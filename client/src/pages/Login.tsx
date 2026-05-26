@@ -7,6 +7,13 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, setAuthToken, queryClient } from "@/lib/queryClient";
 import { track } from "@/lib/analytics";
 import { FriendlyError } from "@/components/FriendlyError";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+} from "@/components/ui/drawer";
 
 import { ADMIN_CHROME, CUSTOMER_CHROME, type Mode } from "./authChrome";
 
@@ -48,18 +55,16 @@ type AdminPhase = "password" | "totp" | "enroll" | "emailOtp";
 const inputBgStyle = (kind: "admin" | "customer"): React.CSSProperties | undefined =>
   kind === "customer" ? { background: "rgba(255,255,255,0.06)" } : undefined;
 
-// Task #400 — Welcome-back banner for imported gogoods.com fans who
-// landed on /login on their own (didn't get the wave-1 mail, or lost
-// the link). Same shape as /api/auth/lookup: constant-floor latency,
-// no enumeration. We always show a friendly "if your email is on file
-// we just sent a link" toast regardless of whether the address was a
-// hit, then stick a localStorage dismiss flag so the banner stays out
-// of a returning fan's way after first interaction.
-function WelcomeBackBanner() {
+// Task #400 / #409 — Welcome-back pill for imported gogoods.com fans
+// who landed on /login on their own (didn't get the wave-1 mail, or
+// lost the link). Subtle rounded pill above the sign-in card; tap it
+// to open a bottom sheet that explains what's going on and offers to
+// email a one-tap sign-in link. The /api/welcome-back/start endpoint
+// is non-enumerating (constant-floor latency, identical response
+// shape), so we surface the same friendly "if your email is on file
+// we just sent a link" toast regardless of whether the address hit.
+function WelcomeBackPill() {
   const { toast } = useToast();
-  const [dismissed, setDismissed] = useState<boolean>(() => {
-    try { return localStorage.getItem("gt:welcomeback:banner-dismissed") === "1"; } catch { return false; }
-  });
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -67,16 +72,14 @@ function WelcomeBackBanner() {
   useEffect(() => {
     const params = new URL(window.location.href).searchParams;
     const reason = params.get("welcomeback");
-    if (reason === "expired") toast({ title: "That sign-in link has expired", description: "Tap below to send a fresh one.", variant: "destructive" });
-    else if (reason === "used") toast({ title: "That sign-in link was already used", description: "Tap below to send a fresh one.", variant: "destructive" });
+    if (reason === "expired") {
+      toast({ title: "That sign-in link has expired", description: "Tap “Customer prior to June 2026?” to send a fresh one.", variant: "destructive" });
+      setOpen(true);
+    } else if (reason === "used") {
+      toast({ title: "That sign-in link was already used", description: "Tap “Customer prior to June 2026?” to send a fresh one.", variant: "destructive" });
+      setOpen(true);
+    }
   }, [toast]);
-
-  if (dismissed) return null;
-
-  const dismiss = () => {
-    try { localStorage.setItem("gt:welcomeback:banner-dismissed", "1"); } catch {}
-    setDismissed(true);
-  };
 
   const sendLink = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,73 +87,104 @@ function WelcomeBackBanner() {
     setSubmitting(true);
     try {
       await apiRequest("POST", "/api/welcome-back/start", { email: email.trim() });
-      toast({ title: "Check your inbox", description: "If that email is on file, a sign-in link is on its way." });
-      dismiss();
     } catch {
       // Endpoint is intentionally non-enumerating — fall through to the
       // same friendly toast so timing/error never reveals account presence.
-      toast({ title: "Check your inbox", description: "If that email is on file, a sign-in link is on its way." });
-      dismiss();
     } finally {
       setSubmitting(false);
+      toast({ title: "Check your inbox", description: "If that email is on file, a sign-in link is on its way." });
+      setOpen(false);
+      setEmail("");
     }
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 mb-4" data-testid="welcomeback-banner">
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="text-white text-sm font-semibold mb-0.5">Imported from gogoods.com?</div>
-          <div className="text-white/55 text-xs leading-relaxed">
-            Your old library moved over. We'll email a one-tap sign-in link — no password needed.
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={dismiss}
-          className="text-white/40 hover:text-white/70 text-lg leading-none -mr-1 -mt-1 p-1"
-          aria-label="Dismiss"
-          data-testid="button-welcomeback-banner-dismiss"
-        >
-          ×
-        </button>
-      </div>
-      {open ? (
-        <form onSubmit={sendLink} className="mt-3 flex gap-2">
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            autoComplete="email"
-            inputMode="email"
-            autoCapitalize="none"
-            spellCheck={false}
-            className="flex-1 border border-white/10 bg-white/[0.06] rounded-xl px-3 py-2 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[var(--brand-blue)]"
-            required
-            data-testid="input-welcomeback-banner-email"
-          />
+    <>
+      {/* Fixed bottom contextual bar — Apple HIG "ornament / floating
+          toolbar" pattern (also seen on Instagram's profile "Get in
+          touch" CTA): pinned above the home-indicator safe area, a
+          single rounded-rect with the call to action and a trailing
+          chevron. Stays out of the form's way but is always one tap
+          away. Pointer-events scoped to the button so the surrounding
+          gutter doesn't eat taps meant for the page below. */}
+      <div
+        className="fixed inset-x-0 bottom-0 z-30 px-4 pt-3 pointer-events-none"
+        style={{ paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + 12px)` }}
+      >
+        <div className="mx-auto w-full max-w-[440px] pointer-events-auto">
           <button
-            type="submit"
-            disabled={submitting || !email.trim()}
-            className="px-3 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
-            style={{ background: "linear-gradient(135deg, #1D5E8F, var(--brand-blue))" }}
-            data-testid="button-welcomeback-banner-send"
+            type="button"
+            onClick={() => setOpen(true)}
+            className="w-full flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#0B1437]/85 backdrop-blur-md shadow-[0_8px_24px_rgba(0,0,0,0.35)] px-4 py-3 text-left transition-colors hover:bg-[#0E1A45]/90 active:bg-[#0E1A45]"
+            data-testid="button-welcomeback-pill"
           >
-            {submitting ? "…" : "Send"}
+            <span className="flex flex-col min-w-0">
+              <span className="text-white text-sm font-semibold leading-tight">Customer prior to June 2026?</span>
+              <span className="text-white/55 text-xs leading-tight mt-0.5">Tap to bring your library over</span>
+            </span>
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-[var(--brand-mint)] shrink-0"
+              aria-hidden="true"
+            >
+              <path d="M9 6l6 6-6 6" />
+            </svg>
           </button>
-        </form>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="mt-3 text-[var(--brand-mint)] text-sm font-semibold"
-          data-testid="button-welcomeback-banner-open"
-        >
-          Email me a sign-in link →
-        </button>
-      )}
-    </div>
+        </div>
+      </div>
+      <Drawer open={open} onOpenChange={setOpen}>
+        <DrawerContent className="bg-[var(--brand-bg)] border-white/10 text-white">
+          <div className="mx-auto w-full max-w-[440px] px-5 pb-8">
+            <DrawerHeader className="px-0 text-left">
+              <DrawerTitle className="text-white text-2xl font-bold tracking-tight">Welcome back.</DrawerTitle>
+              <DrawerDescription className="text-white/55 text-sm leading-relaxed">
+                If you bought music from gogoods.com before June 2026, your library moved over to GoodTunes. Enter the email you used and we'll send a one-tap sign-in link — no password needed.
+              </DrawerDescription>
+            </DrawerHeader>
+            <form onSubmit={sendLink} className="mt-2 flex flex-col gap-3">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                inputMode="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="w-full border border-white/10 bg-white/[0.06] rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-base focus:outline-none focus:border-[var(--brand-blue)]"
+                required
+                autoFocus
+                data-testid="input-welcomeback-sheet-email"
+              />
+              <button
+                type="submit"
+                disabled={submitting || !email.trim()}
+                className="w-full py-3.5 rounded-2xl font-semibold text-white disabled:opacity-40"
+                style={{ background: "linear-gradient(135deg, #1D5E8F, var(--brand-blue))" }}
+                data-testid="button-welcomeback-sheet-send"
+              >
+                {submitting ? "Sending…" : "Email me a sign-in link"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="w-full py-3 text-white/55 hover:text-white/80 text-sm"
+                data-testid="button-welcomeback-sheet-cancel"
+              >
+                Not me
+              </button>
+            </form>
+          </div>
+        </DrawerContent>
+      </Drawer>
+    </>
   );
 }
 
@@ -796,12 +830,12 @@ export function Login() {
           </div>
         )}
 
-        {/* Task #400 — Welcome-back banner. Customer login only.
-            Dismissible (sticky in localStorage) and short-circuited
-            after first dismiss so it never re-bothers a returning fan.
-            Posts to /api/welcome-back/start with constant-floor latency
-            and no-enumeration semantics, so it's safe to show pre-auth. */}
-        {!isAdmin && mode === "login" && <WelcomeBackBanner />}
+        {/* Task #400 / #409 — Welcome-back pill. Customer login only.
+            Subtle rounded pill above the form; tap to open a bottom
+            sheet with explainer + email field. Posts to
+            /api/welcome-back/start with constant-floor latency and
+            no-enumeration semantics, so it's safe to show pre-auth. */}
+        {!isAdmin && mode === "login" && <WelcomeBackPill />}
         {mode === "login" && (
           <form onSubmit={handleLogin} className="flex flex-col gap-3">
             <div>
@@ -1095,19 +1129,6 @@ export function Login() {
                 Continue with Apple
               </button>
             </div>
-            {/* Dev-only shortcut so task-review previews (which have no
-                session because cookies are per-host) can land in /admin
-                in one click without typing creds. The server route is
-                404 in production. */}
-            {import.meta.env.DEV && (
-              <a
-                href="/dev-login-bill"
-                className={`${s.oauthBtn} mt-2.5 justify-center text-xs`}
-                data-testid="link-dev-login-bill"
-              >
-                Dev sign-in as admin (bill) →
-              </a>
-            )}
           </>
         )}
       </div>

@@ -355,6 +355,107 @@ export function registerWelcomeBackRoutes(
     return res.json({ ok: true });
   });
 
+  // Step 1.5 — preview. Returns the move counts + the losing email
+  // *without* applying any changes, so the fan can see "here's what
+  // we'd move: 3 albums, 2 orders, 1 playlist" before tapping Confirm.
+  // Pure read — does NOT consume the token, so a fan can refresh or
+  // back out without burning their link.
+  app.get("/api/me/welcome-back/merge/preview", requireAuth, async (req, res) => {
+    if ((req.session as any).kind !== "customer") return res.status(403).json({ message: "Customer only" });
+    const myId = (req.session as any).userId as string;
+    const raw = String(req.query.token ?? "");
+    if (!raw) return res.status(400).json({ message: "Missing token" });
+
+    const tokenHash = hashToken(raw);
+    const [row] = await db
+      .select()
+      .from(welcomeBackTokens)
+      .where(eq(welcomeBackTokens.tokenHash, tokenHash))
+      .limit(1);
+    if (!row) return res.status(400).json({ message: "Link expired" });
+    if (row.expiresAt.getTime() < Date.now()) return res.status(400).json({ message: "Link expired" });
+    if (row.customerId === myId) return res.status(400).json({ message: "Pick a different email" });
+
+    const losing = await storage.getCustomer(row.customerId);
+    const surviving = await storage.getCustomer(myId);
+    if (!losing || !surviving) return res.status(404).json({ message: "Account not found" });
+
+    // Idempotency: if the token was already consumed AND we have a
+    // matching audit row, surface the prior counts as `alreadyMerged`
+    // so the UI can show a success state instead of an error.
+    if (row.consumedAt || losing.mergedIntoId) {
+      if (losing.mergedIntoId === surviving.id) {
+        const [prior] = await db
+          .select()
+          .from(customerMerges)
+          .where(and(eq(customerMerges.survivingId, surviving.id), eq(customerMerges.losingId, losing.id)))
+          .orderBy(desc(customerMerges.createdAt))
+          .limit(1);
+        if (prior) {
+          return res.json({
+            alreadyMerged: true,
+            losingEmail: losing.email,
+            counts: {
+              albums: prior.movedAlbumCount,
+              orders: prior.movedOrderCount,
+              playlists: prior.movedPlaylistCount,
+            },
+          });
+        }
+      }
+      return res.status(400).json({ message: "Link already used" });
+    }
+
+    // Mirror the merge planner: collisions on user_albums UNIQUE(user, album)
+    // are skipped, so the preview must skip them too — otherwise we'd
+    // promise to move N albums and only move N-K.
+    const survivingAlbums = await db
+      .select({ albumId: userAlbums.albumId })
+      .from(userAlbums)
+      .where(eq(userAlbums.userId, surviving.id));
+    const survivingAlbumIds = new Set(survivingAlbums.map((r) => r.albumId));
+    const losingAlbumsRows = await db
+      .select({ albumId: userAlbums.albumId })
+      .from(userAlbums)
+      .where(eq(userAlbums.userId, losing.id));
+    const albumsToMove = losingAlbumsRows.filter((r) => !survivingAlbumIds.has(r.albumId)).length;
+
+    const [orderRow] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(orders)
+      .where(eq(orders.customerId, losing.id));
+    const [playlistRow] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(playlists)
+      .where(eq(playlists.userId, losing.id));
+
+    return res.json({
+      alreadyMerged: false,
+      losingEmail: losing.email,
+      counts: {
+        albums: albumsToMove,
+        orders: orderRow?.n ?? 0,
+        playlists: playlistRow?.n ?? 0,
+      },
+    });
+  });
+
+  // Cancel — fan tapped "Cancel" on the preview. We mark the token
+  // consumed so the link is one-shot and can't be re-used (which would
+  // also defang a stolen link the fan didn't want to honor). Always
+  // returns 200 so a stale tab can dismiss without erroring.
+  app.post("/api/me/welcome-back/merge/cancel", requireAuth, async (req, res) => {
+    if ((req.session as any).kind !== "customer") return res.status(403).json({ message: "Customer only" });
+    const raw = String(req.body?.token ?? "");
+    if (!raw) return res.json({ ok: true });
+    const tokenHash = hashToken(raw);
+    await db
+      .update(welcomeBackTokens)
+      .set({ consumedAt: new Date() })
+      .where(and(eq(welcomeBackTokens.tokenHash, tokenHash), isNull(welcomeBackTokens.consumedAt)));
+    return res.json({ ok: true });
+  });
+
   // Step 2 — fan returns to the SPA signed in as the *surviving*
   // account, clicks the link from the other inbox, the SPA POSTs the
   // token + surviving id to confirm. We:
@@ -377,13 +478,37 @@ export function registerWelcomeBackRoutes(
       .where(eq(welcomeBackTokens.tokenHash, tokenHash))
       .limit(1);
     if (!row) return res.status(400).json({ message: "Link expired" });
-    if (row.consumedAt) return res.status(400).json({ message: "Link already used" });
     if (row.expiresAt.getTime() < Date.now()) return res.status(400).json({ message: "Link expired" });
     if (row.customerId === myId) return res.status(400).json({ message: "Pick a different email" });
 
     const losing = await storage.getCustomer(row.customerId);
     const surviving = await storage.getCustomer(myId);
     if (!losing || !surviving) return res.status(404).json({ message: "Account not found" });
+
+    // Idempotency: if this exact merge already happened (losing.mergedIntoId
+    // points at the surviving account), return the prior counts from the
+    // audit row instead of erroring. Covers double-tap, browser back/refresh,
+    // and a Cancel-then-Confirm tap before the SPA caught up.
+    if (losing.mergedIntoId === surviving.id) {
+      const [prior] = await db
+        .select()
+        .from(customerMerges)
+        .where(and(eq(customerMerges.survivingId, surviving.id), eq(customerMerges.losingId, losing.id)))
+        .orderBy(desc(customerMerges.createdAt))
+        .limit(1);
+      if (prior) {
+        return res.json({
+          ok: true,
+          moved: {
+            albums: prior.movedAlbumCount,
+            orders: prior.movedOrderCount,
+            playlists: prior.movedPlaylistCount,
+          },
+        });
+      }
+    }
+
+    if (row.consumedAt) return res.status(400).json({ message: "Link already used" });
     if (losing.mergedIntoId || surviving.mergedIntoId) return res.status(400).json({ message: "Already merged" });
 
     // Atomic consume so two parallel clicks can't double-merge.
