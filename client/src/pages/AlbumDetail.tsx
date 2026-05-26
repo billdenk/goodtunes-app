@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlbumDetailMobileSurface } from "@/components/ui/AlbumDetailMobileSurface";
+import { AlbumDetailMobileSkeleton, AlbumNotFound } from "@/components/ui/AlbumDetailSkeleton";
 import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { usePlayer } from "@/context/PlayerContext";
@@ -208,7 +209,7 @@ function AlbumDetailMobile() {
       isExplicit: boolean;
     }[];
   };
-  const { data: apiAlbum } = useQuery<ApiAlbum>({
+  const { data: apiAlbum, isLoading: isAlbumLoading } = useQuery<ApiAlbum>({
     queryKey: ["/api/albums", id],
     enabled: !!id,
   });
@@ -373,15 +374,12 @@ function AlbumDetailMobile() {
     }
   };
 
+  if (!album && isAlbumLoading) {
+    return <AlbumDetailMobileSkeleton />;
+  }
+
   if (!album) {
-    return (
-      <main className="min-h-screen flex items-center justify-center">
-        <div className="text-white text-center">
-          <p>Album not found</p>
-          <button onClick={() => navigate("/collection")} className="mt-4 text-[#319ED8]">Back to Collection</button>
-        </div>
-      </main>
-    );
+    return <AlbumNotFound variant="mobile" />;
   }
 
   const albumSongs = songs.map((s) => ({ ...s, album }));

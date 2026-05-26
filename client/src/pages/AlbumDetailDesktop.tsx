@@ -13,6 +13,10 @@ import {
   AlbumDesktopSidebar,
   BRAND_BG,
 } from "@/components/ui/AlbumDesktopSidebar";
+import {
+  AlbumDetailDesktopSkeleton,
+  AlbumNotFound,
+} from "@/components/ui/AlbumDetailSkeleton";
 import { AlbumTopNowPlayingStrip } from "@/components/ui/AlbumTopNowPlayingStrip";
 import { PlayerDock } from "@/components/ui/PlayerDock";
 import {
@@ -227,34 +231,11 @@ export function AlbumDetailDesktop() {
   }, []);
 
   if (!album && !isLoading) {
-    return (
-      <div
-        className="w-full h-screen flex items-center justify-center text-white"
-        style={{ background: BRAND_BG }}
-      >
-        <div className="text-center">
-          <p>Album not found</p>
-          <button
-            onClick={() => navigate("/collection")}
-            className="mt-4 text-[#319ED8]"
-            data-testid="link-back-collection"
-          >
-            Back to Collection
-          </button>
-        </div>
-      </div>
-    );
+    return <AlbumNotFound variant="desktop" />;
   }
 
   if (!album) {
-    return (
-      <div
-        className="w-full h-screen flex items-center justify-center text-white/55"
-        style={{ background: BRAND_BG }}
-      >
-        Loading…
-      </div>
-    );
+    return <AlbumDetailDesktopSkeleton />;
   }
 
   // Lyrics panel body — pulled from the currently-playing song. Falls
