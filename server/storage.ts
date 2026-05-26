@@ -1190,18 +1190,49 @@ export class DbStorage implements IStorage {
       .limit(1);
     const primaryArtistId = album[0]?.primaryArtistId ?? null;
 
+    // Task #448 — LEFT join people so name-only performer rows
+    // (personId NULL — common after liner-notes paste or scraped imports
+    // where the row was created with just a name snapshot) still surface
+    // in the roll-up. We re-attach them to an existing Person by
+    // case-insensitive exact name match below; if there's no Person row
+    // at all we skip (lineup rows require a Person FK).
     const rows = await db
       .select({
         personId: trackPerformers.personId,
         role: trackPerformers.role,
         songId: trackPerformers.songId,
+        snapshotName: trackPerformers.name,
         personName: people.name,
         photoUrl: people.photoUrl,
       })
       .from(trackPerformers)
       .innerJoin(songs, eq(trackPerformers.songId, songs.id))
-      .innerJoin(people, eq(trackPerformers.personId, people.id))
+      .leftJoin(people, eq(trackPerformers.personId, people.id))
       .where(eq(songs.albumId, albumId));
+
+    // Resolve name-only rows by matching against existing People (case-
+    // insensitive exact). Single batched query keyed by lowercased name.
+    const orphanNames = Array.from(
+      new Set(
+        rows
+          .filter((r) => !r.personId && r.snapshotName)
+          .map((r) => r.snapshotName.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    );
+    const orphanMatches = new Map<
+      string,
+      { id: string; name: string; photoUrl: string | null }
+    >();
+    if (orphanNames.length > 0) {
+      const matched = await db
+        .select({ id: people.id, name: people.name, photoUrl: people.photoUrl })
+        .from(people)
+        .where(inArray(sql`lower(${people.name})`, orphanNames));
+      for (const m of matched) {
+        orphanMatches.set(m.name.trim().toLowerCase(), m);
+      }
+    }
 
     // Aggregate by personId. Collapse role variants like "Composer ·
     // Violin" down to the instrument label after the bullet when one
@@ -1218,8 +1249,24 @@ export class DbStorage implements IStorage {
       }
     >();
     for (const r of rows) {
-      if (!r.personId) continue;
-      if (primaryArtistId && r.personId === primaryArtistId) continue;
+      // Resolve the effective Person for this row: either the FK or a
+      // name-match against existing People. Unmatched name-only rows
+      // (no Person row exists at all) can't be pinned to a lineup, so
+      // we skip them — operator can add the Person and they'll roll
+      // up on the next refresh.
+      let personId = r.personId;
+      let personName = r.personName;
+      let photoUrl = r.photoUrl;
+      if (!personId && r.snapshotName) {
+        const m = orphanMatches.get(r.snapshotName.trim().toLowerCase());
+        if (m) {
+          personId = m.id;
+          personName = m.name;
+          photoUrl = m.photoUrl;
+        }
+      }
+      if (!personId || !personName) continue;
+      if (primaryArtistId && personId === primaryArtistId) continue;
       const cleanedRole = (() => {
         const raw = (r.role ?? "").trim();
         if (!raw) return "";
@@ -1228,17 +1275,17 @@ export class DbStorage implements IStorage {
         const parts = raw.split("·").map((s) => s.trim()).filter(Boolean);
         return parts.length > 1 ? parts[parts.length - 1] : raw;
       })();
-      let entry = agg.get(r.personId);
+      let entry = agg.get(personId);
       if (!entry) {
         entry = {
-          memberId: r.personId,
-          personName: r.personName,
-          photoUrl: r.photoUrl ?? null,
+          memberId: personId,
+          personName: personName,
+          photoUrl: photoUrl ?? null,
           roles: [],
           roleSet: new Set<string>(),
           songIds: new Set<string>(),
         };
-        agg.set(r.personId, entry);
+        agg.set(personId, entry);
       }
       entry.songIds.add(r.songId);
       if (cleanedRole && !entry.roleSet.has(cleanedRole)) {

@@ -400,6 +400,7 @@ function AddInstrumentFromUrl({
 
 function AddPicker({
   people,
+  lineupPeople,
   roles,
   instruments,
   bucket,
@@ -408,6 +409,7 @@ function AddPicker({
   onClose,
 }: {
   people: AdminPersonLite[];
+  lineupPeople: AdminPersonLite[];
   roles: AdminCreditRole[];
   instruments: AdminInstrumentLite[];
   bucket: Bucket;
@@ -452,13 +454,22 @@ function AddPicker({
   // We deliberately do NOT filter out people already in this section —
   // a single person commonly has multiple roles in the same bucket
   // (e.g. Composer + Lyricist in Song). Pick them again to add another role.
+  // Task #448 — lineup members are also part of the search universe so
+  // a freshly-added member is reachable even if /api/people hasn't
+  // refetched yet. Merge by id; people wins (richer record).
+  const searchUniverse = useMemo(() => {
+    const byId = new Map<string, AdminPersonLite>();
+    for (const p of lineupPeople) byId.set(p.id, p);
+    for (const p of people) byId.set(p.id, p);
+    return Array.from(byId.values());
+  }, [people, lineupPeople]);
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [] as AdminPersonLite[];
-    return people
+    return searchUniverse
       .filter((p) => p.name.toLowerCase().includes(q))
       .slice(0, 6);
-  }, [people, query]);
+  }, [searchUniverse, query]);
   const recents = usePersonCreditRecents();
 
   const commit = async () => {
@@ -497,12 +508,49 @@ function AddPicker({
       onClick={(e) => e.stopPropagation()}
       data-testid="add-credit-picker"
     >
+      {!picked && !query && lineupPeople.length > 0 && (
+        <div className="mb-2">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            From the album lineup
+          </div>
+          <div
+            className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1"
+            data-testid="rail-lineup-people"
+          >
+            {lineupPeople.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => {
+                  setPicked(p);
+                  setQuery("");
+                }}
+                className="flex flex-shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:border-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/5"
+                data-testid={`button-lineup-person-${p.id}`}
+              >
+                <span className="flex h-5 w-5 items-center justify-center overflow-hidden rounded-full bg-slate-200 font-semibold text-slate-600 leading-none">
+                  {p.photoUrl ? (
+                    <img
+                      src={p.photoUrl}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    initials(p.name)
+                  )}
+                </span>
+                <span className="whitespace-nowrap">{p.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {!picked && !query && recents.length > 0 && (
         <div className="mb-2">
           <RecentsRail
             recents={recents}
             onPick={(p) => {
-              const existing = people.find((person) => person.id === p.id);
+              const existing = searchUniverse.find((person) => person.id === p.id);
               setPicked(
                 existing ?? ({
                   id: p.id,
@@ -682,6 +730,7 @@ function Section({
   songId,
   albumId,
   people,
+  lineupPeople,
   roles,
   instruments,
 }: {
@@ -690,6 +739,7 @@ function Section({
   songId: string;
   albumId: string;
   people: AdminPersonLite[];
+  lineupPeople: AdminPersonLite[];
   roles: AdminCreditRole[];
   instruments: AdminInstrumentLite[];
 }) {
@@ -701,10 +751,19 @@ function Section({
   const [pendingRemoveKey, setPendingRemoveKey] = useState<string | null>(null);
   const removeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const invalidate = () =>
-    qc.invalidateQueries({
-      queryKey: ["/api/albums", albumId, "credits"],
-    });
+  // Task #448 — credits ↔ lineup is bidirectional. After any per-track
+  // credit add/remove also refetch the album's roll-up suggestion and
+  // the surfaced lineup so the AlbumLineupPanel "+N from credits" badge
+  // and the picker's lineup rail stay in sync without a page reload.
+  const invalidate = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["/api/albums", albumId, "credits"] }),
+      qc.invalidateQueries({
+        queryKey: ["/api/admin/albums", albumId, "lineup", "suggest"],
+      }),
+      qc.invalidateQueries({ queryKey: ["/api/albums", albumId, "lineup"] }),
+    ]);
+  };
 
   // Click-away closes the pencil popover.
   useEffect(() => {
@@ -918,6 +977,7 @@ function Section({
         <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-2">
           <AddPicker
             people={people}
+            lineupPeople={lineupPeople}
             roles={roles}
             instruments={instruments}
             bucket={bucket}
@@ -1564,6 +1624,33 @@ export default function TrackCreditsPanel({
   const { data: instruments = [] } = useQuery<AdminInstrumentLite[]>({
     queryKey: ["/api/instruments"],
   });
+  // Task #448 — the album's pinned lineup is a first-class source in
+  // the per-track Credits picker, alongside recent collaborators. The
+  // public /api/albums/:id/lineup endpoint returns the same enriched
+  // rows the admin panel uses (memberId + memberName + memberPhotoUrl).
+  type AlbumLineupRow = {
+    memberId: string;
+    memberName: string;
+    memberPhotoUrl: string | null;
+    roles: string[] | null;
+  };
+  const { data: albumLineup = [] } = useQuery<AlbumLineupRow[]>({
+    queryKey: ["/api/albums", albumId, "lineup"],
+    queryFn: async () => {
+      const r = await fetch(`/api/albums/${albumId}/lineup`);
+      if (!r.ok) return [];
+      return r.json();
+    },
+  });
+  const lineupPeople = useMemo<AdminPersonLite[]>(
+    () =>
+      albumLineup.map((m) => ({
+        id: m.memberId,
+        name: m.memberName,
+        photoUrl: m.memberPhotoUrl,
+      })),
+    [albumLineup],
+  );
 
   const cards = useMemo(() => {
     const writers = (credits?.writers ?? []).map((w) => ({
@@ -1639,6 +1726,7 @@ export default function TrackCreditsPanel({
                   songId={songId}
                   albumId={albumId}
                   people={people}
+                  lineupPeople={lineupPeople}
                   instruments={instruments}
                   roles={roles}
                 />

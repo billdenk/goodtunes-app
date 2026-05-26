@@ -13692,6 +13692,91 @@ function AlbumLineupPanel({
     Array<{ memberId: string; roles: string[] | null; displayOrder: number; personName: string; photoUrl: string | null }>
   >([]);
   const [hydrated, setHydrated] = useState(false);
+
+  // Task #448 — inline Add member affordance. Typeahead over /api/people
+  // (same source the per-track Credits picker uses) with a "+ Create
+  // new" fallback that mints a Person row via POST /api/admin/people
+  // and then appends + persists immediately. Operator never leaves
+  // the album page.
+  const [adding, setAdding] = useState(false);
+  const [addQuery, setAddQuery] = useState("");
+  const { data: allPeople = [] } = useQuery<
+    Array<{ id: string; name: string; photoUrl: string | null }>
+  >({
+    queryKey: ["/api/people"],
+    queryFn: async () => {
+      const r = await fetch(`/api/people`);
+      if (!r.ok) return [];
+      return r.json();
+    },
+    enabled: adding,
+  });
+  const createPersonMut = useMutation({
+    mutationFn: async (name: string) => {
+      const r = await apiRequest("POST", "/api/admin/people", { name });
+      return (await r.json()) as { id: string; name: string; photoUrl: string | null };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/people"] });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't create person",
+        description: String(e?.message ?? e),
+        variant: "destructive",
+      }),
+  });
+
+  // Append a member to the draft and persist via PUT immediately so
+  // the row is live for the per-track Credits picker (same album-wide
+  // roster, both directions). We push the full ordered draft so the
+  // server replaces atomically.
+  const commitAddMember = (m: {
+    id: string;
+    name: string;
+    photoUrl: string | null;
+  }) => {
+    if (draft.some((d) => d.memberId === m.id)) {
+      toast({ title: `${m.name} is already in the lineup` });
+      setAdding(false);
+      setAddQuery("");
+      return;
+    }
+    const nextDraft = [
+      ...draft,
+      {
+        memberId: m.id,
+        roles: null,
+        displayOrder: draft.length,
+        personName: m.name,
+        photoUrl: m.photoUrl,
+      },
+    ];
+    setDraft(nextDraft);
+    saveMutation.mutate(
+      nextDraft.map((d, i) => ({
+        memberId: d.memberId,
+        roles: d.roles,
+        displayOrder: i,
+      })),
+    );
+    setAdding(false);
+    setAddQuery("");
+  };
+
+  const addMatches = useMemo(() => {
+    const q = addQuery.trim().toLowerCase();
+    if (!q) return [] as typeof allPeople;
+    const usedSet = new Set(draft.map((d) => d.memberId));
+    return allPeople
+      .filter((p) => !usedSet.has(p.id) && p.name.toLowerCase().includes(q))
+      .slice(0, 6);
+  }, [allPeople, addQuery, draft]);
+  const exactExists = useMemo(() => {
+    const q = addQuery.trim().toLowerCase();
+    if (!q) return false;
+    return allPeople.some((p) => p.name.toLowerCase() === q);
+  }, [allPeople, addQuery]);
   useEffect(() => {
     if (!isLoading) {
       setDraft(
@@ -13731,28 +13816,11 @@ function AlbumLineupPanel({
 
   if (!album.primaryArtistId) return null;
   if (!primaryArtist) return null;
-  // Task #193 — even for solo artists, if SuperCredits name distinct
-  // session players we want the operator to be able to pin them as the
-  // album lineup. We only suppress the panel entirely when there's
-  // nothing to act on (not a group AND no suggestion AND no existing
-  // pinned lineup), so a true bedroom-pop solo record stays uncluttered.
-  if (
-    !primaryArtist.isGroup &&
-    suggestion.length === 0 &&
-    draft.length === 0 &&
-    lineup.length === 0
-  ) {
-    return (
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5" data-testid="panel-lineup-solo">
-        <h2 className="text-[15px] font-semibold text-slate-900">Lineup</h2>
-        <p className="text-[12.5px] text-slate-500 mt-2">
-          {primaryArtist.name} is a solo artist. Import per-track credits
-          (or mark the artist as a group) and we'll propose a lineup here
-          automatically.
-        </p>
-      </div>
-    );
-  }
+  // Task #448 — the Lineup panel always renders for any album with an
+  // editable primary artist (group or solo). When the album is truly
+  // empty (no draft, no pinned rows, no roll-up) the empty state below
+  // offers the inline Add affordance instead of telling the operator
+  // to go elsewhere.
 
   // Suggested members not already in the draft — these power the
   // "Add ___ (5 tracks)" chips below the roster picker. We compute it
@@ -13768,14 +13836,30 @@ function AlbumLineupPanel({
         <div>
           <h2 className="text-[15px] font-semibold text-slate-900">Lineup</h2>
           <p className="text-[12.5px] text-slate-500 mt-0.5">
-            Who played on this record. Leave empty and the fan page falls
-            back to {primaryArtist.name}'s current band roster.
+            Who played on this record. Rolls up live from per-track
+            credits; anyone you add here is available on every track's
+            Credits picker.
+            {primaryArtist.isGroup
+              ? ` Leave empty and the fan page falls back to ${primaryArtist.name}'s current band roster.`
+              : ""}
           </p>
           {disabled && disabledReason && (
             <p className="text-[11px] text-amber-600 mt-1">{disabledReason}</p>
           )}
         </div>
         <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setAdding((v) => !v);
+              setAddQuery("");
+            }}
+            disabled={disabled}
+            className="text-[12px] font-semibold px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            data-testid="button-add-lineup-member"
+          >
+            {adding ? "Cancel" : "Add member"}
+          </button>
           {dirty && (
             <button
               type="button"
@@ -13862,22 +13946,101 @@ function AlbumLineupPanel({
           )}
         </div>
       </div>
+      {adding && (
+        <div
+          className="px-5 py-4 border-b border-slate-100 bg-slate-50"
+          data-testid="picker-add-lineup-member"
+        >
+          <input
+            type="text"
+            autoFocus
+            value={addQuery}
+            onChange={(e) => setAddQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setAdding(false);
+                setAddQuery("");
+              }
+            }}
+            placeholder="Search a person or type a new name…"
+            className="w-full px-3 py-2 rounded-md border border-[var(--brand-blue)]/30 bg-white text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
+            data-testid="input-add-lineup-member"
+          />
+          {addQuery.trim() && (
+            <div className="mt-2 rounded-md border border-slate-200 bg-white shadow-sm overflow-hidden">
+              {addMatches.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() =>
+                    commitAddMember({
+                      id: p.id,
+                      name: p.name,
+                      photoUrl: p.photoUrl,
+                    })
+                  }
+                  disabled={saveMutation.isPending}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  data-testid={`button-pick-lineup-person-${p.id}`}
+                >
+                  <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-xs font-semibold text-slate-600">
+                    {p.photoUrl ? (
+                      <img
+                        src={p.photoUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      p.name.slice(0, 1).toUpperCase()
+                    )}
+                  </span>
+                  <span className="flex-1">{p.name}</span>
+                </button>
+              ))}
+              {!exactExists && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const name = addQuery.trim();
+                    if (!name) return;
+                    const created = await createPersonMut.mutateAsync(name);
+                    commitAddMember({
+                      id: created.id,
+                      name: created.name,
+                      photoUrl: created.photoUrl ?? null,
+                    });
+                  }}
+                  disabled={createPersonMut.isPending || saveMutation.isPending}
+                  className="flex w-full items-center gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2 text-left text-xs font-medium text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/5 disabled:opacity-50"
+                  data-testid="button-create-lineup-person"
+                >
+                  <span className="text-sm">+</span>
+                  <span>
+                    Create new person:{" "}
+                    <span className="font-semibold">"{addQuery.trim()}"</span>
+                  </span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       <div className="divide-y divide-slate-100">
         {draft.length === 0 && (
           <p
             className="px-5 py-6 text-[13px] text-slate-500"
             data-testid="empty-album-lineup"
           >
-            No per-album lineup set.{" "}
             {suggestion.length > 0
-              ? `SuperCredits name ${suggestion.length} ${
+              ? `Per-track credits name ${suggestion.length} ${
                   suggestion.length === 1 ? "player" : "players"
-                } across this album's tracks — click "Use ${
+                } on this album — click "Use ${
                   suggestion.length
-                } from credits" to accept the proposal.`
+                } from credits" to pin them, or add anyone else below.`
               : bandRoster.length === 0
-                ? `Add members to ${primaryArtist.name} first, or import per-track credits.`
-                : "Use the band's current roster or pick members below."}
+                ? `No one credited yet. Use "Add member" to pin the first player, or save performer credits on a track and they'll roll up here.`
+                : `No one credited yet. Add a member, pull from ${primaryArtist.name}'s roster below, or save performer credits on a track.`}
           </p>
         )}
         {draft.map((d, i) => (
