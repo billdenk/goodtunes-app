@@ -1,6 +1,7 @@
 import { Disc3 } from "lucide-react";
 import { useLocation } from "wouter";
 import { BRAND_BG } from "@/components/ui/AlbumDesktopSidebar";
+import { GoodTunesLogo } from "@/components/GoodTunesLogo";
 
 /**
  * Shared loading + empty-state surfaces for the fan-facing Album page.
@@ -22,65 +23,83 @@ import { BRAND_BG } from "@/components/ui/AlbumDesktopSidebar";
 
 const SHIMMER = "bg-white/10 animate-pulse rounded-md";
 
+/**
+ * GoodDeed-certificate-style loading placeholder.
+ *
+ * Top ~70% is a muted rectangle sized where the album art will land
+ * once data arrives. Bottom ~30% is a navy strip carrying a small
+ * avatar circle + two/three text-bar placeholders on the left, the
+ * GoodTunes wordmark in the top-right, and a square placeholder
+ * bottom-right where a real certificate's QR code sits. A hairline
+ * divider between the two halves matches the HR line on the real
+ * certificate. No track rows, no chrome — this should read as
+ * "the certificate is loading," not "the album page is mirroring
+ * itself in grey".
+ */
+function CertificateSkeleton({ testId }: { testId: string }) {
+  return (
+    <div
+      className="w-full h-full flex flex-col"
+      style={{ background: "var(--brand-bg)" }}
+      data-testid={testId}
+    >
+      {/* Image area — where the album art will land. Gentle pulse. */}
+      <div
+        className="flex-[7] w-full bg-white/10 animate-pulse"
+        aria-hidden
+      />
+
+      {/* Hairline divider — matches the HR on the real certificate. */}
+      <div
+        className="h-px w-full"
+        style={{ background: "rgba(255,255,255,0.12)" }}
+        aria-hidden
+      />
+
+      {/* Navy info strip — avatar + text bars + wordmark + QR square. */}
+      <div
+        className="flex-[3] w-full relative px-5 py-4"
+        style={{ background: "var(--brand-bg)" }}
+      >
+        {/* Wordmark top-right */}
+        <div className="absolute top-3 right-4">
+          <GoodTunesLogo size="sm" variant="white" />
+        </div>
+
+        {/* QR square placeholder bottom-right */}
+        <div
+          className="absolute bottom-4 right-4 bg-white/15 animate-pulse rounded-sm"
+          style={{ width: 56, height: 56 }}
+          aria-hidden
+        />
+
+        {/* Left column — avatar circle + text bars */}
+        <div className="flex items-start gap-3 pr-20">
+          <div
+            className="rounded-full bg-white/15 flex-shrink-0 animate-pulse"
+            style={{ width: 44, height: 44 }}
+          />
+          <div className="flex-1 min-w-0 flex flex-col gap-2 pt-1.5">
+            <div className={`${SHIMMER} h-3 w-[62%]`} />
+            <div className={`${SHIMMER} h-3 w-[78%]`} />
+          </div>
+        </div>
+        <div className="mt-3 flex flex-col gap-2 pr-20">
+          <div className={`${SHIMMER} h-3 w-[88%]`} />
+          <div className={`${SHIMMER} h-3 w-[64%]`} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AlbumDetailMobileSkeleton() {
   return (
     <main
-      className="h-screen w-full flex justify-center overflow-hidden relative text-white"
+      className="h-screen w-full flex justify-center overflow-hidden text-white"
       style={{ background: "var(--brand-bg)" }}
-      data-testid="skeleton-album-mobile"
     >
-      <section className="relative w-full h-screen flex flex-col">
-        {/* Back / share/⋯ chrome placeholders — mirror AlbumDetailMobileSurface */}
-        <div className="absolute top-14 left-4 z-50 w-11 h-11 rounded-full bg-white/10" />
-        <div className="absolute top-14 right-4 z-50 w-[92px] h-11 rounded-full bg-white/10" />
-
-        <div className="flex-1 overflow-hidden" style={{ paddingBottom: 160 }}>
-          <div style={{ background: "var(--brand-bg)" }}>
-            {/* Artwork — matches real `w-[72%] max-w-[300px] aspect-square` */}
-            <div className="pt-32 px-6 flex justify-center">
-              <div
-                className="w-[72%] max-w-[300px] rounded-xl bg-white/10"
-                style={{ aspectRatio: "1 / 1" }}
-              />
-            </div>
-
-            {/* Title + artist + meta */}
-            <div className="pt-4 pb-3 px-5 flex flex-col items-center gap-2">
-              <div className={`${SHIMMER} h-6 w-[62%]`} />
-              <div className={`${SHIMMER} h-5 w-[34%]`} />
-              <div className={`${SHIMMER} h-3.5 w-[48%] mt-1`} />
-            </div>
-          </div>
-
-          {/* Action row — shuffle / play / download placeholders */}
-          <div className="flex items-center justify-center gap-3 px-5 mt-1 mb-5">
-            <div className="w-12 h-12 rounded-full bg-white/10" />
-            <div className="h-12 w-[180px] rounded-full bg-white/10" />
-            <div className="w-12 h-12 rounded-full bg-white/10" />
-          </div>
-
-          {/* Track rows */}
-          <div
-            className="px-5 mt-5 border-t"
-            style={{ borderColor: "rgba(255,255,255,0.08)" }}
-          >
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-4 py-3.5 border-b"
-                style={{ borderColor: "rgba(255,255,255,0.06)" }}
-              >
-                <div className="w-4 h-4 rounded bg-white/10 flex-shrink-0" />
-                <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                  <div className={`${SHIMMER} h-3.5`} style={{ width: `${64 - i * 5}%` }} />
-                  <div className={`${SHIMMER} h-3`} style={{ width: `${36 + i * 3}%` }} />
-                </div>
-                <div className="w-5 h-5 rounded bg-white/10 flex-shrink-0" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <CertificateSkeleton testId="skeleton-album-mobile" />
     </main>
   );
 }
@@ -95,7 +114,9 @@ export function AlbumDetailDesktopSkeleton() {
       }}
       data-testid="skeleton-album-desktop"
     >
-      {/* Sidebar placeholder — same ~248px column as AlbumDesktopSidebar */}
+      {/* Sidebar placeholder — same ~248px column as AlbumDesktopSidebar so
+          the change reads as "the certificate is loading", not "the
+          whole app is loading". */}
       <div
         className="hidden md:flex flex-col gap-3 px-5 pt-8 border-r border-white/5"
         style={{ width: 248, flexShrink: 0 }}
@@ -114,57 +135,14 @@ export function AlbumDetailDesktopSkeleton() {
           <div className={`${SHIMMER} h-5 w-40`} />
         </div>
 
-        <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto px-6 md:px-8 lg:px-10 py-8 max-w-[960px]">
-            {/* Breadcrumb */}
-            <div className="flex items-center gap-2">
-              <div className={`${SHIMMER} h-3.5 w-16`} />
-              <div className={`${SHIMMER} h-3.5 w-32`} />
-            </div>
-
-            {/* Hero — cover + title/artist column */}
-            <section className="mt-6 flex gap-7">
-              <div
-                className="rounded-2xl bg-white/10 flex-shrink-0"
-                style={{ width: 280, height: 280 }}
-              />
-              <div className="flex-1 min-w-0 flex flex-col gap-3 pt-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-11 h-11 rounded-full bg-white/10" />
-                  <div className={`${SHIMMER} h-4 w-40`} />
-                </div>
-                <div className={`${SHIMMER} h-9 w-[70%] mt-1`} />
-                <div className={`${SHIMMER} h-3.5 w-48 mt-2`} />
-                <div className="mt-3 flex flex-col gap-2">
-                  <div className={`${SHIMMER} h-3 w-[88%]`} />
-                  <div className={`${SHIMMER} h-3 w-[78%]`} />
-                  <div className={`${SHIMMER} h-3 w-[64%]`} />
-                </div>
-                <div className="mt-5 flex items-center gap-3">
-                  <div className="h-11 w-28 rounded-full bg-white/10" />
-                  <div className="h-11 w-11 rounded-full bg-white/10" />
-                  <div className="h-11 w-11 rounded-full bg-white/10" />
-                </div>
-              </div>
-            </section>
-
-            {/* Tracklist */}
-            <div className="mt-10 flex flex-col">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-4 py-3 border-b"
-                  style={{ borderColor: "rgba(255,255,255,0.06)" }}
-                >
-                  <div className={`${SHIMMER} h-4 w-4`} />
-                  <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                    <div className={`${SHIMMER} h-3.5`} style={{ width: `${60 - i * 4}%` }} />
-                    <div className={`${SHIMMER} h-3`} style={{ width: `${30 + i * 3}%` }} />
-                  </div>
-                  <div className={`${SHIMMER} h-3 w-10`} />
-                </div>
-              ))}
-            </div>
+        <main className="flex-1 overflow-y-auto flex items-center justify-center p-8">
+          {/* Centered certificate at a poster-ish aspect so the cover
+              tile lands roughly where the desktop hero cover does. */}
+          <div
+            className="w-full max-w-[520px] rounded-xl overflow-hidden shadow-2xl"
+            style={{ aspectRatio: "4 / 5" }}
+          >
+            <CertificateSkeleton testId="skeleton-album-desktop-certificate" />
           </div>
         </main>
       </div>
