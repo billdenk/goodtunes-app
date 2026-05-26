@@ -733,3 +733,57 @@ SQL
 }
 migrate_profile_photos_v2 dev  "${DATABASE_URL:-}"
 migrate_profile_photos_v2 prod "${PROD_DATABASE_URL:-}"
+
+# Task #395 — Loose-FK on playlists.user_id + server-side fan favorites.
+#
+#   1. `playlists.user_id` no longer carries a `.references(users.id)` in the
+#      Drizzle schema: fan playlists write a `customer_users.id` here, and the
+#      enforced FK to `users` 500'd every fan playlist create. Same pattern as
+#      `user_albums.user_id` and the old `auth_tokens.user_id`. The publish
+#      dev→prod diff will keep trying to re-add the constraint, so sweep it
+#      off both DBs every merge (idempotent).
+#
+#   2. `song_favorites` + `artist_favorites` back the heart-on-song and star-
+#      on-artist UI. Server-side so they survive logout / device switch.
+#      `user_id` is a loose FK (no REFERENCES) for the same dual-table reason
+#      as playlists. Composite PK enforces idempotent add. song_favorites
+#      keeps a real FK to `songs(id)` so deleted songs don't leave dangling
+#      hearts; artist_favorites keys by artist name (no stable artist id yet).
+#
+# Safe to re-run on already-migrated DBs (every statement is IF EXISTS /
+# IF NOT EXISTS) and is pre-applied on both DBs so the publish flow's
+# dev→prod diff stays empty.
+migrate_fan_favorites() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping fan-favorites migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE IF EXISTS playlists
+  DROP CONSTRAINT IF EXISTS playlists_user_id_users_id_fk;
+
+CREATE TABLE IF NOT EXISTS song_favorites (
+  user_id    varchar NOT NULL,
+  song_id    varchar NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+  created_at timestamp DEFAULT now(),
+  PRIMARY KEY (user_id, song_id)
+);
+
+CREATE TABLE IF NOT EXISTS artist_favorites (
+  user_id     varchar NOT NULL,
+  artist_name text    NOT NULL,
+  created_at  timestamp DEFAULT now(),
+  PRIMARY KEY (user_id, artist_name)
+);
+COMMIT;
+SQL
+  then
+    echo "post-merge: fan-favorites migration ok on $label"
+  else
+    echo "post-merge: WARNING — fan-favorites migration failed on $label (continuing)"
+  fi
+}
+migrate_fan_favorites dev  "${DATABASE_URL:-}"
+migrate_fan_favorites prod "${PROD_DATABASE_URL:-}"

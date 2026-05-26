@@ -11708,6 +11708,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ message: "Removed" });
   });
 
+  // ----- Fan favorites (Task #395) ----------------------------------------
+  // Server-backed hearts (songs) and stars (artists). Fan-only — admin
+  // sessions don't get persisted favorites; the client falls back to its
+  // localStorage path for anonymous + admin (same behavior as today).
+  // Artist favorites key by artist NAME because the fan model has no
+  // stable artist id surfaced yet (see useFavoriteArtists hook).
+  app.get("/api/favorites/songs", requireCustomer, async (req, res) => {
+    const rows = await storage.listSongFavorites(req.session.userId!);
+    return res.json(rows.map((r) => ({ songId: r.songId, createdAt: r.createdAt })));
+  });
+  app.post("/api/favorites/songs", requireCustomer, async (req, res) => {
+    const songId = typeof req.body?.songId === "string" ? req.body.songId : "";
+    if (!songId) return res.status(400).json({ message: "songId required" });
+    try {
+      await storage.addSongFavorite(req.session.userId!, songId);
+    } catch (err: any) {
+      // FK violation on songs.id — the client sent a song id that
+      // doesn't exist (e.g. legacy localStorage entry pointing at a
+      // demo-data song that was never seeded). Swallow so the one-shot
+      // migration doesn't 500 the whole batch.
+      if (err?.code !== "23503") throw err;
+    }
+    return res.status(201).json({ ok: true });
+  });
+  app.delete("/api/favorites/songs/:songId", requireCustomer, async (req, res) => {
+    await storage.removeSongFavorite(req.session.userId!, String(req.params.songId));
+    return res.json({ ok: true });
+  });
+
+  app.get("/api/favorites/artists", requireCustomer, async (req, res) => {
+    const rows = await storage.listArtistFavorites(req.session.userId!);
+    return res.json(rows.map((r) => ({ artistName: r.artistName, createdAt: r.createdAt })));
+  });
+  app.post("/api/favorites/artists", requireCustomer, async (req, res) => {
+    const artistName = typeof req.body?.artistName === "string" ? req.body.artistName.trim() : "";
+    if (!artistName) return res.status(400).json({ message: "artistName required" });
+    await storage.addArtistFavorite(req.session.userId!, artistName);
+    return res.status(201).json({ ok: true });
+  });
+  app.delete("/api/favorites/artists/:artistName", requireCustomer, async (req, res) => {
+    const name = decodeURIComponent(String(req.params.artistName));
+    await storage.removeArtistFavorite(req.session.userId!, name);
+    return res.json({ ok: true });
+  });
+
   // ----- Play analytics ---------------------------------------------------
   // Backed by `analytics_events` table now (was in-memory ring buffer). Same
   // shape on the wire.

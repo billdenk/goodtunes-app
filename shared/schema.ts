@@ -455,9 +455,18 @@ export const userAlbums = pgTable(
   }),
 );
 
+// Task #395 — `userId` is a loose FK. Fan playlists carry a `customer_users.id`
+// here; admin playlists (legacy / staff demos) carry a `users.id`. Same pattern
+// as `user_albums` and the old `auth_tokens.user_id` — Drizzle's pgTable can't
+// express "FK to one of two tables", and the column has to accept both, so we
+// drop the `.references()` entirely. `scripts/post-merge.sh` idempotently
+// sweeps the leftover `playlists_user_id_users_id_fk` constraint off both
+// dev + prod so the publish dev→prod diff can't keep re-adding it (which is
+// what broke fan playlist creation with a 500 — see
+// .agents/memory/user-albums-loose-fk.md + auth-tokens-fk-recurrence.md).
 export const playlists = pgTable("playlists", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id").notNull(),
   name: text("name").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -473,6 +482,44 @@ export const playlistSongs = pgTable(
   },
   (t) => ({
     playlistSongUnique: uniqueIndex("playlist_songs_playlist_song_uniq").on(t.playlistId, t.songId),
+  }),
+);
+
+// Task #395 — Server-side song & artist favorites for signed-in fans.
+// Replaces the localStorage-only `gt:fav:songs` / `gt:fav:artists` keys so
+// hearts and stars survive logout, device switch, and reinstall. Anonymous
+// fans keep the localStorage path; on first sign-in the client one-shot
+// migrates whatever's in localStorage up here, then clears the keys.
+//
+// `userId` is a loose FK to customer_users.id (same pattern as playlists /
+// user_albums) — drizzle pgTable can't express the dual-table reference and
+// only fans favorite anyway, but we keep the constraint off so a stray admin
+// session (or a future shape change) can't 500 the route.
+//
+// Artist favorites are keyed by **artist name** because the current data
+// model has no stable artist id surfaced to the fan client; the hooks have
+// always treated the name string as the identity.
+export const songFavorites = pgTable(
+  "song_favorites",
+  {
+    userId: varchar("user_id").notNull(),
+    songId: varchar("song_id").notNull().references(() => songs.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.userId, t.songId] }),
+  }),
+);
+
+export const artistFavorites = pgTable(
+  "artist_favorites",
+  {
+    userId: varchar("user_id").notNull(),
+    artistName: text("artist_name").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.userId, t.artistName] }),
   }),
 );
 
@@ -2038,6 +2085,8 @@ export type CreditRole = typeof creditRoles.$inferSelect;
 export type UserAlbum = typeof userAlbums.$inferSelect;
 export type Playlist = typeof playlists.$inferSelect;
 export type PlaylistSong = typeof playlistSongs.$inferSelect;
+export type SongFavorite = typeof songFavorites.$inferSelect;
+export type ArtistFavorite = typeof artistFavorites.$inferSelect;
 export type AuthToken = typeof authTokens.$inferSelect;
 export type ProfilePhoto = typeof profilePhotos.$inferSelect;
 export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;

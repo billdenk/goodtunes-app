@@ -36,7 +36,7 @@ What fans actually see and do.
 - **View Albums / Songs / Artists.** Browse the library through three lenses on the same catalog, with album art and artist photos inline.
 - **Search and sort.** Fast search across albums, songs, and artists from a single field at the top of the library, with sort by artist or title.
 - **Shuffle.** One-tap shuffle on any album, playlist, or auto-collection.
-- **Favorite.** Heart a song or star an artist. Favorited artists' songs roll into the auto-built Favorites playlist (see below).
+- **Favorite.** Heart a song or star an artist. Favorites are saved to the fan's GoodTunes account on the server, so they survive logout and follow the fan to a new phone or browser. Favorited artists' songs roll into the auto-built Favorites playlist (see below).
 - **Playlists, including an auto-playlist from favorites.** Fans build their own playlists, and a virtual "Favorites" playlist is maintained automatically — favorited songs plus every song by a favorited artist, deduped, freshest first.
 - **Gear bookmarks.** Fans can bookmark any piece of gear they spot inside SuperCredits™ — the guitar they noticed on track 3 lives in a dedicated Bookmarks page in their account, one tap away later.
 - **Play Next / Play Last.** Queue any song to play immediately after the current track, or drop it at the end of the queue.

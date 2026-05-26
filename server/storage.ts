@@ -54,6 +54,10 @@ import {
   userAlbums,
   playlists,
   playlistSongs,
+  songFavorites,
+  artistFavorites,
+  type SongFavorite,
+  type ArtistFavorite,
   authTokens,
   profilePhotos,
   analyticsEvents,
@@ -428,6 +432,17 @@ export interface IStorage {
   getPlaylistSongs(playlistId: string): Promise<(PlaylistSong & { song: Song & { album: Album } })[]>;
   addSongToPlaylist(playlistId: string, songId: string, position: number): Promise<PlaylistSong>;
   removeSongFromPlaylist(playlistId: string, songId: string): Promise<void>;
+
+  // Fan favorites (Task #395). userId is a customer_users.id; admin
+  // sessions are never expected to call these (the routes are gated by
+  // requireCustomer). Ordered ASC by createdAt so the client's "oldest
+  // first" iteration order matches the legacy localStorage Set behavior.
+  listSongFavorites(userId: string): Promise<SongFavorite[]>;
+  addSongFavorite(userId: string, songId: string): Promise<void>;
+  removeSongFavorite(userId: string, songId: string): Promise<void>;
+  listArtistFavorites(userId: string): Promise<ArtistFavorite[]>;
+  addArtistFavorite(userId: string, artistName: string): Promise<void>;
+  removeArtistFavorite(userId: string, artistName: string): Promise<void>;
 
   // Auth tokens (bearer)
   // `kind` defaults to "admin" for back-compat with the existing route
@@ -2289,6 +2304,43 @@ export class DbStorage implements IStorage {
     }
     await db.delete(playlists).where(eq(playlists.id, id));
   }
+  async listSongFavorites(userId: string): Promise<SongFavorite[]> {
+    return db
+      .select()
+      .from(songFavorites)
+      .where(eq(songFavorites.userId, userId))
+      .orderBy(asc(songFavorites.createdAt));
+  }
+  async addSongFavorite(userId: string, songId: string): Promise<void> {
+    await db
+      .insert(songFavorites)
+      .values({ userId, songId })
+      .onConflictDoNothing();
+  }
+  async removeSongFavorite(userId: string, songId: string): Promise<void> {
+    await db
+      .delete(songFavorites)
+      .where(and(eq(songFavorites.userId, userId), eq(songFavorites.songId, songId)));
+  }
+  async listArtistFavorites(userId: string): Promise<ArtistFavorite[]> {
+    return db
+      .select()
+      .from(artistFavorites)
+      .where(eq(artistFavorites.userId, userId))
+      .orderBy(asc(artistFavorites.createdAt));
+  }
+  async addArtistFavorite(userId: string, artistName: string): Promise<void> {
+    await db
+      .insert(artistFavorites)
+      .values({ userId, artistName })
+      .onConflictDoNothing();
+  }
+  async removeArtistFavorite(userId: string, artistName: string): Promise<void> {
+    await db
+      .delete(artistFavorites)
+      .where(and(eq(artistFavorites.userId, userId), eq(artistFavorites.artistName, artistName)));
+  }
+
   async getPlaylistSongs(playlistId: string): Promise<(PlaylistSong & { song: Song & { album: Album } })[]> {
     const rows = await db
       .select()
