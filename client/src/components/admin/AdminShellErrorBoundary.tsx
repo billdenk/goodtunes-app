@@ -1,4 +1,6 @@
 import { Component, type ReactNode } from "react";
+import { queryClient } from "@/lib/queryClient";
+import { sendErrorReport } from "@/lib/errorReport";
 
 /**
  * Task #424 — Top-level safety net for the admin shell.
@@ -29,6 +31,31 @@ export class AdminShellErrorBoundary extends Component<
   componentDidCatch(error: Error, info: { componentStack?: string }) {
     console.error("[AdminShellErrorBoundary]", error, info);
     this.setState({ info: info?.componentStack ?? null });
+    // Task #426 — forward the crash to the error-report inbox so a
+    // real iPad/admin regression pings us automatically instead of
+    // relying on someone happening to look at the visible card.
+    // Failures stay silent: we don't want a broken send to make the
+    // already-bad crash card worse.
+    try {
+      const cached = queryClient.getQueryData<{ email?: string | null } | null>(["/api/me"]);
+      const reporterEmail = cached?.email ?? null;
+      void sendErrorReport({
+        summary: "The admin shell crashed during render.",
+        context: {
+          source: "admin-shell",
+          step: info?.componentStack ? "componentDidCatch" : null,
+          serverBody: info?.componentStack ?? null,
+        },
+        error: {
+          name: error?.name ?? null,
+          message: error?.message ?? null,
+          stack: error?.stack ?? null,
+        },
+        reporterEmail,
+      }).catch(() => {});
+    } catch {
+      // never let the reporter make the crash card worse
+    }
   }
   render() {
     if (!this.state.error) return this.props.children;
