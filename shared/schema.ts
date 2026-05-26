@@ -1279,6 +1279,12 @@ export const albumSkus = pgTable(
     jacketUpgrade: text("jacket_upgrade"),
     quantityTier: integer("quantity_tier"),
     costSource: text("cost_source"),
+    // Task #433 — per-row Lock affordance. Same "finalized, reversible
+    // until the run actually goes to press" semantics as the album-level
+    // `sellQuoteLockedAt`. NULL = unlocked (editable); non-null = locked
+    // (read-only on the artist Sell panel). Server blocks unlock once a
+    // pressing_order_requests row for this album reaches status='approved'.
+    lockedAt: timestamp("locked_at"),
     createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => ({

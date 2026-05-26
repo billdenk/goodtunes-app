@@ -5711,29 +5711,12 @@ function TrackRow({
               );
             })()}
         {/* Destructive cluster — only surfaced when the row is open.
-            Hide+Delete sit behind a hairline divider so a thumb can't
-            slide from a benign control straight into the trash. */}
+            Task #433 — reordered to [Trash | divider | Eye] so Trash
+            sits farthest from the Chevron and the hairline divider
+            still guards a thumb from sliding between destructive and
+            benign affordances. */}
         {expanded && (
           <div className="flex items-center flex-shrink-0">
-            <button
-              type="button"
-              onClick={() =>
-                toast({
-                  title: "Hide track",
-                  description: "Hide / Park is coming soon.",
-                })
-              }
-              aria-label="Hide track"
-              title="Hide track (parks it — reversible)"
-              className="w-7 h-7 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 inline-flex items-center justify-center"
-              data-testid={`button-hide-track-${song.id}`}
-            >
-              <EyeOff className="w-3.5 h-3.5" />
-            </button>
-            <span
-              className="mx-2 h-4 w-px bg-slate-200"
-              aria-hidden="true"
-            />
             <button
               type="button"
               onClick={() => {
@@ -5756,6 +5739,25 @@ function TrackRow({
               ) : (
                 <Trash2 className="w-3.5 h-3.5" />
               )}
+            </button>
+            <span
+              className="mx-2 h-4 w-px bg-slate-200"
+              aria-hidden="true"
+            />
+            <button
+              type="button"
+              onClick={() =>
+                toast({
+                  title: "Hide track",
+                  description: "Hide / Park is coming soon.",
+                })
+              }
+              aria-label="Hide track"
+              title="Hide track (parks it — reversible)"
+              className="w-7 h-7 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 inline-flex items-center justify-center"
+              data-testid={`button-hide-track-${song.id}`}
+            >
+              <EyeOff className="w-3.5 h-3.5" />
             </button>
           </div>
         )}

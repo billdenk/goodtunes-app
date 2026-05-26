@@ -971,3 +971,26 @@ SQL
 }
 migrate_welcome_back dev  "${DATABASE_URL:-}"
 migrate_welcome_back prod "${PROD_DATABASE_URL:-}"
+
+# Task #433 — per-row Lock affordance on physical-good SKUs. Mirrors the
+# album-level `albums.sell_quote_locked_at` semantics: NULL = unlocked
+# (editable), non-NULL = locked (read-only on the artist Sell panel).
+# Server only allows unlock until the album's pressing_order_requests row
+# reaches status='approved'. Idempotent.
+migrate_album_skus_locked_at() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping album_skus.locked_at migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE album_skus ADD COLUMN IF NOT EXISTS locked_at timestamp;
+SQL
+  then
+    echo "post-merge: album_skus.locked_at migration ok on $label"
+  else
+    echo "post-merge: WARNING — album_skus.locked_at migration failed on $label (continuing)"
+  fi
+}
+migrate_album_skus_locked_at dev  "${DATABASE_URL:-}"
+migrate_album_skus_locked_at prod "${PROD_DATABASE_URL:-}"

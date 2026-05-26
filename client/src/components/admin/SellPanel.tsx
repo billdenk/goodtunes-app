@@ -23,7 +23,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2 } from "lucide-react";
+import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +40,7 @@ import {
   type AlbumAddon,
   type PayoutSettings,
   type PayoutFormatCost,
+  type PressingOrderRequest,
 } from "@shared/schema";
 import {
   VINYL_COLORS,
@@ -275,6 +276,10 @@ export function SellPanel({
       displayName?: string | null;
       // Task #423 — snapshotted track count on Save.
       trackCount?: number | null;
+      // Task #433 — per-row Lock toggle. Omitted on field-edit saves
+      // (preserves the existing lock state); set true/false from the
+      // header's Lock/Unlock icon.
+      locked?: boolean;
     }) => {
       const r = await apiRequest("PUT", `/api/admin/albums/${albumId}/skus/${body.format}`, body);
       return r.json();
@@ -491,6 +496,7 @@ export function SellPanel({
                           albumTitle={albumTitle}
                           artistName={artistName}
                           artistPhotoUrl={artistPhotoUrl}
+                          albumQuoteLockedAt={sellQuoteLockedAt ?? null}
                         />
                       );
                     })}
@@ -528,6 +534,7 @@ export function SellPanel({
                         albumTitle={albumTitle}
                         artistName={artistName}
                         artistPhotoUrl={artistPhotoUrl}
+                        albumQuoteLockedAt={sellQuoteLockedAt ?? null}
                       />
                     ))}
                   </>
@@ -1248,6 +1255,7 @@ function SkuRow({
   albumTitle,
   artistName,
   artistPhotoUrl,
+  albumQuoteLockedAt = null,
 }: {
   format: AlbumFormat;
   existing: AlbumSku | null;
@@ -1280,6 +1288,10 @@ function SkuRow({
     // Task #423 — snapshotted track count so Publishing math stays
     // stable when songs are added / removed after Save.
     trackCount?: number | null;
+    // Task #433 — per-row Lock toggle. Set true/false to flip the
+    // row's lock; omit on every other Save so existing lock state is
+    // preserved.
+    locked?: boolean;
   }) => void;
   onDelete: () => void;
   // Exclusive-disclosure: owned by SellPanel via `useExclusiveDisclosure`.
@@ -1322,6 +1334,11 @@ function SkuRow({
   albumTitle?: string;
   artistName?: string;
   artistPhotoUrl?: string | null;
+  // Task #433 — album-level Quote lock cascades to the row: when the
+  // bigger Lock-in-quote CTA is engaged, every row is locked too
+  // (visual + behavioural) so the album lock and per-row lock can't
+  // disagree.
+  albumQuoteLockedAt?: string | null;
 }) {
   const isDraft = existing === null;
   const isVinyl = isVinylFormat(format);
@@ -1670,6 +1687,21 @@ function SkuRow({
   const trackCountDirty =
     !!existing &&
     (existing.costSnapshotTrackCount ?? 0) !== (trackCount ?? 0);
+
+  // Task #433 — per-row Lock. The row is effectively locked when:
+  //   1) the row itself has `lockedAt` set (per-row Lock icon), OR
+  //   2) the album-level Quote lock is engaged (cascade — keeps the
+  //      two locks visually + behaviourally consistent), OR
+  //   3) the album's pressing order has been approved (run at press).
+  // Server rejects unlock with 409 in case (3); we also hide the
+  // Unlock affordance entirely there so the artist isn't tempted.
+  const { data: pressingOrder } = useQuery<PressingOrderRequest | null>({
+    queryKey: ["/api/admin/albums", albumId, "pressing-order"],
+    enabled: !!albumId,
+  });
+  const atPress = pressingOrder?.status === "approved";
+  const rowLocked = !!existing?.lockedAt;
+  const isLocked = rowLocked || !!albumQuoteLockedAt || atPress;
   const dirty =
     active !== storedActive ||
     priceStr !== storedPrice ||
@@ -1740,12 +1772,17 @@ function SkuRow({
   useEffect(() => {
     if (!isVinyl) return;
     if (!dirty) return;
+    // Task #433 — locked rows are read-only. Skip autosave so a stale
+    // dirty flag from a pre-lock edit can't sneak through and mutate
+    // the snapshot the artist just finalised.
+    if (isLocked) return;
     const t = setTimeout(() => submit(), 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     dirty,
     isVinyl,
+    isLocked,
     priceStr,
     parsedQty,
     vinylColorId,
@@ -1762,6 +1799,27 @@ function SkuRow({
     // re-snapshots the old value.
     trackCount,
   ]);
+
+  const onToggleLock = () => {
+    onSave({
+      format,
+      // Re-send the persisted snapshot — the server upsert needs the
+      // full body, but the row's editable fields aren't necessarily
+      // valid at lock-time (e.g. price still blank on a draft). We
+      // skip the lock call entirely for unsaved drafts.
+      priceCents: existing?.priceCents ?? 0,
+      trackCount: existing?.costSnapshotTrackCount ?? trackCount ?? 0,
+      stock: existing?.stock ?? null,
+      active: existing?.active ?? true,
+      plannedQuantity: existing?.plannedQuantity ?? null,
+      vinylColor: existing?.vinylColor ?? null,
+      jacketUpgrade: (existing?.jacketUpgrade as JacketUpgrade | null) ?? null,
+      pressTierId: usingCatalog ? pressTierId : null,
+      pressColorId: usingCatalog ? pressColorId : null,
+      displayName: existing?.displayName ?? null,
+      locked: !isLocked,
+    });
+  };
 
   // Task #393 — destructive confirm for the trash button in the new
   // vinyl card header. Mirrors the `window.confirm` pattern the
@@ -1818,8 +1876,14 @@ function SkuRow({
               onChange={(e) => setDisplayNameStr(e.target.value.slice(0, 80))}
               placeholder={`Untitled ${ALBUM_FORMAT_LABEL[format]}`}
               maxLength={80}
+              readOnly={isLocked}
               aria-label={`Row title — defaults to ${ALBUM_FORMAT_LABEL[format]}`}
-              className="min-w-0 flex-1 bg-transparent border-0 outline-none text-sm font-semibold text-slate-900 placeholder:text-slate-400 placeholder:font-semibold focus:bg-slate-50 focus:px-1 focus:-mx-1 focus:rounded-sm transition-all"
+              className={[
+                "min-w-0 flex-1 bg-transparent border-0 outline-none text-sm font-semibold placeholder:font-semibold transition-all",
+                isLocked
+                  ? "text-slate-500 placeholder:text-slate-400 cursor-default"
+                  : "text-slate-900 placeholder:text-slate-400 focus:bg-slate-50 focus:px-1 focus:-mx-1 focus:rounded-sm",
+              ].join(" ")}
               data-testid={`input-sku-display-name-${format}`}
             />
             {!expanded && collapsedSummary && (
@@ -1834,37 +1898,96 @@ function SkuRow({
               </button>
             )}
           </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setActive((a) => !a)}
-              className="h-8 w-8 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
-              aria-label={active ? "Hide from Buy sheet" : "Show on Buy sheet"}
-              aria-pressed={!active}
-              title={active ? "Hide from Buy sheet" : "Show on Buy sheet"}
-              data-testid={`button-hide-sku-${format}`}
-            >
-              {active ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-            </button>
+          {/* Task #433 — pulled tight to the top-right edge (-mr-1) and
+              sized to the Tracks-row 7×7 chrome so the cluster reads
+              as one affordance. Order matches Tracks-row destructive
+              ordering: [Lock] [Trash | divider | Eye] [Chevron]. The
+              hairline divider sits between the destructive Trash and
+              the benign Eye so a thumb can't slide between them. Lock
+              is the leftmost (furthest from the chevron) and is only
+              offered on saved rows (drafts can't lock yet). */}
+          <div className="flex items-center flex-shrink-0 -mr-1">
+            {/* Task #433 — Lock affordance. Hidden once the run is at
+                the press (the unlock direction is the only thing left
+                to offer, and the server blocks it with 409); drafts
+                can't lock either since there's no row to persist to.
+                When the album-level Quote lock is what's holding the
+                row, the icon is non-interactive and points at the
+                bigger CTA via its tooltip. */}
+            {!isDraft && !atPress && (
+              <button
+                type="button"
+                onClick={onToggleLock}
+                disabled={!rowLocked && !!albumQuoteLockedAt}
+                className={[
+                  "w-7 h-7 rounded-md inline-flex items-center justify-center transition-colors",
+                  isLocked
+                    ? "text-[color:var(--brand-blue)] hover:bg-slate-100"
+                    : "text-slate-400 hover:text-slate-700 hover:bg-slate-100",
+                  !rowLocked && !!albumQuoteLockedAt ? "opacity-60 cursor-not-allowed" : "",
+                ].join(" ")}
+                aria-label={isLocked ? "Unlock row" : "Lock row"}
+                aria-pressed={isLocked}
+                title={
+                  !rowLocked && !!albumQuoteLockedAt
+                    ? "Quote is locked — unlock it below to edit this row."
+                    : isLocked
+                      ? "Unlock row (reversible until the run goes to press)"
+                      : "Lock row (finalises this format in the quote)"
+                }
+                data-testid={`button-lock-sku-${format}`}
+              >
+                {isLocked ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
+              </button>
+            )}
             <button
               type="button"
               onClick={onDeleteWithConfirm}
-              className="h-8 w-8 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center transition-colors"
+              disabled={isLocked}
+              className={[
+                "w-7 h-7 rounded-md inline-flex items-center justify-center transition-colors",
+                isLocked
+                  ? "text-slate-300 cursor-not-allowed"
+                  : "text-slate-400 hover:text-rose-600 hover:bg-rose-50",
+              ].join(" ")}
               aria-label={isDraft ? "Discard draft" : "Remove format"}
+              title={isLocked ? "Unlock the row to remove this format." : undefined}
               data-testid={`button-delete-sku-${format}`}
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-3.5 h-3.5" />
               <span className="sr-only">{isDraft ? "Discard draft" : "Remove format"}</span>
+            </button>
+            <span className="mx-2 h-4 w-px bg-slate-200" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={() => setActive((a) => !a)}
+              disabled={isLocked}
+              className={[
+                "w-7 h-7 rounded-md inline-flex items-center justify-center transition-colors",
+                isLocked
+                  ? "text-slate-300 cursor-not-allowed"
+                  : "text-slate-400 hover:text-slate-700 hover:bg-slate-100",
+              ].join(" ")}
+              aria-label={active ? "Hide from Buy sheet" : "Show on Buy sheet"}
+              aria-pressed={!active}
+              title={
+                isLocked
+                  ? "Unlock the row to change visibility."
+                  : active ? "Hide from Buy sheet" : "Show on Buy sheet"
+              }
+              data-testid={`button-hide-sku-${format}`}
+            >
+              {active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
             </button>
             <button
               type="button"
               onClick={() => onSetExpanded(!expanded)}
-              className="h-8 w-8 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+              className="w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
               aria-label={expanded ? "Collapse format" : "Expand format"}
               aria-expanded={expanded}
               data-testid={`button-toggle-sku-${format}`}
             >
-              <ChevronDown className={["w-4 h-4 transition-transform", expanded ? "rotate-180" : ""].join(" ")} />
+              <ChevronDown className={["w-3.5 h-3.5 transition-transform", expanded ? "rotate-180" : ""].join(" ")} />
             </button>
           </div>
         </div>
@@ -1916,7 +2039,11 @@ function SkuRow({
       )}
 
       {expanded && (isVinyl ? (
-      <>
+      <div
+        className={isLocked ? "pointer-events-none opacity-60" : "contents"}
+        aria-disabled={isLocked || undefined}
+        data-testid={isLocked ? `body-sku-locked-${format}` : undefined}
+      >
       {/* Task #393 — REQUIRED section. The vinyl pressing itself is
           non-optional for this format; the hairline + label echoes the
           Tracks-row REQUIRED/OPTIONAL split. */}
@@ -2435,7 +2562,7 @@ function SkuRow({
           onEditArtwork={onEditArtwork}
         />
       ) : null}
-      </>
+      </div>
       ) : (
       <>
       <div className={["grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4"].join(" ")}>

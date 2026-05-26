@@ -179,29 +179,39 @@ async function upsertSku(input: {
   jacketUpgrade: JacketUpgrade | null;
   quantityTier: number | null;
   costSource: string;
+  // Task #433 — per-row Lock. `undefined` = leave existing value alone
+  // (no-op on conflict update); `Date` = lock; `null` = unlock.
+  lockedAt?: Date | null;
 }): Promise<AlbumSku> {
+  const setOnConflict: Record<string, unknown> = {
+    priceCents: input.priceCents,
+    stock: input.stock,
+    active: input.active,
+    plannedQuantity: input.plannedQuantity,
+    displayName: input.displayName,
+    costSnapshotManufacturingCents: input.costSnapshotManufacturingCents,
+    costSnapshotPublishingCents: input.costSnapshotPublishingCents,
+    costSnapshotPaymentProcessingCents: input.costSnapshotPaymentProcessingCents,
+    costSnapshotGoodtunesCents: input.costSnapshotGoodtunesCents,
+    costSnapshotTrackCount: input.costSnapshotTrackCount,
+    vinylColor: input.vinylColor,
+    vinylColorTier: input.vinylColorTier,
+    jacketUpgrade: input.jacketUpgrade,
+    quantityTier: input.quantityTier,
+    costSource: input.costSource,
+  };
+  const insertValues: Record<string, unknown> = { ...input };
+  if (input.lockedAt === undefined) {
+    delete insertValues.lockedAt;
+  } else {
+    setOnConflict.lockedAt = input.lockedAt;
+  }
   const [row] = await db
     .insert(albumSkus)
-    .values(input)
+    .values(insertValues as typeof albumSkus.$inferInsert)
     .onConflictDoUpdate({
       target: [albumSkus.albumId, albumSkus.format],
-      set: {
-        priceCents: input.priceCents,
-        stock: input.stock,
-        active: input.active,
-        plannedQuantity: input.plannedQuantity,
-        displayName: input.displayName,
-        costSnapshotManufacturingCents: input.costSnapshotManufacturingCents,
-        costSnapshotPublishingCents: input.costSnapshotPublishingCents,
-        costSnapshotPaymentProcessingCents: input.costSnapshotPaymentProcessingCents,
-        costSnapshotGoodtunesCents: input.costSnapshotGoodtunesCents,
-        costSnapshotTrackCount: input.costSnapshotTrackCount,
-        vinylColor: input.vinylColor,
-        vinylColorTier: input.vinylColorTier,
-        jacketUpgrade: input.jacketUpgrade,
-        quantityTier: input.quantityTier,
-        costSource: input.costSource,
-      },
+      set: setOnConflict,
     })
     .returning();
   return row;
@@ -529,6 +539,11 @@ export function registerCommerceRoutes(app: Express) {
     // shifting when the artist later adds or removes songs. Optional /
     // nullable for back-compat with clients that haven't been updated.
     trackCount: z.number().int().min(0).nullable().optional(),
+    // Task #433 — per-row Lock. Omitted = preserve existing lock state
+    // (don't accidentally unlock on every Save). true/false = explicit
+    // toggle from the row's Lock/Unlock icon. Unlock once a pressing
+    // order has been approved is rejected with 409 below.
+    locked: z.boolean().optional(),
   });
   app.put("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {
     const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
@@ -604,6 +619,22 @@ export function registerCommerceRoutes(app: Express) {
         costSource = "hellbender";
       }
     }
+    // Task #433 — per-row Lock semantics. Reject unlock once the run
+    // has actually gone to press (pressing_order_requests with status
+    // 'approved'). Lock is always allowed; same direction as the
+    // album-level Quote lock CTA, just at row granularity.
+    let lockedAt: Date | null | undefined = undefined;
+    if (parsed.data.locked !== undefined) {
+      if (parsed.data.locked === false) {
+        const latest = await storage.getLatestPressingOrderRequestForAlbum(album.id);
+        if (latest?.status === "approved") {
+          return res.status(409).json({
+            message: "This run is already at the press — rows can't be unlocked.",
+          });
+        }
+      }
+      lockedAt = parsed.data.locked ? new Date() : null;
+    }
     const row = await upsertSku({
       albumId: album.id,
       format: parsed.data.format,
@@ -622,6 +653,7 @@ export function registerCommerceRoutes(app: Express) {
       jacketUpgrade,
       quantityTier,
       costSource,
+      lockedAt,
     });
     res.json(row);
   });
