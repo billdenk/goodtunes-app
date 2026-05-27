@@ -263,7 +263,7 @@ function visibleTabsFor(album: {
 }): { key: Tab; label: string }[] {
   const base: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
-    { key: "sell", label: "Estimate" },
+    { key: "sell", label: "Design" },
     { key: "tracks", label: "Tracks" },
   ];
   // Bonus is part of the digital offering — always available, no gate.

@@ -639,9 +639,9 @@ export function SellPanel({
         >
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
             <div>
-              <h2 className="text-slate-900 text-[14px] font-bold">Formats</h2>
+              <h2 className="text-slate-900 text-[14px] font-bold">Design your Package</h2>
               <p className="text-slate-500 text-[11.5px] mt-0.5">
-                Toggle a format on and set its price. Only enabled formats appear on the fan's Buy sheet.
+                The plan here is to determine what you'd like your package to look like: 12{"\""} LP? Booklet? Printed GoodDeed? It's all up to you. The calculator is for you to see what you could earn. But, in the end it's up to the fans. So, have fun, pick your package, vinyl color, save it. Then, let's get your offering to your fans!
               </p>
             </div>
             {availableFormats.length > 0 && (
