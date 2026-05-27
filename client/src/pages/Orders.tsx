@@ -530,16 +530,35 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
                   ? "Locked for the next print run — name can no longer be changed."
                   : `Paper: ${cert.paperSize === "a4" ? "A4" : "US Letter"} · You can change the name until it's locked for printing.`}
               </div>
-              {cert.nameStatus === "printed" && (
-                <Link
-                  href={`/g/${cert.shortId}`}
-                  className="mt-2 inline-flex items-center gap-1 text-[12px] text-[#4AFFCA] font-semibold active:opacity-70"
-                  data-testid={`link-cert-view-${order.id}`}
+              {/* Task #435 — Download the PDF (works for every cert state
+                  so legacy-import certs imported as `printed` AND
+                  new-sale certs queued as `confirmed` both get the
+                  action) and link out to the public provenance page once
+                  the cert is finalised. */}
+              <div className="mt-2 flex items-center gap-3 flex-wrap">
+                <a
+                  href={`/api/orders/${order.id}/cert/pdf`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-semibold active:opacity-70"
+                  style={{ color: "var(--brand-mint)" }}
+                  data-testid={`link-cert-download-${order.id}`}
                 >
-                  View certificate
+                  Download GoodDeed
                   <ExternalLink className="w-3 h-3" />
-                </Link>
-              )}
+                </a>
+                {cert.nameStatus === "printed" && (
+                  <Link
+                    href={`/g/${cert.shortId}`}
+                    className="inline-flex items-center gap-1 text-xs font-semibold active:opacity-70"
+                    style={{ color: "var(--brand-blue)" }}
+                    data-testid={`link-cert-view-${order.id}`}
+                  >
+                    View provenance
+                    <ExternalLink className="w-3 h-3" />
+                  </Link>
+                )}
+              </div>
               {!locked && !showPicker && (
                 <button
                   type="button"

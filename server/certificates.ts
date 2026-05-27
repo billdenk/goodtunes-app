@@ -8,7 +8,7 @@
 // is just a re-hit of the endpoint — useful when a row is unlocked or
 // the cover art changes.
 import type { Express, Request, Response } from "express";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import PDFDocument from "pdfkit";
 // qrcode ships no bundled types and we don't want to vendor a .d.ts just
 // for this single import — same pattern as server/auth/totp.ts.
@@ -380,6 +380,9 @@ export function registerCertificateRoutes(app: Express) {
         customerEmail: r.customer.email,
         customerDisplayName: r.customer.displayName,
         shippingCountry: (r.order.shippingAddress as any)?.country ?? null,
+        // Task #435 — origin lets the queue render a "Legacy" pill so
+        // operators don't accidentally re-print imported gogoods certs.
+        origin: r.order.origin,
       })),
     );
   });
@@ -444,6 +447,152 @@ export function registerCertificateRoutes(app: Express) {
     if (!me) return res.status(403).json({ message: "Admin only" });
     const ctx = await loadCertContext(req.params.certId, absoluteOrigin(req));
     if (!ctx) return res.status(404).json({ message: "Not found" });
+    const pdf = await renderCertPdf(ctx);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${certFilename(ctx)}"`);
+    res.send(pdf);
+  });
+
+  // ─── Task #435 — Fan-facing cert PDF download ───────────────────
+  // Fans hit this from the Orders page "Download certificate" link.
+  // Auth: must own the order. Works for every cert state (legacy
+  // imports land as `printed` straight from the bulk generator, so
+  // gating on `printed` only — like the original Orders link did —
+  // would have hidden new-sale certs that are still `confirmed`).
+  app.get("/api/orders/:orderId/cert/pdf", async (req, res) => {
+    const me = await getCustomerAuth(req);
+    if (!me) return res.status(401).json({ message: "Sign in required" });
+    const [row] = await db
+      .select({ cert: signedCertCertificates, order: orders })
+      .from(signedCertCertificates)
+      .innerJoin(orders, eq(orders.id, signedCertCertificates.orderId))
+      .where(eq(signedCertCertificates.orderId, req.params.orderId));
+    if (!row || row.order.customerId !== me.userId) {
+      return res.status(404).json({ message: "Not found" });
+    }
+    const ctx = await loadCertContext(row.cert.id, absoluteOrigin(req));
+    if (!ctx) return res.status(404).json({ message: "Not found" });
+    const pdf = await renderCertPdf(ctx);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${certFilename(ctx)}"`);
+    res.send(pdf);
+  });
+
+  // ─── Task #435 — Legacy-import preview tool (admin only) ────────
+  // Renders cert PDFs on the fly from any order — no `signed_cert_
+  // certificates` row required. We synthesize a SignedCertCertificate
+  // shape in-memory so loadCertContext-style consumers (renderCertPdf,
+  // drawCertOnto) don't care that the row never hit the DB. This is
+  // the design-review checkpoint Bill clicks through before the bulk
+  // generator runs against the 3,006 imported gogoods owners.
+  //
+  // /samples returns five hand-picked candidates so the preview covers
+  // Letter, A4, long-title, Nick Carter LLT, and short-title.
+  app.get("/api/admin/legacy-cert-preview/samples", async (req, res) => {
+    const me = await getAdminAuth(req);
+    if (!me) return res.status(403).json({ message: "Admin only" });
+    const rows = await db
+      .select({ order: orders, album: albums, customer: customerUsers })
+      .from(orders)
+      .innerJoin(albums, eq(albums.id, orders.albumId))
+      .innerJoin(customerUsers, eq(customerUsers.id, orders.customerId))
+      .where(and(eq(orders.origin, "legacy:gogoods"), isNotNull(orders.goodDeedNumber)));
+    if (rows.length === 0) return res.json({ samples: [] });
+    // Score each candidate so we can pick a varied set.
+    type Scored = {
+      orderId: string;
+      goodDeedNumber: number | null;
+      albumTitle: string;
+      albumArtist: string;
+      displayName: string;
+      titleLen: number;
+      isNickCarter: boolean;
+    };
+    const scored: Scored[] = rows.map((r) => ({
+      orderId: r.order.id,
+      goodDeedNumber: r.order.goodDeedNumber,
+      albumTitle: r.album.title,
+      albumArtist: r.album.artist,
+      displayName: r.customer.displayName ?? r.customer.username,
+      titleLen: r.album.title.length + r.album.artist.length,
+      isNickCarter: /nick\s*carter/i.test(r.album.artist),
+    }));
+    const picks: Scored[] = [];
+    const seen = new Set<string>();
+    function take(s: Scored | undefined, _label: string) {
+      if (!s || seen.has(s.orderId)) return;
+      picks.push(s);
+      seen.add(s.orderId);
+    }
+    // 1. Nick Carter LLT (longest title wins inside that bucket).
+    const nick = scored.filter((s) => s.isNickCarter).sort((a, b) => b.titleLen - a.titleLen)[0];
+    take(nick, "nick-carter");
+    // 2. Longest title overall (Letter target).
+    const longest = scored.slice().sort((a, b) => b.titleLen - a.titleLen)[0];
+    take(longest, "long-title");
+    // 3. Short title (clean rendering).
+    const short = scored.slice().sort((a, b) => a.titleLen - b.titleLen)[0];
+    take(short, "short-title");
+    // 4. Another distinct artist for variety.
+    const distinct = scored.find(
+      (s) => !picks.some((p) => p.albumArtist === s.albumArtist),
+    );
+    take(distinct, "variety");
+    // 5. Whatever else fills the slot.
+    take(scored.find((s) => !seen.has(s.orderId)), "filler");
+
+    res.json({
+      total: rows.length,
+      samples: picks.map((p) => ({
+        orderId: p.orderId,
+        goodDeedNumber: p.goodDeedNumber,
+        albumTitle: p.albumTitle,
+        albumArtist: p.albumArtist,
+        displayName: p.displayName,
+        previewLetterUrl: `/api/admin/legacy-cert-preview/order/${p.orderId}.pdf?paperSize=letter`,
+        previewA4Url: `/api/admin/legacy-cert-preview/order/${p.orderId}.pdf?paperSize=a4`,
+      })),
+    });
+  });
+
+  app.get("/api/admin/legacy-cert-preview/order/:orderId.pdf", async (req, res) => {
+    const me = await getAdminAuth(req);
+    if (!me) return res.status(403).json({ message: "Admin only" });
+    const [row] = await db
+      .select({ order: orders, album: albums, customer: customerUsers })
+      .from(orders)
+      .innerJoin(albums, eq(albums.id, orders.albumId))
+      .innerJoin(customerUsers, eq(customerUsers.id, orders.customerId))
+      .where(eq(orders.id, req.params.orderId));
+    if (!row) return res.status(404).json({ message: "Order not found" });
+    const paperSize: "letter" | "a4" =
+      req.query.paperSize === "a4" ? "a4" : req.query.paperSize === "letter" ? "letter" : "letter";
+    const nameOverride = typeof req.query.name === "string" ? req.query.name.trim() : "";
+    const confirmedName =
+      nameOverride || row.customer.realName || row.customer.displayName || row.customer.username;
+    // Synthetic in-memory cert — never written to the DB.
+    const syntheticCert: SignedCertCertificate = {
+      id: "preview",
+      orderId: row.order.id,
+      shortId: "preview" + row.order.id.slice(0, 8),
+      nameStatus: "confirmed",
+      confirmedIdentityKind: "display",
+      confirmedName,
+      paperSize,
+      paperSizeOverridden: false,
+      printBatchId: null,
+      lockedAt: null,
+      printedAt: null,
+      confirmedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const ctx: CertContext = {
+      cert: syntheticCert,
+      order: row.order,
+      album: row.album,
+      origin: absoluteOrigin(req),
+    };
     const pdf = await renderCertPdf(ctx);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${certFilename(ctx)}"`);

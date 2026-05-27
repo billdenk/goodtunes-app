@@ -30,6 +30,10 @@ type QueueRow = {
   shippingCountry: string | null;
   createdAt: string;
   confirmedAt: string | null;
+  // Task #435 — order.origin pass-through. "legacy:gogoods" rows are
+  // imported certs that fans already physically own; we badge them so
+  // operators don't re-print them by reflex on the Printed tab.
+  origin: string;
 };
 
 const TABS: { key: QueueRow["nameStatus"]; label: string }[] = [
@@ -295,6 +299,15 @@ function AdminPrintQueueInner() {
                       </span>
                     )}
                     <span className="text-[11px] text-white/35">{r.shippingCountry ?? "?"}</span>
+                    {r.origin === "legacy:gogoods" && (
+                      <span
+                        className="px-2 py-0.5 rounded-full text-xs font-semibold uppercase bg-amber-400/15 text-amber-200"
+                        title="Imported from gogoods.com — fan already has the original physical certificate; don't re-print unless asked."
+                        data-testid={`badge-legacy-${r.id}`}
+                      >
+                        Legacy
+                      </span>
+                    )}
                   </div>
                   <div className="text-[14px] font-medium truncate mt-0.5">
                     {r.confirmedName ?? <span className="text-white/45 italic">No name yet</span>}
