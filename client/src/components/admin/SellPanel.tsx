@@ -3630,39 +3630,40 @@ function GoodDeedPill({
                   )}
                 </div>
               )}
-              {/* Task #498 — Navy band mirrors the new portrait
-                  customer-facing cert: avatar + owner skeleton line
-                  + "owns no. NN of <album>" on the left with the
-                  GoodTunes mark pinned top-right; founder signature
-                  on a thin rule bottom-left with a small QR tile
-                  bottom-right. Per-fan dynamic bits (owner name,
-                  serial #, QR) render as mid-blue bars / decorative
-                  finder pattern so it reads as a template, not
-                  filled-in copy the artist is expected to edit. */}
+              {/* Task #510 follow-up — band matches Bill's wireframe
+                  (image_1779851332242.png): all placeholder content is
+                  a uniform muted slate-blue rounded rect set against
+                  brand-navy. Top row = solid avatar disc + two short
+                  bars (owner / serial) + GoodTunes wordmark top-right.
+                  Middle = three full-width body bars (cert body copy).
+                  Bottom-left = real Will signature overlaid on a wider
+                  bar; bottom-right = solid square QR placeholder. No
+                  founder caption, no mint, no QR finder pattern —
+                  reads as a pure wireframe template. */}
               <div
-                className="w-full text-white flex flex-col justify-between px-[5%] py-[4%] aspect-[3/1]"
+                className="w-full text-white flex flex-col justify-between px-[5%] py-[5%] aspect-[3/1] gap-[3%]"
                 style={{ backgroundColor: "var(--brand-bg)" }}
                 data-testid="band-gooddeed-cert"
               >
-                {/* Top row — avatar + two skeleton text bars ("owner"
-                    and "owns no. NN of <album>") on the left, stacked
-                    GoodTunes lockup pinned top-right. */}
+                {/* Top row — solid avatar + two short bars + GoodTunes wordmark */}
                 <div className="flex items-start justify-between gap-[4%]">
-                  <div className="flex items-center gap-[4%] min-w-0 flex-1">
+                  <div className="flex items-center gap-[3%] min-w-0 flex-1">
                     <div
-                      className="w-[14%] aspect-square rounded-full flex-shrink-0 border border-white/25"
-                      style={{ background: "rgba(255,255,255,0.18)" }}
+                      className="w-[12%] aspect-square rounded-full flex-shrink-0"
+                      style={{ background: "rgba(255,255,255,0.32)" }}
                       aria-label="Owner avatar (per fan)"
                       data-testid="skeleton-gooddeed-avatar"
                     />
-                    <div className="flex-1 min-w-0 flex flex-col gap-[10%]">
+                    <div className="flex-1 min-w-0 flex flex-col gap-[12%]">
                       <div
-                        className="h-[14%] min-h-[10px] w-1/2 rounded-full bg-white/85"
+                        className="h-[40%] min-h-[10px] w-[55%] rounded-full"
+                        style={{ background: "rgba(255,255,255,0.32)" }}
                         aria-label="Owner name (filled in per fan)"
                         data-testid="skeleton-gooddeed-owner"
                       />
                       <div
-                        className="h-[12%] min-h-[8px] w-[75%] rounded-full bg-white/55"
+                        className="h-[40%] min-h-[10px] w-[32%] rounded-full"
+                        style={{ background: "rgba(255,255,255,0.32)" }}
                         aria-label={`owns no. NN of ${albumTitle || "this release"}`}
                         data-testid="skeleton-gooddeed-serial"
                       />
@@ -3671,54 +3672,36 @@ function GoodDeedPill({
                   <img
                     src="/goodtunes-logo-white.png"
                     alt="GoodTunes®"
-                    className="h-8 w-auto object-contain object-right flex-shrink-0"
+                    className="h-[80%] w-auto object-contain object-right flex-shrink-0"
                     data-testid="mark-goodtunes"
                   />
                 </div>
 
-                {/* Bottom row — founder signature on a thin rule with
-                    WILL BOWEN · FOUNDER underneath (left), mint QR
-                    placeholder (right). */}
+                {/* Middle — three long body-text bars */}
+                <div className="flex flex-col gap-[3%]" aria-hidden>
+                  <div className="h-[14%] min-h-[8px] w-[88%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
+                  <div className="h-[14%] min-h-[8px] w-[80%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
+                  <div className="h-[14%] min-h-[8px] w-[68%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
+                </div>
+
+                {/* Bottom row — signature overlaid on a bar (left), solid square QR placeholder (right) */}
                 <div className="flex items-end justify-between gap-[4%]">
-                  <div
-                    className="flex-1 min-w-0"
-                    aria-label="Founder signature"
-                    data-testid="signature-gooddeed"
-                  >
+                  <div className="flex-1 min-w-0 relative" aria-label="Founder signature" data-testid="signature-gooddeed">
+                    <div className="h-[16%] min-h-[10px] w-[60%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} aria-hidden />
                     <img
                       src="/will-signature.png"
                       alt="Will Bowen, Founder"
-                      className="h-[2em] w-auto max-w-[60%] object-contain object-left select-none -mb-1"
+                      className="absolute left-0 bottom-0 h-[2.2em] w-auto max-w-[55%] object-contain object-left-bottom select-none"
                       draggable={false}
                     />
-                    <div className="border-t border-white/70" />
-                    <div className="text-[0.65rem] text-white uppercase tracking-[0.18em] mt-1.5 font-medium">
-                      Will Bowen · Founder
-                    </div>
                   </div>
                   <div
-                    className="w-[14%] aspect-square rounded-sm flex-shrink-0 grid place-items-center p-[2%]"
-                    style={{ background: "var(--brand-mint)" }}
+                    className="w-[12%] aspect-square rounded-md flex-shrink-0"
+                    style={{ background: "rgba(255,255,255,0.32)" }}
                     aria-hidden
                     title="Per-fan QR — auto-generated at sale time"
                     data-testid="placeholder-gooddeed-qr"
-                  >
-                    <svg viewBox="0 0 25 25" className="w-full h-full" style={{ color: "var(--brand-bg)" }} aria-hidden>
-                      <rect x="0" y="0" width="7" height="7" fill="currentColor" />
-                      <rect x="2" y="2" width="3" height="3" fill="var(--brand-mint)" />
-                      <rect x="18" y="0" width="7" height="7" fill="currentColor" />
-                      <rect x="20" y="2" width="3" height="3" fill="var(--brand-mint)" />
-                      <rect x="0" y="18" width="7" height="7" fill="currentColor" />
-                      <rect x="2" y="20" width="3" height="3" fill="var(--brand-mint)" />
-                      <rect x="10" y="2" width="2" height="2" fill="currentColor" />
-                      <rect x="13" y="9" width="2" height="2" fill="currentColor" />
-                      <rect x="9" y="12" width="2" height="2" fill="currentColor" />
-                      <rect x="16" y="14" width="2" height="2" fill="currentColor" />
-                      <rect x="12" y="17" width="2" height="2" fill="currentColor" />
-                      <rect x="19" y="19" width="2" height="2" fill="currentColor" />
-                      <rect x="22" y="11" width="2" height="2" fill="currentColor" />
-                    </svg>
-                  </div>
+                  />
                 </div>
               </div>
             </div>

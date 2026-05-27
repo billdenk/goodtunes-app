@@ -424,43 +424,48 @@ const CertCard = forwardRef(function CertCard(
         <img src={album.artwork} alt={album.title} className="w-full h-full object-cover block" />
       </div>
 
-      {/* Bottom: navy band — same width as art, kisses its bottom edge (no gap, no inset) */}
+      {/* Bottom: navy band — wireframe layout matching Bill's mockup.
+          All placeholder content is a single muted slate-blue
+          (rgba(255,255,255,0.32)) rounded rect against brand-navy:
+          solid avatar disc + 2 short top bars + GoodTunes wordmark,
+          3 long body bars in the middle, signature overlaid on a
+          wider bar + solid square QR placeholder at the bottom. No
+          mint, no QR finder pattern, no WILL BOWEN · FOUNDER caption. */}
       <div
-        className="relative w-full flex-1 px-[5%] py-[3.5%] flex flex-col justify-between"
+        className="relative w-full flex-1 px-[5%] py-[4%] flex flex-col justify-between gap-[3%]"
         style={{ backgroundColor: "var(--brand-bg)" }}
       >
-        {/* Top row: avatar + two "owns no. NN of <album>" text bars (left), stacked GoodTunes logo (right) */}
+        {/* Top row */}
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="flex items-center gap-[3%] min-w-0 flex-1">
             {ownerPhotoUrl ? (
               <img
                 src={ownerPhotoUrl}
                 alt=""
-                className="w-[14%] aspect-square rounded-full object-cover flex-shrink-0 border border-white/20"
+                className="w-[12%] aspect-square rounded-full object-cover flex-shrink-0"
                 data-testid="img-cert-owner-photo"
               />
             ) : (
               <div
-                className="w-[14%] aspect-square rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-semibold border border-white/20"
-                style={{ background: "rgba(255,255,255,0.14)" }}
+                className="w-[12%] aspect-square rounded-full flex-shrink-0"
+                style={{ background: "rgba(255,255,255,0.32)" }}
                 aria-hidden
-              >
-                {initial}
-              </div>
+                data-testid="placeholder-cert-owner-avatar"
+              />
             )}
             <div
-              className="min-w-0 flex-1 flex flex-col gap-2"
+              className="min-w-0 flex-1 flex flex-col gap-[12%]"
               data-testid="text-cert-owner"
               aria-label={`${ownerName} owns no. ${certNumStr} of ${album.title}`}
             >
               <div
-                className="h-[0.55em] min-h-[10px] rounded-full w-1/2"
-                style={{ background: "rgba(255,255,255,0.85)" }}
+                className="h-[0.55em] min-h-[10px] rounded-full w-[55%]"
+                style={{ background: "rgba(255,255,255,0.32)" }}
                 aria-hidden
               />
               <div
-                className="h-[0.5em] min-h-[8px] rounded-full w-[75%]"
-                style={{ background: "rgba(255,255,255,0.55)" }}
+                className="h-[0.55em] min-h-[10px] rounded-full w-[32%]"
+                style={{ background: "rgba(255,255,255,0.32)" }}
                 aria-hidden
               />
             </div>
@@ -468,49 +473,35 @@ const CertCard = forwardRef(function CertCard(
           <img
             src="/goodtunes-logo-white.png"
             alt="GoodTunes"
-            className="h-[2.6em] w-auto object-contain flex-shrink-0"
+            className="h-[2.4em] w-auto object-contain flex-shrink-0"
           />
         </div>
 
-        {/* Bottom row: signature-on-rule + WILL BOWEN · FOUNDER (left), mint QR square (right) */}
+        {/* Middle — 3 body-text bars */}
+        <div className="flex flex-col gap-[3%]" aria-hidden>
+          <div className="h-[0.5em] min-h-[8px] w-[88%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
+          <div className="h-[0.5em] min-h-[8px] w-[80%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
+          <div className="h-[0.5em] min-h-[8px] w-[68%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
+        </div>
+
+        {/* Bottom row — signature overlaid on a bar (left), solid square QR placeholder (right) */}
         <div className="flex items-end justify-between gap-4">
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 relative">
+            <div className="h-[0.6em] min-h-[10px] w-[60%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} aria-hidden />
             <img
               src="/will-signature.png"
               alt="Will Bowen, Founder"
-              className="h-[2.4em] w-auto max-w-[55%] object-contain object-left select-none -mb-1"
+              className="absolute left-0 bottom-0 h-[2.4em] w-auto max-w-[55%] object-contain object-left-bottom select-none"
               draggable={false}
             />
-            <div className="border-t border-white/70" />
-            <div className="text-white text-[0.7em] uppercase tracking-[0.15em] mt-1.5">
-              Will Bowen · Founder
-            </div>
           </div>
           <div
-            className="w-[14%] aspect-square rounded-sm flex-shrink-0 grid place-items-center p-[2%]"
-            style={{ background: "var(--brand-mint)" }}
+            className="w-[12%] aspect-square rounded-md flex-shrink-0"
+            style={{ background: "rgba(255,255,255,0.32)" }}
             aria-hidden
             title="Per-fan QR — verifies this certificate"
             data-testid="placeholder-cert-qr"
-          >
-            <svg viewBox="0 0 25 25" className="w-full h-full" style={{ color: "var(--brand-bg)" }} aria-hidden>
-              <rect x="0" y="0" width="7" height="7" fill="currentColor" />
-              <rect x="2" y="2" width="3" height="3" fill="var(--brand-mint)" />
-              <rect x="18" y="0" width="7" height="7" fill="currentColor" />
-              <rect x="20" y="2" width="3" height="3" fill="var(--brand-mint)" />
-              <rect x="0" y="18" width="7" height="7" fill="currentColor" />
-              <rect x="2" y="20" width="3" height="3" fill="var(--brand-mint)" />
-              <rect x="10" y="2" width="2" height="2" fill="currentColor" />
-              <rect x="13" y="9" width="2" height="2" fill="currentColor" />
-              <rect x="9" y="12" width="2" height="2" fill="currentColor" />
-              <rect x="16" y="14" width="2" height="2" fill="currentColor" />
-              <rect x="12" y="17" width="2" height="2" fill="currentColor" />
-              <rect x="19" y="19" width="2" height="2" fill="currentColor" />
-              <rect x="22" y="11" width="2" height="2" fill="currentColor" />
-              <rect x="14" y="22" width="2" height="2" fill="currentColor" />
-              <rect x="8" y="8" width="2" height="2" fill="currentColor" />
-            </svg>
-          </div>
+          />
         </div>
       </div>
     </div>
