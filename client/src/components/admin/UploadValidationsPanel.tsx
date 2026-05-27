@@ -55,8 +55,11 @@ export function UploadValidationsPanel({
   onReprobeClick?: () => void;
 }) {
   const { toast } = useToast();
-  const [vendorId, setVendorId] = useState<VendorId>("mrp");
-  const [templateId, setTemplateId] = useState<string>(VENDOR_SPECS.mrp.art.templates[0].id);
+  // MRP temporarily hidden from preflight pickers pre-meeting (mirrors
+  // the Hellbender hide on the Printer/Press picker). To restore: drop
+  // HIDDEN_PREFLIGHT_VENDORS and flip the default back to "mrp".
+  const [vendorId, setVendorId] = useState<VendorId>("pmp");
+  const [templateId, setTemplateId] = useState<string>(VENDOR_SPECS.pmp.art.templates[0].id);
   const [kind, setKind] = useState<"art" | "audio">(kindFilter ?? "art");
   const [vinylSize, setVinylSize] = useState<'7"' | '10"' | '12"'>('12"');
   const [rpm, setRpm] = useState<33 | 45>(33);
@@ -144,9 +147,11 @@ export function UploadValidationsPanel({
               className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
               data-testid="select-preflight-vendor"
             >
-              {Object.values(VENDOR_SPECS).map((s) => (
-                <option key={s.id} value={s.id}>{s.label}</option>
-              ))}
+              {Object.values(VENDOR_SPECS)
+                .filter((s) => s.id !== "mrp")
+                .map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
             </select>
           </label>
           {!kindFilter && (

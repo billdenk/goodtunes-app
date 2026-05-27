@@ -62,7 +62,10 @@ function fmtKb(b: number) {
 
 export function PrintPdfsPanel({ albumId }: { albumId: string }) {
   const { toast } = useToast();
-  const [vendorId, setVendorId] = useState<VendorId>("mrp");
+  // MRP temporarily hidden from print-PDF pickers pre-meeting (mirrors
+  // the Hellbender hide on the Printer/Press picker). To restore: drop
+  // the .filter below and flip the default back to "mrp".
+  const [vendorId, setVendorId] = useState<VendorId>("pmp");
   const [blocked, setBlocked] = useState<GenerateError | null>(null);
   const [justification, setJustification] = useState("");
 
@@ -132,9 +135,11 @@ export function PrintPdfsPanel({ albumId }: { albumId: string }) {
               className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm"
               data-testid="select-print-vendor"
             >
-              {Object.values(VENDOR_SPECS).map((s) => (
-                <option key={s.id} value={s.id}>{s.label}</option>
-              ))}
+              {Object.values(VENDOR_SPECS)
+                .filter((s) => s.id !== "mrp")
+                .map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
             </select>
           </label>
           <button

@@ -102,7 +102,11 @@ export function PressPanel({
   // ── Audio preflight controls (shared by "Run on-file" runner and
   //    the UploadValidationsPanel below, which carries its own copy
   //    of these fields for the replacement-upload path).
-  const [vendorId, setVendorId] = useState<VendorId>("mrp");
+  // MRP temporarily hidden from preflight pickers pre-meeting (mirrors
+  // the Hellbender hide on the Printer/Press picker). To restore: drop
+  // the .filter on the vendor select below and flip the default back to
+  // "mrp".
+  const [vendorId, setVendorId] = useState<VendorId>("pmp");
   const [vinylSize, setVinylSize] = useState<'7"' | '10"' | '12"'>('12"');
   const [rpm, setRpm] = useState<33 | 45>(33);
 
@@ -342,9 +346,11 @@ export function PressPanel({
                   className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
                   data-testid="select-onfile-vendor"
                 >
-                  {Object.values(VENDOR_SPECS).map((s) => (
-                    <option key={s.id} value={s.id}>{s.label}</option>
-                  ))}
+                  {Object.values(VENDOR_SPECS)
+                    .filter((s) => s.id !== "mrp")
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>{s.label}</option>
+                    ))}
                 </select>
               </label>
               <label className="text-[12px] text-slate-600">
