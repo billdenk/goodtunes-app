@@ -3422,9 +3422,14 @@ function GoodDeedPill({
   });
 
   const priceCents = useMemo(() => parseDollars(priceStr), [priceStr]);
+  // Task #511 — Prefer the qty-driven tier preview so the operator sees
+  // wholesale move as they scrub Select Qty. The snapshot stays in the
+  // DB (and continues to inform sale-time / statement readouts) but no
+  // longer overrides the live preview here. Falls back to snapshot or
+  // live platform cost when the preview hasn't returned yet.
   const costCents: number | null =
-    existing?.costCentsSnapshot ??
     preview?.totalPerUnitCents ??
+    existing?.costCentsSnapshot ??
     livePlatformCostCents ??
     null;
   const earnsCents =
