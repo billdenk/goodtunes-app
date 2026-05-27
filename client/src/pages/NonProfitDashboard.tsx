@@ -2,8 +2,10 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Heart, Music as MusicIcon, Mail, Clock } from "lucide-react";
-import { DashboardPanel, DashboardTabs } from "@/components/partner/dashboard-controls";
+import { DashboardPanel } from "@/components/partner/dashboard-controls";
 import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
+import { OperatorShell } from "@/components/operator/OperatorShell";
+import { modulesForRole } from "@/components/operator/registry";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -31,11 +33,7 @@ type Dashboard = {
 
 const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
 
-const NPO_TABS = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "artists", label: "Your artists" },
-  { id: "invites", label: "Invites" },
-] as const;
+const NPO_TABS = modulesForRole("non_profit") as ReadonlyArray<{ id: "dashboard" | "artists" | "invites"; label: string }>;
 type NpoTabId = (typeof NPO_TABS)[number]["id"];
 
 export function NonProfitDashboard() {
@@ -55,44 +53,39 @@ export function NonProfitDashboard() {
   }
 
   return (
-    <main className="min-h-screen bg-[color:var(--brand-bg)] text-white pb-20">
-      <header className="border-b border-white/10 bg-gradient-to-b from-[color:var(--brand-header-gradient-top)] to-[color:var(--brand-bg)]">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
-          <div className="flex items-center gap-4">
-            {me.data?.logoUrl ? (
-              <img src={me.data.logoUrl} alt="" className="w-14 h-14 rounded-xl object-cover bg-white/10 ring-1 ring-white/15" />
-            ) : (
-              <div className="w-14 h-14 rounded-xl bg-[color:var(--brand-purple)]/30 ring-1 ring-white/15 flex items-center justify-center">
-                <Heart className="w-6 h-6 text-[color:var(--brand-pink)]" />
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="text-white/55 text-[12px] uppercase tracking-wider font-semibold">Non-profit dashboard</p>
-              <h1 className="text-2xl sm:text-3xl font-bold truncate" data-testid="text-npo-name">{me.data?.name ?? "Loading…"}</h1>
-              {me.data?.websiteUrl && (
-                <a href={me.data.websiteUrl} target="_blank" rel="noreferrer" className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors">
-                  {me.data.websiteUrl.replace(/^https?:\/\//, "")}
-                </a>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <DashboardTabs tabs={NPO_TABS} value={tab} onChange={setTab} />
-
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 mt-6">
-        {tab === "dashboard" && (
-          <PartnerDashboard
-            scope="npo"
-            title={me.data?.name ?? "Your dashboard"}
-            subtitle="Referred-artist activity and payout accrual"
-          />
-        )}
-        {tab === "artists" && <ArtistsTab />}
-        {tab === "invites" && <InvitesTab />}
-      </div>
-    </main>
+    <OperatorShell
+      testId="npo-shell"
+      roleLabel="Non-profit dashboard"
+      name={me.data?.name ?? "Loading…"}
+      logoUrl={me.data?.logoUrl ?? null}
+      fallbackIcon={Heart}
+      maxWidth="5xl"
+      subtitle={
+        me.data?.websiteUrl ? (
+          <a
+            href={me.data.websiteUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
+          >
+            {me.data.websiteUrl.replace(/^https?:\/\//, "")}
+          </a>
+        ) : null
+      }
+      tabs={NPO_TABS}
+      activeTab={tab}
+      onTabChange={setTab}
+    >
+      {tab === "dashboard" && (
+        <PartnerDashboard
+          scope="npo"
+          title={me.data?.name ?? "Your dashboard"}
+          subtitle="Referred-artist activity and payout accrual"
+        />
+      )}
+      {tab === "artists" && <ArtistsTab />}
+      {tab === "invites" && <InvitesTab />}
+    </OperatorShell>
   );
 }
 

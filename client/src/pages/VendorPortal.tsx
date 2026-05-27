@@ -11,8 +11,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { Redirect, useSearch } from "wouter";
 import { GoodDeedServicesTab } from "@/components/admin/GoodDeedServicesTab";
 import { Store, Loader2 } from "lucide-react";
-import { DashboardTabs } from "@/components/partner/dashboard-controls";
 import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
+import { OperatorShell } from "@/components/operator/OperatorShell";
+import { modulesForRole, type OperatorRole } from "@/components/operator/registry";
 // Task #522 — manufacturer (is_maker / press) admins get the press
 // portal shell instead of the legacy vendor shell.
 import { PressPortal } from "./PressPortal";
@@ -119,14 +120,12 @@ function RoleRouter({ meRole }: { meRole: MeRole | null | undefined }) {
 function VendorBody({ vendorId, role, superAdminScopeKind }: { vendorId: string; role: string; superAdminScopeKind?: "vendor" | "manufacturer" | "fulfillment" }) {
   const [tab, setTab] = useState<VendorTabId>("dashboard");
   // GoodDeed Services is vendor-only server-side (gateVendorAccess in
-  // server/routes.ts admits role==='vendor' only). For manufacturer +
-  // fulfillment users the dashboard is still useful, but we hide the
-  // Services tab they'd get a 403 from rather than expose a tab that
-  // fails on click.
-  const canSeeServices = role === "vendor";
-  const tabs = canSeeServices
-    ? ([{ id: "dashboard", label: "Dashboard" }, { id: "services", label: "GoodDeed Services" }] as const)
-    : ([{ id: "dashboard", label: "Dashboard" }] as const);
+  // server/routes.ts admits role==='vendor' only). The shared module
+  // registry encodes this — manufacturer + fulfillment scopes get the
+  // dashboard tab only and never see Services.
+  const operatorRole = (role as OperatorRole) || "vendor";
+  const tabs = modulesForRole(operatorRole) as ReadonlyArray<{ id: VendorTabId; label: string }>;
+  const canSeeServices = tabs.some((t) => t.id === "services");
   // Header lookup currently goes through the gooddeed-services endpoint
   // (vendor-only). For manufacturer/fulfillment we fall back to a
   // header without the logo + name lookup — the dashboard payload
@@ -142,45 +141,30 @@ function VendorBody({ vendorId, role, superAdminScopeKind }: { vendorId: string;
     "Vendor portal";
 
   return (
-    <main className="min-h-screen bg-[color:var(--brand-bg)] text-white pb-20">
-      <header className="border-b border-white/10 bg-gradient-to-b from-[color:var(--brand-header-gradient-top)] to-[color:var(--brand-bg)]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-          <div className="flex items-center gap-4" data-testid="vendor-portal-header">
-            <div className="w-14 h-14 rounded-2xl bg-white/5 ring-1 ring-white/15 overflow-hidden flex items-center justify-center">
-              {vendor?.logoUrl ? (
-                <img src={vendor.logoUrl} alt="" className="w-full h-full object-cover" data-testid="img-vendor-logo" />
-              ) : (
-                <Store className="w-5 h-5 text-white/45" />
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-white/55 text-[12px] uppercase tracking-wider font-semibold">{portalLabel}</p>
-              <h1 className="text-2xl sm:text-3xl font-bold truncate" data-testid="heading-vendor-name">
-                {vendor?.name ?? "Your dashboard"}
-              </h1>
-            </div>
-          </div>
+    <OperatorShell
+      testId="vendor-shell"
+      roleLabel={portalLabel}
+      name={vendor?.name ?? "Your dashboard"}
+      logoUrl={vendor?.logoUrl ?? null}
+      fallbackIcon={Store}
+      tabs={tabs}
+      activeTab={tab}
+      onTabChange={setTab}
+    >
+      {tab === "dashboard" && (
+        <PartnerDashboard
+          scope="vendor"
+          title={vendor?.name ?? "Your dashboard"}
+          subtitle="Jobs, units, and turn-time across your GoodTunes pipeline"
+          scopeIdQs={superAdminScopeKind ? vendorId : null}
+          scopeKindQs={superAdminScopeKind ?? null}
+        />
+      )}
+      {tab === "services" && (
+        <div className="bg-white text-slate-900 rounded-2xl p-4 sm:p-6 ring-1 ring-white/10" data-testid="vendor-services-panel">
+          <GoodDeedServicesTab vendorId={vendorId} />
         </div>
-      </header>
-
-      <DashboardTabs tabs={tabs} value={tab} onChange={setTab} />
-
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-6">
-        {tab === "dashboard" && (
-          <PartnerDashboard
-            scope="vendor"
-            title={vendor?.name ?? "Your dashboard"}
-            subtitle="Jobs, units, and turn-time across your GoodTunes pipeline"
-            scopeIdQs={superAdminScopeKind ? vendorId : null}
-            scopeKindQs={superAdminScopeKind ?? null}
-          />
-        )}
-        {tab === "services" && (
-          <div className="bg-white text-slate-900 rounded-2xl p-4 sm:p-6 ring-1 ring-white/10" data-testid="vendor-services-panel">
-            <GoodDeedServicesTab vendorId={vendorId} />
-          </div>
-        )}
-      </div>
-    </main>
+      )}
+    </OperatorShell>
   );
 }

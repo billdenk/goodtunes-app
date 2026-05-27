@@ -18,8 +18,10 @@ import {
 } from "recharts";
 // Heart for song-favorite metrics — keeps the artist dashboard's
 // favourites column visually paired with the player's heart action.
-import { Heart } from "lucide-react";
-import { RangePicker, CompareToggle, DashboardTabs } from "@/components/partner/dashboard-controls";
+import { Heart, User as UserIcon } from "lucide-react";
+import { RangePicker, CompareToggle } from "@/components/partner/dashboard-controls";
+import { OperatorShell } from "@/components/operator/OperatorShell";
+import { modulesForRole } from "@/components/operator/registry";
 import { CertRunsSection } from "@/components/partner/cert-runs-section";
 import { BRAND, SKU_COLORS, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 
@@ -114,66 +116,39 @@ export function ArtistDashboard() {
     );
   }
 
+  const artistName = me.data?.name ?? "Your dashboard";
+  const albumCount = me.data?.albumCount ?? 0;
+  const songCount = me.data?.songCount ?? 0;
+  const invitedPress = me.data?.invitedPress ?? null;
+  const hasShippedFirst = !!me.data?.hasShippedFirst;
+
   return (
-    <main className="min-h-screen bg-[color:var(--brand-bg)] text-white pb-20">
-      <Header
-        artistName={me.data?.name ?? "Your dashboard"}
-        photoUrl={me.data?.photoUrl ?? null}
-        albumCount={me.data?.albumCount ?? 0}
-        songCount={me.data?.songCount ?? 0}
-        invitedPress={me.data?.invitedPress ?? null}
-        hasShippedFirst={!!me.data?.hasShippedFirst}
-        preset={preset}
-        onPreset={setPreset}
-        compare={compare}
-        onCompare={setCompare}
-      />
-
-      <Tabs tab={tab} onTab={setTab} />
-
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-6 space-y-6">
-        {tab === "overview" && <OverviewTab qs={qs} />}
-        {tab === "audience" && <AudienceTab qs={qs} />}
-        {tab === "catalog" && <CatalogTab qs={qs} />}
-        {tab === "orders" && <OrdersTab qs={qs} />}
-        {tab === "referrals" && <ReferralsTab />}
-      </div>
-    </main>
-  );
-}
-
-// ─── Page chrome ──────────────────────────────────────────────────────
-function Header({ artistName, photoUrl, albumCount, songCount, invitedPress, hasShippedFirst, preset, onPreset, compare, onCompare }: {
-  artistName: string; photoUrl: string | null; albumCount: number; songCount: number;
-  invitedPress: { id: string; name: string; logoUrl: string | null } | null;
-  hasShippedFirst: boolean;
-  preset: PresetId; onPreset: (p: PresetId) => void;
-  compare: boolean; onCompare: (c: boolean) => void;
-}) {
-  return (
-    <header className="border-b border-white/10 bg-gradient-to-b from-[color:var(--brand-header-gradient-top)] to-[color:var(--brand-bg)]">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-        <div className="flex items-center gap-4 mb-6">
-          {photoUrl ? (
-            <img src={photoUrl} alt="" className="w-14 h-14 rounded-full object-cover ring-1 ring-white/15" data-testid="img-artist-photo" />
-          ) : (
-            <div className="w-14 h-14 rounded-full bg-[color:var(--brand-blue)]/20 ring-1 ring-white/15 flex items-center justify-center text-xl font-bold">
-              {artistName.slice(0, 1).toUpperCase()}
-            </div>
-          )}
-          <div className="min-w-0">
-            <p className="text-white/55 text-[12px] uppercase tracking-wider font-semibold">Artist dashboard</p>
-            <h1 className="text-2xl sm:text-3xl font-bold truncate" data-testid="text-artist-name">{artistName}</h1>
-            <p className="text-white/55 text-[12px] mt-0.5">{albumCount} album{albumCount === 1 ? "" : "s"} · {songCount} credited track{songCount === 1 ? "" : "s"}</p>
-          </div>
-        </div>
-        {invitedPress && <InvitedByPressRow press={invitedPress} hasShippedFirst={hasShippedFirst} />}
-        <div className="flex flex-wrap items-center gap-2">
-          <RangePicker presets={RANGE_PRESETS} value={preset} onChange={onPreset} />
-          <CompareToggle active={compare} onToggle={onCompare} />
-        </div>
-      </div>
-    </header>
+    <OperatorShell
+      testId="artist-shell"
+      roleLabel="Artist dashboard"
+      name={artistName}
+      logoUrl={me.data?.photoUrl ?? null}
+      fallbackIcon={UserIcon}
+      logoShape="circle"
+      subtitle={`${albumCount} album${albumCount === 1 ? "" : "s"} · ${songCount} credited track${songCount === 1 ? "" : "s"}`}
+      headerExtras={invitedPress ? <InvitedByPressRow press={invitedPress} hasShippedFirst={hasShippedFirst} /> : null}
+      headerActions={
+        <>
+          <RangePicker presets={RANGE_PRESETS} value={preset} onChange={setPreset} />
+          <CompareToggle active={compare} onToggle={setCompare} />
+        </>
+      }
+      tabs={ARTIST_TABS}
+      activeTab={tab}
+      onTabChange={setTab}
+      spaceContent
+    >
+      {tab === "overview" && <OverviewTab qs={qs} />}
+      {tab === "audience" && <AudienceTab qs={qs} />}
+      {tab === "catalog" && <CatalogTab qs={qs} />}
+      {tab === "orders" && <OrdersTab qs={qs} />}
+      {tab === "referrals" && <ReferralsTab />}
+    </OperatorShell>
   );
 }
 
@@ -216,18 +191,11 @@ function InvitedByPressRow({ press, hasShippedFirst }: {
   );
 }
 
-const ARTIST_TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "audience", label: "Audience" },
-  { id: "catalog", label: "Catalog" },
-  { id: "orders", label: "Orders" },
-  { id: "referrals", label: "Referrals" },
-] as const;
+const ARTIST_TABS = modulesForRole("artist") as ReadonlyArray<{
+  id: "overview" | "audience" | "catalog" | "orders" | "referrals";
+  label: string;
+}>;
 type ArtistTabId = (typeof ARTIST_TABS)[number]["id"];
-
-function Tabs({ tab, onTab }: { tab: ArtistTabId; onTab: (t: ArtistTabId) => void }) {
-  return <DashboardTabs tabs={ARTIST_TABS} value={tab} onChange={onTab} />;
-}
 
 // ─── KPI card ─────────────────────────────────────────────────────────
 function delta(cur: number, prev: number | null | undefined): { val: string; positive: boolean } | null {

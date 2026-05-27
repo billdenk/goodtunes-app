@@ -20,8 +20,10 @@ import {
 // Heart for song-favorite metrics, Star for artist-roster metrics —
 // per docs/design-system.md the brand uses these two icons as a quick
 // visual cue for what a count means (favorites vs roster size).
-import { Heart, Star } from "lucide-react";
-import { RangePicker, CompareToggle, DashboardTabs } from "@/components/partner/dashboard-controls";
+import { Heart, Star, Building2 } from "lucide-react";
+import { RangePicker, CompareToggle } from "@/components/partner/dashboard-controls";
+import { OperatorShell } from "@/components/operator/OperatorShell";
+import { modulesForRole } from "@/components/operator/registry";
 import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
 import { CertRunsSection } from "@/components/partner/cert-runs-section";
 import { BRAND, CHART_STACK_PALETTE, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
@@ -154,79 +156,49 @@ export function LabelDashboard() {
     );
   }
 
+  const labelName = me.data?.name ?? "Your dashboard";
+  const rosterSize = me.data?.rosterSize ?? 0;
+  const albumCount = me.data?.albumCount ?? 0;
+  const invitedPress = me.data?.invitedPress ?? null;
+  const hasShippedFirst = !!me.data?.hasShippedFirst;
+
   return (
-    <main className="min-h-screen bg-[color:var(--brand-bg)] text-white pb-20">
-      <Header
-        labelName={me.data?.name ?? "Your dashboard"}
-        logoUrl={me.data?.logoUrl ?? null}
-        rosterSize={me.data?.rosterSize ?? 0}
-        albumCount={me.data?.albumCount ?? 0}
-        invitedPress={me.data?.invitedPress ?? null}
-        hasShippedFirst={!!me.data?.hasShippedFirst}
-        preset={preset}
-        onPreset={setPreset}
-        compare={compare}
-        onCompare={setCompare}
-      />
-
-      <Tabs tab={tab} onTab={setTab} />
-
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-6 space-y-6">
-        {tab === "dashboard" && (
-          <PartnerDashboard
-            scope="label"
-            title={me.data?.name ?? "Your dashboard"}
-            subtitle={
-              me.data
-                ? `${me.data.rosterSize} artist${me.data.rosterSize === 1 ? "" : "s"} · ${me.data.albumCount} album${me.data.albumCount === 1 ? "" : "s"}`
-                : undefined
-            }
-            scopeIdQs={labelIdParam}
-          />
-        )}
-        {tab === "overview" && <OverviewTab qs={qs} />}
-        {tab === "roster" && <RosterTab qs={qs} labelIdParam={labelIdParam} />}
-        {tab === "catalog" && <CatalogTab qs={qs} />}
-        {tab === "orders" && <OrdersTab qs={qs} labelIdParam={labelIdParam} />}
-      </div>
-    </main>
-  );
-}
-
-// ─── Page chrome ──────────────────────────────────────────────────────
-function Header({ labelName, logoUrl, rosterSize, albumCount, invitedPress, hasShippedFirst, preset, onPreset, compare, onCompare }: {
-  labelName: string; logoUrl: string | null; rosterSize: number; albumCount: number;
-  invitedPress: { id: string; name: string; logoUrl: string | null } | null;
-  hasShippedFirst: boolean;
-  preset: PresetId; onPreset: (p: PresetId) => void;
-  compare: boolean; onCompare: (c: boolean) => void;
-}) {
-  return (
-    <header className="border-b border-white/10 bg-gradient-to-b from-[color:var(--brand-header-gradient-top)] to-[color:var(--brand-bg)]">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-        <div className="flex items-center gap-4 mb-6">
-          {logoUrl ? (
-            <img src={logoUrl} alt="" className="w-14 h-14 rounded-2xl object-cover ring-1 ring-white/15 bg-white/5" data-testid="img-label-logo" />
-          ) : (
-            <div className="w-14 h-14 rounded-2xl bg-[color:var(--brand-purple)]/25 ring-1 ring-white/15 flex items-center justify-center text-xl font-bold">
-              {labelName.slice(0, 1).toUpperCase()}
-            </div>
-          )}
-          <div className="min-w-0">
-            <p className="text-white/55 text-[12px] uppercase tracking-wider font-semibold">Label dashboard</p>
-            <h1 className="text-2xl sm:text-3xl font-bold truncate" data-testid="text-label-name">{labelName}</h1>
-            <p className="text-white/55 text-[12px] mt-0.5">
-              {rosterSize} artist{rosterSize === 1 ? "" : "s"} · {albumCount} album{albumCount === 1 ? "" : "s"}
-            </p>
-          </div>
-        </div>
-        {invitedPress && <InvitedByPressRow press={invitedPress} hasShippedFirst={hasShippedFirst} />}
-        <div className="flex flex-wrap items-center gap-2">
-          <RangePicker presets={RANGE_PRESETS} value={preset} onChange={onPreset} />
-          <CompareToggle active={compare} onToggle={onCompare} />
-        </div>
-      </div>
-    </header>
+    <OperatorShell
+      testId="label-shell"
+      roleLabel="Label dashboard"
+      name={labelName}
+      logoUrl={me.data?.logoUrl ?? null}
+      fallbackIcon={Building2}
+      subtitle={`${rosterSize} artist${rosterSize === 1 ? "" : "s"} · ${albumCount} album${albumCount === 1 ? "" : "s"}`}
+      headerExtras={invitedPress ? <InvitedByPressRow press={invitedPress} hasShippedFirst={hasShippedFirst} /> : null}
+      headerActions={
+        <>
+          <RangePicker presets={RANGE_PRESETS} value={preset} onChange={setPreset} />
+          <CompareToggle active={compare} onToggle={setCompare} />
+        </>
+      }
+      tabs={LABEL_TABS}
+      activeTab={tab}
+      onTabChange={setTab}
+      spaceContent
+    >
+      {tab === "dashboard" && (
+        <PartnerDashboard
+          scope="label"
+          title={me.data?.name ?? "Your dashboard"}
+          subtitle={
+            me.data
+              ? `${me.data.rosterSize} artist${me.data.rosterSize === 1 ? "" : "s"} · ${me.data.albumCount} album${me.data.albumCount === 1 ? "" : "s"}`
+              : undefined
+          }
+          scopeIdQs={labelIdParam}
+        />
+      )}
+      {tab === "overview" && <OverviewTab qs={qs} />}
+      {tab === "roster" && <RosterTab qs={qs} labelIdParam={labelIdParam} />}
+      {tab === "catalog" && <CatalogTab qs={qs} />}
+      {tab === "orders" && <OrdersTab qs={qs} labelIdParam={labelIdParam} />}
+    </OperatorShell>
   );
 }
 
@@ -266,18 +238,11 @@ function InvitedByPressRow({ press, hasShippedFirst }: {
   );
 }
 
-const LABEL_TABS = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "overview", label: "Overview" },
-  { id: "roster", label: "Roster" },
-  { id: "catalog", label: "Catalog" },
-  { id: "orders", label: "Orders" },
-] as const;
+const LABEL_TABS = modulesForRole("label") as ReadonlyArray<{
+  id: "dashboard" | "overview" | "roster" | "catalog" | "orders";
+  label: string;
+}>;
 type LabelTabId = (typeof LABEL_TABS)[number]["id"];
-
-function Tabs({ tab, onTab }: { tab: LabelTabId; onTab: (t: LabelTabId) => void }) {
-  return <DashboardTabs tabs={LABEL_TABS} value={tab} onChange={onTab} />;
-}
 
 // ─── KPI card ─────────────────────────────────────────────────────────
 function delta(cur: number, prev: number | null | undefined): { val: string; positive: boolean } | null {

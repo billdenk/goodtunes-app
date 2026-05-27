@@ -32,8 +32,10 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { DashboardTabs, DashboardPanel } from "@/components/partner/dashboard-controls";
+import { DashboardPanel } from "@/components/partner/dashboard-controls";
 import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
+import { OperatorShell } from "@/components/operator/OperatorShell";
+import { modulesForRole } from "@/components/operator/registry";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import {
@@ -81,57 +83,35 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
     );
   }
 
-  const tabs = [
-    { id: "dashboard" as const, label: "Dashboard" },
-    { id: "customers" as const, label: "Customers" },
-    { id: "pipeline" as const, label: "Pipeline" },
-    { id: "settings" as const, label: "Settings" },
-  ];
+  const tabs = modulesForRole("press") as ReadonlyArray<{ id: TabId; label: string }>;
 
   return (
-    <main className="min-h-screen bg-[color:var(--brand-bg)] text-white pb-20">
-      <header className="border-b border-white/10 bg-gradient-to-b from-[color:var(--brand-header-gradient-top)] to-[color:var(--brand-bg)]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-          <div className="flex items-center gap-4" data-testid="press-portal-header">
-            <div className="w-14 h-14 rounded-2xl bg-white/5 ring-1 ring-white/15 overflow-hidden flex items-center justify-center">
-              {me?.logoUrl ? (
-                <img src={me.logoUrl} alt="" className="w-full h-full object-cover" data-testid="img-press-logo" />
-              ) : (
-                <Factory className="w-5 h-5 text-white/45" />
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-white/55 text-xs uppercase tracking-wider font-semibold">
-                {isSuperAdminView ? "Press portal (super-admin view)" : "Press portal"}
-              </p>
-              <h1 className="text-2xl sm:text-3xl font-bold truncate" data-testid="heading-press-name">
-                {me?.name ?? "Your press"}
-              </h1>
-            </div>
-          </div>
+    <OperatorShell
+      testId="press-shell"
+      roleLabel={isSuperAdminView ? "Press portal (super-admin view)" : "Press portal"}
+      name={me?.name ?? "Your press"}
+      logoUrl={me?.logoUrl ?? null}
+      fallbackIcon={Factory}
+      tabs={tabs}
+      activeTab={tab}
+      onTabChange={setTab}
+    >
+      {tab === "dashboard" && (
+        <div className="space-y-4">
+          <DashboardSummary pressId={pressId} />
+          <PartnerDashboard
+            scope="vendor"
+            title="Jobs & turn-time"
+            subtitle="The same operational dashboard the legacy vendor shell shows."
+            scopeIdQs={isSuperAdminView ? pressId : null}
+            scopeKindQs={isSuperAdminView ? "manufacturer" : null}
+          />
         </div>
-      </header>
-
-      <DashboardTabs tabs={tabs} value={tab} onChange={setTab} />
-
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-6">
-        {tab === "dashboard" && (
-          <div className="space-y-4">
-            <DashboardSummary pressId={pressId} />
-            <PartnerDashboard
-              scope="vendor"
-              title="Jobs & turn-time"
-              subtitle="The same operational dashboard the legacy vendor shell shows."
-              scopeIdQs={isSuperAdminView ? pressId : null}
-              scopeKindQs={isSuperAdminView ? "manufacturer" : null}
-            />
-          </div>
-        )}
-        {tab === "customers" && <CustomersTab pressId={pressId} />}
-        {tab === "pipeline" && <PipelineTab pressId={pressId} />}
-        {tab === "settings" && <SettingsTab pressId={pressId} pressName={me?.name ?? ""} />}
-      </div>
-    </main>
+      )}
+      {tab === "customers" && <CustomersTab pressId={pressId} />}
+      {tab === "pipeline" && <PipelineTab pressId={pressId} />}
+      {tab === "settings" && <SettingsTab pressId={pressId} pressName={me?.name ?? ""} />}
+    </OperatorShell>
   );
 }
 
