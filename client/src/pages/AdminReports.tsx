@@ -121,6 +121,7 @@ export function AdminReports() {
   const [asPartner, setAsPartner] = useState("");
   const [asKind, setAsKind] = useState<"label" | "artist">("label");
   const [asPartnerName, setAsPartnerName] = useState("");
+  const [asPartnerImageUrl, setAsPartnerImageUrl] = useState<string | null>(null);
   const qs = useMemo(() => buildQs(from, to, asPartner, asKind), [from, to, asPartner, asKind]);
 
   const { data: scope } = useQuery<ScopeInfo>({
@@ -171,15 +172,18 @@ export function AdminReports() {
           <ViewingAsControl
             asPartner={asPartner}
             asPartnerName={asPartnerName}
+            asPartnerImageUrl={asPartnerImageUrl}
             asKind={asKind}
             onPick={(r) => {
               setAsPartner(r.id);
               setAsKind(r.kind);
               setAsPartnerName(r.name);
+              setAsPartnerImageUrl(r.imageUrl);
             }}
             onClear={() => {
               setAsPartner("");
               setAsPartnerName("");
+              setAsPartnerImageUrl(null);
             }}
           />
         )}
@@ -250,6 +254,46 @@ function ReportTab({ value, testId, children }: { value: string; testId: string;
   );
 }
 
+function PartnerThumb({
+  imageUrl,
+  name,
+  kind,
+  size = 28,
+}: {
+  imageUrl: string | null;
+  name: string;
+  kind: "label" | "artist";
+  size?: number;
+}) {
+  const rounded = kind === "artist" ? "rounded-full" : "rounded-md";
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("") || "?";
+  const style = { width: size, height: size };
+  if (imageUrl) {
+    return (
+      <img
+        src={imageUrl}
+        alt=""
+        style={style}
+        className={`${rounded} object-cover bg-slate-100 border border-slate-200 flex-shrink-0`}
+      />
+    );
+  }
+  return (
+    <div
+      style={style}
+      className={`${rounded} flex items-center justify-center bg-slate-100 text-slate-500 text-xs font-semibold border border-slate-200 flex-shrink-0`}
+      aria-hidden
+    >
+      {initials}
+    </div>
+  );
+}
+
 function PartnerKindChip({ kind }: { kind: "label" | "artist" }) {
   const Icon = kind === "label" ? Tag : User;
   const text = kind === "label" ? "Label" : "Artist";
@@ -264,12 +308,14 @@ function PartnerKindChip({ kind }: { kind: "label" | "artist" }) {
 function ViewingAsControl({
   asPartner,
   asPartnerName,
+  asPartnerImageUrl,
   asKind,
   onPick,
   onClear,
 }: {
   asPartner: string;
   asPartnerName: string;
+  asPartnerImageUrl: string | null;
   asKind: "label" | "artist";
   onPick: (r: PartnerSearchResult) => void;
   onClear: () => void;
@@ -290,7 +336,13 @@ function ViewingAsControl({
         <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
           Viewing as
         </span>
-        <div className="inline-flex items-center gap-2 self-start rounded-full border border-slate-200 bg-white pl-3 pr-1.5 py-1 text-sm text-slate-900 shadow-sm">
+        <div className="inline-flex items-center gap-2 self-start rounded-full border border-slate-200 bg-white pl-1.5 pr-1.5 py-1 text-sm text-slate-900 shadow-sm">
+          <PartnerThumb
+            imageUrl={asPartnerImageUrl}
+            name={asPartnerName || asPartner}
+            kind={asKind}
+            size={22}
+          />
           <span className="font-medium" data-testid="text-as-partner-name">
             {asPartnerName || asPartner}
           </span>
@@ -396,6 +448,12 @@ function ViewingAsControl({
                           data-testid={`option-as-partner-${r.kind}-${r.id}`}
                           className="flex items-center gap-2 py-2"
                         >
+                          <PartnerThumb
+                            imageUrl={r.imageUrl}
+                            name={r.name}
+                            kind={r.kind}
+                            size={28}
+                          />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="truncate font-medium text-slate-900">
