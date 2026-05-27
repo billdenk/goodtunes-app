@@ -2109,6 +2109,16 @@ async function handleRefund(paymentIntentId: string): Promise<void> {
   if (order.payoutStatus === "transferred" && order.payoutTransferId) {
     const { reverseTransferForOrder } = await import("./payouts");
     await reverseTransferForOrder(order);
+  } else if (order.payoutStatus === "earmarked") {
+    // Task #543 — Refund before Bill released the payout: just cancel
+    // the held earmark so the queue doesn't display a phantom row for
+    // an order the customer already got their money back on.
+    const { cancelHeldEarmarksForSource } = await import("./payoutEarmarks");
+    await cancelHeldEarmarksForSource("order_royalty", order.id, "Order refunded before release");
+    await db
+      .update(orders)
+      .set({ payoutStatus: "skipped", payoutError: "Refunded before release" })
+      .where(eq(orders.id, order.id));
   }
   await db
     .update(orders)

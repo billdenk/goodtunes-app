@@ -1601,3 +1601,48 @@ SQL
 }
 migrate_finish_signup dev  "${DATABASE_URL:-}"
 migrate_finish_signup prod "${PROD_DATABASE_URL:-}"
+
+# Task #543 — Held payout earmarks. Bill must release every Stripe
+# Connect transfer from /admin/payouts-release before it actually
+# fires. Schema-only — additive, idempotent — pre-create on both
+# DBs so the publish dev→prod diff stays empty and a fresh-clone dev
+# never 500s /api/admin/payout-earmarks.
+migrate_payout_earmarks() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping payout_earmarks migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+CREATE TABLE IF NOT EXISTS payout_earmarks (
+  id                  varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_kind         text      NOT NULL,
+  source_ref          text      NOT NULL,
+  album_id            varchar,
+  owner_kind          text      NOT NULL,
+  owner_id            varchar   NOT NULL,
+  amount_cents        integer   NOT NULL,
+  currency            text      NOT NULL DEFAULT 'usd',
+  status              text      NOT NULL DEFAULT 'held',
+  held_at             timestamp NOT NULL DEFAULT now(),
+  released_at         timestamp,
+  released_by_user_id varchar,
+  rejected_at         timestamp,
+  rejected_by_user_id varchar,
+  rejection_reason    text,
+  stripe_transfer_id  text,
+  transfer_error      text,
+  notes               text
+);
+CREATE INDEX IF NOT EXISTS payout_earmarks_status_idx ON payout_earmarks(status);
+CREATE INDEX IF NOT EXISTS payout_earmarks_owner_idx  ON payout_earmarks(owner_kind, owner_id);
+CREATE INDEX IF NOT EXISTS payout_earmarks_source_idx ON payout_earmarks(source_kind, source_ref);
+SQL
+  then
+    echo "post-merge: payout_earmarks migration ok on $label"
+  else
+    echo "post-merge: WARNING — payout_earmarks migration failed on $label (continuing)"
+  fi
+}
+migrate_payout_earmarks dev  "${DATABASE_URL:-}"
+migrate_payout_earmarks prod "${PROD_DATABASE_URL:-}"

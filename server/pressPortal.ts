@@ -1406,69 +1406,49 @@ async function mintPressInvoiceTransfer(
     WHERE id = ${albumId}
   `);
 
-  // 2) Look up the press's Connect account via payout_accounts.
-  const acctRows = await db.execute<any>(sql`
-    SELECT stripe_account_id, payouts_enabled
-    FROM payout_accounts
-    WHERE owner_kind = 'manufacturer' AND owner_id = ${pressId}
-    LIMIT 1
-  `);
-  const acct = ((acctRows as any).rows ?? [])[0];
-  if (!acct?.stripe_account_id) {
-    const reason = "No Stripe Connect account on press";
-    await db.execute(sql`
-      UPDATE albums SET press_invoice_transfer_error = ${reason}
-      WHERE id = ${albumId}
-    `);
-    console.log(`[press-transfer] album=${albumId} press=${pressId} skipped — ${reason}`);
-    return { status: "skipped", error: reason };
-  }
-  if (!acct.payouts_enabled) {
-    const reason = "Stripe Connect account not yet payouts-enabled";
-    await db.execute(sql`
-      UPDATE albums SET press_invoice_transfer_error = ${reason}
-      WHERE id = ${albumId}
-    `);
-    console.log(`[press-transfer] album=${albumId} press=${pressId} skipped — ${reason}`);
-    return { status: "skipped", error: reason };
-  }
-
-  // 3) Mint the transfer. Idempotency-keyed on (album, invoiceKey) so
-  //    a retry of the SAME captured invoice collapses to the same
-  //    Stripe transfer object; a corrected invoice keys differently
-  //    and mints a fresh one.
+  // Task #543 — Earmark instead of transferring. The press's Stripe
+  // account is still resolved on release; we just stamp the invoice
+  // identity on the album so the Payouts subtab can show "earmarked,
+  // waiting for Bill". Any earlier still-held earmark for this album
+  // is auto-cancelled so the queue can't show two competing rows for
+  // the same album when a corrected invoice supersedes the first.
   try {
-    const { getStripe } = await import("./stripe");
-    const stripe = await getStripe();
-    const transfer = await stripe.transfers.create(
-      {
-        amount: totalCents,
-        currency: "usd",
-        destination: acct.stripe_account_id,
-        transfer_group: `press_invoice_${albumId}`,
-        metadata: {
-          gt_kind: "press_invoice",
-          gt_album_id: albumId,
-          gt_press_id: pressId,
-          gt_invoice_total_cents: String(totalCents),
-          gt_invoice_key: invoiceKey,
-        },
-      },
-      { idempotencyKey: stripeIdempotencyKey },
-    );
+    const { createEarmarkIfAbsent } = await import("./payoutEarmarks");
+    // Supersede any held earmark for an earlier invoiceKey on this
+    // album — keeps the queue from showing two competing rows when a
+    // corrected invoice arrives. Raw SQL because cancelHeldEarmarksForSource
+    // matches on sourceRef equality; we need to cancel everything *except*
+    // the current key.
+    await db.execute(sql`
+      UPDATE payout_earmarks
+         SET status = 'rejected', rejected_at = NOW(),
+             rejection_reason = 'Superseded by corrected invoice'
+       WHERE source_kind = 'press_invoice'
+         AND album_id = ${albumId}
+         AND status IN ('held','failed')
+         AND source_ref <> ${invoiceKey}
+    `);
+    const earmark = await createEarmarkIfAbsent({
+      sourceKind: "press_invoice",
+      sourceRef: invoiceKey,
+      albumId,
+      ownerKind: "manufacturer",
+      ownerId: pressId,
+      amountCents: totalCents,
+      currency: "usd",
+      notes: `Invoice ${invoiceUrl || "(no url)"}`,
+    });
     await db.execute(sql`
       UPDATE albums
-      SET press_invoice_transfer_id = ${transfer.id},
-          press_invoice_transferred_at = NOW(),
+      SET press_invoice_transfer_invoice_key = ${invoiceKey},
           press_invoice_transfer_amount_cents = ${totalCents},
-          press_invoice_transfer_invoice_key = ${invoiceKey},
-          press_invoice_transfer_error = NULL
+          press_invoice_transfer_error = 'Earmarked — pending Bill release'
       WHERE id = ${albumId}
     `);
-    console.log(`[press-transfer] album=${albumId} press=${pressId} transfer=${transfer.id} amount=${totalCents}c key=${invoiceKey}`);
-    return { status: "transferred", transferId: transfer.id, amountCents: totalCents, invoiceKey };
+    console.log(`[press-transfer] album=${albumId} press=${pressId} earmarked=${earmark.id} amount=${totalCents}c key=${invoiceKey}`);
+    return { status: "transferred", transferId: earmark.id, amountCents: totalCents, invoiceKey };
   } catch (e: any) {
-    const reason = e?.message ?? "Stripe transfer failed";
+    const reason = e?.message ?? "Earmark failed";
     await db.execute(sql`
       UPDATE albums SET press_invoice_transfer_error = ${reason}
       WHERE id = ${albumId}

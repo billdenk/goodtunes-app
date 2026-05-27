@@ -2673,6 +2673,88 @@ export type InsertPayoutAccount = z.infer<typeof insertPayoutAccountSchema>;
 export type PayoutAccount = typeof payoutAccounts.$inferSelect;
 export type PayoutSettings = typeof payoutSettings.$inferSelect;
 
+// ─── Task #543 — Held payout earmarks ───────────────────────────────────
+// Bill must personally sign off on every dollar that leaves our Stripe
+// before it lands with a partner. Every existing "money moves" path
+// (artist royalty on shipped order, press invoice capture, referral
+// credit batch) creates a row here in status='held' instead of calling
+// stripe.transfers.create directly. The Bill-only /admin/payouts-release
+// page is the single chokepoint that flips held → released (firing the
+// actual Stripe Connect transfer) or held → rejected (with a required
+// reason). Other admins see the queue read-only.
+//
+// `ownerKind` covers every partner type that receives money — superset
+// of PAYOUT_OWNER_KINDS plus vendor + fulfillment so future flows for
+// those partner types can land earmarks here without a schema bump.
+// `sourceKind` records which event minted the earmark so the queue
+// can render the right "from order X" / "from album Y invoice" chip.
+export const PAYOUT_EARMARK_OWNER_KINDS = [
+  "person",
+  "label",
+  "organization",
+  "manufacturer",
+  "vendor",
+  "fulfillment",
+] as const;
+export type PayoutEarmarkOwnerKind = (typeof PAYOUT_EARMARK_OWNER_KINDS)[number];
+export const PAYOUT_EARMARK_SOURCE_KINDS = [
+  "order_royalty",
+  "press_invoice",
+  "referral_credit",
+  "fulfillment_fee",
+  "vendor_payout",
+] as const;
+export type PayoutEarmarkSourceKind = (typeof PAYOUT_EARMARK_SOURCE_KINDS)[number];
+export const PAYOUT_EARMARK_STATUSES = [
+  "held",
+  "released",
+  "rejected",
+  "failed",
+] as const;
+export type PayoutEarmarkStatus = (typeof PAYOUT_EARMARK_STATUSES)[number];
+
+export const payoutEarmarks = pgTable(
+  "payout_earmarks",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    sourceKind: text("source_kind").notNull(),
+    // Free-text reference back to whatever minted the row. For
+    // `order_royalty` this is the order id; for `press_invoice` the
+    // album id; for `referral_credit` the comma-joined credit ids.
+    // Lets the UI deep-link to the right detail page without a join.
+    sourceRef: text("source_ref").notNull(),
+    // Optional album the earmark is "about" — populated when the source
+    // event has one (order_royalty, press_invoice). Lets the digest +
+    // queue render "(albumTitle) – $X to (owner)" without per-row joins.
+    albumId: varchar("album_id"),
+    ownerKind: text("owner_kind").notNull(),
+    ownerId: varchar("owner_id").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("usd"),
+    status: text("status").notNull().default("held"),
+    heldAt: timestamp("held_at").defaultNow().notNull(),
+    releasedAt: timestamp("released_at"),
+    releasedByUserId: varchar("released_by_user_id"),
+    rejectedAt: timestamp("rejected_at"),
+    rejectedByUserId: varchar("rejected_by_user_id"),
+    rejectionReason: text("rejection_reason"),
+    // Stripe Connect transfer id stamped on release. NULL until released.
+    stripeTransferId: text("stripe_transfer_id"),
+    // Last release-attempt failure surfaced in the UI for retry.
+    transferError: text("transfer_error"),
+    // Free-text operator note (e.g. "Hold-longer until tour kickoff").
+    notes: text("notes"),
+  },
+  (t) => ({
+    statusIdx: index("payout_earmarks_status_idx").on(t.status),
+    ownerIdx: index("payout_earmarks_owner_idx").on(t.ownerKind, t.ownerId),
+    sourceIdx: index("payout_earmarks_source_idx").on(t.sourceKind, t.sourceRef),
+  }),
+);
+
+export type PayoutEarmark = typeof payoutEarmarks.$inferSelect;
+export type InsertPayoutEarmark = typeof payoutEarmarks.$inferInsert;
+
 export type EmailVerification = typeof emailVerifications.$inferSelect;
 
 // ─── Task #49 — Shopify redemption flow ─────────────────────────────────

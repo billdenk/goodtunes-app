@@ -14098,6 +14098,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerPayoutRoutes(app);
   const { registerReferralPayoutRoutes } = await import("./referralPayouts");
   registerReferralPayoutRoutes(app);
+  const { registerPayoutEarmarkRoutes } = await import("./payoutEarmarks");
+  registerPayoutEarmarkRoutes(app);
 
   // ─── Task #80 — Partner reporting v1 ───────────────────────────
   const { registerReportRoutes } = await import("./reports/routes");

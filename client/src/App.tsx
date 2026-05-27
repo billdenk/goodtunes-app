@@ -83,6 +83,7 @@ import { isAnalyticsDebugOverlayEnabled } from "@/lib/analytics";
 import { AdminReports } from "@/pages/AdminReports";
 import { AdminJobs } from "@/pages/AdminJobs";
 import { AdminPlatformPricing } from "@/pages/AdminPlatformPricing";
+import AdminPayoutsRelease from "@/pages/AdminPayoutsRelease";
 import { AdminDashboard } from "@/pages/AdminDashboard";
 import { VendorPortal } from "@/pages/VendorPortal";
 import ErrorPage from "@/pages/ErrorPage";
@@ -485,6 +486,10 @@ function Router() {
             caller's role isn't super_admin. */}
         <Route path="/admin/platform-pricing">
           <ProtectedRoute component={AdminPlatformPricing} />
+        </Route>
+        {/* Task #543 — Bill-only payout-release queue. */}
+        <Route path="/admin/payouts-release">
+          <ProtectedRoute component={AdminPayoutsRelease} />
         </Route>
         {/* Task #475 — Soft-delete trash. Page self-gates on super_admin
             via /api/admin/trash returning 403 for everyone else. */}

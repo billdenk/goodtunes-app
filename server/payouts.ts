@@ -228,45 +228,39 @@ export async function attemptTransferForOrder(order: Order): Promise<{
       .where(eq(orders.id, order.id));
     return { status: "skipped", error: "Zero payout" };
   }
+  // Task #543 — Earmark instead of transferring. Bill releases from
+  // /admin/payouts-release; that endpoint calls stripe.transfers.create
+  // keyed on the earmark id so a re-press of Release can never
+  // double-pay. The order row records `payoutStatus='earmarked'` so the
+  // stuck-cases dashboard doesn't keep re-trying this row.
   try {
-    const stripe = await getStripe();
-    const transfer = await stripe.transfers.create(
-      {
-        amount: split.payoutAmountCents,
-        currency: order.currency || "usd",
-        destination: target.stripeAccountId,
-        transfer_group: `order_${order.id}`,
-        // Source the funds from the charge we captured at checkout.
-        // When the PI used a normal charge the source_transaction is
-        // the charge id; if we don't have it, Stripe falls back to
-        // the platform balance (also fine for test mode).
-        ...(order.stripePaymentIntentId ? { source_transaction: undefined } : {}),
-        metadata: {
-          gt_order_id: order.id,
-          gt_album_id: order.albumId,
-          gt_owner_kind: target.ownerKind,
-          gt_owner_id: target.ownerId,
-        },
-      },
-      { idempotencyKey: `transfer_${order.id}` },
-    );
+    const { createEarmarkIfAbsent } = await import("./payoutEarmarks");
+    const earmark = await createEarmarkIfAbsent({
+      sourceKind: "order_royalty",
+      sourceRef: order.id,
+      albumId: order.albumId,
+      // PayoutOwnerKind ⊂ PayoutEarmarkOwnerKind (vendor + fulfillment
+      // are reserved for future owner types). Cast is safe today.
+      ownerKind: target.ownerKind as any,
+      ownerId: target.ownerId,
+      amountCents: split.payoutAmountCents,
+      currency: order.currency || "usd",
+    });
     await db
       .update(orders)
       .set({
-        payoutStatus: "transferred",
-        payoutTransferId: transfer.id,
+        payoutStatus: "earmarked",
         payoutAmountCents: split.payoutAmountCents,
         platformFeeCents: split.platformFeeCents,
         certCostCents: split.certCostCents,
         payoutOwnerKind: target.ownerKind,
         payoutOwnerId: target.ownerId,
-        payoutAt: new Date(),
         payoutError: null,
       })
       .where(eq(orders.id, order.id));
-    return { status: "transferred", transferId: transfer.id, amount: split.payoutAmountCents };
+    return { status: "skipped", amount: split.payoutAmountCents, transferId: earmark.id, error: "Earmarked — pending Bill release" };
   } catch (e: any) {
-    const msg = e?.message || "Transfer failed";
+    const msg = e?.message || "Earmark failed";
     await db
       .update(orders)
       .set({

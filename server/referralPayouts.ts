@@ -260,35 +260,26 @@ export async function runReferralPayouts(options?: {
       });
       continue;
     }
-    // 2. TRANSFER — stripe call against the actually-claimed total.
+    // 2. EARMARK — Task #543. Instead of firing the Stripe transfer
+    //    here, we leave the claimed referral_credits rows in
+    //    'processing' status and mint a held earmark referencing them.
+    //    Bill releases each owner's earmark from /admin/payouts-release;
+    //    that endpoint fires the actual transfer and FINALIZEs the
+    //    rows. Reject sends them back to 'pending_payout' (mirrors the
+    //    legacy REVERT path).
     try {
-      const transfer = await stripe!.transfers.create(
-        {
-          amount: claimedCents,
-          currency: b.currency,
-          destination: b.stripeAccountId,
-          transfer_group: `referral_${b.ownerKind}_${b.ownerId}`,
-          metadata: {
-            gt_kind: "referral_payout",
-            gt_owner_kind: b.ownerKind,
-            gt_owner_id: b.ownerId,
-            gt_run_id: runId,
-            gt_credit_count: String(claimedIds.length),
-          },
-        },
-        { idempotencyKey: idempotencyKeyFor(runId, b.ownerKind, b.ownerId) },
-      );
-      // 3a. FINALIZE — processing → paid for *this run's* claimed rows.
-      await db.execute(sql`
-        UPDATE referral_credits
-           SET status = 'paid',
-               paid_at = now(),
-               payout_transfer_id = ${transfer.id},
-               payout_error = NULL
-         WHERE payout_run_id = ${runId}
-           AND status        = 'processing'
-           AND id = ANY(${claimedIds}::varchar[])
-      `);
+      const { createEarmarkIfAbsent } = await import("./payoutEarmarks");
+      const earmark = await createEarmarkIfAbsent({
+        sourceKind: "referral_credit",
+        sourceRef: claimedIds.join(","),
+        ownerKind: b.ownerKind as any,
+        ownerId: b.ownerId,
+        amountCents: claimedCents,
+        currency: b.currency,
+        notes: `Run ${runId.slice(0, 8)} · ${claimedIds.length} credit(s)`,
+      });
+      void idempotencyKeyFor; // legacy Stripe-side idempotency helper; release path keys on earmark.id instead.
+      void stripe; // unused now — release path resolves Stripe lazily
       out.paid += 1;
       out.totalCents += claimedCents;
       out.batches.push({
@@ -298,11 +289,11 @@ export async function runReferralPayouts(options?: {
         status: "paid",
         amountCents: claimedCents,
         creditCount: claimedIds.length,
-        transferId: transfer.id,
+        transferId: earmark.id,
       });
     } catch (e: any) {
-      const msg = e?.message || "Transfer failed";
-      // 3b. REVERT — give the claimed rows back so a later run retries.
+      const msg = e?.message || "Earmark failed";
+      // REVERT — give the claimed rows back so a later run retries.
       await db.execute(sql`
         UPDATE referral_credits
            SET status        = 'pending_payout',

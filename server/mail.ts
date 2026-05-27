@@ -530,6 +530,33 @@ export async function sendAdminInviteEmail(
 // approve the early-start cut. Sent fire-and-forget from the pipeline
 // auto-trigger sweep, so we use the same ok/reason contract as every
 // other template and never throw upward.
+// Task #543 — Daily digest to Bill summarising still-HELD payout
+// earmarks. Sent by the in-process tick from server/index.ts and also
+// callable on demand from the release queue. Plain-text body keeps the
+// list scannable on phone.
+export async function sendPayoutDigestToBill(
+  toEmail: string,
+  count: number,
+  totalCents: number,
+  lines: string[],
+): Promise<SendResult> {
+  const dollars = (totalCents / 100).toFixed(2);
+  const subject = `GoodTunes payouts to release: ${count} held ($${dollars})`;
+  const text = [
+    `${count} held payout earmark(s) totalling $${dollars} are waiting for your release.`,
+    ``,
+    ...lines,
+    ``,
+    `Release / Hold-longer / Reject from /admin/payouts-release.`,
+  ].join("\n");
+  const html = [
+    `<p>${count} held payout earmark(s) totalling <strong>$${dollars}</strong> are waiting for your release.</p>`,
+    `<pre style="font-family:ui-monospace,Menlo,monospace;font-size:13px;">${lines.map((l) => l.replace(/</g, "&lt;")).join("\n")}</pre>`,
+    `<p>Release, Hold-longer, or Reject from <a href="https://admin.goodtunes.music/admin/payouts-release">/admin/payouts-release</a>.</p>`,
+  ].join("\n");
+  return sendViaResend("payout-digest", toEmail, subject, html, text);
+}
+
 export async function sendMastersReadyEmail(
   toEmail: string,
   artistName: string,

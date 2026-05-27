@@ -26,6 +26,7 @@ import {
   Smartphone,
   Tablet,
   Trash2,
+  Wallet,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
@@ -73,6 +74,7 @@ const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   customers: "audience",
   reports: "audience",
   "platform-pricing": "system",
+  "payouts-release": "system",
   trash: "system",
 };
 
@@ -108,6 +110,7 @@ export type EntityKey =
   | "gear"
   | "makers"
   | "vendors"
+  | "payouts-release"
   | "labels"
   | "manufacturers"
   | "pressing-orders"
@@ -637,6 +640,18 @@ export function AdminFrame({
                   active={active === "platform-pricing"}
                   onClick={() => navigate("/admin/platform-pricing")}
                   testId="nav-platform-pricing"
+                />
+                {/* Task #543 — Bill-only payout-release queue. Visible
+                    to every super_admin (read-only for non-Bill); the
+                    page itself disables action buttons when the
+                    viewer isn't Bill. */}
+                <SidebarLink
+                  icon={Wallet}
+                  label="Payouts to release"
+                  count={-1}
+                  active={active === "payouts-release"}
+                  onClick={() => navigate("/admin/payouts-release")}
+                  testId="nav-payouts-release"
                 />
                 {/* Task #350 — Invite tree (multi-level referrals). */}
                 <SidebarLink

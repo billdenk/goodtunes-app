@@ -261,6 +261,35 @@ async function bootstrapAccessGuard() {
     log(`trash sweeper init failed: ${e?.message ?? e}`, "trash-sweep");
   }
 
+  // Task #543 — Daily digest mail to Bill of every still-HELD payout
+  // earmark. Mirrors the trash sweeper shape (long first delay so boot
+  // logs settle, then a 24h tick; in-process guard prevents overlap).
+  // The digest helper itself short-circuits if a digest already went
+  // out in the last ~20h so a server restart never double-mails.
+  try {
+    const { sendBillDailyDigest } = await import("./payoutEarmarks");
+    let digesting = false;
+    const runDigest = async () => {
+      if (digesting) return;
+      digesting = true;
+      try {
+        const out = await sendBillDailyDigest();
+        if (out.sent) {
+          log(`payout digest sent to Bill — ${out.count} held / $${((out.totalCents ?? 0) / 100).toFixed(2)}`, "earmark-digest");
+        }
+      } catch (e: any) {
+        log(`payout digest tick failed: ${e?.message ?? e}`, "earmark-digest");
+      } finally {
+        digesting = false;
+      }
+    };
+    setTimeout(runDigest, 5 * 60 * 1000);
+    setInterval(runDigest, 24 * 60 * 60 * 1000);
+    log("payout digest scheduler armed (daily tick)", "earmark-digest");
+  } catch (e: any) {
+    log(`payout digest scheduler init failed: ${e?.message ?? e}`, "earmark-digest");
+  }
+
   // Task #364 — Loud one-line warning at boot when Mux isn't fully
   // configured. The pipeline degrades to "raw audio only" without these
   // keys, so the operator needs to see the gap on the next deploy log
