@@ -3677,7 +3677,7 @@ function GoodDeedPill({
                   <img
                     src="/goodtunes-logo-white.png"
                     alt="GoodTunes®"
-                    className="h-[80%] w-auto object-contain object-right flex-shrink-0"
+                    className="h-8 w-auto object-contain object-right flex-shrink-0"
                     data-testid="mark-goodtunes"
                   />
                 </div>

@@ -473,7 +473,7 @@ const CertCard = forwardRef(function CertCard(
           <img
             src="/goodtunes-logo-white.png"
             alt="GoodTunes"
-            className="h-[2.4em] w-auto object-contain flex-shrink-0"
+            className="h-10 w-auto object-contain flex-shrink-0"
           />
         </div>
 
