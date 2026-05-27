@@ -413,7 +413,7 @@ function SignedCertLadderCard({ settings }: { settings: PayoutSettings }) {
     >
       <div>
         <h2 className="text-[15px] font-semibold text-slate-900">
-          Signed-cert wholesale ladder
+          GoodTunes® Certificate Wholesale Ladder
         </h2>
         <p className="text-[13px] text-slate-500 mt-1">
           Per-unit price GoodTunes charges artists and labels for printed,
