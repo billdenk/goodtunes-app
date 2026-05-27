@@ -201,3 +201,13 @@ Every list/detail read filters `WHERE deleted_at IS NULL`, so the rest of admin 
 **What this is not** — object-storage blobs (album art, audio, person photos, vendor logos) are **not** copied to a recycle area. A purge does not delete the blob, and a soft-delete does not hide it from `/objects/uploads/<id>`. Restoring a row puts its existing image URL back into circulation. Customer and order tables (`customer_users`, `orders`, `order_items`, `subscriptions`, etc.) are out of scope — those use status fields and refund flows, not soft-delete.
 
 **Schema migration** lives in `scripts/post-merge.sh` (`migrate_soft_delete`) and runs idempotently against both `DATABASE_URL` and `PROD_DATABASE_URL` after every merge. Per the dev↔prod drift rule, the columns must exist on both DBs before publish or the Replit publish dialog will try to drop them from prod.
+
+## Shopify tab — explainer + content-readiness parity (Task #540)
+
+The album's Shopify tab opens with three label-facing surfaces above the existing Push / Sales / Mappings sections:
+
+1. **"How the Shopify path works" explainer** — dismissible per browser via `localStorage["gt:shopify:explainer:dismissed"]`. Plain-English four-step recap so a label reading the tab for the first time can explain the path in one sentence ("you give us your Shopify product link, we match it to your tracks + art + bonus content, and we hand you a snippet to paste into the product page").
+2. **Content-readiness checklist** — cover art, track masters, 30-second previews, bonus content. Each row jumps to the **same** Tracks / Bonus / artwork modal the direct-to-fan flow uses (`onJumpToTab` callback wired from `AdminAlbum`). Parity = one set of uploaders, not a duplicate Shopify-only stack. Don't add a parallel uploader on the Shopify tab; if a new content surface lands on Tracks/Bonus, just add a checklist row.
+3. **Per-album product-page snippet** — appears only once the album has been pushed to Shopify (`pushStatus.push` non-null). Generates a self-contained HTML badge with the album id baked in for pasting into the Shopify product description, with one-line "where do I paste this" instructions. The order-confirmation Liquid block at `/admin/shopify` is the email-side complement; this card is the product-page side.
+
+**How to apply:** any new "explainable upload flow" tab (future Bandcamp / Squarespace integrations) should follow the same shape — dismissible explainer at top, checklist that jumps into the shared content tabs, paste-this snippet at bottom — so labels see one mental model across distribution channels.

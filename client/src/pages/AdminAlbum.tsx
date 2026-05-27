@@ -1112,7 +1112,14 @@ export function AdminAlbum() {
                 <PressPanel albumId={album.id} songs={album.songs} />
               )}
               {safeTab === "shopify" && allowed.has("shopify") && (
-                <ShopifyPanel albumId={album.id} />
+                <ShopifyPanel
+                  albumId={album.id}
+                  album={album}
+                  onJumpToTab={(t) => {
+                    if (t === "overview") setArtworkEditorOpen(true);
+                    else setTab(t as Tab);
+                  }}
+                />
               )}
             </>
           );

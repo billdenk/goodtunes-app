@@ -6925,6 +6925,21 @@
     "snippet": "<button type=\"button\" onClick={onDelete} className=\"h-8 w-8 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center transition-colors\" aria-label={isDraf"
   },
   {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<div style=\"margin:16px 0;padding:14px 16px;border:1px solid #319ED8;border-radius:10px;background:#f3fbff;font-family:-apple-system,Segoe UI,sans-serif;\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<div style=\"font-weight:600;color:#00062B;margin-bottom:4px;\">Includes the GoodTunes digital edition</div>"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<a href=\"${albumUrl}\" style=\"color:#319ED8;text-decoration:underline;\">Preview the album</a>."
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
     "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">Push to Shopify as a draft</h2>"
@@ -7098,6 +7113,61 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
     "snippet": "className=\"h-8 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-medium hover:bg-[var(--brand-blue-hover)] disabled:opacity-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-2 pr-6\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<p className=\"text-[13px] text-slate-700 leading-snug mb-3\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<ol className=\"text-[12.5px] text-slate-600 space-y-1.5 list-decimal list-inside leading-snug\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<p className=\"text-[12.5px] text-slate-500 leading-snug\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<div className=\"text-[13px] font-medium text-slate-900\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<div className=\"text-[11.5px] text-slate-500 leading-snug\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"text-[12px] text-[var(--brand-blue)] hover:underline shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"h-8 px-2.5 rounded-md border border-slate-300 bg-white text-[12px] text-slate-700 font-medium hover:bg-slate-50 inline-flex items-center gap-1.5 shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<pre className=\"text-[11.5px] bg-slate-100 text-slate-800 border border-slate-200 p-3 rounded-md overflow-x-auto leading-relaxed\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<ol className=\"mt-3 text-[12px] text-slate-500 space-y-1 list-decimal list-inside leading-snug\">"
   },
   {
     "rule": "hardcoded-font-size",

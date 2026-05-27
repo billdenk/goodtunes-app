@@ -5,12 +5,48 @@
 // "all variants"), and toggle whether the printed-signed-cert add-on
 // is bundled into the same Shopify order — at a price floor-checked
 // against the album's signed_cert min.
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Link as LinkIcon, Trash2, ChevronDown, ExternalLink, Upload, AlertTriangle, RefreshCw } from "lucide-react";
+import {
+  Link as LinkIcon,
+  Trash2,
+  ChevronDown,
+  ExternalLink,
+  Upload,
+  AlertTriangle,
+  RefreshCw,
+  Check,
+  Circle,
+  X as XIcon,
+  Copy,
+  Image as ImageIcon,
+  Music,
+  Scissors,
+  Video,
+} from "lucide-react";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
+
+// Same shape as AlbumFull.songs in AdminAlbum.tsx — narrowed here to
+// just the fields the readiness checklist needs.
+export type ShopifyPanelSong = {
+  id: string;
+  title: string;
+  audioUrl: string | null;
+  previewStartMs?: number | null;
+  previewEndMs?: number | null;
+};
+export type ShopifyPanelAlbum = {
+  id: string;
+  title: string;
+  artist: string;
+  artwork: string;
+  priceCents?: number | null;
+  songs: ShopifyPanelSong[];
+};
+
+export type ShopifyJumpTab = "tracks" | "bonus" | "sell" | "overview";
 
 type Mapping = {
   id: string;
@@ -70,7 +106,15 @@ type PushStatus = {
   } | null;
 };
 
-export function ShopifyPanel({ albumId }: { albumId: string }) {
+export function ShopifyPanel({
+  albumId,
+  album,
+  onJumpToTab,
+}: {
+  albumId: string;
+  album?: ShopifyPanelAlbum;
+  onJumpToTab?: (tab: ShopifyJumpTab) => void;
+}) {
   const { toast } = useToast();
   const { data: mappings, isLoading } = useQuery<Mapping[]>({
     queryKey: ["/api/admin/albums", albumId, "shopify-mappings"],
@@ -219,6 +263,17 @@ export function ShopifyPanel({ albumId }: { albumId: string }) {
   return (
     <div className="py-6" data-testid="panel-shopify">
       <div className="max-w-3xl">
+        <ShopifyExplainer />
+        {album && (
+          <ShopifyContentChecklist album={album} onJumpToTab={onJumpToTab} />
+        )}
+        {album && (pushStatus?.push || (mappings?.length ?? 0) > 0) && (
+          <ShopifyProductSnippetCard
+            album={album}
+            push={pushStatus?.push ?? null}
+            mappings={mappings ?? []}
+          />
+        )}
         {/* Push to Shopify (Task #242) — creates a DRAFT product on the
             label's connected store. Sits above the URL-pasting flow
             because this is the path most labels will take by default. */}
@@ -702,6 +757,358 @@ function ShopifySalesPanel({ albumId }: { albumId: string }) {
           Updated {formatRelative(data.fetchedAt, now)}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── ShopifyExplainer (Task #540) ─────────────────────────────────────
+// First-visit "How this works" panel a label sees on the Shopify tab.
+// Dismissible per-user via localStorage. Stays plain-English on purpose:
+// Bill's one-sentence test is "you give us your Shopify product link,
+// we match it to your tracks + art + bonus content on our side, and
+// we hand you a snippet to paste into the Shopify product page so the
+// fan gets the digital + signed GoodDeed at purchase."
+const EXPLAINER_KEY = "gt:shopify:explainer:dismissed";
+function ShopifyExplainer() {
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(EXPLAINER_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  if (dismissed) return null;
+  return (
+    <div
+      className="rounded-lg border border-[var(--brand-blue)]/30 bg-[var(--brand-blue)]/5 p-4 mb-6 relative"
+      data-testid="shopify-explainer"
+    >
+      <button
+        type="button"
+        onClick={() => {
+          try {
+            localStorage.setItem(EXPLAINER_KEY, "1");
+          } catch {
+            /* private mode — soft-dismiss for this render only */
+          }
+          setDismissed(true);
+        }}
+        className="absolute top-2.5 right-2.5 text-slate-400 hover:text-slate-700 p-1"
+        aria-label="Dismiss explainer"
+        data-testid="button-dismiss-shopify-explainer"
+      >
+        <XIcon className="w-4 h-4" />
+      </button>
+      <h2 className="text-[15px] font-semibold text-slate-900 mb-2 pr-6">
+        How the Shopify path works
+      </h2>
+      <p className="text-[13px] text-slate-700 leading-snug mb-3">
+        You sell the physical product on your Shopify store the way you sell
+        anything else. GoodTunes plugs into the digital side: we match your
+        Shopify product to this album's tracks, art, and bonus content, and
+        hand you a snippet to paste into the product page. Every paid order
+        delivers a numbered GoodDeed and an Apple-Music-quality digital
+        edition — instantly, on any device the fan signs in on.
+      </p>
+      <ol className="text-[12.5px] text-slate-600 space-y-1.5 list-decimal list-inside leading-snug">
+        <li>
+          Upload masters, set the 30-second preview, drop in cover art and
+          bonus content — same uploaders the direct-to-fan flow uses (see the
+          checklist below).
+        </li>
+        <li>
+          Push the album to Shopify as a draft (or paste an existing product
+          URL to match a product you already have).
+        </li>
+        <li>
+          Copy the product-page snippet we generate and paste it into your
+          Shopify product description.
+        </li>
+        <li>
+          A fan checks out on Shopify → lands on a branded redeem page →
+          plays the album. Refunds reverse the unlock automatically.
+        </li>
+      </ol>
+    </div>
+  );
+}
+
+// ── ShopifyContentChecklist (Task #540) ──────────────────────────────
+// Surfaces the same album-content readiness the vinyl flow depends on,
+// so a label opening the Shopify tab knows what's still missing without
+// touring every other tab. Each row jumps to the existing surface that
+// owns the data (Tracks tab for masters/previews, Overview/header for
+// cover art, Bonus tab for bonus content). NOTHING is uploaded from
+// here — parity means the same uploader runs the show, not a duplicate.
+function ShopifyContentChecklist({
+  album,
+  onJumpToTab,
+}: {
+  album: ShopifyPanelAlbum;
+  onJumpToTab?: (tab: ShopifyJumpTab) => void;
+}) {
+  const tracksCount = album.songs.length;
+  const tracksWithMaster = album.songs.filter((s) => !!s.audioUrl).length;
+  const tracksWithPreview = album.songs.filter(
+    (s) =>
+      typeof s.previewStartMs === "number" &&
+      typeof s.previewEndMs === "number",
+  ).length;
+  const hasCover = !!album.artwork && !/placeholder/i.test(album.artwork);
+
+  const rows: {
+    key: string;
+    icon: typeof Music;
+    label: string;
+    detail: string;
+    state: "done" | "partial" | "todo";
+    jump: ShopifyJumpTab;
+    testId: string;
+  }[] = [
+    {
+      key: "cover",
+      icon: ImageIcon,
+      label: "Cover art",
+      detail: hasCover ? "On file" : "Tap the cover at the top to upload",
+      state: hasCover ? "done" : "todo",
+      jump: "overview",
+      testId: "checklist-row-cover",
+    },
+    {
+      key: "masters",
+      icon: Music,
+      label: "Track masters",
+      detail:
+        tracksCount === 0
+          ? "No tracks yet"
+          : tracksWithMaster === tracksCount
+            ? `${tracksCount} of ${tracksCount} tracks have masters`
+            : `${tracksWithMaster} of ${tracksCount} tracks have masters`,
+      state:
+        tracksCount === 0
+          ? "todo"
+          : tracksWithMaster === tracksCount
+            ? "done"
+            : tracksWithMaster === 0
+              ? "todo"
+              : "partial",
+      jump: "tracks",
+      testId: "checklist-row-masters",
+    },
+    {
+      key: "previews",
+      icon: Scissors,
+      label: "30-second previews",
+      detail:
+        tracksCount === 0
+          ? "Add tracks first"
+          : tracksWithPreview === 0
+            ? `Auto-derived from the first 30s of each master — set custom windows on Tracks`
+            : tracksWithPreview === tracksCount
+              ? `Custom windows set on all ${tracksCount} tracks`
+              : `Custom windows on ${tracksWithPreview} of ${tracksCount}; the rest auto-derive`,
+      state:
+        tracksCount === 0
+          ? "todo"
+          : tracksWithPreview > 0
+            ? "done"
+            : "partial",
+      jump: "tracks",
+      testId: "checklist-row-previews",
+    },
+    {
+      key: "bonus",
+      icon: Video,
+      label: "Bonus content",
+      detail: "Drop in videos, photos, lyrics, credits on the Bonus tab",
+      state: "partial",
+      jump: "bonus",
+      testId: "checklist-row-bonus",
+    },
+  ];
+
+  return (
+    <div
+      className="rounded-lg border border-slate-200 bg-white p-4 mb-6"
+      data-testid="shopify-content-checklist"
+    >
+      <div className="mb-2">
+        <h2 className="text-[15px] font-semibold text-slate-900">
+          Album content
+        </h2>
+        <p className="text-[12.5px] text-slate-500 leading-snug">
+          Shopify fans get the same digital experience as direct-to-fan
+          buyers. Manage masters, previews, and bonus content on the same
+          tabs the vinyl flow uses.
+        </p>
+      </div>
+      <ul className="divide-y divide-slate-100">
+        {rows.map((r) => {
+          const Icon = r.icon;
+          const stateIcon =
+            r.state === "done" ? (
+              <Check className="w-4 h-4 text-emerald-600" />
+            ) : r.state === "partial" ? (
+              <Circle className="w-4 h-4 text-amber-500" strokeWidth={2.5} />
+            ) : (
+              <Circle className="w-4 h-4 text-slate-300" />
+            );
+          return (
+            <li
+              key={r.key}
+              className="py-2.5 flex items-center gap-3"
+              data-testid={r.testId}
+            >
+              <div className="shrink-0">{stateIcon}</div>
+              <Icon className="w-4 h-4 text-slate-400 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-medium text-slate-900">
+                  {r.label}
+                </div>
+                <div className="text-[11.5px] text-slate-500 leading-snug">
+                  {r.detail}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onJumpToTab?.(r.jump)}
+                className="text-[12px] text-[var(--brand-blue)] hover:underline shrink-0"
+                data-testid={`${r.testId}-jump`}
+              >
+                Open →
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+// ── ShopifyProductSnippetCard (Task #540) ────────────────────────────
+// Per-album HTML snippet the label pastes into their Shopify product
+// description. Includes the album id so the badge can deep-link fans
+// to the GoodTunes landing for this album (curiosity + reassurance
+// pre-purchase). The actual redemption URL is per-order via the
+// `GoodTunes redemption URL` note attribute and is documented at
+// /admin/shopify for the order-confirm email block; this card is the
+// product-page-side complement.
+function ShopifyProductSnippetCard({
+  album,
+  push,
+  mappings,
+}: {
+  album: ShopifyPanelAlbum;
+  push: PushStatus["push"] | null;
+  mappings: Mapping[];
+}) {
+  const { toast } = useToast();
+  const origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "https://goodtunes.music";
+  const albumUrl = `${origin}/album/${album.id}`;
+  const escapeHtml = (s: string) =>
+    s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  const snippet = useMemo(() => {
+    const safeTitle = escapeHtml(album.title);
+    return `<!-- GoodTunes digital edition · album ${album.id} -->
+<div style="margin:16px 0;padding:14px 16px;border:1px solid #319ED8;border-radius:10px;background:#f3fbff;font-family:-apple-system,Segoe UI,sans-serif;">
+  <div style="font-weight:600;color:#00062B;margin-bottom:4px;">Includes the GoodTunes digital edition</div>
+  <div style="font-size:13px;color:#334;line-height:1.4;">
+    Every paid order unlocks <em>${safeTitle}</em> instantly in a real Apple-Music-quality player on any device — plus a numbered GoodDeed certificate.
+    <a href="${albumUrl}" style="color:#319ED8;text-decoration:underline;">Preview the album</a>.
+  </div>
+</div>`;
+  }, [album.id, album.title, albumUrl]);
+  // Target context: prefer the pushed draft (we know its admin URL),
+  // otherwise point at the first mapped product so the URL-paste flow
+  // gets the same "open my product" affordance.
+  const target: { adminUrl: string | null; label: string } = push
+    ? {
+        adminUrl: push.adminUrl,
+        label: `your draft on ${push.storeName ?? push.shopDomain ?? "Shopify"}`,
+      }
+    : (() => {
+        const m = mappings[0];
+        if (!m) return { adminUrl: null, label: "your Shopify product" };
+        const adminUrl = m.shopDomain
+          ? `https://${m.shopDomain}/admin/products/${m.shopifyProductId}`
+          : null;
+        const storeName = m.storeName ?? m.shopDomain ?? "Shopify";
+        const productName = m.shopifyProductTitle ?? "your mapped product";
+        return { adminUrl, label: `${productName} on ${storeName}` };
+      })();
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(snippet);
+      setCopied(true);
+      toast({ title: "Snippet copied" });
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch (e: any) {
+      toast({
+        title: "Couldn't copy",
+        description: "Select the text and copy it manually.",
+        variant: "destructive",
+      });
+    }
+  };
+  return (
+    <div
+      className="rounded-lg border border-slate-200 bg-white p-4 mb-6"
+      data-testid="shopify-product-snippet"
+    >
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div>
+          <h2 className="text-[15px] font-semibold text-slate-900">
+            Paste this into your Shopify product
+          </h2>
+          <p className="text-[12.5px] text-slate-500 leading-snug">
+            One-time setup. Tells shoppers the product comes with the GoodTunes
+            digital edition + numbered GoodDeed. Paste into the
+            <strong> Description</strong> field on{" "}
+            {target.adminUrl ? (
+              <a
+                className="text-[var(--brand-blue)] underline underline-offset-2"
+                href={target.adminUrl}
+                target="_blank"
+                rel="noopener"
+                data-testid="link-shopify-product-target"
+              >
+                {target.label}
+              </a>
+            ) : (
+              <span className="font-medium" data-testid="text-shopify-product-target">
+                {target.label}
+              </span>
+            )}{" "}
+            in Shopify admin.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={copy}
+          className="h-8 px-2.5 rounded-md border border-slate-300 bg-white text-[12px] text-slate-700 font-medium hover:bg-slate-50 inline-flex items-center gap-1.5 shrink-0"
+          data-testid="button-copy-product-snippet"
+        >
+          <Copy className="w-3.5 h-3.5" />
+          {copied ? "Copied" : "Copy snippet"}
+        </button>
+      </div>
+      <pre className="text-[11.5px] bg-slate-100 text-slate-800 border border-slate-200 p-3 rounded-md overflow-x-auto leading-relaxed">
+        {snippet}
+      </pre>
+      <ol className="mt-3 text-[12px] text-slate-500 space-y-1 list-decimal list-inside leading-snug">
+        <li>Open the product in Shopify admin and switch the Description to “Show HTML” (&lt;/&gt; in the editor toolbar).</li>
+        <li>Paste the block above at the top of the description.</li>
+        <li>Save. Fans see the badge before they buy; the redeem CTA appears in the order-confirm email automatically.</li>
+      </ol>
     </div>
   );
 }
