@@ -1,18 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Disc3, GripVertical } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   VINYL_FORMAT_RULES,
-  VINYL_FORMATS,
   type VinylFormat,
   type VinylSide,
 } from "@shared/vinylFormatRules";
@@ -163,10 +155,13 @@ export function VinylOrderPanel({
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  // Format defaults to the album's saved pick, or a sensible derive
-  // from the Sell-panel pick when the artist hasn't chosen yet.
-  const effectiveFormat: VinylFormat =
-    vinylFormat ?? defaultFormatFor(physicalFormat);
+  // Task #583 — format derives exclusively from the Sell-panel
+  // `physicalFormat` pick now that the per-surface format dropdown is
+  // gone. We intentionally ignore the persisted `album.vinylFormat`
+  // here so a stale 2xLP value can't render four sides on a single-LP
+  // album. The DB column stays untouched.
+  void vinylFormat;
+  const effectiveFormat: VinylFormat = defaultFormatFor(physicalFormat);
   const rule = VINYL_FORMAT_RULES[effectiveFormat];
   const sides = rule.sides;
 
@@ -222,60 +217,6 @@ export function VinylOrderPanel({
       qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
-    },
-  });
-
-  // Normalize side assignments when switching formats: a 2xLP→1xLP
-  // change drops C/D — those songs migrate onto the last surviving
-  // side (Side B) so we never persist a `vinylSide` the new format
-  // doesn't have.
-  const normalizeForSides = (
-    src: WorkingState,
-    nextSides: readonly VinylSide[],
-  ): WorkingState => {
-    const out: WorkingState = { A: [], B: [], C: [], D: [] };
-    const orphaned: string[] = [];
-    for (const side of ["A", "B", "C", "D"] as VinylSide[]) {
-      if (nextSides.includes(side)) {
-        out[side] = [...src[side]];
-      } else {
-        orphaned.push(...src[side]);
-      }
-    }
-    if (orphaned.length > 0) {
-      const dest = nextSides[nextSides.length - 1];
-      out[dest].push(...orphaned);
-    }
-    return out;
-  };
-
-  const formatMut = useMutation({
-    mutationFn: async (next: VinylFormat) => {
-      const nextSides = VINYL_FORMAT_RULES[next].sides;
-      const normalized = normalizeForSides(working, nextSides);
-      // Persist format + (potentially-rebalanced) assignments in
-      // sequence so a 2xLP→1xLP switch can't leave orphaned C/D rows
-      // in the DB pointing at sides the album no longer has.
-      await apiRequest("PUT", `/api/admin/albums/${albumId}`, {
-        vinylFormat: next,
-      });
-      if (!workingsEqual(normalized, working)) {
-        await apiRequest("POST", `/api/admin/albums/${albumId}/vinyl-order`, {
-          assignments: workingToAssignments(normalized, nextSides),
-        });
-        setWorking(normalized);
-      }
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
-    },
-    onError: (e: any) => {
-      toast({
-        title: "Couldn't change format",
-        description: e?.message ?? "Try again in a moment.",
-        variant: "destructive",
-      });
       qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
     },
   });
@@ -397,43 +338,16 @@ export function VinylOrderPanel({
   }, [working, sides, rule, songsById]);
 
   return (
-    <div className="p-5 space-y-5" data-testid="panel-vinyl-order">
-      {/* Format selector + summary */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[11.5px] uppercase tracking-wider text-slate-500 font-semibold">
-            Vinyl format
-          </div>
-          <p className="text-[12px] text-slate-500 mt-0.5">
-            Sides + safe-length thresholds depend on the cut. Plays in the
-            app keep using the digital order.
-          </p>
-        </div>
-        <Select
-          value={effectiveFormat}
-          onValueChange={(v) => formatMut.mutate(v as VinylFormat)}
-        >
-          <SelectTrigger
-            className="w-[220px] h-9 text-[12.5px]"
-            data-testid="select-vinyl-format"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {VINYL_FORMATS.map((f) => (
-              <SelectItem key={f} value={f} data-testid={`option-vinyl-format-${f}`}>
-                {VINYL_FORMAT_RULES[f].label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      {!vinylFormat && (
-        <p className="text-[11.5px] text-slate-500 -mt-2">
-          Using a default based on your Sell-panel pick. Choose a format
-          above to lock it in.
-        </p>
-      )}
+    <div className="space-y-4" data-testid="panel-vinyl-order">
+      {/* Task #583 — the format dropdown was retired with the move into
+          the Physical tab; cut format derives from the album's
+          Sell-panel `physicalFormat` pick. The disclaimer stays so the
+          operator remembers vinyl order is independent of the digital
+          order used for plays in the app. */}
+      <p className="text-xs text-slate-500">
+        Plays in the app keep using the digital order. Side caps follow
+        the album's physical format ({VINYL_FORMAT_RULES[effectiveFormat].label}).
+      </p>
 
       {suggestion && (
         <div

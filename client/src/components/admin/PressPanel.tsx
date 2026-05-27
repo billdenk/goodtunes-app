@@ -25,6 +25,8 @@ import { useToast } from "@/hooks/use-toast";
 import { VENDOR_SPECS, type VendorId } from "@shared/vendorSpecs";
 import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
 import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
+import { VinylOrderPanel } from "@/components/admin/VinylOrderPanel";
+import type { VinylFormat } from "@shared/vinylFormatRules";
 
 export type PressPanelSong = {
   id: string;
@@ -39,6 +41,10 @@ export type PressPanelSong = {
   audioBitDepth?: number | null;
   audioChannels?: number | null;
   audioBytes?: number | null;
+  // Task #583 — vinyl cut-order fields surface in the Physical tab's
+  // Side A / Side B block (moved out of the Tracks panel).
+  vinylSide?: "A" | "B" | "C" | "D" | null;
+  vinylOrder?: number | null;
 };
 
 function fmtBytes(b: number | null | undefined): string {
@@ -77,10 +83,18 @@ function fmtDur(s: number | null | undefined): string {
 export function PressPanel({
   albumId,
   songs,
+  physicalFormat,
+  vinylFormat,
 }: {
   albumId: string;
   songs: PressPanelSong[];
+  // Task #583 — Sell-panel physical-format pick drives whether the Side
+  // A / Side B cut block renders inside Masters on file (cassette + no
+  // physical format hide the block; the rest of the panel stays).
+  physicalFormat?: "single_lp" | "double_lp" | "seven_inch" | "cassette" | null;
+  vinylFormat?: VinylFormat | null;
 }) {
+  const showVinylSides = !!physicalFormat && physicalFormat !== "cassette";
   const { toast } = useToast();
   const sorted = [...songs].sort((a, b) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0));
   const withMaster = sorted.filter((s) => !!s.audioUrl);
@@ -194,12 +208,30 @@ export function PressPanel({
         <MastersApprovalBanner albumId={albumId} />
         {/* ── Masters on file ─────────────────────────────────────────── */}
         <div className="mb-10" data-testid="section-masters-on-file">
-          <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Masters on file</h2>
-          <p className="text-[13px] text-slate-500 mb-4">
-            Confirm what's uploaded for this album before preflighting it against a pressing
-            plant. {sorted.length} track{sorted.length === 1 ? "" : "s"} · {withMaster.length} with
-            master · {missing.length > 0 ? <span className="text-rose-700">{missing.length} missing</span> : "all present"} · {fmtBytes(totalBytes)} · {fmtDur(totalDur)}
-          </p>
+          {/* Task #583 — header is a flex row: title + subhead on the
+              left, "Download all masters" pinned top-right. The title
+              block reserves right padding (pr-4 + max-w) so the
+              subhead's wrap line never crowds the button. */}
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div className="min-w-0 flex-1 pr-4 max-w-[calc(100%-12rem)]">
+              <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Masters on file</h2>
+              <p className="text-xs text-slate-500">
+                Confirm what's uploaded for this album before preflighting it against a pressing
+                plant. {sorted.length} track{sorted.length === 1 ? "" : "s"} · {withMaster.length} with
+                master · {missing.length > 0 ? <span className="text-rose-700">{missing.length} missing</span> : "all present"} · {fmtBytes(totalBytes)} · {fmtDur(totalDur)}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={downloadAll}
+              disabled={withMaster.length === 0}
+              className="shrink-0 inline-flex items-center gap-2 px-3 h-9 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              data-testid="button-download-all-masters"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download all masters
+            </button>
+          </div>
 
           <div className="rounded-md border border-slate-200 bg-white overflow-hidden">
             <table className="w-full text-[12.5px]">
@@ -269,18 +301,27 @@ export function PressPanel({
             </table>
           </div>
 
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={downloadAll}
-              disabled={withMaster.length === 0}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-200 bg-white text-[13px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              data-testid="button-download-all-masters"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Download all masters
-            </button>
-          </div>
+          {/* Task #583 — Side A / Side B cut-order block, lifted out of
+              the Tracks tab so the artist sees what's uploaded AND how
+              it'll be cut in one place. Hidden when no physical format
+              is picked or the format is cassette (no sides to cut). */}
+          {showVinylSides && sorted.length > 0 && (
+            <div className="mt-6">
+              <VinylOrderPanel
+                albumId={albumId}
+                songs={sorted.map((s) => ({
+                  id: s.id,
+                  title: s.title,
+                  trackNumber: s.trackNumber,
+                  duration: s.duration ?? 0,
+                  vinylSide: s.vinylSide ?? null,
+                  vinylOrder: s.vinylOrder ?? null,
+                }))}
+                vinylFormat={vinylFormat ?? null}
+                physicalFormat={physicalFormat ?? null}
+              />
+            </div>
+          )}
         </div>
 
         {/* ── Re-probe banner (Task #337) ─────────────────────────────

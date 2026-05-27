@@ -87,7 +87,6 @@ import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
 import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
-import { VinylOrderPanel } from "@/components/admin/VinylOrderPanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import Hls from "hls.js";
@@ -273,7 +272,7 @@ function visibleTabsFor(album: {
   const base: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "sell", label: "Design" },
-    { key: "tracks", label: "Tracks" },
+    { key: "tracks", label: "Digital" },
   ];
   // Bonus is part of the digital offering — always available, no gate.
   const bonus: { key: Tab; label: string } = { key: "bonus", label: "Bonus" };
@@ -281,7 +280,7 @@ function visibleTabsFor(album: {
   const fulfillmentUnlocked = !!album.sellQuoteLockedAt || released;
   if (album.sellMode === "direct") {
     return fulfillmentUnlocked
-      ? [...base, { key: "press", label: "Press" }, bonus]
+      ? [...base, { key: "press", label: "Physical" }, bonus]
       : [...base, bonus];
   }
   if (album.sellMode === "shopify") {
@@ -1145,7 +1144,12 @@ export function AdminAlbum() {
                 />
               )}
               {safeTab === "press" && allowed.has("press") && (
-                <PressPanel albumId={album.id} songs={album.songs} />
+                <PressPanel
+                  albumId={album.id}
+                  songs={album.songs}
+                  physicalFormat={album.physicalFormat ?? null}
+                  vinylFormat={(album.vinylFormat as any) ?? null}
+                />
               )}
               {safeTab === "shopify" && allowed.has("shopify") && (
                 <ShopifyPanel
@@ -1937,14 +1941,10 @@ function TracksPanel({
   const [albumSyncOpen, setAlbumSyncOpen] = useState(false);
   const [lyricsImportOpen, setLyricsImportOpen] = useState(false);
   const [creditsImportOpen, setCreditsImportOpen] = useState(false);
-  // Task #541 — Digital vs Vinyl order view. Defaults to digital; the
-  // segmented toggle lives in the panel header. Vinyl view is hidden
-  // for albums where vinyl makes no sense (cassette + shopify mode
-  // without a physical format) but we keep the toggle available for
-  // direct-mode albums even if the artist hasn't picked a format yet.
-  const [orderView, setOrderView] = useState<"digital" | "vinyl">("digital");
-  const showVinylToggle =
-    album.sellMode === "direct" && album.physicalFormat !== "cassette";
+  // Task #583 — the Digital/Vinyl segmented toggle has moved out of
+  // this panel: the Digital tab is now strictly the digital tracklist,
+  // and the Side A/B cut view lives on the Physical tab beside the
+  // masters table where the cuts originate.
 
   // Album-wide lyrics lookup: walks every track missing lyrics and
   // asks LRCLIB first (plain + synced cues), then falls through to a
@@ -2355,57 +2355,13 @@ function TracksPanel({
             <p className="text-slate-500 text-[11.5px] mt-0.5">
               {sorted.length === 0 ? (
                 <>Add your first track below. Press Enter to add and keep going.</>
-              ) : orderView === "vinyl" ? (
-                <>Drag to set the cut order; we'll warn if a side runs long.</>
               ) : (
                 <>Reorder, edit, and play right from the list.</>
               )}
             </p>
           </div>
-          {/* Task #541 — Digital vs Vinyl order segmented toggle.
-              Lives next to the Tracks title; only renders when the
-              album sells a physical record (direct mode + non-cassette
-              physical format). Switching to Vinyl hides the digital
-              tracklist and renders VinylOrderPanel underneath. */}
-          {showVinylToggle && sorted.length > 0 && (
-            <div
-              className="ml-2 inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-[11.5px] font-semibold"
-              role="tablist"
-              aria-label="Track ordering view"
-            >
-              <button
-                onClick={() => setOrderView("digital")}
-                role="tab"
-                aria-selected={orderView === "digital"}
-                data-testid="toggle-order-digital"
-                className={
-                  "px-2.5 py-1 rounded-[5px] " +
-                  (orderView === "digital"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700")
-                }
-              >
-                Digital
-              </button>
-              <button
-                onClick={() => setOrderView("vinyl")}
-                role="tab"
-                aria-selected={orderView === "vinyl"}
-                data-testid="toggle-order-vinyl"
-                className={
-                  "px-2.5 py-1 rounded-[5px] inline-flex items-center gap-1 " +
-                  (orderView === "vinyl"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700")
-                }
-              >
-                <Disc3 className="w-3 h-3" />
-                Vinyl
-              </button>
-            </div>
-          )}
         </div>
-        <div className={cn("flex items-center gap-1.5", orderView === "vinyl" && "opacity-0 pointer-events-none")}>
+        <div className="flex items-center gap-1.5">
           <button
             onClick={() => setAdding((v) => !v)}
             className={
@@ -2544,70 +2500,14 @@ function TracksPanel({
                 </div>
               </DropdownMenuItem>
 
-              <DropdownMenuLabel className="px-2.5 pt-2.5 pb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-slate-400">
-                Masters
-              </DropdownMenuLabel>
-              {/* Bulk-download every master on this album. We fire one
-                  anchor click per track with a small stagger so the
-                  browser doesn't dedupe / batch-block them. A real .zip
-                  bundle is server work (jszip on-the-fly) — deferred
-                  until someone asks. For now this is the same action
-                  the operator would take per-row, just looped. */}
-              <DropdownMenuItem
-                onSelect={() => {
-                  const tracksWithMaster = sorted.filter((s) => !!s.audioUrl);
-                  if (tracksWithMaster.length === 0) {
-                    toast({
-                      title: "No masters to download",
-                      description: "Upload masters on the Tracks tab first.",
-                    });
-                    return;
-                  }
-                  tracksWithMaster.forEach((s, i) => {
-                    setTimeout(() => {
-                      const a = document.createElement("a");
-                      a.href = s.audioUrl!;
-                      // Preserve original extension (.mp3/.wav/.flac/.m4a/.ogg)
-                      // so each saved file opens in the user's audio app.
-                      const ext = s.audioUrl!.match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3";
-                      a.download = `${String(s.trackNumber).padStart(2, "0")} ${s.title}${ext}`;
-                      document.body.appendChild(a);
-                      a.click();
-                      a.remove();
-                    }, i * 250);
-                  });
-                  toast({
-                    title: `Downloading ${tracksWithMaster.length} master${tracksWithMaster.length === 1 ? "" : "s"}`,
-                    description: "Your browser will save each file.",
-                  });
-                }}
-                data-testid="menu-download-all-masters"
-                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900"
-              >
-                <Download className="w-4 h-4 text-slate-500" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-slate-900">
-                    Download all masters
-                  </div>
-                  <div className="text-[11px] text-slate-500">
-                    Saves every uploaded master to your computer.
-                  </div>
-                </div>
-              </DropdownMenuItem>
+              {/* Task #583 — "Download all masters" lives on the Physical
+                  tab now (single home for master bulk-actions). */}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
       {albumCredits?.production && albumCredits.production.length > 0 && (
         <AlbumProductionCreditsPanel rows={albumCredits.production} albumId={album.id} />
-      )}
-      {orderView === "vinyl" && (
-        <VinylOrderPanel
-          albumId={album.id}
-          songs={sorted}
-          vinylFormat={(album.vinylFormat as any) ?? null}
-          physicalFormat={album.physicalFormat ?? null}
-        />
       )}
       {/* Dock clearance lives as `mb-32` on the OUTER section (above) — a
           margin BELOW the white card, not padding inside it. Earlier the
@@ -2616,7 +2516,7 @@ function TracksPanel({
           short (Bill flagged it). Margin-below keeps the card hugging its
           content while still reserving scroll space so the fixed dock
           can't cover the last track or the AddTrackForm. */}
-      <ol className={orderView === "vinyl" ? "hidden" : undefined}>
+      <ol>
         {sorted.map((song, i) => {
           const songCredits = albumCredits?.bySongId[song.id];
           return (
