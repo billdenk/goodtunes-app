@@ -750,13 +750,14 @@ function AttachContactDialog(
             onChange={setPicked}
             excludeIds={props.attachedIds}
             testIdPrefix={`${props.testIdPrefix}-${props.kind}`}
-            // Bill 2026-05-27: press/NPO/label/maker/reseller admins
-            // are often the same people who already have a Spotify
-            // artist row (label founders who release records, NPO
-            // ambassadors who tour), so surface the same Spotify
-            // fallback here that Invite Artist uses — not just the
-            // paste-a-URL prefill.
-            enableSpotify
+            // Spotify search is intentionally NOT enabled here — admins
+            // for a press / NPO / label / maker / reseller aren't
+            // artists, so an artist-name search would return mostly
+            // noise. The Paste-a-URL prefill above already covers the
+            // edge case where an admin happens to also be a Spotify
+            // artist (paste their artist URL); for everyone else the
+            // "+ Create" inline fallback in PersonPicker is the right
+            // path. Only Invite Artist sets enableSpotify.
             // Paste-a-URL prefill: a scraped JSON-LD `jobTitle`
             // (vendor team pages, label staff pages) maps onto the Role
             // input here so the operator doesn't retype it. Only fills
