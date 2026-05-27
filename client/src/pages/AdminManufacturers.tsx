@@ -248,7 +248,7 @@ export function AdminManufacturers() {
                 testIdPrefix="view-mode-presses"
               />
               <AddEntityButton
-                label="Add press"
+                label="Add Press"
                 onClick={() => setAddOpen(true)}
                 testId="button-add-manufacturer"
               />
@@ -321,7 +321,7 @@ export function AdminManufacturers() {
         >
           <DialogHeader className="text-left space-y-1">
             <DialogTitle className="text-base font-semibold text-slate-900">
-              Add press
+              Add Press
             </DialogTitle>
             <DialogDescription className="text-sm text-slate-500 leading-relaxed">
               Paste the plant's website — we'll prefill name, domain, logo,

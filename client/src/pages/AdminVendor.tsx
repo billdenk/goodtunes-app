@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Pencil,
+  Plus,
   Upload,
   Guitar,
   Store,
@@ -77,6 +78,10 @@ interface Vendor {
   // both a Maker and a Reseller). Toggle them on the Roles panel.
   isMaker: boolean;
   isReseller: boolean;
+  // Task #471 — print-only Quickprinter (Hoover Printing & friends).
+  // Mutually exclusive with Maker. Drives the GoodDeed Services tab
+  // gate — only Quickprinters quote certificate printing legs.
+  isQuickprinter?: boolean;
   // Task #237 — sub-brand self-reference. When set, this vendor is a
   // sub-brand of `parentVendorId` (e.g. Epiphone → Gibson). Edited
   // from the Lineage panel. One level deep only — sub-brands can't
@@ -127,6 +132,16 @@ interface VendorProfile {
 }
 
 type Tab = "overview" | "people" | "albums" | "analytics" | "cover" | "instruments" | "gooddeed" | "permissions";
+
+// Task #581 — Only Quickprinters quote GoodDeed certificate work. Pure
+// Makers (Epiphone), pure Resellers (Carter Vintage), and Maker+Reseller
+// hybrids (Gibson) never see the tab. Presses live in the manufacturers
+// table — not on this surface — so vendor-side this is just the
+// `isQuickprinter` flag.
+function vendorQuotesGoodDeed(v: Pick<Vendor, "isQuickprinter">): boolean {
+  return !!v.isQuickprinter;
+}
+
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   // Task #295 — entity-detail parity (People / Albums / Analytics)
@@ -137,9 +152,15 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "albums", label: "Albums" },
   { key: "analytics", label: "Analytics" },
   { key: "cover", label: "Cover" },
-  { key: "instruments", label: "Instruments" },
+  // Task #581 — "Gear" is the user-facing word everywhere we surface
+  // instruments now. Route key + component name stay `instruments`
+  // (data entity token) — this is a copy/label pass.
+  { key: "instruments", label: "Gear" },
   // Task #245 — vendor-quoted GoodDeed pricing (printing / hologram /
   // insertion). Same panel a vendor-role partner sees in /vendor.
+  // Task #581 — only rendered when this vendor actually quotes
+  // GoodDeed work (Quickprinter). Pure Makers / Resellers / Maker+
+  // Reseller hybrids skip this tab — see `vendorQuotesGoodDeed`.
   { key: "gooddeed", label: "GoodDeed Services" },
   // Task #297 — per-vendor partner-permissions card. Same panel and
   // server endpoint Label/Artist/Press use; vendor was wired into
@@ -164,7 +185,16 @@ export function AdminVendor() {
   const listLabel = mode === "maker" ? "Makers" : "Resellers";
   const activeKey: "makers" | "vendors" = mode === "maker" ? "makers" : "vendors";
   const [, navigate] = useLocation();
-  const [tab, setTab] = useState<Tab>("overview");
+  // Task #581 — honor `?tab=<key>` deep links so cross-section links
+  // can land on a specific tab. Falls back to overview when the key
+  // isn't recognized or (for gooddeed) when the vendor doesn't quote
+  // it — see the snap-back effect below.
+  const [tab, setTab] = useState<Tab>(() => {
+    if (typeof window === "undefined") return "overview";
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    const valid = TABS.some((t) => t.key === requested);
+    return valid ? (requested as Tab) : "overview";
+  });
   // Logo editor lives as a modal hanging off the header logo thumbnail
   // (same pencil-on-thumbnail pattern as AdminAlbum's Artwork editor).
   // The dedicated Logo tab was removed; Cover stays a tab because the
@@ -228,6 +258,16 @@ export function AdminVendor() {
     queryKey: [profileEndpoint],
     enabled: !!user?.isAdmin && !!vendorId,
   });
+
+  // Task #581 — snap back to Overview if the active tab is `gooddeed`
+  // but this vendor doesn't quote it (e.g. a deep link from a prior
+  // visit when the vendor was a Quickprinter, or a hand-typed URL).
+  useEffect(() => {
+    if (!profile?.vendor) return;
+    if (tab === "gooddeed" && !vendorQuotesGoodDeed(profile.vendor)) {
+      setTab("overview");
+    }
+  }, [profile?.vendor, tab]);
 
   const rescrape = useMutation({
     mutationFn: async () => {
@@ -401,7 +441,7 @@ export function AdminVendor() {
               <span className="inline-flex items-center gap-1.5">
                 <Guitar className="w-3.5 h-3.5 text-slate-400" />
                 {instruments.length}{" "}
-                {instruments.length === 1 ? "instrument" : "instruments"}
+                {instruments.length === 1 ? "piece of gear" : "pieces of gear"}
               </span>
               {vendor.location && (
                 <span className="inline-flex items-center gap-1.5">
@@ -434,7 +474,7 @@ export function AdminVendor() {
           data-testid="tabs-admin-vendor"
         >
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-            {TABS.map((t) => (
+            {TABS.filter((t) => t.key !== "gooddeed" || vendorQuotesGoodDeed(vendor)).map((t) => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
@@ -520,9 +560,13 @@ export function AdminVendor() {
         )}
         {tab === "cover" && <CoverPanel vendor={vendor} />}
         {tab === "instruments" && (
-          <InstrumentsPanel instruments={instruments} mode={mode} />
+          <InstrumentsPanel
+            instruments={instruments}
+            mode={mode}
+            vendorId={vendor.id}
+          />
         )}
-        {tab === "gooddeed" && (
+        {tab === "gooddeed" && vendorQuotesGoodDeed(vendor) && (
           <div className="mt-6">
             <GoodDeedServicesTab vendorId={vendorId} />
           </div>
@@ -558,7 +602,7 @@ export function AdminVendor() {
                       ? "piece of gear"
                       : "pieces of gear"}
                   </span>
-                  . Cancel to review the Instruments tab first, or continue
+                  . Cancel to review the Gear tab first, or continue
                   to remove it everywhere — this can't be undone.
                 </>
               ) : (
@@ -1390,124 +1434,143 @@ function CoverPanel({ vendor }: { vendor: Vendor }) {
 function InstrumentsPanel({
   instruments,
   mode,
+  vendorId,
 }: {
   instruments: VendorInstrument[];
   mode: "maker" | "reseller";
+  vendorId: string;
 }) {
   const isMaker = mode === "maker";
-  if (instruments.length === 0) {
-    return (
-      <Card
-        className="rounded-2xl shadow-sm p-10 text-center"
-        data-testid="panel-instruments-empty"
-      >
-        <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
-          <Guitar className="w-6 h-6" />
-        </div>
-        <p className="text-slate-700 text-[14px] font-semibold">
-          {isMaker
-            ? "No gear yet attributes its build to this maker"
-            : "No instruments link to this vendor yet"}
-        </p>
-        <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs mx-auto">
-          {isMaker
-            ? "Open a piece of gear and pick this brand as its Maker — it'll show up here."
-            : "Attach a product URL to any instrument and this vendor will appear here."}
-        </p>
-      </Card>
-    );
-  }
+  // Task #581 — "+ Add Gear" deep-links to /admin/instruments with the
+  // smart-back-crumb signal so the operator lands on the existing add-
+  // gear scrape flow and can paste a product URL. The scraper already
+  // stamps `makerVendorId` from the JSON-LD brand, and the breadcrumb
+  // back to this vendor is rendered by useSmartBackCrumb on the Gear
+  // index/detail pages.
+  const addGearHref = `/admin/instruments?from=vendor&vendorId=${vendorId}`;
+  const headerCopy = isMaker ? "Gear built by this maker" : "Gear sold by this vendor";
+  const countLine =
+    instruments.length === 0
+      ? null
+      : `${instruments.length} ${
+          instruments.length === 1 ? "piece" : "pieces"
+        } ${isMaker ? "tied to this maker" : "attached"}`;
+
   return (
     <Card
       className="rounded-2xl shadow-sm overflow-hidden"
       data-testid="panel-instruments"
     >
-      <div className="px-6 py-4 border-b border-slate-100">
-        <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
-          <Guitar className="w-4 h-4 text-slate-400" />
-          {isMaker ? "Built by this maker" : "Instruments"}
-        </h2>
-        <p className="text-slate-400 text-[11.5px]">
-          {instruments.length}{" "}
-          {instruments.length === 1
-            ? isMaker
-              ? "piece"
-              : "instrument"
-            : isMaker
-            ? "pieces"
-            : "instruments"}{" "}
-          {isMaker ? "tied to this maker" : "attached"}
-        </p>
+      <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
+            <Guitar className="w-4 h-4 text-slate-400" />
+            {headerCopy}
+          </h2>
+          {countLine && (
+            <p className="text-slate-400 text-xs mt-0.5">{countLine}</p>
+          )}
+        </div>
+        <Link
+          href={addGearHref}
+          className="inline-flex items-center gap-1 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors px-2.5 py-1 text-xs font-semibold text-slate-700 flex-shrink-0"
+          data-testid="button-add-gear"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add Gear
+        </Link>
       </div>
-      <ul className="divide-y divide-slate-100" data-testid="list-instruments">
-        {instruments.map((i) => (
-          <li key={i.id} className="px-6 py-3 hover:bg-slate-50 transition-colors">
-            <div className="flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
-                {i.photoUrl ? (
-                  <img
-                    src={i.photoUrl}
-                    alt={i.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <Guitar className="w-4 h-4 text-slate-400" />
-                )}
-              </div>
-              <Link
-                href={`/admin/instruments/${i.id}`}
-                className="flex-1 min-w-0"
-                data-testid={`row-instrument-${i.id}`}
-              >
-                <div className="text-slate-900 text-[13.5px] font-semibold truncate">
-                  {i.name}
-                </div>
-                <div className="text-slate-400 text-[11.5px] truncate">
-                  {i.shortCategory || i.category}
-                </div>
-              </Link>
-              <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+      <div className="px-5 py-4">
+        {instruments.length === 0 ? (
+          <div
+            className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-5 py-8 text-center"
+            data-testid="panel-instruments-empty"
+          >
+            <div className="w-10 h-10 mx-auto rounded-full bg-white ring-1 ring-slate-200 text-slate-400 flex items-center justify-center mb-3">
+              <Guitar className="w-5 h-5" />
             </div>
-            {isMaker && i.resellers && (
-              <div
-                className="mt-2 ml-[54px] flex flex-wrap items-center gap-1.5"
-                data-testid={`resellers-${i.id}`}
-              >
-                {i.resellers.length === 0 ? (
-                  <span className="text-slate-400 text-[11px] italic">
-                    No resellers yet
+            <p className="text-slate-700 text-sm font-semibold">
+              {isMaker
+                ? "No gear yet attributes its build to this maker"
+                : "No gear linked to this vendor yet"}
+            </p>
+            <p className="text-slate-400 text-xs mt-1 max-w-xs mx-auto">
+              {isMaker
+                ? "Open a piece of gear and pick this brand as its Maker — it'll show up here."
+                : "Attach a product URL to any piece of gear and this vendor will appear here."}
+            </p>
+          </div>
+        ) : (
+          <ul className="space-y-2.5" data-testid="list-instruments">
+            {instruments.map((i) => (
+              <li key={i.id}>
+                <Link
+                  href={`/admin/instruments/${i.id}`}
+                  className="inline-flex items-center gap-2 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors pl-1 pr-3 py-1 max-w-full"
+                  data-testid={`chip-gear-${i.id}`}
+                >
+                  <span className="w-7 h-7 rounded-full overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+                    {i.photoUrl ? (
+                      <img
+                        src={i.photoUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Guitar className="w-3.5 h-3.5 text-slate-400" />
+                    )}
                   </span>
-                ) : (
-                  <>
-                    <span className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mr-1">
-                      Available at
+                  <span className="text-xs font-semibold text-slate-800 truncate">
+                    {i.name}
+                  </span>
+                  {(i.shortCategory || i.category) && (
+                    <span className="text-xs text-slate-500 truncate">
+                      · {i.shortCategory || i.category}
                     </span>
-                    {i.resellers.map((r) => (
-                      <Link
-                        key={`${i.id}-${r.id}`}
-                        href={`/admin/vendors/${r.id}`}
-                        className="inline-flex items-center gap-1 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors px-2 py-0.5 text-[11px] text-slate-700"
-                        data-testid={`chip-reseller-${i.id}-${r.id}`}
-                      >
-                        {r.logoUrl ? (
-                          <img
-                            src={r.logoUrl}
-                            alt=""
-                            className="w-3 h-3 rounded-sm object-cover"
-                          />
-                        ) : (
-                          <Store className="w-2.5 h-2.5 text-slate-400" />
-                        )}
-                        <span className="font-medium">{r.name}</span>
-                      </Link>
-                    ))}
-                  </>
+                  )}
+                </Link>
+                {isMaker && i.resellers && (
+                  <div
+                    className="mt-1.5 ml-9 flex flex-wrap items-center gap-1.5"
+                    data-testid={`resellers-${i.id}`}
+                  >
+                    {i.resellers.length === 0 ? (
+                      <span className="text-slate-400 text-[11px] italic">
+                        No resellers yet
+                      </span>
+                    ) : (
+                      <>
+                        <span className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mr-1">
+                          Available at
+                        </span>
+                        {i.resellers.map((r) => (
+                          <Link
+                            key={`${i.id}-${r.id}`}
+                            href={`/admin/vendors/${r.id}`}
+                            className="inline-flex items-center gap-1 rounded-full bg-white ring-1 ring-slate-200 hover:bg-slate-50 transition-colors px-2 py-0.5 text-xs text-slate-700"
+                            data-testid={`chip-reseller-${i.id}-${r.id}`}
+                          >
+                            {r.logoUrl ? (
+                              <img
+                                src={r.logoUrl}
+                                alt=""
+                                className="w-3 h-3 rounded-sm object-cover"
+                              />
+                            ) : (
+                              <Store className="w-2.5 h-2.5 text-slate-400" />
+                            )}
+                            <span className="font-medium">{r.name}</span>
+                          </Link>
+                        ))}
+                      </>
+                    )}
+                  </div>
                 )}
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </Card>
   );
 }
