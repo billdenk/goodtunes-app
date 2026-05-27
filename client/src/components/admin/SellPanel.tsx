@@ -2101,15 +2101,23 @@ function SkuRow({
               chevron) to expand. Task #413 — empty placeholder reads
               "Untitled <format label>" so it's obvious the title is
               empty without losing which size was picked. */}
+          {(() => {
+            const effectivePlaceholder = albumTitle?.trim()
+              ? albumTitle.trim()
+              : `Untitled ${ALBUM_FORMAT_LABEL[format]}`;
+            const effectiveAriaLabel = albumTitle?.trim()
+              ? "Row title — defaults to album title"
+              : `Row title — defaults to ${ALBUM_FORMAT_LABEL[format]}`;
+            return (
           <div className="flex-1 min-w-0 flex items-center gap-2">
             <input
               type="text"
               value={displayNameStr}
               onChange={(e) => setDisplayNameStr(e.target.value.slice(0, 80))}
-              placeholder={`Untitled ${ALBUM_FORMAT_LABEL[format]}`}
+              placeholder={effectivePlaceholder}
               maxLength={80}
               readOnly={isLocked}
-              aria-label={`Row title — defaults to ${ALBUM_FORMAT_LABEL[format]}`}
+              aria-label={effectiveAriaLabel}
               className={[
                 "min-w-0 flex-1 bg-transparent border-0 outline-none text-sm font-semibold placeholder:font-semibold transition-all",
                 isLocked
@@ -2130,6 +2138,8 @@ function SkuRow({
               </button>
             )}
           </div>
+            );
+          })()}
           {/* Task #433 — pulled tight to the top-right edge (-mr-1) and
               sized to the Tracks-row 7×7 chrome so the cluster reads
               as one affordance. Order matches Tracks-row destructive
