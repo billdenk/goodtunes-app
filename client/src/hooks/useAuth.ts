@@ -12,6 +12,16 @@ interface AuthUser {
   photoUrl?: string | null;
   isAdmin?: boolean;
   kind?: "admin" | "customer";
+  // Task #537 — finish-signup gating fields. `signupCompletedAt` is
+  // null for OAuth-minted fans until they submit /finish-setup; the
+  // router redirects them there on every nav until it's stamped.
+  // `isPrivateRelay` is server-computed from the email so the picker
+  // can require a deliverable contact email/phone when true.
+  handle?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  signupCompletedAt?: string | null;
+  isPrivateRelay?: boolean;
 }
 
 // Login can return one of:

@@ -1315,11 +1315,73 @@ export const customerUsers = pgTable("customer_users", {
   // means the fan has never seen the sheet — eligible for the next
   // first-launch render.
   whatsNewSeenVersion: integer("whats_new_seen_version"),
+  // Task #537 — Finish-signup flow for OAuth-minted accounts. Apple/
+  // Google sign-in drops a fresh fan into the app with whatever the
+  // provider returned (often a `@privaterelay.appleid.com` mask + no
+  // name). Real accounts that will hold purchases, receipts, gifting,
+  // and a public handle need a deliverable contact + a chosen display
+  // name + a unique, non-reserved handle before they land in the
+  // player. The fields below capture that:
+  //
+  //   `handle`            — public @handle the fan picks. Mirrors
+  //                         `username` (kept in sync on the same write)
+  //                         so legacy /api/me/welcome-back/* paths and
+  //                         playlist sharing keep working, but the
+  //                         reserved-artist check and uniqueness live
+  //                         here (case-insensitive on the unique index).
+  //   `contactEmail`      — deliverable email captured when Apple's
+  //                         relay address is the only one we have.
+  //                         The provider email stays on
+  //                         `customer_identities.email` (the link key);
+  //                         `customer_users.email` keeps whatever the
+  //                         provider sent so admin search keeps finding
+  //                         the row; this column is what receipts /
+  //                         gifting / payouts read from.
+  //   `contactPhone`      — alternative deliverable contact. Phone
+  //                         verification is intentionally out of scope
+  //                         here (separate task — gifting/payouts gate
+  //                         it later) — this column stores the raw
+  //                         value as entered until that flow ships.
+  //   `signupCompletedAt` — stamped once the fan submits a valid
+  //                         finish-setup form. The route guard treats
+  //                         NULL as "still in onboarding" and redirects
+  //                         every navigation to /finish-setup until
+  //                         set. Legacy rows + password-signup rows
+  //                         backfill to `created_at` so they never see
+  //                         the flow.
+  handle: text("handle"),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  signupCompletedAt: timestamp("signup_completed_at"),
 }, (t) => ({
   legacyGogoodsIdUniq: uniqueIndex("customer_users_legacy_gogoods_id_uniq")
     .on(t.legacyGogoodsId)
     .where(sql`${t.legacyGogoodsId} IS NOT NULL`),
+  handleUniq: uniqueIndex("customer_users_handle_lower_uniq")
+    .on(sql`lower(${t.handle})`)
+    .where(sql`${t.handle} IS NOT NULL`),
 }));
+
+// Task #537 — Reserved handles. Verified artists + a curated top-N
+// of famous-artist usernames are blocked from the fan handle picker
+// so a random fan can't grab `@taylorswift` before the artist's team
+// has a chance to claim it. Seeded manually for now (a Spotify-driven
+// importer is tracked as a separate task). The picker hits
+// /api/auth/handle-available which does a case-insensitive lookup
+// here AND on `customer_users.handle` in one round-trip.
+export const reservedHandles = pgTable("reserved_handles", {
+  // Stored lowercased — the unique index is on the column itself, so
+  // every insert MUST lowercase first. Picker lookups also lowercase
+  // the input before the .where(eq) match.
+  handle: text("handle").primaryKey(),
+  // Human-readable reason for the block. Surfaces nowhere fan-facing
+  // (the picker shows a generic "held for the artist" message) — it's
+  // an operator note: "verified artist on people.id=…", "top-N seed",
+  // "manual block", etc.
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type ReservedHandle = typeof reservedHandles.$inferSelect;
 
 // Task #400 — Single-use one-tap sign-in tokens emailed in the welcome
 // campaign. Clicking the link in the wave-1 email lands the fan on

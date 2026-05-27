@@ -1506,3 +1506,98 @@ SQL
 }
 migrate_task_538_phone_verification dev  "${DATABASE_URL:-}"
 migrate_task_538_phone_verification prod "${PROD_DATABASE_URL:-}"
+
+# Task #537 — Finish-signup flow for OAuth-minted fan accounts. Adds
+# nullable columns to customer_users (handle, contact_email,
+# contact_phone, signup_completed_at) + the case-insensitive partial
+# unique index on `handle`. Creates `reserved_handles` and seeds it
+# with verified-artist usernames pulled from `people` (idempotent ON
+# CONFLICT DO NOTHING). Backfills `signup_completed_at` on every
+# existing row to `created_at` so legacy + password-signup fans never
+# see the new screen. Additive + idempotent — safe on every merge.
+migrate_finish_signup() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping finish_signup migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE customer_users
+  ADD COLUMN IF NOT EXISTS handle               text,
+  ADD COLUMN IF NOT EXISTS contact_email        text,
+  ADD COLUMN IF NOT EXISTS contact_phone        text,
+  ADD COLUMN IF NOT EXISTS signup_completed_at  timestamp;
+CREATE UNIQUE INDEX IF NOT EXISTS customer_users_handle_lower_uniq
+  ON customer_users (lower(handle))
+  WHERE handle IS NOT NULL;
+-- Every existing fan was created before this flow shipped; treat them
+-- as already-onboarded so the redirect never fires on them.
+UPDATE customer_users
+   SET signup_completed_at = COALESCE(created_at, now())
+ WHERE signup_completed_at IS NULL;
+CREATE TABLE IF NOT EXISTS reserved_handles (
+  handle      text PRIMARY KEY,
+  reason      text,
+  created_at  timestamp DEFAULT now()
+);
+-- Seed with every artist-style People row's name so a fan can't grab
+-- a known artist's handle before that artist's team has claimed it.
+-- `people` carries no slug/verified column today, so we derive a
+-- handle from `name` (lowercased, stripped to a–z 0–9 . _ -) and
+-- skip anything that doesn't fit the 3–30-char fan-handle vocabulary.
+-- The Spotify-driven importer that expands this list is a separate
+-- task; this gives us a sensible starting baseline.
+INSERT INTO reserved_handles (handle, reason)
+SELECT lower(regexp_replace(name, '[^A-Za-z0-9._-]+', '', 'g')) AS h, 'people-row'
+  FROM people
+ WHERE name IS NOT NULL
+   AND deleted_at IS NULL
+   AND length(regexp_replace(name, '[^A-Za-z0-9._-]+', '', 'g')) BETWEEN 3 AND 30
+ON CONFLICT (handle) DO NOTHING;
+INSERT INTO reserved_handles (handle, reason) VALUES
+  ('taylorswift',   'top-N seed'),
+  ('beyonce',       'top-N seed'),
+  ('drake',         'top-N seed'),
+  ('rihanna',       'top-N seed'),
+  ('kanyewest',     'top-N seed'),
+  ('adele',         'top-N seed'),
+  ('billieeilish',  'top-N seed'),
+  ('arianagrande',  'top-N seed'),
+  ('edsheeran',     'top-N seed'),
+  ('bts',           'top-N seed'),
+  ('badbunny',      'top-N seed'),
+  ('theweeknd',     'top-N seed'),
+  ('brunomars',     'top-N seed'),
+  ('coldplay',      'top-N seed'),
+  ('u2',            'top-N seed'),
+  ('radiohead',     'top-N seed'),
+  ('metallica',     'top-N seed'),
+  ('beatles',       'top-N seed'),
+  ('rollingstones', 'top-N seed'),
+  ('pinkfloyd',     'top-N seed'),
+  ('zeppelin',      'top-N seed'),
+  ('ledzeppelin',   'top-N seed'),
+  ('queen',         'top-N seed'),
+  ('davidbowie',    'top-N seed'),
+  ('madonna',       'top-N seed'),
+  ('prince',        'top-N seed'),
+  ('michaeljackson','top-N seed'),
+  ('nickcarter',    'verified-artist'),
+  ('backstreetboys','top-N seed'),
+  ('compassrecords','top-N seed'),
+  ('goodtunes',     'platform'),
+  ('admin',         'platform'),
+  ('support',       'platform'),
+  ('help',          'platform')
+ON CONFLICT (handle) DO NOTHING;
+COMMIT;
+SQL
+  then
+    echo "post-merge: finish_signup migration ok on $label"
+  else
+    echo "post-merge: WARNING — finish_signup migration failed on $label (continuing)"
+  fi
+}
+migrate_finish_signup dev  "${DATABASE_URL:-}"
+migrate_finish_signup prod "${PROD_DATABASE_URL:-}"

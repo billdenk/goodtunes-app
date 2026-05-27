@@ -54,6 +54,8 @@ import { Welcome } from "@/pages/Welcome";
 import { WelcomeInvitee } from "@/pages/WelcomeInvitee";
 // Task #400 — Welcome-back flow for imported gogoods.com fans.
 import { WelcomeBack } from "@/pages/WelcomeBack";
+// Task #537 — Finish-signup screen for OAuth-minted customer accounts.
+import { FinishSetup } from "@/pages/FinishSetup";
 import { AccountMerge } from "@/pages/AccountMerge";
 import { AdminWelcomeBack } from "@/pages/AdminWelcomeBack";
 import { Orders } from "@/pages/Orders";
@@ -170,6 +172,21 @@ function Router() {
   if (showAccessGuard && accessRequest.data) {
     return <AccessNotAuthorizedDialog customer={accessRequest.data} />;
   }
+  // Task #537 — Force first-time OAuth-minted fans through the
+  // /finish-setup screen before they can hit any real player surface.
+  // `signupCompletedAt === null` is the trigger; password-signups
+  // pre-stamp it on /api/register and legacy rows were backfilled at
+  // migration time, so this only ever fires for OAuth signups.
+  // Allow-list every path the picker page itself can need (logout,
+  // login bounce, the error landing) so a fan who hits "log out"
+  // from the finish-setup screen isn't trapped in a loop.
+  const needsFinishSignup =
+    !isLoading && user?.kind === "customer" && !user.signupCompletedAt;
+  const finishSignupAllow = ["/finish-setup", "/login", "/logout", "/error"];
+  if (needsFinishSignup && !finishSignupAllow.some((p) => location.startsWith(p))) {
+    return <Redirect to="/finish-setup" />;
+  }
+
   if (isProdHost) {
     if (kind === "customer" && location.startsWith("/admin")) {
       return <Redirect to="/account" />;
@@ -231,6 +248,17 @@ function Router() {
             bounces non-imported or already-onboarded fans to /account. */}
         <Route path="/welcome-back">
           <ProtectedRoute component={WelcomeBack} />
+        </Route>
+        {/* Task #537 — Finish-signup for OAuth-minted customer
+            accounts. Pick a unique handle + confirm display name +
+            (when Apple's private relay is the only email we have)
+            provide a deliverable contact. Gated server-side via
+            GET /api/auth/complete-signup/state — already-completed
+            fans bounce themselves out. The Router-level guard below
+            additionally redirects every other path here until the
+            row is stamped. */}
+        <Route path="/finish-setup">
+          <ProtectedRoute component={FinishSetup} />
         </Route>
         {/* Public landing for the merge-confirmation link emailed to
             the *other* address. Page itself handles the not-signed-in

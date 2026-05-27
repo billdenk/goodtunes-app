@@ -51,6 +51,56 @@ See [`docs/migrations/gogoods-welcome-back.md`](./migrations/gogoods-welcome-bac
 for the whole welcome-back flow (single-use email-link sign-in,
 3-screen onboarding, admin wave-1 campaign, fan-initiated merge).
 
+### Finish-signup for OAuth-minted fans (Task #537)
+
+OAuth (Google/Apple) creates a `customer_users` row with whatever the
+provider returned — for Apple Hide-My-Email that's an
+`@privaterelay.appleid.com` mask + no name; for Google it's the
+account email + real name. Before the fan can land in the player we
+make them complete one Apple-Music-styled screen at `/finish-setup`:
+
+- **Handle** — public `@handle`, vetted live against `reserved_handles`
+  (verified-artist names + a top-N celebrity seed) and the case-
+  insensitive partial unique index on `customer_users.handle`. Picker
+  distinguishes "format / reserved / taken" so the copy can be honest
+  ("this handle is held for the artist — pick another"). The submit
+  writes `handle` *and* mirrors it onto `username` so playlist URLs,
+  admin search, and the welcome-back routes keep working unchanged.
+- **Display name** — pre-filled from the provider name (Google) or the
+  email local-part fallback (Apple). Required, 1–80 chars.
+- **Contact email or phone** — required *only* when the row's email is
+  `@privaterelay.appleid.com`. Either field satisfies the requirement;
+  full phone verification is out of scope here (a separate task gates
+  gifting/payouts on it). The provider email stays on
+  `customer_identities.email` as the link key; `customer_users.email`
+  stays as-is for admin search; `contact_email` / `contact_phone` are
+  what receipts/gifting/payouts read from.
+
+Gating: `signupCompletedAt` (nullable timestamp on `customer_users`)
+is null only for first-time OAuth signups. The router-level guard in
+`client/src/App.tsx` redirects every navigation to `/finish-setup`
+until it's stamped (allow-list: `/finish-setup`, `/login`, `/logout`,
+`/error`). Password signups stamp `signup_completed_at = now()` and
+write `handle` + `contactEmail` inside `/api/register`, so they never
+see the screen. The migration in `scripts/post-merge.sh` backfills
+every pre-existing row to `created_at` for the same reason.
+
+Reserved handles are seeded in `scripts/post-merge.sh` from a top-N
+celebrity list + every existing People-row name (lowercased and
+stripped to `a–z 0–9 . _ -`). A Spotify-driven importer that expands
+this list automatically is tracked separately under
+[`docs/roadmap.md`](./roadmap.md).
+
+Endpoints (all customer-side, behind `requireAuth`):
+
+- `GET /api/auth/complete-signup/state` — returns pre-fill + the
+  `isPrivateRelay` flag the picker uses to show the contact block.
+- `GET /api/auth/handle-available?u=…` — live picker check; returns
+  `{ ok, reason: 'format' | 'reserved' | 'taken' | null }`.
+- `POST /api/auth/complete-signup` — submits handle + displayName
+  + (optional) contactEmail/contactPhone, stamps `signup_completed_at`,
+  and returns the freshly-shaped customer row.
+
 ## Host-based routing
 
 - `admin.goodtunes.music` → admin shell

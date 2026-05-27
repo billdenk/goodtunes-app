@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
 import { sql, and, eq, or, ilike, isNull, desc, inArray } from "drizzle-orm";
-import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, FAN_RECENT_KINDS } from "@shared/schema";
+import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS } from "@shared/schema";
 import { closeSaleWindow as closeCertSaleWindow } from "./saleWindow";
 import { generateBatchPdf as generateCertBatchPdf, CERT_BATCH_STEPS } from "./certBatch";
 import session from "express-session";
@@ -280,7 +280,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   }
   function shapeCustomer(c: Awaited<ReturnType<typeof storage.getCustomer>>, photoUrl: string | null = null) {
     if (!c) return null;
-    return { id: c.id, username: c.username, email: c.email, displayName: c.displayName, realName: c.realName, photoUrl, isAdmin: false, kind: "customer" as const };
+    // Task #537 — surface `handle`, the deliverable contact pair, the
+    // `signupCompletedAt` gate, and a derived `isPrivateRelay` flag.
+    // The client uses signupCompletedAt to route OAuth-minted fans
+    // through /finish-setup; isPrivateRelay tells the picker whether
+    // to require a deliverable contact email/phone (Apple-only).
+    const email = c.email ?? "";
+    const isPrivateRelay = /@privaterelay\.appleid\.com$/i.test(email);
+    return {
+      id: c.id,
+      username: c.username,
+      email,
+      displayName: c.displayName,
+      realName: c.realName,
+      photoUrl,
+      isAdmin: false,
+      kind: "customer" as const,
+      handle: (c as any).handle ?? null,
+      contactEmail: (c as any).contactEmail ?? null,
+      contactPhone: (c as any).contactPhone ?? null,
+      signupCompletedAt: (c as any).signupCompletedAt ?? null,
+      isPrivateRelay,
+    };
   }
 
   app.post("/api/register", async (req, res) => {
@@ -321,11 +342,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(201).json({ id: user.id, username: user.username, email: user.email, displayName: user.displayName, realName: user.realName, requiresLogin: true, kind: "admin" });
     } else {
       const c = await storage.createCustomer({ username: usernameNorm, email: emailNorm, displayName, realName: realName ?? null, password: hashed });
-      req.session.userId = c.id;
+      // Task #537 — password-signup already collected handle + name +
+      // a deliverable email up-front, so mark the row complete and
+      // also stamp `handle` (mirroring `username`) so the finish-setup
+      // gate never fires on these fans. OAuth signups skip this.
+      const c2 = await storage.updateCustomer(c.id, {
+        handle: usernameNorm,
+        contactEmail: emailNorm,
+        signupCompletedAt: new Date(),
+      } as any) ?? c;
+      req.session.userId = c2.id;
       req.session.kind = "customer";
       const token = generateToken();
-      await storage.createAuthToken(token, c.id, "customer");
-      return res.status(201).json({ ...shapeCustomer(c), token });
+      await storage.createAuthToken(token, c2.id, "customer");
+      return res.status(201).json({ ...shapeCustomer(c2), token });
     }
   });
 
@@ -560,6 +590,176 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(shapeAdmin(updated, photoUrl));
   });
 
+  // ─── Task #537 — Finish-signup flow for OAuth-minted customers ────
+  //
+  // OAuth (Google/Apple) creates a customer_users row with whatever
+  // the provider returned (often an Apple `@privaterelay.appleid.com`
+  // mask + no name). Before the fan lands in the player we make them
+  // confirm a display name, pick a unique non-reserved @handle, and
+  // — only when Apple's relay is the only email we have — supply a
+  // deliverable contact email or phone. Once submitted we stamp
+  // `signupCompletedAt` and they never see this screen again.
+  //
+  // The three endpoints below back the /finish-setup page:
+  //   GET  /api/auth/complete-signup/state   — pre-fill + flags
+  //   GET  /api/auth/handle-available?u=…    — live picker check
+  //   POST /api/auth/complete-signup         — submit + stamp
+
+  // Shared handle vocabulary check. Matches the welcome-back picker:
+  // 3–30 chars, lowercase a–z / 0–9 / `.` / `_` / `-`. Kept in lock-
+  // step with USERNAME_RE in server/welcomeBack.ts and the client
+  // FinishSetup page — change all three together.
+  const FINISH_SIGNUP_HANDLE_RE = /^[a-z0-9._-]{3,30}$/;
+
+  // Pure helper: classify a candidate handle against vocabulary +
+  // reserved-handles table + a case-insensitive lookup on the live
+  // customer_users.handle column (excluding the caller's own id so
+  // re-submitting their own current handle isn't flagged as taken).
+  async function classifyHandle(
+    raw: string,
+    selfCustomerId: string | null,
+  ): Promise<{ ok: boolean; reason: "format" | "reserved" | "taken" | null }> {
+    const handle = String(raw ?? "").trim().toLowerCase();
+    if (!FINISH_SIGNUP_HANDLE_RE.test(handle)) {
+      return { ok: false, reason: "format" };
+    }
+    const [reserved] = await db
+      .select({ handle: reservedHandles.handle })
+      .from(reservedHandles)
+      .where(eq(reservedHandles.handle, handle))
+      .limit(1);
+    if (reserved) return { ok: false, reason: "reserved" };
+    const [taken] = await db
+      .select({ id: customerUsers.id })
+      .from(customerUsers)
+      .where(sql`lower(${customerUsers.handle}) = ${handle}`)
+      .limit(1);
+    if (taken && taken.id !== selfCustomerId) {
+      return { ok: false, reason: "taken" };
+    }
+    return { ok: true, reason: null };
+  }
+
+  app.get("/api/auth/complete-signup/state", requireAuth, async (req, res) => {
+    if (req.session.kind !== "customer") {
+      return res.status(403).json({ message: "Customer accounts only" });
+    }
+    const c = await storage.getCustomer(req.session.userId!);
+    if (!c) return res.status(404).json({ message: "User not found" });
+    const email = c.email ?? "";
+    const isPrivateRelay = /@privaterelay\.appleid\.com$/i.test(email);
+    return res.json({
+      // True once the fan has been through this flow (or was created
+      // via password signup, which pre-stamps it). Client uses this
+      // to short-circuit and redirect to /account on direct visits.
+      isComplete: Boolean((c as any).signupCompletedAt),
+      // Pre-fill the picker — `username` is what the OAuth branch
+      // derived from the email local-part; `displayName` is whatever
+      // the provider sent (Google: real name; Apple: usually the
+      // email local-part fallback).
+      suggestedHandle: ((c as any).handle as string | null) || c.username || "",
+      displayName: c.displayName || "",
+      email,
+      isPrivateRelay,
+      // Show the picker's "this handle is held for the artist" copy
+      // only when the candidate matches a reserved row — surfaced
+      // here so the client doesn't need a second round-trip.
+      requiresContact: isPrivateRelay,
+    });
+  });
+
+  app.get("/api/auth/handle-available", requireAuth, async (req, res) => {
+    if (req.session.kind !== "customer") {
+      return res.status(403).json({ message: "Customer accounts only" });
+    }
+    const raw = String(req.query.u ?? "");
+    const result = await classifyHandle(raw, req.session.userId ?? null);
+    return res.json(result);
+  });
+
+  app.post("/api/auth/complete-signup", requireAuth, async (req, res) => {
+    if (req.session.kind !== "customer") {
+      return res.status(403).json({ message: "Customer accounts only" });
+    }
+    const userId = req.session.userId!;
+    const c = await storage.getCustomer(userId);
+    if (!c) return res.status(404).json({ message: "User not found" });
+
+    const body = req.body ?? {};
+    const handleRaw = String(body.handle ?? "").trim().toLowerCase();
+    const displayName = String(body.displayName ?? "").trim();
+    const contactEmail = String(body.contactEmail ?? "").trim().toLowerCase();
+    const contactPhone = String(body.contactPhone ?? "").trim();
+
+    if (displayName.length < 1 || displayName.length > 80) {
+      return res.status(400).json({ field: "displayName", message: "Display name is required (1–80 characters)." });
+    }
+    const classified = await classifyHandle(handleRaw, userId);
+    if (!classified.ok) {
+      const message =
+        classified.reason === "format"
+          ? "Handle must be 3–30 characters: lowercase letters, numbers, dot, underscore, or hyphen."
+          : classified.reason === "reserved"
+            ? "That handle is held for the artist — please pick another."
+            : "That handle is already taken.";
+      return res.status(400).json({ field: "handle", reason: classified.reason, message });
+    }
+
+    const email = c.email ?? "";
+    const isPrivateRelay = /@privaterelay\.appleid\.com$/i.test(email);
+    // Apple private-relay fans must give us at least one deliverable
+    // contact — receipts/gifting/payouts can't ship to a relay alias
+    // we don't control. Require email-shape on contactEmail and a
+    // minimal-length digit string on contactPhone (full E.164
+    // validation lives in a separate phone-verification task).
+    let normalizedContactEmail: string | null = null;
+    let normalizedContactPhone: string | null = null;
+    if (contactEmail) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail) || /@privaterelay\.appleid\.com$/i.test(contactEmail)) {
+        return res.status(400).json({ field: "contactEmail", message: "Please enter a deliverable email address." });
+      }
+      normalizedContactEmail = contactEmail;
+    }
+    if (contactPhone) {
+      const digits = contactPhone.replace(/[^0-9]/g, "");
+      if (digits.length < 7) {
+        return res.status(400).json({ field: "contactPhone", message: "Please enter a valid phone number." });
+      }
+      normalizedContactPhone = contactPhone;
+    }
+    if (isPrivateRelay && !normalizedContactEmail && !normalizedContactPhone) {
+      return res.status(400).json({
+        field: "contactEmail",
+        message: "Apple is hiding your email — please add a contact email or phone so we can send receipts.",
+      });
+    }
+
+    // Keep `username` in lock-step with `handle` so existing surfaces
+    // (playlist URLs, /api/me/welcome-back, admin search) keep working.
+    // The unique partial index on lower(handle) protects against a
+    // race where two fans claim the same handle between classify and
+    // write — surface the conflict as a friendly 409.
+    try {
+      const updated = await storage.updateCustomer(userId, {
+        handle: handleRaw,
+        username: handleRaw,
+        displayName,
+        contactEmail: normalizedContactEmail,
+        contactPhone: normalizedContactPhone,
+        signupCompletedAt: new Date(),
+      } as any);
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      const photoUrl = await storage.getProfilePhoto(updated.id);
+      return res.json(shapeCustomer(updated, photoUrl));
+    } catch (err: any) {
+      if (String(err?.message ?? "").includes("customer_users_handle_lower_uniq") ||
+          String(err?.code) === "23505") {
+        return res.status(409).json({ field: "handle", reason: "taken", message: "That handle was just claimed — pick another." });
+      }
+      throw err;
+    }
+  });
+
   // ─── Apple domain-association ──────────────────────────────────────
   // Apple's Sign-In service verifies our return URLs by fetching this
   // file on each subdomain. We serve a `body` env var (so the user can
@@ -676,7 +876,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const kind = stateBag.kind;
     const redirectUri = `${callbackOrigin(req, kind)}/api/auth/${provider}/callback`;
 
-    let identity: { sub: string; email: string | null; emailVerified: boolean; picture?: string | null };
+    let identity: { sub: string; email: string | null; emailVerified: boolean; picture?: string | null; name?: string | null };
     try {
       identity = provider === "google"
         ? await exchangeGoogleCode(code, redirectUri)
@@ -810,6 +1010,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Sign-in / sign-up flow.
     const existingByIdentity = await storage.findIdentity(kind, provider, identity.sub);
     let userId = existingByIdentity?.userId;
+    // Task #537 — set when we mint a fresh customer row in the
+    // first-time-OAuth-signup branch below. Drives the final
+    // redirect: new fans land on /finish-setup, returning fans land
+    // on /account.
+    let isNewOauthSignup = false;
 
     if (!userId && identity.email) {
       // Don't auto-merge — if an existing account with this email is on
@@ -877,7 +1082,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         username = `${baseLocal}${n}`;
         if (n > 999) { username = `${baseLocal}${randomBytes(3).toString("hex")}`; break; }
       }
-      const displayName = identity.email?.split("@")[0] || username;
+      // Task #537 — prefer the provider's name (Google passes it; Apple
+      // sends it ONCE on the very first authorize). Falls back to the
+      // email local-part so we always have *something* — the fan will
+      // confirm/edit it on /finish-setup before they ever land in the
+      // player.
+      const displayName = (identity.name && identity.name.trim()) || identity.email?.split("@")[0] || username;
       const placeholderPwd = await hashPassword(randomBytes(16).toString("hex"));
       // Admin OAuth sign-up is gated above (Task #78 invite-only); only
       // customers reach this branch.
@@ -889,6 +1099,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         password: placeholderPwd,
       });
       userId = c.id;
+      // Task #537 — flag this branch for the redirect below. Existing
+      // OAuth fans (the `userId` was set on the linkIdentity branch
+      // above) skip /finish-setup; first-time OAuth signups go there.
+      isNewOauthSignup = true;
       await storage.linkIdentity(kind, { userId, provider, providerUserId: identity.sub, email: identity.email });
 
       // Capture Google's profile picture on first signup. Only set it if
@@ -947,7 +1161,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Pass token through URL fragment so the login page can stash it in
     // localStorage. (Same-origin so no leak; fragment isn't sent to the
     // server in subsequent navigations.)
-    return res.redirect(`/account#token=${encodeURIComponent(token)}`);
+    // Task #537 — first-time OAuth signups need to finish onboarding
+    // (handle + display name + Apple-private-relay-only contact)
+    // before they land in the player. Returning fans skip it.
+    const landing = isNewOauthSignup ? "/finish-setup" : "/account";
+    return res.redirect(`${landing}#token=${encodeURIComponent(token)}`);
   }
 
   app.get("/api/auth/google/callback", (req, res) => handleProviderCallback("google", req, res));
