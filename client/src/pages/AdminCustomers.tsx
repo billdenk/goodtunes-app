@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Search, Users, ArrowUp, ArrowDown, ShieldCheck, X } from "lucide-react";
@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
 import {
   ROLE_OPTIONS,
   ROLE_LABEL,
@@ -46,6 +47,12 @@ function formatMoney(cents: number): string {
   });
 }
 
+function initialFor(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "?";
+  return trimmed.charAt(0).toUpperCase();
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -60,7 +67,14 @@ export function AdminCustomers() {
   }, []);
   const { user, isLoading: authLoading } = useAuth();
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [view, setView] = useViewMode("customers", "list");
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
 
   // Task #256 — "Make admin…" row action. Only super_admin sees it; the
   // dialog mirrors the role + scope picker from /admin/invites but
@@ -196,18 +210,56 @@ export function AdminCustomers() {
               ? `${rows.length} match${rows.length === 1 ? "" : "es"} of ${total} fan account${total === 1 ? "" : "s"}`
               : `${total} fan account${total === 1 ? "" : "s"}`
           }
+          actions={(<>
+            {searchOpen ? (
+              <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">
+                <Search className="w-4 h-4 text-slate-400" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name, email, or username"
+                  className="w-56 text-sm bg-transparent outline-none placeholder:text-slate-400"
+                  data-testid="input-search-customers"
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setSearch("");
+                      setSearchOpen(false);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setSearchOpen(false);
+                  }}
+                  className="text-slate-400 hover:text-slate-700"
+                  aria-label="Close search"
+                  data-testid="button-close-search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                className="h-9 w-9 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+                aria-label="Search"
+                data-testid="button-open-search"
+              >
+                <Search className="w-4 h-4" />
+              </button>
+            )}
+            <ViewModeToggle
+              value={view}
+              onChange={setView}
+              testIdPrefix="view-mode-customers"
+            />
+          </>)}
         />
-
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, email, or username"
-            className="w-full h-9 pl-9 pr-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
-            data-testid="input-search-customers"
-          />
-        </div>
 
         {isLoading ? (
           <div className="py-10 text-slate-500 text-sm">Loading…</div>
@@ -233,8 +285,77 @@ export function AdminCustomers() {
                 : "Your first fan will show up here once they buy something."}
             </div>
           </div>
+        ) : view === "grid" ? (
+          <div>
+            <div
+              className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-4 gap-y-5"
+              data-testid="grid-customers"
+            >
+              {rows.map((c) => {
+                const name = c.realName || c.displayName;
+                return (
+                  <div
+                    key={c.id}
+                    className="relative group"
+                    data-testid={`card-customer-${c.id}`}
+                  >
+                    <Link
+                      href={`/admin/customers/${c.id}`}
+                      className="block text-left"
+                    >
+                      <div className="aspect-square w-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-slate-200 shadow-sm group-hover:shadow-md group-hover:ring-[var(--brand-blue)]/30 transition-all flex items-center justify-center">
+                        <span className="text-white text-3xl font-bold">
+                          {initialFor(name)}
+                        </span>
+                      </div>
+                      <div
+                        className="mt-3 w-full text-center text-slate-900 text-sm font-semibold truncate px-1"
+                        data-testid={`text-customer-name-${c.id}`}
+                      >
+                        {name}
+                      </div>
+                      <div className="w-full text-center text-slate-500 text-xs truncate px-1">
+                        {c.email}
+                      </div>
+                      <div className="w-full text-center text-slate-400 text-xs truncate px-1 tabular-nums">
+                        <span data-testid={`text-lifetime-${c.id}`}>
+                          {formatMoney(c.lifetimeSpendCents)}
+                        </span>
+                        <span className="mx-1">·</span>
+                        <span>{formatDate(c.lastActivityAt)}</span>
+                      </div>
+                    </Link>
+                    {isSuperAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setPromoteFor({ id: c.id, name, email: c.email })}
+                        className="absolute top-1 right-1 w-8 h-8 rounded-full bg-white/90 backdrop-blur ring-1 ring-slate-200 text-[var(--brand-purple)] inline-flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white"
+                        title="Promote this customer to an admin/partner role"
+                        data-testid={`button-promote-${c.id}`}
+                      >
+                        <ShieldCheck className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {rows.length < total && (
+              <div className="mt-6 text-center">
+                <button
+                  type="button"
+                  onClick={() => setOffset(allRows.length)}
+                  disabled={isFetching}
+                  className="text-[13px] font-medium text-[var(--brand-blue)] hover:underline disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed"
+                  data-testid="button-load-more-customers"
+                >
+                  {isFetching ? "Loading…" : `Load more (${rows.length} of ${total})`}
+                </button>
+              </div>
+            )}
+          </div>
         ) : (
-          <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+          <div className="rounded-lg border border-slate-200 bg-white overflow-hidden" data-testid="list-customers">
             <div className="hidden sm:grid grid-cols-[1fr_72px_104px_104px_104px] gap-4 px-4 py-2 bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               <SortHeader label="Customer" k="name" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="left" />
               <SortHeader label="Orders" k="orders" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />

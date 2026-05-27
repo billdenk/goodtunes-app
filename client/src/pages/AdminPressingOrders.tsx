@@ -75,7 +75,7 @@ export function AdminPressingOrders() {
 
   return (
     <AdminFrame active="pressing-orders">
-      <div className="px-6 py-6 max-w-5xl">
+      <div className="px-6 py-6 max-w-5xl mx-auto">
         <div className="flex items-end justify-between gap-4 mb-5">
           <div>
             <h1 className="text-[22px] font-bold text-slate-900 tracking-tight">
