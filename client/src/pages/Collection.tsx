@@ -13,6 +13,9 @@ import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { track } from "@/lib/analytics";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
+import { useRecordRecent } from "@/hooks/useRecents";
+import { chatEnabled } from "@/lib/platform";
+import { subscribeChats, totalUnread } from "@/lib/chatStore";
 import { ARTIST_PHOTOS, type Album, type Song } from "@/data/musicData";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { Disc3, Music2, Mic2 } from "lucide-react";
@@ -38,9 +41,23 @@ export function Collection() {
   const { playSong, currentSong, recentAlbums, setShowPlayer } = usePlayer();
   const [certAlbum, setCertAlbum] = useState<Album | null>(null);
   const [tab, setTab] = useState<LibraryTab>("albums");
-  const [search, setSearch] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
+  // Task #530 — inline library search retired in favour of the global
+  // /search destination on the right of the bottom nav. We keep the
+  // `search` constant as an empty string so the existing filter
+  // pipeline below stays a no-op transform and we don't have to rewrite
+  // every memo at once.
+  const search = "";
   const [showSort, setShowSort] = useState(false);
+  const recordRecent = useRecordRecent();
+  // Chat tab is gone from the bottom nav (Task #530); the unread count
+  // now lives as a red dot on the account avatar in the header. Force
+  // a re-render whenever the chat store changes so the dot stays
+  // honest.
+  const [, setUnreadTick] = useState(0);
+  useEffect(() => subscribeChats(() => setUnreadTick((n) => n + 1)), []);
+  const unread = chatEnabled ? totalUnread() : 0;
+  const avatarInitials = (user?.displayName || user?.username || "?")
+    .split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   const [addToPlaylistSong, setAddToPlaylistSong] = useState<SongWithAlbum | null>(null);
   // iOS Safari renderer-OOM mitigation: cap the rendered list so we never
   // paint hundreds of song/album/artist rows at once (each pulls album
@@ -90,6 +107,31 @@ export function Collection() {
     [songsRaw, dbAlbumIds],
   );
 
+  // Stamp a fan-recent every time we open an album from Collection (the
+  // grid card, the carousel rail, or the song row's parent-album link).
+  const openAlbum = (album: Album) => {
+    recordRecent({
+      entityKind: "album",
+      entityId: album.id,
+      title: album.title,
+      subtitle: album.artist,
+      thumbUrl: album.artwork ?? null,
+      href: `/album/${album.id}`,
+    });
+    navigate(`/album/${album.id}`);
+  };
+  const openArtist = (name: string, photo?: string | null) => {
+    recordRecent({
+      entityKind: "artist",
+      entityId: name,
+      title: name,
+      subtitle: "Artist",
+      thumbUrl: photo ?? null,
+      href: `/artist/${encodeURIComponent(name)}`,
+    });
+    navigate(`/artist/${encodeURIComponent(name)}`);
+  };
+
   const addSongMutation = useMutation({
     mutationFn: async ({ playlistId, songId }: { playlistId: string; songId: string }) => {
       const res = await apiRequest("POST", `/api/playlists/${playlistId}/songs`, { songId });
@@ -123,21 +165,9 @@ export function Collection() {
       });
     },
   });
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
 
-  useEffect(() => {
-    if (searchOpen) {
-      const t = setTimeout(() => searchInputRef.current?.focus(), 30);
-      return () => clearTimeout(t);
-    }
-  }, [searchOpen]);
-
-  const closeSearch = () => {
-    setSearch("");
-    setSearchOpen(false);
-  };
   const [sortByMap, setSortByMap] = useState<Record<LibraryTab, string>>({
     albums: "title",
     songs: "title",
@@ -233,8 +263,34 @@ export function Collection() {
     <main className="h-screen w-full flex justify-center overflow-hidden">
       <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
 
-        <header className="relative z-10 flex items-end px-5 pt-14 pb-3">
+        <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
           <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Collection</h1>
+          {/* Task #530 — account avatar lives top-right. Unread chat
+              count (Chat tab was retired from the bottom nav) shows as
+              a small red dot on the avatar so the inbox stays
+              discoverable without a dedicated tab. */}
+          <button
+            type="button"
+            onClick={() => navigate("/account")}
+            aria-label="Account"
+            className="relative w-9 h-9 rounded-full overflow-hidden flex items-center justify-center active:opacity-70"
+            style={{ background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.12)" }}
+            data-testid="button-open-account"
+          >
+            {user?.photoUrl ? (
+              <img src={user.photoUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-white text-xs font-semibold">{avatarInitials}</span>
+            )}
+            {unread > 0 && (
+              <span
+                aria-label={`${unread} unread messages`}
+                className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
+                style={{ background: "#FF5470", border: "1.5px solid #00062B" }}
+                data-testid="badge-account-unread"
+              />
+            )}
+          </button>
         </header>
 
         <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
@@ -248,10 +304,7 @@ export function Collection() {
                   <button
                     key={album.id}
                     type="button"
-                    onClick={() => {
-                      if (q) track("search_result_clicked", { kind: "album", albumId: album.id, query: q });
-                      navigate(`/album/${album.id}`);
-                    }}
+                    onClick={() => openAlbum(album)}
                     className="flex-shrink-0 flex flex-col active:scale-[0.95] transition-transform"
                     style={{ width: 90 }}
                   >
@@ -275,112 +328,63 @@ export function Collection() {
             </div>
           )}
 
-          <div className="px-5 mb-3 flex items-center justify-end gap-2 min-h-[32px]">
-            {searchOpen ? (
-              <div className="flex items-center gap-2 w-full animate-in fade-in duration-150">
-                <div className="relative flex items-center flex-1" style={{ background: "rgba(255,255,255,0.09)", borderRadius: 10 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="2.2" strokeLinecap="round" className="ml-3 flex-shrink-0">
-                    <circle cx="11" cy="11" r="7" />
-                    <path d="M20 20l-3.5-3.5" />
-                  </svg>
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder={`Search ${tab}`}
-                    className="flex-1 bg-transparent border-0 px-2.5 py-2 text-white placeholder-white/35 text-sm focus:outline-none"
-                    data-testid="input-library-search"
-                  />
-                  {search && (
-                    <button
-                      type="button"
-                      onClick={() => setSearch("")}
-                      className="mr-2 w-5 h-5 flex items-center justify-center rounded-full"
-                      style={{ background: "rgba(255,255,255,0.18)" }}
-                      data-testid="button-clear-search"
-                    >
-                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round">
-                        <path d="M6 6l12 12M18 6L6 18" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={closeSearch}
-                  className="text-[#319ED8] text-sm font-medium px-1 active:opacity-60 transition-opacity"
-                  data-testid="button-cancel-search"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <>
-                <IconButton
-                  onClick={() => setSearchOpen(true)}
-                  label="Search"
-                  data-testid="button-search-toggle"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                    <circle cx="11" cy="11" r="7" />
-                    <path d="M20 20l-3.5-3.5" />
-                  </svg>
-                </IconButton>
-                <div className="relative">
-                  <IconButton
-                    onClick={() => setShowSort((s) => !s)}
-                    label="Sort"
-                    data-testid="button-sort"
+          {/* Task #530 — segmented tabs sit inline with the sort
+              ("filter") IconButton on the right. The standalone library
+              search row is gone — fans tap the search circle in the
+              bottom nav to land on /search instead. */}
+          <div className="px-5 mb-4 flex items-center gap-2">
+            {/* Task #530 — Filter sits to the LEFT of the segmented
+                control, matching Apple Music's "filter then category"
+                reading order on the library screen. */}
+            <div className="relative flex-shrink-0">
+              <IconButton
+                onClick={() => setShowSort((s) => !s)}
+                label="Filter"
+                data-testid="button-sort"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M3 6h18M6 12h12M10 18h4" />
+                </svg>
+              </IconButton>
+              {showSort && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowSort(false)} />
+                  <div
+                    className="absolute right-0 top-full mt-1.5 z-40 rounded-xl py-1 min-w-[180px]"
+                    style={{
+                      background: "rgba(36, 36, 40, 0.96)",
+                      backdropFilter: "blur(24px) saturate(180%)",
+                      WebkitBackdropFilter: "blur(24px) saturate(180%)",
+                      boxShadow: "0 12px 32px rgba(0,0,0,0.55)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }}
                   >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                      <path d="M3 6h18M6 12h12M10 18h4" />
-                    </svg>
-                  </IconButton>
-                  {showSort && (
-                    <>
-                      <div className="fixed inset-0 z-30" onClick={() => setShowSort(false)} />
-                      <div
-                        className="absolute right-0 top-full mt-1.5 z-40 rounded-xl py-1 min-w-[180px]"
-                        style={{
-                          background: "rgba(36, 36, 40, 0.96)",
-                          backdropFilter: "blur(24px) saturate(180%)",
-                          WebkitBackdropFilter: "blur(24px) saturate(180%)",
-                          boxShadow: "0 12px 32px rgba(0,0,0,0.55)",
-                          border: "1px solid rgba(255,255,255,0.08)",
-                        }}
+                    <div className="px-3.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                      Sort by
+                    </div>
+                    {sortOptions[tab].map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => { setSortBy(opt.value); setShowSort(false); }}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm font-medium text-white active:bg-white/10"
+                        data-testid={`sort-${opt.value}`}
                       >
-                        <div className="px-3.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/40">
-                          Sort by
-                        </div>
-                        {sortOptions[tab].map((opt) => (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() => { setSortBy(opt.value); setShowSort(false); }}
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm font-medium text-white active:bg-white/10"
-                            data-testid={`sort-${opt.value}`}
-                          >
-                            <span className="w-4 flex-shrink-0 flex items-center justify-center">
-                              {sortBy === opt.value && (
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="3" strokeLinecap="round">
-                                  <path d="M20 6L9 17l-5-5" />
-                                </svg>
-                              )}
-                            </span>
-                            <span>{opt.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="px-5 mb-4">
-            <div className="relative flex p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.07)" }}>
+                        <span className="w-4 flex-shrink-0 flex items-center justify-center">
+                          {sortBy === opt.value && (
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="3" strokeLinecap="round">
+                              <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                          )}
+                        </span>
+                        <span>{opt.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="relative flex flex-1 p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.07)" }}>
               <div
                 className="absolute top-1 bottom-1 rounded-lg transition-all duration-200"
                 style={{
@@ -423,7 +427,7 @@ export function Collection() {
                         key={album.id}
                         album={album}
                         isCurrentlyPlaying={currentSong?.albumId === album.id}
-                        onPress={() => navigate(`/album/${album.id}`)}
+                        onPress={() => openAlbum(album)}
                         onCertPress={() => setCertAlbum(album)}
                       />
                     ))}
@@ -547,10 +551,7 @@ export function Collection() {
                   <button
                     key={artist.name}
                     type="button"
-                    onClick={() => {
-                      if (q) track("search_result_clicked", { kind: "artist", query: q });
-                      navigate(`/artist/${encodeURIComponent(artist.name)}`);
-                    }}
+                    onClick={() => openArtist(artist.name, ARTIST_PHOTOS[artist.name] ?? artist.albums[0]?.artwork ?? null)}
                     className="flex items-center gap-3 py-3 active:opacity-60 transition-opacity text-left"
                     style={{
                       borderBottom: idx < visibleArtists.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",

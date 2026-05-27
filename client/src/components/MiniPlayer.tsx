@@ -13,11 +13,18 @@ export function MiniPlayer() {
   // small capsule anchored to the RIGHT, sitting next to the collapsed nav
   // pill on the left. When the nav is visible, the mini-player floats above
   // the nav as a full-width capsule.
+  // Task #530 split-nav geometry:
+  //   * Collapsed: 48px tab circle on the LEFT (at left:12), 48px search
+  //     circle on the RIGHT (at right:12). MiniPlayer fills the gap
+  //     between them (left:70, right:70) so it's a wide capsule that
+  //     reads as the "Now playing" surface, not a third pill.
+  //   * Expanded: MiniPlayer floats above the labeled pillow + search
+  //     circle as a full-width capsule (same 79px lift as before).
   const containerClass = hidden
     ? "absolute z-30 flex"
     : "absolute left-0 right-0 z-30 px-3 pb-1";
   const containerStyle: React.CSSProperties = hidden
-    ? { bottom: 12, left: 70, right: 12, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" }
+    ? { bottom: 12, left: 70, right: 70, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" }
     : { bottom: 79, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" };
 
   return (

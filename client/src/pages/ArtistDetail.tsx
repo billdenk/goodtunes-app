@@ -13,6 +13,7 @@ import spotifyLogo from "@/assets/brand/spotify.svg";
 import { X, ChevronRight, ChevronLeft } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { track } from "@/lib/analytics";
+import { useRecordRecent } from "@/hooks/useRecents";
 
 export function ArtistDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -28,6 +29,21 @@ export function ArtistDetail() {
   useEffect(() => {
     if (artistName) track("artist_viewed", { artistName });
   }, [artistName]);
+
+  // Task #530 — stamp the artist into fan recents on mount so any deep
+  // link (search, share, push) lands on a row that lights up Recents.
+  const recordRecent = useRecordRecent();
+  useEffect(() => {
+    if (!artistName) return;
+    recordRecent({
+      entityKind: "artist",
+      entityId: artistName,
+      title: artistName,
+      subtitle: "Artist",
+      thumbUrl: ARTIST_PHOTOS[artistName] ?? null,
+      href: `/artist/${encodeURIComponent(artistName)}`,
+    });
+  }, [artistName, recordRecent]);
 
   // DB-backed albums. The fan ArtistDetail used to read only the
   // hardcoded `ALBUMS` from `@/data/musicData`, so anything Bill added

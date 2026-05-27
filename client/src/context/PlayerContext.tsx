@@ -626,6 +626,26 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       const filtered = prev.filter((a) => a.id !== album.id);
       return [album, ...filtered].slice(0, 8);
     });
+    // Task #530 — stamp every play into fan_recents so the Recents
+    // tab reflects "anything opened or played", not just navigations
+    // into AlbumDetail / ArtistDetail / InstrumentDetail. We POST
+    // directly (the hook can't be used here — PlayerContext sits above
+    // any auth provider that uses it). Session cookie carries the
+    // identity; anonymous calls 401 and we silently ignore.
+    const album = hydratedSong.album;
+    fetch("/api/me/recents", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entityKind: "song",
+        entityId: hydratedSong.id,
+        title: hydratedSong.title,
+        subtitle: album?.artist ?? null,
+        thumbUrl: album?.artwork ?? null,
+        href: album?.id ? `/album/${album.id}` : "/collection",
+      }),
+    }).catch(() => { /* fire-and-forget */ });
   }, [hydrate, beginPlayInstance]);
 
   const togglePlay = useCallback(() => {

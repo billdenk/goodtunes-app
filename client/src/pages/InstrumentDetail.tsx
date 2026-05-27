@@ -29,6 +29,7 @@ interface LiveMakerProfile {
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { track } from "@/lib/analytics";
+import { useRecordRecent } from "@/hooks/useRecents";
 
 function parseInstrumentAbout(about: string): { prose: string; specs: { label: string; value: string }[] } {
   const lines = about.split(/\r?\n/);
@@ -60,6 +61,21 @@ export function InstrumentDetail() {
       track("gear_viewed", { instrumentId: instrument.id, instrumentName: instrument.name });
     }
   }, [instrument?.id, instrument?.name]);
+
+  // Task #530 — Recents stamp for gear (used by /search → instruments
+  // and direct deep links). Skipped for the 404 fallback above.
+  const recordRecent = useRecordRecent();
+  useEffect(() => {
+    if (!instrument?.id) return;
+    recordRecent({
+      entityKind: "instrument",
+      entityId: instrument.id,
+      title: instrument.name,
+      subtitle: "Gear",
+      thumbUrl: instrument.photo ?? null,
+      href: `/instrument/${instrument.id}`,
+    });
+  }, [instrument?.id, instrument?.name, instrument?.photo, recordRecent]);
 
   const [isBookmarked, setIsBookmarked] = useState<boolean>(() => {
     if (!params?.id || typeof window === "undefined") return false;

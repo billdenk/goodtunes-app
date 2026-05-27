@@ -3,8 +3,8 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
-import { sql, and, eq } from "drizzle-orm";
-import { userAlbums, albums, certReservations, certTrueupLedger, orders } from "@shared/schema";
+import { sql, and, eq, or, ilike, isNull, desc, inArray } from "drizzle-orm";
+import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, FAN_RECENT_KINDS } from "@shared/schema";
 import { closeSaleWindow as closeCertSaleWindow } from "./saleWindow";
 import { generateBatchPdf as generateCertBatchPdf, CERT_BATCH_STEPS } from "./certBatch";
 import session from "express-session";
@@ -12506,6 +12506,289 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/favorites/artists/:artistName", requireCustomer, async (req, res) => {
     const name = decodeURIComponent(String(req.params.artistName));
     await storage.removeArtistFavorite(req.session.userId!, name);
+    return res.json({ ok: true });
+  });
+
+  // ----- Task #530: Unified search + fan recents + recent searches ------
+  //
+  // GET /api/search?q=&kinds=&limit=
+  //   Public read. Returns a ranked, mixed list of entities matching `q`
+  //   across albums, songs, artists (derived from albums.artist),
+  //   people, instruments, vendors, labels, playlists, plus bonus
+  //   videos/photos surfaced by their parent album. Hidden / prepping /
+  //   non-GoodTunes albums (and their songs) are filtered out so the fan
+  //   surface never accidentally exposes streaming-only rows or drafts.
+  //   `kinds` (csv) narrows the result set for the Show-All category
+  //   pills; `limit` caps each section (default 8, max 50).
+  app.get("/api/search", async (req, res) => {
+    const q = String(req.query.q ?? "").trim();
+    const limit = Math.max(1, Math.min(50, parseInt(String(req.query.limit ?? "8"), 10) || 8));
+    const kindsParam = String(req.query.kinds ?? "").trim();
+    const wantKinds = new Set(
+      kindsParam
+        ? kindsParam.split(",").map((s) => s.trim()).filter(Boolean)
+        : ["album", "song", "artist", "person", "instrument", "vendor", "label", "playlist", "video", "photo"],
+    );
+    if (!q) {
+      return res.json({ query: "", results: { albums: [], songs: [], artists: [], people: [], instruments: [], vendors: [], labels: [], playlists: [], videos: [], photos: [] } });
+    }
+    const pat = `%${q.replace(/[%_]/g, "\\$&")}%`;
+
+    // Albums: fan catalog only (curated GoodTunes releases, not prepping,
+    // not hidden, not trashed).
+    const albumRows = wantKinds.has("album") || wantKinds.has("song") || wantKinds.has("artist") || wantKinds.has("video") || wantKinds.has("photo")
+      ? await db
+          .select({ id: albums.id, title: albums.title, artist: albums.artist, coverUrl: albums.coverUrl })
+          .from(albums)
+          .where(and(
+            eq(albums.isGoodTunesRelease, true),
+            eq(albums.isPrepping, false),
+            eq(albums.isHidden, false),
+            isNull(albums.deletedAt),
+            or(ilike(albums.title, pat), ilike(albums.artist, pat)),
+          ))
+          .limit(limit * 2)
+      : [];
+
+    // For songs + bonus content we need the universe of fan-visible album
+    // ids (not just those that matched on text). Cheap separate query.
+    const fanAlbumIds = wantKinds.has("song") || wantKinds.has("video") || wantKinds.has("photo")
+      ? await db
+          .select({ id: albums.id, title: albums.title, artist: albums.artist, coverUrl: albums.coverUrl })
+          .from(albums)
+          .where(and(
+            eq(albums.isGoodTunesRelease, true),
+            eq(albums.isPrepping, false),
+            eq(albums.isHidden, false),
+            isNull(albums.deletedAt),
+          ))
+      : [];
+    const albumById = new Map(fanAlbumIds.map((a) => [a.id, a]));
+
+    const songRows = wantKinds.has("song") && fanAlbumIds.length
+      ? await db
+          .select({ id: songsTable.id, title: songsTable.title, albumId: songsTable.albumId })
+          .from(songsTable)
+          .where(and(
+            ilike(songsTable.title, pat),
+            isNull(songsTable.deletedAt),
+          ))
+          .limit(limit * 3)
+      : [];
+    const songsScoped = songRows.filter((s) => albumById.has(s.albumId)).slice(0, limit);
+
+    // Artists derived from album.artist column — distinct names.
+    const artistNames = wantKinds.has("artist")
+      ? Array.from(new Set(albumRows.map((a) => a.artist).filter((n) => n.toLowerCase().includes(q.toLowerCase())))).slice(0, limit)
+      : [];
+
+    const peopleRows = wantKinds.has("person")
+      ? await db
+          .select({ id: peopleTable.id, name: peopleTable.name, photoUrl: peopleTable.photoUrl })
+          .from(peopleTable)
+          .where(and(ilike(peopleTable.name, pat), isNull(peopleTable.deletedAt)))
+          .limit(limit)
+      : [];
+
+    const instrumentRows = wantKinds.has("instrument")
+      ? await db
+          .select({ id: instrumentsTable.id, name: instrumentsTable.name, photoUrl: instrumentsTable.photoUrl })
+          .from(instrumentsTable)
+          .where(and(ilike(instrumentsTable.name, pat), isNull(instrumentsTable.deletedAt)))
+          .limit(limit)
+      : [];
+
+    const vendorRows = wantKinds.has("vendor")
+      ? await db
+          .select({ id: vendorsTable.id, name: vendorsTable.name, logoUrl: vendorsTable.logoUrl })
+          .from(vendorsTable)
+          .where(and(ilike(vendorsTable.name, pat), isNull(vendorsTable.deletedAt)))
+          .limit(limit)
+      : [];
+
+    const labelRows = wantKinds.has("label")
+      ? await db
+          .select({ id: labelsTable.id, name: labelsTable.name, logoUrl: labelsTable.logoUrl })
+          .from(labelsTable)
+          .where(and(ilike(labelsTable.name, pat), isNull(labelsTable.deletedAt)))
+          .limit(limit)
+      : [];
+
+    // Playlists: only the fan's own. Anonymous callers get an empty list.
+    let playlistRows: any[] = [];
+    if (wantKinds.has("playlist")) {
+      const auth = await getAuthFromRequest(req);
+      if (auth?.kind === "customer") {
+        playlistRows = await db
+          .select({ id: playlistsTable.id, name: playlistsTable.name })
+          .from(playlistsTable)
+          .where(and(eq(playlistsTable.userId, auth.userId), ilike(playlistsTable.name, pat)))
+          .limit(limit);
+      }
+    }
+
+    // Bonus content: album_videos / album_photos matched by title|caption
+    // and scoped to fan-visible parent albums.
+    const videoRows: any[] = [];
+    const photoRows: any[] = [];
+    if ((wantKinds.has("video") || wantKinds.has("photo")) && fanAlbumIds.length) {
+      // Parameterized IN-list via drizzle's `inArray` — never inline raw
+      // SQL strings built from data (the album ids here come from a
+      // trusted table, but the rule is: any value, no exceptions).
+      const albumIds = fanAlbumIds.map((a) => a.id);
+      if (wantKinds.has("video")) {
+        const vids = await db.execute(sql`
+          SELECT id, album_id, title, poster_url
+            FROM album_videos
+           WHERE deleted_at IS NULL
+             AND album_id IN (${sql.join(albumIds.map((id) => sql`${id}`), sql`, `)})
+             AND title ILIKE ${pat}
+           LIMIT ${limit}
+        `);
+        videoRows.push(...(vids.rows as any[]));
+      }
+      if (wantKinds.has("photo")) {
+        const phs = await db.execute(sql`
+          SELECT id, album_id, caption, photo_url
+            FROM album_photos
+           WHERE deleted_at IS NULL
+             AND album_id IN (${sql.join(albumIds.map((id) => sql`${id}`), sql`, `)})
+             AND caption ILIKE ${pat}
+           LIMIT ${limit}
+        `);
+        photoRows.push(...(phs.rows as any[]));
+      }
+    }
+
+    return res.json({
+      query: q,
+      results: {
+        albums: albumRows.slice(0, limit).map((a) => ({
+          kind: "album", id: a.id, title: a.title, subtitle: a.artist, thumbUrl: a.coverUrl,
+          href: `/album/${a.id}`,
+        })),
+        songs: songsScoped.map((s) => {
+          const al = albumById.get(s.albumId)!;
+          return {
+            kind: "song", id: s.id, title: s.title, subtitle: al.artist, thumbUrl: al.coverUrl,
+            href: `/album/${s.albumId}`, albumId: s.albumId,
+          };
+        }),
+        artists: artistNames.map((name) => ({
+          kind: "artist", id: name, title: name, subtitle: "Artist",
+          thumbUrl: albumRows.find((a) => a.artist === name)?.coverUrl ?? null,
+          href: `/artist/${encodeURIComponent(name)}`,
+        })),
+        people: peopleRows.map((p) => ({
+          kind: "person", id: p.id, title: p.name, subtitle: "Person", thumbUrl: p.photoUrl,
+          // No fan-side People route yet; deep link into Account → bookmarks fallback.
+          href: `/account/bookmarks`,
+        })),
+        instruments: instrumentRows.map((i) => ({
+          kind: "instrument", id: i.id, title: i.name, subtitle: "Gear", thumbUrl: i.photoUrl,
+          href: `/instrument/${i.id}`,
+        })),
+        vendors: vendorRows.map((v) => ({
+          kind: "vendor", id: v.id, title: v.name, subtitle: "Vendor", thumbUrl: v.logoUrl,
+          href: `/account/bookmarks`,
+        })),
+        labels: labelRows.map((l) => ({
+          kind: "label", id: l.id, title: l.name, subtitle: "Label", thumbUrl: l.logoUrl,
+          href: `/account/bookmarks`,
+        })),
+        playlists: playlistRows.map((p) => ({
+          kind: "playlist", id: p.id, title: p.name, subtitle: "Playlist", thumbUrl: null,
+          href: `/playlists?playlist=${encodeURIComponent(p.id)}`,
+        })),
+        videos: videoRows.map((v) => {
+          const al = albumById.get(v.album_id);
+          return {
+            kind: "video", id: v.id, title: v.title, subtitle: al ? `Bonus video · ${al.title}` : "Bonus video",
+            thumbUrl: v.poster_url ?? al?.coverUrl ?? null,
+            href: `/album/${v.album_id}`, albumId: v.album_id,
+          };
+        }),
+        photos: photoRows.map((p) => {
+          const al = albumById.get(p.album_id);
+          return {
+            kind: "photo", id: p.id, title: p.caption ?? "Photo",
+            subtitle: al ? `Bonus photo · ${al.title}` : "Bonus photo",
+            thumbUrl: p.photo_url ?? null,
+            href: `/album/${p.album_id}`, albumId: p.album_id,
+          };
+        }),
+      },
+    });
+  });
+
+  // Fan recents (server-backed history for the new Recents tab).
+  app.get("/api/me/recents", requireCustomer, async (req, res) => {
+    const rows = await storage.listFanRecents(req.session.userId!);
+    return res.json(rows);
+  });
+  app.post("/api/me/recents", requireCustomer, async (req, res) => {
+    const kind = String(req.body?.entityKind ?? "");
+    if (!FAN_RECENT_KINDS.includes(kind as any)) {
+      return res.status(400).json({ message: "invalid entityKind" });
+    }
+    const entityId = String(req.body?.entityId ?? "").trim();
+    const title = String(req.body?.title ?? "").trim();
+    const href = String(req.body?.href ?? "").trim();
+    if (!entityId || !title || !href) {
+      return res.status(400).json({ message: "entityId, title, href required" });
+    }
+    await storage.upsertFanRecent(req.session.userId!, {
+      entityKind: kind as any,
+      entityId,
+      title,
+      subtitle: typeof req.body?.subtitle === "string" ? req.body.subtitle : null,
+      thumbUrl: typeof req.body?.thumbUrl === "string" ? req.body.thumbUrl : null,
+      href,
+    });
+    return res.status(201).json({ ok: true });
+  });
+  app.delete("/api/me/recents/:id", requireCustomer, async (req, res) => {
+    await storage.removeFanRecent(req.session.userId!, String(req.params.id));
+    return res.json({ ok: true });
+  });
+  app.delete("/api/me/recents", requireCustomer, async (req, res) => {
+    await storage.clearFanRecents(req.session.userId!);
+    return res.json({ ok: true });
+  });
+
+  app.get("/api/me/recent-searches", requireCustomer, async (req, res) => {
+    const rows = await storage.listFanRecentSearches(req.session.userId!);
+    return res.json(rows);
+  });
+  app.post("/api/me/recent-searches", requireCustomer, async (req, res) => {
+    const body = req.body ?? {};
+    // Two payload shapes share this endpoint:
+    //   - { query: string }                  → a free-text search the
+    //                                          fan typed (no tap yet)
+    //   - { entityKind, entityId, title, … } → a result the fan tapped
+    //                                          on the search surface
+    // Both land in fan_recent_searches so "Clear" wipes everything the
+    // search-landing surface displays. fan_recents stays scoped to the
+    // Recents tab (every entity opened or played anywhere in the app).
+    if (body.entityKind && body.entityId) {
+      await storage.upsertFanRecentSearch(req.session.userId!, {
+        kind: "entity",
+        entityKind: String(body.entityKind),
+        entityId: String(body.entityId),
+        title: String(body.title ?? ""),
+        subtitle: body.subtitle ? String(body.subtitle) : null,
+        thumbUrl: body.thumbUrl ? String(body.thumbUrl) : null,
+        href: String(body.href ?? ""),
+      });
+      return res.status(201).json({ ok: true });
+    }
+    const q = String(body?.query ?? "").trim();
+    if (!q) return res.status(400).json({ message: "query or entity required" });
+    await storage.upsertFanRecentSearch(req.session.userId!, { kind: "query", displayQuery: q });
+    return res.status(201).json({ ok: true });
+  });
+  app.delete("/api/me/recent-searches", requireCustomer, async (req, res) => {
+    await storage.clearFanRecentSearches(req.session.userId!);
     return res.json({ ok: true });
   });
 

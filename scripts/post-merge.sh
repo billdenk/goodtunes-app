@@ -1316,3 +1316,56 @@ SQL
 }
 migrate_partner_addresses dev  "${DATABASE_URL:-}"
 migrate_partner_addresses prod "${PROD_DATABASE_URL:-}"
+
+# Task #530 — Fan recents + recent searches (server-backed history for the
+# new Recents tab + Search landing). Loose FK to customer_users.id (same
+# pattern as song_favorites / user_albums). Idempotent; safe on every merge.
+migrate_fan_recents() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping fan_recents migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+CREATE TABLE IF NOT EXISTS fan_recents (
+  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id varchar NOT NULL,
+  entity_kind text NOT NULL,
+  entity_id varchar NOT NULL,
+  title text NOT NULL,
+  subtitle text,
+  thumb_url text,
+  href text NOT NULL,
+  last_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS fan_recents_user_lastat_idx ON fan_recents (user_id, last_at);
+CREATE UNIQUE INDEX IF NOT EXISTS fan_recents_user_kind_entity_uniq ON fan_recents (user_id, entity_kind, entity_id);
+
+CREATE TABLE IF NOT EXISTS fan_recent_searches (
+  user_id varchar NOT NULL,
+  query_norm text NOT NULL,
+  display_query text NOT NULL,
+  last_at timestamp NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, query_norm)
+);
+CREATE INDEX IF NOT EXISTS fan_recent_searches_user_lastat_idx ON fan_recent_searches (user_id, last_at);
+-- Task #530 code-review pass: entity-tapped recent-search rows live
+-- in this same table (decoupled from fan_recents, which is the
+-- "everything opened" Recents tab). Nullable so legacy text-only
+-- rows stay valid.
+ALTER TABLE fan_recent_searches
+  ADD COLUMN IF NOT EXISTS entity_kind text,
+  ADD COLUMN IF NOT EXISTS entity_id varchar,
+  ADD COLUMN IF NOT EXISTS title text,
+  ADD COLUMN IF NOT EXISTS subtitle text,
+  ADD COLUMN IF NOT EXISTS thumb_url text,
+  ADD COLUMN IF NOT EXISTS href text;
+SQL
+  then
+    echo "post-merge: fan_recents migration ok on $label"
+  else
+    echo "post-merge: WARNING — fan_recents migration failed on $label (continuing)"
+  fi
+}
+migrate_fan_recents dev  "${DATABASE_URL:-}"
+migrate_fan_recents prod "${PROD_DATABASE_URL:-}"

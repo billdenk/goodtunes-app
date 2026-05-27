@@ -21,6 +21,7 @@ import { chatEnabled, nativeDownloadsEnabled } from "@/lib/platform";
 import { downloadSong, removeDownload, listDownloadedSongs } from "@/lib/nativeDownloads";
 import { track } from "@/lib/analytics";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
+import { useRecordRecent } from "@/hooks/useRecents";
 import { ALBUMS, getSongsByAlbum, getCreditsForSong, PEOPLE, INSTRUMENTS, type Song, type Album, type AlbumVideo, type AlbumPhoto, type Person, type Instrument, type InstrumentVendor, type TrackPerformer, type TrackCredits } from "@/data/musicData";
 
 // Enriched credits as returned by GET /api/songs/:id/credits and
@@ -98,6 +99,7 @@ export function AlbumDetail() {
 
 function AlbumDetailMobile() {
   const { id } = useParams<{ id: string }>();
+  const _recordRecent = useRecordRecent();
   const [, navigate] = useLocation();
   const { playSong, currentSong, isPlaying, togglePlay, playNext, playLast, addToQueue, queue, currentIndex } = usePlayer();
   const queueHasUpcoming = queue.length - currentIndex - 1 > 0;
@@ -216,6 +218,20 @@ function AlbumDetailMobile() {
     enabled: !!id,
   });
   const staticAlbum = ALBUMS.find((a) => a.id === id);
+  // Task #530 — stamp the album into fan recents whenever the
+  // resolved record changes (mount, switch albums via internal links,
+  // back/forward). Fire-and-forget; failure does not block render.
+  useEffect(() => {
+    if (!apiAlbum?.id) return;
+    _recordRecent({
+      entityKind: "album",
+      entityId: apiAlbum.id,
+      title: apiAlbum.title,
+      subtitle: apiAlbum.artist,
+      thumbUrl: apiAlbum.artwork ?? null,
+      href: `/album/${apiAlbum.id}`,
+    });
+  }, [apiAlbum?.id, apiAlbum?.title, apiAlbum?.artist, apiAlbum?.artwork, _recordRecent]);
   const album: Album | undefined = useMemo(() => {
     if (apiAlbum) {
       return {

@@ -3378,3 +3378,100 @@ export const certTrueupLedger = pgTable("cert_trueup_ledger", {
 
 export type CertTrueupLedgerRow = typeof certTrueupLedger.$inferSelect;
 export type InsertCertTrueupLedgerRow = typeof certTrueupLedger.$inferInsert;
+
+// ──────────────────────────────────────────────────────────────────────────
+// Task #530 — Fan recents + recent searches (server-backed, per-fan).
+//
+// `fan_recents`: a capped (~200) running log of entities a fan has opened
+// or played (album, song, artist, person, instrument, vendor, label,
+// playlist, bonus video/photo). Drives the new Recents tab — replaces the
+// PlayerContext.recentAlbums in-memory list so history survives logout +
+// device switch. `entityKind` + `entityId` is the natural id; titles +
+// thumbnails are denormalized so the Recents tab can paint without N
+// joins (a deleted album row should still render its strikethrough
+// "Recently played" entry until the fan dismisses it).
+//
+// `fan_recent_searches`: last ~10 distinct search queries the fan typed,
+// shown on the Search landing surface as Apple Music's "Recently
+// Searched" chips. We store the trimmed lowercase form for dedupe; the
+// `displayQuery` keeps the original casing for re-display.
+//
+// `userId` is a loose FK to `customer_users.id` — same pattern as
+// playlists / user_albums / song_favorites. Drizzle pgTable can't hold a
+// dual-table FK and only fans use these surfaces; we leave the DB
+// constraint off so a stray admin probe can't 500 the route.
+// ──────────────────────────────────────────────────────────────────────────
+
+export const FAN_RECENT_KINDS = [
+  "album",
+  "song",
+  "artist",
+  "person",
+  "instrument",
+  "vendor",
+  "label",
+  "playlist",
+  "video",
+  "photo",
+] as const;
+export type FanRecentKind = (typeof FAN_RECENT_KINDS)[number];
+
+export const fanRecents = pgTable(
+  "fan_recents",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull(),
+    entityKind: text("entity_kind").notNull(),
+    entityId: varchar("entity_id").notNull(),
+    title: text("title").notNull(),
+    subtitle: text("subtitle"),
+    thumbUrl: text("thumb_url"),
+    href: text("href").notNull(),
+    lastAt: timestamp("last_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    userIdx: index("fan_recents_user_lastat_idx").on(t.userId, t.lastAt),
+    natural: uniqueIndex("fan_recents_user_kind_entity_uniq").on(
+      t.userId,
+      t.entityKind,
+      t.entityId,
+    ),
+  }),
+);
+
+export type FanRecent = typeof fanRecents.$inferSelect;
+export type InsertFanRecent = typeof fanRecents.$inferInsert;
+export const insertFanRecentSchema = createInsertSchema(fanRecents).omit({
+  id: true,
+  userId: true,
+  lastAt: true,
+});
+
+// Each row is either a free-text query the fan typed (entity_* null)
+// OR an entity the fan tapped from search results (entity_* set,
+// display_query mirrors the entity title). Search-landing reads both
+// from this one table so "Clear" really does clear everything the fan
+// sees on the search surface — distinct from fan_recents, which
+// powers the standalone Recents tab (everything opened or played
+// anywhere in the app).
+export const fanRecentSearches = pgTable(
+  "fan_recent_searches",
+  {
+    userId: varchar("user_id").notNull(),
+    queryNorm: text("query_norm").notNull(),
+    displayQuery: text("display_query").notNull(),
+    entityKind: text("entity_kind"),
+    entityId: varchar("entity_id"),
+    title: text("title"),
+    subtitle: text("subtitle"),
+    thumbUrl: text("thumb_url"),
+    href: text("href"),
+    lastAt: timestamp("last_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.userId, t.queryNorm] }),
+    userIdx: index("fan_recent_searches_user_lastat_idx").on(t.userId, t.lastAt),
+  }),
+);
+
+export type FanRecentSearch = typeof fanRecentSearches.$inferSelect;

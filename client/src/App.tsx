@@ -26,6 +26,8 @@ import { ArtistDashboard } from "@/pages/ArtistDashboard";
 import { NonProfitDashboard } from "@/pages/NonProfitDashboard";
 import { LabelDashboard } from "@/pages/LabelDashboard";
 import { Chat, ChatThreadPage } from "@/pages/Chat";
+import { SearchPage } from "@/pages/Search";
+import { RecentsPage } from "@/pages/Recents";
 import { Admin } from "@/pages/Admin";
 import { AdminCustomers } from "@/pages/AdminCustomers";
 import { AdminCustomerDetail } from "@/pages/AdminCustomerDetail";
@@ -174,7 +176,8 @@ function Router() {
       location.startsWith("/collection") || location.startsWith("/account") ||
       location.startsWith("/playlists") || location.startsWith("/chat") ||
       location.startsWith("/album") || location.startsWith("/artist") ||
-      location.startsWith("/instrument")
+      location.startsWith("/instrument") || location.startsWith("/search") ||
+      location.startsWith("/recents")
     )) {
       return <Redirect to="/admin" />;
     }
@@ -337,6 +340,13 @@ function Router() {
         </Route>
         <Route path="/playlists">
           <ProtectedRoute component={Playlists} />
+        </Route>
+        {/* Task #530 — Unified search + server-backed recents. */}
+        <Route path="/search">
+          <ProtectedRoute component={SearchPage} />
+        </Route>
+        <Route path="/recents">
+          <ProtectedRoute component={RecentsPage} />
         </Route>
         <Route path="/chat">
           <ProtectedRoute component={Chat} />

@@ -56,6 +56,11 @@ import {
   playlistSongs,
   songFavorites,
   artistFavorites,
+  fanRecents,
+  fanRecentSearches,
+  type FanRecent,
+  type FanRecentSearch,
+  type FanRecentKind,
   type SongFavorite,
   type ArtistFavorite,
   authTokens,
@@ -448,6 +453,25 @@ export interface IStorage {
   listArtistFavorites(userId: string): Promise<ArtistFavorite[]>;
   addArtistFavorite(userId: string, artistName: string): Promise<void>;
   removeArtistFavorite(userId: string, artistName: string): Promise<void>;
+
+  // Task #530 — Fan recents + recent searches. Loose FK to customer_users.id;
+  // upserts dedupe on (userId, entityKind, entityId), capping the list per
+  // fan so it stays bounded (Apple Music keeps ~200).
+  listFanRecents(userId: string): Promise<FanRecent[]>;
+  upsertFanRecent(
+    userId: string,
+    row: { entityKind: FanRecentKind; entityId: string; title: string; subtitle?: string | null; thumbUrl?: string | null; href: string },
+  ): Promise<void>;
+  removeFanRecent(userId: string, id: string): Promise<void>;
+  clearFanRecents(userId: string): Promise<void>;
+  listFanRecentSearches(userId: string): Promise<FanRecentSearch[]>;
+  upsertFanRecentSearch(
+    userId: string,
+    input:
+      | { kind: "query"; displayQuery: string }
+      | { kind: "entity"; entityKind: string; entityId: string; title: string; subtitle?: string | null; thumbUrl?: string | null; href: string },
+  ): Promise<void>;
+  clearFanRecentSearches(userId: string): Promise<void>;
 
   // Auth tokens (bearer)
   // `kind` defaults to "admin" for back-compat with the existing route
@@ -2488,6 +2512,129 @@ export class DbStorage implements IStorage {
     await db
       .delete(artistFavorites)
       .where(and(eq(artistFavorites.userId, userId), eq(artistFavorites.artistName, artistName)));
+  }
+
+  // ----- Task #530: Fan recents + recent searches ------------------------
+  async listFanRecents(userId: string): Promise<FanRecent[]> {
+    return db
+      .select()
+      .from(fanRecents)
+      .where(eq(fanRecents.userId, userId))
+      .orderBy(desc(fanRecents.lastAt))
+      .limit(200);
+  }
+  async upsertFanRecent(
+    userId: string,
+    row: { entityKind: FanRecentKind; entityId: string; title: string; subtitle?: string | null; thumbUrl?: string | null; href: string },
+  ): Promise<void> {
+    // ON CONFLICT bumps lastAt + refreshes denormalised display fields so a
+    // renamed album updates next time the fan opens it.
+    await db
+      .insert(fanRecents)
+      .values({
+        userId,
+        entityKind: row.entityKind,
+        entityId: row.entityId,
+        title: row.title,
+        subtitle: row.subtitle ?? null,
+        thumbUrl: row.thumbUrl ?? null,
+        href: row.href,
+      })
+      .onConflictDoUpdate({
+        target: [fanRecents.userId, fanRecents.entityKind, fanRecents.entityId],
+        set: {
+          title: row.title,
+          subtitle: row.subtitle ?? null,
+          thumbUrl: row.thumbUrl ?? null,
+          href: row.href,
+          lastAt: sql`now()`,
+        },
+      });
+    // Cap at 200 per fan; trim the tail.
+    await db.execute(sql`
+      DELETE FROM fan_recents
+       WHERE user_id = ${userId}
+         AND id NOT IN (
+           SELECT id FROM fan_recents
+            WHERE user_id = ${userId}
+            ORDER BY last_at DESC
+            LIMIT 200
+         )
+    `);
+  }
+  async removeFanRecent(userId: string, id: string): Promise<void> {
+    await db.delete(fanRecents).where(and(eq(fanRecents.userId, userId), eq(fanRecents.id, id)));
+  }
+  async clearFanRecents(userId: string): Promise<void> {
+    await db.delete(fanRecents).where(eq(fanRecents.userId, userId));
+  }
+  async listFanRecentSearches(userId: string): Promise<FanRecentSearch[]> {
+    return db
+      .select()
+      .from(fanRecentSearches)
+      .where(eq(fanRecentSearches.userId, userId))
+      .orderBy(desc(fanRecentSearches.lastAt))
+      .limit(20);
+  }
+  async upsertFanRecentSearch(
+    userId: string,
+    input:
+      | { kind: "query"; displayQuery: string }
+      | { kind: "entity"; entityKind: string; entityId: string; title: string; subtitle?: string | null; thumbUrl?: string | null; href: string },
+  ): Promise<void> {
+    if (input.kind === "query") {
+      const trimmed = input.displayQuery.trim();
+      if (!trimmed) return;
+      const norm = `q:${trimmed.toLowerCase()}`;
+      await db
+        .insert(fanRecentSearches)
+        .values({ userId, queryNorm: norm, displayQuery: trimmed })
+        .onConflictDoUpdate({
+          target: [fanRecentSearches.userId, fanRecentSearches.queryNorm],
+          set: { displayQuery: trimmed, lastAt: sql`now()` },
+        });
+    } else {
+      // Entity rows dedupe on (kind, id) so the same album can't pile
+      // up just because it surfaced under multiple search queries.
+      const norm = `e:${input.entityKind}:${input.entityId}`;
+      await db
+        .insert(fanRecentSearches)
+        .values({
+          userId,
+          queryNorm: norm,
+          displayQuery: input.title,
+          entityKind: input.entityKind,
+          entityId: input.entityId,
+          title: input.title,
+          subtitle: input.subtitle ?? null,
+          thumbUrl: input.thumbUrl ?? null,
+          href: input.href,
+        })
+        .onConflictDoUpdate({
+          target: [fanRecentSearches.userId, fanRecentSearches.queryNorm],
+          set: {
+            displayQuery: input.title,
+            title: input.title,
+            subtitle: input.subtitle ?? null,
+            thumbUrl: input.thumbUrl ?? null,
+            href: input.href,
+            lastAt: sql`now()`,
+          },
+        });
+    }
+    await db.execute(sql`
+      DELETE FROM fan_recent_searches
+       WHERE user_id = ${userId}
+         AND query_norm NOT IN (
+           SELECT query_norm FROM fan_recent_searches
+            WHERE user_id = ${userId}
+            ORDER BY last_at DESC
+            LIMIT 20
+         )
+    `);
+  }
+  async clearFanRecentSearches(userId: string): Promise<void> {
+    await db.delete(fanRecentSearches).where(eq(fanRecentSearches.userId, userId));
   }
 
   async getPlaylistSongs(playlistId: string): Promise<(PlaylistSong & { song: Song & { album: Album } })[]> {

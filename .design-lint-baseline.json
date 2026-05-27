@@ -7497,37 +7497,22 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/components/BottomNav.tsx",
-    "snippet": "style={{ background: \"#FF5470\", border: \"1.5px solid #00062B\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/BottomNav.tsx",
-    "snippet": "color: active ? \"#319ED8\" : \"rgba(255,255,255,0.75)\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/BottomNav.tsx",
     "snippet": "className=\"pointer-events-auto absolute bottom-3 left-3 flex items-center justify-center w-12 h-12 rounded-full text-[#319ED8] active:scale-95 transition-transform\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/BottomNav.tsx",
+    "snippet": "className={`pointer-events-auto absolute bottom-3 right-3 flex items-center justify-center w-12 h-12 rounded-full active:scale-95 transition-transform ${isSearch ? \"text-[#319ED8]\" : \"text-white/80\"}`"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/BottomNav.tsx",
+    "snippet": "className={`pointer-events-auto absolute bottom-3 right-3 flex items-center justify-center w-14 h-14 rounded-full active:scale-95 transition-transform ${isSearch ? \"text-[#319ED8]\" : \"text-white/80\"}`"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/BottomNav.tsx",
     "snippet": "className={`relative text-[10px] font-medium transition-colors duration-150 ${contentShift} ${active ? \"text-[#319ED8]\" : \"text-white/35\"}`}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/BottomNav.tsx",
-    "snippet": "className=\"absolute -top-1 -right-1.5 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[9px] font-bold text-white\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/BottomNav.tsx",
-    "snippet": "className=\"w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold transition-all\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/components/BottomNav.tsx",
-    "snippet": "className=\"w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold transition-all\""
   },
   {
     "rule": "brand-hex-literal",
@@ -12677,16 +12662,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<Label htmlFor=\"as-kind\" className=\"text-[11px] text-slate-500\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<Label htmlFor=\"as-id\" className=\"text-[11px] text-slate-500\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminReports.tsx",
     "snippet": "<Label htmlFor=\"date-from\" className=\"text-[11px] text-slate-500\">From</Label>"
   },
   {
@@ -14657,12 +14632,12 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Collection.tsx",
-    "snippet": "? \"0 0 0 2px #319ED8, 0 4px 16px rgba(0,0,0,0.5)\""
+    "snippet": "style={{ background: \"#FF5470\", border: \"1.5px solid #00062B\" }}"
   },
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Collection.tsx",
-    "snippet": "className=\"text-[#319ED8] text-sm font-medium px-1 active:opacity-60 transition-opacity\""
+    "snippet": "? \"0 0 0 2px #319ED8, 0 4px 16px rgba(0,0,0,0.5)\""
   },
   {
     "rule": "brand-hex-literal",
@@ -14762,7 +14737,12 @@
   {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/Collection.tsx",
-    "snippet": "className=\"mr-2 w-5 h-5 flex items-center justify-center rounded-full\""
+    "snippet": "className=\"relative w-9 h-9 rounded-full overflow-hidden flex items-center justify-center active:opacity-70\""
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/Collection.tsx",
+    "snippet": "className=\"absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full\""
   },
   {
     "rule": "player-touch-target-too-small",
@@ -15836,6 +15816,51 @@
   },
   {
     "rule": "brand-hex-literal",
+    "file": "client/src/pages/Recents.tsx",
+    "snippet": "<main className=\"h-screen w-full flex justify-center overflow-hidden bg-[#00062B]\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/Recents.tsx",
+    "snippet": "className=\"text-[#319ED8] text-[14px] font-semibold active:opacity-60\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/Recents.tsx",
+    "snippet": "style={{ background: \"#FF5470\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/Recents.tsx",
+    "snippet": "className=\"relative bg-[#00062B]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Recents.tsx",
+    "snippet": "<h1 className=\"text-white text-[34px] font-bold leading-none tracking-tight\" data-testid=\"text-page-title\">Recents</h1>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Recents.tsx",
+    "snippet": "className=\"text-[#319ED8] text-[14px] font-semibold active:opacity-60\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Recents.tsx",
+    "snippet": "<h2 className=\"text-white text-[15px] font-bold\">{SECTION_LABELS[k]}</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Recents.tsx",
+    "snippet": "className=\"text-white/40 text-[11px] flex-shrink-0 mr-1 tabular-nums\""
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/Recents.tsx",
+    "snippet": "<div className=\"w-10 h-1 bg-white/20 rounded-full mx-auto mb-4\" />"
+  },
+  {
+    "rule": "brand-hex-literal",
     "file": "client/src/pages/Redeem.tsx",
     "snippet": "<main className=\"min-h-screen bg-[#00062B] flex items-center justify-center text-white\">"
   },
@@ -15943,6 +15968,71 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Redeem.tsx",
     "snippet": "className=\"text-white/55 text-[13px] underline-offset-2 hover:underline\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/Search.tsx",
+    "snippet": "<main className=\"h-screen w-full flex justify-center overflow-hidden bg-[#00062B]\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/Search.tsx",
+    "snippet": "className=\"text-[#319ED8] text-[13px] font-semibold active:opacity-60\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/Search.tsx",
+    "snippet": "style={{ background: \"#4AFFCA\", color: \"#00062B\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/Search.tsx",
+    "snippet": "? { background: \"#319ED8\", color: \"#00062B\" }"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Search.tsx",
+    "snippet": "<h1 className=\"text-white text-[34px] font-bold leading-none tracking-tight\" data-testid=\"text-page-title\">Search</h1>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Search.tsx",
+    "snippet": "<h2 className=\"text-white text-[15px] font-bold\">Recently Searched</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Search.tsx",
+    "snippet": "className=\"text-[#319ED8] text-[13px] font-semibold active:opacity-60\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Search.tsx",
+    "snippet": "<span className=\"text-white text-[14px] truncate\">{s.title}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Search.tsx",
+    "snippet": "{s.subtitle && <span className=\"text-white/40 text-[13px] truncate\">— {s.subtitle}</span>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Search.tsx",
+    "snippet": "className=\"px-5 py-2.5 rounded-full text-[14px] font-semibold active:opacity-70\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Search.tsx",
+    "snippet": "className=\"flex-shrink-0 px-3.5 py-1.5 rounded-full text-[13px] font-semibold transition-all\""
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/Search.tsx",
+    "snippet": "className=\"relative w-9 h-9 rounded-full overflow-hidden flex items-center justify-center active:opacity-70\""
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/Search.tsx",
+    "snippet": "className=\"mr-2 w-5 h-5 flex items-center justify-center rounded-full\""
   },
   {
     "rule": "hardcoded-font-size",
