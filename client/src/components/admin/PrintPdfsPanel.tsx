@@ -24,7 +24,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, FileText, Loader2 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { VENDOR_SPECS, type VendorId } from "@shared/vendorSpecs";
+import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, defaultPreflightVendor, type VendorId } from "@shared/vendorSpecs";
 
 type Artifact = {
   id: string;
@@ -60,12 +60,23 @@ function fmtKb(b: number) {
   return `${(b / 1024 / 1024).toFixed(2)} MB`;
 }
 
-export function PrintPdfsPanel({ albumId }: { albumId: string }) {
+export function PrintPdfsPanel({
+  albumId,
+  vendor,
+}: {
+  albumId: string;
+  // Task #597 — vendor selection is now lifted to the Press tab. When
+  // supplied the internal picker is hidden and this drives the
+  // generate call. When omitted (no current caller after #597) the
+  // panel falls back to its own picker for forward compat. The
+  // default lands on the first non-hidden vendor (MRP + Hellbender
+  // hidden pre-meeting via HIDDEN_PREFLIGHT_VENDORS; restore by
+  // emptying that set in vendorSpecs.ts).
+  vendor?: VendorId;
+}) {
   const { toast } = useToast();
-  // MRP temporarily hidden from print-PDF pickers pre-meeting (mirrors
-  // the Hellbender hide on the Printer/Press picker). To restore: drop
-  // the .filter below and flip the default back to "mrp".
-  const [vendorId, setVendorId] = useState<VendorId>("pmp");
+  const [internalVendorId, setInternalVendorId] = useState<VendorId>(() => defaultPreflightVendor());
+  const vendorId: VendorId = vendor ?? internalVendorId;
   const [blocked, setBlocked] = useState<GenerateError | null>(null);
   const [justification, setJustification] = useState("");
 
@@ -126,22 +137,24 @@ export function PrintPdfsPanel({ albumId }: { albumId: string }) {
       </p>
 
       <div className="rounded-md border border-slate-200 bg-white p-4 space-y-3">
-        <div className="grid grid-cols-2 gap-3 items-end">
-          <label className="text-xs text-slate-600">
-            Vendor
-            <select
-              value={vendorId}
-              onChange={(e) => { setVendorId(e.target.value as VendorId); setBlocked(null); }}
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm"
-              data-testid="select-print-vendor"
-            >
-              {Object.values(VENDOR_SPECS)
-                .filter((s) => s.id !== "mrp")
-                .map((s) => (
-                  <option key={s.id} value={s.id}>{s.label}</option>
-                ))}
-            </select>
-          </label>
+        <div className={`grid ${vendor ? "grid-cols-1" : "grid-cols-2"} gap-3 items-end`}>
+          {!vendor && (
+            <label className="text-xs text-slate-600">
+              Vendor
+              <select
+                value={vendorId}
+                onChange={(e) => { setInternalVendorId(e.target.value as VendorId); setBlocked(null); }}
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm"
+                data-testid="select-print-vendor"
+              >
+                {Object.values(VENDOR_SPECS)
+                  .filter((s) => !HIDDEN_PREFLIGHT_VENDORS.has(s.id))
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>{s.label}</option>
+                  ))}
+              </select>
+            </label>
+          )}
           <button
             type="button"
             onClick={() => generate.mutate(undefined)}

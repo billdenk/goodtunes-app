@@ -1,11 +1,20 @@
 // Task #216 — Upload preflight UI.
 //
-// Mounted in the Sell tab of AdminAlbum. The artist/label operator
+// Mounted in the Press tab of AdminAlbum. The artist/label operator
 // picks a pressing vendor + template, sees the spec hints (finished
 // size, bleed, PPI, accepted formats) BEFORE picking a file, then
 // drops in art or audio and gets back a row of pass/warn/fail checks
 // computed server-side. A failing row is blocking; an admin can write
 // a justification to override it and unblock fulfillment.
+//
+// Task #597 — vendor selection is now lifted to the Press tab and
+// passed down as `vendor` / `vinylSize` / `rpm`. When supplied the
+// internal vendor (and audio size/rpm) selectors are hidden so all
+// preflight surfaces stay in lock-step with the single top-of-tab
+// picker. Audio mode also hides the spec-hints + file-picker chrome —
+// the runner above the results list drives validation now and failing
+// rows expose an inline "Replace this master" picker instead of a
+// separate replacement-upload panel.
 //
 // NOTE: art uploads are treated as PRINT masters today — when we add
 // "for display" trim variants we'll surface a second usage toggle here
@@ -13,10 +22,10 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, AlertTriangle, X, Upload, Lock } from "lucide-react";
+import { Check, AlertTriangle, X, Upload, Lock, RefreshCcw } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { VENDOR_SPECS, type VendorId } from "@shared/vendorSpecs";
+import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, defaultPreflightVendor, type VendorId } from "@shared/vendorSpecs";
 import type { UploadValidationResult, CheckStatus } from "@shared/uploadValidation";
 
 const STATUS_STYLE: Record<CheckStatus, { ring: string; text: string; bg: string; label: string }> = {
@@ -37,6 +46,11 @@ export function UploadValidationsPanel({
   title,
   description,
   onReprobeClick,
+  vendor,
+  defaultVinylSize,
+  defaultRpm,
+  hidePicker,
+  hideHeading,
 }: {
   albumId: string;
   // When set, the Kind selector is hidden, the panel is locked to that
@@ -53,16 +67,40 @@ export function UploadValidationsPanel({
   // "Re-probe master" link that calls this back. PressPanel uses it
   // to scroll the re-probe banner into view.
   onReprobeClick?: () => void;
+  // Task #597 — external vendor selection lifted to PressPanel. When
+  // supplied the internal vendor selector is hidden and this value
+  // drives every validation upload + the spec-hint copy.
+  vendor?: VendorId;
+  // Task #597 — defaults for the per-row "Replace this master" inline
+  // form (size / RPM). They are *defaults*, not forced values: the
+  // replace form lets the operator override per file since size/RPM/
+  // side legitimately vary per master.
+  defaultVinylSize?: '7"' | '10"' | '12"';
+  defaultRpm?: 33 | 45;
+  // Task #597 — hide the spec hints + file-picker chrome and just
+  // render the results list. Audio mode under the consolidated Press
+  // tab uses this — the runner above drives validation, and the
+  // inline "Replace this master" affordance per failing row covers
+  // the old replacement-upload path.
+  hidePicker?: boolean;
+  // Task #597 — drop the panel <h2> + description so the consolidated
+  // "Check masters against plant specs" section can supply its own.
+  hideHeading?: boolean;
 }) {
   const { toast } = useToast();
-  // MRP temporarily hidden from preflight pickers pre-meeting (mirrors
-  // the Hellbender hide on the Printer/Press picker). To restore: drop
-  // HIDDEN_PREFLIGHT_VENDORS and flip the default back to "mrp".
-  const [vendorId, setVendorId] = useState<VendorId>("pmp");
-  const [templateId, setTemplateId] = useState<string>(VENDOR_SPECS.pmp.art.templates[0].id);
+  // Task #597 — vendor now comes from the Press-tab picker. Local
+  // state stays as a fallback for the art-panel mount (which doesn't
+  // pass vendor) and any future standalone use. Default lands on the
+  // first non-hidden vendor (MRP + Hellbender hidden pre-meeting;
+  // restore by emptying HIDDEN_PREFLIGHT_VENDORS in vendorSpecs.ts).
+  const [internalVendorId, setInternalVendorId] = useState<VendorId>(() => defaultPreflightVendor());
+  const vendorId: VendorId = vendor ?? internalVendorId;
+  const [templateId, setTemplateId] = useState<string>(VENDOR_SPECS[vendorId].art.templates[0].id);
   const [kind, setKind] = useState<"art" | "audio">(kindFilter ?? "art");
-  const [vinylSize, setVinylSize] = useState<'7"' | '10"' | '12"'>('12"');
-  const [rpm, setRpm] = useState<33 | 45>(33);
+  const [internalVinylSize, setInternalVinylSize] = useState<'7"' | '10"' | '12"'>('12"');
+  const [internalRpm, setInternalRpm] = useState<33 | 45>(33);
+  const effectiveVinylSize = internalVinylSize;
+  const effectiveRpm = internalRpm;
   const [side, setSide] = useState<string>("A");
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -90,8 +128,8 @@ export function UploadValidationsPanel({
       if (kind === "art") {
         fd.append("templateId", templateId);
       } else {
-        fd.append("vinylSize", vinylSize);
-        fd.append("rpm", String(rpm));
+        fd.append("vinylSize", effectiveVinylSize);
+        fd.append("rpm", String(effectiveRpm));
         fd.append("side", side);
       }
       const r = await fetch(`/api/admin/uploads/validate-${kind}`, {
@@ -111,11 +149,11 @@ export function UploadValidationsPanel({
     onError: (e: any) => toast({ title: "Upload failed", description: e?.message, variant: "destructive" }),
   });
 
-  // When the operator switches vendor, snap to that vendor's first
-  // template so the dropdown never carries a stale id from the
-  // previous vendor.
+  // When the operator switches vendor on a panel that owns its own
+  // picker, snap to that vendor's first template so the dropdown
+  // never carries a stale id from the previous vendor.
   function pickVendor(v: VendorId) {
-    setVendorId(v);
+    setInternalVendorId(v);
     setTemplateId(VENDOR_SPECS[v].art.templates[0].id);
   }
 
@@ -128,182 +166,232 @@ export function UploadValidationsPanel({
   );
 
   return (
-    <div className="mb-10" data-testid={`panel-upload-validations${kindFilter ? `-${kindFilter}` : ""}`}>
-      <h2 className="text-[15px] font-semibold text-slate-900 mb-1">
-        {title ?? "Upload preflight"}
-      </h2>
-      <p className="text-[13px] text-slate-500 mb-4">
-        {description ??
-          "Validate art & audio against pressing-plant specs before sending it to fulfillment. Failing rows block the order; an admin can override with a justification."}
-      </p>
+    <div className={hideHeading ? "" : "mb-10"} data-testid={`panel-upload-validations${kindFilter ? `-${kindFilter}` : ""}`}>
+      {!hideHeading && (
+        <>
+          <h2 className="text-[15px] font-semibold text-slate-900 mb-1">
+            {title ?? "Upload preflight"}
+          </h2>
+          <p className="text-[13px] text-slate-500 mb-4">
+            {description ??
+              "Validate art & audio against pressing-plant specs before sending it to fulfillment. Failing rows block the order; an admin can override with a justification."}
+          </p>
+        </>
+      )}
 
-      <div className="rounded-md border border-slate-200 bg-white p-4 space-y-4">
-        <div className={`grid ${kindFilter ? "grid-cols-1" : "grid-cols-2"} gap-3`}>
-          <label className="text-[12px] text-slate-600">
-            Vendor
-            <select
-              value={vendorId}
-              onChange={(e) => pickVendor(e.target.value as VendorId)}
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
-              data-testid="select-preflight-vendor"
-            >
-              {Object.values(VENDOR_SPECS)
-                .filter((s) => s.id !== "mrp")
-                .map((s) => (
-                  <option key={s.id} value={s.id}>{s.label}</option>
-                ))}
-            </select>
-          </label>
-          {!kindFilter && (
-            <label className="text-[12px] text-slate-600">
-              Kind
-              <select
-                value={kind}
-                onChange={(e) => setKind(e.target.value as "art" | "audio")}
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
-                data-testid="select-preflight-kind"
-              >
-                <option value="art">Art</option>
-                <option value="audio">Audio</option>
-              </select>
-            </label>
-          )}
-        </div>
-
-        {kind === "art" ? (
-          <label className="block text-[12px] text-slate-600">
-            Template
-            <select
-              value={templateId}
-              onChange={(e) => setTemplateId(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
-              data-testid="select-preflight-template"
-            >
-              {spec.art.templates.map((t) => (
-                <option key={t.id} value={t.id}>{t.label}</option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <div className="grid grid-cols-3 gap-3">
-            <label className="text-[12px] text-slate-600">
-              Size
-              <select
-                value={vinylSize}
-                onChange={(e) => setVinylSize(e.target.value as any)}
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
-                data-testid="select-preflight-size"
-              >
-                <option value={'7"'}>7"</option>
-                <option value={'10"'}>10"</option>
-                <option value={'12"'}>12"</option>
-              </select>
-            </label>
-            <label className="text-[12px] text-slate-600">
-              RPM
-              <select
-                value={rpm}
-                onChange={(e) => setRpm(Number(e.target.value) as 33 | 45)}
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
-                data-testid="select-preflight-rpm"
-              >
-                <option value={33}>33</option>
-                <option value={45}>45</option>
-              </select>
-            </label>
-            <label className="text-[12px] text-slate-600">
-              Side
-              <input
-                value={side}
-                onChange={(e) => setSide(e.target.value.toUpperCase().slice(0, 2))}
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
-                data-testid="input-preflight-side"
-              />
-            </label>
-          </div>
-        )}
-
-        {/* Spec hints — shown BEFORE the operator picks a file so they
-            know exactly what shape the bytes need to be. */}
-        <div className="rounded-md bg-slate-50 border border-slate-100 p-3 text-[12px] text-slate-600 space-y-0.5">
-          {kind === "art" ? (
-            <>
-              <div>
-                <span className="font-semibold text-slate-700">Finished:</span>{" "}
-                {template.finishedInches.w}″ × {template.finishedInches.h}″
-                {template.bleedInches > 0 && <> · <span className="font-semibold text-slate-700">Bleed:</span> {template.bleedInches}″ all sides</>}
-              </div>
-              <div>
-                <span className="font-semibold text-slate-700">Resolution:</span> {spec.art.requiredPpi} PPI ·{" "}
-                <span className="font-semibold text-slate-700">Color:</span> {spec.art.allowedColorSpaces.map((c) => c.toUpperCase()).join(" / ")}
-              </div>
-              <div>
-                <span className="font-semibold text-slate-700">Accepts:</span> {spec.art.acceptedFormats.join(", ").toUpperCase()}
-              </div>
-              {spec.art.filenamePattern && (
-                <div className="text-amber-700">
-                  Filename must match: Catalog#_Artist_TemplateType_YYYYMMDD.ext
-                </div>
+      {!hidePicker && (
+        <div className="rounded-md border border-slate-200 bg-white p-4 space-y-4">
+          {/* Vendor / Kind selectors — hidden when vendor is supplied
+              by the parent (Task #597 consolidated Press tab). */}
+          {(!vendor || !kindFilter) && (
+            <div className={`grid ${(!vendor && !kindFilter) ? "grid-cols-2" : "grid-cols-1"} gap-3`}>
+              {!vendor && (
+                <label className="text-[12px] text-slate-600">
+                  Vendor
+                  <select
+                    value={vendorId}
+                    onChange={(e) => pickVendor(e.target.value as VendorId)}
+                    className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
+                    data-testid="select-preflight-vendor"
+                  >
+                    {Object.values(VENDOR_SPECS)
+                      .filter((s) => !HIDDEN_PREFLIGHT_VENDORS.has(s.id))
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>{s.label}</option>
+                      ))}
+                  </select>
+                </label>
               )}
-            </>
-          ) : (
-            <>
-              <div>
-                <span className="font-semibold text-slate-700">Format:</span> {spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}
-                {spec.audio.requiredBitDepth && <> · ≥ {spec.audio.requiredBitDepth}-bit</>}
-              </div>
-              <div>
-                <span className="font-semibold text-slate-700">One file per side.</span>{" "}
-                Side-break tracklist required for length check.
-              </div>
-            </>
+              {!kindFilter && (
+                <label className="text-[12px] text-slate-600">
+                  Kind
+                  <select
+                    value={kind}
+                    onChange={(e) => setKind(e.target.value as "art" | "audio")}
+                    className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
+                    data-testid="select-preflight-kind"
+                  >
+                    <option value="art">Art</option>
+                    <option value="audio">Audio</option>
+                  </select>
+                </label>
+              )}
+            </div>
           )}
-        </div>
 
-        <div className="flex items-center gap-3">
-          <input
-            ref={fileRef}
-            type="file"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) upload.mutate(f);
-              e.target.value = "";
-            }}
-            data-testid="input-preflight-file"
-          />
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={upload.isPending}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--brand-blue)] text-white text-[13px] font-semibold hover:opacity-90 disabled:opacity-50"
-            data-testid="button-preflight-upload"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            {upload.isPending ? "Validating…" : `Validate ${kind} file`}
-          </button>
+          {kind === "art" ? (
+            <label className="block text-[12px] text-slate-600">
+              Template
+              <select
+                value={templateId}
+                onChange={(e) => setTemplateId(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
+                data-testid="select-preflight-template"
+              >
+                {spec.art.templates.map((t) => (
+                  <option key={t.id} value={t.id}>{t.label}</option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              <label className="text-[12px] text-slate-600">
+                Size
+                <select
+                  value={effectiveVinylSize}
+                  onChange={(e) => setInternalVinylSize(e.target.value as any)}
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
+                  data-testid="select-preflight-size"
+                >
+                  <option value={'7"'}>7"</option>
+                  <option value={'10"'}>10"</option>
+                  <option value={'12"'}>12"</option>
+                </select>
+              </label>
+              <label className="text-[12px] text-slate-600">
+                RPM
+                <select
+                  value={effectiveRpm}
+                  onChange={(e) => setInternalRpm(Number(e.target.value) as 33 | 45)}
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
+                  data-testid="select-preflight-rpm"
+                >
+                  <option value={33}>33</option>
+                  <option value={45}>45</option>
+                </select>
+              </label>
+              <label className="text-[12px] text-slate-600">
+                Side
+                <input
+                  value={side}
+                  onChange={(e) => setSide(e.target.value.toUpperCase().slice(0, 2))}
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
+                  data-testid="input-preflight-side"
+                />
+              </label>
+            </div>
+          )}
+
+          {/* Spec hints — shown BEFORE the operator picks a file so they
+              know exactly what shape the bytes need to be. */}
+          <div className="rounded-md bg-slate-50 border border-slate-100 p-3 text-[12px] text-slate-600 space-y-0.5">
+            {kind === "art" ? (
+              <>
+                <div>
+                  <span className="font-semibold text-slate-700">Finished:</span>{" "}
+                  {template.finishedInches.w}″ × {template.finishedInches.h}″
+                  {template.bleedInches > 0 && <> · <span className="font-semibold text-slate-700">Bleed:</span> {template.bleedInches}″ all sides</>}
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-700">Resolution:</span> {spec.art.requiredPpi} PPI ·{" "}
+                  <span className="font-semibold text-slate-700">Color:</span> {spec.art.allowedColorSpaces.map((c) => c.toUpperCase()).join(" / ")}
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-700">Accepts:</span> {spec.art.acceptedFormats.join(", ").toUpperCase()}
+                </div>
+                {spec.art.filenamePattern && (
+                  <div className="text-amber-700">
+                    Filename must match: Catalog#_Artist_TemplateType_YYYYMMDD.ext
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div>
+                  <span className="font-semibold text-slate-700">Format:</span> {spec.audio.requiredFormats.map((f) => f.toUpperCase()).join(" or ")}
+                  {spec.audio.requiredBitDepth && <> · ≥ {spec.audio.requiredBitDepth}-bit</>}
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-700">One file per side.</span>{" "}
+                  Side-break tracklist required for length check.
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <input
+              ref={fileRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) upload.mutate(f);
+                e.target.value = "";
+              }}
+              data-testid="input-preflight-file"
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={upload.isPending}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[var(--brand-blue)] text-white text-[13px] font-semibold hover:opacity-90 disabled:opacity-50"
+              data-testid="button-preflight-upload"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              {upload.isPending ? "Validating…" : `Validate ${kind} file`}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Results list */}
-      <div className="mt-4 space-y-2">
+      <div className={`${hidePicker ? "" : "mt-4"} space-y-2`}>
         {validations.isLoading && <div className="text-[13px] text-slate-500">Loading…</div>}
         {validations.data && visibleRows.length === 0 && (
           <div className="text-[13px] text-slate-500 italic">No files validated yet.</div>
         )}
         {visibleRows.map((row) => (
-          <ValidationRow key={row.id} row={row} onReprobeClick={onReprobeClick} />
+          <ValidationRow
+            key={row.id}
+            row={row}
+            onReprobeClick={onReprobeClick}
+            // Task #597 — inline "Replace this master" affordance on
+            // failing audio rows replaces the old replacement-upload
+            // panel above the list. Only enabled when the parent has
+            // supplied the vendor context; the row form lets the
+            // operator override size / RPM / side per file since those
+            // legitimately vary per master.
+            replaceContext={
+              row.kind === "audio" && vendor
+                ? {
+                    albumId,
+                    vendorId: vendor,
+                    defaultVinylSize: defaultVinylSize ?? '12"',
+                    defaultRpm: defaultRpm ?? 33,
+                  }
+                : null
+            }
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function ValidationRow({ row, onReprobeClick }: { row: UploadValidationResult; onReprobeClick?: () => void }) {
+function ValidationRow({
+  row,
+  onReprobeClick,
+  replaceContext,
+}: {
+  row: UploadValidationResult;
+  onReprobeClick?: () => void;
+  replaceContext: { albumId: string; vendorId: VendorId; defaultVinylSize: '7"' | '10"' | '12"'; defaultRpm: 33 | 45 } | null;
+}) {
   const { toast } = useToast();
   const [open, setOpen] = useState(row.status !== "pass");
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [justification, setJustification] = useState("");
+  const replaceRef = useRef<HTMLInputElement | null>(null);
+  // Task #597 — per-row size / RPM / side for the inline "Replace this
+  // master" form. Defaults inherit from the runner's pair (passed
+  // down by PressPanel), but the operator can override per file
+  // because those values legitimately vary per master.
+  const [replaceSize, setReplaceSize] = useState<'7"' | '10"' | '12"'>(
+    replaceContext?.defaultVinylSize ?? '12"',
+  );
+  const [replaceRpm, setReplaceRpm] = useState<33 | 45>(replaceContext?.defaultRpm ?? 33);
+  const [replaceSide, setReplaceSide] = useState<string>("A");
   const sty = STATUS_STYLE[row.status];
   const override = useMutation({
     mutationFn: async () => {
@@ -318,6 +406,43 @@ function ValidationRow({ row, onReprobeClick }: { row: UploadValidationResult; o
     },
     onError: (e: any) => toast({ title: "Couldn't save override", description: e?.message, variant: "destructive" }),
   });
+
+  // Task #597 — inline replacement upload for failing audio rows. Hits
+  // the same /validate-audio endpoint the standalone upload panel
+  // used; a new validation row appears with the result of the new
+  // file.
+  const replaceUpload = useMutation({
+    mutationFn: async (file: File) => {
+      if (!replaceContext) throw new Error("Missing replacement context");
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("albumId", replaceContext.albumId);
+      fd.append("vendorId", replaceContext.vendorId);
+      fd.append("vinylSize", replaceSize);
+      fd.append("rpm", String(replaceRpm));
+      fd.append("side", replaceSide || "A");
+      const r = await fetch("/api/admin/uploads/validate-audio", {
+        method: "POST",
+        credentials: "include",
+        body: fd,
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.message ?? "Replacement validation failed");
+      return j as UploadValidationResult;
+    },
+    onSuccess: (newRow) => {
+      const sty2 = STATUS_STYLE[newRow.status];
+      toast({
+        title: `Replacement ${sty2.label.toLowerCase()}`,
+        description: `${newRow.fileName ?? "File"} — ${newRow.checks.length} check(s).`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", row.albumId, "upload-validations"] });
+    },
+    onError: (e: any) =>
+      toast({ title: "Replacement failed", description: e?.message, variant: "destructive" }),
+  });
+
+  const canReplace = !!replaceContext && row.status === "fail" && row.kind === "audio" && !row.override;
 
   return (
     <div className={`rounded-md border border-slate-200 bg-white p-3 ring-1 ${sty.ring}`} data-testid={`row-validation-${row.id}`}>
@@ -381,6 +506,70 @@ function ValidationRow({ row, onReprobeClick }: { row: UploadValidationResult; o
               </div>
             );
           })}
+
+          {canReplace && (
+            <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 space-y-3">
+              <div className="text-xs font-semibold text-slate-700">Replace this master</div>
+              <div className="grid grid-cols-3 gap-2">
+                <label className="text-xs text-slate-600">
+                  Size
+                  <select
+                    value={replaceSize}
+                    onChange={(e) => setReplaceSize(e.target.value as any)}
+                    className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                    data-testid={`select-replace-size-${row.id}`}
+                  >
+                    <option value={'7"'}>7"</option>
+                    <option value={'10"'}>10"</option>
+                    <option value={'12"'}>12"</option>
+                  </select>
+                </label>
+                <label className="text-xs text-slate-600">
+                  RPM
+                  <select
+                    value={replaceRpm}
+                    onChange={(e) => setReplaceRpm(Number(e.target.value) as 33 | 45)}
+                    className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                    data-testid={`select-replace-rpm-${row.id}`}
+                  >
+                    <option value={33}>33</option>
+                    <option value={45}>45</option>
+                  </select>
+                </label>
+                <label className="text-xs text-slate-600">
+                  Side
+                  <input
+                    value={replaceSide}
+                    onChange={(e) => setReplaceSide(e.target.value.toUpperCase().slice(0, 2))}
+                    className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                    data-testid={`input-replace-side-${row.id}`}
+                  />
+                </label>
+              </div>
+              <input
+                ref={replaceRef}
+                type="file"
+                accept="audio/*,.wav,.aiff,.aif,.flac"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) replaceUpload.mutate(f);
+                  e.target.value = "";
+                }}
+                data-testid={`input-replace-master-${row.id}`}
+              />
+              <button
+                type="button"
+                onClick={() => replaceRef.current?.click()}
+                disabled={replaceUpload.isPending}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                data-testid={`button-replace-master-${row.id}`}
+              >
+                <RefreshCcw className="w-3 h-3" />
+                {replaceUpload.isPending ? "Validating replacement…" : "Pick replacement file"}
+              </button>
+            </div>
+          )}
 
           {row.override ? (
             <div className="mt-3 rounded-md bg-violet-50 border border-violet-100 p-2 text-[12px] text-violet-800">

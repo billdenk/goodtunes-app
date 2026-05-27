@@ -191,3 +191,38 @@ export function getVendorSpec(id: string | null | undefined): VendorSpec | null 
 export function getTemplate(vendorId: VendorId, templateId: string): TemplateSpec | null {
   return VENDOR_SPECS[vendorId].art.templates.find((t) => t.id === templateId) ?? null;
 }
+
+// Task #597 — vendors hidden from every preflight / print-PDF /
+// Printer-chip surface pre-meeting. MRP demo is in flight and
+// Hellbender shouldn't render as the default live plant while that
+// pitch is open. Restore by emptying this set.
+export const HIDDEN_PREFLIGHT_VENDORS: ReadonlySet<VendorId> = new Set<VendorId>(["mrp", "hellbender"]);
+
+export function visiblePreflightVendors(): VendorSpec[] {
+  return Object.values(VENDOR_SPECS).filter((s) => !HIDDEN_PREFLIGHT_VENDORS.has(s.id));
+}
+
+/** First non-hidden vendor — the "only live vendor" fallback. */
+export function defaultPreflightVendor(): VendorId {
+  return (visiblePreflightVendors()[0] ?? Object.values(VENDOR_SPECS)[0]).id;
+}
+
+/**
+ * Best-effort match from an album's invited-press manufacturer name
+ * to a `VENDOR_SPECS` entry that can drive preflight. Used by the
+ * Press tab's single vendor picker to default to the album's
+ * assigned press when present (Task #597). Returns null when the
+ * invited press has no corresponding spec.
+ */
+export function matchInvitedPressToVendor(pressName: string | null | undefined): VendorId | null {
+  if (!pressName) return null;
+  const n = pressName.trim().toLowerCase();
+  if (!n) return null;
+  for (const v of Object.values(VENDOR_SPECS)) {
+    const label = v.label.toLowerCase();
+    if (n === label || n.includes(label) || label.includes(n) || n.startsWith(v.id)) {
+      return v.id;
+    }
+  }
+  return null;
+}

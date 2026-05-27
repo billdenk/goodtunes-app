@@ -17,12 +17,12 @@
 // SellPanel used to mount UploadValidationsPanel directly; that surface
 // is now a one-line pointer to this tab.
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { VENDOR_SPECS, type VendorId } from "@shared/vendorSpecs";
+import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, matchInvitedPressToVendor, type VendorId } from "@shared/vendorSpecs";
 import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
 import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
 import { VinylOrderPanel } from "@/components/admin/VinylOrderPanel";
@@ -113,14 +113,38 @@ export function PressPanel({
   const totalBytes = withMaster.reduce((acc, s) => acc + (s.audioBytes ?? 0), 0);
   const totalDur = withMaster.reduce((acc, s) => acc + (s.duration ?? 0), 0);
 
-  // ── Audio preflight controls (shared by "Run on-file" runner and
-  //    the UploadValidationsPanel below, which carries its own copy
-  //    of these fields for the replacement-upload path).
-  // MRP temporarily hidden from preflight pickers pre-meeting (mirrors
-  // the Hellbender hide on the Printer/Press picker). To restore: drop
-  // the .filter on the vendor select below and flip the default back to
-  // "mrp".
-  const [vendorId, setVendorId] = useState<VendorId>("pmp");
+  // Task #597 — only VENDOR is lifted to the top of the Press tab.
+  // Size / RPM stay per-file: the on-file runner keeps its own
+  // size/RPM block (the run-all uses one pair for the whole album),
+  // and the per-row "Replace this master" inline form carries its
+  // own size/rpm/side (defaulted from the runner's pair) because
+  // those values can legitimately differ per file.
+  //
+  // Default vendor is, in order: the album's invited press matched
+  // against `VENDOR_SPECS`, or the first non-hidden vendor when
+  // nothing matches. MRP + Hellbender are hidden from every
+  // preflight surface pre-meeting (see HIDDEN_PREFLIGHT_VENDORS) so
+  // the Press tab never lands the operator on a vendor the Sell-tab
+  // Printer chip row also refuses to surface. Restore by emptying
+  // `HIDDEN_PREFLIGHT_VENDORS`.
+  const { data: invitedPress } = useQuery<{ press: { name: string | null } | null }>({
+    queryKey: ["/api/admin/albums", albumId, "invited-press"],
+  });
+  const visibleVendors = useMemo(
+    () => Object.values(VENDOR_SPECS).filter((s) => !HIDDEN_PREFLIGHT_VENDORS.has(s.id)),
+    [],
+  );
+  const defaultVendor: VendorId = useMemo(() => {
+    const matched = matchInvitedPressToVendor(invitedPress?.press?.name);
+    if (matched && !HIDDEN_PREFLIGHT_VENDORS.has(matched)) return matched;
+    return (visibleVendors[0] ?? Object.values(VENDOR_SPECS)[0]).id;
+  }, [invitedPress, visibleVendors]);
+  // Track the operator's manual pick separately so the invited-press
+  // default doesn't yank their selection out from under them once
+  // the query resolves.
+  const [vendorOverride, setVendorOverride] = useState<VendorId | null>(null);
+  const vendorId: VendorId = vendorOverride ?? defaultVendor;
+
   const [vinylSize, setVinylSize] = useState<'7"' | '10"' | '12"'>('12"');
   const [rpm, setRpm] = useState<33 | 45>(33);
 
@@ -367,33 +391,54 @@ export function PressPanel({
           </div>
         )}
 
-        {/* ── On-file audio preflight runner ──────────────────────────── */}
-        <div className="mb-10" data-testid="section-on-file-preflight">
+        {/* ── Single Press-tab vendor picker (Task #597) ──────────────
+            Vendor is the only field lifted to the top of the tab —
+            size / RPM / template / side vary per file and stay on
+            their per-surface controls (runner, art template, replace
+            inline). Default lands on the album's invited press when
+            it matches a VENDOR_SPECS entry, otherwise the first
+            non-hidden vendor. */}
+        <div className="mb-10" data-testid="section-press-vendor-picker">
+          <h2 className="text-base font-semibold text-slate-900 mb-1">Pressing plant</h2>
+          <p className="text-[13px] text-slate-500 mb-4">
+            Pick the plant this album is going to. Drives preflight checks, the art uploader,
+            and the print-ready PDF generator below.
+          </p>
+          <div className="rounded-md border border-slate-200 bg-white p-4">
+            <label className="block text-xs text-slate-600 max-w-xs">
+              Vendor
+              <select
+                value={vendorId}
+                onChange={(e) => setVendorOverride(e.target.value as VendorId)}
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
+                data-testid="select-press-vendor"
+              >
+                {visibleVendors.map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+
+        {/* ── Check masters against plant specs (Task #597) ──────────
+            Merges the old "Run preflight on masters" runner with the
+            "Audio preflight results" list — the runner sits on top
+            and the per-track rows render directly below it. The
+            clarifier reminds operators that upload-time probing
+            already ran, so this step is the plant-spec check. */}
+        <div className="mb-10" data-testid="section-check-masters">
           <h2 className="text-[15px] font-semibold text-slate-900 mb-1">
-            Run preflight on masters
+            Check masters against plant specs
           </h2>
           <p className="text-[13px] text-slate-500 mb-4">
-            Validates every uploaded master against the picked plant's specs — no re-upload
-            needed. Tracks with no master are listed as fail rows so the gap is loud. Re-run
-            after swapping a master or changing the vendor / size / RPM.
+            Format, sample rate, and bit depth were captured when each master was uploaded —
+            this step checks them against the picked plant's specs. Tracks with no master are
+            listed as fail rows so the gap is loud. Re-run after swapping a master or
+            changing the size / RPM. Failing rows offer an inline replace below.
           </p>
           <div className="rounded-md border border-slate-200 bg-white p-4 space-y-4">
-            <div className="grid grid-cols-3 gap-3">
-              <label className="text-[12px] text-slate-600">
-                Vendor
-                <select
-                  value={vendorId}
-                  onChange={(e) => setVendorId(e.target.value as VendorId)}
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
-                  data-testid="select-onfile-vendor"
-                >
-                  {Object.values(VENDOR_SPECS)
-                    .filter((s) => s.id !== "mrp")
-                    .map((s) => (
-                      <option key={s.id} value={s.id}>{s.label}</option>
-                    ))}
-                </select>
-              </label>
+            <div className="grid grid-cols-2 gap-3 max-w-md">
               <label className="text-[12px] text-slate-600">
                 Size
                 <select
@@ -436,16 +481,20 @@ export function PressPanel({
               Replaces any prior audio preflight rows for this album. Art rows are left alone.
             </p>
           </div>
-        </div>
 
-        {/* ── Audio preflight rows (shared with replacement-upload) ───── */}
-        <UploadValidationsPanel
-          albumId={albumId}
-          kindFilter="audio"
-          title="Audio preflight results"
-          description="Per-track pass / warn / fail against the picked plant's specs. Failing rows block fulfillment; an admin can override with a justification."
-          onReprobeClick={staleSpecs.length > 0 ? scrollToReprobeBanner : undefined}
-        />
+          <div className="mt-4">
+            <UploadValidationsPanel
+              albumId={albumId}
+              kindFilter="audio"
+              vendor={vendorId}
+              defaultVinylSize={vinylSize}
+              defaultRpm={rpm}
+              hidePicker
+              hideHeading
+              onReprobeClick={staleSpecs.length > 0 ? scrollToReprobeBanner : undefined}
+            />
+          </div>
+        </div>
 
         {/* ── Art preflight (file-picker path) ────────────────────────── */}
         <UploadValidationsPanel
@@ -453,10 +502,11 @@ export function PressPanel({
           kindFilter="art"
           title="Art preflight"
           description="Drop a jacket / label / hype-sticker file to validate against the picked plant's print template before sending it to fulfillment."
+          vendor={vendorId}
         />
 
         {/* ── Print-ready PDFs (Task #327, moved from Sell) ──────────── */}
-        <PrintPdfsPanel albumId={albumId} />
+        <PrintPdfsPanel albumId={albumId} vendor={vendorId} />
       </div>
     </div>
   );

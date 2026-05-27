@@ -863,10 +863,14 @@ function PrinterAndPressPanel({ invited }: { invited: InvitedPressResponse | nul
   // query) once MRP signs.
 
   type Chip = { id: string; label: string; status: "live" | "coming-soon"; press: Manufacturer | null };
+  // Task #597 — MRP hidden from the Printer chip row pre-meeting
+  // (mirrors the Press-tab preflight hide). With only PMP left as a
+  // coming-soon chip and the invited press as the live one, the
+  // default-selected label is never "MRP". Restore by re-adding the
+  // MRP entry above PMP.
   const chips: Chip[] = locked
     ? [{ id: "invited", label: invitedPress!.name, status: "live", press: invitedPress }]
     : [
-        { id: "mrp", label: "MRP", status: "coming-soon", press: null },
         { id: "pmp", label: "PMP", status: "coming-soon", press: null },
       ];
 
