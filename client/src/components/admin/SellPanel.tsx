@@ -672,8 +672,8 @@ export function SellPanel({
           className="relative rounded-2xl shadow-sm overflow-hidden mb-8"
           data-testid="panel-formats"
         >
-          <div className="flex items-start justify-between gap-6 px-5 py-3.5 border-b border-slate-100">
-            <div className="min-w-0">
+          <div className="flex items-start justify-between gap-10 px-5 py-3.5 border-b border-slate-100">
+            <div className="min-w-0 pr-2">
               <h2 className="text-slate-900 text-[14px] font-bold">Design your Package</h2>
               <p className="text-slate-500 text-[11.5px] mt-0.5">
                 The plan here is to determine what you'd like your package to look like: 12{"\""} LP? Booklet? Printed GoodDeed? It's all up to you. The calculator is for you to see what you could earn. But, in the end it's up to the fans. So, have fun, pick your package, vinyl color, save it. Then, let's get your offering to your fans!
@@ -854,18 +854,18 @@ function PrinterAndPressPanel({ invited }: { invited: InvitedPressResponse | nul
   const invitedPress = invited?.press ?? null;
   const locked = !!invitedPress && !invited?.hasShippedFirst;
 
-  const { data } = useQuery<Manufacturer[]>({
-    queryKey: ["/api/manufacturers"],
-    enabled: !locked,
-  });
-  const presses = data ?? [];
-  const hellbender = presses.find((p) => p.name.toLowerCase().includes("hellbender")) ?? null;
+  // Hellbender is intentionally hidden from the Printer picker for
+  // now — MRP demo / pitch is in flight and we don't want partners
+  // landing on the Sell tab and seeing Hellbender presented as the
+  // default live plant. Reference rates still drive cost math under
+  // the hood; only the user-facing chip is suppressed. Restore by
+  // re-adding the Hellbender entry (and the /api/manufacturers
+  // query) once MRP signs.
 
   type Chip = { id: string; label: string; status: "live" | "coming-soon"; press: Manufacturer | null };
   const chips: Chip[] = locked
     ? [{ id: "invited", label: invitedPress!.name, status: "live", press: invitedPress }]
     : [
-        { id: "hellbender", label: "Hellbender Vinyl", status: "live", press: hellbender },
         { id: "mrp", label: "MRP", status: "coming-soon", press: null },
         { id: "pmp", label: "PMP", status: "coming-soon", press: null },
       ];
