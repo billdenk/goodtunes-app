@@ -118,6 +118,7 @@ export function AdminLabel() {
     } catch {}
   };
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [logoEditorOpen, setLogoEditorOpen] = useState(false);
   const labelId = params?.id ?? "";
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -296,23 +297,38 @@ export function AdminLabel() {
 
         {/* HEADER */}
         <div className="flex items-start gap-5">
-          <div
+          <button
+            type="button"
+            onClick={() => setLogoEditorOpen(true)}
             className={[
-              "w-24 h-24 rounded-xl overflow-hidden shadow-sm flex-shrink-0 flex items-center justify-center",
+              "group relative w-24 h-24 rounded-xl overflow-hidden shadow-sm flex-shrink-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2",
               label.logoUrl ? "" : "bg-white ring-1 ring-slate-200",
             ].join(" ")}
+            aria-label="Edit label logo"
+            data-testid="button-edit-label-logo"
           >
             {label.logoUrl ? (
               <img
                 src={label.logoUrl}
                 alt={label.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover transition-transform group-hover:scale-[1.03]"
                 data-testid="img-label-logo"
               />
             ) : (
               <Tag className="w-10 h-10 text-slate-300" />
             )}
-          </div>
+            <span className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 [@media(hover:none)]:bg-black/30 transition-colors" />
+            <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
+              <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
+                <Pencil className="w-4 h-4" />
+              </span>
+            </span>
+          </button>
+          <LogoEditorDialog
+            label={label}
+            open={logoEditorOpen}
+            onOpenChange={setLogoEditorOpen}
+          />
           <div className="flex-1 min-w-0">
             <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
               Label
@@ -871,6 +887,41 @@ function LogoPanel({ label }: { label: Label }) {
       aspect="square"
       description="Square works best — used in admin lists and any future fan-facing label page."
     />
+  );
+}
+
+// Header pencil-overlay opens this dialog so admins can replace the
+// label logo without hunting for the Logo tab. We wrap the same
+// lock-aware LogoPanel used by the Logo tab — so curation lock,
+// drag-drop, file-picker, and invalidation behavior are identical and
+// stay in lock-step automatically. Mirrors AdminVendor's
+// LogoEditorDialog so all partner headers share one source of truth.
+function LogoEditorDialog({
+  label,
+  open,
+  onOpenChange,
+}: {
+  label: Label;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-w-3xl bg-white rounded-2xl border-slate-200 shadow-xl p-6 gap-5"
+        data-testid="dialog-edit-label-logo"
+      >
+        <DialogHeader className="flex-row items-center justify-between space-y-0">
+          <DialogTitle className="text-slate-900 text-sm font-bold">
+            Logo
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Replace the logo for {label.name}.
+          </DialogDescription>
+        </DialogHeader>
+        <LogoPanel label={label} />
+      </DialogContent>
+    </Dialog>
   );
 }
 
