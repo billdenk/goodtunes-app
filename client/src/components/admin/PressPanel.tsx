@@ -276,7 +276,7 @@ export function PressPanel({
                   return (
                     <tr
                       key={s.id}
-                      className="border-t border-slate-100"
+                      className="group border-t border-slate-100"
                       data-testid={`row-master-${s.id}`}
                     >
                       <td className="px-3 py-2 text-slate-500 font-mono tabular-nums">
@@ -302,7 +302,7 @@ export function PressPanel({
                           <a
                             href={s.audioUrl!}
                             download={`${String(s.trackNumber).padStart(2, "0")} ${s.title}${urlExt(s.audioUrl) ?? ""}`}
-                            className="inline-flex items-center gap-1 text-[var(--brand-blue)] hover:underline"
+                            className="inline-flex items-center gap-1 text-[var(--brand-blue)] hover:underline opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 transition-opacity"
                             data-testid={`link-download-master-${s.id}`}
                           >
                             <Download className="w-3 h-3" /> download
