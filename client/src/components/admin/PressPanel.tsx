@@ -232,11 +232,14 @@ export function PressPanel({
         <MastersApprovalBanner albumId={albumId} />
         {/* ── Masters on file ─────────────────────────────────────────── */}
         <div className="mb-10" data-testid="section-masters-on-file">
-          {/* Task #583 — header is a flex row: title + subhead on the
-              left, "Download all masters" pinned top-right. The title
-              block reserves right padding (pr-4 + max-w) so the
-              subhead's wrap line never crowds the button. */}
-          <div className="flex items-start justify-between gap-4 mb-4">
+          {/* Task #583 / #618 — header is a flex row: title + subhead
+              on the left, "Download all masters" pinned bottom-right
+              so its bottom edge sits on the subhead's last-line
+              baseline (title still sits at the top of its own
+              column). The title block reserves right padding (pr-4 +
+              max-w) so the subhead's wrap line never crowds the
+              button. */}
+          <div className="flex items-end justify-between gap-4 mb-4">
             <div className="min-w-0 flex-1 pr-4 max-w-[calc(100%-12rem)]">
               <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Masters on file</h2>
               <p className="text-xs text-slate-500">
