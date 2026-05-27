@@ -30,6 +30,7 @@
 import type { Express, Request, Response } from "express";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import { pgArray } from "./lib/pgArray";
 import { getUserRole } from "./auth/roles";
 import { storage } from "./storage";
 
@@ -118,7 +119,7 @@ async function resolveArtistScope(req: Request): Promise<ArtistScope | { error: 
 
   const ownedSongRows = albumIds.length
     ? await db.execute<{ id: string }>(sql`
-        SELECT id FROM songs WHERE album_id = ANY(${albumIds}::text[])
+        SELECT id FROM songs WHERE album_id = ANY(${pgArray(albumIds)})
       `)
     : ({ rows: [] } as any);
   const ownedSongIds = ((ownedSongRows as any).rows || []).map((r: any) => r.id);
@@ -148,14 +149,14 @@ async function resolveArtistScope(req: Request): Promise<ArtistScope | { error: 
 function ordersFilter(scope: ArtistScope) {
   return sql`
     o.status IN ('paid','shipped','refunded')
-    AND o.album_id = ANY(${scope.albumIds}::text[])
+    AND o.album_id = ANY(${pgArray(scope.albumIds)})
   `;
 }
 
 function playsFilter(scope: ArtistScope) {
   return sql`
     e.name IN ('play_start','play_complete')
-    AND e.payload->>'songId' = ANY(${scope.songIds}::text[])
+    AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
   `;
 }
 
@@ -199,7 +200,7 @@ async function computeKpis(scope: ArtistScope, r: Range) {
     FROM analytics_events e
     JOIN songs s ON s.id = e.payload->>'songId'
     WHERE e.name = 'play_start'
-      AND e.payload->>'songId' = ANY(${scope.songIds}::text[])
+      AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
       AND e.ts >= ${r.from} AND e.ts < ${r.to}
     GROUP BY s.id, s.title
     ORDER BY COUNT(*) DESC
@@ -377,7 +378,7 @@ async function geoHandler(req: Request, res: Response) {
       COUNT(*)::text AS plays
     FROM analytics_events e
     WHERE e.name = 'play_start'
-      AND e.payload->>'songId' = ANY(${scope.songIds}::text[])
+      AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
       AND e.ts >= ${range.from} AND e.ts < ${range.to}
     GROUP BY 1
     ORDER BY 2 DESC NULLS LAST
@@ -422,7 +423,7 @@ async function topTracksHandler(req: Request, res: Response) {
     FROM analytics_events e
     JOIN songs s ON s.id = e.payload->>'songId'
     LEFT JOIN albums a ON a.id = s.album_id
-    WHERE e.payload->>'songId' = ANY(${scope.songIds}::text[])
+    WHERE e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
       AND e.name IN ('play_start','play_complete','favorite_song','song_added_to_playlist','share_completed')
       AND e.ts >= ${range.from} AND e.ts < ${range.to}
     GROUP BY s.id, s.title, s.album_id, a.title
@@ -463,7 +464,7 @@ async function topAlbumsHandler(req: Request, res: Response) {
     LEFT JOIN orders o ON o.album_id = a.id
       AND o.status IN ('paid','shipped','refunded')
       AND o.created_at >= ${range.from} AND o.created_at < ${range.to}
-    WHERE a.id = ANY(${scope.albumIds}::text[])
+    WHERE a.id = ANY(${pgArray(scope.albumIds)})
     GROUP BY a.id, a.title, a.artist, a.artwork
   `);
 
@@ -475,8 +476,8 @@ async function topAlbumsHandler(req: Request, res: Response) {
     FROM analytics_events e
     JOIN songs s ON s.id = e.payload->>'songId'
     WHERE e.name = 'play_start'
-      AND e.payload->>'songId' = ANY(${scope.songIds}::text[])
-      AND s.album_id = ANY(${scope.albumIds}::text[])
+      AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
+      AND s.album_id = ANY(${pgArray(scope.albumIds)})
       AND e.ts >= ${range.from} AND e.ts < ${range.to}
     GROUP BY 1
   `) : ({ rows: [] } as any);
@@ -565,7 +566,7 @@ async function audienceHandler(req: Request, res: Response) {
              COUNT(*) FILTER (WHERE e.ts >= ${range.from} AND e.ts < ${range.to}) AS plays_in_window
       FROM analytics_events e
       WHERE e.name = 'play_start'
-        AND e.payload->>'songId' = ANY(${scope.songIds}::text[])
+        AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
         AND COALESCE(e.user_id, e.session_id) IS NOT NULL
       GROUP BY 1
     )

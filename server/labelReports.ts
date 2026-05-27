@@ -25,6 +25,7 @@
 import type { Express, Request, Response } from "express";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import { pgArray } from "./lib/pgArray";
 import { getUserRole } from "./auth/roles";
 import { storage } from "./storage";
 
@@ -82,7 +83,7 @@ export async function resolveLabelScope(req: Request): Promise<LabelScope | { er
   const primaryArtistIds = albums.map((r) => r.primary_artist_id).filter((x): x is string => !!x);
 
   const songRows = albumIds.length
-    ? await db.execute<{ id: string }>(sql`SELECT id FROM songs WHERE album_id = ANY(${albumIds}::text[])`)
+    ? await db.execute<{ id: string }>(sql`SELECT id FROM songs WHERE album_id = ANY(${pgArray(albumIds)})`)
     : ({ rows: [] } as any);
   const songIds = ((songRows as any).rows || []).map((r: any) => r.id);
 
@@ -100,13 +101,13 @@ export async function resolveLabelScope(req: Request): Promise<LabelScope | { er
 function ordersFilter(scope: LabelScope) {
   return sql`
     o.status IN ('paid','shipped','refunded')
-    AND o.album_id = ANY(${scope.albumIds}::text[])
+    AND o.album_id = ANY(${pgArray(scope.albumIds)})
   `;
 }
 function playsFilter(scope: LabelScope) {
   return sql`
     e.name IN ('play_start','play_complete')
-    AND e.payload->>'songId' = ANY(${scope.songIds}::text[])
+    AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
   `;
 }
 
@@ -148,7 +149,7 @@ async function computeKpis(scope: LabelScope, r: Range) {
       SELECT COALESCE(e.user_id, e.session_id) AS listener, MIN(e.ts) AS first_ts
       FROM analytics_events e
       WHERE e.name = 'play_start'
-        AND e.payload->>'songId' = ANY(${scope.songIds}::text[])
+        AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
         AND COALESCE(e.user_id, e.session_id) IS NOT NULL
       GROUP BY 1
     )
@@ -381,7 +382,7 @@ async function rosterHandler(req: Request, res: Response) {
 
   const peopleRows = await db.execute<{ id: string; name: string; photo_url: string | null }>(sql`
     SELECT id, name, photo_url FROM people
-    WHERE id = ANY(${scope.rosterPersonIds}::text[])
+    WHERE id = ANY(${pgArray(scope.rosterPersonIds)})
   `);
   const artists = (((peopleRows as any).rows || []) as any[]).map((p: any) => {
     const r = revMap.get(p.id);
@@ -427,7 +428,7 @@ async function geoHandler(req: Request, res: Response) {
       COUNT(*)::text AS plays
     FROM analytics_events e
     WHERE e.name = 'play_start'
-      AND e.payload->>'songId' = ANY(${scope.songIds}::text[])
+      AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
       AND e.ts >= ${range.from} AND e.ts < ${range.to}
     GROUP BY 1 ORDER BY 2 DESC NULLS LAST
   `) : ({ rows: [] } as any);
@@ -466,7 +467,7 @@ async function topAlbumsHandler(req: Request, res: Response) {
     LEFT JOIN orders o ON o.album_id = a.id
       AND o.status IN ('paid','shipped','refunded')
       AND o.created_at >= ${range.from} AND o.created_at < ${range.to}
-    WHERE a.id = ANY(${scope.albumIds}::text[])
+    WHERE a.id = ANY(${pgArray(scope.albumIds)})
     GROUP BY a.id, a.title, a.artist, a.artwork, a.primary_artist_id
   `);
 
@@ -476,8 +477,8 @@ async function topAlbumsHandler(req: Request, res: Response) {
     FROM analytics_events e
     JOIN songs s ON s.id = e.payload->>'songId'
     WHERE e.name = 'play_start'
-      AND e.payload->>'songId' = ANY(${scope.songIds}::text[])
-      AND s.album_id = ANY(${scope.albumIds}::text[])
+      AND e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
+      AND s.album_id = ANY(${pgArray(scope.albumIds)})
       AND e.ts >= ${range.from} AND e.ts < ${range.to}
     GROUP BY 1
   `) : ({ rows: [] } as any);
@@ -530,7 +531,7 @@ async function topTracksHandler(req: Request, res: Response) {
     FROM analytics_events e
     JOIN songs s ON s.id = e.payload->>'songId'
     LEFT JOIN albums a ON a.id = s.album_id
-    WHERE e.payload->>'songId' = ANY(${scope.songIds}::text[])
+    WHERE e.payload->>'songId' = ANY(${pgArray(scope.songIds)})
       AND e.name IN ('play_start','play_complete','favorite_song','song_added_to_playlist','share_completed')
       AND e.ts >= ${range.from} AND e.ts < ${range.to}
     GROUP BY s.id, s.title, s.album_id, a.title, a.artist

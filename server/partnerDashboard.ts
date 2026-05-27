@@ -20,6 +20,7 @@
 import type { Express, Request, Response } from "express";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import { pgArray } from "./lib/pgArray";
 import { getUserRole } from "./auth/roles";
 import { storage } from "./storage";
 
@@ -199,7 +200,7 @@ async function buildLabelPayload(
   const albumIds = albums.map((a) => a.id);
 
   const songRows = albumIds.length
-    ? await db.execute<any>(sql`SELECT id FROM songs WHERE album_id = ANY(${albumIds}::text[])`)
+    ? await db.execute<any>(sql`SELECT id FROM songs WHERE album_id = ANY(${pgArray(albumIds)})`)
     : ({ rows: [] } as any);
   const songIds = ((songRows as any).rows ?? []).map((s: any) => s.id);
 
@@ -211,7 +212,7 @@ async function buildLabelPayload(
         COUNT(*) FILTER (WHERE status <> 'refunded')::bigint AS orders
       FROM orders
       WHERE status IN ('paid','shipped','refunded')
-        AND album_id = ANY(${albumIds}::text[])
+        AND album_id = ANY(${pgArray(albumIds)})
         AND created_at >= ${window.from} AND created_at < ${window.to}
     `);
     const x = ((row as any).rows ?? [])[0] ?? { gross: 0, orders: 0 };
@@ -223,7 +224,7 @@ async function buildLabelPayload(
       SELECT COUNT(*) FILTER (WHERE name = 'play_start')::bigint AS plays
       FROM analytics_events
       WHERE name IN ('play_start','play_complete')
-        AND payload->>'songId' = ANY(${songIds}::text[])
+        AND payload->>'songId' = ANY(${pgArray(songIds)})
         AND ts >= ${window.from} AND ts < ${window.to}
     `);
     const nf = await db.execute<any>(sql`
@@ -231,7 +232,7 @@ async function buildLabelPayload(
         SELECT COALESCE(user_id, session_id) AS listener, MIN(ts) AS first_ts
         FROM analytics_events
         WHERE name = 'play_start'
-          AND payload->>'songId' = ANY(${songIds}::text[])
+          AND payload->>'songId' = ANY(${pgArray(songIds)})
           AND COALESCE(user_id, session_id) IS NOT NULL
         GROUP BY 1
       )
@@ -270,7 +271,7 @@ async function buildLabelPayload(
           COUNT(*) FILTER (WHERE status <> 'refunded')::bigint AS orders
         FROM orders
         WHERE status IN ('paid','shipped','refunded')
-          AND album_id = ANY(${albumIds}::text[])
+          AND album_id = ANY(${pgArray(albumIds)})
           AND created_at >= ${r.from} AND created_at < ${r.to}
         GROUP BY 1 ORDER BY 1 ASC
       `)
@@ -281,7 +282,7 @@ async function buildLabelPayload(
           COUNT(*) FILTER (WHERE name = 'play_start')::bigint AS plays
         FROM analytics_events
         WHERE name IN ('play_start','play_complete')
-          AND payload->>'songId' = ANY(${songIds}::text[])
+          AND payload->>'songId' = ANY(${pgArray(songIds)})
           AND ts >= ${r.from} AND ts < ${r.to}
         GROUP BY 1 ORDER BY 1 ASC
       `)
@@ -294,7 +295,7 @@ async function buildLabelPayload(
           SELECT COALESCE(user_id, session_id) AS listener, MIN(ts) AS first_ts
           FROM analytics_events
           WHERE name = 'play_start'
-            AND payload->>'songId' = ANY(${songIds}::text[])
+            AND payload->>'songId' = ANY(${pgArray(songIds)})
             AND COALESCE(user_id, session_id) IS NOT NULL
           GROUP BY 1
         )
@@ -327,7 +328,7 @@ async function buildLabelPayload(
       FROM orders o
       JOIN albums a ON a.id = o.album_id
       WHERE o.status IN ('paid','shipped')
-        AND o.album_id = ANY(${albumIds}::text[])
+        AND o.album_id = ANY(${pgArray(albumIds)})
         AND o.created_at >= ${r.from} AND o.created_at < ${r.to}
       ORDER BY o.created_at DESC LIMIT 10
     `);
@@ -412,7 +413,7 @@ async function buildNpoPayload(
     if (!referredArtistIds.length) return 0;
     const row = await db.execute<any>(sql`
       SELECT COUNT(*)::bigint AS n FROM albums
-      WHERE primary_artist_id = ANY(${referredArtistIds}::text[])
+      WHERE primary_artist_id = ANY(${pgArray(referredArtistIds)})
         AND COALESCE(created_at, NOW()) >= ${window.from}
         AND COALESCE(created_at, NOW()) < ${window.to}
     `);
@@ -596,7 +597,7 @@ async function buildArtistPayload(
   const albums = ((albumRows as any).rows ?? []) as any[];
   const albumIds = albums.map((a) => a.id);
   const songRows = albumIds.length
-    ? await db.execute<any>(sql`SELECT id FROM songs WHERE album_id = ANY(${albumIds}::text[])`)
+    ? await db.execute<any>(sql`SELECT id FROM songs WHERE album_id = ANY(${pgArray(albumIds)})`)
     : ({ rows: [] } as any);
   const songIds = ((songRows as any).rows ?? []).map((s: any) => s.id);
 
@@ -606,7 +607,7 @@ async function buildArtistPayload(
       SELECT COUNT(*) FILTER (WHERE name = 'play_start')::bigint AS plays
       FROM analytics_events
       WHERE name IN ('play_start','play_complete')
-        AND payload->>'songId' = ANY(${songIds}::text[])
+        AND payload->>'songId' = ANY(${pgArray(songIds)})
         AND ts >= ${window.from} AND ts < ${window.to}
     `).catch(() => ({ rows: [{ plays: 0 }] }) as any);
     const nf = await db.execute<any>(sql`
@@ -614,7 +615,7 @@ async function buildArtistPayload(
         SELECT COALESCE(user_id, session_id) AS listener, MIN(ts) AS first_ts
         FROM analytics_events
         WHERE name = 'play_start'
-          AND payload->>'songId' = ANY(${songIds}::text[])
+          AND payload->>'songId' = ANY(${pgArray(songIds)})
           AND COALESCE(user_id, session_id) IS NOT NULL
         GROUP BY 1
       )
@@ -632,7 +633,7 @@ async function buildArtistPayload(
       SELECT COUNT(*) FILTER (WHERE status <> 'refunded')::bigint AS n
       FROM orders
       WHERE status IN ('paid','shipped','refunded')
-        AND album_id = ANY(${albumIds}::text[])
+        AND album_id = ANY(${pgArray(albumIds)})
         AND created_at >= ${window.from} AND created_at < ${window.to}
     `).catch(() => ({ rows: [{ n: 0 }] }) as any);
     return Number(((row as any).rows ?? [{}])[0]?.n ?? 0);
@@ -659,7 +660,7 @@ async function buildArtistPayload(
           COUNT(*) FILTER (WHERE name = 'play_start')::bigint AS plays
         FROM analytics_events
         WHERE name IN ('play_start','play_complete')
-          AND payload->>'songId' = ANY(${songIds}::text[])
+          AND payload->>'songId' = ANY(${pgArray(songIds)})
           AND ts >= ${r.from} AND ts < ${r.to}
         GROUP BY 1 ORDER BY 1 ASC
       `).catch(() => ({ rows: [] }) as any)
@@ -670,7 +671,7 @@ async function buildArtistPayload(
           SELECT COALESCE(user_id, session_id) AS listener, MIN(ts) AS first_ts
           FROM analytics_events
           WHERE name = 'play_start'
-            AND payload->>'songId' = ANY(${songIds}::text[])
+            AND payload->>'songId' = ANY(${pgArray(songIds)})
             AND COALESCE(user_id, session_id) IS NOT NULL
           GROUP BY 1
         )
@@ -687,7 +688,7 @@ async function buildArtistPayload(
           COUNT(*) FILTER (WHERE status <> 'refunded')::bigint AS orders
         FROM orders
         WHERE status IN ('paid','shipped','refunded')
-          AND album_id = ANY(${albumIds}::text[])
+          AND album_id = ANY(${pgArray(albumIds)})
           AND created_at >= ${r.from} AND created_at < ${r.to}
         GROUP BY 1 ORDER BY 1 ASC
       `).catch(() => ({ rows: [] }) as any)
@@ -711,7 +712,7 @@ async function buildArtistPayload(
       FROM orders o
       JOIN albums a ON a.id = o.album_id
       WHERE o.status IN ('paid','shipped')
-        AND o.album_id = ANY(${albumIds}::text[])
+        AND o.album_id = ANY(${pgArray(albumIds)})
         AND o.created_at >= ${r.from} AND o.created_at < ${r.to}
       ORDER BY o.created_at DESC LIMIT 10
     `).catch(() => ({ rows: [] }) as any);
