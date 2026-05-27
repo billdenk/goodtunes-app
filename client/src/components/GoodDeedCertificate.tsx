@@ -413,8 +413,8 @@ const CertCard = forwardRef(function CertCard(
       ref={ref}
       className="flex-shrink-0 snap-start rounded-3xl overflow-hidden mx-auto flex flex-col"
       style={{
-        width: "min(92vw, calc((100dvh - 220px) / 1.36))",
-        aspectRatio: "1 / 1.36",
+        width: "min(92vw, calc((100dvh - 220px) / 1.32))",
+        aspectRatio: "1 / 1.32",
         boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
         backgroundColor: "var(--brand-bg)",
       }}
@@ -424,9 +424,9 @@ const CertCard = forwardRef(function CertCard(
         <img src={album.artwork} alt={album.title} className="w-full h-full object-cover block" />
       </div>
 
-      {/* Bottom: navy band */}
+      {/* Bottom: navy band — short strip under the art */}
       <div
-        className="relative w-full flex-1 px-5 py-4 flex flex-col"
+        className="relative w-full flex-1 px-4 py-3 flex flex-col justify-between"
         style={{ backgroundColor: "var(--brand-bg)" }}
       >
         {/* Top of band: avatar + owner / "owns no. NN of <album>" on left, GoodTunes logo top-right */}
@@ -448,27 +448,29 @@ const CertCard = forwardRef(function CertCard(
                 {initial}
               </div>
             )}
-            <div className="min-w-0">
+            <div
+              className="min-w-0 flex-1 flex flex-col gap-1.5"
+              data-testid="text-cert-owner"
+              aria-label={`${ownerName} owns no. ${certNumStr} of ${album.title}`}
+            >
               <div
-                className="text-white text-sm font-semibold truncate leading-tight"
-                data-testid="text-cert-owner"
-              >
-                {ownerName}
-              </div>
-              <div className="text-white/65 text-xs leading-tight mt-0.5 truncate">
-                owns no. {certNumStr} of {album.title}
-              </div>
+                className="h-2 rounded-sm w-1/2"
+                style={{ background: "rgba(255,255,255,0.85)" }}
+                aria-hidden
+              />
+              <div
+                className="h-2 rounded-sm w-4/5"
+                style={{ background: "rgba(255,255,255,0.35)" }}
+                aria-hidden
+              />
             </div>
           </div>
           <img
             src="/goodtunes-logo-white.png"
             alt="GoodTunes"
-            className="h-4 w-auto object-contain flex-shrink-0 mt-1"
+            className="h-3.5 w-auto object-contain flex-shrink-0 mt-0.5"
           />
         </div>
-
-        {/* Spacer */}
-        <div className="flex-1" />
 
         {/* Bottom of band: signature on rule (left), QR (right) */}
         <div className="flex items-end justify-between gap-3">
@@ -476,16 +478,16 @@ const CertCard = forwardRef(function CertCard(
             <img
               src="/will-signature.png"
               alt="Will Bowen, Founder"
-              className="h-8 w-auto max-w-[8rem] object-contain object-left select-none"
+              className="h-6 w-auto max-w-[7rem] object-contain object-left select-none"
               draggable={false}
             />
-            <div className="border-t border-white/35 mt-1" />
-            <div className="text-white/55 text-xs uppercase tracking-wider mt-1">
+            <div className="border-t border-white/35 mt-0.5" />
+            <div className="text-white/55 text-xs uppercase tracking-wider mt-0.5">
               Will Bowen · Founder, GoodTunes
             </div>
           </div>
           <div
-            className="w-14 h-14 rounded-sm flex-shrink-0 grid place-items-center p-1"
+            className="w-11 h-11 rounded-sm flex-shrink-0 grid place-items-center p-1"
             style={{ background: "var(--brand-mint)" }}
             aria-hidden
             title="Per-fan QR — verifies this certificate"
