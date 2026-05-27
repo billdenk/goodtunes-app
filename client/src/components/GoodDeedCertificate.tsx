@@ -432,12 +432,12 @@ const CertCard = forwardRef(function CertCard(
           wider bar + solid square QR placeholder at the bottom. No
           mint, no QR finder pattern, no WILL BOWEN · FOUNDER caption. */}
       <div
-        className="relative w-full flex-1 px-[5%] py-[4%] flex flex-col justify-between gap-[3%]"
+        className="relative w-full flex-1 px-5 py-5 flex flex-col justify-between gap-3"
         style={{ backgroundColor: "var(--brand-bg)" }}
       >
         {/* Top row */}
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-[3%] min-w-0 flex-1">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             {ownerPhotoUrl ? (
               <img
                 src={ownerPhotoUrl}
@@ -454,7 +454,7 @@ const CertCard = forwardRef(function CertCard(
               />
             )}
             <div
-              className="min-w-0 flex-1 flex flex-col gap-[12%]"
+              className="min-w-0 flex-1 flex flex-col gap-2"
               data-testid="text-cert-owner"
               aria-label={`${ownerName} owns no. ${certNumStr} of ${album.title}`}
             >
@@ -478,7 +478,7 @@ const CertCard = forwardRef(function CertCard(
         </div>
 
         {/* Middle — 3 body-text bars */}
-        <div className="flex flex-col gap-[3%]" aria-hidden>
+        <div className="flex flex-col gap-2" aria-hidden>
           <div className="h-[0.5em] min-h-[8px] w-[88%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
           <div className="h-[0.5em] min-h-[8px] w-[80%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
           <div className="h-[0.5em] min-h-[8px] w-[68%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />

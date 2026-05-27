@@ -3646,20 +3646,20 @@ function GoodDeedPill({
                   founder caption, no mint, no QR finder pattern —
                   reads as a pure wireframe template. */}
               <div
-                className="w-full text-white flex flex-col justify-between px-[5%] py-[5%] aspect-[3/1] gap-[3%]"
+                className="w-full text-white flex flex-col justify-between px-5 py-5 aspect-[3/1] gap-3"
                 style={{ backgroundColor: "var(--brand-bg)" }}
                 data-testid="band-gooddeed-cert"
               >
                 {/* Top row — solid avatar + two short bars + GoodTunes wordmark */}
-                <div className="flex items-start justify-between gap-[4%]">
-                  <div className="flex items-center gap-[3%] min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div
                       className="w-[12%] aspect-square rounded-full flex-shrink-0"
                       style={{ background: "rgba(255,255,255,0.32)" }}
                       aria-label="Owner avatar (per fan)"
                       data-testid="skeleton-gooddeed-avatar"
                     />
-                    <div className="flex-1 min-w-0 flex flex-col gap-[12%]">
+                    <div className="flex-1 min-w-0 flex flex-col gap-2">
                       <div
                         className="h-[40%] min-h-[10px] w-[55%] rounded-full"
                         style={{ background: "rgba(255,255,255,0.32)" }}
@@ -3683,14 +3683,14 @@ function GoodDeedPill({
                 </div>
 
                 {/* Middle — three long body-text bars */}
-                <div className="flex flex-col gap-[3%]" aria-hidden>
+                <div className="flex flex-col gap-2" aria-hidden>
                   <div className="h-[14%] min-h-[8px] w-[88%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
                   <div className="h-[14%] min-h-[8px] w-[80%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
                   <div className="h-[14%] min-h-[8px] w-[68%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
                 </div>
 
                 {/* Bottom row — signature overlaid on a bar (left), solid square QR placeholder (right) */}
-                <div className="flex items-end justify-between gap-[4%]">
+                <div className="flex items-end justify-between gap-4">
                   <div className="flex-1 min-w-0 relative" aria-label="Founder signature" data-testid="signature-gooddeed">
                     <div className="h-[16%] min-h-[10px] w-[60%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} aria-hidden />
                     <img
