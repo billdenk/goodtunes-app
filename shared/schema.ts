@@ -1759,6 +1759,12 @@ export const albumAddons = pgTable(
     printVendorId: varchar("print_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
     hologramVendorId: varchar("hologram_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
     insertionVendorId: varchar("insertion_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
+    // Task #579 — addon-scoped artwork URL. Used by the `booklet`
+    // add-on as the print-ready cover the artist drag-and-drops on
+    // the BookletPill tile (separate from the album jacket art). Nullable
+    // so existing signed_cert rows (which inherit `albums.artwork`)
+    // keep working without a backfill.
+    artworkUrl: text("artwork_url"),
     // Task #245 — per-release pricing snapshot. Populated when the sale
     // window closes and the run is locked for print. Shape:
     //   { runQty, printing: { vendorId, perUnitCents, setupFeeCents },
@@ -2602,14 +2608,22 @@ export const ALBUM_FORMAT_LABEL: Record<AlbumFormat, string> = {
   cassette: "Cassette",
   cd: "CD",
 };
-// Closed enum of add-on kinds. Today the only shipped add-on is the
-// printed & signed GoodDeed certificate (`signed_cert`). Future shapes
-// (`framing`, `framed_gooddeed_qr`) drop in here without a schema change.
-export const ALBUM_ADDON_KINDS = ["signed_cert"] as const;
+// Closed enum of add-on kinds. Today the shipped add-ons are the
+// printed & signed GoodDeed certificate (`signed_cert`) and the
+// 16-page PMP booklet upsell on 7" / cassette releases (`booklet`).
+// Future shapes (`framing`, `framed_gooddeed_qr`) drop in here
+// without a schema change.
+export const ALBUM_ADDON_KINDS = ["signed_cert", "booklet"] as const;
 export type AlbumAddonKind = (typeof ALBUM_ADDON_KINDS)[number];
 export const ALBUM_ADDON_LABEL: Record<AlbumAddonKind, string> = {
   signed_cert: "Printed & Signed GoodDeed Certificate",
+  booklet: "16-Page Booklet",
 };
+// Task #579 — formats the `booklet` add-on can be paired with. The
+// 7.125"×7.125" trim suits 7" jackets; the cassette J-card sleeve
+// holds the same booklet as an insert. Other formats hide the add-on
+// in admin and on the fan Buy sheet.
+export const BOOKLET_ELIGIBLE_FORMATS = ["7_inch", "cassette"] as const;
 
 export const insertAlbumSkuSchema = createInsertSchema(albumSkus)
   .omit({ id: true, createdAt: true })

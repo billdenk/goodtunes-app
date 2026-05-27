@@ -45,7 +45,17 @@ type Sku = {
   vinylColor: string | null;
   jacketUpgrade: JacketUpgrade | null;
 };
-type Addon = { id: string; kind: string; label: string; priceCents: number; minPriceCents: number };
+type Addon = {
+  id: string;
+  kind: string;
+  label: string;
+  priceCents: number;
+  minPriceCents: number;
+  // Task #579 — booklet carries its own printed cover (NOT the album
+  // jacket). Null on signed_cert and on booklet rows the artist
+  // hasn't dropped art on yet.
+  artworkUrl?: string | null;
+};
 type BuyOptions = {
   albumId: string;
   title: string;
@@ -57,7 +67,17 @@ type BuyOptions = {
   // Task #122 — true when the signed_cert add-on has a fixed planned
   // quantity and that many paid certs already exist for this album.
   signedCertSoldOut?: boolean;
+  // Task #579 — true when this release has an active 7" vinyl or
+  // cassette SKU (server already filters the booklet addon out of
+  // the `addons` array when false; the flag lets the UI gate any
+  // future booklet-only chrome without re-deriving eligibility).
+  bookletEligible?: boolean;
 };
+
+// Task #579 — Booklet anchors to a 7" vinyl or cassette purchase. Kept
+// inline (not imported from @shared/schema) so the fan bundle stays
+// dependency-light; values mirror BOOKLET_ELIGIBLE_FORMATS exactly.
+const BOOKLET_FORMATS_FAN: ReadonlySet<string> = new Set(["7_inch", "cassette"]);
 
 const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
@@ -91,6 +111,12 @@ export function BuySheet({
   const [options, setOptions] = useState<BuyOptions | null>(null);
   const [format, setFormat] = useState<string | null>(null);
   const [signedCert, setSignedCert] = useState(signedCertDefault);
+  // Task #579 — Booklet add-on toggle. Independent of signedCert; both
+  // can be on the same checkout. Forced off when the selected format
+  // isn't booklet-eligible (e.g. fan switches from 7" to 12"LP after
+  // toggling on), so the displayed total can't drift from what we
+  // POST to /api/checkout/session.
+  const [booklet, setBooklet] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -124,6 +150,13 @@ export function BuySheet({
 
   const selectedSku = options?.skus.find((s) => s.format === format) ?? null;
   const addon = options?.addons.find((a) => a.kind === "signed_cert") ?? null;
+  // Task #579 — booklet add-on. Server already hides it on releases
+  // without a booklet-eligible SKU; we additionally gate on the
+  // *currently selected* SKU because a release with both a 7" and a
+  // 12" SKU can have the booklet listed, but it only ships with the 7".
+  const bookletAddon = options?.addons.find((a) => a.kind === "booklet") ?? null;
+  const bookletAvailable =
+    !!bookletAddon && !!selectedSku && BOOKLET_FORMATS_FAN.has(selectedSku.format);
   const signedCertSoldOut = !!options?.signedCertSoldOut;
   // If the run got exhausted between page-load and toggle (or by another
   // tab), defensively flip the local toggle off so the displayed total
@@ -131,7 +164,16 @@ export function BuySheet({
   useEffect(() => {
     if (signedCertSoldOut && signedCert) setSignedCert(false);
   }, [signedCertSoldOut, signedCert]);
-  const totalCents = (selectedSku?.priceCents ?? 0) + (signedCert && addon && !signedCertSoldOut ? addon.priceCents : 0);
+  // Task #579 — Format pivot may invalidate a booklet selection (fan
+  // toggles booklet on a 7", then swaps to 12"LP). Hard-reset so the
+  // POST body and displayed total stay in sync.
+  useEffect(() => {
+    if (booklet && !bookletAvailable) setBooklet(false);
+  }, [booklet, bookletAvailable]);
+  const totalCents =
+    (selectedSku?.priceCents ?? 0) +
+    (signedCert && addon && !signedCertSoldOut ? addon.priceCents : 0) +
+    (booklet && bookletAvailable ? bookletAddon!.priceCents : 0);
 
   const beginCheckout = async () => {
     if (!selectedSku) return;
@@ -157,6 +199,13 @@ export function BuySheet({
         skuFormat: selectedSku.format,
         signedCert: willSendSignedCert,
         signedCertPriceCents: willSendSignedCert ? addon!.priceCents : undefined,
+        // Task #579 — booklet add-on. Sent only when the toggle is on
+        // AND the selected SKU is eligible (defensive: a stale state
+        // post-format-swap shouldn't slip through). Server re-validates
+        // both conditions before adding it to the Stripe line items.
+        booklet: booklet && bookletAvailable,
+        bookletPriceCents:
+          booklet && bookletAvailable ? bookletAddon!.priceCents : undefined,
       });
       const j = await r.json();
       if (!j.clientSecret) throw new Error(j?.message ?? "Checkout failed to start");
@@ -288,7 +337,7 @@ export function BuySheet({
                     onClick={() => !signedCertSoldOut && setSignedCert((v) => !v)}
                     disabled={signedCertSoldOut}
                     className={[
-                      "w-full flex items-start justify-between gap-3 rounded-2xl px-4 py-3 border transition-colors text-left mb-5",
+                      "w-full flex items-start justify-between gap-3 rounded-2xl px-4 py-3 border transition-colors text-left mb-3",
                       signedCertSoldOut
                         ? "border-white/10 opacity-50 cursor-not-allowed"
                         : signedCert
@@ -307,6 +356,55 @@ export function BuySheet({
                     </div>
                     <span className="text-[14px] font-semibold whitespace-nowrap">
                       {signedCertSoldOut ? "Sold out" : `+ ${dollars(addon.priceCents)}`}
+                    </span>
+                  </button>
+                )}
+
+                {/* Task #579 — Booklet add-on. Only shown when the
+                    selected SKU is booklet-eligible (7" vinyl or
+                    cassette). Renders a small square thumbnail of the
+                    artist's uploaded printed cover (NOT the album
+                    jacket) when present; falls back to a placeholder
+                    glyph otherwise. */}
+                {bookletAddon && bookletAvailable && (
+                  <button
+                    type="button"
+                    onClick={() => setBooklet((v) => !v)}
+                    className={[
+                      "w-full flex items-start justify-between gap-3 rounded-2xl px-4 py-3 border transition-colors text-left mb-5",
+                      booklet
+                        ? "border-[color:var(--brand-mint)] bg-[color:var(--brand-mint)]/10"
+                        : "border-white/10 hover:border-white/30",
+                    ].join(" ")}
+                    data-testid="button-toggle-booklet"
+                  >
+                    <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
+                      <div
+                        className="w-12 h-12 rounded-md border border-white/10 bg-white/[0.04] flex-shrink-0 overflow-hidden flex items-center justify-center"
+                        data-testid="img-booklet-thumb"
+                      >
+                        {bookletAddon.artworkUrl ? (
+                          <img
+                            src={bookletAddon.artworkUrl}
+                            alt=""
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-xs text-white/40 font-semibold uppercase tracking-wider">
+                            16pp
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <span className="text-sm font-medium">{bookletAddon.label}</span>
+                        <span className="text-[12px] text-white/55 leading-snug mt-0.5">
+                          7.125&quot; × 7.125&quot;, 16 full-colour pages on 100# gloss text.
+                          Tucked in with your record.
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[14px] font-semibold whitespace-nowrap">
+                      + {dollars(bookletAddon.priceCents)}
                     </span>
                   </button>
                 )}

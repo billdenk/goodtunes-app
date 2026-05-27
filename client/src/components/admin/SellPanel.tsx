@@ -24,7 +24,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { IconButton } from "@/components/ui/IconButton";
+import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -42,6 +43,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   ALBUM_FORMATS,
   ALBUM_FORMAT_LABEL,
+  BOOKLET_ELIGIBLE_FORMATS,
   PHYSICAL_FORMAT_TO_ALBUM_FORMAT,
   type AlbumFormat,
   type AlbumSku,
@@ -322,6 +324,25 @@ export function SellPanel({
     },
     onError: (e: any) => toast({ title: "Couldn't save", description: e?.message, variant: "destructive" }),
   });
+  // Task #579 — Booklet add-on mirrors signed_cert's upsert but with a
+  // separate body shape (artworkUrl is booklet-specific — signed_cert
+  // inherits the album jacket via the existing edit-artwork dialog).
+  const upsertBookletAddon = useMutation({
+    mutationFn: async (body: {
+      priceCents: number;
+      active: boolean;
+      minPriceCents: number;
+      plannedQuantity: number | null;
+      artworkUrl?: string | null;
+    }) => {
+      const r = await apiRequest("PUT", `/api/admin/albums/${albumId}/addons/booklet`, body);
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "skus"] });
+    },
+    onError: (e: any) => toast({ title: "Couldn't save", description: e?.message, variant: "destructive" }),
+  });
 
   // In-progress draft rows — picked from the "+ Add physical good" menu
   // but not yet saved. We hold them locally and only persist when the
@@ -570,6 +591,12 @@ export function SellPanel({
 
   const skuByFormat = new Map(data.skus.map((s) => [s.format as AlbumFormat, s]));
   const signedAddon = data.addons.find((a) => a.kind === "signed_cert");
+  // Task #579 — PMP 16-page booklet add-on. Only one row per album,
+  // so we anchor its pill to the first eligible (7" vinyl or
+  // cassette) SkuRow — same pattern as primaryVinylFormat for the
+  // GoodDeed pill, so two eligible rows can't race-overwrite each
+  // other's planned quantity.
+  const bookletAddon = data.addons.find((a) => a.kind === "booklet");
 
   const catalogScoped = !!invitedPress?.press && catalogByFormat.size > 0;
   const offeredFormats = catalogScoped
@@ -592,6 +619,14 @@ export function SellPanel({
   // is just the first vinyl format in the configured/draft order.
   const primaryVinylFormat: AlbumFormat | null =
     [...configuredFormats, ...liveDrafts].find((f) => isVinylFormat(f)) ?? null;
+  // Task #579 — Booklet anchors on the first eligible format (7" vinyl
+  // OR cassette) in the configured/draft order. Both `7_inch` and
+  // `cassette` qualify; CDs and 10"/12" do not. Null = booklet pill
+  // hidden across all rows on this release.
+  const primaryBookletFormat: AlbumFormat | null =
+    [...configuredFormats, ...liveDrafts].find((f) =>
+      (BOOKLET_ELIGIBLE_FORMATS as readonly AlbumFormat[]).includes(f),
+    ) ?? null;
 
   return (
     <div className="py-6">
@@ -711,6 +746,9 @@ export function SellPanel({
                           livePlatformCostCents={payoutSettings?.certCostCents ?? null}
                           onSaveAddon={upsertAddon.mutate}
                           isPrimaryVinyl={primaryVinylFormat === f}
+                          bookletAddon={bookletAddon ?? null}
+                          isBookletAnchor={primaryBookletFormat === f}
+                          onSaveBookletAddon={upsertBookletAddon.mutate}
                           albumTitle={albumTitle}
                           artistName={artistName}
                           artistPhotoUrl={artistPhotoUrl}
@@ -749,6 +787,9 @@ export function SellPanel({
                         livePlatformCostCents={payoutSettings?.certCostCents ?? null}
                         onSaveAddon={upsertAddon.mutate}
                         isPrimaryVinyl={primaryVinylFormat === f}
+                        bookletAddon={bookletAddon ?? null}
+                        isBookletAnchor={primaryBookletFormat === f}
+                        onSaveBookletAddon={upsertBookletAddon.mutate}
                         albumTitle={albumTitle}
                         artistName={artistName}
                         artistPhotoUrl={artistPhotoUrl}
@@ -1415,6 +1456,9 @@ function SkuRow({
   livePlatformCostCents,
   onSaveAddon,
   isPrimaryVinyl,
+  bookletAddon,
+  isBookletAnchor,
+  onSaveBookletAddon,
   albumTitle,
   artistName,
   artistPhotoUrl,
@@ -1493,6 +1537,19 @@ function SkuRow({
   // would race-overwrite the same addon's plannedQuantity. SellPanel
   // sets this true on whichever vinyl row is first in the offered list.
   isPrimaryVinyl?: boolean;
+  // Task #579 — Booklet add-on parallel to signed_cert. The pill is
+  // mounted only on the *anchor* SKU row (first 7" vinyl or cassette
+  // in the configured-then-draft order), so two booklet-eligible rows
+  // on the same album can't race-overwrite each other's plannedQuantity.
+  bookletAddon?: AlbumAddon | null;
+  isBookletAnchor?: boolean;
+  onSaveBookletAddon?: (b: {
+    priceCents: number;
+    active: boolean;
+    minPriceCents: number;
+    plannedQuantity: number | null;
+    artworkUrl?: string | null;
+  }) => void;
   // Task #397 — forwarded into the GoodDeed cert preview tile.
   albumTitle?: string;
   artistName?: string;
@@ -2858,6 +2915,18 @@ function SkuRow({
           onEditArtwork={onEditArtwork}
         />
       ) : null}
+      {/* Task #579 — Booklet pill. Anchors to the first booklet-eligible
+          SKU row (7" vinyl or cassette) so only one is rendered per
+          album, mirroring the isPrimaryVinyl gate on GoodDeedPill. */}
+      {albumId && onSaveBookletAddon && isBookletAnchor ? (
+        <div className="mt-3">
+          <BookletPill
+            albumId={albumId}
+            existing={bookletAddon ?? null}
+            onSave={onSaveBookletAddon}
+          />
+        </div>
+      ) : null}
       </div>
       ) : (
       <>
@@ -3309,6 +3378,565 @@ function CatalogPicksBlock({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// Task #579 — PMP 16-page booklet upsell. Mirrors GoodDeedPill's
+// Retail / Qty / Profit / Total disclosure exactly so the row reads as
+// part of the same "Optional · Upsells" family, but swaps the
+// signed-cert preview for a square drag-and-drop artwork tile (booklet
+// art is its own printed cover, NOT the album jacket — different trim,
+// different file). Quantity is one of the four PMP rungs
+// (500 / 1000 / 2000 / 5000) plus an Other input that snaps UP to the
+// next rung in the live cost preview. Vendor cost stays editable
+// post-sale (see memory: vendor-pricing-bypasses-post-sale-lock); only
+// the fan-facing fields respect the partner-permissions lock.
+async function uploadAdminImage(file: File): Promise<string> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const token = getAuthToken();
+  if (!token) throw new Error("Sign out and back in — your session token is missing.");
+  const res = await fetch("/api/admin/upload", {
+    method: "POST",
+    body: fd,
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `Upload failed (${res.status})`);
+  }
+  const { url } = await res.json();
+  return url as string;
+}
+
+function BookletPill({
+  albumId,
+  existing,
+  onSave,
+}: {
+  albumId: string;
+  existing: AlbumAddon | null;
+  onSave: (b: {
+    priceCents: number;
+    active: boolean;
+    minPriceCents: number;
+    plannedQuantity: number | null;
+    artworkUrl?: string | null;
+  }) => void;
+}) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(existing?.active ?? false);
+  const [priceStr, setPriceStr] = useState(
+    existing ? (existing.priceCents / 100).toFixed(2) : "9.99",
+  );
+  const [floorStr, setFloorStr] = useState(
+    existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99",
+  );
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  // Quantity snaps to a PMP rung. "other" lets the operator type a
+  // custom planned-run, which the server snaps UP to the next rung
+  // anyway — we surface the snapped value live via the preview query.
+  const RUNGS = [500, 1000, 2000, 5000] as const;
+  const initialQtyChoice = useMemo<string>(() => {
+    const q = existing?.plannedQuantity ?? null;
+    if (!q) return "500";
+    if (RUNGS.includes(q as any)) return String(q);
+    return "other";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [qtyChoice, setQtyChoice] = useState<string>(initialQtyChoice);
+  const [otherQtyStr, setOtherQtyStr] = useState(
+    initialQtyChoice === "other" && existing?.plannedQuantity
+      ? String(existing.plannedQuantity)
+      : "500",
+  );
+  const resolvedQty =
+    qtyChoice === "other"
+      ? Math.max(1, parseInt(otherQtyStr.replace(/[^0-9]/g, ""), 10) || 0)
+      : parseInt(qtyChoice, 10);
+
+  // Live PMP tier preview — mirrors the GoodDeedPill query shape so
+  // costCents has the same `totalPerUnitCents` field to read from.
+  const { data: preview } = useQuery<{
+    snappedQty: number;
+    totalPerUnitCents: number;
+    runTotalCents: number;
+  }>({
+    queryKey: ["/api/admin/albums", albumId, "booklet-pricing-preview", resolvedQty],
+    queryFn: async () => {
+      const r = await apiRequest(
+        "GET",
+        `/api/admin/albums/${albumId}/booklet-pricing-preview?runQty=${Math.max(1, resolvedQty)}`,
+      );
+      return r.json();
+    },
+    enabled: open,
+  });
+
+  // Artwork — drag/drop or click-to-pick. Optimistic preview URL until
+  // the upload returns the persisted /objects/uploads/<id> path; then
+  // we PUT the addon with the new artworkUrl so the BuySheet thumbnail
+  // updates on next buy-options fetch.
+  const [artworkUrl, setArtworkUrl] = useState<string | null>(existing?.artworkUrl ?? null);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const upload = useMutation({
+    mutationFn: async (file: File) => {
+      const objectUrl = URL.createObjectURL(file);
+      setArtworkUrl(objectUrl);
+      const url = await uploadAdminImage(file);
+      return url;
+    },
+    onSuccess: (url) => {
+      setArtworkUrl(url);
+      // Persist immediately — the artwork edit shouldn't have to wait
+      // for the debounced autosave below (operator could navigate away).
+      onSave({
+        priceCents: parseDollars(priceStr) ?? 0,
+        active,
+        minPriceCents: parseDollars(floorStr) ?? 0,
+        plannedQuantity: resolvedQty > 0 ? resolvedQty : null,
+        artworkUrl: url,
+      });
+      toast({ title: "Booklet artwork uploaded" });
+    },
+    onError: (e: any) => {
+      setArtworkUrl(existing?.artworkUrl ?? null);
+      toast({
+        title: "Couldn't upload artwork",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+  const removeArtwork = () => {
+    setArtworkUrl(null);
+    onSave({
+      priceCents: parseDollars(priceStr) ?? 0,
+      active,
+      minPriceCents: parseDollars(floorStr) ?? 0,
+      plannedQuantity: resolvedQty > 0 ? resolvedQty : null,
+      artworkUrl: null,
+    });
+  };
+
+  const priceCents = useMemo(() => parseDollars(priceStr), [priceStr]);
+  const costCents: number | null =
+    preview?.totalPerUnitCents ?? existing?.costCentsSnapshot ?? null;
+  const ccFeeCents =
+    priceCents !== null ? Math.round(priceCents * 0.029) + 30 : null;
+  const costPerUnitCents =
+    costCents !== null && ccFeeCents !== null ? costCents + ccFeeCents : costCents;
+  const netPerUnitCents =
+    priceCents !== null && costCents !== null && ccFeeCents !== null
+      ? priceCents - costCents - ccFeeCents
+      : null;
+  const canComputeNet = netPerUnitCents !== null;
+  const netTotalCents = canComputeNet ? netPerUnitCents! * resolvedQty : null;
+  const grossTotalCents = priceCents !== null ? priceCents * resolvedQty : null;
+  const totalCents = netTotalCents ?? grossTotalCents;
+  const totalIsLoss = netTotalCents !== null && netTotalCents < 0;
+  const totalLabel =
+    totalCents === null
+      ? "—"
+      : totalIsLoss
+        ? `-${dollars(Math.abs(totalCents))}`
+        : dollars(totalCents);
+  const lossColor = netPerUnitCents !== null && netPerUnitCents < 0;
+  const profitLabel =
+    netPerUnitCents === null
+      ? "—"
+      : netPerUnitCents < 0
+        ? `-${dollars(Math.abs(netPerUnitCents))}`
+        : dollars(netPerUnitCents);
+
+  const storedActive = existing?.active ?? false;
+  const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "9.99";
+  const storedFloor = existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99";
+  const storedQty = existing?.plannedQuantity ?? null;
+  const dirty =
+    active !== storedActive ||
+    priceStr !== storedPrice ||
+    floorStr !== storedFloor ||
+    (resolvedQty || null) !== storedQty;
+  useEffect(() => {
+    if (!dirty) return;
+    const t = setTimeout(() => {
+      const cents = parseDollars(priceStr);
+      if (cents === null) return;
+      onSave({
+        priceCents: cents,
+        active,
+        minPriceCents: parseDollars(floorStr) ?? 0,
+        plannedQuantity: resolvedQty > 0 ? resolvedQty : null,
+        // Don't re-send artworkUrl here — upload/remove mutations own
+        // that field. Sending null on every debounce would clobber an
+        // in-flight upload.
+      });
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, priceStr, floorStr, active, resolvedQty]);
+
+  const snappedQty = preview?.snappedQty ?? resolvedQty;
+  const qtyDisplay =
+    qtyChoice === "other"
+      ? `${resolvedQty.toLocaleString()} (snaps to ${snappedQty.toLocaleString()})`
+      : `${resolvedQty.toLocaleString()}`;
+  const summary = `${active ? "On" : "Off"} · ${qtyDisplay}`;
+
+  const handleFiles = (files: FileList | null) => {
+    if (!files?.[0]) return;
+    upload.mutate(files[0]);
+  };
+
+  return (
+    <div
+      className="rounded-md border border-slate-200 bg-white"
+      data-testid="pill-booklet"
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full min-h-[44px] flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-slate-50 transition-colors"
+        aria-expanded={open}
+        data-testid="button-toggle-booklet-pill"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[13.5px] font-semibold text-slate-900">
+            16-Page Booklet
+          </span>
+          <span
+            className="text-xs text-slate-500 truncate"
+            data-testid="text-booklet-summary"
+          >
+            · {summary}
+          </span>
+        </div>
+        <ChevronDown
+          className={[
+            "w-4 h-4 text-slate-400 transition-transform flex-shrink-0",
+            open ? "rotate-180" : "",
+          ].join(" ")}
+        />
+      </button>
+      {open && (
+        <div className="px-3 pb-3 pt-3 border-t border-slate-100 space-y-4">
+          <div
+            className="flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2.5"
+            data-testid="row-booklet-enable"
+          >
+            <Switch
+              id="toggle-booklet-active"
+              checked={active}
+              onCheckedChange={setActive}
+              data-testid="toggle-booklet-active"
+              aria-label="Offer 16-page booklet on this release"
+            />
+            <label
+              htmlFor="toggle-booklet-active"
+              className="text-sm font-medium text-slate-900 cursor-pointer select-none"
+            >
+              Add 16-Page Booklet (PMP)
+            </label>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5 items-start">
+            {/* LEFT — square drag/drop artwork tile. NOT the album
+                jacket: PMP prints 7.125"×7.125" on 100# gloss, so this
+                file is its own upload. Pencil overlay on hover/touch
+                mirrors the GoodDeed cert tile's affordance; trash
+                button clears artworkUrl. */}
+            <div>
+              <div
+                className={[
+                  "relative w-full aspect-square rounded-md border-2 border-dashed bg-slate-50 overflow-hidden transition-colors",
+                  dragging
+                    ? "border-[color:var(--brand-blue)] bg-[color:var(--brand-blue)]/5"
+                    : "border-slate-300",
+                ].join(" ")}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragging(false);
+                  handleFiles(e.dataTransfer.files);
+                }}
+                data-testid="dropzone-booklet-artwork"
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(e) => handleFiles(e.target.files)}
+                  data-testid="input-booklet-artwork-file"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  aria-label={artworkUrl ? "Replace booklet artwork" : "Upload booklet artwork"}
+                  className="group absolute inset-0 w-full h-full focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]/40"
+                  data-testid="button-booklet-edit-artwork"
+                >
+                  {artworkUrl ? (
+                    <>
+                      <img
+                        src={artworkUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        data-testid="img-booklet-preview"
+                      />
+                      <span
+                        className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 [@media(hover:none)]:bg-black/30 transition-colors pointer-events-none"
+                        aria-hidden
+                      />
+                      <span
+                        className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity pointer-events-none"
+                        aria-hidden
+                      >
+                        <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
+                          <Pencil className="w-4 h-4" />
+                        </span>
+                      </span>
+                    </>
+                  ) : (
+                    <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-slate-500">
+                      <Pencil className="w-5 h-5" aria-hidden />
+                      <span className="text-xs font-medium">
+                        Drop booklet art
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        7.125&quot; × 7.125&quot;, 4/4
+                      </span>
+                    </span>
+                  )}
+                </button>
+                {artworkUrl && (
+                  <IconButton
+                    label="Remove booklet artwork"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeArtwork();
+                    }}
+                    variant="ghost"
+                    size="md"
+                    className="absolute top-2 right-2 !w-8 !h-8 !bg-white/90 hover:!bg-white !text-slate-700 shadow-md ring-1 ring-black/5"
+                    data-testid="button-booklet-remove-artwork"
+                  >
+                    <Trash2 />
+                  </IconButton>
+                )}
+              </div>
+              <div className="mt-2 text-xs text-slate-400 leading-snug">
+                PMP prints 16 pages full-colour on 100# gloss text. Upload a
+                single front-cover image — the interior pages get laid out
+                from your album tracklist + liner notes before press time.
+              </div>
+            </div>
+
+            {/* RIGHT — Retail / Qty / Profit / Total */}
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                    Retail Price
+                  </span>
+                  <InfoTip
+                    label="About retail price"
+                    testId="info-booklet-price"
+                    text="What fans pay per booklet add-on."
+                  />
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-slate-400 text-sm leading-9">$</span>
+                  <div className="flex flex-col">
+                    <input
+                      type="text"
+                      value={priceStr}
+                      onChange={(e) => setPriceStr(e.target.value)}
+                      inputMode="decimal"
+                      className={`${fieldClass} w-32 tabular-nums`}
+                      data-testid="input-booklet-price"
+                      aria-label="Retail price per booklet"
+                    />
+                    <div className="text-xs text-slate-400 mt-1">
+                      Per unit sold to fans.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                    Select Qty
+                  </span>
+                  <InfoTip
+                    label="About booklet quantity"
+                    testId="info-booklet-qty"
+                    text="PMP only quotes 500 / 1000 / 2000 / 5000 runs. Anything else snaps UP to the next rung."
+                  />
+                </div>
+                <Select value={qtyChoice} onValueChange={setQtyChoice}>
+                  <SelectTrigger
+                    className="h-8 w-full text-sm"
+                    data-testid="select-booklet-qty"
+                    aria-label={`Booklet run quantity — currently ${qtyDisplay}`}
+                  >
+                    <span className="truncate">{qtyDisplay}</span>
+                  </SelectTrigger>
+                  <SelectContent className="bg-white text-slate-900 border-slate-200">
+                    <SelectItem value="500">500</SelectItem>
+                    <SelectItem value="1000">1,000</SelectItem>
+                    <SelectItem value="2000">2,000</SelectItem>
+                    <SelectItem value="5000">5,000</SelectItem>
+                    <SelectItem value="other">Other…</SelectItem>
+                  </SelectContent>
+                </Select>
+                {qtyChoice === "other" && (
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={otherQtyStr}
+                    onChange={(e) => setOtherQtyStr(e.target.value)}
+                    className={`${fieldClass} mt-1.5`}
+                    placeholder="e.g. 750 → snaps to 1,000"
+                    aria-label="Booklet run quantity (snaps up to next PMP rung)"
+                    data-testid="input-booklet-other-qty"
+                  />
+                )}
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setBreakdownOpen((o) => !o)}
+                  className="w-full flex items-center justify-between gap-2 py-1.5 -mx-1 px-1 rounded hover:bg-slate-50 transition-colors text-left"
+                  aria-expanded={breakdownOpen}
+                  data-testid="button-toggle-booklet-profit"
+                >
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                      Profit
+                    </span>
+                    <span className="text-xs text-slate-400 truncate">
+                      · Per unit sold
+                    </span>
+                    <ChevronDown
+                      className={[
+                        "w-3.5 h-3.5 text-slate-400 transition-transform flex-shrink-0",
+                        breakdownOpen ? "rotate-180" : "",
+                      ].join(" ")}
+                    />
+                  </span>
+                  <span
+                    className={[
+                      "text-sm font-semibold tabular-nums flex-shrink-0",
+                      lossColor
+                        ? "text-[color:var(--brand-pink)]"
+                        : "text-slate-900",
+                    ].join(" ")}
+                    data-testid="text-booklet-profit"
+                  >
+                    {profitLabel}
+                  </span>
+                </button>
+                {breakdownOpen && (
+                  <div
+                    className="mt-1 ml-1 pl-3 border-l border-slate-200 space-y-1.5 py-1"
+                    data-testid="block-booklet-cost-breakdown"
+                  >
+                    {costCents !== null ? (
+                      <>
+                        <div className="flex items-center justify-between text-xs tabular-nums">
+                          <span className="text-slate-600">
+                            PMP Wholesale ({snappedQty.toLocaleString()} run)
+                          </span>
+                          <span
+                            className="text-slate-900"
+                            data-testid="text-booklet-wholesale"
+                          >
+                            {dollars(costCents)}
+                          </span>
+                        </div>
+                        <div
+                          className="flex items-center justify-between text-xs tabular-nums"
+                          data-testid="row-booklet-cc-fee"
+                        >
+                          <span className="text-slate-600">CC fee</span>
+                          {ccFeeCents !== null ? (
+                            <span
+                              className="text-slate-900"
+                              data-testid="text-booklet-cc-fee"
+                            >
+                              {dollars(ccFeeCents)}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400 italic">
+                              set retail price
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-xs font-semibold border-t border-slate-200 pt-1.5 mt-1 tabular-nums">
+                          <span className="text-slate-700">Cost / unit</span>
+                          <span
+                            className="text-slate-900"
+                            data-testid="text-booklet-cost-per-unit"
+                          >
+                            {dollars(costPerUnitCents!)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs tabular-nums pt-1">
+                          <span className="text-slate-600">Floor</span>
+                          <input
+                            type="text"
+                            value={floorStr}
+                            onChange={(e) => setFloorStr(e.target.value)}
+                            inputMode="decimal"
+                            className={`${fieldClass} w-20 tabular-nums text-right`}
+                            data-testid="input-booklet-floor"
+                            aria-label="Minimum retail price (floor)"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div
+                        className="text-xs text-slate-400 italic"
+                        data-testid="text-booklet-cost-unavailable"
+                      >
+                        Loading PMP pricing…
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between border-t border-slate-200 pt-3 mt-1">
+                <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                  Total
+                </span>
+                <span
+                  className={[
+                    "text-base font-semibold tabular-nums",
+                    totalIsLoss
+                      ? "text-[color:var(--brand-pink)]"
+                      : "text-slate-900",
+                  ].join(" ")}
+                  data-testid="text-booklet-total"
+                >
+                  {totalLabel}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

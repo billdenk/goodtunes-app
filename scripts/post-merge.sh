@@ -1704,3 +1704,26 @@ SQL
 }
 migrate_orders_good_deed_unique dev  "${DATABASE_URL:-}"
 migrate_orders_good_deed_unique prod "${PROD_DATABASE_URL:-}"
+
+# Task #579 — Booklet add-on artwork. The new `booklet` AlbumAddon
+# kind carries its own print-ready cover URL (separate from the
+# album jacket). Add the column on both DBs so a fresh-clone dev
+# never 500s the addon PUT and the publish dev→prod diff stays empty.
+migrate_album_addons_booklet() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping album_addons booklet migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE IF EXISTS album_addons
+  ADD COLUMN IF NOT EXISTS artwork_url text;
+SQL
+  then
+    echo "post-merge: album_addons booklet migration ok on $label"
+  else
+    echo "post-merge: WARNING — album_addons booklet migration failed on $label (continuing)"
+  fi
+}
+migrate_album_addons_booklet dev  "${DATABASE_URL:-}"
+migrate_album_addons_booklet prod "${PROD_DATABASE_URL:-}"

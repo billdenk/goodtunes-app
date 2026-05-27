@@ -424,6 +424,45 @@ export async function seedHellbenderCatalog() {
   }
 }
 
+// ─── PMP booklet add-on (Task #579) ──────────────────────────────────
+//
+// PMP is the only press currently quoting booklets for the GoodTunes
+// catalog. The trim (7.125"×7.125", 16pp, 4/4 on 100# gloss text) suits
+// 7" jackets and cassette J-card sleeves; other formats hide the add-on.
+// The wholesale price ladder is stored here rather than per-press in the
+// DB — only PMP quotes a booklet, so a dedicated column / table would
+// just be empty rows. When MRP/Hellbender add booklet pricing, lift this
+// into a `press_booklet_ladders` table and back-fill PMP from these
+// constants. Source: docs/vendors/pmp.md.
+export const PMP_DOMAIN = "physicalmusicproducts.com";
+export const PMP_BOOKLET_LADDER: ReadonlyArray<{ qty: number; unitCents: number }> = [
+  { qty: 500, unitCents: 407 },   // $2036.27 / 500  ≈ $4.07 ea
+  { qty: 1000, unitCents: 271 },  // $2711.90 / 1000 ≈ $2.71 ea
+  { qty: 2000, unitCents: 202 },  // $4036.06 / 2000 ≈ $2.02 ea
+  { qty: 5000, unitCents: 159 },  // $7965.47 / 5000 ≈ $1.59 ea
+];
+export const PMP_BOOKLET_RUN_TOTALS_CENTS: Readonly<Record<number, number>> = {
+  500: 203627,
+  1000: 271190,
+  2000: 403606,
+  5000: 796547,
+};
+
+/** Snap a planned quantity *up* to the nearest configured booklet rung. */
+export function snapBookletQty(plannedQty: number | null): number {
+  const ladder = PMP_BOOKLET_LADDER;
+  if (!plannedQty || plannedQty <= 0) return ladder[0].qty;
+  for (const r of ladder) if (plannedQty <= r.qty) return r.qty;
+  return ladder[ladder.length - 1].qty;
+}
+
+/** Look up the per-unit booklet wholesale for a planned quantity. */
+export function lookupBookletUnitCents(plannedQty: number | null): number {
+  const snapped = snapBookletQty(plannedQty);
+  const row = PMP_BOOKLET_LADDER.find((r) => r.qty === snapped);
+  return row?.unitCents ?? PMP_BOOKLET_LADDER[PMP_BOOKLET_LADDER.length - 1].unitCents;
+}
+
 // ─── Routes ──────────────────────────────────────────────────────────
 
 const tierBodySchema = z.object({

@@ -34,6 +34,7 @@ import {
   ALBUM_FORMAT_LABEL,
   ALBUM_ADDON_KINDS,
   ALBUM_ADDON_LABEL,
+  BOOKLET_ELIGIBLE_FORMATS,
   type AlbumFormat,
   type AlbumAddonKind,
   type StripeAddressSnapshot,
@@ -262,19 +263,25 @@ async function upsertAddon(input: {
   active: boolean;
   costCentsSnapshot: number | null;
   plannedQuantity: number | null;
+  // Task #579 — booklet add-on carries its own print-ready cover.
+  // `undefined` = leave the existing value alone; explicit `null`
+  // clears the previously-uploaded art.
+  artworkUrl?: string | null;
 }): Promise<AlbumAddon> {
+  const setOnConflict: Record<string, unknown> = {
+    priceCents: input.priceCents,
+    minPriceCents: input.minPriceCents,
+    active: input.active,
+    costCentsSnapshot: input.costCentsSnapshot,
+    plannedQuantity: input.plannedQuantity,
+  };
+  if (input.artworkUrl !== undefined) setOnConflict.artworkUrl = input.artworkUrl;
   const [row] = await db
     .insert(albumAddons)
     .values(input)
     .onConflictDoUpdate({
       target: [albumAddons.albumId, albumAddons.kind],
-      set: {
-        priceCents: input.priceCents,
-        minPriceCents: input.minPriceCents,
-        active: input.active,
-        costCentsSnapshot: input.costCentsSnapshot,
-        plannedQuantity: input.plannedQuantity,
-      },
+      set: setOnConflict,
     })
     .returning();
   return row;
@@ -483,6 +490,18 @@ export function registerCommerceRoutes(app: Express) {
       const claimed = await countSignedCertsClaimed(album.id);
       signedCertSoldOut = claimed >= signedCert.plannedQuantity;
     }
+    // Task #579 — Hide the `booklet` add-on entirely on releases that
+    // don't have a 7" vinyl OR cassette SKU. The trim only fits those
+    // packaging formats; surfacing it on a 12"-only release would be
+    // misleading. Eligibility uses the *active* SKU list above so a
+    // dormant 7" draft can't unlock the booklet for fans.
+    const skuFormats = new Set(skus.map((s) => s.format));
+    const bookletEligible = (BOOKLET_ELIGIBLE_FORMATS as readonly string[]).some(
+      (f) => skuFormats.has(f),
+    );
+    const visibleAddons = addons.filter(
+      (a) => !(a.kind === "booklet" && !bookletEligible),
+    );
     res.json({
       albumId: album.id,
       title: album.title,
@@ -502,14 +521,20 @@ export function registerCommerceRoutes(app: Express) {
         vinylColor: s.vinylColor ?? null,
         jacketUpgrade: (s.jacketUpgrade as JacketUpgrade | null) ?? null,
       })),
-      addons: addons.map((a) => ({
+      addons: visibleAddons.map((a) => ({
         id: a.id,
         kind: a.kind,
         label: ALBUM_ADDON_LABEL[a.kind as AlbumAddonKind] ?? a.kind,
         priceCents: a.priceCents,
         minPriceCents: a.minPriceCents,
+        // Task #579 — booklet renders its own thumbnail in the Buy
+        // sheet (the printed cover, NOT the album jacket). Null on
+        // signed_cert and on booklet rows the artist hasn't dropped
+        // art on yet.
+        artworkUrl: a.artworkUrl ?? null,
       })),
       signedCertSoldOut,
+      bookletEligible,
     });
   });
 
@@ -983,6 +1008,9 @@ export function registerCommerceRoutes(app: Express) {
     // fixed planned quantity. Hard-rejects 0 or negatives so the UI's
     // "Fixed" mode can't silently round down to nothing.
     plannedQuantity: z.number().int().min(1).nullable().optional(),
+    // Task #579 — booklet add-on carries its own print-ready cover.
+    // Optional/null for signed_cert (which inherits the album jacket).
+    artworkUrl: z.string().url().nullable().optional(),
   });
   app.put("/api/admin/albums/:id/addons/:kind", requireAdmin, async (req, res) => {
     const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
@@ -991,10 +1019,28 @@ export function registerCommerceRoutes(app: Express) {
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid add-on" });
     const { getPayoutSettings } = await import("./payouts");
     const settings = await getPayoutSettings();
-    const costSnapshot =
-      parsed.data.kind === "signed_cert"
-        ? (album.payoutCertCentsOverride ?? settings.certCostCents)
-        : null;
+    // Task #579 — Booklet eligibility + cost snapshot. The add-on
+    // only makes sense on releases with a 7" vinyl OR cassette SKU
+    // (trim doesn't suit 12" jackets, CDs don't carry it). The
+    // wholesale cost snapshots from the PMP ladder, snapped UP to
+    // the next planned-quantity rung — so the artist's Profit
+    // readout stays honest if they later edit the planned run.
+    let costSnapshot: number | null = null;
+    if (parsed.data.kind === "signed_cert") {
+      costSnapshot = album.payoutCertCentsOverride ?? settings.certCostCents;
+    } else if (parsed.data.kind === "booklet") {
+      const skus = await listAllSkus(album.id);
+      const eligible = skus.some(
+        (s) => s.active && (BOOKLET_ELIGIBLE_FORMATS as readonly string[]).includes(s.format),
+      );
+      if (!eligible) {
+        return res.status(409).json({
+          message: "Add a 7\" vinyl or cassette SKU before offering a booklet.",
+        });
+      }
+      const { lookupBookletUnitCents } = await import("./pressCatalog");
+      costSnapshot = lookupBookletUnitCents(parsed.data.plannedQuantity ?? null);
+    }
     // Preserve any existing minPriceCents so the Shopify path keeps
     // its per-album floor; default 0 on first save.
     const [existing] = await db
@@ -1010,9 +1056,38 @@ export function registerCommerceRoutes(app: Express) {
       active: parsed.data.active,
       costCentsSnapshot: costSnapshot,
       plannedQuantity: parsed.data.plannedQuantity ?? null,
+      artworkUrl: parsed.data.artworkUrl,
     });
     res.json(row);
   });
+
+  // Task #579 — Booklet wholesale preview, qty-driven. Mirrors the
+  // signed-cert /gooddeed-pricing-preview shape so the admin
+  // BookletPill can scrub the planned run and watch the per-unit
+  // cost / run total update live. Snaps UP to the next PMP rung.
+  app.get(
+    "/api/admin/albums/:id/booklet-pricing-preview",
+    requireAdmin,
+    async (req, res) => {
+      const runQty = Math.max(1, parseInt(String(req.query.runQty ?? "1"), 10) || 1);
+      const { lookupBookletUnitCents, snapBookletQty, PMP_BOOKLET_RUN_TOTALS_CENTS } =
+        await import("./pressCatalog");
+      const snappedQty = snapBookletQty(runQty);
+      const perUnitCents = lookupBookletUnitCents(runQty);
+      const runTotalCents =
+        PMP_BOOKLET_RUN_TOTALS_CENTS[snappedQty] ?? perUnitCents * snappedQty;
+      res.json({
+        runQty,
+        snappedQty,
+        perUnitCents,
+        runTotalCents,
+        // Mirror the field names the GoodDeed preview uses so the
+        // BookletPill can read `totalPerUnitCents` interchangeably.
+        totalPerUnitCents: perUnitCents,
+        vendorDomain: "physicalmusicproducts.com",
+      });
+    },
+  );
   app.delete("/api/admin/albums/:id/addons/:kind", requireAdmin, async (req, res) => {
     await db
       .delete(albumAddons)
@@ -1223,6 +1298,9 @@ export function registerCommerceRoutes(app: Express) {
     signedCert: z.boolean().default(false),
     // Optional override price for the signed cert add-on. Must be >= min.
     signedCertPriceCents: z.number().int().min(0).optional(),
+    // Task #579 — Booklet add-on toggle + optional override price.
+    booklet: z.boolean().default(false),
+    bookletPriceCents: z.number().int().min(0).optional(),
   });
   app.post("/api/checkout/session", async (req, res) => {
     const auth = req.headers.authorization;
@@ -1243,6 +1321,10 @@ export function registerCommerceRoutes(app: Express) {
 
     let addon: AlbumAddon | null = null;
     let addonPriceCents = 0;
+    // Task #579 — Booklet add-on resolves to its own line item, separately
+    // from the signed-cert add-on. Both can be on the same checkout.
+    let bookletAddon: AlbumAddon | null = null;
+    let bookletPriceCents = 0;
     // Task #122 — Reservation id we mint inside the cap-check transaction
     // below. Stamped with the Stripe session id right after the session
     // is created so the webhook can resolve and delete it on payment, and
@@ -1332,6 +1414,43 @@ export function registerCommerceRoutes(app: Express) {
       });
     }
 
+    // Task #579 — Booklet add-on. Eligibility gated by the active SKU
+    // belonging to BOOKLET_ELIGIBLE_FORMATS (7" vinyl or cassette);
+    // otherwise the client shouldn't have offered the toggle, and we
+    // reject defensively here so a hand-crafted POST can't slip a
+    // booklet onto a 12" or CD order.
+    if (parsed.data.booklet) {
+      if (!(BOOKLET_ELIGIBLE_FORMATS as readonly string[]).includes(sku.format)) {
+        return res.status(400).json({
+          message: "Booklet is only available with a 7\" vinyl or cassette.",
+        });
+      }
+      const addons = await listActiveAddons(album.id);
+      bookletAddon = addons.find((x) => x.kind === "booklet") ?? null;
+      if (!bookletAddon) {
+        return res.status(400).json({ message: "Booklet isn't offered on this album" });
+      }
+      bookletPriceCents = parsed.data.bookletPriceCents ?? bookletAddon.priceCents;
+      if (bookletPriceCents < bookletAddon.minPriceCents) {
+        return res.status(400).json({
+          message: `Booklet must be at least $${(bookletAddon.minPriceCents / 100).toFixed(2)}`,
+        });
+      }
+      lineItems.push({
+        price_data: {
+          currency: "usd",
+          unit_amount: bookletPriceCents,
+          product_data: {
+            name: ALBUM_ADDON_LABEL[bookletAddon.kind as AlbumAddonKind] ?? bookletAddon.kind,
+            description: `16-page booklet for ${album.title}`,
+            images: bookletAddon.artworkUrl ? [absoluteUrl(req, bookletAddon.artworkUrl)] : [],
+            metadata: { gt_kind: "addon", gt_sku: bookletAddon.kind, gt_album_id: album.id },
+          },
+        },
+        quantity: 1,
+      });
+    }
+
     // Task #73 — enrich Stripe metadata so the Stripe dashboard already
     // tells artists/labels what sold (skuKind, artistId, labelId,
     // bundleContents) without us having to round-trip our DB on every
@@ -1340,7 +1459,10 @@ export function registerCommerceRoutes(app: Express) {
     // created before we know our internal order id.
     const { classifySkuKind } = await import("./orderDesk");
     const skuKind = classifySkuKind(sku.format);
-    const bundleContents = addon ? `${sku.format}+signed_cert` : sku.format;
+    const bundleParts = [sku.format];
+    if (addon) bundleParts.push("signed_cert");
+    if (bookletAddon) bundleParts.push("booklet");
+    const bundleContents = bundleParts.join("+");
     const enrichedMetadata: Record<string, string> = {
       gt_customer_id: customer.id,
       gt_album_id: album.id,
@@ -1352,6 +1474,7 @@ export function registerCommerceRoutes(app: Express) {
       gt_sku_kind: skuKind,
       gt_bundle_contents: bundleContents,
       gt_signed_cert: addon ? "1" : "0",
+      gt_booklet: bookletAddon ? "1" : "0",
     };
     const returnUrl = `${absoluteOrigin(req)}/welcome?session_id={CHECKOUT_SESSION_ID}`;
     let session: Stripe.Checkout.Session;
@@ -1370,6 +1493,7 @@ export function registerCommerceRoutes(app: Express) {
           metadata: {
             ...enrichedMetadata,
             gt_signed_cert_price: addon ? String(addonPriceCents) : "0",
+            gt_booklet_price: bookletAddon ? String(bookletPriceCents) : "0",
           },
         },
         metadata: enrichedMetadata,

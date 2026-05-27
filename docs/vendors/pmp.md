@@ -45,6 +45,7 @@ Not stated — request from CSR.
 - Default assembly: record into sleeve, top-loaded with jacket opening on the right.
 - Printed inner sleeves: assembled A-side toward operator, top-loaded.
 - Booklets in **multiples of 4 pages** (4, 8, 12, 16…).
+- **16-page booklet** — the only booklet currently offered on GoodTunes as an add-on. Trim **7.125"×7.125"**, **4/4 process** (full colour both sides), **100# gloss text**, saddle-stitched. Selectable on releases that include a 7" vinyl SKU or a cassette SKU (the trim suits a 7" jacket and slips into a cassette J-card sleeve). The artist drag-and-drops a separate print-ready cover on the BookletPill in admin — it is **not** wired off the album jacket.
 - Other packaging options (gatefold, tip-on, widespine, inserts, posters, obi, etching): **not stated — request from CSR.**
 
 ## Color / vinyl options
@@ -60,6 +61,17 @@ PMP issues templates per project via CSR. **No public template gallery.** When a
 
 - Art: artwork file-drop tool (link above).
 - Audio: audio file-drop tool (link above).
+
+## Booklet pricing (16pp, 7.125"×7.125", 4/4, 100# gloss text)
+
+Wholesale ladder seeded in `server/pressCatalog.ts` (`PMP_BOOKLET_LADDER`). The admin **BookletPill** snaps the planned quantity *up* to the nearest rung, so any planned run between rungs prints at the higher rung's per-unit rate.
+
+| Qty   | Run total | Per unit |
+|------:|----------:|---------:|
+|   500 | $2,036.27 |   $4.07  |
+| 1,000 | $2,711.90 |   $2.71  |
+| 2,000 | $4,036.06 |   $2.02  |
+| 5,000 | $7,965.47 |   $1.59  |
 
 ## Turn time
 
