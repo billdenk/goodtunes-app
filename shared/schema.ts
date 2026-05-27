@@ -329,6 +329,16 @@ export const albums = pgTable("albums", {
   // snapshot so the re-fire check doesn't double-send for tiny drifts.
   fulfillmentHeadsUpSentAt: timestamp("fulfillment_heads_up_sent_at"),
   fulfillmentHeadsUpQty: integer("fulfillment_heads_up_qty"),
+  // Task #541 — vinyl press format chosen for the *cut* (independent of
+  // the streaming/digital release). One of the keys in
+  // `shared/vinylFormatRules.ts`: 12_33_single, 12_33_double, 12_45,
+  // 7_45. Null until the artist picks on the Tracks → Vinyl-order view.
+  // Distinct from `physicalFormat` (which is the Sell-panel SKU choice
+  // — single_lp/double_lp/seven_inch/cassette); the cut format here is
+  // a finer-grained pressing decision (33⅓ vs 45 RPM) that drives the
+  // safe-length warnings per side. Defaults to a value derived from
+  // `physicalFormat` if the artist hasn't picked one yet.
+  vinylFormat: text("vinyl_format"),
   ...softDeleteCols,
 }, (t) => ({
   legacyGogoodsIdUniq: uniqueIndex("albums_legacy_gogoods_id_uniq")
@@ -565,6 +575,15 @@ export const songs = pgTable("songs", {
   audioSourceBitDepth: integer("audio_source_bit_depth"),
   audioSourceChannels: integer("audio_source_channels"),
   audioSourceBytes: integer("audio_source_bytes"),
+  // Task #541 — Vinyl-specific track order. `vinylSide` is one of
+  // "A"/"B"/"C"/"D" (depending on the album's `vinylFormat`); `vinylOrder`
+  // is the 1-indexed position WITHIN that side. Both null until the
+  // artist opens the Tracks → Vinyl-order view; the UI then seeds them
+  // from `trackNumber` (digital order) on first edit. Press masters PDF
+  // generation reads these when present, otherwise falls back to
+  // trackNumber so legacy albums keep cutting in digital order.
+  vinylSide: text("vinyl_side"),
+  vinylOrder: integer("vinyl_order"),
   legacyGogoodsId: text("legacy_gogoods_id"),
   ...softDeleteCols,
 }, (t) => ({

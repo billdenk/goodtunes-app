@@ -7555,6 +7555,71 @@
     "snippet": "<div className=\"p-4 text-[12.5px] text-slate-500 inline-flex items-center gap-2\">"
   },
   {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/VinylOrderPanel.tsx",
+    "snippet": "<div className=\"text-[11.5px] uppercase tracking-wider text-slate-500 font-semibold\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/VinylOrderPanel.tsx",
+    "snippet": "<p className=\"text-[12px] text-slate-500 mt-0.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/VinylOrderPanel.tsx",
+    "snippet": "className=\"w-[220px] h-9 text-[12.5px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/VinylOrderPanel.tsx",
+    "snippet": "<p className=\"text-[11.5px] text-slate-500 -mt-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/VinylOrderPanel.tsx",
+    "snippet": "className=\"flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/VinylOrderPanel.tsx",
+    "snippet": "\"w-7 h-7 inline-flex items-center justify-center rounded-full text-[12px] font-bold\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/VinylOrderPanel.tsx",
+    "snippet": "<div className=\"text-[12.5px] font-semibold text-slate-900\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/VinylOrderPanel.tsx",
+    "snippet": "<div className=\"flex items-center gap-2 text-[12px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/VinylOrderPanel.tsx",
+    "snippet": "<div className=\"px-4 py-6 text-center text-[11.5px] text-slate-400\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/VinylOrderPanel.tsx",
+    "snippet": "<div className=\"w-6 text-center text-[11.5px] tabular-nums text-slate-400\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/VinylOrderPanel.tsx",
+    "snippet": "<div className=\"flex-1 min-w-0 text-[13px] text-slate-900 truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/VinylOrderPanel.tsx",
+    "snippet": "<div className=\"text-[11.5px] tabular-nums text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/VinylOrderPanel.tsx",
+    "snippet": "<p className=\"text-[11px] text-slate-400\">"
+  },
+  {
     "rule": "brand-hex-literal",
     "file": "client/src/components/BottomNav.tsx",
     "snippet": "<div className={`transition-all duration-150 ${active ? \"text-[#319ED8]\" : \"text-white/35\"}`}>"
@@ -9453,6 +9518,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "<p className=\"text-slate-500 text-[11.5px] mt-0.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "className=\"ml-2 inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-[11.5px] font-semibold\""
   },
   {
     "rule": "hardcoded-font-size",

@@ -87,6 +87,7 @@ import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
 import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
+import { VinylOrderPanel } from "@/components/admin/VinylOrderPanel";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import Hls from "hls.js";
@@ -190,6 +191,10 @@ interface AlbumFull {
   sellMode?: "direct" | "shopify" | null;
   physicalFormat?: "single_lp" | "double_lp" | "seven_inch" | "cassette" | null;
   sellQuoteLockedAt?: string | null;
+  // Task #541 — Vinyl cut format (12_33_single / 12_33_double / 12_45 /
+  // 7_45). Picked on the Tracks → Vinyl-order view; independent of
+  // physicalFormat (Sell-panel SKU choice). Null until the artist picks.
+  vinylFormat?: string | null;
   songs: SongLite[];
 }
 
@@ -245,6 +250,10 @@ interface SongLite {
   audioSourceBitDepth?: number | null;
   audioSourceChannels?: number | null;
   audioSourceBytes?: number | null;
+  // Task #541 — Vinyl-specific cut position. Null until the artist
+  // touches the Vinyl-order view (we then seed from trackNumber).
+  vinylSide?: "A" | "B" | "C" | "D" | null;
+  vinylOrder?: number | null;
 }
 
 type Tab = "overview" | "tracks" | "bonus" | "sell" | "press" | "shopify";
@@ -1901,6 +1910,14 @@ function TracksPanel({
   const [albumSyncOpen, setAlbumSyncOpen] = useState(false);
   const [lyricsImportOpen, setLyricsImportOpen] = useState(false);
   const [creditsImportOpen, setCreditsImportOpen] = useState(false);
+  // Task #541 — Digital vs Vinyl order view. Defaults to digital; the
+  // segmented toggle lives in the panel header. Vinyl view is hidden
+  // for albums where vinyl makes no sense (cassette + shopify mode
+  // without a physical format) but we keep the toggle available for
+  // direct-mode albums even if the artist hasn't picked a format yet.
+  const [orderView, setOrderView] = useState<"digital" | "vinyl">("digital");
+  const showVinylToggle =
+    album.sellMode === "direct" && album.physicalFormat !== "cassette";
 
   // Album-wide lyrics lookup: walks every track missing lyrics and
   // asks LRCLIB first (plain + synced cues), then falls through to a
@@ -2305,17 +2322,63 @@ function TracksPanel({
       data-testid="panel-tracks"
     >
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
-        <div>
-          <h2 className="text-slate-900 text-[14px] font-bold">Tracks</h2>
-          <p className="text-slate-500 text-[11.5px] mt-0.5">
-            {sorted.length === 0 ? (
-              <>Add your first track below. Press Enter to add and keep going.</>
-            ) : (
-              <>Reorder, edit, and play right from the list.</>
-            )}
-          </p>
+        <div className="flex items-center gap-3 min-w-0">
+          <div>
+            <h2 className="text-slate-900 text-[14px] font-bold">Tracks</h2>
+            <p className="text-slate-500 text-[11.5px] mt-0.5">
+              {sorted.length === 0 ? (
+                <>Add your first track below. Press Enter to add and keep going.</>
+              ) : orderView === "vinyl" ? (
+                <>Drag to set the cut order; we'll warn if a side runs long.</>
+              ) : (
+                <>Reorder, edit, and play right from the list.</>
+              )}
+            </p>
+          </div>
+          {/* Task #541 — Digital vs Vinyl order segmented toggle.
+              Lives next to the Tracks title; only renders when the
+              album sells a physical record (direct mode + non-cassette
+              physical format). Switching to Vinyl hides the digital
+              tracklist and renders VinylOrderPanel underneath. */}
+          {showVinylToggle && sorted.length > 0 && (
+            <div
+              className="ml-2 inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-[11.5px] font-semibold"
+              role="tablist"
+              aria-label="Track ordering view"
+            >
+              <button
+                onClick={() => setOrderView("digital")}
+                role="tab"
+                aria-selected={orderView === "digital"}
+                data-testid="toggle-order-digital"
+                className={
+                  "px-2.5 py-1 rounded-[5px] " +
+                  (orderView === "digital"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700")
+                }
+              >
+                Digital
+              </button>
+              <button
+                onClick={() => setOrderView("vinyl")}
+                role="tab"
+                aria-selected={orderView === "vinyl"}
+                data-testid="toggle-order-vinyl"
+                className={
+                  "px-2.5 py-1 rounded-[5px] inline-flex items-center gap-1 " +
+                  (orderView === "vinyl"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700")
+                }
+              >
+                <Disc3 className="w-3 h-3" />
+                Vinyl
+              </button>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className={cn("flex items-center gap-1.5", orderView === "vinyl" && "opacity-0 pointer-events-none")}>
           <button
             onClick={() => setAdding((v) => !v)}
             className={
@@ -2511,6 +2574,14 @@ function TracksPanel({
       {albumCredits?.production && albumCredits.production.length > 0 && (
         <AlbumProductionCreditsPanel rows={albumCredits.production} albumId={album.id} />
       )}
+      {orderView === "vinyl" && (
+        <VinylOrderPanel
+          albumId={album.id}
+          songs={sorted}
+          vinylFormat={(album.vinylFormat as any) ?? null}
+          physicalFormat={album.physicalFormat ?? null}
+        />
+      )}
       {/* Dock clearance lives as `mb-32` on the OUTER section (above) — a
           margin BELOW the white card, not padding inside it. Earlier the
           clearance was `pb-32` *inside* the card, which made the card
@@ -2518,7 +2589,7 @@ function TracksPanel({
           short (Bill flagged it). Margin-below keeps the card hugging its
           content while still reserving scroll space so the fixed dock
           can't cover the last track or the AddTrackForm. */}
-      <ol>
+      <ol className={orderView === "vinyl" ? "hidden" : undefined}>
         {sorted.map((song, i) => {
           const songCredits = albumCredits?.bySongId[song.id];
           return (

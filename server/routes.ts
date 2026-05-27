@@ -4716,6 +4716,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       "physicalFormat",
       "sellQuoteLockedAt",
       "anticipatedTrackCount",
+      // Task #541 — vinyl press format is a pressing-side decision, not
+      // fan-facing metadata, so it rides through the operational-bypass
+      // path same as physicalFormat.
+      "vinylFormat",
     ]);
     const bodyKeys = Object.keys(req.body ?? {}).filter((k) => k !== "__note");
     const operationalOnly =
@@ -4834,6 +4838,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Unknown physicalFormat" });
       }
       updates.physicalFormat = v;
+    }
+    // Task #541 — vinyl press format. Validated against the shared
+    // lookup so the UI and the route agree on the keyspace; null
+    // clears the pick (album reverts to the digital order on the
+    // press-masters side).
+    if (req.body?.vinylFormat !== undefined) {
+      const { isVinylFormat } = await import("@shared/vinylFormatRules");
+      const v = req.body.vinylFormat;
+      if (v !== null && !isVinylFormat(v)) {
+        return res.status(400).json({ message: "Unknown vinylFormat" });
+      }
+      updates.vinylFormat = v;
     }
     if (req.body?.anticipatedTrackCount !== undefined) {
       const raw = req.body.anticipatedTrackCount;
@@ -9539,6 +9555,131 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         await storage.updateSong(songIds[i], { trackNumber: i + 1 });
       }
       return res.json({ albumId, count: songIds.length });
+    },
+  );
+
+  // Task #541 — Batch-assign vinyl side + per-side order for every song on
+  // an album. Optionally accepts a new `vinylFormat` so the artist can
+  // flip 33⅓ ↔ 45 in the same round-trip as picking a side. Body shape:
+  //   {
+  //     vinylFormat?: "12_33_single" | "12_33_double" | "12_45" | "7_45" | null,
+  //     assignments: [{ songId, vinylSide, vinylOrder }, …]
+  //   }
+  // `vinylSide` may be null to "unassign" a track (excluded from the
+  // press cut); `vinylOrder` is the 1-indexed position within the side
+  // and is also nullable when the song is unassigned. The route doesn't
+  // demand every song appear in `assignments` — missing songs keep
+  // whatever assignment they already have, so the UI can ship a partial
+  // diff if it wants.
+  app.post(
+    "/api/admin/albums/:id/vinyl-order",
+    requireAdmin,
+    async (req, res) => {
+      const albumId = String(req.params.id);
+      const { assignments, vinylFormat } = req.body ?? {};
+      const { isVinylFormat, isVinylSide } = await import(
+        "@shared/vinylFormatRules"
+      );
+      // Task #541 — same partner-permission + post-sale-lock gate as
+      // every other album/song mutation. Vinyl ordering is metadata,
+      // so it gates on `edit_metadata`. Approval-mode would normally
+      // divert to the pending-changes queue, but the queue's patch
+      // schema can't represent a batch song update — treat divert as
+      // a 403 here ("submit edits via the standard Tracks tab").
+      const { gateAlbumRoute, resolveAlbumScope, partnerEditGate } =
+        await import("./auth/partnerPermissions");
+      const albumScope = await resolveAlbumScope(albumId);
+      if (!albumScope)
+        return res.status(404).json({ message: "Album not found" });
+      if (albumScope.scope) {
+        const outcome = await partnerEditGate(
+          req,
+          res,
+          "edit_metadata",
+          albumScope.scope,
+          { albumIdForLock: albumId },
+        );
+        if (outcome === "deny") return;
+        if (outcome === "divert") {
+          return res.status(403).json({
+            message:
+              "Vinyl-order edits require direct edit access — make track changes on the Tracks tab and resubmit when approved.",
+          });
+        }
+      }
+      // Cross-album-mutation guard: every songId in `assignments`
+      // must belong to THIS album. Bulk-load once and reject the
+      // whole request on any mismatch.
+      if (!Array.isArray(assignments)) {
+        return res
+          .status(400)
+          .json({ message: "assignments must be an array" });
+      }
+      const ownedSongs = await storage.getSongsByAlbum(albumId);
+      const ownedIds = new Set(ownedSongs.map((s: any) => String(s.id)));
+      if (vinylFormat !== undefined) {
+        if (vinylFormat !== null && !isVinylFormat(vinylFormat)) {
+          return res.status(400).json({ message: "Unknown vinylFormat" });
+        }
+        await storage.updateAlbum(albumId, { vinylFormat } as any);
+      }
+      for (const a of assignments) {
+        if (!a || typeof a !== "object") continue;
+        const songId = typeof a.songId === "string" ? a.songId : null;
+        if (!songId) {
+          return res
+            .status(400)
+            .json({ message: "assignments[].songId required" });
+        }
+        if (!ownedIds.has(songId)) {
+          return res.status(400).json({
+            message: `Song ${songId} does not belong to album ${albumId}.`,
+          });
+        }
+        const sideRaw = a.vinylSide;
+        if (
+          sideRaw !== null &&
+          sideRaw !== undefined &&
+          !isVinylSide(sideRaw)
+        ) {
+          return res
+            .status(400)
+            .json({ message: "assignments[].vinylSide invalid" });
+        }
+        const orderRaw = a.vinylOrder;
+        let order: number | null = null;
+        if (orderRaw === null || orderRaw === undefined) {
+          order = null;
+        } else {
+          const n = Number(orderRaw);
+          if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1) {
+            return res.status(400).json({
+              message:
+                "assignments[].vinylOrder must be a positive integer or null",
+            });
+          }
+          order = n;
+        }
+        // vinylOrder must be null whenever vinylSide is null (a song
+        // can't have a position within "no side"). Reject rather than
+        // silently coerce so the UI sees what it sent.
+        const sideFinal = sideRaw ?? null;
+        if (sideFinal === null && order !== null) {
+          return res.status(400).json({
+            message: "assignments[].vinylOrder must be null when vinylSide is null",
+          });
+        }
+        if (sideFinal !== null && order === null) {
+          return res.status(400).json({
+            message: "assignments[].vinylOrder is required when vinylSide is set",
+          });
+        }
+        await storage.updateSong(songId, {
+          vinylSide: sideFinal,
+          vinylOrder: order,
+        } as any);
+      }
+      return res.json({ albumId, count: assignments.length });
     },
   );
 
@@ -17518,9 +17659,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // so the plant's preflight runs against what they actually cut.
       const { validateAudioFromSpecs } = await import("./validators/preflight");
       const { rollupStatus } = await import("../shared/uploadValidation");
-      const sorted = [...songs].sort(
-        (a: any, b: any) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0),
+      // Task #541 — prefer the artist's vinyl-side ordering when set,
+      // so a track destined for Side B is checked against Side B's
+      // length budget (and stamped with side="B" on the validation row)
+      // rather than being treated as a single linear program. Falls
+      // back to digital trackNumber when no vinyl ordering is set.
+      const anyVinylAssigned = (songs as any[]).some(
+        (s) => s.vinylSide && s.vinylOrder != null,
       );
+      const sorted = anyVinylAssigned
+        ? [...songs].sort((a: any, b: any) => {
+            const sa = a.vinylSide ?? "Z";
+            const sb = b.vinylSide ?? "Z";
+            if (sa !== sb) return sa.localeCompare(sb);
+            const oa = a.vinylOrder ?? a.trackNumber ?? 0;
+            const ob = b.vinylOrder ?? b.trackNumber ?? 0;
+            return oa - ob;
+          })
+        : [...songs].sort(
+            (a: any, b: any) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0),
+          );
       let validated = 0;
       let missing = 0;
       for (const song of sorted as any[]) {
@@ -17563,7 +17721,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           vinylSize: vinylSize as any,
           rpm: rpm as 33 | 45,
           fileName: `${padded} ${safeTitle}`,
-          side: null,
+          // Task #541 — when the artist has assigned a vinyl side, pin
+          // the per-track "one file per side" check to that side so
+          // plants requiring side-tagging (e.g. Hellbender) pass cleanly.
+          side: (song.vinylSide as string | null) ?? null,
         });
         const extMatch = url.match(/\.(\w+)(?:\?|$)/);
         const ext = extMatch ? extMatch[0] : "";

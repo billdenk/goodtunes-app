@@ -1,0 +1,555 @@
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Disc3, GripVertical } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import {
+  VINYL_FORMAT_RULES,
+  VINYL_FORMATS,
+  type VinylFormat,
+  type VinylSide,
+} from "@shared/vinylFormatRules";
+import { cn } from "@/lib/utils";
+
+// Task #541 — Vinyl-order view. Sits inside the Tracks panel under a
+// segmented toggle (Digital | Vinyl). Drag-and-drop is grouped by
+// physical side; the artist can move tracks within a side or across
+// sides, see live per-side runtime, and gets a non-prescriptive
+// warning when a side runs over the safe-length threshold for the
+// chosen press format. Persists `vinylSide` + `vinylOrder` on each
+// song independently of the digital `trackNumber` so streaming +
+// library reads keep using the digital order.
+
+export interface VinylSongLite {
+  id: string;
+  title: string;
+  trackNumber: number;
+  duration: number;
+  vinylSide?: VinylSide | null;
+  vinylOrder?: number | null;
+}
+
+interface Props {
+  albumId: string;
+  songs: VinylSongLite[];
+  vinylFormat: VinylFormat | null;
+  // Sell-tab format pick — used as a sensible default when the artist
+  // hasn't picked a vinyl-cut format yet.
+  physicalFormat?: "single_lp" | "double_lp" | "seven_inch" | "cassette" | null;
+}
+
+// Translate the Sell-panel format (Single LP / Double LP / 7" / Cassette)
+// into a default vinyl-cut format. Cassette has no vinyl mapping — the
+// panel falls back to single-LP for the default warning thresholds, but
+// the format selector lets the artist pick the actual cut anyway.
+function defaultFormatFor(physical: Props["physicalFormat"]): VinylFormat {
+  switch (physical) {
+    case "double_lp":
+      return "12_33_double";
+    case "seven_inch":
+      return "7_45";
+    case "single_lp":
+    case "cassette":
+    case null:
+    case undefined:
+    default:
+      return "12_33_single";
+  }
+}
+
+function formatRuntime(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(totalSeconds));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, "0")}`;
+}
+
+// Two-row interpretation of "side":
+//   - Working state (per-side ordered arrays) drives the UI.
+//   - Persisted state (vinylSide + vinylOrder on each song) is what
+//     the server stores; we re-derive working state from it on mount
+//     and after a successful save.
+type WorkingState = Record<VinylSide, string[]>;
+
+function deriveWorkingState(
+  songs: VinylSongLite[],
+  sides: readonly VinylSide[],
+): WorkingState {
+  const state: WorkingState = { A: [], B: [], C: [], D: [] };
+  // Bucket songs by their persisted side; unassigned songs go to the
+  // first side so the artist sees the full tracklist on first open.
+  const unassigned: VinylSongLite[] = [];
+  for (const s of songs) {
+    if (s.vinylSide && sides.includes(s.vinylSide as VinylSide)) {
+      state[s.vinylSide as VinylSide].push(s.id);
+    } else {
+      unassigned.push(s);
+    }
+  }
+  // Sort each side by persisted `vinylOrder`, falling back to digital
+  // `trackNumber` (with id as a final tiebreaker for determinism).
+  for (const side of sides) {
+    state[side].sort((a, b) => {
+      const sa = songs.find((s) => s.id === a)!;
+      const sb = songs.find((s) => s.id === b)!;
+      const oa = sa.vinylOrder ?? sa.trackNumber;
+      const ob = sb.vinylOrder ?? sb.trackNumber;
+      if (oa !== ob) return oa - ob;
+      return a.localeCompare(b);
+    });
+  }
+  // Drop unassigned songs into the first side in digital-order. First-
+  // open seeding: matches the spec ("Default vinyl_order from digital
+  // order on first edit").
+  if (unassigned.length > 0) {
+    unassigned.sort((a, b) => a.trackNumber - b.trackNumber);
+    // Balanced auto-split across sides when nothing is assigned and we
+    // have multiple sides — better than dumping everything on Side A.
+    const everyoneUnassigned = unassigned.length === songs.length;
+    if (everyoneUnassigned && sides.length > 1) {
+      const perSide = Math.ceil(unassigned.length / sides.length);
+      let cursor = 0;
+      for (const side of sides) {
+        const slice = unassigned.slice(cursor, cursor + perSide);
+        state[side] = slice.map((s) => s.id);
+        cursor += perSide;
+      }
+    } else {
+      state[sides[0]].push(...unassigned.map((s) => s.id));
+    }
+  }
+  return state;
+}
+
+function workingToAssignments(
+  state: WorkingState,
+  sides: readonly VinylSide[],
+): { songId: string; vinylSide: VinylSide; vinylOrder: number }[] {
+  const out: { songId: string; vinylSide: VinylSide; vinylOrder: number }[] =
+    [];
+  for (const side of sides) {
+    state[side].forEach((songId, i) => {
+      out.push({ songId, vinylSide: side, vinylOrder: i + 1 });
+    });
+  }
+  return out;
+}
+
+function workingsEqual(a: WorkingState, b: WorkingState): boolean {
+  for (const side of ["A", "B", "C", "D"] as VinylSide[]) {
+    const xa = a[side];
+    const xb = b[side];
+    if (xa.length !== xb.length) return false;
+    for (let i = 0; i < xa.length; i++) {
+      if (xa[i] !== xb[i]) return false;
+    }
+  }
+  return true;
+}
+
+export function VinylOrderPanel({
+  albumId,
+  songs,
+  vinylFormat,
+  physicalFormat,
+}: Props) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  // Format defaults to the album's saved pick, or a sensible derive
+  // from the Sell-panel pick when the artist hasn't chosen yet.
+  const effectiveFormat: VinylFormat =
+    vinylFormat ?? defaultFormatFor(physicalFormat);
+  const rule = VINYL_FORMAT_RULES[effectiveFormat];
+  const sides = rule.sides;
+
+  const [working, setWorking] = useState<WorkingState>(() =>
+    deriveWorkingState(songs, sides),
+  );
+  // Fingerprint the server's view of vinyl ordering so failed saves or
+  // any external mutation (not just track-count changes) re-syncs the
+  // local working state. We key on the persisted shape rather than on
+  // `songs` identity — TanStack rebuilds the array reference on every
+  // refetch and would otherwise stomp an in-flight edit when nothing
+  // actually moved on the server.
+  const serverFingerprint = useMemo(() => {
+    return songs
+      .map(
+        (s) =>
+          `${s.id}:${s.vinylSide ?? ""}:${s.vinylOrder ?? ""}:${s.trackNumber}`,
+      )
+      .sort()
+      .join("|");
+  }, [songs]);
+  useEffect(() => {
+    setWorking(deriveWorkingState(songs, sides));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveFormat, serverFingerprint]);
+
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<
+    | { kind: "row"; id: string }
+    | { kind: "side"; side: VinylSide }
+    | null
+  >(null);
+
+  const songsById = useMemo(() => {
+    const m = new Map<string, VinylSongLite>();
+    for (const s of songs) m.set(s.id, s);
+    return m;
+  }, [songs]);
+
+  const saveMut = useMutation({
+    mutationFn: async (next: WorkingState) => {
+      await apiRequest("POST", `/api/admin/albums/${albumId}/vinyl-order`, {
+        assignments: workingToAssignments(next, sides),
+      });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't save vinyl order",
+        description: e?.message ?? "Try again in a moment.",
+        variant: "destructive",
+      });
+      // Roll back to the server's last-known state.
+      qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+    },
+  });
+
+  // Normalize side assignments when switching formats: a 2xLP→1xLP
+  // change drops C/D — those songs migrate onto the last surviving
+  // side (Side B) so we never persist a `vinylSide` the new format
+  // doesn't have.
+  const normalizeForSides = (
+    src: WorkingState,
+    nextSides: readonly VinylSide[],
+  ): WorkingState => {
+    const out: WorkingState = { A: [], B: [], C: [], D: [] };
+    const orphaned: string[] = [];
+    for (const side of ["A", "B", "C", "D"] as VinylSide[]) {
+      if (nextSides.includes(side)) {
+        out[side] = [...src[side]];
+      } else {
+        orphaned.push(...src[side]);
+      }
+    }
+    if (orphaned.length > 0) {
+      const dest = nextSides[nextSides.length - 1];
+      out[dest].push(...orphaned);
+    }
+    return out;
+  };
+
+  const formatMut = useMutation({
+    mutationFn: async (next: VinylFormat) => {
+      const nextSides = VINYL_FORMAT_RULES[next].sides;
+      const normalized = normalizeForSides(working, nextSides);
+      // Persist format + (potentially-rebalanced) assignments in
+      // sequence so a 2xLP→1xLP switch can't leave orphaned C/D rows
+      // in the DB pointing at sides the album no longer has.
+      await apiRequest("PUT", `/api/admin/albums/${albumId}`, {
+        vinylFormat: next,
+      });
+      if (!workingsEqual(normalized, working)) {
+        await apiRequest("POST", `/api/admin/albums/${albumId}/vinyl-order`, {
+          assignments: workingToAssignments(normalized, nextSides),
+        });
+        setWorking(normalized);
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't change format",
+        description: e?.message ?? "Try again in a moment.",
+        variant: "destructive",
+      });
+      qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+    },
+  });
+
+  const commit = (next: WorkingState) => {
+    if (workingsEqual(next, working)) return;
+    setWorking(next);
+    saveMut.mutate(next);
+  };
+
+  // ── DnD ───────────────────────────────────────────────────────────
+  const onDragStart = (id: string) => (e: React.DragEvent) => {
+    setDragId(id);
+    try {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", id);
+    } catch {
+      /* setData can throw if called too late in some browsers */
+    }
+  };
+  const onDragEnd = () => {
+    setDragId(null);
+    setDropTarget(null);
+  };
+  const onRowDragOver = (id: string) => (e: React.DragEvent) => {
+    if (!dragId || dragId === id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropTarget({ kind: "row", id });
+  };
+  const onSideDragOver = (side: VinylSide) => (e: React.DragEvent) => {
+    if (!dragId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropTarget((prev) =>
+      prev?.kind === "row" ? prev : { kind: "side", side },
+    );
+  };
+  const onRowDrop = (targetId: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    const src = dragId;
+    setDragId(null);
+    setDropTarget(null);
+    if (!src || src === targetId) return;
+    moveSong(src, { kind: "row", id: targetId });
+  };
+  const onSideDrop = (side: VinylSide) => (e: React.DragEvent) => {
+    e.preventDefault();
+    const src = dragId;
+    setDragId(null);
+    setDropTarget(null);
+    if (!src) return;
+    moveSong(src, { kind: "side", side });
+  };
+
+  const moveSong = (
+    songId: string,
+    target: { kind: "row"; id: string } | { kind: "side"; side: VinylSide },
+  ) => {
+    const next: WorkingState = {
+      A: [...working.A],
+      B: [...working.B],
+      C: [...working.C],
+      D: [...working.D],
+    };
+    // Remove from current side.
+    for (const side of sides) {
+      const idx = next[side].indexOf(songId);
+      if (idx >= 0) {
+        next[side].splice(idx, 1);
+        break;
+      }
+    }
+    if (target.kind === "side") {
+      next[target.side].push(songId);
+    } else {
+      // Insert before the target row.
+      for (const side of sides) {
+        const idx = next[side].indexOf(target.id);
+        if (idx >= 0) {
+          next[side].splice(idx, 0, songId);
+          break;
+        }
+      }
+    }
+    commit(next);
+  };
+
+  // ── Render helpers ────────────────────────────────────────────────
+  const sideTotalSeconds = (side: VinylSide): number =>
+    working[side].reduce((sum, id) => {
+      const s = songsById.get(id);
+      return sum + (s?.duration ?? 0);
+    }, 0);
+
+  // Non-prescriptive hint: if a side is over the threshold and there
+  // exists a strictly shorter side, suggest moving its longest track to
+  // that lighter side. Only one hint at a time to keep the panel quiet.
+  const suggestion = useMemo<string | null>(() => {
+    const overSide = sides.find(
+      (side) => sideTotalSeconds(side) / 60 > rule.maxMinutesPerSide,
+    );
+    if (!overSide) return null;
+    const longestId = [...working[overSide]].sort((a, b) => {
+      const sa = songsById.get(a)?.duration ?? 0;
+      const sb = songsById.get(b)?.duration ?? 0;
+      return sb - sa;
+    })[0];
+    const longest = longestId ? songsById.get(longestId) : null;
+    if (!longest) return null;
+    const lighter = sides
+      .filter((s) => s !== overSide)
+      .map((s) => ({ side: s, total: sideTotalSeconds(s) }))
+      .sort((a, b) => a.total - b.total)[0];
+    if (!lighter) return null;
+    if (lighter.total >= sideTotalSeconds(overSide)) return null;
+    return `Side ${overSide} is over the safe length. Consider moving “${longest.title}” (${formatRuntime(longest.duration)}) to Side ${lighter.side}.`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [working, sides, rule, songsById]);
+
+  return (
+    <div className="p-5 space-y-5" data-testid="panel-vinyl-order">
+      {/* Format selector + summary */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[11.5px] uppercase tracking-wider text-slate-500 font-semibold">
+            Vinyl format
+          </div>
+          <p className="text-[12px] text-slate-500 mt-0.5">
+            Sides + safe-length thresholds depend on the cut. Plays in the
+            app keep using the digital order.
+          </p>
+        </div>
+        <Select
+          value={effectiveFormat}
+          onValueChange={(v) => formatMut.mutate(v as VinylFormat)}
+        >
+          <SelectTrigger
+            className="w-[220px] h-9 text-[12.5px]"
+            data-testid="select-vinyl-format"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {VINYL_FORMATS.map((f) => (
+              <SelectItem key={f} value={f} data-testid={`option-vinyl-format-${f}`}>
+                {VINYL_FORMAT_RULES[f].label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {!vinylFormat && (
+        <p className="text-[11.5px] text-slate-500 -mt-2">
+          Using a default based on your Sell-panel pick. Choose a format
+          above to lock it in.
+        </p>
+      )}
+
+      {suggestion && (
+        <div
+          className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900"
+          data-testid="banner-vinyl-suggestion"
+        >
+          <Disc3 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <div>{suggestion}</div>
+        </div>
+      )}
+
+      {/* Per-side groups */}
+      <div className="space-y-4">
+        {sides.map((side) => {
+          const totalSec = sideTotalSeconds(side);
+          const overBudget = totalSec / 60 > rule.maxMinutesPerSide;
+          const ids = working[side];
+          return (
+            <div
+              key={side}
+              className={cn(
+                "rounded-xl border bg-white",
+                overBudget ? "border-amber-300" : "border-slate-200",
+                dropTarget?.kind === "side" && dropTarget.side === side
+                  ? "ring-2 ring-[var(--brand-blue)]/30"
+                  : "",
+              )}
+              onDragOver={onSideDragOver(side)}
+              onDrop={onSideDrop(side)}
+              data-testid={`vinyl-side-${side}`}
+            >
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={cn(
+                      "w-7 h-7 inline-flex items-center justify-center rounded-full text-[12px] font-bold",
+                      overBudget
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-slate-100 text-slate-700",
+                    )}
+                  >
+                    {side}
+                  </div>
+                  <div className="text-[12.5px] font-semibold text-slate-900">
+                    Side {side}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-[12px]">
+                  <span
+                    className={cn(
+                      "tabular-nums",
+                      overBudget ? "text-amber-800 font-semibold" : "text-slate-600",
+                    )}
+                    data-testid={`text-side-runtime-${side}`}
+                  >
+                    {formatRuntime(totalSec)} / {rule.maxMinutesPerSide}:00 max
+                  </span>
+                  {overBudget && (
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                  )}
+                </div>
+              </div>
+
+              {ids.length === 0 ? (
+                <div className="px-4 py-6 text-center text-[11.5px] text-slate-400">
+                  Drop a track here to put it on Side {side}.
+                </div>
+              ) : (
+                <ol>
+                  {ids.map((id, i) => {
+                    const song = songsById.get(id);
+                    if (!song) return null;
+                    const isDragging = dragId === id;
+                    const isDropTarget =
+                      dropTarget?.kind === "row" && dropTarget.id === id;
+                    return (
+                      <li
+                        key={id}
+                        draggable
+                        onDragStart={onDragStart(id)}
+                        onDragEnd={onDragEnd}
+                        onDragOver={onRowDragOver(id)}
+                        onDrop={onRowDrop(id)}
+                        className={cn(
+                          "flex items-center gap-3 px-4 py-2.5 border-t border-slate-100 cursor-grab active:cursor-grabbing select-none",
+                          i === 0 && "border-t-0",
+                          isDragging && "opacity-40",
+                          isDropTarget && "bg-[var(--brand-blue)]/5",
+                        )}
+                        data-testid={`vinyl-row-${id}`}
+                      >
+                        <GripVertical className="w-4 h-4 text-slate-300 shrink-0" />
+                        <div className="w-6 text-center text-[11.5px] tabular-nums text-slate-400">
+                          {i + 1}
+                        </div>
+                        <div className="flex-1 min-w-0 text-[13px] text-slate-900 truncate">
+                          {song.title}
+                        </div>
+                        <div className="text-[11.5px] tabular-nums text-slate-500">
+                          {formatRuntime(song.duration)}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-[11px] text-slate-400">
+        Thresholds are industry defaults — Bill will confirm the exact
+        safe-length per format with the press vendors. The digital order
+        on the main Tracks list is unchanged.
+      </p>
+    </div>
+  );
+}
