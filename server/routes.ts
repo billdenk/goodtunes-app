@@ -13418,18 +13418,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { registerPartnerDashboardRoutes } = await import("./partnerDashboard");
   await registerPartnerDashboardRoutes(app);
 
-  // ─── Task #521 — Combined partner search for the Reports "Viewing as"
-  // combobox. Returns labels + artists in one shot so the super-admin
-  // can type a name without first picking a Kind. Only the two kinds
-  // requireReportScope honors today (label, artist) are returned —
-  // expanding to non-profit/etc. requires extending requireReportScope
-  // first. Capped at ~20 rows per kind.
+  // ─── Task #521 / #524 — Combined partner search for the Reports
+  // "Viewing as" combobox. Returns labels + artists + non-profits in
+  // one shot so the super-admin can type a name without first picking
+  // a Kind. The kinds returned must stay in lock-step with
+  // requireReportScope (see server/auth/roles.ts). Capped at ~20 rows
+  // per kind.
   app.get("/api/admin/partner-search", requireAdmin, async (req, res) => {
     const q = String(req.query.q || "").trim().toLowerCase();
     const LIMIT = 20;
-    const [labelsAll, peopleAll] = await Promise.all([
+    const [labelsAll, peopleAll, nonProfitsAll] = await Promise.all([
       storage.getLabels(),
       storage.getPeople(),
+      // searchNonProfitsAdmin already honors lower(name) LIKE matching;
+      // pass empty string + a generous limit so we get the unfiltered
+      // top slice when q is empty, otherwise the matched rows.
+      storage.searchNonProfitsAdmin(q, LIMIT),
     ]);
     const matchLabel = (name: string) => !q || name.toLowerCase().includes(q);
     const labelRows = labelsAll
@@ -13452,6 +13456,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         secondary: null,
         imageUrl: p.photoUrl || null,
       }));
+    const nonProfitRows = nonProfitsAll.map((o) => ({
+      id: o.id,
+      kind: "non_profit" as const,
+      name: o.name,
+      secondary: "Non-profit",
+      imageUrl: null,
+    }));
     // Interleave so exact-prefix matches rank first regardless of kind.
     const score = (name: string) => {
       const n = name.toLowerCase();
@@ -13460,7 +13471,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (n.startsWith(q)) return 1;
       return 2;
     };
-    const rows = [...labelRows, ...artistRows]
+    const rows = [...labelRows, ...artistRows, ...nonProfitRows]
       .sort((a, b) => score(a.name) - score(b.name) || a.name.localeCompare(b.name))
       .slice(0, LIMIT);
     res.json({ results: rows });

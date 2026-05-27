@@ -76,11 +76,15 @@ export function requireRole(...roles: AdminRole[]) {
 // (kind, id) tuple so every partner sees only their own catalogue.
 
 export interface PartnerScope extends UserRoleInfo {
-  // When super_admin uses ?asPartner=<id>&asPartnerKind=label|artist
+  // When super_admin uses ?asPartner=<id>&asPartnerKind=label|artist|non_profit
   // these are populated and the report query filters as if the caller
   // were that partner. The role itself stays "super_admin" so we know
   // not to demote them mid-request.
-  viewAs?: { kind: "label" | "artist"; id: string };
+  //
+  // Task #524 — non_profit was added so super-admins can also view the
+  // Reports surface from a non-profit's perspective (Referrals tab is
+  // the relevant one; album-scoped tabs gate out for orgs).
+  viewAs?: { kind: "label" | "artist" | "non_profit"; id: string };
 }
 
 let roleColumnsKnownToExist: boolean | null = null;
@@ -121,7 +125,10 @@ export async function resolveReportScope(req: Request): Promise<PartnerScope | n
   if (scope.role === "super_admin") {
     const asPartner = String(req.query.asPartner || "").trim();
     const asKind = String(req.query.asPartnerKind || "").trim();
-    if (asPartner && (asKind === "label" || asKind === "artist")) {
+    if (
+      asPartner &&
+      (asKind === "label" || asKind === "artist" || asKind === "non_profit")
+    ) {
       return { ...scope, viewAs: { kind: asKind, id: asPartner } };
     }
   }
@@ -137,9 +144,33 @@ export async function requireReportScope(req: Request, res: Response, next: Next
 
 // Effective (kind, id) the report should filter by. Returns null when
 // the caller is super_admin with no asPartner — i.e. "see everything".
+// Non-profit impersonation returns null here because orgs don't own
+// albums; album-scoped reports should treat it as an empty cohort
+// (see `effectiveOrgId` + resolveScope in reports/index.ts).
 export function effectiveScopeFilter(scope: PartnerScope): { kind: "label" | "artist"; id: string } | null {
-  if (scope.viewAs) return scope.viewAs;
+  if (scope.viewAs) {
+    const v = scope.viewAs;
+    if (v.kind === "label") return { kind: "label", id: v.id };
+    if (v.kind === "artist") return { kind: "artist", id: v.id };
+    return null;
+  }
   if (scope.role === "label" && scope.roleScopeId) return { kind: "label", id: scope.roleScopeId };
   if (scope.role === "artist" && scope.roleScopeId) return { kind: "artist", id: scope.roleScopeId };
+  return null;
+}
+
+// True when the caller's effective scope is a non-profit (real role
+// or super_admin impersonation). Reports that are album-scoped should
+// treat this as an empty cohort; the Referrals tab uses `effectiveOrgId`
+// to pull the referred-artist cohort instead.
+export function isOrgScope(scope: PartnerScope): boolean {
+  if (scope.viewAs?.kind === "non_profit") return true;
+  return scope.role === "non_profit" || scope.role === ("org" as AdminRole);
+}
+
+// Effective non-profit org id for the caller (impersonation > own role).
+export function effectiveOrgId(scope: PartnerScope): string | null {
+  if (scope.viewAs?.kind === "non_profit") return scope.viewAs.id;
+  if (isOrgScope(scope)) return scope.roleScopeId;
   return null;
 }

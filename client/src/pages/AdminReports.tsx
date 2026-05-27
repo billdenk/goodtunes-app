@@ -25,7 +25,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Spinner } from "@/components/ui/Spinner";
-import { X, Search, User, Tag } from "lucide-react";
+import { X, Search, User, Tag, Heart } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -93,6 +93,8 @@ function useDateRange() {
   return { from: range.from, to: range.to, setFrom, setTo };
 }
 
+type PartnerKind = "label" | "artist" | "non_profit";
+
 function buildQs(from: string, to: string, asPartner: string, asKind: string): string {
   const p = new URLSearchParams({ from, to });
   if (asPartner) {
@@ -103,14 +105,14 @@ function buildQs(from: string, to: string, asPartner: string, asKind: string): s
 }
 
 interface ScopeInfo {
-  role: "super_admin" | "admin" | "label" | "artist" | "org" | "manufacturer" | "fulfillment";
+  role: "super_admin" | "admin" | "label" | "artist" | "org" | "non_profit" | "manufacturer" | "fulfillment";
   roleScopeId: string | null;
-  viewAs: { kind: "label" | "artist"; id: string } | null;
+  viewAs: { kind: PartnerKind; id: string } | null;
 }
 
 interface PartnerSearchResult {
   id: string;
-  kind: "label" | "artist";
+  kind: PartnerKind;
   name: string;
   secondary: string | null;
   imageUrl: string | null;
@@ -119,7 +121,7 @@ interface PartnerSearchResult {
 export function AdminReports() {
   const { from, to, setFrom, setTo } = useDateRange();
   const [asPartner, setAsPartner] = useState("");
-  const [asKind, setAsKind] = useState<"label" | "artist">("label");
+  const [asKind, setAsKind] = useState<PartnerKind>("label");
   const [asPartnerName, setAsPartnerName] = useState("");
   const [asPartnerImageUrl, setAsPartnerImageUrl] = useState<string | null>(null);
   const qs = useMemo(() => buildQs(from, to, asPartner, asKind), [from, to, asPartner, asKind]);
@@ -135,8 +137,17 @@ export function AdminReports() {
   // funnels, ops health, PostHog embeds — but NOT payout reconciliation
   // or the raw event explorer (super_admin only).
   const isAdmin = (scope?.role === "super_admin" || scope?.role === "admin") && !scope.viewAs;
-  const isOrg = scope?.role === "org";
-  const showReferrals = isOrg || scope?.role === "artist" || isSuper;
+  // Non-profit perspective: either the caller is themselves a non-profit
+  // partner, or super_admin is impersonating one via the Viewing-as
+  // combobox (Task #524). Album-scoped tabs (sales / plays / payouts /
+  // redemption / fans / map) don't apply for orgs — they only see
+  // Referrals — so we gate the tab row on this flag.
+  const isOrgView =
+    scope?.role === "org" ||
+    scope?.role === "non_profit" ||
+    scope?.viewAs?.kind === "non_profit";
+  const showAlbumScopedTabs = !isOrgView;
+  const showReferrals = isOrgView || scope?.role === "artist" || isSuper;
 
   // Task #145 — Dashboard KPI tiles deep-link here as
   // `/admin/reports?tab=<name>&from=…&to=…`. We read `tab` once on
@@ -192,12 +203,12 @@ export function AdminReports() {
         <Tabs defaultValue={initialTab} className="w-full">
           <div className="border-b border-slate-200 -mx-1 overflow-x-auto">
             <TabsList className="bg-transparent border-0 p-0 h-auto gap-6 px-1 flex-nowrap justify-start rounded-none">
-              <ReportTab value="sales" testId="tab-sales">Sales</ReportTab>
-              <ReportTab value="plays" testId="tab-plays">Plays &amp; GoodSync</ReportTab>
-              <ReportTab value="payouts" testId="tab-payouts">Payouts</ReportTab>
-              <ReportTab value="redemption" testId="tab-redemption">Shopify redemption</ReportTab>
-              <ReportTab value="fans" testId="tab-fans">Top fans</ReportTab>
-              <ReportTab value="map" testId="tab-map">Fan map</ReportTab>
+              {showAlbumScopedTabs && <ReportTab value="sales" testId="tab-sales">Sales</ReportTab>}
+              {showAlbumScopedTabs && <ReportTab value="plays" testId="tab-plays">Plays &amp; GoodSync</ReportTab>}
+              {showAlbumScopedTabs && <ReportTab value="payouts" testId="tab-payouts">Payouts</ReportTab>}
+              {showAlbumScopedTabs && <ReportTab value="redemption" testId="tab-redemption">Shopify redemption</ReportTab>}
+              {showAlbumScopedTabs && <ReportTab value="fans" testId="tab-fans">Top fans</ReportTab>}
+              {showAlbumScopedTabs && <ReportTab value="map" testId="tab-map">Fan map</ReportTab>}
               {showReferrals && (
                 <ReportTab value="referrals" testId="tab-referrals">Referrals</ReportTab>
               )}
@@ -211,12 +222,12 @@ export function AdminReports() {
             </TabsList>
           </div>
 
-          <TabsContent value="sales"><SalesTab qs={qs} /></TabsContent>
-          <TabsContent value="plays"><PlaysTab qs={qs} /></TabsContent>
-          <TabsContent value="payouts"><PayoutsTab qs={qs} /></TabsContent>
-          <TabsContent value="redemption"><RedemptionTab qs={qs} /></TabsContent>
-          <TabsContent value="fans"><TopFansTab qs={qs} /></TabsContent>
-          <TabsContent value="map"><FanMapTab qs={qs} /></TabsContent>
+          {showAlbumScopedTabs && <TabsContent value="sales"><SalesTab qs={qs} /></TabsContent>}
+          {showAlbumScopedTabs && <TabsContent value="plays"><PlaysTab qs={qs} /></TabsContent>}
+          {showAlbumScopedTabs && <TabsContent value="payouts"><PayoutsTab qs={qs} /></TabsContent>}
+          {showAlbumScopedTabs && <TabsContent value="redemption"><RedemptionTab qs={qs} /></TabsContent>}
+          {showAlbumScopedTabs && <TabsContent value="fans"><TopFansTab qs={qs} /></TabsContent>}
+          {showAlbumScopedTabs && <TabsContent value="map"><FanMapTab qs={qs} /></TabsContent>}
           {showReferrals && <TabsContent value="referrals"><ReferralsTab qs={qs} /></TabsContent>}
           {isAdmin && <TabsContent value="overview"><OverviewTab qs={qs} /></TabsContent>}
           {isAdmin && <TabsContent value="revenue"><RevenueTab qs={qs} /></TabsContent>}
@@ -262,7 +273,7 @@ function PartnerThumb({
 }: {
   imageUrl: string | null;
   name: string;
-  kind: "label" | "artist";
+  kind: PartnerKind;
   size?: number;
 }) {
   const rounded = kind === "artist" ? "rounded-full" : "rounded-md";
@@ -294,9 +305,9 @@ function PartnerThumb({
   );
 }
 
-function PartnerKindChip({ kind }: { kind: "label" | "artist" }) {
-  const Icon = kind === "label" ? Tag : User;
-  const text = kind === "label" ? "Label" : "Artist";
+function PartnerKindChip({ kind }: { kind: PartnerKind }) {
+  const Icon = kind === "label" ? Tag : kind === "artist" ? User : Heart;
+  const text = kind === "label" ? "Label" : kind === "artist" ? "Artist" : "Non-profit";
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">
       <Icon className="w-3 h-3" />
@@ -316,7 +327,7 @@ function ViewingAsControl({
   asPartner: string;
   asPartnerName: string;
   asPartnerImageUrl: string | null;
-  asKind: "label" | "artist";
+  asKind: PartnerKind;
   onPick: (r: PartnerSearchResult) => void;
   onClear: () => void;
 }) {
@@ -393,7 +404,7 @@ function ViewingAsControl({
           >
             <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
             <span className="flex-1 truncate">
-              Search labels and artists…
+              Search labels, artists, and non-profits…
             </span>
           </button>
         </PopoverTrigger>
@@ -413,7 +424,7 @@ function ViewingAsControl({
             ].join(" ")}
           >
             <CommandInput
-              placeholder="Search labels and artists…"
+              placeholder="Search labels, artists, and non-profits…"
               value={query}
               onValueChange={setQuery}
               className="text-slate-900 placeholder:text-slate-400"
@@ -431,7 +442,7 @@ function ViewingAsControl({
                     <div className="px-3 py-4 text-xs text-slate-500">
                       {query.trim()
                         ? `No partners matching "${query.trim()}".`
-                        : "Start typing to search labels and artists."}
+                        : "Start typing to search labels, artists, and non-profits."}
                     </div>
                   </CommandEmpty>
                   {results.length > 0 && (

@@ -11,7 +11,7 @@ import {
 } from "@shared/schema";
 import { and, eq, gte, lte, inArray, sql, desc, isNotNull, or } from "drizzle-orm";
 import type { PartnerScope } from "../auth/roles";
-import { effectiveScopeFilter } from "../auth/roles";
+import { effectiveScopeFilter, effectiveOrgId, isOrgScope } from "../auth/roles";
 
 /**
  * Task #80 — Partner reporting v1.
@@ -48,6 +48,19 @@ interface ScopeResolution {
 }
 
 async function resolveScope(ctx: ReportContext): Promise<ScopeResolution> {
+  // Non-profit scope (real role or super_admin impersonation) doesn't
+  // own albums — treat as an empty cohort so album-scoped tabs show
+  // empty data rather than a god-view. Referrals tab resolves its own
+  // cohort via `resolveOrgScope` below.
+  if (isOrgScope(ctx.scope)) {
+    const orgId = effectiveOrgId(ctx.scope);
+    let orgName: string | null = null;
+    if (orgId) {
+      const [org] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, orgId));
+      orgName = org?.name ?? null;
+    }
+    return { albumIds: [], referredArtistIds: [], perUnitCents: 0, label: orgName ? `Non-profit · ${orgName}` : "Non-profit" };
+  }
   const eff = effectiveScopeFilter(ctx.scope);
   // super_admin with no impersonation → see everything.
   if (!eff) {
@@ -91,18 +104,21 @@ async function resolveScope(ctx: ReportContext): Promise<ScopeResolution> {
 }
 
 async function resolveOrgScope(ctx: ReportContext): Promise<{ orgId: string | null; referredArtistIds: string[]; perUnitCents: number; orgName: string | null }> {
-  if (ctx.scope.role !== "org" || !ctx.scope.roleScopeId) {
+  // Honors both a real non-profit role and a super_admin viewing as
+  // a non-profit (Task #524).
+  const orgId = effectiveOrgId(ctx.scope);
+  if (!orgId) {
     return { orgId: null, referredArtistIds: [], perUnitCents: 0, orgName: null };
   }
   const referred = await db
     .select({ id: people.id, perUnit: people.referrerPerUnitCents })
     .from(people)
-    .where(eq(people.referredByOrgId, ctx.scope.roleScopeId));
-  const [org] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, ctx.scope.roleScopeId));
+    .where(eq(people.referredByOrgId, orgId));
+  const [org] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, orgId));
   // Use the highest single per-unit so the report header can show a
   // consistent rate; individual rows still compute their own.
   const perUnit = referred[0]?.perUnit ?? 100;
-  return { orgId: ctx.scope.roleScopeId, referredArtistIds: referred.map((r) => r.id), perUnitCents: perUnit, orgName: org?.name ?? null };
+  return { orgId, referredArtistIds: referred.map((r) => r.id), perUnitCents: perUnit, orgName: org?.name ?? null };
 }
 
 function dateBucket(d: Date): string {
@@ -407,7 +423,7 @@ export async function referralEarnings(ctx: ReportContext) {
   let perUnit = 100;
   let scopeLabel = "Referrals";
 
-  if (ctx.scope.role === "org" && ctx.scope.roleScopeId) {
+  if (isOrgScope(ctx.scope)) {
     const o = await resolveOrgScope(ctx);
     cohort = o.referredArtistIds;
     perUnit = o.perUnitCents;
