@@ -2,6 +2,7 @@ import { useState, useRef, useMemo, useEffect } from "react";
 import { usePlayer } from "@/context/PlayerContext";
 import { formatDuration } from "@/data/musicData";
 import { LyricsIcon } from "@/components/ui/LyricsIcon";
+import { LyricsGapDots } from "@/components/LyricsGapDots";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { track } from "@/lib/analytics";
 
@@ -19,29 +20,86 @@ type SyncedLine = {
   isHeader: boolean;
   isEmpty: boolean;
   time: number | null;
+  // Instrumental gap row — when true, the renderer draws LyricsGapDots
+  // instead of a lyric line. `time` is the gap start (when the dots
+  // become active) and `gapEnd` is the gap end (when the next cue
+  // starts, or duration for a trailing outro gap). Only emitted when
+  // we have real cue timing data (syncedLyrics with endMs); the plain-
+  // lyrics fallback never produces gap rows so those tracks render
+  // exactly as before.
+  isGap?: boolean;
+  gapEnd?: number;
 };
 
 function buildSyncedLines(
   lyrics: string | undefined,
   duration: number,
-  syncedLyrics?: { timeMs: number; text: string }[] | null,
+  syncedLyrics?: { timeMs: number; endMs?: number; text: string }[] | null,
 ): SyncedLine[] {
   // Preferred path: real per-line timing from an uploaded .vtt file. Each
   // cue becomes one rendered line with seconds-precision time (the overlay
   // compares to currentTime in seconds). Section-header detection still
   // runs so [Verse 1]-style cues render dimmed + un-tappable.
   if (syncedLyrics && syncedLyrics.length > 0) {
-    return syncedLyrics.map((cue) => {
+    const out: SyncedLine[] = [];
+    // Same gap-detection rule the admin GoodSync preview uses:
+    // measure silence AFTER the previous cue's endMs (not from its
+    // start), threshold ≥3s, and synthesize an estimated end when
+    // endMs is missing (older synced data without STT timing) so
+    // obvious instrumentals still get dots. Intro gap counts: prevEnd
+    // is 0 before the first cue. Trailing gap is handled after the
+    // loop using `duration`.
+    for (let i = 0; i < syncedLyrics.length; i++) {
+      const cue = syncedLyrics[i];
+      const cueTime = cue.timeMs / 1000;
+      const prevCue = i === 0 ? null : syncedLyrics[i - 1];
+      const prevEnd = !prevCue
+        ? 0
+        : prevCue.endMs != null
+          ? prevCue.endMs / 1000
+          : Math.min(cueTime - 0.3, prevCue.timeMs / 1000 + 3);
+      const silence = cueTime - prevEnd;
+      if (silence >= 3) {
+        out.push({
+          text: "",
+          isHeader: false,
+          isEmpty: false,
+          isGap: true,
+          time: prevEnd,
+          gapEnd: cueTime,
+        });
+      }
       const text = cue.text;
       const trimmed = text.trim();
       const isHeader = /^\[.*\]$/.test(trimmed);
-      return {
+      out.push({
         text,
         isHeader,
         isEmpty: trimmed === "",
-        time: isHeader ? null : cue.timeMs / 1000,
-      };
-    });
+        time: isHeader ? null : cueTime,
+      });
+    }
+    // Trailing outro gap — only if we know the song duration and the
+    // last cue's end (or our estimate of it).
+    if (duration > 0) {
+      const last = syncedLyrics[syncedLyrics.length - 1];
+      const lastEnd =
+        last.endMs != null
+          ? last.endMs / 1000
+          : Math.min(duration, last.timeMs / 1000 + 3);
+      const trailing = duration - lastEnd;
+      if (trailing >= 3) {
+        out.push({
+          text: "",
+          isHeader: false,
+          isEmpty: false,
+          isGap: true,
+          time: lastEnd,
+          gapEnd: duration,
+        });
+      }
+    }
+    return out;
   }
   // Fallback: distribute the plain-text lyrics evenly across duration.
   if (!lyrics || !duration || duration <= 0) {
@@ -608,6 +666,30 @@ export function Player() {
             >
               <div className="flex flex-col gap-3">
                 {syncedLines.map((line, i) => {
+                  if (line.isGap) {
+                    const gapStart = line.time as number;
+                    const gapEnd = line.gapEnd as number;
+                    const gapLen = Math.max(0.0001, gapEnd - gapStart);
+                    const dotState: "upcoming" | "active" | "past" =
+                      currentTime >= gapEnd
+                        ? "past"
+                        : currentTime >= gapStart
+                          ? "active"
+                          : "upcoming";
+                    const gapProgress =
+                      dotState === "active"
+                        ? Math.max(0, Math.min(1, (currentTime - gapStart) / gapLen))
+                        : 0;
+                    return (
+                      <div
+                        key={i}
+                        ref={(el) => { lyricLineRefs.current[i] = el; }}
+                        data-testid={`lyric-gap-${i}`}
+                      >
+                        <LyricsGapDots state={dotState} progress={gapProgress} />
+                      </div>
+                    );
+                  }
                   if (line.isEmpty) {
                     return <div key={i} className="h-2" aria-hidden />;
                   }
