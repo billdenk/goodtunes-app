@@ -5851,19 +5851,25 @@ function TrackRow({
             Upload master
           </button>
         )}
-        {!expanded && (
-          <span
-            className="text-slate-400 text-[12px] tabular-nums flex-shrink-0"
-            data-testid={`text-track-duration-${song.id}`}
+        {/* Hover-only cluster — Mux state pill + retry countdown +
+            "Retry now" button + per-row master download. Hidden at rest
+            so the row reads like Apple Music (number · title · duration
+            · chevron); revealed on row hover / focus-within, with the
+            same touch-fallback pattern the P/L/C chips use so iPad
+            operators can still see and tap the affordances. The
+            inline-amber Upload-master chip above keeps showing at rest
+            because rows without a master have no Mux pill or download
+            to hide anyway. */}
+        {!expanded && !!song.audioUrl && (
+          <div
+            className="flex items-center gap-1.5 flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-60 transition-opacity"
+            data-testid={`cluster-mux-download-${song.id}`}
           >
-            {formatDuration(song.duration)}
-          </span>
-        )}
         {/* Task #364 — per-track Mux state pill. Only shown when a
             master exists (no master → the Upload chip above owns the
             row). Title carries the captured error reason on hover so
             the operator doesn't need to open the track row to read it. */}
-        {!expanded && !!song.audioUrl && (() => {
+        {(() => {
           const ready = song.muxStatus === "ready" && !!song.muxPlaybackId;
           const errored = song.muxStatus === "errored";
           const preparing = !ready && !errored && (!!song.muxAssetId || song.muxStatus === "preparing" || song.muxStatus === "ingesting");
@@ -5951,7 +5957,7 @@ function TrackRow({
             without opening a tab. Replaces the dead Masters tab's
             "click to play / download" affordance with a single, focused
             action right where the operator already lives (Tracks). */}
-        {!expanded && !!song.audioUrl && (() => {
+        {(() => {
           // Prefer the archival original when the upload pipeline
           // transcoded the master for browser playback — the operator
           // almost always wants the 24-bit WAV they uploaded, not the
@@ -5974,6 +5980,8 @@ function TrackRow({
             </a>
           );
         })()}
+          </div>
+        )}
             {/* Right-aligned P/L/C status chips — Preview / Lyrics /
                 Credits. Hover-only per the chips mockup: the row stays
                 silent at rest so the eye reads "title · 3:30" cleanly,
@@ -6063,6 +6071,19 @@ function TrackRow({
                 </div>
               );
             })()}
+        {/* Duration — pinned just to the left of the chevron with the
+            parent flex `gap-4` providing the cushion, so the resting
+            row reads "title … 3:30 ›". The hover-only Mux + download
+            cluster slots in to the left of duration; the P/L/C chips
+            (also hover-only) sit between them. */}
+        {!expanded && (
+          <span
+            className="text-slate-400 text-[12px] tabular-nums flex-shrink-0"
+            data-testid={`text-track-duration-${song.id}`}
+          >
+            {formatDuration(song.duration)}
+          </span>
+        )}
         {/* Destructive cluster — only surfaced when the row is open.
             Task #433 — reordered to [Trash | divider | Eye] so Trash
             sits farthest from the Chevron and the hairline divider
