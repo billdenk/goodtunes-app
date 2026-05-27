@@ -1,5 +1,6 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
@@ -7,11 +8,70 @@ import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { ALBUMS, ARTIST_PHOTOS, type Album } from "@/data/musicData";
 import { IconButton } from "@/components/ui/IconButton";
 
+type PublicPerson = {
+  id: string;
+  name: string;
+  photoUrl: string | null;
+};
+
+function ArtistAvatar({
+  name,
+  photo,
+  fallback,
+}: {
+  name: string;
+  photo: string | undefined;
+  fallback: string | undefined;
+}) {
+  const [errored, setErrored] = useState(false);
+  const src = !errored ? photo ?? fallback : undefined;
+  if (!src) {
+    return (
+      <div
+        className="w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center text-white/70 font-bold"
+        style={{
+          background: "linear-gradient(135deg, #1D5E8F, #4A1E8F)",
+          border: "1px solid rgba(255,255,255,0.1)",
+        }}
+        aria-hidden="true"
+      >
+        {name.charAt(0).toUpperCase()}
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={name}
+      onError={() => setErrored(true)}
+      className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+      style={{
+        border: "1px solid rgba(255,255,255,0.1)",
+        ...(photo && !errored ? { objectPosition: "50% 20%" } : {}),
+      }}
+    />
+  );
+}
+
 export function FavoriteArtists() {
   const [, navigate] = useLocation();
   const favArtists = useFavoriteArtists();
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
+
+  // Shared cache with ArtistDetail — same queryKey so this is a free
+  // read when the fan has visited any artist page this session.
+  const { data: people, isLoading: peopleLoading } = useQuery<PublicPerson[]>({
+    queryKey: ["/api/people"],
+  });
+
+  const peoplePhotoByName = useMemo(() => {
+    const map = new Map<string, string>();
+    (people ?? []).forEach((p) => {
+      if (p.photoUrl) map.set(p.name.trim().toLowerCase(), p.photoUrl);
+    });
+    return map;
+  }, [people]);
 
   const artistsByName = useMemo(() => {
     const map = new Map<string, { name: string; albums: Album[] }>();
@@ -65,8 +125,16 @@ export function FavoriteArtists() {
           ) : (
             <div className="px-5">
               {ordered.map((artist, idx) => {
-                const photo = ARTIST_PHOTOS[artist.name];
-                const fallback = artist.albums[0]?.artwork;
+                // Prefer the admin-uploaded Person photo (the same source
+                // ArtistDetail uses), then the static fallback map, then
+                // album artwork. While /api/people is still loading we
+                // intentionally pass undefined so the gradient-initial
+                // placeholder renders — no flash of an album-art fallback
+                // that the resolved photo will then replace.
+                const personPhoto = peoplePhotoByName.get(artist.name.trim().toLowerCase());
+                const staticPhoto = ARTIST_PHOTOS[artist.name];
+                const photo = peopleLoading ? undefined : personPhoto ?? staticPhoto;
+                const fallback = peopleLoading ? undefined : artist.albums[0]?.artwork;
                 return (
                   <button
                     key={artist.name}
@@ -78,25 +146,7 @@ export function FavoriteArtists() {
                     }}
                     data-testid={`row-favorite-artist-${artist.name}`}
                   >
-                    {photo || fallback ? (
-                      <img
-                        src={photo ?? fallback}
-                        alt={artist.name}
-                        className="w-12 h-12 rounded-full object-cover flex-shrink-0"
-                        style={{
-                          border: "1px solid rgba(255,255,255,0.1)",
-                          ...(photo ? { objectPosition: "50% 20%" } : {}),
-                        }}
-                      />
-                    ) : (
-                      <div
-                        className="w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center text-white/70 font-bold"
-                        style={{ background: "linear-gradient(135deg, #1D5E8F, #4A1E8F)", border: "1px solid rgba(255,255,255,0.1)" }}
-                        aria-hidden="true"
-                      >
-                        {artist.name.charAt(0).toUpperCase()}
-                      </div>
-                    )}
+                    <ArtistAvatar name={artist.name} photo={photo} fallback={fallback} />
                     <div className="flex-1 min-w-0">
                       <p className="text-white text-sm font-semibold truncate leading-tight">{artist.name}</p>
                       <p className="text-white/45 text-xs truncate leading-tight mt-0.5">
