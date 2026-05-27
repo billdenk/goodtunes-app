@@ -25,6 +25,7 @@ import {
   certNameAudits,
   certPrintBatches,
   customerUsers,
+  orderCopies,
   orderItems,
   orders,
   signedCertCertificates,
@@ -60,36 +61,77 @@ function generateShortId(): string {
 }
 
 // ─── Cert lifecycle helpers ──────────────────────────────────────────
-// Creates the row for a paid signed_cert order. Idempotent via the
-// unique (order_id) constraint so the webhook + backfill + manual repair
-// all converge on the same row.
+// Creates the row(s) for a paid signed_cert order. Idempotent via the
+// partial unique indexes on signed_cert_certificates (legacy: one row
+// per order with copy_id NULL; per-copy: one row per (order_id, copy_id)).
+// Task #549 — multi-quantity orders mint one cert row per signed
+// `order_copies` entry; legacy single-copy orders (no order_copies rows)
+// fall back to the original one-cert-per-order shape with copy_id NULL.
 export async function ensureCertificateForOrder(orderId: string): Promise<void> {
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
   if (!order || order.status !== "paid") return;
-  const items = await db.select().from(orderItems).where(
-    and(eq(orderItems.orderId, orderId), eq(orderItems.kind, "addon"), eq(orderItems.sku, "signed_cert")),
-  );
-  if (items.length === 0) return;
   const country = (order.shippingAddress as any)?.country ?? null;
   const paperSize = paperSizeFromCountry(country);
+
+  // Per-copy path: iterate signed `order_copies` and mint one cert per
+  // copy. The partial unique index `signed_cert_certs_order_copy_uniq`
+  // makes the insert idempotent on (order_id, copy_id).
+  const copies = await db
+    .select()
+    .from(orderCopies)
+    .where(and(eq(orderCopies.orderId, orderId), eq(orderCopies.signedCert, true)));
+  if (copies.length > 0) {
+    for (const c of copies) {
+      await insertCertRowWithShortIdRetry({
+        orderId,
+        copyId: c.id,
+        paperSize,
+      });
+    }
+    return;
+  }
+
+  // Legacy single-cert path: orders written before Task #549 don't have
+  // any `order_copies` rows yet. Fall back to the original behaviour —
+  // one row per order with copy_id NULL, guarded by
+  // `signed_cert_certs_order_legacy_uniq`.
+  const addonItems = await db.select().from(orderItems).where(
+    and(eq(orderItems.orderId, orderId), eq(orderItems.kind, "addon"), eq(orderItems.sku, "signed_cert")),
+  );
+  if (addonItems.length === 0) return;
+  await insertCertRowWithShortIdRetry({ orderId, copyId: null, paperSize });
+}
+
+async function insertCertRowWithShortIdRetry(opts: {
+  orderId: string;
+  copyId: string | null;
+  paperSize: "letter" | "a4";
+}): Promise<void> {
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
+      // Idempotency comes from the partial unique indexes on (order_id)
+      // and (order_id, copy_id); the orderId-only `onConflictDoNothing`
+      // target we used pre-549 no longer exists as a constraint. Catch
+      // 23505s and treat them as "already inserted".
       await db
         .insert(signedCertCertificates)
         .values({
-          orderId,
+          orderId: opts.orderId,
+          copyId: opts.copyId,
           shortId: generateShortId(),
-          paperSize,
+          paperSize: opts.paperSize,
           nameStatus: "awaiting",
-        })
-        .onConflictDoNothing({ target: signedCertCertificates.orderId });
+        });
       return;
     } catch (e: any) {
-      // Unique violation on short_id — retry with a fresh id.
-      if (!String(e?.message ?? "").includes("short_id")) throw e;
+      const code = e?.code ?? e?.cause?.code;
+      const msg = String(e?.message ?? e?.cause?.message ?? "");
+      if (code === "23505" && msg.includes("short_id")) continue; // retry
+      if (code === "23505") return; // already minted for this (order, copy) — done
+      throw e;
     }
   }
-  throw new Error(`Could not mint a unique cert shortId for order ${orderId}`);
+  throw new Error(`Could not mint a unique cert shortId for order ${opts.orderId}`);
 }
 
 // One-shot backfill: every paid signed_cert order that lacks a cert row
@@ -587,6 +629,7 @@ export function registerCertificateRoutes(app: Express) {
     const syntheticCert: SignedCertCertificate = {
       id: "preview",
       orderId: row.order.id,
+      copyId: null,
       shortId: "preview" + row.order.id.slice(0, 8),
       nameStatus: "confirmed",
       confirmedIdentityKind: "display",

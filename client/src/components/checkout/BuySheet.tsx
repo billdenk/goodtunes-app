@@ -3,9 +3,10 @@
 //
 // 1) Picks a format (7" / 12" LP / 12" Double / Cassette / CD — only those
 //    the artist enabled in admin).
-// 2) Optionally toggles on the printed-and-signed GoodDeed certificate
-//    add-on at the artist's chosen price (subject to the per-album
-//    minimum floor).
+// 2) Picks a quantity (1–10) and toggles the signed-GoodDeed add-on
+//    per individual copy (Task #549). Same album, multiple copies, mix
+//    of signed / unsigned — the gifting flow can later peel any one
+//    copy off into a recipient.
 // 3) Gates non-signed-in fans through /login?next=… with the minimal
 //    customer signup we built (email + 6-digit code + password, or
 //    Continue with Google/Apple).
@@ -22,7 +23,7 @@ import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { IconButton } from "@/components/ui/IconButton";
-import { X } from "lucide-react";
+import { Minus, Plus, X } from "lucide-react";
 import { VinylPreview } from "@/components/VinylPreview";
 import {
   DEFAULT_VINYL_COLOR_ID,
@@ -72,6 +73,10 @@ type BuyOptions = {
   // the `addons` array when false; the flag lets the UI gate any
   // future booklet-only chrome without re-deriving eligibility).
   bookletEligible?: boolean;
+  // Task #549 — when the signed_cert add-on has a planned quantity, the
+  // server can report how many slots remain so we can cap per-copy
+  // toggles in a multi-quantity checkout. Undefined = uncapped.
+  signedCertRemaining?: number | null;
 };
 
 // Task #579 — Booklet anchors to a 7" vinyl or cassette purchase. Kept
@@ -79,6 +84,7 @@ type BuyOptions = {
 // dependency-light; values mirror BOOKLET_ELIGIBLE_FORMATS exactly.
 const BOOKLET_FORMATS_FAN: ReadonlySet<string> = new Set(["7_inch", "cassette"]);
 
+const MAX_COPIES_PER_CHECKOUT = 10;
 const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 let stripePromise: Promise<Stripe | null> | null = null;
@@ -100,8 +106,9 @@ export function BuySheet({
 }: {
   albumId: string;
   onClose: () => void;
-  /** Pre-toggle the signed-cert add-on. Set when the fan opted in via
-   *  the hover-revealed chip on the album hero before opening the sheet. */
+  /** Pre-toggle the signed-cert add-on on the FIRST copy. Set when the
+   *  fan opted in via the hover-revealed chip on the album hero before
+   *  opening the sheet. */
   signedCertDefault?: boolean;
 }) {
   const { user } = useAuth();
@@ -110,7 +117,11 @@ export function BuySheet({
 
   const [options, setOptions] = useState<BuyOptions | null>(null);
   const [format, setFormat] = useState<string | null>(null);
-  const [signedCert, setSignedCert] = useState(signedCertDefault);
+  const [quantity, setQuantity] = useState(1);
+  // Task #549 — Per-copy signed-cert toggles. Length always tracks
+  // `quantity`. First copy seeds from `signedCertDefault` so the
+  // hero-pill pre-toggle still flows through.
+  const [copyCerts, setCopyCerts] = useState<boolean[]>([signedCertDefault]);
   // Task #579 — Booklet add-on toggle. Independent of signedCert; both
   // can be on the same checkout. Forced off when the selected format
   // isn't booklet-eligible (e.g. fan switches from 7" to 12"LP after
@@ -130,8 +141,6 @@ export function BuySheet({
         setOptions(j);
         const firstAvailable = j.skus.find((s) => !s.soldOut);
         if (firstAvailable) setFormat(firstAvailable.format);
-        // Fan is now looking at the full bundle (format SKUs × signed-cert
-        // add-on). Distinct from `album_viewed` (just landing on the page).
         track("bundle_viewed", {
           albumId,
           skuCount: j.skus.length,
@@ -158,27 +167,63 @@ export function BuySheet({
   const bookletAvailable =
     !!bookletAddon && !!selectedSku && BOOKLET_FORMATS_FAN.has(selectedSku.format);
   const signedCertSoldOut = !!options?.signedCertSoldOut;
-  // If the run got exhausted between page-load and toggle (or by another
-  // tab), defensively flip the local toggle off so the displayed total
-  // matches what we'll actually charge.
+  const signedCertRemaining = options?.signedCertRemaining ?? null;
+
+  // Cap quantity by the SKU stock (when metered).
+  const maxQuantity = useMemo(() => {
+    const stockCap = selectedSku?.stock ?? MAX_COPIES_PER_CHECKOUT;
+    return Math.max(1, Math.min(MAX_COPIES_PER_CHECKOUT, stockCap));
+  }, [selectedSku]);
+
+  // Sync the per-copy toggle array as quantity changes. Preserve existing
+  // picks where we can (extending pads with `false`; shrinking truncates).
   useEffect(() => {
-    if (signedCertSoldOut && signedCert) setSignedCert(false);
-  }, [signedCertSoldOut, signedCert]);
+    setCopyCerts((prev) => {
+      if (prev.length === quantity) return prev;
+      if (prev.length > quantity) return prev.slice(0, quantity);
+      return [...prev, ...Array(quantity - prev.length).fill(false)];
+    });
+  }, [quantity]);
+
+  // If the run got exhausted or the stock cap shrank, clamp.
+  useEffect(() => {
+    if (quantity > maxQuantity) setQuantity(maxQuantity);
+  }, [maxQuantity, quantity]);
+  useEffect(() => {
+    if (signedCertSoldOut && copyCerts.some(Boolean)) {
+      setCopyCerts(copyCerts.map(() => false));
+    }
+  }, [signedCertSoldOut, copyCerts]);
   // Task #579 — Format pivot may invalidate a booklet selection (fan
   // toggles booklet on a 7", then swaps to 12"LP). Hard-reset so the
   // POST body and displayed total stay in sync.
   useEffect(() => {
     if (booklet && !bookletAvailable) setBooklet(false);
   }, [booklet, bookletAvailable]);
-  const totalCents =
-    (selectedSku?.priceCents ?? 0) +
-    (signedCert && addon && !signedCertSoldOut ? addon.priceCents : 0) +
-    (booklet && bookletAvailable ? bookletAddon!.priceCents : 0);
+
+  const certCount = copyCerts.filter(Boolean).length;
+  const formatLineCents = (selectedSku?.priceCents ?? 0) * quantity;
+  const certLineCents = (addon && !signedCertSoldOut ? addon.priceCents : 0) * certCount;
+  const bookletLineCents = booklet && bookletAvailable ? bookletAddon!.priceCents : 0;
+  const totalCents = formatLineCents + certLineCents + bookletLineCents;
+
+  // If the run is capped, don't let the fan toggle more copies than
+  // remain in inventory. The server validates this too — this is just
+  // immediate UX.
+  const canToggleMoreCerts = (idx: number): boolean => {
+    if (signedCertSoldOut) return false;
+    if (copyCerts[idx]) return true; // turning OFF is always allowed
+    if (signedCertRemaining == null) return true;
+    return certCount < signedCertRemaining;
+  };
+
+  const toggleCopyCert = (idx: number) => {
+    if (!canToggleMoreCerts(idx)) return;
+    setCopyCerts((prev) => prev.map((v, i) => (i === idx ? !v : v)));
+  };
 
   const beginCheckout = async () => {
     if (!selectedSku) return;
-    // Non-signed-in fans → route through /login first. The login page
-    // honors ?next= and bounces back into the album when done.
     if (!isCustomerSignedIn) {
       const next = `/album/${albumId}?buy=1`;
       navigate(`/login?next=${encodeURIComponent(next)}`);
@@ -188,17 +233,16 @@ export function BuySheet({
     setError(null);
     try {
       track("checkout_started", { albumId, priceCents: totalCents });
-      // Defensive: if the album doesn't actually offer a signed-cert
-      // add-on (or the run sold out), never forward `signedCert=true`
-      // to the server — it would 400 "Signed certificate isn't
-      // offered on this album". Belt-and-suspenders against a stale
-      // `signedCertDefault` carried in from the album page chip.
-      const willSendSignedCert = !!(signedCert && addon && !signedCertSoldOut);
+      const willSendCert = !!(addon && !signedCertSoldOut);
+      const copiesPayload = copyCerts.map((sc) => ({
+        skuFormat: selectedSku.format,
+        signedCert: willSendCert && sc,
+      }));
       const r = await apiRequest("POST", "/api/checkout/session", {
         albumId,
         skuFormat: selectedSku.format,
-        signedCert: willSendSignedCert,
-        signedCertPriceCents: willSendSignedCert ? addon!.priceCents : undefined,
+        copies: copiesPayload,
+        signedCertPriceCents: willSendCert && certCount > 0 ? addon!.priceCents : undefined,
         // Task #579 — booklet add-on. Sent only when the toggle is on
         // AND the selected SKU is eligible (defensive: a stale state
         // post-format-swap shouldn't slip through). Server re-validates
@@ -217,8 +261,6 @@ export function BuySheet({
     }
   };
 
-  // The embedded checkout takes over the whole sheet once a session
-  // exists; up until then we render the format/add-on picker.
   const inCheckout = !!clientSecret;
 
   return (
@@ -268,11 +310,6 @@ export function BuySheet({
                   </div>
                 </div>
 
-                {/* Task #201 — "You'll get" preview. When the fan has
-                    a vinyl format selected, render the same
-                    <VinylPreview> the artist sees in admin so the disc
-                    they tap is the disc that arrives. Falls back to
-                    Black when an older SKU never had a color picked. */}
                 {selectedSku && isVinylFormat(selectedSku.format as AlbumFormat) && (
                   <div className="mb-5" data-testid="youll-get-vinyl">
                     <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">You'll get</div>
@@ -331,33 +368,101 @@ export function BuySheet({
                   </div>
                 )}
 
-                {addon && (
-                  <button
-                    type="button"
-                    onClick={() => !signedCertSoldOut && setSignedCert((v) => !v)}
-                    disabled={signedCertSoldOut}
-                    className={[
-                      "w-full flex items-start justify-between gap-3 rounded-2xl px-4 py-3 border transition-colors text-left mb-3",
-                      signedCertSoldOut
-                        ? "border-white/10 opacity-50 cursor-not-allowed"
-                        : signedCert
-                          ? "border-[#FF5470] bg-[#FF5470]/10"
-                          : "border-white/10 hover:border-white/30",
-                    ].join(" ")}
-                    data-testid="button-toggle-signed-cert"
-                  >
-                    <div className="flex flex-col flex-1 min-w-0 pr-2">
-                      <span className="text-[14px] font-medium">{addon.label}</span>
-                      <span className="text-[12px] text-white/55 leading-snug mt-0.5">
-                        {signedCertSoldOut
-                          ? "All signed copies claimed"
-                          : "Numbered, printed, and signed by the artist. Mailed with your record."}
-                      </span>
+                {/* Task #549 — Quantity stepper. Capped at the lesser of
+                    MAX_COPIES_PER_CHECKOUT and remaining stock. */}
+                {selectedSku && (
+                  <div className="mb-5">
+                    <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">Quantity</div>
+                    <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                      <span className="text-[14px] text-white/85">How many copies?</span>
+                      <div className="flex items-center gap-3">
+                        <IconButton
+                          label="Decrease quantity"
+                          variant="glass"
+                          onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                          disabled={quantity <= 1}
+                          data-testid="button-qty-dec"
+                        >
+                          <Minus />
+                        </IconButton>
+                        <span className="text-[18px] font-semibold w-6 text-center tabular-nums" data-testid="text-quantity">
+                          {quantity}
+                        </span>
+                        <IconButton
+                          label="Increase quantity"
+                          variant="glass"
+                          onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}
+                          disabled={quantity >= maxQuantity}
+                          data-testid="button-qty-inc"
+                        >
+                          <Plus />
+                        </IconButton>
+                      </div>
                     </div>
-                    <span className="text-[14px] font-semibold whitespace-nowrap">
-                      {signedCertSoldOut ? "Sold out" : `+ ${dollars(addon.priceCents)}`}
-                    </span>
-                  </button>
+                    {quantity >= maxQuantity && maxQuantity < MAX_COPIES_PER_CHECKOUT && (
+                      <p className="text-white/40 text-[11px] mt-1.5 ml-1" data-testid="text-qty-cap">
+                        That's all we have in stock for this format.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Task #549 — Per-copy signed-cert toggles. One row per
+                    copy so the fan can mix signed + unsigned (e.g. one
+                    for yourself + one to gift, only the gift one is
+                    signed). When qty = 1 this collapses to the original
+                    single-toggle behaviour visually. */}
+                {addon && selectedSku && (
+                  <div className="mb-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider">
+                        {quantity === 1 ? "Add-on" : "Per-copy add-ons"}
+                      </div>
+                      {signedCertRemaining != null && !signedCertSoldOut && (
+                        <div className="text-white/40 text-[11px]" data-testid="text-signed-cert-remaining">
+                          {signedCertRemaining} signed left
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {copyCerts.map((on, i) => {
+                        const disabled = signedCertSoldOut || (!on && !canToggleMoreCerts(i));
+                        return (
+                          <button
+                            key={`copy-${i}`}
+                            type="button"
+                            onClick={() => toggleCopyCert(i)}
+                            disabled={disabled}
+                            className={[
+                              "w-full flex items-start justify-between gap-3 rounded-2xl px-4 py-3 border transition-colors text-left",
+                              disabled
+                                ? "border-white/10 opacity-50 cursor-not-allowed"
+                                : on
+                                  ? "border-[#FF5470] bg-[#FF5470]/10"
+                                  : "border-white/10 hover:border-white/30",
+                            ].join(" ")}
+                            data-testid={`button-toggle-signed-cert-${i}`}
+                          >
+                            <div className="flex flex-col flex-1 min-w-0 pr-2">
+                              <span className="text-[14px] font-medium">
+                                {quantity === 1 ? addon.label : `Copy ${i + 1} · ${addon.label}`}
+                              </span>
+                              <span className="text-[12px] text-white/55 leading-snug mt-0.5">
+                                {signedCertSoldOut
+                                  ? "All signed copies claimed"
+                                  : on
+                                    ? "Numbered, printed, and signed by the artist. Mailed with your record."
+                                    : "Tap to add a signed certificate for this copy."}
+                              </span>
+                            </div>
+                            <span className="text-[14px] font-semibold whitespace-nowrap">
+                              {on ? `+ ${dollars(addon.priceCents)}` : ""}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
 
                 {/* Task #579 — Booklet add-on. Only shown when the
@@ -365,7 +470,8 @@ export function BuySheet({
                     cassette). Renders a small square thumbnail of the
                     artist's uploaded printed cover (NOT the album
                     jacket) when present; falls back to a placeholder
-                    glyph otherwise. */}
+                    glyph otherwise. One booklet per order regardless
+                    of copy count. */}
                 {bookletAddon && bookletAvailable && (
                   <button
                     type="button"
@@ -409,11 +515,33 @@ export function BuySheet({
                   </button>
                 )}
 
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-white/55 text-[13px]">Total</span>
-                  <span className="text-[18px] font-bold" data-testid="text-buy-total">
-                    {dollars(totalCents)}
-                  </span>
+                {/* Live breakdown — separate lines so the fan can verify
+                    the math before tapping checkout. */}
+                <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-4 mb-4 text-[13px]" data-testid="block-breakdown">
+                  <div className="flex items-center justify-between">
+                    <span className="text-white/65">
+                      {selectedSku?.label ?? "Format"} × {quantity}
+                    </span>
+                    <span className="text-white/85" data-testid="text-line-format">{dollars(formatLineCents)}</span>
+                  </div>
+                  {addon && certCount > 0 && (
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-white/65">{addon.label} × {certCount}</span>
+                      <span className="text-white/85" data-testid="text-line-cert">{dollars(certLineCents)}</span>
+                    </div>
+                  )}
+                  {bookletAddon && booklet && bookletAvailable && (
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-white/65">{bookletAddon.label}</span>
+                      <span className="text-white/85" data-testid="text-line-booklet">{dollars(bookletLineCents)}</span>
+                    </div>
+                  )}
+                  <div className="border-t border-white/10 mt-3 pt-3 flex items-center justify-between">
+                    <span className="text-white/55">Total</span>
+                    <span className="text-[18px] font-bold" data-testid="text-buy-total">
+                      {dollars(totalCents)}
+                    </span>
+                  </div>
                 </div>
 
                 <button

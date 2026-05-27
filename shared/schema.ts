@@ -2201,6 +2201,43 @@ export const payoutSettings = pgTable("payout_settings", {
 // the fan picked) or "addon" (signed_cert today, framing/etc. later).
 // `label` is a human snapshot — even if the SKU row is later renamed in
 // admin, the receipt + order history keep reading the original label.
+// Task #549 — per-copy entitlement row. One row per album the fan
+// bought, even when quantity > 1. Each copy carries its own
+// `signed_cert` add-on toggle and (when signed) its own GoodDeed
+// number — the downstream gifting flow assigns/keeps individual
+// copies, so the per-copy unit needs to be addressable in the schema
+// rather than derived from order_items aggregate quantities.
+//
+// `order_items` stays the aggregate Stripe-aligned receipt structure
+// (one row per kind+sku with summed quantity); `order_copies` is the
+// gift-able unit. Both views are written at materialize time.
+export const orderCopies = pgTable(
+  "order_copies",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+    // Denormalised from `orders.album_id` so the partial unique index
+    // below can enforce per-album GoodDeed-number uniqueness without a
+    // join — same protection model as `orders.good_deed_number`.
+    albumId: varchar("album_id").notNull(),
+    position: integer("position").notNull().default(0),
+    format: text("format").notNull(),
+    signedCert: boolean("signed_cert").notNull().default(false),
+    formatPriceCents: integer("format_price_cents").notNull(),
+    addonPriceCents: integer("addon_price_cents").notNull().default(0),
+    goodDeedNumber: integer("good_deed_number"),
+    vinylColor: text("vinyl_color"),
+    jacketUpgrade: text("jacket_upgrade"),
+    // Downstream gifting task fills this when a copy is sent as a gift.
+    giftId: varchar("gift_id"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    orderPosUniq: uniqueIndex("order_copies_order_position_uniq").on(t.orderId, t.position),
+  }),
+);
+export type OrderCopy = typeof orderCopies.$inferSelect;
+
 export const orderItems = pgTable("order_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
@@ -3293,7 +3330,13 @@ export type ReferralFundingConfig = typeof referralFundingConfig.$inferSelect;
 // Admin can override (`paperSizeOverridden = true`) without un-locking.
 export const signedCertCertificates = pgTable("signed_cert_certificates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }).unique(),
+  orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  // Task #549 — per-copy cert. NULL on legacy single-copy orders
+  // (kept that way for backwards-compat); set on every cert minted
+  // for an order with `order_copies`. Uniqueness is enforced by two
+  // partial indexes managed in post-merge.sh so legacy + per-copy rows
+  // coexist without a data migration.
+  copyId: varchar("copy_id"),
   shortId: varchar("short_id").notNull().unique(),
   nameStatus: text("name_status").notNull().default("awaiting"),
   confirmedIdentityKind: text("confirmed_identity_kind"),

@@ -23,6 +23,7 @@ import {
   pressFormatCosts,
   orders,
   orderItems,
+  orderCopies,
   signedCertReservations,
   customerUsers,
   emailVerifications,
@@ -42,6 +43,7 @@ import {
   type AlbumAddon,
   type Order,
   type OrderItem,
+  type OrderCopy,
 } from "@shared/schema";
 import {
   lookupHellbenderUnitCents,
@@ -429,15 +431,18 @@ export async function withRetryOnGoodDeedCollision<T>(
 }
 
 export async function assignNextGoodDeedNumber(albumId: string): Promise<number> {
-  // Floor = max(goodDeedNumber across paid orders, certificateNumber
-  // across owned user_albums). The user_albums leg matters because the
-  // gogoods.com importer (Task #398) stamps the legacy collectible
-  // index into `user_albums.certificateNumber` for owned-but-no-paid-
-  // order rows; without considering it here we could mint a duplicate
-  // GoodDeed number on the next real sale.
+  // Floor = max(goodDeedNumber across paid orders, per-copy
+  // goodDeedNumber across order_copies, certificateNumber across owned
+  // user_albums). The user_albums leg matters because the gogoods.com
+  // importer (Task #398) stamps the legacy collectible index into
+  // `user_albums.certificateNumber` for owned-but-no-paid-order rows;
+  // without considering it here we could mint a duplicate GoodDeed
+  // number on the next real sale. The order_copies leg matters from
+  // Task #549 onward — multi-quantity orders mint one per signed copy.
   const [row] = await db.execute(sql<{ max: number }>`
     SELECT GREATEST(
       COALESCE((SELECT MAX(${orders.goodDeedNumber}) FROM ${orders} WHERE ${orders.albumId} = ${albumId}), 0),
+      COALESCE((SELECT MAX(${orderCopies.goodDeedNumber}) FROM ${orderCopies} WHERE ${orderCopies.albumId} = ${albumId}), 0),
       COALESCE((SELECT MAX(${userAlbums.certificateNumber}) FROM ${userAlbums} WHERE ${userAlbums.albumId} = ${albumId}), 0)
     ) AS max
   `);
@@ -1287,20 +1292,36 @@ export function registerCommerceRoutes(app: Express) {
 
   // ─── Checkout session create ─────────────────────────────────────
   // POST /api/checkout/session
-  // Body: { albumId, skuFormat, signedCert: boolean, signedCertPriceCents?: number }
-  // Requires a signed-in customer. Returns { clientSecret } for embedded checkout.
-  // NB: all prices are read server-side from albumSkus / albumAddons — the
-  // client cannot influence the amount Stripe charges (the optional
+  // Body shape (Task #549 — per-copy):
+  //   { albumId, skuFormat, copies: [{ signedCert: bool }, …],
+  //     signedCertPriceCents?: number }
+  // Backwards-compat shape (single copy):
+  //   { albumId, skuFormat, signedCert: bool, signedCertPriceCents?: number }
+  //
+  // Requires a signed-in customer. Returns { clientSecret } for embedded
+  // checkout. All prices read server-side from albumSkus / albumAddons —
+  // the client can't influence the amount Stripe charges (the optional
   // signedCertPriceCents is an *override above* the floor, never below).
+  // Cap on copies-per-checkout is a soft UX guard; physical fulfillment
+  // doesn't choke until much higher numbers.
+  const MAX_COPIES_PER_CHECKOUT = 10;
   const checkoutSchema = z.object({
     albumId: z.string().min(1),
     skuFormat: z.enum(ALBUM_FORMATS),
-    signedCert: z.boolean().default(false),
-    // Optional override price for the signed cert add-on. Must be >= min.
+    signedCert: z.boolean().optional(),
     signedCertPriceCents: z.number().int().min(0).optional(),
     // Task #579 — Booklet add-on toggle + optional override price.
     booklet: z.boolean().default(false),
     bookletPriceCents: z.number().int().min(0).optional(),
+    // Task #549 — Per-copy multi-quantity payload. When present, each
+    // entry materializes as its own order_copies row with its own
+    // signed-cert selection and minted GoodDeed number. Legacy single-
+    // copy clients omit this and we synthesize a 1-element array.
+    copies: z
+      .array(z.object({ signedCert: z.boolean().default(false) }))
+      .min(1)
+      .max(MAX_COPIES_PER_CHECKOUT)
+      .optional(),
   });
   app.post("/api/checkout/session", async (req, res) => {
     const auth = req.headers.authorization;
@@ -1317,7 +1338,18 @@ export function registerCommerceRoutes(app: Express) {
     const skus = await listActiveSkus(album.id);
     const sku = skus.find((s) => s.format === parsed.data.skuFormat);
     if (!sku) return res.status(400).json({ message: "That format isn't available for this album" });
-    if (sku.stock !== null && sku.stock <= 0) return res.status(409).json({ message: "Sold out" });
+    // Task #549 — Normalise the request into a `copies` array. Legacy
+    // clients send `signedCert: bool` (single copy); the new BuySheet
+    // sends an explicit `copies` array so each copy carries its own
+    // add-on selection.
+    const copies = parsed.data.copies
+      ?? [{ signedCert: !!parsed.data.signedCert }];
+    const quantity = copies.length;
+    const signedCertCount = copies.filter((c) => c.signedCert).length;
+
+    if (sku.stock !== null && sku.stock < quantity) {
+      return res.status(409).json({ message: sku.stock <= 0 ? "Sold out" : `Only ${sku.stock} left in stock` });
+    }
 
     let addon: AlbumAddon | null = null;
     let addonPriceCents = 0;
@@ -1325,12 +1357,14 @@ export function registerCommerceRoutes(app: Express) {
     // from the signed-cert add-on. Both can be on the same checkout.
     let bookletAddon: AlbumAddon | null = null;
     let bookletPriceCents = 0;
-    // Task #122 — Reservation id we mint inside the cap-check transaction
+    // Task #122 — Reservation ids minted inside the cap-check transaction
     // below. Stamped with the Stripe session id right after the session
-    // is created so the webhook can resolve and delete it on payment, and
-    // released eagerly if Stripe itself fails.
-    let reservationId: string | null = null;
-    if (parsed.data.signedCert) {
+    // is created so the webhook can resolve and delete them on payment,
+    // and released eagerly if Stripe itself fails. Task #549 — one row
+    // per cert copy so the cap math (paid quantity + pending row count)
+    // lines up with per-copy fulfillment.
+    let reservationIds: string[] = [];
+    if (signedCertCount > 0) {
       const addons = await listActiveAddons(album.id);
       addon = addons.find((x) => x.kind === "signed_cert") ?? null;
       if (!addon) return res.status(400).json({ message: "Signed certificate isn't offered on this album" });
@@ -1346,28 +1380,37 @@ export function registerCommerceRoutes(app: Express) {
       //      'signed_cert') — serializes only contending buyers, never
       //      blocks unrelated work,
       //   2) re-count paid order_items + active pending reservations,
-      //   3) insert a 30-min reservation row if there's still a slot.
+      //   3) insert N 30-min reservation rows if there's still room.
       // Concurrent contenders queue on the lock; the second one sees
       // the first reservation in the count and gets the 409.
       if (addon.plannedQuantity != null) {
         const planned = addon.plannedQuantity;
+        const want = signedCertCount;
         const outcome = await db.transaction(async (tx) => {
           await tx.execute(
             sql`SELECT pg_advisory_xact_lock(hashtextextended(${`signed_cert:${album.id}`}, 0))`,
           );
           const claimed = await countSignedCertsClaimed(album.id, tx);
-          if (claimed >= planned) return { ok: false as const };
-          const [row] = await tx
+          if (claimed + want > planned) return { ok: false as const, remaining: Math.max(0, planned - claimed) };
+          const rows = await tx
             .insert(signedCertReservations)
-            .values({
-              albumId: album.id,
-              expiresAt: new Date(Date.now() + 30 * 60_000),
-            })
+            .values(
+              Array.from({ length: want }, () => ({
+                albumId: album.id,
+                expiresAt: new Date(Date.now() + 30 * 60_000),
+              })),
+            )
             .returning({ id: signedCertReservations.id });
-          return { ok: true as const, id: row.id };
+          return { ok: true as const, ids: rows.map((r) => r.id) };
         });
-        if (!outcome.ok) return res.status(409).json({ message: "All signed copies claimed" });
-        reservationId = outcome.id;
+        if (!outcome.ok) {
+          return res.status(409).json({
+            message: outcome.remaining === 0
+              ? "All signed copies claimed"
+              : `Only ${outcome.remaining} signed copies left`,
+          });
+        }
+        reservationIds = outcome.ids;
       }
     }
 
@@ -1396,10 +1439,10 @@ export function registerCommerceRoutes(app: Express) {
             metadata: { gt_kind: "format", gt_sku: sku.format, gt_album_id: album.id },
           },
         },
-        quantity: 1,
+        quantity: quantity,
       },
     ];
-    if (addon) {
+    if (addon && signedCertCount > 0) {
       lineItems.push({
         price_data: {
           currency: "usd",
@@ -1410,7 +1453,7 @@ export function registerCommerceRoutes(app: Express) {
             metadata: { gt_kind: "addon", gt_sku: addon.kind, gt_album_id: album.id },
           },
         },
-        quantity: 1,
+        quantity: signedCertCount,
       });
     }
 
@@ -1460,9 +1503,15 @@ export function registerCommerceRoutes(app: Express) {
     const { classifySkuKind } = await import("./orderDesk");
     const skuKind = classifySkuKind(sku.format);
     const bundleParts = [sku.format];
-    if (addon) bundleParts.push("signed_cert");
+    if (signedCertCount > 0) bundleParts.push("signed_cert");
     if (bookletAddon) bundleParts.push("booklet");
     const bundleContents = bundleParts.join("+");
+    // Task #549 — `gt_copies` encodes the per-copy signed-cert pattern
+    // (e.g. "1011" for 4 copies where #1/#3/#4 are signed). Materialize
+    // splits this back into N order_copies rows so each copy carries
+    // its own GoodDeed number and entitlement. Legacy single-copy
+    // orders read as `gt_copies = "1"` or `"0"`.
+    const copiesMask = copies.map((c) => (c.signedCert ? "1" : "0")).join("");
     const enrichedMetadata: Record<string, string> = {
       gt_customer_id: customer.id,
       gt_album_id: album.id,
@@ -1473,8 +1522,11 @@ export function registerCommerceRoutes(app: Express) {
       gt_sku_format: sku.format,
       gt_sku_kind: skuKind,
       gt_bundle_contents: bundleContents,
-      gt_signed_cert: addon ? "1" : "0",
+      gt_signed_cert: signedCertCount > 0 ? "1" : "0",
       gt_booklet: bookletAddon ? "1" : "0",
+      gt_quantity: String(quantity),
+      gt_signed_cert_count: String(signedCertCount),
+      gt_copies: copiesMask,
     };
     const returnUrl = `${absoluteOrigin(req)}/welcome?session_id={CHECKOUT_SESSION_ID}`;
     let session: Stripe.Checkout.Session;
@@ -1492,29 +1544,32 @@ export function registerCommerceRoutes(app: Express) {
         payment_intent_data: {
           metadata: {
             ...enrichedMetadata,
-            gt_signed_cert_price: addon ? String(addonPriceCents) : "0",
+            gt_signed_cert_price: signedCertCount > 0 ? String(addonPriceCents) : "0",
             gt_booklet_price: bookletAddon ? String(bookletPriceCents) : "0",
           },
         },
-        metadata: enrichedMetadata,
+        metadata: {
+          ...enrichedMetadata,
+          gt_signed_cert_price: signedCertCount > 0 ? String(addonPriceCents) : "0",
+        },
       });
     } catch (e) {
-      // Task #122 — Stripe failed to mint the session: release the
-      // reservation we just took so its slot returns to the pool
+      // Task #122 — Stripe failed to mint the session: release every
+      // reservation we just took so the slots return to the pool
       // immediately instead of waiting 30 min to expire.
-      if (reservationId) {
-        await db.delete(signedCertReservations).where(eq(signedCertReservations.id, reservationId));
+      if (reservationIds.length > 0) {
+        await db.delete(signedCertReservations).where(inArray(signedCertReservations.id, reservationIds));
       }
       throw e;
     }
-    // Task #122 — Attach the Stripe session id to the reservation now
+    // Task #122 — Attach the Stripe session id to every reservation now
     // that we have one. The webhook deletes by session id when the
     // order is materialized as paid; abandoned sessions just expire.
-    if (reservationId) {
+    if (reservationIds.length > 0) {
       await db
         .update(signedCertReservations)
         .set({ stripeCheckoutSessionId: session.id })
-        .where(eq(signedCertReservations.id, reservationId));
+        .where(inArray(signedCertReservations.id, reservationIds));
     }
 
     res.json({ clientSecret: session.client_secret, sessionId: session.id });
@@ -1549,11 +1604,17 @@ export function registerCommerceRoutes(app: Express) {
     // Task #201 — surface the album artwork so the /welcome receipt can
     // render <VinylPreview> for vinyl line items.
     const album = order ? await storage.getAlbumById(order.albumId) : null;
+    // Task #549 — per-copy entitlements so the receipt can list each
+    // copy with its own GoodDeed number and signed-cert state.
+    const copies = order
+      ? await db.select().from(orderCopies).where(eq(orderCopies.orderId, order.id)).orderBy(asc(orderCopies.position))
+      : [];
     res.json({
       paymentStatus: session.payment_status,
       status: session.status,
       order: order ?? null,
       items: order ? await getOrderItems(order.id) : [],
+      copies,
       album: album ? { artwork: album.artwork ?? null } : null,
     });
   });
@@ -1936,6 +1997,15 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
   if (!customerId || !albumId || !skuFormat) {
     throw new Error(`Stripe session ${session.id} missing GoodTunes metadata`);
   }
+  // Task #549 — per-copy split. Legacy single-copy sessions either omit
+  // these or carry "1"/"0"; treat both as one copy with `signedCert`
+  // mirroring the legacy flag.
+  const quantity = Math.max(1, parseInt(session.metadata?.gt_quantity ?? "1", 10) || 1);
+  const copiesMask = session.metadata?.gt_copies ?? (signedCert ? "1" : "0").padEnd(quantity, "0");
+  const copyCertPattern: boolean[] = Array.from({ length: quantity }, (_, i) =>
+    copiesMask[i] === "1",
+  );
+  const signedCertPriceCents = parseInt(session.metadata?.gt_signed_cert_price ?? "0", 10) || 0;
 
   // Task #73 — snapshot artist/label/skuKind so reporting joins survive
   // album reassignment, and so the Stripe→OD handoff has the routing
@@ -2007,6 +2077,25 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
   }
   const totalCents = full.amount_total ?? items.reduce((a, b) => a + b.unitPriceCents * b.quantity, 0);
 
+  // Task #549 — Pressing snapshot for the chosen format, used on every
+  // order_copies row we write below.
+  const formatPressingSnap = skuByFormatAtPurchase.get(skuFormat as any);
+  const formatItem = items.find((i) => i.kind === "format");
+  const formatUnitCents = formatItem
+    ? Math.floor((formatItem.unitPriceCents ?? 0) / Math.max(1, formatItem.quantity ?? 1))
+    : 0;
+
+  // Task #549 — Mint per-copy GoodDeed numbers + order_copies inside a
+  // single transaction so:
+  //   1) all-or-nothing semantics across order + items + copies,
+  //   2) the partial unique index on order_copies(albumId, goodDeed
+  //      Number) catches cross-order races (handled by the retry
+  //      wrapper just like orders.good_deed_number_uniq), and
+  //   3) the floor in assignNextGoodDeedNumber sees our own freshly-
+  //      inserted copies on retry.
+  // Order-level `goodDeedNumber` mirrors the FIRST signed copy's number
+  // for legacy reads (admin lists, fulfillment, OrderDesk metadata) so
+  // nothing downstream has to learn about copies.
   // Upsert by session id. If a row exists (pending), flip to paid; if not, insert.
   let order = existing;
   if (!order) {
@@ -2014,58 +2103,127 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
     // retry helper. A concurrent webhook race that picks the same
     // MAX+1 trips the partial unique index (23505) and we re-mint.
     const inserted = await withRetryOnGoodDeedCollision(albumId, async () => {
-      const goodDeedNumber = isPaid ? await assignNextGoodDeedNumber(albumId) : null;
-      const [row] = await db
-        .insert(orders)
-        .values({
-          customerId,
-          albumId,
-          totalCents,
-          currency: full.currency ?? "usd",
-          stripeCheckoutSessionId: full.id,
-          stripePaymentIntentId: piId,
-          status: isPaid ? "paid" : "pending",
-          shippingAddress: shipping,
-          billingAddress: billing,
-          buyerEmail,
-          buyerName,
-          buyerPhone,
-          goodDeedNumber,
-          skuKind,
-          artistSnapshotId,
-          labelSnapshotId,
-          fulfillmentStatus: isPaid && skuKind !== "digital" ? "pending" : null,
-        })
-        .onConflictDoNothing({ target: orders.stripeCheckoutSessionId })
-        .returning();
-      return row;
+      return await db.transaction(async (tx) => {
+        // Assign sequential numbers to each signed copy starting from
+        // MAX+1. If anyone else also takes MAX+1 first we'll trip the
+        // unique index on insert and the retry loop re-runs us from
+        // the top with a fresh MAX read.
+        let nextNum = isPaid ? await assignNextGoodDeedNumber(albumId) : 0;
+        const copyNumbers: (number | null)[] = copyCertPattern.map((hasCert) => {
+          if (!isPaid || !hasCert) return null;
+          const n = nextNum;
+          nextNum += 1;
+          return n;
+        });
+        const firstCertNumber = copyNumbers.find((n) => n != null) ?? null;
+        const [row] = await tx
+          .insert(orders)
+          .values({
+            customerId,
+            albumId,
+            totalCents,
+            currency: full.currency ?? "usd",
+            stripeCheckoutSessionId: full.id,
+            stripePaymentIntentId: piId,
+            status: isPaid ? "paid" : "pending",
+            shippingAddress: shipping,
+            billingAddress: billing,
+            buyerEmail,
+            buyerName,
+            buyerPhone,
+            goodDeedNumber: firstCertNumber,
+            skuKind,
+            artistSnapshotId,
+            labelSnapshotId,
+            fulfillmentStatus: isPaid && skuKind !== "digital" ? "pending" : null,
+          })
+          .onConflictDoNothing({ target: orders.stripeCheckoutSessionId })
+          .returning();
+        if (!row) return undefined; // session already materialised
+        await tx.insert(orderItems).values(items.map((i) => ({ ...i, orderId: row.id })));
+        await tx.insert(orderCopies).values(
+          copyCertPattern.map((hasCert, i) => ({
+            orderId: row.id,
+            albumId,
+            position: i + 1,
+            format: skuFormat,
+            signedCert: hasCert,
+            formatPriceCents: formatUnitCents,
+            addonPriceCents: hasCert ? signedCertPriceCents : 0,
+            goodDeedNumber: copyNumbers[i],
+            vinylColor: formatPressingSnap?.vinylColor ?? null,
+            jacketUpgrade: (formatPressingSnap?.jacketUpgrade as JacketUpgrade | null) ?? null,
+          })),
+        );
+        return row;
+      });
     });
     order = inserted ?? (await getOrderBySessionId(full.id))!;
-    if (order && order.id && (await getOrderItems(order.id)).length === 0) {
-      await db.insert(orderItems).values(items.map((i) => ({ ...i, orderId: order!.id })));
-    }
   } else if (isPaid && order.status === "pending") {
     const u = await withRetryOnGoodDeedCollision(albumId, async () => {
-      const goodDeedNumber = order!.goodDeedNumber ?? (await assignNextGoodDeedNumber(albumId));
-      const [row] = await db
-        .update(orders)
-        .set({
-          status: "paid",
-          stripePaymentIntentId: piId,
-          shippingAddress: shipping,
-          billingAddress: billing,
-          buyerEmail,
-          buyerName,
-          buyerPhone,
-          goodDeedNumber,
-          skuKind: order!.skuKind ?? skuKind,
-          artistSnapshotId: order!.artistSnapshotId ?? artistSnapshotId,
-          labelSnapshotId: order!.labelSnapshotId ?? labelSnapshotId,
-          fulfillmentStatus: order!.fulfillmentStatus ?? (skuKind !== "digital" ? "pending" : null),
-        })
-        .where(eq(orders.id, order!.id))
-        .returning();
-      return row;
+      return await db.transaction(async (tx) => {
+        // Existing pending row → look up its copies and fill in any
+        // missing GoodDeed numbers now that we're flipping to paid.
+        const existingCopies = await tx.select().from(orderCopies).where(eq(orderCopies.orderId, order!.id)).orderBy(asc(orderCopies.position));
+        const needsCopies = existingCopies.length === 0;
+        let nextNum = await assignNextGoodDeedNumber(albumId);
+        const copyNumbers: (number | null)[] = (needsCopies ? copyCertPattern : existingCopies.map((c) => c.signedCert)).map((hasCert, i) => {
+          if (!hasCert) return null;
+          // Reuse a copy's existing number if it already had one
+          // (idempotent re-runs of this branch).
+          const prev = existingCopies[i]?.goodDeedNumber ?? null;
+          if (prev != null) return prev;
+          const n = nextNum;
+          nextNum += 1;
+          return n;
+        });
+        const firstCertNumber = copyNumbers.find((n) => n != null) ?? order!.goodDeedNumber ?? null;
+        const [row] = await tx
+          .update(orders)
+          .set({
+            status: "paid",
+            stripePaymentIntentId: piId,
+            shippingAddress: shipping,
+            billingAddress: billing,
+            buyerEmail,
+            buyerName,
+            buyerPhone,
+            goodDeedNumber: firstCertNumber,
+            skuKind: order!.skuKind ?? skuKind,
+            artistSnapshotId: order!.artistSnapshotId ?? artistSnapshotId,
+            labelSnapshotId: order!.labelSnapshotId ?? labelSnapshotId,
+            fulfillmentStatus: order!.fulfillmentStatus ?? (skuKind !== "digital" ? "pending" : null),
+          })
+          .where(eq(orders.id, order!.id))
+          .returning();
+        if (needsCopies) {
+          await tx.insert(orderCopies).values(
+            copyCertPattern.map((hasCert, i) => ({
+              orderId: row.id,
+              albumId,
+              position: i + 1,
+              format: skuFormat,
+              signedCert: hasCert,
+              formatPriceCents: formatUnitCents,
+              addonPriceCents: hasCert ? signedCertPriceCents : 0,
+              goodDeedNumber: copyNumbers[i],
+              vinylColor: formatPressingSnap?.vinylColor ?? null,
+              jacketUpgrade: (formatPressingSnap?.jacketUpgrade as JacketUpgrade | null) ?? null,
+            })),
+          );
+        } else {
+          for (let i = 0; i < existingCopies.length; i++) {
+            const c = existingCopies[i];
+            if (c.signedCert && c.goodDeedNumber == null && copyNumbers[i] != null) {
+              await tx
+                .update(orderCopies)
+                .set({ goodDeedNumber: copyNumbers[i] })
+                .where(eq(orderCopies.id, c.id));
+            }
+          }
+        }
+        return row;
+      });
     });
     order = u;
   }
@@ -2091,10 +2249,11 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
       .onConflictDoNothing();
     // Decrement stock — guarded by `wasAlreadyPaid` so concurrent
     // materializations of the same session don't double-decrement.
+    // Task #549 — multi-quantity orders subtract N, not 1.
     if (!wasAlreadyPaid) {
       await db
         .update(albumSkus)
-        .set({ stock: sql`GREATEST(${albumSkus.stock} - 1, 0)` })
+        .set({ stock: sql`GREATEST(${albumSkus.stock} - ${quantity}, 0)` })
         .where(and(eq(albumSkus.albumId, albumId), eq(albumSkus.format, skuFormat), sql`${albumSkus.stock} IS NOT NULL`));
     }
 
@@ -2289,14 +2448,24 @@ async function handleRefund(paymentIntentId: string): Promise<void> {
     .update(orders)
     .set({ status: "refunded", refundedAt: new Date(), goodDeedNumber: null })
     .where(eq(orders.id, order.id));
+  // Task #549 — also void every per-copy GoodDeed number so neither the
+  // cert renderer nor the next assignNextGoodDeedNumber floor sees this
+  // refunded order's numbers.
+  await db
+    .update(orderCopies)
+    .set({ goodDeedNumber: null })
+    .where(eq(orderCopies.orderId, order.id));
   // Restore stock if the SKU was metered. Best-effort — pulled from the
   // first format-kind order item snapshot we wrote at purchase time.
+  // Quantity is the aggregate from order_items (one row per kind+sku),
+  // so a 3-copy order restores 3.
   const items = await getOrderItems(order.id);
   const formatItem = items.find((i) => i.kind === "format");
   if (formatItem) {
+    const qty = Math.max(1, formatItem.quantity ?? 1);
     await db
       .update(albumSkus)
-      .set({ stock: sql`${albumSkus.stock} + 1` })
+      .set({ stock: sql`${albumSkus.stock} + ${qty}` })
       .where(and(
         eq(albumSkus.albumId, order.albumId),
         eq(albumSkus.format, formatItem.sku as any),

@@ -7712,7 +7712,37 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-[14px] font-medium\">{addon.label}</span>"
+    "snippet": "<div className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2\">Quantity</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/checkout/BuySheet.tsx",
+    "snippet": "<span className=\"text-[14px] text-white/85\">How many copies?</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/checkout/BuySheet.tsx",
+    "snippet": "<span className=\"text-[18px] font-semibold w-6 text-center tabular-nums\" data-testid=\"text-quantity\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/checkout/BuySheet.tsx",
+    "snippet": "<p className=\"text-white/40 text-[11px] mt-1.5 ml-1\" data-testid=\"text-qty-cap\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/checkout/BuySheet.tsx",
+    "snippet": "<div className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/checkout/BuySheet.tsx",
+    "snippet": "<div className=\"text-white/40 text-[11px]\" data-testid=\"text-signed-cert-remaining\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/checkout/BuySheet.tsx",
+    "snippet": "<span className=\"text-[14px] font-medium\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -7727,7 +7757,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-white/55 text-[13px]\">Total</span>"
+    "snippet": "<div className=\"rounded-2xl bg-white/[0.04] border border-white/10 p-4 mb-4 text-[13px]\" data-testid=\"block-breakdown\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14217,16 +14247,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "<p className=\"text-white/55 text-[12px] uppercase tracking-wider font-semibold\">Artist dashboard</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "<p className=\"text-white/55 text-[12px] mt-0.5\">{albumCount} album{albumCount === 1 ? \"\" : \"s\"} · {songCount} credited track{songCount === 1 ? \"\" : \"s\"}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/ArtistDashboard.tsx",
     "snippet": "<span className=\"text-[12px]\">"
   },
   {
@@ -14333,16 +14353,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
     "snippet": "<span className=\"text-[11px] text-white/55 uppercase tracking-wider\">Non-profit</span>"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "<img src={p.photoUrl} alt=\"\" className=\"w-10 h-10 rounded-full object-cover bg-white/5\" />"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "<div className=\"w-10 h-10 rounded-full bg-white/5\" />"
   },
   {
     "rule": "brand-hex-literal",
@@ -15177,16 +15187,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/LabelDashboard.tsx",
-    "snippet": "<p className=\"text-white/55 text-[12px] uppercase tracking-wider font-semibold\">Label dashboard</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/LabelDashboard.tsx",
-    "snippet": "<p className=\"text-white/55 text-[12px] mt-0.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/LabelDashboard.tsx",
     "snippet": "<span className=\"text-[12px]\">"
   },
   {
@@ -15280,56 +15280,6 @@
     "snippet": "<span className=\"font-mono text-white/65 text-[11px] w-7\">{r.country}</span>"
   },
   {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/NonProfitDashboard.tsx",
-    "snippet": "<p className=\"text-white/55 text-[12px] uppercase tracking-wider font-semibold\">Non-profit dashboard</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/NonProfitDashboard.tsx",
-    "snippet": "<p className=\"py-8 text-center text-white/45 text-[13px]\">Loading…</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/NonProfitDashboard.tsx",
-    "snippet": "<p className=\"text-[11px] text-white/55\">{a.albums.length} album{a.albums.length === 1 ? \"\" : \"s\"} listed</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/NonProfitDashboard.tsx",
-    "snippet": "className={`px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-semibold ${"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/NonProfitDashboard.tsx",
-    "snippet": "<p className=\"flex-1 min-w-0 text-[13px] truncate\">{al.title}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/NonProfitDashboard.tsx",
-    "snippet": "<span className=\"text-[11px] text-white/55 tabular-nums\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/NonProfitDashboard.tsx",
-    "snippet": "<li key={i.id} className=\"flex items-center gap-3 px-4 py-3 text-[13px]\" data-testid={`row-npo-invite-${i.id}`}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/NonProfitDashboard.tsx",
-    "snippet": "<span className=\"text-[11px] text-white/55 inline-flex items-center gap-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/NonProfitDashboard.tsx",
-    "snippet": "<p className=\"text-[11px] uppercase tracking-wider text-white/55 font-semibold\">{label}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/NonProfitDashboard.tsx",
-    "snippet": "{sub && <p className=\"mt-1 text-[11px] text-white/55\">{sub}</p>}"
-  },
-  {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/NonProfitDashboard.tsx",
     "snippet": "<img src={a.photoUrl} alt=\"\" className=\"w-10 h-10 rounded-full object-cover bg-white/5\" />"
@@ -15398,11 +15348,6 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Orders.tsx",
     "snippet": "<Award className=\"w-5 h-5 text-[#4AFFCA] mt-0.5 flex-shrink-0\" />"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Orders.tsx",
-    "snippet": "className=\"mt-2 text-[12px] text-[#319ED8] font-semibold active:opacity-70\""
   },
   {
     "rule": "brand-hex-literal",
@@ -15563,11 +15508,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Orders.tsx",
     "snippet": "<div className=\"text-[11px] text-white/45 mt-0.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Orders.tsx",
-    "snippet": "className=\"mt-2 text-[12px] text-[#319ED8] font-semibold active:opacity-70\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -16175,11 +16115,6 @@
     "snippet": "className=\"mr-2 w-5 h-5 flex items-center justify-center rounded-full\""
   },
   {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/VendorPortal.tsx",
-    "snippet": "<p className=\"text-white/55 text-[12px] uppercase tracking-wider font-semibold\">{portalLabel}</p>"
-  },
-  {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Welcome.tsx",
     "snippet": "<main className=\"min-h-screen flex items-center justify-center bg-[#00062B] text-white px-6\">"
@@ -16203,6 +16138,16 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Welcome.tsx",
     "snippet": "<div className=\"text-[40px] font-bold mt-1 text-[#4AFFCA]\" data-testid=\"text-gooddeed-number\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/Welcome.tsx",
+    "snippet": "<div className=\"mt-1.5 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[28px] font-bold text-[#4AFFCA]\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/Welcome.tsx",
+    "snippet": "<span className=\"ml-2 text-[11px] text-[#FF5470] font-medium\">"
   },
   {
     "rule": "brand-hex-literal",
@@ -16272,12 +16217,37 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Welcome.tsx",
+    "snippet": "<div className=\"text-white/40 text-[11px] uppercase tracking-wider font-semibold\">Your GoodDeeds®</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Welcome.tsx",
+    "snippet": "<div className=\"mt-1.5 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[28px] font-bold text-[#4AFFCA]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Welcome.tsx",
+    "snippet": "<div className=\"text-white/55 text-[12px] mt-2\">Numbered for life. Each copy is its own entitlement.</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Welcome.tsx",
     "snippet": "<div className=\"text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-3\">Order</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Welcome.tsx",
     "snippet": "<div className=\"mt-2 text-[12px] text-white/65 leading-snug\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Welcome.tsx",
+    "snippet": "className=\"flex items-center justify-between text-[14px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Welcome.tsx",
+    "snippet": "<span className=\"ml-2 text-[11px] text-[#FF5470] font-medium\">"
   },
   {
     "rule": "hardcoded-font-size",

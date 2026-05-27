@@ -43,11 +43,26 @@ type Order = {
   createdAt: string;
 };
 type AlbumLite = { artwork: string | null };
+// Task #549 — one entitlement per physical copy. Multi-quantity orders
+// now have N copies; legacy orders have at most one row (or zero if
+// they predate the table).
+type OrderCopy = {
+  id: string;
+  position: number;
+  format: string;
+  signedCert: boolean;
+  formatPriceCents: number;
+  addonPriceCents: number;
+  goodDeedNumber: number | null;
+  vinylColor: string | null;
+  jacketUpgrade: JacketUpgrade | null;
+};
 type SessionResponse = {
   paymentStatus: string;
   status: string;
   order: Order | null;
   items: OrderItem[];
+  copies?: OrderCopy[];
   album: AlbumLite | null;
 };
 
@@ -227,15 +242,40 @@ export function Welcome() {
           </p>
         </div>
 
-        {data.order.goodDeedNumber !== null && (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5 text-center" data-testid="welcome-gooddeed">
-            <div className="text-white/40 text-[11px] uppercase tracking-wider font-semibold">Your GoodDeed®</div>
-            <div className="text-[40px] font-bold mt-1 text-[#4AFFCA]" data-testid="text-gooddeed-number">
-              #{data.order.goodDeedNumber}
-            </div>
-            <div className="text-white/55 text-[12px] mt-1">Numbered for life. Refundable up until shipping.</div>
-          </div>
-        )}
+        {/* Task #549 — Show every minted GoodDeed number when this order
+            carries more than one signed copy; collapse to the single
+            hero number on a 1-copy order (or a multi-copy order with
+            just one signed cert) so the existing single-buy flow looks
+            unchanged. */}
+        {(() => {
+          const certNumbers = (data.copies ?? []).filter((c) => c.goodDeedNumber != null).map((c) => c.goodDeedNumber!) as number[];
+          const showHero = certNumbers.length <= 1 && data.order!.goodDeedNumber !== null;
+          if (showHero) {
+            return (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5 text-center" data-testid="welcome-gooddeed">
+                <div className="text-white/40 text-[11px] uppercase tracking-wider font-semibold">Your GoodDeed®</div>
+                <div className="text-[40px] font-bold mt-1 text-[#4AFFCA]" data-testid="text-gooddeed-number">
+                  #{data.order!.goodDeedNumber}
+                </div>
+                <div className="text-white/55 text-[12px] mt-1">Numbered for life. Refundable up until shipping.</div>
+              </div>
+            );
+          }
+          if (certNumbers.length >= 2) {
+            return (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5 text-center" data-testid="welcome-gooddeed-multi">
+                <div className="text-white/40 text-[11px] uppercase tracking-wider font-semibold">Your GoodDeeds®</div>
+                <div className="mt-1.5 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[28px] font-bold text-[#4AFFCA]">
+                  {certNumbers.map((n) => (
+                    <span key={n} data-testid={`text-gooddeed-number-${n}`}>#{n}</span>
+                  ))}
+                </div>
+                <div className="text-white/55 text-[12px] mt-2">Numbered for life. Each copy is its own entitlement.</div>
+              </div>
+            );
+          }
+          return null;
+        })()}
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5">
           <div className="text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-3">Order</div>
@@ -267,12 +307,39 @@ export function Welcome() {
                 </div>
               );
             })}
-          {data.items.map((it) => (
-            <div key={it.id} className="flex items-center justify-between text-[14px] mb-1" data-testid={`order-item-${it.kind}-${it.sku}`}>
-              <span className="text-white/85">{it.label}</span>
-              <span className="text-white/55">${(it.unitPriceCents / 100).toFixed(2)}</span>
+          {/* Task #549 — Prefer the per-copy breakdown when the server
+              returned copies; falls back to the legacy line-item list
+              for older orders that pre-date order_copies. */}
+          {data.copies && data.copies.length > 0 ? (
+            <div className="space-y-1.5" data-testid="welcome-copies">
+              {data.copies.map((c) => (
+                <div
+                  key={c.id}
+                  className="flex items-center justify-between text-[14px]"
+                  data-testid={`welcome-copy-${c.position}`}
+                >
+                  <span className="text-white/85 truncate pr-2">
+                    Copy {c.position}
+                    {c.signedCert && (
+                      <span className="ml-2 text-[11px] text-[#FF5470] font-medium">
+                        Signed{c.goodDeedNumber != null ? ` · #${c.goodDeedNumber}` : ""}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-white/55 whitespace-nowrap">
+                    ${((c.formatPriceCents + c.addonPriceCents) / 100).toFixed(2)}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
+          ) : (
+            data.items.map((it) => (
+              <div key={it.id} className="flex items-center justify-between text-[14px] mb-1" data-testid={`order-item-${it.kind}-${it.sku}`}>
+                <span className="text-white/85">{it.label}{it.quantity > 1 ? ` × ${it.quantity}` : ""}</span>
+                <span className="text-white/55">${((it.unitPriceCents * it.quantity) / 100).toFixed(2)}</span>
+              </div>
+            ))
+          )}
           <div className="border-t border-white/10 mt-3 pt-3 flex items-center justify-between">
             <span className="text-white/55 text-[13px]">Total</span>
             <span className="font-semibold">${(data.order.totalCents / 100).toFixed(2)}</span>

@@ -1727,3 +1727,74 @@ SQL
 }
 migrate_album_addons_booklet dev  "${DATABASE_URL:-}"
 migrate_album_addons_booklet prod "${PROD_DATABASE_URL:-}"
+
+# Task #549 — Multi-quantity web checkout. Adds the per-copy
+# entitlement table (`order_copies`) and a nullable `copy_id` column on
+# `signed_cert_certificates`, swapping the old `unique(order_id)`
+# constraint for two partial unique indexes so legacy single-cert
+# orders (copy_id NULL) and per-copy orders (copy_id set) coexist
+# without a data migration. Idempotent on both DBs.
+migrate_task_549_multi_quantity() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-549 multi-quantity migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS order_copies (
+  id                  varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id            varchar NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  album_id            varchar NOT NULL,
+  position            integer NOT NULL DEFAULT 0,
+  format              text    NOT NULL,
+  signed_cert         boolean NOT NULL DEFAULT false,
+  format_price_cents  integer NOT NULL,
+  addon_price_cents   integer NOT NULL DEFAULT 0,
+  good_deed_number    integer,
+  vinyl_color         text,
+  jacket_upgrade      text,
+  gift_id             varchar,
+  created_at          timestamp DEFAULT now()
+);
+ALTER TABLE order_copies ADD COLUMN IF NOT EXISTS album_id varchar;
+-- Backfill album_id for any rows written before this column existed,
+-- then enforce NOT NULL.
+UPDATE order_copies oc SET album_id = o.album_id
+  FROM orders o WHERE o.id = oc.order_id AND oc.album_id IS NULL;
+ALTER TABLE order_copies ALTER COLUMN album_id SET NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS order_copies_order_position_uniq
+  ON order_copies (order_id, position);
+-- Per-album partial unique on good_deed_number — same protection
+-- model as orders.good_deed_number_uniq; lets withRetryOnGoodDeed
+-- Collision recover from cross-order races on per-copy numbers.
+CREATE UNIQUE INDEX IF NOT EXISTS order_copies_album_good_deed_number_uniq
+  ON order_copies (album_id, good_deed_number)
+  WHERE good_deed_number IS NOT NULL;
+
+ALTER TABLE signed_cert_certificates
+  ADD COLUMN IF NOT EXISTS copy_id varchar;
+-- The original `.unique()` on order_id auto-named the constraint
+-- `signed_cert_certificates_order_id_unique` (drizzle default) or
+-- `signed_cert_certificates_order_id_key` (pg default). Drop whichever
+-- exists so we can replace it with two partial unique indexes.
+ALTER TABLE signed_cert_certificates
+  DROP CONSTRAINT IF EXISTS signed_cert_certificates_order_id_unique;
+ALTER TABLE signed_cert_certificates
+  DROP CONSTRAINT IF EXISTS signed_cert_certificates_order_id_key;
+CREATE UNIQUE INDEX IF NOT EXISTS signed_cert_certs_order_legacy_uniq
+  ON signed_cert_certificates (order_id)
+  WHERE copy_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS signed_cert_certs_order_copy_uniq
+  ON signed_cert_certificates (order_id, copy_id)
+  WHERE copy_id IS NOT NULL;
+COMMIT;
+SQL
+  then
+    echo "post-merge: task-549 multi-quantity migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-549 multi-quantity migration failed on $label (continuing)"
+  fi
+}
+migrate_task_549_multi_quantity dev  "${DATABASE_URL:-}"
+migrate_task_549_multi_quantity prod "${PROD_DATABASE_URL:-}"
