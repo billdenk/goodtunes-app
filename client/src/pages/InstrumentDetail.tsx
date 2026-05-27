@@ -4,12 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
 import { INSTRUMENTS, type Instrument, type InstrumentVendor } from "@/data/musicData";
 
-// Task #174 — fan-side gear page still hangs off the static
-// INSTRUMENTS catalog (the same shape the rest of the demo content
-// uses), but we now hydrate the Maker headline from the live admin
-// API when the id is one a logged-in admin has edited. Missing /
-// 401 / 404 just leaves the maker chip off; the static body still
-// renders.
+// Task #174 — fan-side gear page started life on the static
+// INSTRUMENTS catalog (demo content). Task #604 — also resolve
+// live admin-created gear by id, so a fan bookmarking a real DB
+// entry (e.g. the PRS Silver Sky) renders with the admin-saved
+// per-attachment product URLs from `instrument_vendors.affiliate_url`,
+// not the vendor's homepage. Live wins when present; static is the
+// fallback for the seeded demo rows.
 interface LiveMakerProfile {
   instrument?: {
     // Task #461 — also carries `sourceUrl`, the original product page
@@ -24,6 +25,67 @@ interface LiveMakerProfile {
       domain: string;
       logoUrl: string | null;
     } | null;
+  };
+}
+
+// Shape of GET /api/instruments/:id — the live row from admin CMS.
+// `vendors[].affiliateUrl` is the per-attachment product URL the admin
+// saved; never the vendor's `home_url`. The fan tap MUST honor this
+// field — see the comment on `handleVendorOpen` below.
+interface ApiInstrumentVendor {
+  id: string;
+  vendorId: string;
+  instrumentId: string;
+  affiliateUrl: string;
+  name: string;
+  domain: string | null;
+  homeUrl: string | null;
+  aboutUrl: string | null;
+  logoUrl: string | null;
+  tagline: string | null;
+  bio: string | null;
+  location: string | null;
+  coverUrl: string | null;
+  position: number;
+}
+interface ApiInstrument {
+  id: string;
+  name: string;
+  category: string;
+  shortCategory: string | null;
+  photoUrl: string | null;
+  about: string | null;
+  artistNote: string | null;
+  vendors: ApiInstrumentVendor[];
+}
+
+function liveToInstrument(i: ApiInstrument): Instrument {
+  return {
+    id: i.id,
+    name: i.name,
+    category: i.category,
+    shortCategory: i.shortCategory ?? undefined,
+    photoUrl: i.photoUrl ?? undefined,
+    about: i.about ?? undefined,
+    artistNote: i.artistNote ?? undefined,
+    vendors: i.vendors.map((v) => ({
+      name: v.name,
+      // Per-attachment product URL from instrument_vendors.affiliate_url.
+      // Falling back to homeUrl here would defeat the credit
+      // breadcrumb — leave it as-is and trust the admin write path.
+      affiliateUrl: v.affiliateUrl,
+      aboutUrl: v.aboutUrl ?? undefined,
+      logoUrl: v.logoUrl ?? undefined,
+      tagline: v.tagline ?? undefined,
+      bio: v.bio ?? undefined,
+      location: v.location ?? undefined,
+      coverUrl: v.coverUrl ?? undefined,
+      id: v.id,
+      vendorId: v.vendorId,
+      instrumentId: v.instrumentId,
+      homeUrl: v.homeUrl ?? undefined,
+      domain: v.domain ?? undefined,
+    })),
   };
 }
 import { BottomNav } from "@/components/BottomNav";
@@ -52,7 +114,21 @@ function parseInstrumentAbout(about: string): { prose: string; specs: { label: s
 export function InstrumentDetail() {
   const [, params] = useRoute<{ id: string }>("/instrument/:id");
   const [, navigate] = useLocation();
-  const instrument: Instrument | undefined = params?.id ? INSTRUMENTS[params.id] : undefined;
+  // Task #604 — live admin-created gear (UUID ids) lives in the DB only;
+  // static demo gear ("i-…" ids) lives in INSTRUMENTS. Try both; live
+  // wins so we always render the admin-saved `affiliateUrl` (per-
+  // attachment product URL) on vendor rows, not the vendor homepage.
+  const staticInstrument: Instrument | undefined = params?.id ? INSTRUMENTS[params.id] : undefined;
+  const isStaticId = !!staticInstrument;
+  const { data: liveApi, isLoading: liveLoading } = useQuery<ApiInstrument>({
+    queryKey: ["/api/instruments", params?.id],
+    enabled: !!params?.id && !isStaticId,
+  });
+  const liveInstrument: Instrument | undefined = useMemo(
+    () => (liveApi ? liveToInstrument(liveApi) : undefined),
+    [liveApi],
+  );
+  const instrument: Instrument | undefined = liveInstrument ?? staticInstrument;
 
   // Fire gear_viewed when a real instrument is resolved. Skipped on the
   // "no longer available" fallback below so we don't track 404s.
@@ -112,6 +188,15 @@ export function InstrumentDetail() {
   );
 
   if (!instrument) {
+    // While the live fetch is in flight (UUID id), don't flash the
+    // "no longer available" copy — wait for the API response.
+    if (liveLoading) {
+      return (
+        <main className="relative h-screen w-full flex justify-center overflow-hidden" style={{ background: "#00062B" }}>
+          <section className="relative w-full max-w-[390px] h-screen" />
+        </main>
+      );
+    }
     return (
       <main className="relative h-screen w-full flex justify-center overflow-hidden" style={{ background: "#00062B" }}>
         <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col items-center justify-center px-8 text-center">

@@ -12442,6 +12442,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const affiliateUrl = body.affiliateUrl ? String(body.affiliateUrl) : "";
     if (!affiliateUrl) return res.status(400).json({ message: "affiliateUrl is required" });
 
+    // Task #604 guardrail — `affiliateUrl` is the per-attachment product
+    // URL that the fan tap opens (instrument_vendors.affiliate_url). For
+    // maker hosts (prsguitars.com, martinguitar.com, fender.com, …) it
+    // must point at a specific product page, not the brand homepage —
+    // otherwise the gear page sends fans to "/" instead of the model.
+    // Reject the bare-root case so a botched scrape can't silently
+    // overwrite a good attachment with the homepage.
+    try {
+      const parsedAffiliate = new URL(affiliateUrl);
+      const affiliateHost = parsedAffiliate.hostname.replace(/^www\./, "");
+      const affiliateInfo = KNOWN_HOSTS[affiliateHost];
+      const path = parsedAffiliate.pathname.replace(/\/+$/, "");
+      const isBareRoot = (path === "" || path === "/") && !parsedAffiliate.search;
+      if (
+        isBareRoot &&
+        affiliateInfo &&
+        (affiliateInfo.role === "maker" || affiliateInfo.role === "both")
+      ) {
+        return res.status(400).json({
+          message: `${affiliateInfo.name} attachments need a specific product URL, not the homepage.`,
+        });
+      }
+    } catch {
+      return res.status(400).json({ message: "affiliateUrl is not a valid URL" });
+    }
+
     let vendorId: string | null = body.vendorId ? String(body.vendorId) : null;
 
     if (vendorId) {
