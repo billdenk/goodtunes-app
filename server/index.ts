@@ -290,6 +290,17 @@ async function bootstrapAccessGuard() {
     log(`payout digest scheduler init failed: ${e?.message ?? e}`, "earmark-digest");
   }
 
+  // Task #550 — Daily scheduler for scheduled-delivery gifts. Stamps
+  // deliveredAt on any pending gift whose deliver_on date has arrived
+  // so the recipient's claim page unlocks. Same shape as the trash
+  // sweeper above (long first delay + 24h tick + in-process guard).
+  try {
+    const { armGiftDeliveryScheduler } = await import("./giftScheduler");
+    armGiftDeliveryScheduler();
+  } catch (e: any) {
+    log(`gift scheduler init failed: ${e?.message ?? e}`, "gift-scheduler");
+  }
+
   // Task #364 — Loud one-line warning at boot when Mux isn't fully
   // configured. The pipeline degrades to "raw audio only" without these
   // keys, so the operator needs to see the gap on the next deploy log

@@ -85,6 +85,11 @@ export function Welcome() {
   const [giftLast, setGiftLast] = useState("");
   const [giftContactKind, setGiftContactKind] = useState<"email" | "phone">("email");
   const [giftContact, setGiftContact] = useState("");
+  // Task #550 — optional gift-card message + scheduled delivery date.
+  // Both are blank-by-default; sending without them keeps the legacy
+  // "deliver now, no message" behaviour.
+  const [giftMessage, setGiftMessage] = useState("");
+  const [giftDeliverOn, setGiftDeliverOn] = useState("");
   const [giftSubmitting, setGiftSubmitting] = useState(false);
   const [giftShareUrl, setGiftShareUrl] = useState<string | null>(null);
   const [giftCopied, setGiftCopied] = useState(false);
@@ -158,6 +163,8 @@ export function Welcome() {
         lastName: giftLast.trim(),
         email: giftContactKind === "email" ? giftContact.trim() : "",
         phone: giftContactKind === "phone" ? giftContact.trim() : "",
+        message: giftMessage.trim() || null,
+        deliverOn: giftDeliverOn || null,
       });
       const j = await r.json();
       setGiftShareUrl(j.shareUrl);
@@ -406,8 +413,34 @@ export function Welcome() {
                   className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]"
                   data-testid="input-gift-contact"
                 />
+                <textarea
+                  value={giftMessage}
+                  onChange={(e) => setGiftMessage(e.target.value.slice(0, 500))}
+                  placeholder="Optional message (500 chars)"
+                  rows={2}
+                  className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none resize-none"
+                  style={{ borderColor: undefined }}
+                  onFocus={(e) => { (e.currentTarget.style as any).borderColor = "var(--brand-blue)"; }}
+                  onBlur={(e) => { (e.currentTarget.style as any).borderColor = ""; }}
+                  data-testid="input-gift-message"
+                />
+                <div>
+                  <label className="text-white/55 text-xs uppercase tracking-wider font-semibold block mb-1.5">
+                    Deliver on (optional)
+                  </label>
+                  <input
+                    type="date"
+                    value={giftDeliverOn}
+                    onChange={(e) => setGiftDeliverOn(e.target.value)}
+                    min={new Date().toISOString().slice(0, 10)}
+                    className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm bg-white/[0.06] focus:outline-none"
+                    onFocus={(e) => { (e.currentTarget.style as any).borderColor = "var(--brand-blue)"; }}
+                    onBlur={(e) => { (e.currentTarget.style as any).borderColor = ""; }}
+                    data-testid="input-gift-deliver-on"
+                  />
+                </div>
                 <p className="text-white/40 text-[11px] leading-snug">
-                  We'll generate a one-time claim link. You can share it directly or we'll send it on your behalf.
+                  We'll generate a one-time claim link. {giftDeliverOn ? `It unlocks on ${giftDeliverOn}.` : "You can share it right away."}
                 </p>
                 <button
                   type="button"

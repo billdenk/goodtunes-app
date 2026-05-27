@@ -1822,3 +1822,76 @@ SQL
 }
 migrate_vinyl_order dev  "${DATABASE_URL:-}"
 migrate_vinyl_order prod "${PROD_DATABASE_URL:-}"
+
+# Task #550 — Gifting at checkout + post-purchase window. Adds per-copy
+# gifting (gifts.copy_id), optional gift-card message, scheduled
+# delivery (deliver_on), recipient pre-lookup (recipient_user_id),
+# delivered_at + reverted_at audit columns, and a configurable
+# payout_settings.gifting_window_days. Uniqueness on gifts is enforced
+# via two partial indexes (legacy whole-order vs. per-copy) — same
+# pattern as signed_cert_certificates from Task #549. Idempotent on
+# both DBs so a fresh-clone dev never 500s the gift endpoints and the
+# publish dev→prod diff stays empty.
+migrate_task_550_gifting() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-550 gifting migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE gifts
+  ADD COLUMN IF NOT EXISTS copy_id            varchar,
+  ADD COLUMN IF NOT EXISTS recipient_user_id  varchar,
+  ADD COLUMN IF NOT EXISTS message            text,
+  ADD COLUMN IF NOT EXISTS deliver_on         text,
+  ADD COLUMN IF NOT EXISTS delivered_at       timestamp,
+  ADD COLUMN IF NOT EXISTS reverted_at        timestamp;
+-- Drop the legacy single-gift-per-order unique constraint (auto-named
+-- by drizzle from the original .unique() on order_id) so multi-copy
+-- orders can carry one gift per copy. Tries both common names.
+ALTER TABLE gifts DROP CONSTRAINT IF EXISTS gifts_order_id_unique;
+ALTER TABLE gifts DROP CONSTRAINT IF EXISTS gifts_order_id_key;
+DROP INDEX IF EXISTS gifts_order_id_unique;
+DROP INDEX IF EXISTS gifts_order_id_key;
+-- Replace with two partial unique indexes: one whole-order gift per
+-- order (copy_id IS NULL), one per (order_id, copy_id) when set.
+CREATE UNIQUE INDEX IF NOT EXISTS gifts_order_whole_uniq
+  ON gifts (order_id) WHERE copy_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS gifts_order_copy_uniq
+  ON gifts (order_id, copy_id) WHERE copy_id IS NOT NULL;
+-- Add FKs only when the referenced table exists and the constraint
+-- isn't already there. Skips silently on a freshly-cloned dev where
+-- order_copies may have been added after gifts.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'gifts_copy_id_order_copies_id_fk') THEN
+    BEGIN
+      ALTER TABLE gifts
+        ADD CONSTRAINT gifts_copy_id_order_copies_id_fk
+        FOREIGN KEY (copy_id) REFERENCES order_copies(id) ON DELETE CASCADE;
+    EXCEPTION WHEN undefined_table THEN NULL;
+    END;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'gifts_recipient_user_id_customer_users_id_fk') THEN
+    BEGIN
+      ALTER TABLE gifts
+        ADD CONSTRAINT gifts_recipient_user_id_customer_users_id_fk
+        FOREIGN KEY (recipient_user_id) REFERENCES customer_users(id) ON DELETE SET NULL;
+    EXCEPTION WHEN undefined_table THEN NULL;
+    END;
+  END IF;
+END
+$$;
+ALTER TABLE payout_settings
+  ADD COLUMN IF NOT EXISTS gifting_window_days integer NOT NULL DEFAULT 30;
+COMMIT;
+SQL
+  then
+    echo "post-merge: task-550 gifting migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-550 gifting migration failed on $label (continuing)"
+  fi
+}
+migrate_task_550_gifting dev  "${DATABASE_URL:-}"
+migrate_task_550_gifting prod "${PROD_DATABASE_URL:-}"

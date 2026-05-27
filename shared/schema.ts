@@ -2114,23 +2114,59 @@ export const shopifyRedemptionCodes = pgTable("shopify_redemption_codes", {
 // move to the claimer so the certificate + library follow the gift.
 // `expiresAt` is suggested 30 days from creation; the buyer can re-send
 // (rotates `claimToken`) or change the recipient within 24h.
+// Task #550 — per-copy gifting + scheduled delivery. The order-level
+// gift from #46 still works (legacy single-copy orders pass copyId=null
+// and the whole order transfers). On multi-quantity orders the sender
+// can gift any individual copy, attach an optional message, and
+// optionally schedule delivery for a future date. When the recipient
+// already has a GoodTunes account we resolve the email/phone to a
+// `recipientUserId` at creation time and reserve the entitlement; the
+// claim flow keeps working the same way (recipient still has to log in
+// and tap Claim). A daily scheduler stamps `deliveredAt` on gifts
+// whose `deliverOn` date has arrived. Refund-before-claim stamps
+// `revertedAt` and leaves the entitlement with the sender.
 export const gifts = pgTable("gifts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }).unique(),
+  orderId: varchar("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  // When set, the gift moves only this one per-copy entitlement; when
+  // null, the whole order moves (legacy single-copy path).
+  copyId: varchar("copy_id").references(() => orderCopies.id, { onDelete: "cascade" }),
   buyerUserId: varchar("buyer_user_id").notNull().references(() => customerUsers.id),
   recipientFirstName: text("recipient_first_name").notNull(),
   recipientLastName: text("recipient_last_name").notNull(),
   recipientEmail: text("recipient_email"),
   recipientPhone: text("recipient_phone"),
+  // Resolved at creation time when the recipient email/phone matches an
+  // existing customer_users row. Null when no match (we send an invite
+  // link instead). Distinct from `claimedByUserId` — recipientUserId is
+  // who we *expect* will claim; claimedByUserId is who actually did.
+  recipientUserId: varchar("recipient_user_id").references(() => customerUsers.id, { onDelete: "set null" }),
+  // Optional gift-card-style message the recipient sees on the claim
+  // page. Plain text, ≤500 chars (enforced at the route).
+  message: text("message"),
+  // Optional scheduled delivery date (YYYY-MM-DD). Until the daily
+  // scheduler stamps `deliveredAt`, the public claim endpoint reports
+  // the gift as not-yet-delivered and the claim button is disabled.
+  deliverOn: text("deliver_on"),
+  deliveredAt: timestamp("delivered_at"),
   claimToken: text("claim_token").notNull().unique(),
   claimedByUserId: varchar("claimed_by_user_id").references(() => customerUsers.id),
   claimedAt: timestamp("claimed_at"),
+  // Stamped when the parent order is refunded before claim — the gift
+  // link stops working and the entitlement stays with the sender (or
+  // is removed entirely as part of the standard refund unwind).
+  revertedAt: timestamp("reverted_at"),
   expiresAt: timestamp("expires_at").notNull(),
   // Bookkeeping for "Sent / Resent" admin pill — increments each resend.
   resendCount: integer("resend_count").notNull().default(0),
   lastSentAt: timestamp("last_sent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+// Uniqueness enforced at the DB layer via two partial indexes (post-
+// merge SQL): one on (order_id) WHERE copy_id IS NULL for the legacy
+// whole-order gift, one on (order_id, copy_id) WHERE copy_id IS NOT
+// NULL for per-copy gifts. Mirrors the signed_cert_certificates
+// pattern from Task #549.
 
 // Stripe Connect (Express) account attached to a People row or a
 // Label row. Pair (ownerKind, ownerId) is unique — each artist or
@@ -2194,6 +2230,11 @@ export const payoutSettings = pgTable("payout_settings", {
   defaultPrintVendorId: varchar("default_print_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
   defaultHologramVendorId: varchar("default_hologram_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
   defaultInsertionVendorId: varchar("default_insertion_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
+  // Task #550 — gifting window. Fan can convert a kept copy into a
+  // gift from their library for this many days after purchase. Default
+  // 30; editable on AdminPlatformPricing. The checkout-time gift path
+  // is always available (no window check at order-creation time).
+  giftingWindowDays: integer("gifting_window_days").notNull().default(30),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

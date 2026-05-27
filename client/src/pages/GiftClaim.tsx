@@ -23,6 +23,14 @@ type GiftPublic = {
   buyerName: string | null;
   recipientFirstName: string;
   recipientLastName: string;
+  // Task #550 — optional gift-card message + scheduled delivery state.
+  // `delivered` is true when there's no schedule OR the deliver-on
+  // date has arrived; the claim button stays disabled when false.
+  message: string | null;
+  deliverOn: string | null;
+  delivered: boolean;
+  deliveredAt: string | null;
+  reverted: boolean;
   claimed: boolean;
   claimedAt: string | null;
   expired: boolean;
@@ -115,11 +123,33 @@ export function GiftClaim() {
           </div>
         </div>
 
+        {data.message && (
+          <div
+            className="rounded-2xl border p-5 mb-5"
+            style={{ borderColor: "color-mix(in srgb, var(--brand-heart) 25%, transparent)", background: "color-mix(in srgb, var(--brand-heart) 6%, transparent)" }}
+            data-testid="text-gift-message"
+          >
+            <div className="text-xs uppercase tracking-wider font-semibold mb-1" style={{ color: "var(--brand-heart)" }}>Message</div>
+            <p className="text-white/85 text-sm leading-snug whitespace-pre-wrap">{data.message}</p>
+          </div>
+        )}
+
         {data.claimed ? (
           <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-5 text-center" data-testid="gift-claim-already">
             <div className="text-emerald-300 text-[12px] uppercase tracking-wider font-semibold mb-1">Already claimed</div>
             <div className="text-white/75 text-[13px]">
               This gift was claimed on {data.claimedAt ? new Date(data.claimedAt).toLocaleDateString() : "an earlier date"}.
+            </div>
+          </div>
+        ) : !data.delivered ? (
+          <div
+            className="rounded-2xl border p-5 text-center"
+            style={{ borderColor: "color-mix(in srgb, var(--brand-blue) 30%, transparent)", background: "color-mix(in srgb, var(--brand-blue) 10%, transparent)" }}
+            data-testid="gift-claim-scheduled"
+          >
+            <div className="text-xs uppercase tracking-wider font-semibold mb-1" style={{ color: "var(--brand-blue)" }}>Unlocks {data.deliverOn}</div>
+            <div className="text-white/75 text-sm">
+              Come back on {data.deliverOn ? new Date(`${data.deliverOn}T00:00:00Z`).toLocaleDateString() : "the scheduled date"} to claim — we'll keep the link safe until then.
             </div>
           </div>
         ) : data.expired ? (

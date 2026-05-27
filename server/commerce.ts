@@ -2448,6 +2448,18 @@ async function handleRefund(paymentIntentId: string): Promise<void> {
     .update(orders)
     .set({ status: "refunded", refundedAt: new Date(), goodDeedNumber: null })
     .where(eq(orders.id, order.id));
+  // Task #550 — revert any unclaimed gifts on this order so the share
+  // link stops working and the entitlement stays with the sender (the
+  // user_albums sweep below removes the album entirely when no other
+  // paid order remains, which is the correct end-state for a refunded
+  // gift). Already-claimed gifts keep their state — the standard
+  // refund unwind treats them like any other transferred order.
+  try {
+    const { revertGiftsForRefundedOrder } = await import("./gifts");
+    await revertGiftsForRefundedOrder(order.id);
+  } catch (e: any) {
+    console.warn(`[commerce] gift revert failed for refunded order ${order.id}: ${e?.message}`);
+  }
   // Task #549 — also void every per-copy GoodDeed number so neither the
   // cert renderer nor the next assignNextGoodDeedNumber floor sees this
   // refunded order's numbers.
