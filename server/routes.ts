@@ -4315,9 +4315,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // this filter we'd import the brand-as-gear with the logo as the photo).
       const product = pickProduct(html, meta["og:site_name"] || null);
 
-      const name = product?.name || meta["og:title"] || meta["twitter:title"] || null;
-      const brand = (typeof product?.brand === "object" ? product.brand?.name : product?.brand) || null;
-      const category = product?.category || null;
+      let name: string | null = product?.name || meta["og:title"] || meta["twitter:title"] || null;
+      let brand: string | null = (typeof product?.brand === "object" ? product.brand?.name : product?.brand) || null;
+      let category: string | null = product?.category || null;
       // Description: prefer Product.description (richer/longer) over OG.
       // Strip HTML tags — Shopify often embeds <p> / <br> in description.
       let descriptionRaw: string | null =
@@ -4383,6 +4383,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const label = cleanCell(sm[1]);
         const value = cleanCell(sm[2]);
         if (looksLikeSpec(label, value) && !(label in specs)) specs[label] = value;
+      }
+
+      // Carter Vintage / Norman's Rare Guitars / other vintage shops keep
+      // the brand and category in the spec table, not in JSON-LD. Lift
+      // them so the maker-from-brand resolver downstream actually has
+      // something to work with (without this, "1959 Gretsch 6120" off
+      // cartervintage.com imports with Maker: unset).
+      const lookupSpec = (...keys: string[]): string | null => {
+        const lower: Record<string, string> = {};
+        for (const k of Object.keys(specs)) lower[k.toLowerCase()] = specs[k];
+        for (const k of keys) {
+          const v = lower[k.toLowerCase()];
+          if (v && v.trim()) return v.trim();
+        }
+        return null;
+      };
+      if (!brand) brand = lookupSpec("Brand", "Manufacturer", "Maker", "Make");
+      if (!category) category = lookupSpec("Instrument", "Category", "Type", "Body Style", "Instrument Type");
+
+      // When the host is a known reseller, strip the reseller-name prefix
+      // that vintage shops bake into their HTML <title> ("Carter Vintage
+      // - Gibson Les Paul Roadworn..." → "Gibson Les Paul Roadworn...").
+      // Match by the first token of the reseller's display name so we
+      // catch "Carter Vintage" without needing "Carter Vintage Guitars"
+      // to appear verbatim.
+      if (
+        name &&
+        hostInfo &&
+        (hostInfo.role === "reseller" || hostInfo.role === "both")
+      ) {
+        const sep = /\s*[-–—|:]\s+/;
+        const parts = name.split(sep);
+        if (parts.length >= 2) {
+          const head = parts[0].trim().toLowerCase();
+          const resellerNameLc = hostInfo.name.toLowerCase();
+          const headIsResellerPrefix =
+            head.length >= 4 &&
+            (resellerNameLc.startsWith(head) || head.startsWith(resellerNameLc) || resellerNameLc.includes(head));
+          if (headIsResellerPrefix) {
+            name = parts.slice(1).join(" - ").trim() || name;
+          }
+        }
       }
 
       // JSON-LD Product.image can also be a wrapped { "@type": "ImageObject",
