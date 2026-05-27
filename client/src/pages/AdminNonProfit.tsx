@@ -100,8 +100,11 @@ export default function AdminNonProfit() {
             ) : (
               <Heart className="w-7 h-7 text-slate-300" strokeWidth={1.5} />
             )}
-            <span className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/40 transition-colors flex items-center justify-center text-white opacity-0 group-hover:opacity-100">
-              <Pencil className="w-4 h-4" />
+            <span className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 [@media(hover:none)]:bg-black/30 transition-colors" />
+            <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
+              <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
+                <Pencil className="w-4 h-4" />
+              </span>
             </span>
           </button>
           <PressLogoEditorDialog
