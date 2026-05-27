@@ -454,12 +454,12 @@ const CertCard = forwardRef(function CertCard(
               aria-label={`${ownerName} owns no. ${certNumStr} of ${album.title}`}
             >
               <div
-                className="h-2 rounded-sm w-1/3"
-                style={{ background: "rgba(255,255,255,0.55)" }}
+                className="h-[0.55em] min-h-[10px] rounded-full w-1/2"
+                style={{ background: "rgba(255,255,255,0.85)" }}
                 aria-hidden
               />
               <div
-                className="h-2 rounded-sm w-2/3"
+                className="h-[0.5em] min-h-[8px] rounded-full w-[75%]"
                 style={{ background: "rgba(255,255,255,0.55)" }}
                 aria-hidden
               />

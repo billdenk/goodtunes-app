@@ -3655,14 +3655,14 @@ function GoodDeedPill({
                       aria-label="Owner avatar (per fan)"
                       data-testid="skeleton-gooddeed-avatar"
                     />
-                    <div className="flex-1 min-w-0 flex flex-col gap-[6%]">
+                    <div className="flex-1 min-w-0 flex flex-col gap-[10%]">
                       <div
-                        className="h-2 w-1/3 rounded-full bg-white/55"
+                        className="h-[14%] min-h-[10px] w-1/2 rounded-full bg-white/85"
                         aria-label="Owner name (filled in per fan)"
                         data-testid="skeleton-gooddeed-owner"
                       />
                       <div
-                        className="h-2 w-2/3 rounded-full bg-white/55"
+                        className="h-[12%] min-h-[8px] w-[75%] rounded-full bg-white/55"
                         aria-label={`owns no. NN of ${albumTitle || "this release"}`}
                         data-testid="skeleton-gooddeed-serial"
                       />
