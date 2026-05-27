@@ -193,7 +193,7 @@ async function buildLabelPayload(
 ): Promise<{ kpis: Kpi[]; chartMetrics: ChartMetric[]; series: SeriesPoint[]; activity: ActivityItem[] }> {
   // Scope: all albums + songs under the label.
   const albumRows = await db.execute<any>(sql`
-    SELECT id, primary_artist_id, title, created_at FROM albums WHERE label_id = ${scope.id}
+    SELECT id, primary_artist_id, title, good_tunes_release_date FROM albums WHERE label_id = ${scope.id}
   `);
   const albums = ((albumRows as any).rows ?? []) as any[];
   const albumIds = albums.map((a) => a.id);
@@ -342,11 +342,12 @@ async function buildLabelPayload(
     }
   }
   for (const a of albums) {
-    if (a.created_at && new Date(a.created_at) >= r.from && new Date(a.created_at) < r.to) {
+    const rd = a.good_tunes_release_date;
+    if (rd && new Date(rd) >= r.from && new Date(rd) < r.to) {
       activity.push({
         kind: "release",
-        ts: new Date(a.created_at).toISOString(),
-        title: `Album added — ${a.title}`,
+        ts: new Date(rd).toISOString(),
+        title: `Album released — ${a.title}`,
         href: `/admin/albums/${a.id}`,
       });
     }
@@ -590,7 +591,7 @@ async function buildArtistPayload(
   // Songs the artist owns the primary credit on (via their albums).
   // Doesn't yet include side-musician credits — that's a follow-up.
   const albumRows = await db.execute<any>(sql`
-    SELECT id, title, created_at FROM albums WHERE primary_artist_id = ${scope.id}
+    SELECT id, title, good_tunes_release_date FROM albums WHERE primary_artist_id = ${scope.id}
   `);
   const albums = ((albumRows as any).rows ?? []) as any[];
   const albumIds = albums.map((a) => a.id);
@@ -725,11 +726,12 @@ async function buildArtistPayload(
     }
   }
   for (const a of albums) {
-    if (a.created_at && new Date(a.created_at) >= r.from && new Date(a.created_at) < r.to) {
+    const rd = a.good_tunes_release_date;
+    if (rd && new Date(rd) >= r.from && new Date(rd) < r.to) {
       activity.push({
         kind: "release",
-        ts: new Date(a.created_at).toISOString(),
-        title: `Album added — ${a.title}`,
+        ts: new Date(rd).toISOString(),
+        title: `Album released — ${a.title}`,
         href: `/admin/albums/${a.id}`,
       });
     }
