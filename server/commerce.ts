@@ -59,6 +59,7 @@ import {
   lookupCatalogUnitCents,
   seedHellbenderCatalog,
 } from "./pressCatalog";
+import { registerPressPortalRoutes } from "./pressPortal";
 import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "./storage";
@@ -734,6 +735,10 @@ export function registerCommerceRoutes(app: Express) {
   // Task #218 — mount the press catalog routes (formats/tiers/colors)
   // under the same requirePressScope as the legacy format-cost routes.
   registerPressCatalogRoutes(app, requireAdmin, requirePressScope);
+
+  // Task #522 — Press portal endpoints (customers/pipeline/invite/etc.)
+  // share the same press-scope gate.
+  registerPressPortalRoutes(app, requireAdmin, requirePressScope);
 
   app.get("/api/admin/manufacturers/:id/format-costs", requireAdmin, requirePressScope, async (req, res) => {
     const pressId = String(req.params.id);

@@ -18,8 +18,8 @@
 // is now a one-line pointer to this tab.
 
 import { useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { Download, Loader2, AlertTriangle, RefreshCcw } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VENDOR_SPECS, type VendorId } from "@shared/vendorSpecs";
@@ -187,6 +187,7 @@ export function PressPanel({
   return (
     <div className="py-6" data-testid="panel-press">
       <div className="max-w-3xl">
+        <MastersApprovalBanner albumId={albumId} />
         {/* ── Masters on file ─────────────────────────────────────────── */}
         <div className="mb-10" data-testid="section-masters-on-file">
           <h2 className="text-[15px] font-semibold text-slate-900 mb-1">Masters on file</h2>
@@ -409,6 +410,64 @@ export function PressPanel({
 
         {/* ── Print-ready PDFs (Task #327, moved from Sell) ──────────── */}
         <PrintPdfsPanel albumId={albumId} />
+      </div>
+    </div>
+  );
+}
+
+// ── Artist-side approval banner ──────────────────────────────────────
+// Renders at the top of the Press tab whenever the press has triggered
+// masters but the artist hasn't yet approved the early-start cut. The
+// approval gates the Pipeline `masters_triggered` stage transition
+// (server stamps `mastersApprovedByArtistAt`). Hidden when the album
+// isn't masters-triggered yet, and downgrades to a passive "approved"
+// chip once stamped so super_admins can audit when approval landed.
+function MastersApprovalBanner({ albumId }: { albumId: string }) {
+  const { toast } = useToast();
+  const { data } = useQuery<{
+    mastersTriggeredAt: string | null;
+    mastersApprovedByArtistAt: string | null;
+    canApprove: boolean;
+  }>({ queryKey: ["/api/albums", albumId, "masters/state"] });
+  const approve = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/albums/${albumId}/masters/approve`),
+    onSuccess: () => {
+      toast({ title: "Approved", description: "The press can begin cutting the early-start masters." });
+      queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId, "masters/state"] });
+    },
+    onError: (e: any) => toast({ title: "Approval failed", description: e?.message ?? "", variant: "destructive" }),
+  });
+  if (!data?.mastersTriggeredAt) return null;
+  if (data.mastersApprovedByArtistAt) {
+    return (
+      <div className="mb-6 rounded-md border border-emerald-200 bg-emerald-50 p-3 flex items-start gap-3" data-testid="banner-masters-approved">
+        <CheckCircle2 className="w-4 h-4 text-emerald-700 mt-0.5 shrink-0" />
+        <div className="flex-1 text-xs text-emerald-900">
+          <div className="font-semibold">Artist approved early-start cutting</div>
+          <div className="text-emerald-800">Approved {new Date(data.mastersApprovedByArtistAt).toLocaleString()}.</div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="mb-6 rounded-md border border-blue-200 bg-blue-50 p-3 flex items-start gap-3" data-testid="banner-masters-pending-approval">
+      <AlertTriangle className="w-4 h-4 text-blue-700 mt-0.5 shrink-0" />
+      <div className="flex-1 text-xs text-blue-900">
+        <div className="font-semibold">Masters trigger pending artist approval</div>
+        <div className="text-blue-800">
+          The press hit the masters-prep threshold {new Date(data.mastersTriggeredAt).toLocaleDateString()} and is ready to start cutting early. Approving here advances the pipeline to <strong>Masters triggered</strong>.
+        </div>
+        {data.canApprove ? (
+          <button
+            type="button"
+            onClick={() => approve.mutate()}
+            disabled={approve.isPending}
+            className="mt-2 inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-60"
+            data-testid="button-approve-masters"
+          >{approve.isPending ? "Approving…" : "Approve early-start cutting"}</button>
+        ) : (
+          <div className="mt-2 italic text-blue-800/80">Only the album's artist (or a super-admin) can approve.</div>
+        )}
       </div>
     </div>
   );

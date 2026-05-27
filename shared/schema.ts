@@ -83,6 +83,12 @@ export const labels = pgTable("labels", {
   // per-format cost calculator pulls from that press's pricing.
   // Nullable + SET NULL so deleting a press doesn't orphan the label.
   invitedByPressId: varchar("invited_by_press_id"),
+  // Task #522 — Default press for new albums this label starts. Set at
+  // invite-accept to the inviting press; mutable by the label as they
+  // shop other presses. Separate from `invitedByPressId` (which is the
+  // immutable provenance stamp) so the label can re-home their pipeline
+  // without losing the original referral attribution.
+  defaultPressId: varchar("default_press_id"),
   createdAt: timestamp("created_at").defaultNow(),
   ...softDeleteCols,
 });
@@ -273,6 +279,29 @@ export const albums = pgTable("albums", {
   // by Tasks #400/#402/#403/#404 to reconnect legacy assets. Nullable;
   // populated only for rows that came in via the legacy export.
   legacyGogoodsId: text("legacy_gogoods_id"),
+  // Task #522 — Press portal pipeline state. `mastersTriggeredAt` is
+  // set the moment fan-earmarked revenue crosses the press's
+  // masters_prep_cost_cents threshold (artist is notified). The artist
+  // approves early-start; `mastersApprovedByArtistAt` is stamped then,
+  // and the press's pipeline card flips into the "Masters triggered"
+  // column with an "Approved — start masters" CTA. The press uploads
+  // their PDF invoice once the run goes to plant; the URL + total +
+  // optional note live here so the artist + admin see variance vs the
+  // locked quote without a second round-trip. `pressInvoiceOutsideSystem`
+  // is the escape hatch for presses that bill outside GoodTunes — flips
+  // the same "In production" stage transition without requiring a file.
+  mastersTriggeredAt: timestamp("masters_triggered_at"),
+  mastersApprovedByArtistAt: timestamp("masters_approved_by_artist_at"),
+  pressInvoiceUrl: text("press_invoice_url"),
+  pressInvoiceTotalCents: integer("press_invoice_total_cents"),
+  pressInvoiceNote: text("press_invoice_note"),
+  pressInvoiceUploadedAt: timestamp("press_invoice_uploaded_at"),
+  pressInvoiceOutsideSystem: boolean("press_invoice_outside_system").notNull().default(false),
+  // Heads-up to fulfillment was sent on Locked transition. Re-fires
+  // when the locked quantity changes by >5%; we keep the last-sent
+  // snapshot so the re-fire check doesn't double-send for tiny drifts.
+  fulfillmentHeadsUpSentAt: timestamp("fulfillment_heads_up_sent_at"),
+  fulfillmentHeadsUpQty: integer("fulfillment_heads_up_qty"),
   ...softDeleteCols,
 }, (t) => ({
   legacyGogoodsIdUniq: uniqueIndex("albums_legacy_gogoods_id_uniq")
@@ -696,6 +725,11 @@ export const people = pgTable("people", {
   // from that press's pricing. Nullable + SET NULL on delete so a
   // removed press doesn't orphan the artist row.
   invitedByPressId: varchar("invited_by_press_id"),
+  // Task #522 — Default press for new albums by this artist. Set at
+  // invite-accept to the inviting press; mutable from the artist's
+  // album setup ("Choose a different press"). Separate from
+  // invitedByPressId so the original referral never resets.
+  defaultPressId: varchar("default_press_id"),
   // Task #350 — per-person ambassador inviter flag. NPO partner shells
   // gate the "Invite an ambassador" action on `inviteSubusers` (org-wide
   // permission) AND this column on the specific ambassador-Person who
@@ -1500,6 +1534,11 @@ export const pressColorTiers = pgTable("press_color_tiers", {
     .$type<{ qty: number; unitCents: number }[]>()
     .notNull()
     .default(sql`'[]'::jsonb`),
+  // Task #522 — Per-tier masters-prep cost. Once fan-earmarked revenue
+  // on an album using this tier crosses this threshold, the artist is
+  // offered an early-start approval (so the press can begin cutting
+  // masters before the preorder window closes). 0 disables the offer.
+  mastersPrepCostCents: integer("masters_prep_cost_cents").notNull().default(0),
 });
 export type PressColorTier = typeof pressColorTiers.$inferSelect;
 
@@ -2678,6 +2717,28 @@ export const rfqReplies = pgTable(
 // to fold it into the main `users` definition without diff-bombing
 // every consumer.
 
+// Task #522 — Audit row written every time an artist/label re-homes
+// an in-flight album from one press to another (or changes their
+// default press in Settings). The original press's Customers tab
+// greys out the customer for 90 days post-switch, then drops them
+// off — but the row itself is retained for analytics + dispute.
+// Soft-delete via deletedAt so we never lose history on an accidental
+// admin sweep.
+export const pressSwitchHistory = pgTable("press_switch_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerKind: text("customer_kind").notNull(), // "artist" | "label"
+  customerId: varchar("customer_id").notNull(),
+  // Album the switch was triggered from (null for a Settings-level
+  // defaultPressId change with no album in flight).
+  albumId: varchar("album_id"),
+  fromPressId: varchar("from_press_id"),
+  toPressId: varchar("to_press_id"),
+  reason: text("reason"),
+  switchedAt: timestamp("switched_at").defaultNow().notNull(),
+  ...softDeleteCols,
+});
+export type PressSwitchHistory = typeof pressSwitchHistory.$inferSelect;
+
 export const insertManufacturerSchema = createInsertSchema(manufacturers).omit({ id: true, createdAt: true });
 export type InsertManufacturer = z.infer<typeof insertManufacturerSchema>;
 export type Manufacturer = typeof manufacturers.$inferSelect;
@@ -2766,6 +2827,13 @@ export const adminInvites = pgTable("admin_invites", {
   // the last time the magic link was re-issued.
   revokedAt: timestamp("revoked_at"),
   resentAt: timestamp("resent_at"),
+  // Task #522 — When a press invites an artist/label, we stamp the
+  // inviting manufacturer id here so the accept handler can pin the
+  // new partner's `defaultPressId` (people.defaultPressId /
+  // labels.defaultPressId) at signup. Separate from the existing
+  // referrerKind="manufacturer" path because that one only sets the
+  // immutable invitedByPressId provenance stamp.
+  defaultPressId: varchar("default_press_id"),
 });
 
 export const insertAdminInviteSchema = createInsertSchema(adminInvites).omit({

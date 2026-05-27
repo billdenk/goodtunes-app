@@ -13,6 +13,29 @@ import { GoodDeedServicesTab } from "@/components/admin/GoodDeedServicesTab";
 import { Store, Loader2 } from "lucide-react";
 import { DashboardTabs } from "@/components/partner/dashboard-controls";
 import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
+// Task #522 — manufacturer (is_maker / press) admins get the press
+// portal shell instead of the legacy vendor shell.
+import { PressPortal } from "./PressPortal";
+
+// Routes a manufacturer-role scope to either the new PressPortal
+// (when the vendor is flagged `is_maker`) or the legacy VendorBody
+// shell (resellers, quick-printers). Resolved off /api/press/:id/me.
+function ManufacturerScopeRouter({ pressId, isSuperAdminView }: { pressId: string; isSuperAdminView: boolean }) {
+  const { data, isLoading } = useQuery<{ id: string; name: string; isMaker: boolean }>({
+    queryKey: [`/api/press/${pressId}/me`],
+  });
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-[color:var(--brand-bg)] flex items-center justify-center">
+        <Loader2 className="w-6 h-6 text-[color:var(--brand-blue)] animate-spin" />
+      </main>
+    );
+  }
+  if (data?.isMaker) {
+    return <PressPortal pressId={pressId} isSuperAdminView={isSuperAdminView} />;
+  }
+  return <VendorBody vendorId={pressId} role="manufacturer" superAdminScopeKind={isSuperAdminView ? "manufacturer" : undefined} />;
+}
 
 interface MeRole {
   role: string;
@@ -44,18 +67,38 @@ export function VendorPortal() {
     );
   }
 
-  // Super-admins viewing /vendor can either inspect a specific scope
-  // (via ?scopeId=…&scopeKind=vendor|manufacturer|fulfillment, which
-  // the partner-dashboard endpoint honors for super_admin only) or fall
-  // back to the admin vendors index if no scope is pinned.
+  // Task #522 — the new press portal is ONLY for vendors flagged
+  // `is_maker` (pressing plants like Hellbender). Resellers and quick-
+  // printers stay on the legacy vendor shell below, even though both
+  // are role='manufacturer'. We resolve isMaker via /api/press/:id/me
+  // (cheap; cached by RQ) and only when we already know the scope.
+  return <RoleRouter meRole={meRole} />;
+}
+
+function RoleRouter({ meRole }: { meRole: MeRole | null | undefined }) {
+  // ?scopeId=…&scopeKind=vendor|manufacturer|fulfillment lets super-
+  // admins inspect any scope; the partner-dashboard endpoint honors
+  // these only for super_admin. Falls back to the vendors index if no
+  // scope is pinned.
   const search = useSearch();
   if (meRole?.role === "super_admin") {
     const sp = new URLSearchParams(search);
     const sid = sp.get("scopeId");
     const skRaw = sp.get("scopeKind");
     const sk = skRaw === "manufacturer" || skRaw === "fulfillment" ? skRaw : "vendor";
-    if (sid) return <VendorBody vendorId={sid} role={sk} superAdminScopeKind={sk} />;
+    if (sid) {
+      if (sk === "manufacturer") return <ManufacturerScopeRouter pressId={sid} isSuperAdminView={true} />;
+      return <VendorBody vendorId={sid} role={sk} superAdminScopeKind={sk} />;
+    }
     return <Redirect to="/admin/vendors" />;
+  }
+
+  // manufacturer-role admins: route to PressPortal only if their press
+  // is flagged `is_maker`. Resellers / quick-printers (is_maker=false)
+  // stay on the legacy vendor shell since the press lifecycle (masters
+  // prep, pressing-order pipeline, etc.) doesn't apply to them.
+  if (meRole?.role === "manufacturer" && meRole.roleScopeId) {
+    return <ManufacturerScopeRouter pressId={meRole.roleScopeId} isSuperAdminView={false} />;
   }
 
   const isVendorRole = meRole?.role === "vendor" || meRole?.role === "manufacturer" || meRole?.role === "fulfillment";

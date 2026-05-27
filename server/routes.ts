@@ -15308,6 +15308,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
 
+    // Task #522 — Press-portal invite carries a mutable `defaultPressId`
+    // separate from the immutable `invited_by_press_id` provenance.
+    // Stamp it on accept so the artist/label's first album defaults
+    // to this press and they show up in the inviting press's
+    // Customers list and Pipeline tab immediately. NULL-guarded so a
+    // partner who's already picked a different default press isn't
+    // silently switched back on a stale invite.
+    const inviteDefaultPressId = (invite as any).defaultPressId as string | null;
+    if (inviteDefaultPressId && invite.roleScopeId) {
+      try {
+        if (invite.role === "artist") {
+          await db.execute(sql`UPDATE people SET default_press_id = ${inviteDefaultPressId} WHERE id = ${invite.roleScopeId} AND default_press_id IS NULL`);
+        } else if (invite.role === "label") {
+          await db.execute(sql`UPDATE labels SET default_press_id = ${inviteDefaultPressId} WHERE id = ${invite.roleScopeId} AND default_press_id IS NULL`);
+        }
+      } catch (e: any) {
+        console.warn(`[invite] default press stamp failed for ${invite.id}: ${e?.message}`);
+      }
+    }
+
     try {
       await storage.markAdminInviteUsed(invite.id, user.id);
     } catch (e: any) {

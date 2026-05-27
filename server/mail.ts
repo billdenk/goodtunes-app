@@ -525,3 +525,73 @@ export async function sendAdminInviteEmail(
   `;
   return sendViaResend("admin-invite", toEmail, subject, html, text);
 }
+
+// Press portal — masters-prep threshold crossed; ask the artist to
+// approve the early-start cut. Sent fire-and-forget from the pipeline
+// auto-trigger sweep, so we use the same ok/reason contract as every
+// other template and never throw upward.
+export async function sendMastersReadyEmail(
+  toEmail: string,
+  artistName: string,
+  albumTitle: string,
+  pressName: string,
+  approveUrl: string,
+): Promise<SendResult> {
+  const subject = `${pressName} can start cutting ${albumTitle} early — approve?`;
+  const text = [
+    `Hi ${artistName},`,
+    ``,
+    `${pressName} has earmarked enough revenue from ${albumTitle} to cover the masters-prep cost and start cutting now.`,
+    ``,
+    `If you approve, the press will begin work immediately so finished units land at fulfillment sooner.`,
+    ``,
+    `Approve here: ${approveUrl}`,
+    ``,
+    `If you'd rather wait for preorder close, you can ignore this email.`,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">GoodTunes</div>
+      <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700;">Start cutting early?</h1>
+      <p style="font-size: 16px; line-height: 1.5; color: #333;"><strong>${escapeHtml(pressName)}</strong> has earmarked enough revenue from <strong>${escapeHtml(albumTitle)}</strong> to cover the masters-prep cost. Approve to let them begin cutting now.</p>
+      <p style="margin: 28px 0;">
+        <a href="${approveUrl}" style="display: inline-block; background: #319ED8; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 15px;">Approve early start</a>
+      </p>
+      <p style="font-size: 13px; color: #888; line-height: 1.5;">If you'd rather wait for preorder close, you can ignore this email.</p>
+    </div>
+  `;
+  return sendViaResend("press-masters-ready", toEmail, subject, html, text);
+}
+
+// Press portal — fulfillment heads-up. Sent when an album enters Locked
+// (or when locked qty drifts >5%) so the routed fulfillment partner can
+// prep dock space and reserve packing-slot capacity for the run.
+export async function sendFulfillmentHeadsUpEmail(
+  toEmail: string,
+  partnerName: string,
+  albumTitle: string,
+  pressName: string,
+  quantity: number,
+  isUpdate: boolean,
+): Promise<SendResult> {
+  const verb = isUpdate ? "Updated quantity" : "Incoming run";
+  const subject = `${verb}: ${quantity} units of ${albumTitle} from ${pressName}`;
+  const text = [
+    `Hi ${partnerName},`,
+    ``,
+    `${isUpdate ? "The expected quantity changed:" : "Heads-up — a run is on the way:"}`,
+    ``,
+    `${quantity} units of ${albumTitle}, pressed by ${pressName}.`,
+    ``,
+    `Expected ship date and tracking will follow from the press directly.`,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">GoodTunes</div>
+      <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700;">${verb}</h1>
+      <p style="font-size: 16px; line-height: 1.5; color: #333;"><strong>${quantity}</strong> units of <strong>${escapeHtml(albumTitle)}</strong>, pressed by <strong>${escapeHtml(pressName)}</strong>.</p>
+      <p style="font-size: 14px; color: #555; line-height: 1.5;">Expected ship date and tracking will follow from the press directly.</p>
+    </div>
+  `;
+  return sendViaResend("press-fulfillment-heads-up", toEmail, subject, html, text);
+}
