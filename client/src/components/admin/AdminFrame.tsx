@@ -53,7 +53,7 @@ const SIDEBAR_SECTIONS_KEY = "gt:admin-sidebar-sections";
 // rows and have no parent section.
 type SidebarSectionId =
   | "catalog"
-  | "supply-chain"
+  | "partners"
   | "queues"
   | "audience"
   | "system";
@@ -61,18 +61,17 @@ type SidebarSectionId =
 const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   albums: "catalog",
   people: "catalog",
-  labels: "catalog",
-  nonprofits: "catalog",
   gear: "catalog",
-  manufacturers: "supply-chain",
-  makers: "supply-chain",
-  vendors: "supply-chain",
-  fulfillment: "supply-chain",
+  labels: "partners",
+  nonprofits: "partners",
+  manufacturers: "partners",
+  makers: "partners",
+  vendors: "partners",
+  fulfillment: "partners",
   "pressing-orders": "queues",
   "fan-orders": "queues",
   jobs: "queues",
   customers: "audience",
-  reports: "audience",
   "platform-pricing": "system",
   "payouts-release": "system",
   trash: "system",
@@ -378,13 +377,20 @@ export function AdminFrame({
         if (raw) {
           const parsed = JSON.parse(raw);
           if (typeof parsed === "string" || parsed === null) {
+            // Task #580 — migrate the retired "supply-chain" section id
+            // to its replacement "partners" so admins who had it open
+            // don't see a stuck-collapsed orphan.
+            if (parsed === "supply-chain") return "partners";
             return parsed as SidebarSectionId | null;
           }
           if (parsed && typeof parsed === "object") {
             const firstOpen = Object.keys(parsed).find(
               (k) => (parsed as Record<string, unknown>)[k],
             );
-            if (firstOpen) return firstOpen as SidebarSectionId;
+            if (firstOpen) {
+              if (firstOpen === "supply-chain") return "partners";
+              return firstOpen as SidebarSectionId;
+            }
             return activeSection;
           }
         }
@@ -472,6 +478,28 @@ export function AdminFrame({
                 testId="nav-people"
               />
               <SidebarLink
+                icon={Guitar}
+                label="Gear"
+                count={instruments.length}
+                active={active === "gear"}
+                onClick={() => navigate("/admin/instruments")}
+                testId="nav-gear"
+              />
+            </Section>
+
+            {/* Task #580 — Partners section gathers every org type the
+                catalog is attached to (Labels, NPOs, Presses, Makers,
+                Resellers, Fulfillment). Replaces the old "Supply chain"
+                section; localStorage state migrates over so admins who
+                had it expanded stay expanded. */}
+            <Section
+              id="partners"
+              label="Partners"
+              containsActive={activeSection === "partners"}
+              expanded={isSectionOpen("partners")}
+              onToggle={() => toggleSection("partners")}
+            >
+              <SidebarLink
                 icon={Tag}
                 label="Labels"
                 count={labels.length}
@@ -489,23 +517,6 @@ export function AdminFrame({
                 onClick={() => navigate("/admin/non-profits")}
                 testId="nav-nonprofits"
               />
-              <SidebarLink
-                icon={Guitar}
-                label="Gear"
-                count={instruments.length}
-                active={active === "gear"}
-                onClick={() => navigate("/admin/instruments")}
-                testId="nav-gear"
-              />
-            </Section>
-
-            <Section
-              id="supply-chain"
-              label="Supply chain"
-              containsActive={activeSection === "supply-chain"}
-              expanded={isSectionOpen("supply-chain")}
-              onToggle={() => toggleSection("supply-chain")}
-            >
               {/* Task #174 — vinyl pressing plants are now labelled
                   "Presses" so the noun doesn't clash with "Maker" (gear
                   builder). URL stays /admin/manufacturers. */}
@@ -603,16 +614,6 @@ export function AdminFrame({
                 onClick={() => navigate("/admin/customers")}
                 testId="nav-customers"
               />
-              {/* Task #80 — Reports surface. No count (it's a tool, not
-                  a CRUD list). */}
-              <SidebarLink
-                icon={BarChart3}
-                label="Reports"
-                count={-1}
-                active={active === "reports"}
-                onClick={() => navigate("/admin/reports")}
-                testId="nav-reports"
-              />
               {/* Task #400 — wave-1 welcome-back campaign for imported
                   gogoods.com fans. Tool surface (not a CRUD list). */}
               <SidebarLink
@@ -624,6 +625,19 @@ export function AdminFrame({
                 testId="nav-welcome-back"
               />
             </Section>
+
+            {/* Task #580 — Reports is a cross-cutting analytics tool
+                (sales / plays / payouts / GoodDeed / LCID dashboards),
+                not an audience-only surface. Promoted to its own top-
+                level row above System; no count because it's a tool. */}
+            <SidebarLink
+              icon={BarChart3}
+              label="Reports"
+              count={-1}
+              active={active === "reports"}
+              onClick={() => navigate("/admin/reports")}
+              testId="nav-reports"
+            />
 
             {isSuperAdmin && (
               <Section
