@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { ChevronRight, Play, Pause, Shuffle, MoreHorizontal, Lock, X, Link2, Info } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
@@ -69,7 +69,17 @@ export type DesktopAlbumViewProps = {
   // Album-level CTAs.
   onPlayAll?: () => void;
   onShuffle?: () => void;
-  onBuyBundle?: () => void;
+  /** Buy CTA. Receives the current add-on selection so the host can
+   *  open BuySheet with the matching toggles pre-checked. */
+  onBuyBundle?: (opts?: { signedCert?: boolean }) => void;
+  /** Printed-and-signed GoodDeed add-on price (cents). When provided
+   *  AND the album isn't owned, a hover-revealed chip pops below the
+   *  Buy pill so the fan can toggle the add-on in before checkout.
+   *  Omit when the album has no signed-cert add-on configured. */
+  signedCertPriceCents?: number | null;
+  /** Whether the signed-cert add-on is sold out for this album. When
+   *  true the chip renders disabled with "Sold out" copy. */
+  signedCertSoldOut?: boolean;
   /** Owned=false only. Toggles a 30-sec-per-track preview session that
    *  walks the album. Host wires this into PlayerContext.setPreviewMode +
    *  playSong; the view just renders the rose outline pill. */
@@ -153,6 +163,8 @@ export function DesktopAlbumView({
   onPlayAll,
   onShuffle,
   onBuyBundle,
+  signedCertPriceCents = null,
+  signedCertSoldOut = false,
   onPlayPreview,
   previewActive = false,
   onPlayTrack,
@@ -356,7 +368,9 @@ export function DesktopAlbumView({
                   {album.priceCents != null && (
                     <BuyPricePill
                       priceLabel={formatPrice(album.priceCents)}
-                      onClick={onBuyBundle}
+                      signedCertPriceCents={signedCertPriceCents}
+                      signedCertSoldOut={signedCertSoldOut}
+                      onBuy={(opts) => onBuyBundle?.(opts)}
                     />
                   )}
                 </>
@@ -599,40 +613,134 @@ function PreviewPlayPill({
 }
 
 /**
- * Rose-filled Buy pill. Shows the album price at rest
- * ("Buy Bundle — $14.99") and flips to "Buy Now" on hover. Price hides
- * during the hover swap so the label sits cleanly in the same pill.
+ * Rose-filled Buy pill wrapper.
+ *
+ * - At rest: "Buy Bundle — $14.99".
+ * - On `pointer:fine` hover (desktop / trackpad): label flips to
+ *   "Buy Now" and a small add-on chip pops below offering the printed +
+ *   signed GoodDeed at its add-on price. Toggling the chip pre-checks
+ *   the matching toggle in BuySheet on click.
+ * - Touch surfaces (no fine pointer): the chip is always visible
+ *   underneath when an add-on is offered, since hover doesn't exist.
+ *
+ * The whole group sits inside a `group` wrapper so the chip lifecycle
+ * is purely CSS-driven on hover for desktop and idempotent on touch.
  */
 function BuyPricePill({
   priceLabel,
-  onClick,
+  signedCertPriceCents,
+  signedCertSoldOut,
+  onBuy,
 }: {
   priceLabel: string;
-  onClick?: () => void;
+  signedCertPriceCents: number | null;
+  signedCertSoldOut: boolean;
+  onBuy?: (opts?: { signedCert?: boolean }) => void;
 }) {
   const [hover, setHover] = useState(false);
+  const [signedCert, setSignedCert] = useState(false);
+  const hasAddon = signedCertPriceCents != null && signedCertPriceCents > 0;
+  // Reset the toggle whenever the album-level add-on availability
+  // changes — without this, toggling signed-cert on album A and then
+  // navigating to album B (which doesn't offer it) would keep
+  // `signedCert=true` and pass it through to checkout, where the
+  // server (`server/commerce.ts`) rejects with 400 "Signed certificate
+  // isn't offered on this album". Same goes for the run going sold-out
+  // mid-session.
+  useEffect(() => {
+    if ((!hasAddon || signedCertSoldOut) && signedCert) setSignedCert(false);
+  }, [hasAddon, signedCertSoldOut, signedCert]);
+  // Touch surfaces (no fine pointer): always show the add-on chip;
+  // desktop: only on hover/focus. Detect lazily — purely a render
+  // affordance, no resize listener needed.
+  const isCoarsePointer =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches;
+  const showChip = hasAddon && (hover || isCoarsePointer);
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
+      className="relative inline-flex flex-col items-start"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onFocus={() => setHover(true)}
       onBlur={() => setHover(false)}
-      data-testid="button-buy-bundle"
-      data-hover={hover ? "true" : "false"}
-      className="h-11 px-6 rounded-full inline-flex items-center justify-center text-white font-semibold text-[14px] transition-[background-color,box-shadow,transform] cursor-pointer active:scale-[0.97]"
-      style={{
-        background: ROSE,
-        boxShadow: hover
-          ? "0 8px 22px rgba(255,84,112,0.45)"
-          : "0 4px 12px rgba(255,84,112,0.25)",
-      }}
+      data-testid="buy-bundle-group"
     >
-      <span className="whitespace-nowrap" data-testid="text-buy-label">
-        {hover ? "Buy Now" : `Buy Bundle — ${priceLabel}`}
-      </span>
-    </button>
+      <button
+        type="button"
+        onClick={() => onBuy?.(signedCert ? { signedCert: true } : undefined)}
+        data-testid="button-buy-bundle"
+        data-hover={hover ? "true" : "false"}
+        className="h-11 px-6 rounded-full inline-flex items-center justify-center text-white font-semibold text-[14px] transition-[background-color,box-shadow,transform] cursor-pointer active:scale-[0.97]"
+        style={{
+          background: ROSE,
+          boxShadow: hover
+            ? "0 8px 22px rgba(255,84,112,0.45)"
+            : "0 4px 12px rgba(255,84,112,0.25)",
+        }}
+      >
+        <span className="whitespace-nowrap" data-testid="text-buy-label">
+          {hover ? "Buy Now" : `Buy Bundle — ${priceLabel}`}
+        </span>
+      </button>
+
+      {showChip && (
+        <div
+          className="absolute left-0 top-full mt-2 z-20"
+          data-testid="buy-addon-chips"
+        >
+          <button
+            type="button"
+            disabled={signedCertSoldOut}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (signedCertSoldOut) return;
+              setSignedCert((v) => !v);
+            }}
+            data-testid="chip-addon-signed-cert"
+            data-selected={signedCert ? "true" : "false"}
+            className={[
+              "inline-flex items-center gap-2 rounded-full h-8 px-3 text-xs font-semibold whitespace-nowrap transition-colors",
+              signedCertSoldOut
+                ? "border border-white/15 text-white/35 cursor-not-allowed"
+                : signedCert
+                  ? "border-2 border-[color:var(--brand-pink)] bg-[color:var(--brand-pink)]/15 text-white"
+                  : "border border-white/30 bg-black/30 text-white/85 hover:border-white/70 hover:bg-black/45",
+            ].join(" ")}
+          >
+            <span
+              aria-hidden
+              className={[
+                "inline-block w-3.5 h-3.5 rounded-[3px] flex-shrink-0 transition-colors",
+                signedCert
+                  ? "bg-[color:var(--brand-pink)]"
+                  : "border border-white/55 bg-transparent",
+              ].join(" ")}
+            >
+              {signedCert && (
+                <svg
+                  viewBox="0 0 12 12"
+                  className="w-full h-full text-white"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M2.5 6.5l2.5 2.5 4.5-5" />
+                </svg>
+              )}
+            </span>
+            <span>
+              {signedCertSoldOut
+                ? "Signed GoodDeed — Sold out"
+                : `Add signed GoodDeed +${formatPrice(signedCertPriceCents!)}`}
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -4,7 +4,8 @@ import { AlbumDetailMobileSkeleton, AlbumNotFound } from "@/components/ui/AlbumD
 import { AlbumCreditsSheet } from "@/components/ui/AlbumCreditsSheet";
 import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { usePlayer } from "@/context/PlayerContext";
+import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
+import { useAlbumOwnership } from "@/hooks/useAlbumOwnership";
 import { useAuth } from "@/hooks/useAuth";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
@@ -93,7 +94,12 @@ import { AlbumDetailDesktop } from "@/pages/AlbumDetailDesktop";
  */
 export function AlbumDetail() {
   const isDesktop = useMediaQuery("(min-width: 768px)");
-  if (isDesktop) return <AlbumDetailDesktop />;
+  // iOS native (including iPad — the app ships universal,
+  // TARGETED_DEVICE_FAMILY="1,2") must always render the mobile shell.
+  // The desktop surface is preview-first for non-owners and surfaces
+  // Buy CTAs; both violate App Review 3.1.1 if shown in the iOS app.
+  // The mobile shell already respects `buyEnabled` everywhere.
+  if (isDesktop && buyEnabled) return <AlbumDetailDesktop />;
   return <AlbumDetailMobile />;
 }
 
@@ -101,7 +107,14 @@ function AlbumDetailMobile() {
   const { id } = useParams<{ id: string }>();
   const _recordRecent = useRecordRecent();
   const [, navigate] = useLocation();
-  const { playSong, currentSong, isPlaying, togglePlay, playNext, playLast, addToQueue, queue, currentIndex } = usePlayer();
+  const { playSong, currentSong, isPlaying, togglePlay, playNext, playLast, addToQueue, queue, currentIndex, previewMode, setPreviewMode, currentTime } = usePlayer();
+  const isOwned = useAlbumOwnership(id);
+  // On web (buyEnabled) the album is in preview-first mode when the fan
+  // hasn't bought it yet — every play triggers the 30s-per-track preview
+  // session instead of full-track playback (matching the AlbumDetail-
+  // Desktop branch). On iOS native (buyEnabled=false) we keep the in-app
+  // behavior since IAP isn't wired and the player is for owned content.
+  const previewFirst = buyEnabled && !isOwned;
   const queueHasUpcoming = queue.length - currentIndex - 1 > 0;
   const { user } = useAuth();
   const favSongs = useFavoriteSongs();
@@ -358,6 +371,36 @@ function AlbumDetailMobile() {
     ? ALBUMS.filter((a) => a.artist === album.artist && a.id !== album.id)
     : [];
 
+  // Mirror the Desktop preview-end → Buy prompt. When the fan
+  // auditioned every preview track in sequence and the player ran out
+  // of queue at the 30-sec cap, pop BuySheet so the moment closes with
+  // a clear CTA. Pausing manually mid-preview does NOT trigger this —
+  // the currentTime ≥ cap check filters that case out.
+  const wasPlayingRef = useRef(isPlaying);
+  useEffect(() => {
+    const was = wasPlayingRef.current;
+    wasPlayingRef.current = isPlaying;
+    if (!buyEnabled || isOwned) return;
+    if (!previewMode) return;
+    if (!was || isPlaying) return;
+    if (queue.length === 0) return;
+    if (currentIndex !== queue.length - 1) return;
+    if (currentTime < PREVIEW_CAP_SECONDS - 0.5) return;
+    setShowBuySheet(true);
+  }, [isPlaying, previewMode, queue.length, currentIndex, currentTime, isOwned]);
+
+  // Leaving the album shouldn't leave preview-mode armed on whatever
+  // the fan plays next (a downloaded album from their library, a
+  // playlist, etc.) — clear it on unmount so the global player goes
+  // back to full-track playback.
+  const setPreviewModeRef = useRef(setPreviewMode);
+  setPreviewModeRef.current = setPreviewMode;
+  useEffect(() => {
+    return () => {
+      setPreviewModeRef.current(false);
+    };
+  }, []);
+
   useEffect(() => {
     if (album?.id) {
       track("album_viewed", { albumId: album.id, albumTitle: album.title, artistId: undefined });
@@ -401,21 +444,36 @@ function AlbumDetailMobile() {
   }
 
   const albumSongs = songs.map((s) => ({ ...s, album }));
+  // Preview-first surfaces only the songs the artist marked as
+  // previewable; full-ownership playback walks the entire tracklist.
+  const playableAlbumSongs = previewFirst
+    ? albumSongs.filter((s) => (s as any).isPreviewable !== false)
+    : albumSongs;
+
+  const beginPlay = (
+    song: typeof albumSongs[0],
+    list: typeof albumSongs,
+  ) => {
+    if (previewFirst) setPreviewMode(true);
+    else if (previewMode) setPreviewMode(false);
+    playSong(song, list);
+  };
 
   const handlePlaySong = (song: typeof albumSongs[0]) => {
     const isCurrentSong = currentSong?.id === song.id;
     if (isCurrentSong) togglePlay();
-    else playSong(song, albumSongs);
+    else beginPlay(song, playableAlbumSongs);
   };
 
   const handlePlayAll = () => {
-    if (albumSongs.length > 0) playSong(albumSongs[0], albumSongs);
+    if (playableAlbumSongs.length > 0)
+      beginPlay(playableAlbumSongs[0], playableAlbumSongs);
   };
 
   const handleShuffle = () => {
-    if (albumSongs.length === 0) return;
-    const shuffled = [...albumSongs].sort(() => Math.random() - 0.5);
-    playSong(shuffled[0], shuffled);
+    if (playableAlbumSongs.length === 0) return;
+    const shuffled = [...playableAlbumSongs].sort(() => Math.random() - 0.5);
+    beginPlay(shuffled[0], shuffled);
   };
 
   const totalDuration = songs.reduce((acc, s) => acc + s.duration, 0);

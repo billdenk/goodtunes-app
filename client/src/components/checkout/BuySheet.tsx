@@ -73,14 +73,24 @@ async function getStripePromise() {
   return stripePromise;
 }
 
-export function BuySheet({ albumId, onClose }: { albumId: string; onClose: () => void }) {
+export function BuySheet({
+  albumId,
+  onClose,
+  signedCertDefault = false,
+}: {
+  albumId: string;
+  onClose: () => void;
+  /** Pre-toggle the signed-cert add-on. Set when the fan opted in via
+   *  the hover-revealed chip on the album hero before opening the sheet. */
+  signedCertDefault?: boolean;
+}) {
   const { user } = useAuth();
   const isCustomerSignedIn = !!user && user.kind === "customer";
   const [, navigate] = useLocation();
 
   const [options, setOptions] = useState<BuyOptions | null>(null);
   const [format, setFormat] = useState<string | null>(null);
-  const [signedCert, setSignedCert] = useState(false);
+  const [signedCert, setSignedCert] = useState(signedCertDefault);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -136,11 +146,17 @@ export function BuySheet({ albumId, onClose }: { albumId: string; onClose: () =>
     setError(null);
     try {
       track("checkout_started", { albumId, priceCents: totalCents });
+      // Defensive: if the album doesn't actually offer a signed-cert
+      // add-on (or the run sold out), never forward `signedCert=true`
+      // to the server — it would 400 "Signed certificate isn't
+      // offered on this album". Belt-and-suspenders against a stale
+      // `signedCertDefault` carried in from the album page chip.
+      const willSendSignedCert = !!(signedCert && addon && !signedCertSoldOut);
       const r = await apiRequest("POST", "/api/checkout/session", {
         albumId,
         skuFormat: selectedSku.format,
-        signedCert,
-        signedCertPriceCents: signedCert && addon ? addon.priceCents : undefined,
+        signedCert: willSendSignedCert,
+        signedCertPriceCents: willSendSignedCert ? addon!.priceCents : undefined,
       });
       const j = await r.json();
       if (!j.clientSecret) throw new Error(j?.message ?? "Checkout failed to start");

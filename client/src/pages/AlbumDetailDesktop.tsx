@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
 import { BuySheet } from "@/components/checkout/BuySheet";
 import { buyEnabled } from "@/lib/platform";
+import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { AlbumCreditsSheet, type AlbumCreditsRow } from "@/components/ui/AlbumCreditsSheet";
@@ -101,6 +102,12 @@ export function AlbumDetailDesktop() {
     if (typeof window === "undefined") return false;
     if (!buyEnabled) return false;
     return new URL(window.location.href).searchParams.get("buy") === "1";
+  });
+  // When the fan ticked the signed-cert add-on chip on the hero before
+  // clicking Buy, we hand the toggle into BuySheet so the checkout sheet
+  // opens with it pre-checked. Cleared whenever the sheet closes.
+  const [buyAddons, setBuyAddons] = useState<{ signedCert: boolean }>({
+    signedCert: false,
   });
 
   const isOwned = useAlbumOwnership(id);
@@ -226,9 +233,60 @@ export function AlbumDetailDesktop() {
   const handleAddTrack = () => {
     toast({ title: "Added to playlist (coming next)" });
   };
-  const handleBuyBundle = () => {
+  const handleBuyBundle = (opts?: { signedCert?: boolean }) => {
+    setBuyAddons({ signedCert: !!opts?.signedCert });
     setShowBuySheet(true);
   };
+
+  // Fetch buy-options up front so the hero can render the signed-cert
+  // chip price without waiting for a hover → modal-mount round-trip.
+  // Only fires on web (buyEnabled) and only when we have an id.
+  const { data: buyOptions } = useQuery<{
+    addons: { kind: string; priceCents: number }[];
+    signedCertSoldOut?: boolean;
+  }>({
+    queryKey: ["/api/albums", id, "buy-options"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", `/api/albums/${id}/buy-options`);
+      return r.json();
+    },
+    enabled: !!id && buyEnabled && !isOwned,
+    staleTime: 60_000,
+  });
+  const signedCertAddon = buyOptions?.addons?.find(
+    (a) => a.kind === "signed_cert",
+  );
+  const signedCertPriceCents = signedCertAddon?.priceCents ?? null;
+  const signedCertSoldOut = !!buyOptions?.signedCertSoldOut;
+
+  // Preview-session end → open Buy. When the fan auditioned all preview
+  // tracks back-to-back, the player's natural-end path lands on the last
+  // track at the 30-sec cap, fires advance, runs out of queue, and flips
+  // isPlaying to false. We watch that exact edge (was-playing → not-
+  // playing, in preview-mode, on the last queue index, at the cap) and
+  // pop BuySheet so the moment closes with a clear CTA rather than dead
+  // silence. Pausing manually mid-preview must NOT trigger this — the
+  // currentTime ≥ cap check filters that out.
+  const wasPlayingRef = useRef(player.isPlaying);
+  useEffect(() => {
+    const was = wasPlayingRef.current;
+    wasPlayingRef.current = player.isPlaying;
+    if (!buyEnabled || isOwned) return;
+    if (!player.previewMode) return;
+    if (!was || player.isPlaying) return;
+    if (player.queue.length === 0) return;
+    if (player.currentIndex !== player.queue.length - 1) return;
+    if (player.currentTime < PREVIEW_CAP_SECONDS - 0.5) return;
+    setBuyAddons({ signedCert: false });
+    setShowBuySheet(true);
+  }, [
+    player.isPlaying,
+    player.previewMode,
+    player.queue.length,
+    player.currentIndex,
+    player.currentTime,
+    isOwned,
+  ]);
 
   // Turn preview mode off when the route unmounts so a navigation away
   // from Preview & Purchase doesn't leave the 30-sec cap armed for
@@ -346,6 +404,8 @@ export function AlbumDetailDesktop() {
             hasAlbumCredits={productionCredits.length > 0}
             onOpenAlbumCredits={() => setShowAlbumCredits(true)}
             onBuyBundle={buyEnabled ? handleBuyBundle : undefined}
+            signedCertPriceCents={buyEnabled ? signedCertPriceCents : null}
+            signedCertSoldOut={signedCertSoldOut}
             lyricsOpen={player.showLyrics}
             lyrics={lyricsBody}
             onCloseLyrics={() => player.setShowLyrics(false)}
@@ -410,7 +470,11 @@ export function AlbumDetailDesktop() {
       {showBuySheet && album && (
         <BuySheet
           albumId={album.id}
-          onClose={() => setShowBuySheet(false)}
+          signedCertDefault={buyAddons.signedCert}
+          onClose={() => {
+            setShowBuySheet(false);
+            setBuyAddons({ signedCert: false });
+          }}
         />
       )}
 
