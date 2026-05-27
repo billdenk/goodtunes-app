@@ -396,6 +396,20 @@ export function registerPayoutRoutes(app: Express) {
     email: z.string().email().optional(),
   });
   app.post("/api/admin/payouts/accounts", requireAdmin, async (req, res) => {
+    // Task #538 — Phone verification gate. A partner only sees the
+    // payout settings sheet after their phone is verified, so withdrawal
+    // changes always trail an SMS-confirmed identity check. Skipped
+    // for super_admins acting on behalf of a partner (they're already
+    // on the platform-trust ladder and we don't want them blocked from
+    // bulk operational fix-ups).
+    {
+      const { getUserRole } = await import("./auth/roles");
+      const info = await getUserRole((req as any).adminUserId);
+      if (!info || info.role !== "super_admin") {
+        const { requirePhoneVerified } = await import("./auth/phoneOtp");
+        if (await requirePhoneVerified(req, res, "payouts")) return;
+      }
+    }
     const parsed = createAccountSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request" });
     const { ownerKind, ownerId } = parsed.data;

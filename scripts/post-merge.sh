@@ -1464,3 +1464,45 @@ SQL
 }
 migrate_press_portal dev  "${DATABASE_URL:-}"
 migrate_press_portal prod "${PROD_DATABASE_URL:-}"
+
+# Task #538 — Phone verification (verify-once-reuse-everywhere SMS OTP).
+# Adds phone_e164 + phone_verified_at to both users and customer_users,
+# plus the phone_otp_codes scratch table (one in-flight code per user,
+# 10-minute TTL, 5 attempts, scrypt-hashed). Pre-create on both DBs so
+# the publish dev→prod diff stays empty and a fresh-clone dev never
+# 500s the gift / payouts gating endpoints on first call.
+migrate_task_538_phone_verification() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-538 phone-verification migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS phone_e164         varchar,
+  ADD COLUMN IF NOT EXISTS phone_verified_at  timestamp;
+ALTER TABLE customer_users
+  ADD COLUMN IF NOT EXISTS phone_e164         varchar,
+  ADD COLUMN IF NOT EXISTS phone_verified_at  timestamp;
+CREATE TABLE IF NOT EXISTS phone_otp_codes (
+  id            varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_kind     text     NOT NULL,
+  user_id       varchar  NOT NULL,
+  phone_e164    varchar  NOT NULL,
+  code_hash     text     NOT NULL,
+  attempts      integer  NOT NULL DEFAULT 0,
+  ip            varchar,
+  expires_at    timestamp NOT NULL,
+  created_at    timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS phone_otp_codes_user_uniq
+  ON phone_otp_codes (user_kind, user_id);
+SQL
+  then
+    echo "post-merge: task-538 phone-verification migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-538 phone-verification migration failed on $label (continuing)"
+  fi
+}
+migrate_task_538_phone_verification dev  "${DATABASE_URL:-}"
+migrate_task_538_phone_verification prod "${PROD_DATABASE_URL:-}"

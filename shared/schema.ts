@@ -37,6 +37,14 @@ export const users = pgTable("users", {
   // so no current admin gets locked out. Switching factors is a one-click
   // toggle on the admin security page (only allowed if both are set up).
   factorPref: text("factor_pref").notNull().default("email"),
+  // Task #538 — Phone verification (gated to gifting / payouts / recovery).
+  // `phoneE164` is the canonical E.164 form ("+12025551234") set the
+  // moment a partner verifies a number; `phoneVerifiedAt` stamps when
+  // the OTP succeeded. Mirrored on `customer_users` for fan-side gating
+  // (gifting, recovery). Verify-once, reuse-everywhere: re-verification
+  // only runs when the user changes their number.
+  phoneE164: text("phone_e164"),
+  phoneVerifiedAt: timestamp("phone_verified_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1278,6 +1286,13 @@ export const customerUsers = pgTable("customer_users", {
   billingAddress: jsonb("billing_address").$type<StripeAddressSnapshot>(),
   shippingAddress: jsonb("shipping_address").$type<StripeAddressSnapshot>(),
   phone: text("phone"),
+  // Task #538 — phone verification (gifting / recovery gates). Mirrors the
+  // pair on `users`. `phone` above remains the Stripe-snapshot raw string
+  // we backfill from billing details; `phoneE164` is the canonical form
+  // we own and only set after a successful OTP. Verify-once, reuse-
+  // everywhere — clearing happens when the fan changes their number.
+  phoneE164: text("phone_e164"),
+  phoneVerifiedAt: timestamp("phone_verified_at"),
   emailVerifiedAt: timestamp("email_verified_at"),
   createdAt: timestamp("created_at").defaultNow(),
   legacyGogoodsId: text("legacy_gogoods_id"),
@@ -2171,6 +2186,32 @@ export const adminEmailOtp = pgTable("admin_email_otp", {
   attempts: integer("attempts").notNull().default(0),
   lastSentAt: timestamp("last_sent_at").defaultNow(),
 });
+
+// Task #538 — Phone OTP codes.
+// One row per (userKind, userId) currently mid-verify. `userKind` is
+// "admin" (users table) or "customer" (customer_users table) — we keep
+// a single table instead of two because the verify flow is identical
+// and the rate-limit windows are easier to reason about in one place.
+// `phoneE164` is the number the code was issued against; on successful
+// verify we stamp it on the corresponding user row. Code is scrypt-
+// hashed (same helper as the email-OTP table). Replacing a row when
+// the user requests a fresh code invalidates the previous one. Used
+// for gifting, partner payout-setting gating, and account recovery.
+export const phoneOtpCodes = pgTable("phone_otp_codes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userKind: text("user_kind").notNull(),
+  userId: varchar("user_id").notNull(),
+  phoneE164: text("phone_e164").notNull(),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  lastSentAt: timestamp("last_sent_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  userUniq: uniqueIndex("phone_otp_codes_user_uniq").on(t.userKind, t.userId),
+  phoneIdx: index("phone_otp_codes_phone_idx").on(t.phoneE164),
+}));
+export type PhoneOtpCode = typeof phoneOtpCodes.$inferSelect;
 
 // Task #269 — Admin "Forgot password?" reset tokens. One row per
 // outstanding reset request; raw token lives only in the recipient's

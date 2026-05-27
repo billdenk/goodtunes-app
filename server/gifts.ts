@@ -163,6 +163,10 @@ export function registerGiftRoutes(app: Express) {
   app.post("/api/orders/:id/gift", async (req, res) => {
     const me = await requireCustomer(req, res);
     if (!me) return;
+    // Task #538 — gating: we don't email a stranger on the buyer's say-so
+    // until the buyer's own phone is verified. Sheet pops on the client.
+    const { requirePhoneVerified } = await import("./auth/phoneOtp");
+    if (await requirePhoneVerified(req, res, "gifting")) return;
     const orderId = String(req.params.id);
     const parsed = parseRecipient(req.body);
     if (!parsed.ok) return res.status(400).json({ message: parsed.message });
@@ -205,6 +209,11 @@ export function registerGiftRoutes(app: Express) {
   app.patch("/api/orders/:id/gift", async (req, res) => {
     const me = await requireCustomer(req, res);
     if (!me) return;
+    // Task #538 — same gating as the create path: a recipient swap
+    // re-sends a fresh share link to the new contact, so we still need
+    // a verified buyer phone.
+    const { requirePhoneVerified } = await import("./auth/phoneOtp");
+    if (await requirePhoneVerified(req, res, "gifting")) return;
     const orderId = String(req.params.id);
     const parsed = parseRecipient(req.body);
     if (!parsed.ok) return res.status(400).json({ message: parsed.message });

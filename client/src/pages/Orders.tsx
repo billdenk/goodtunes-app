@@ -18,6 +18,7 @@ import { Check, Truck, Package, MapPin, ExternalLink, Award, Clock, Lock, Printe
 import type { StripeAddressSnapshot, AlbumFormat } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 import { VinylPreview } from "@/components/VinylPreview";
+import { PhoneVerifySheet } from "@/components/PhoneVerifySheet";
 import {
   DEFAULT_JACKET_UPGRADE,
   DEFAULT_VINYL_COLOR_ID,
@@ -161,6 +162,37 @@ export function Orders() {
   const { data: orders, isLoading } = useQuery<OrderRow[]>({ queryKey: ["/api/orders"] });
   const { toast } = useToast();
   const [openOrderId, setOpenOrderId] = useState<string | null>(null);
+  // Task #538 — phone verification gate for gift mutations. The server
+  // returns `{ requiresPhoneVerification: true }` on 403; we open the
+  // shared verify sheet and re-run the pending mutation on success.
+  const [verifyPending, setVerifyPending] = useState<null | (() => void)>(null);
+
+  // Wrap a gift-mutation call so that a 403 phone-verification response
+  // opens the verify sheet and stashes the retry. Anything else throws
+  // through to the mutation's onError as before.
+  async function callGift(method: "POST" | "PATCH", url: string, body: any, retry: () => void): Promise<Response> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const token = (await import("@/lib/queryClient")).getAuthToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(url, { method, headers, credentials: "include", body: JSON.stringify(body) });
+    if (res.status === 403) {
+      try {
+        const j = await res.clone().json();
+        if (j?.requiresPhoneVerification) {
+          setVerifyPending(() => retry);
+          throw new Error("__phone_verification_required__");
+        }
+      } catch (e: any) {
+        if (e?.message === "__phone_verification_required__") throw e;
+        // fall through to generic throw
+      }
+    }
+    if (!res.ok) {
+      const text = (await res.text()) || res.statusText;
+      throw new Error(`${res.status}: ${text}`);
+    }
+    return res;
+  }
 
   const resendGift = useMutation({
     mutationFn: async (orderId: string) => {
@@ -181,7 +213,7 @@ export function Orders() {
 
   const patchGift = useMutation({
     mutationFn: async (args: { orderId: string; body: { firstName: string; lastName: string; email: string | null; phone: string | null } }) => {
-      const r = await apiRequest("PATCH", `/api/orders/${args.orderId}/gift`, args.body);
+      const r = await callGift("PATCH", `/api/orders/${args.orderId}/gift`, args.body, () => patchGift.mutate(args));
       return (await r.json()) as { shareUrl: string };
     },
     onSuccess: async (res, vars) => {
@@ -440,6 +472,19 @@ export function Orders() {
       </div>
 
       <OrderDetailSheet order={openOrder} onClose={() => setOpenOrderId(null)} />
+
+      {/* Task #538 — phone verification sheet, opens whenever a gift
+          mutation comes back with requiresPhoneVerification. */}
+      <PhoneVerifySheet
+        open={verifyPending !== null}
+        reason="gifting"
+        onClose={() => setVerifyPending(null)}
+        onVerified={() => {
+          const retry = verifyPending;
+          setVerifyPending(null);
+          if (retry) retry();
+        }}
+      />
     </main>
   );
 }

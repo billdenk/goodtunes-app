@@ -13710,6 +13710,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { registerGiftRoutes } = await import("./gifts");
   registerGiftRoutes(app);
 
+  // Task #538 — Phone verification (gated to gifting / payouts / recovery).
+  const { registerPhoneOtpRoutes } = await import("./auth/phoneOtp");
+  registerPhoneOtpRoutes(app);
+
   // Task #434 — Read-only audit of imported rows still pointing at the
   // off-platform `tinifycdn.com` CDN. Powers /admin/legacy-image-audit.
   const { registerLegacyImageAuditRoutes } = await import("./legacyImageAudit");

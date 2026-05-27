@@ -164,6 +164,30 @@ export function AdminCustomerDetail() {
                   <Phone className="w-3.5 h-3.5" /> {c.phone}
                 </span>
               )}
+              {/* Task #538 — Phone verification state. Lives next to email
+                  verification so partner-onboarding/payouts review can see
+                  at a glance whether this fan has cleared the SMS gate. */}
+              {(c as any).phoneE164 && (
+                <span className="inline-flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5" /> {(c as any).phoneE164}
+                  {(c as any).phoneVerifiedAt ? (
+                    <span
+                      className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded"
+                      title={`Verified ${new Date((c as any).phoneVerifiedAt).toLocaleDateString()}`}
+                      data-testid="badge-phone-verified"
+                    >
+                      <CheckCircle2 className="w-3 h-3" /> Verified
+                    </span>
+                  ) : (
+                    <span
+                      className="inline-flex items-center text-xs font-semibold uppercase tracking-wide text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded"
+                      data-testid="badge-phone-unverified"
+                    >
+                      Unverified
+                    </span>
+                  )}
+                </span>
+              )}
               <span>Joined {formatDate(c.createdAt as unknown as string | null)}</span>
             </span>
           }
