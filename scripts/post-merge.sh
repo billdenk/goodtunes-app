@@ -1798,3 +1798,27 @@ SQL
 }
 migrate_task_549_multi_quantity dev  "${DATABASE_URL:-}"
 migrate_task_549_multi_quantity prod "${PROD_DATABASE_URL:-}"
+
+# Task #541 — vinyl track reorder + per-side length warnings.
+# albums.vinyl_format + songs.vinyl_side/vinyl_order. Originally
+# applied to dev by hand; prod missed it and crashed Admin Albums +
+# Fan Orders on the shared `SELECT albums.*` until backfilled.
+migrate_vinyl_order() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping vinyl_order migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS vinyl_format text;
+ALTER TABLE songs  ADD COLUMN IF NOT EXISTS vinyl_side   text;
+ALTER TABLE songs  ADD COLUMN IF NOT EXISTS vinyl_order  integer;
+SQL
+  then
+    echo "post-merge: vinyl_order migration ok on $label"
+  else
+    echo "post-merge: WARNING — vinyl_order migration failed on $label (continuing)"
+  fi
+}
+migrate_vinyl_order dev  "${DATABASE_URL:-}"
+migrate_vinyl_order prod "${PROD_DATABASE_URL:-}"
