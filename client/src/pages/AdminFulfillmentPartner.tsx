@@ -9,6 +9,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AddressAutocompleteField } from "@/components/admin/AddressAutocompleteField";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
+import { AdminPartnerDashboardCard } from "@/components/admin/AdminPartnerDashboardCard";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -34,6 +35,25 @@ export function AdminFulfillmentPartner() {
   const id = params?.id ?? "";
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [logoEditorOpen, setLogoEditorOpen] = useState(false);
+  // Task #590 — Fulfillment partner page didn't have tabs before;
+  // introduce Dashboard (lead) / Overview (the FpForm) / People with
+  // `?tab=` round-trip so cross-section deep links stay honest.
+  type FpTab = "dashboard" | "overview" | "people";
+  const FP_TAB_KEYS: readonly FpTab[] = ["dashboard", "overview", "people"];
+  const [tab, setTabState] = useState<FpTab>(() => {
+    if (typeof window === "undefined") return "dashboard";
+    const q = new URLSearchParams(window.location.search).get("tab");
+    return (FP_TAB_KEYS as readonly string[]).includes(q ?? "") ? (q as FpTab) : "dashboard";
+  });
+  const setTab = (next: FpTab) => {
+    setTabState(next);
+    try {
+      const u = new URL(window.location.href);
+      if (next === "dashboard") u.searchParams.delete("tab");
+      else u.searchParams.set("tab", next);
+      window.history.replaceState({}, "", u.toString());
+    } catch {}
+  };
 
   const { data: f, isLoading } = useQuery<FulfillmentPartner>({
     queryKey: ["/api/fulfillment-partners", id],
@@ -225,16 +245,61 @@ export function AdminFulfillmentPartner() {
           </Button>
         </div>
 
-        <FpForm initial={f} onSave={(p) => save.mutate(p)} saving={save.isPending} />
+        <div
+          className="flex items-end gap-5 border-b border-slate-200"
+          data-testid="tabs-admin-fulfillment"
+        >
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+            {([
+              { key: "dashboard", label: "Dashboard" },
+              { key: "overview", label: "Overview" },
+              { key: "people", label: "People" },
+            ] as const).map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={[
+                  "relative pb-2.5 text-sm font-semibold whitespace-nowrap transition-colors",
+                  tab === t.key
+                    ? "text-slate-900"
+                    : "text-slate-400 hover:text-slate-700",
+                ].join(" ")}
+                data-testid={`tab-${t.key}`}
+              >
+                {t.label}
+                {tab === t.key && (
+                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
 
-        <OrganizationPeople
-          apiPath={`/api/fulfillment-partners/${f.id}/people`}
-          testIdPrefix="fulfillment"
-          entityKind="fulfillment"
-          entityId={f.id}
-          entityName={f.name}
-          blurb="People at this fulfillment partner — operations lead, account rep, whoever you need to reach."
-        />
+        {tab === "dashboard" && (
+          <AdminPartnerDashboardCard
+            scope="vendor"
+            scopeKindQs="fulfillment"
+            scopeIdQs={f.id}
+            title={f.name}
+            subtitle="Fulfillment dashboard"
+          />
+        )}
+
+        {tab === "overview" && (
+          <FpForm initial={f} onSave={(p) => save.mutate(p)} saving={save.isPending} />
+        )}
+
+        {tab === "people" && (
+          <OrganizationPeople
+            apiPath={`/api/fulfillment-partners/${f.id}/people`}
+            testIdPrefix="fulfillment"
+            entityKind="fulfillment"
+            entityId={f.id}
+            entityName={f.name}
+            blurb="People at this fulfillment partner — operations lead, account rep, whoever you need to reach."
+          />
+        )}
       </div>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

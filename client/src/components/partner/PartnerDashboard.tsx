@@ -16,7 +16,7 @@ import { Clock } from "lucide-react";
 import { RangePicker, DashboardPanel, type RangePreset } from "./dashboard-controls";
 import { BRAND, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 
-export type PartnerScopeKind = "label" | "npo" | "vendor";
+export type PartnerScopeKind = "label" | "npo" | "vendor" | "artist";
 export type PartnerRangePreset = "today" | "7d" | "30d" | "90d" | "all";
 
 const RANGE_PRESETS: ReadonlyArray<RangePreset<PartnerRangePreset>> = [

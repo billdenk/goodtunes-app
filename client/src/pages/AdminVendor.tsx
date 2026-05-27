@@ -26,6 +26,7 @@ import { VendorPreviewCard } from "@/components/admin/previews/VendorPreviewCard
 import { GoodDeedServicesTab } from "@/components/admin/GoodDeedServicesTab";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
+import { AdminPartnerDashboardCard } from "@/components/admin/AdminPartnerDashboardCard";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
 import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
@@ -131,7 +132,7 @@ interface VendorProfile {
   children?: ChildLite[];
 }
 
-type Tab = "overview" | "people" | "albums" | "analytics" | "cover" | "instruments" | "gooddeed" | "permissions";
+type Tab = "dashboard" | "overview" | "people" | "albums" | "analytics" | "cover" | "instruments" | "gooddeed" | "permissions";
 
 // Task #581 — Only Quickprinters quote GoodDeed certificate work. Pure
 // Makers (Epiphone), pure Resellers (Carter Vintage), and Maker+Reseller
@@ -143,6 +144,8 @@ function vendorQuotesGoodDeed(v: Pick<Vendor, "isQuickprinter">): boolean {
 }
 
 const TABS: { key: Tab; label: string }[] = [
+  // Task #590 — Dashboard leads, Overview demoted to second.
+  { key: "dashboard", label: "Dashboard" },
   { key: "overview", label: "Overview" },
   // Task #295 — entity-detail parity (People / Albums / Analytics)
   // mirroring the Maker template. People moved out of Overview into
@@ -189,12 +192,23 @@ export function AdminVendor() {
   // can land on a specific tab. Falls back to overview when the key
   // isn't recognized or (for gooddeed) when the vendor doesn't quote
   // it — see the snap-back effect below.
-  const [tab, setTab] = useState<Tab>(() => {
-    if (typeof window === "undefined") return "overview";
+  const [tab, setTabState] = useState<Tab>(() => {
+    if (typeof window === "undefined") return "dashboard";
     const requested = new URLSearchParams(window.location.search).get("tab");
     const valid = TABS.some((t) => t.key === requested);
-    return valid ? (requested as Tab) : "overview";
+    return valid ? (requested as Tab) : "dashboard";
   });
+  // Task #590 — keep `?tab=` in sync with the active tab so deep links
+  // and back/forward navigation stay honest.
+  const setTab = (next: Tab) => {
+    setTabState(next);
+    try {
+      const u = new URL(window.location.href);
+      if (next === "dashboard") u.searchParams.delete("tab");
+      else u.searchParams.set("tab", next);
+      window.history.replaceState({}, "", u.toString());
+    } catch {}
+  };
   // Logo editor lives as a modal hanging off the header logo thumbnail
   // (same pencil-on-thumbnail pattern as AdminAlbum's Artwork editor).
   // The dedicated Logo tab was removed; Cover stays a tab because the
@@ -265,7 +279,7 @@ export function AdminVendor() {
   useEffect(() => {
     if (!profile?.vendor) return;
     if (tab === "gooddeed" && !vendorQuotesGoodDeed(profile.vendor)) {
-      setTab("overview");
+      setTab("dashboard");
     }
   }, [profile?.vendor, tab]);
 
@@ -525,6 +539,15 @@ export function AdminVendor() {
         </div>
 
         {/* CONTENT */}
+        {tab === "dashboard" && (
+          <AdminPartnerDashboardCard
+            scope="vendor"
+            scopeKindQs="vendor"
+            scopeIdQs={vendor.id}
+            title={vendor.name}
+            subtitle={mode === "maker" ? "Maker dashboard" : "Reseller dashboard"}
+          />
+        )}
         {tab === "overview" && <OverviewPanel vendor={vendor} />}
         {tab === "overview" && <RolesPanel vendor={vendor} />}
         {tab === "overview" && (

@@ -23,7 +23,7 @@ import { sql } from "drizzle-orm";
 import { getUserRole } from "./auth/roles";
 import { storage } from "./storage";
 
-type ScopeKind = "label" | "npo" | "vendor";
+type ScopeKind = "label" | "npo" | "vendor" | "artist";
 type RangePreset = "today" | "7d" | "30d" | "90d" | "all";
 
 type RangeWindow = { from: Date; to: Date; preset: RangePreset };
@@ -123,6 +123,18 @@ async function resolveScope(kind: ScopeKind, req: Request): Promise<ResolvedScop
     const row = ((r as any).rows ?? [])[0];
     if (!row) return { error: "Label not found", status: 404 };
     return { kind, id: row.id, name: row.name, logoUrl: row.logo_url ?? null };
+  }
+
+  if (kind === "artist") {
+    let id: string | null = null;
+    if (info.role === "super_admin") id = impersonate || null;
+    else if (info.role === "artist") id = info.roleScopeId;
+    else return { error: "Insufficient role", status: 403 };
+    if (!id) return { error: "Artist scope required", status: info.role === "super_admin" ? 400 : 403 };
+    const r = await db.execute<any>(sql`SELECT id, name, photo_url FROM people WHERE id = ${id} LIMIT 1`);
+    const row = ((r as any).rows ?? [])[0];
+    if (!row) return { error: "Artist not found", status: 404 };
+    return { kind, id: row.id, name: row.name, logoUrl: row.photo_url ?? null };
   }
 
   if (kind === "npo") {
@@ -568,6 +580,165 @@ async function buildVendorPayload(
   return { kpis, chartMetrics, series, activity };
 }
 
+// ─── Artist payload ──────────────────────────────────────────────────
+
+async function buildArtistPayload(
+  scope: { id: string; name: string; logoUrl: string | null },
+  r: RangeWindow,
+  prior: RangeWindow | null,
+): Promise<{ kpis: Kpi[]; chartMetrics: ChartMetric[]; series: SeriesPoint[]; activity: ActivityItem[] }> {
+  // Songs the artist owns the primary credit on (via their albums).
+  // Doesn't yet include side-musician credits — that's a follow-up.
+  const albumRows = await db.execute<any>(sql`
+    SELECT id, title, created_at FROM albums WHERE primary_artist_id = ${scope.id}
+  `);
+  const albums = ((albumRows as any).rows ?? []) as any[];
+  const albumIds = albums.map((a) => a.id);
+  const songRows = albumIds.length
+    ? await db.execute<any>(sql`SELECT id FROM songs WHERE album_id = ANY(${albumIds}::text[])`)
+    : ({ rows: [] } as any);
+  const songIds = ((songRows as any).rows ?? []).map((s: any) => s.id);
+
+  async function plays(window: RangeWindow) {
+    if (!songIds.length) return { plays: 0, newFans: 0 };
+    const p = await db.execute<any>(sql`
+      SELECT COUNT(*) FILTER (WHERE name = 'play_start')::bigint AS plays
+      FROM analytics_events
+      WHERE name IN ('play_start','play_complete')
+        AND payload->>'songId' = ANY(${songIds}::text[])
+        AND ts >= ${window.from} AND ts < ${window.to}
+    `).catch(() => ({ rows: [{ plays: 0 }] }) as any);
+    const nf = await db.execute<any>(sql`
+      WITH first_play AS (
+        SELECT COALESCE(user_id, session_id) AS listener, MIN(ts) AS first_ts
+        FROM analytics_events
+        WHERE name = 'play_start'
+          AND payload->>'songId' = ANY(${songIds}::text[])
+          AND COALESCE(user_id, session_id) IS NOT NULL
+        GROUP BY 1
+      )
+      SELECT COUNT(*)::bigint AS new_fans FROM first_play
+      WHERE first_ts >= ${window.from} AND first_ts < ${window.to}
+    `).catch(() => ({ rows: [{ new_fans: 0 }] }) as any);
+    return {
+      plays: Number(((p as any).rows ?? [{}])[0]?.plays ?? 0),
+      newFans: Number(((nf as any).rows ?? [{}])[0]?.new_fans ?? 0),
+    };
+  }
+  async function orders(window: RangeWindow) {
+    if (!albumIds.length) return 0;
+    const row = await db.execute<any>(sql`
+      SELECT COUNT(*) FILTER (WHERE status <> 'refunded')::bigint AS n
+      FROM orders
+      WHERE status IN ('paid','shipped','refunded')
+        AND album_id = ANY(${albumIds}::text[])
+        AND created_at >= ${window.from} AND created_at < ${window.to}
+    `).catch(() => ({ rows: [{ n: 0 }] }) as any);
+    return Number(((row as any).rows ?? [{}])[0]?.n ?? 0);
+  }
+  const [pCur, pPrv, oCur, oPrv] = await Promise.all([
+    plays(r),
+    prior ? plays(prior) : Promise.resolve(null),
+    orders(r),
+    prior ? orders(prior) : Promise.resolve(null),
+  ]);
+
+  const kpis: Kpi[] = [
+    { id: "plays", label: "Plays", value: pCur.plays, prior: pPrv?.plays ?? null, format: "number" },
+    { id: "newFans", label: "New fans", value: pCur.newFans, prior: pPrv?.newFans ?? null, format: "number" },
+    { id: "orders", label: "Orders", value: oCur, prior: oPrv ?? null, format: "number" },
+    { id: "completion", label: "Completion %", value: null, format: "percent", comingSoon: true, note: "Play-complete ratio lands with listening insights" },
+    { id: "topTrack", label: "Top track", value: null, format: "number", comingSoon: true },
+    { id: "revenue", label: "Revenue (artist share)", value: null, format: "currency", comingSoon: true, note: "Artist share lands with payout-split columns" },
+  ];
+
+  const playDaily = songIds.length
+    ? await db.execute<any>(sql`
+        SELECT date_trunc('day', ts)::date::text AS day,
+          COUNT(*) FILTER (WHERE name = 'play_start')::bigint AS plays
+        FROM analytics_events
+        WHERE name IN ('play_start','play_complete')
+          AND payload->>'songId' = ANY(${songIds}::text[])
+          AND ts >= ${r.from} AND ts < ${r.to}
+        GROUP BY 1 ORDER BY 1 ASC
+      `).catch(() => ({ rows: [] }) as any)
+    : ({ rows: [] } as any);
+  const newFansDaily = songIds.length
+    ? await db.execute<any>(sql`
+        WITH first_play AS (
+          SELECT COALESCE(user_id, session_id) AS listener, MIN(ts) AS first_ts
+          FROM analytics_events
+          WHERE name = 'play_start'
+            AND payload->>'songId' = ANY(${songIds}::text[])
+            AND COALESCE(user_id, session_id) IS NOT NULL
+          GROUP BY 1
+        )
+        SELECT date_trunc('day', first_ts)::date::text AS day,
+          COUNT(*)::bigint AS new_fans
+        FROM first_play
+        WHERE first_ts >= ${r.from} AND first_ts < ${r.to}
+        GROUP BY 1 ORDER BY 1 ASC
+      `).catch(() => ({ rows: [] }) as any)
+    : ({ rows: [] } as any);
+  const orderDaily = albumIds.length
+    ? await db.execute<any>(sql`
+        SELECT date_trunc('day', created_at)::date::text AS day,
+          COUNT(*) FILTER (WHERE status <> 'refunded')::bigint AS orders
+        FROM orders
+        WHERE status IN ('paid','shipped','refunded')
+          AND album_id = ANY(${albumIds}::text[])
+          AND created_at >= ${r.from} AND created_at < ${r.to}
+        GROUP BY 1 ORDER BY 1 ASC
+      `).catch(() => ({ rows: [] }) as any)
+    : ({ rows: [] } as any);
+
+  const series = mergeDaily(r, [
+    { rows: ((playDaily as any).rows ?? []) as any[], plays: (x: any) => Number(x.plays ?? 0) },
+    { rows: ((newFansDaily as any).rows ?? []) as any[], newFans: (x: any) => Number(x.new_fans ?? 0) },
+    { rows: ((orderDaily as any).rows ?? []) as any[], orders: (x: any) => Number(x.orders ?? 0) },
+  ]);
+  const chartMetrics: ChartMetric[] = [
+    { id: "plays", label: "Plays", format: "number" },
+    { id: "newFans", label: "New fans", format: "number" },
+    { id: "orders", label: "Orders", format: "number" },
+  ];
+
+  const activity: ActivityItem[] = [];
+  if (albumIds.length) {
+    const ordersRows = await db.execute<any>(sql`
+      SELECT o.id, o.created_at, o.total_cents, a.title AS album_title, a.id AS album_id
+      FROM orders o
+      JOIN albums a ON a.id = o.album_id
+      WHERE o.status IN ('paid','shipped')
+        AND o.album_id = ANY(${albumIds}::text[])
+        AND o.created_at >= ${r.from} AND o.created_at < ${r.to}
+      ORDER BY o.created_at DESC LIMIT 10
+    `).catch(() => ({ rows: [] }) as any);
+    for (const o of ((ordersRows as any).rows ?? []) as any[]) {
+      activity.push({
+        kind: "order",
+        ts: new Date(o.created_at).toISOString(),
+        title: `Order — ${o.album_title}`,
+        detail: `$${(Number(o.total_cents) / 100).toFixed(2)}`,
+        href: `/admin/albums/${o.album_id}`,
+      });
+    }
+  }
+  for (const a of albums) {
+    if (a.created_at && new Date(a.created_at) >= r.from && new Date(a.created_at) < r.to) {
+      activity.push({
+        kind: "release",
+        ts: new Date(a.created_at).toISOString(),
+        title: `Album added — ${a.title}`,
+        href: `/admin/albums/${a.id}`,
+      });
+    }
+  }
+  activity.sort((x, y) => (y.ts < x.ts ? -1 : 1));
+
+  return { kpis, chartMetrics, series, activity: activity.slice(0, 15) };
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 function mergeDaily(
@@ -603,9 +774,10 @@ export async function getPartnerDashboard(
   const r = rangeFor(preset);
   const prior = priorOf(r);
   const built =
-    kind === "label" ? await buildLabelPayload(scope, r, prior) :
-    kind === "npo"   ? await buildNpoPayload(scope, r, prior) :
-                       await buildVendorPayload(scope, r, prior, scope.subKind ?? "vendor");
+    kind === "label"  ? await buildLabelPayload(scope, r, prior) :
+    kind === "npo"    ? await buildNpoPayload(scope, r, prior) :
+    kind === "artist" ? await buildArtistPayload(scope, r, prior) :
+                        await buildVendorPayload(scope, r, prior, scope.subKind ?? "vendor");
   return {
     range: { preset: r.preset, from: r.from.toISOString(), to: r.to.toISOString() },
     prior: prior ? { from: prior.from.toISOString(), to: prior.to.toISOString() } : null,
@@ -618,7 +790,7 @@ export async function getPartnerDashboard(
 export async function registerPartnerDashboardRoutes(app: Express) {
   app.get("/api/partner/:scope/dashboard", async (req: Request, res: Response) => {
     const kindRaw = String(req.params.scope || "").toLowerCase();
-    if (kindRaw !== "label" && kindRaw !== "npo" && kindRaw !== "vendor") {
+    if (kindRaw !== "label" && kindRaw !== "npo" && kindRaw !== "vendor" && kindRaw !== "artist") {
       return res.status(400).json({ message: "Unknown scope" });
     }
     const kind = kindRaw as ScopeKind;

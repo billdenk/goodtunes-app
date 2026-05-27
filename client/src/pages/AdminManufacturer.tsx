@@ -19,6 +19,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AddressAutocompleteField } from "@/components/admin/AddressAutocompleteField";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
+import { AdminPartnerDashboardCard } from "@/components/admin/AdminPartnerDashboardCard";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
@@ -65,7 +66,24 @@ export function AdminManufacturer() {
   // the Maker template. Overview keeps the editable profile + press
   // catalog + permissions cards; the other three tabs are shared
   // components driven by `/api/admin/manufacturers/:id/...` endpoints.
-  const [tab, setTab] = useState<"overview" | "people" | "albums" | "catalog" | "analytics">("overview");
+  // Task #590 — Dashboard leads, Overview demoted to second. `?tab=` deep
+  // links keep working; default lands on Dashboard.
+  type ManufacturerTab = "dashboard" | "overview" | "people" | "albums" | "catalog" | "analytics";
+  const MFR_TAB_KEYS: readonly ManufacturerTab[] = ["dashboard", "overview", "people", "albums", "catalog", "analytics"];
+  const [tab, setTabState] = useState<ManufacturerTab>(() => {
+    if (typeof window === "undefined") return "dashboard";
+    const q = new URLSearchParams(window.location.search).get("tab");
+    return (MFR_TAB_KEYS as readonly string[]).includes(q ?? "") ? (q as ManufacturerTab) : "dashboard";
+  });
+  const setTab = (next: ManufacturerTab) => {
+    setTabState(next);
+    try {
+      const u = new URL(window.location.href);
+      if (next === "dashboard") u.searchParams.delete("tab");
+      else u.searchParams.set("tab", next);
+      window.history.replaceState({}, "", u.toString());
+    } catch {}
+  };
 
   const { data: m, isLoading } = useQuery<Manufacturer>({
     queryKey: ["/api/manufacturers", id],
@@ -251,6 +269,7 @@ export function AdminManufacturer() {
         >
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
             {([
+              { key: "dashboard", label: "Dashboard" },
               { key: "overview", label: "Overview" },
               { key: "people", label: "People" },
               { key: "albums", label: "Albums" },
@@ -306,6 +325,16 @@ export function AdminManufacturer() {
             </button>
           </div>
         </div>
+
+        {tab === "dashboard" && (
+          <AdminPartnerDashboardCard
+            scope="vendor"
+            scopeKindQs="manufacturer"
+            scopeIdQs={m.id}
+            title={m.name}
+            subtitle="Press dashboard"
+          />
+        )}
 
         {tab === "overview" && (
           <>

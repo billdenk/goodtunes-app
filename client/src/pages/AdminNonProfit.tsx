@@ -10,6 +10,7 @@ import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
 import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
+import { AdminPartnerDashboardCard } from "@/components/admin/AdminPartnerDashboardCard";
 import { queryClient } from "@/lib/queryClient";
 import type { PartnerAddressSnapshot } from "@shared/schema";
 
@@ -41,7 +42,24 @@ export default function AdminNonProfit() {
   // other three tabs are shared components driven by
   // `/api/admin/non-profits/:id/...` endpoints (plus the existing
   // contacts endpoint for People).
-  const [tab, setTab] = useState<"overview" | "people" | "albums" | "analytics" | "payouts">("overview");
+  // Task #590 — Dashboard leads, Overview demoted to second; `?tab=`
+  // round-trip so deep links survive.
+  type NpoTab = "dashboard" | "overview" | "people" | "albums" | "analytics" | "payouts";
+  const NPO_TAB_KEYS: readonly NpoTab[] = ["dashboard", "overview", "people", "albums", "analytics", "payouts"];
+  const [tab, setTabState] = useState<NpoTab>(() => {
+    if (typeof window === "undefined") return "dashboard";
+    const q = new URLSearchParams(window.location.search).get("tab");
+    return (NPO_TAB_KEYS as readonly string[]).includes(q ?? "") ? (q as NpoTab) : "dashboard";
+  });
+  const setTab = (next: NpoTab) => {
+    setTabState(next);
+    try {
+      const u = new URL(window.location.href);
+      if (next === "dashboard") u.searchParams.delete("tab");
+      else u.searchParams.set("tab", next);
+      window.history.replaceState({}, "", u.toString());
+    } catch {}
+  };
 
   if (npoQ.isLoading) {
     return (
@@ -155,6 +173,7 @@ export default function AdminNonProfit() {
         >
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
             {([
+              { key: "dashboard", label: "Dashboard" },
               { key: "overview", label: "Overview" },
               { key: "people", label: "People" },
               { key: "albums", label: "Albums" },
@@ -181,6 +200,15 @@ export default function AdminNonProfit() {
             ))}
           </div>
         </div>
+
+        {tab === "dashboard" && (
+          <AdminPartnerDashboardCard
+            scope="npo"
+            scopeIdQs={npo.id}
+            title={npo.name}
+            subtitle="Non-profit dashboard"
+          />
+        )}
 
         {tab === "overview" && (
           <>

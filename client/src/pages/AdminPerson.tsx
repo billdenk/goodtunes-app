@@ -35,6 +35,7 @@ import { EditablePanel } from "@/components/admin/EditablePanel";
 import { NewAlbumTitleDialog } from "@/components/admin/NewAlbumTitleDialog";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
+import { AdminPartnerDashboardCard } from "@/components/admin/AdminPartnerDashboardCard";
 import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
@@ -165,8 +166,12 @@ interface LabelLite {
 // even though the discography endpoints under the hood still say
 // "discography" — the rename is UI-only on purpose so the iTunes pull
 // machinery doesn't ripple.
-type Tab = "overview" | "cover" | "members" | "releases" | "streaming" | "gear" | "payouts" | "permissions";
+type Tab = "dashboard" | "overview" | "cover" | "members" | "releases" | "streaming" | "gear" | "payouts" | "permissions";
 const BASE_TABS: { key: Tab; label: string }[] = [
+  // Task #590 — Dashboard leads on every partner detail page, including
+  // artist-scope. Most artist KPIs render Coming soon until the
+  // listening-insights + payout-split data lands.
+  { key: "dashboard", label: "Dashboard" },
   { key: "overview", label: "Overview" },
   { key: "cover", label: "Cover" },
   { key: "releases", label: "GoodTunes\u00AE Releases" },
@@ -212,7 +217,24 @@ export function AdminPerson() {
   const [, navigate] = useLocation();
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [tab, setTab] = useState<Tab>("overview");
+  // Task #590 — Dashboard is default; `?tab=` deep links keep working.
+  const ALL_TAB_KEYS: readonly Tab[] = [
+    "dashboard", "overview", "cover", "members", "releases", "streaming", "gear", "payouts", "permissions",
+  ];
+  const [tab, setTabState] = useState<Tab>(() => {
+    if (typeof window === "undefined") return "dashboard";
+    const q = new URLSearchParams(window.location.search).get("tab");
+    return (ALL_TAB_KEYS as readonly string[]).includes(q ?? "") ? (q as Tab) : "dashboard";
+  });
+  const setTab = (next: Tab) => {
+    setTabState(next);
+    try {
+      const u = new URL(window.location.href);
+      if (next === "dashboard") u.searchParams.delete("tab");
+      else u.searchParams.set("tab", next);
+      window.history.replaceState({}, "", u.toString());
+    } catch {}
+  };
   // Photo editor lives as a modal hanging off the header avatar (same
   // pencil-on-thumbnail pattern as AdminAlbum's Artwork editor). The
   // dedicated Photo tab was removed; Cover is still its own tab because
@@ -471,6 +493,14 @@ export function AdminPerson() {
         </div>
 
         {/* TAB CONTENT */}
+        {tab === "dashboard" && (
+          <AdminPartnerDashboardCard
+            scope="artist"
+            scopeIdQs={person.id}
+            title={person.name}
+            subtitle={person.isGroup ? "Group dashboard" : "Artist dashboard"}
+          />
+        )}
         {tab === "overview" && (
           <OverviewPanel person={person} labels={labels} />
         )}

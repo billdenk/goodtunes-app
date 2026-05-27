@@ -32,6 +32,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
+import { AdminPartnerDashboardCard } from "@/components/admin/AdminPartnerDashboardCard";
 import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import {
@@ -85,8 +86,10 @@ interface AlbumLite {
   primaryArtistId: string | null;
 }
 
-type Tab = "overview" | "logo" | "cover" | "releases" | "payouts" | "permissions";
+type Tab = "dashboard" | "overview" | "logo" | "cover" | "releases" | "payouts" | "permissions";
 const TABS: { key: Tab; label: string }[] = [
+  // Task #590 — Dashboard leads; Overview demoted to second.
+  { key: "dashboard", label: "Dashboard" },
   { key: "overview", label: "Overview" },
   { key: "logo", label: "Logo" },
   { key: "cover", label: "Cover" },
@@ -99,7 +102,21 @@ export function AdminLabel() {
   const { user, isLoading: authLoading } = useAuth();
   const [, params] = useRoute<{ id: string }>("/admin/labels/:id");
   const [, navigate] = useLocation();
-  const [tab, setTab] = useState<Tab>("overview");
+  // Task #590 — Dashboard leads + `?tab=` round-trip for deep links.
+  const [tab, setTabState] = useState<Tab>(() => {
+    if (typeof window === "undefined") return "dashboard";
+    const q = new URLSearchParams(window.location.search).get("tab");
+    return TABS.some((t) => t.key === q) ? (q as Tab) : "dashboard";
+  });
+  const setTab = (next: Tab) => {
+    setTabState(next);
+    try {
+      const u = new URL(window.location.href);
+      if (next === "dashboard") u.searchParams.delete("tab");
+      else u.searchParams.set("tab", next);
+      window.history.replaceState({}, "", u.toString());
+    } catch {}
+  };
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const labelId = params?.id ?? "";
   const qc = useQueryClient();
@@ -391,6 +408,14 @@ export function AdminLabel() {
           </div>
         </div>
 
+        {tab === "dashboard" && (
+          <AdminPartnerDashboardCard
+            scope="label"
+            scopeIdQs={label.id}
+            title={label.name}
+            subtitle="Label dashboard"
+          />
+        )}
         {tab === "overview" && <OverviewPanel label={label} />}
         {tab === "overview" && (
           <OrganizationPeople
