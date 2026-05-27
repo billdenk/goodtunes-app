@@ -190,7 +190,7 @@ export function PressPanel({
 
   return (
     <div className="py-6" data-testid="panel-press">
-      <div className="max-w-3xl">
+      <div>
         <MastersApprovalBanner albumId={albumId} />
         {/* ── Masters on file ─────────────────────────────────────────── */}
         <div className="mb-10" data-testid="section-masters-on-file">
