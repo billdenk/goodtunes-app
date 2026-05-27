@@ -328,7 +328,7 @@ export function ArtistDetail() {
 
   return (
     <main className="h-screen w-full flex justify-center overflow-hidden relative">
-      <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
+      <section className="relative w-full max-w-[390px] md:max-w-[820px] lg:max-w-[1200px] lg:mx-auto h-screen text-white flex flex-col">
         <IconButton
           size="md"
           variant="dimmed"
@@ -459,7 +459,7 @@ export function ArtistDetail() {
           {hasGtReleases && (
             <div className="px-5 mt-9">
               <h2 className="text-white text-xl font-bold tracking-tight mb-3">GoodTunes&reg; Releases</h2>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                 {artistAlbums.map((album) => (
                   <button
                     key={album.id}
@@ -827,7 +827,7 @@ function BucketGridSheet({
           <p className="text-white/45 text-[12px] mb-4">
             {artistName} · {items.length} {items.length === 1 ? "release" : "releases"}
           </p>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {items.map((release) => (
               <button
                 key={release.id}

@@ -27,8 +27,14 @@ export function MiniPlayer() {
     ? { bottom: 12, left: 70, right: 70, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" }
     : { bottom: 79, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" };
 
+  // Task #547 — on lg+ web (storefront sidebar mounted) the MiniPlayer
+  // anchors to the bottom-right of the content area instead of the
+  // center of the viewport. Mobile/tablet stay on the 390px-wide
+  // centered capsule. (We can't read `useDesktopShell` here without
+  // an extra subscription; Tailwind `lg:` responsive classes do the
+  // work and keep this purely declarative.)
   return (
-    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-30 pointer-events-none">
+    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-30 pointer-events-none lg:left-auto lg:right-6 lg:translate-x-0 lg:bottom-6 lg:max-w-[420px]">
     <div className={`pointer-events-auto ${containerClass}`} style={containerStyle}>
       <div
         className="relative cursor-pointer active:scale-[0.98] transition-transform"

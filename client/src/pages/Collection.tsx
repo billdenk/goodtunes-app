@@ -260,8 +260,8 @@ export function Collection() {
   }, [q, tab, filteredAlbums.length, filteredSongs.length, filteredArtists.length]);
 
   return (
-    <main className="h-screen w-full flex justify-center overflow-hidden">
-      <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
+    <main className="h-screen w-full flex justify-center overflow-hidden lg:justify-start lg:pl-[260px]">
+      <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1200px] lg:mx-auto h-screen text-white flex flex-col">
 
         <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
           <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Collection</h1>
@@ -421,7 +421,7 @@ export function Collection() {
                 )
               ) : (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
                     {filteredAlbums.slice(0, visibleCount).map((album) => (
                       <AlbumCard
                         key={album.id}

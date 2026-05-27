@@ -379,7 +379,7 @@ export function Playlists() {
   if (selectedPlaylist) {
     return (
       <main className="h-screen w-full flex justify-center overflow-hidden">
-        <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
+        <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1100px] lg:mx-auto h-screen text-white flex flex-col">
           <div ref={detailScrollRef} className="flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
           <header className="sticky top-0 z-20 flex items-center justify-between px-5 pt-14 pb-3 flex-shrink-0">
             <button type="button" onClick={closeDetail} className="w-9 h-9 rounded-full flex items-center justify-center text-white/80 backdrop-blur" style={{ background: "rgba(255,255,255,0.12)" }} data-testid="button-back-playlist">
@@ -670,7 +670,7 @@ export function Playlists() {
 
   return (
     <main className="h-screen w-full flex justify-center overflow-hidden">
-      <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
+      <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1100px] lg:mx-auto h-screen text-white flex flex-col">
         <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
           <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Playlists</h1>
           <button

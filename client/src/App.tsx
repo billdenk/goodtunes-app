@@ -89,6 +89,7 @@ import { AdminDashboard } from "@/pages/AdminDashboard";
 import { VendorPortal } from "@/pages/VendorPortal";
 import ErrorPage from "@/pages/ErrorPage";
 import { AdminShellErrorBoundary } from "@/components/admin/AdminShellErrorBoundary";
+import { StorefrontSidebar } from "@/components/StorefrontSidebar";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -530,6 +531,10 @@ function Router() {
           customer + version behind current) so it's safe to mount
           globally. Won't render on admin/auth/welcome/checkout routes. */}
       <WhatsNewSheet />
+      {/* Task #547 — desktop (≥1024px web) storefront sidebar.
+          Self-gates on route (storefront paths only) + viewport +
+          !native. Mobile/tablet keep the floating BottomNav. */}
+      <StorefrontSidebar />
       {user?.kind === "admin" && isAnalyticsDebugOverlayEnabled() && <AnalyticsDebugOverlay />}
       {/* Super-admin-only screen-code chip. Shown on every page so Nick
           can include the code in a screenshot/comment and we know

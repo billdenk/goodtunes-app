@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { subscribeChats, totalUnread } from "@/lib/chatStore";
+import { useDesktopShell } from "@/hooks/useDesktopShell";
 
 /**
  * Bottom padding every customer-shell scroll container must reserve so
@@ -80,6 +81,11 @@ const NavItem = ({
 export function BottomNav() {
   const [location, navigate] = useLocation();
   const { hidden, setHidden } = useNavVisibility();
+  // Task #547 — at lg+ on web the StorefrontSidebar takes over. Native
+  // shell (Capacitor) always renders the bottom-nav pill regardless of
+  // viewport.
+  const isDesktop = useDesktopShell();
+  if (isDesktop) return null;
 
   const isLibrary =
     location === "/collection" || location === "/" || location.startsWith("/album");
