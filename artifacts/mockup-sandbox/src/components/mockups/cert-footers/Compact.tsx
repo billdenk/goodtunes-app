@@ -16,17 +16,14 @@ export function Compact() {
             </div>
             <img src="/__mockup/images/goodtunes-logo-white.png" alt="GoodTunes" className="h-9 w-auto object-contain flex-shrink-0" />
           </div>
-          {/* Middle — 3 body bars */}
-          <div className="flex flex-col gap-1.5">
-            <div className="h-3 w-[88%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
-            <div className="h-3 w-[80%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
-            <div className="h-3 w-[68%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
-          </div>
-          {/* Bottom row */}
+          {/* Body — 4 stacked bars; signature overlays the bottom bar, QR aligns right */}
           <div className="flex items-end justify-between gap-3">
-            <div className="flex-1 min-w-0 relative">
+            <div className="flex-1 min-w-0 flex flex-col gap-1.5 relative">
+              <div className="h-3 w-[88%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
+              <div className="h-3 w-[80%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
+              <div className="h-3 w-[68%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
               <div className="h-3 w-[60%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
-              <img src="/__mockup/images/will-signature.png" alt="" className="absolute left-0 bottom-0 h-10 w-auto max-w-[60%] object-contain object-left-bottom" />
+              <img src="/__mockup/images/will-signature.png" alt="" className="absolute left-0 bottom-0 h-10 w-auto max-w-[60%] object-contain object-left-bottom translate-y-1" />
             </div>
             <div className="w-10 h-10 rounded-sm flex-shrink-0" style={{ background: "rgba(255,255,255,0.32)" }} />
           </div>
