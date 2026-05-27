@@ -45,6 +45,16 @@ interface VendorSlot {
   aboutUrl: string | null;
   logoUrl: string | null;
   known: boolean;
+  // Task #603 — sub-brand hints from the server. When the host owns
+  // sub-brands (gibson.com → Epiphone), the scrape route emits the
+  // maker slot with `parentDomain`, optionally `parentVendorId` (when
+  // the parent vendor row already exists), and `existingVendorId`
+  // (when the sub-brand row already exists). The client uses these to
+  // skip the guaranteed-collision 409 round-trip and to avoid double-
+  // creating an existing sub-brand row.
+  parentDomain?: string | null;
+  parentVendorId?: string | null;
+  existingVendorId?: string | null;
 }
 interface ScrapeResult {
   name: string | null;
@@ -176,17 +186,34 @@ export function AdminInstruments() {
   // payload, just at different shapes.
   async function findOrCreateVendor(slot: VendorSlot, role: "maker" | "reseller" | "both"): Promise<{ id: string; name: string } | null> {
     if (!slot.domain) return null;
+    // Task #603 — server already resolved this sub-brand to an
+    // existing vendor row; skip the POST entirely so we don't double-
+    // create on re-imports of a second Epiphone product off gibson.com.
+    if (slot.existingVendorId) {
+      return { id: slot.existingVendorId, name: slot.name };
+    }
     const isMaker = role === "maker" || role === "both";
     const isReseller = role === "reseller" || role === "both";
-    try {
+    const basePayload: Record<string, unknown> = {
+      name: slot.name,
+      domain: slot.domain,
+      isMaker,
+      isReseller,
+      ...(slot.logoUrl ? { logoUrl: slot.logoUrl } : {}),
+      ...(slot.aboutUrl ? { aboutUrl: slot.aboutUrl } : {}),
+    };
+    // Task #603 — when the scrape gave us a parent hint up front, take
+    // the sub-brand create path directly so we don't burn a round-trip
+    // on a guaranteed domain-collision 409.
+    if (slot.parentVendorId) {
       const r = await apiRequest("POST", "/api/admin/vendors", {
-        name: slot.name,
-        domain: slot.domain,
-        isMaker,
-        isReseller,
-        ...(slot.logoUrl ? { logoUrl: slot.logoUrl } : {}),
-        ...(slot.aboutUrl ? { aboutUrl: slot.aboutUrl } : {}),
+        ...basePayload,
+        parentVendorId: slot.parentVendorId,
       });
+      return (await r.json()) as { id: string; name: string };
+    }
+    try {
+      const r = await apiRequest("POST", "/api/admin/vendors", basePayload);
       return (await r.json()) as { id: string; name: string };
     } catch (err) {
       const raw = err instanceof Error ? err.message : "";
@@ -194,6 +221,21 @@ export function AdminInstruments() {
       if (m) {
         try {
           const body = JSON.parse(m[1]);
+          // Task #603 — when 409 carries a `parentCandidate` and the
+          // existing top-level vendor is a *different* brand than what
+          // we asked for (Gibson vs requested Epiphone), re-POST as a
+          // sub-brand of the parent candidate instead of mistakenly
+          // returning the parent row and clobbering the maker.
+          const existingName = String(body?.vendor?.name ?? "").toLowerCase();
+          const requestedName = slot.name.trim().toLowerCase();
+          const sameName = existingName && existingName === requestedName;
+          if (!sameName && body?.parentCandidate?.id) {
+            const r2 = await apiRequest("POST", "/api/admin/vendors", {
+              ...basePayload,
+              parentVendorId: body.parentCandidate.id,
+            });
+            return (await r2.json()) as { id: string; name: string };
+          }
           if (body?.vendor?.id) return body.vendor as { id: string; name: string };
         } catch { /* fall through */ }
       }
@@ -230,21 +272,36 @@ export function AdminInstruments() {
       // row (Gibson) — dedupe by domain so we don't double-POST.
       let makerVendor: { id: string; name: string } | null = null;
       let resellerVendor: { id: string; name: string } | null = null;
+      // Task #603 — same-domain maker+reseller (pure Gibson product on
+      // gibson.com) collapses to one find-or-create. The Task #603
+      // sub-brand override on the server keeps reseller/maker as the
+      // same slot only for pure Gibson products; Epiphone-on-gibson
+      // splits into different domains (gibson.com reseller + sub-brand
+      // maker slot) so this branch deliberately skips it.
       const sameVendor =
         !!s?.reseller?.domain && !!s?.maker?.domain &&
-        s.reseller.domain.toLowerCase() === s.maker.domain.toLowerCase();
+        s.reseller.domain.toLowerCase() === s.maker.domain.toLowerCase() &&
+        !s.maker.parentDomain && !s.maker.existingVendorId;
+      let vendorError: unknown = null;
       if (sameVendor && s?.reseller) {
-        const both = await findOrCreateVendor(s.reseller, "both");
-        makerVendor = both;
-        resellerVendor = both;
+        // Task #603 — wrap so a vendor-upsert throw can't bubble past
+        // the toast and leave the dialog half-reset with no error.
+        try {
+          const both = await findOrCreateVendor(s.reseller, "both");
+          makerVendor = both;
+          resellerVendor = both;
+        } catch (err) {
+          vendorError = err;
+          console.error("[add-gear] same-vendor upsert failed", err);
+        }
       } else {
         if (s?.maker?.domain) {
           try { makerVendor = await findOrCreateVendor(s.maker, "maker"); }
-          catch (err) { console.error("[add-gear] maker upsert failed", err); }
+          catch (err) { vendorError = err; console.error("[add-gear] maker upsert failed", err); }
         }
         if (s?.reseller?.domain) {
           try { resellerVendor = await findOrCreateVendor(s.reseller, "reseller"); }
-          catch (err) { console.error("[add-gear] reseller upsert failed", err); }
+          catch (err) { if (!vendorError) vendorError = err; console.error("[add-gear] reseller upsert failed", err); }
         }
       }
 
@@ -709,23 +766,23 @@ function VendorChip({
   const label = role === "reseller" ? "Reseller" : "Maker";
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 pl-1.5 pr-2.5 py-1 text-xs text-slate-700"
+      className="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 pl-1.5 pr-2.5 py-1 text-xs text-slate-700 max-w-full min-w-0"
       data-testid={testId}
     >
       {slot.logoUrl ? (
         <img
           src={slot.logoUrl}
           alt=""
-          className="w-4 h-4 rounded-sm object-cover"
+          className="w-4 h-4 rounded-sm object-cover flex-shrink-0"
         />
       ) : (
-        <Icon className="w-3.5 h-3.5 text-slate-400" />
+        <Icon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
       )}
-      <span className="font-semibold text-slate-500">{label}:</span>
-      <span className="truncate max-w-[12rem]">{slot.name}</span>
+      <span className="font-semibold text-slate-500 flex-shrink-0">{label}:</span>
+      <span className="truncate min-w-0">{slot.name}</span>
       {!slot.domain && (
         <span
-          className="text-slate-400 italic"
+          className="text-slate-400 italic flex-shrink-0"
           title="No domain — admin will need to fill this in by hand on the vendor row"
         >
           (no domain)

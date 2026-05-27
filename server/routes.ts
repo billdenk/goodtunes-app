@@ -3954,6 +3954,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "earthquaker": "earthquakerdevices.com",
     "chase bliss": "chasebliss.com",
   };
+  // Task #603 — hosts that ship multiple brands off one domain. For
+  // these, when the JSON-LD `brand` differs from the host's display
+  // name, the scrape route promotes the brand into the Maker slot as
+  // a sub-brand of the host's vendor (Epiphone/Kramer/KRK/Mesa under
+  // Gibson) and keeps the host as the Reseller. Start with `gibson.com`
+  // only — widening this list rewrites other single-brand maker sites,
+  // so it's a deliberate one-at-a-time decision (see task notes).
+  const SUB_BRAND_PARENT_HOSTS: Set<string> = new Set(["gibson.com"]);
+
   function resolveMakerHostFromBrand(brand: string): string | null {
     const norm = brand.trim().toLowerCase();
     if (!norm) return null;
@@ -4190,6 +4199,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       aboutUrl: string | null;
       logoUrl: string | null;
       known: boolean;
+      // Task #603 — sub-brand hints. When a reseller host owns
+      // sub-brands (today: gibson.com → Epiphone/Kramer/KRK/Mesa),
+      // the maker slot for those sub-brands carries `parentDomain`
+      // (the host) and, when the parent vendor row already exists in
+      // the catalog, `parentVendorId`. `existingVendorId` short-
+      // circuits the client's find-or-create when we already resolved
+      // the sub-brand to a real vendor row by name.
+      parentDomain?: string | null;
+      parentVendorId?: string | null;
+      existingVendorId?: string | null;
     };
     const buildHostSlot = (
       slotHost: string,
@@ -4426,6 +4445,65 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           logoUrl: `https://www.google.com/s2/favicons?sz=128&domain=${host}`,
           known: false,
         };
+      }
+      // Task #603 — when the host owns sub-brands (today: gibson.com
+      // ships Epiphone, Kramer, KRK, Mesa products off the same domain)
+      // AND the JSON-LD `brand` is a non-empty string that doesn't
+      // match the host's display name, treat the brand as the Maker
+      // (sub-brand of the host) and keep the host as the Reseller —
+      // even though we classified it as "both" above. Without this
+      // override, an Epiphone product page on gibson.com would import
+      // as Maker: Gibson / Reseller: Gibson.
+      if (
+        hostInfo?.role === "both" &&
+        SUB_BRAND_PARENT_HOSTS.has(host) &&
+        typeof brand === "string"
+      ) {
+        const brandStr = brand.trim();
+        if (
+          brandStr &&
+          brandStr.toLowerCase() !== hostInfo.name.toLowerCase()
+        ) {
+          const parent = await storage.getTopLevelVendorByDomain(host);
+          const byName = await storage.getVendorByNameInsensitive(brandStr);
+          // If an unrelated top-level vendor already carries this name
+          // (e.g. an Epiphone row with its own domain), prefer that row
+          // verbatim — we don't want to create a parallel sub-brand
+          // when a real top-level exists.
+          const byNameIsUnrelatedTopLevel =
+            !!byName &&
+            !(byName as any).parentVendorId &&
+            byName.domain !== host;
+          const byNameIsChildOfParent =
+            !!byName && !!parent && (byName as any).parentVendorId === parent.id;
+          if (byNameIsUnrelatedTopLevel) {
+            maker = {
+              name: byName!.name,
+              domain: byName!.domain,
+              affiliateUrl: null,
+              aboutUrl: byName!.aboutUrl ?? `https://${byName!.domain}/`,
+              logoUrl:
+                byName!.logoUrl ??
+                `https://www.google.com/s2/favicons?sz=128&domain=${byName!.domain}`,
+              known: false,
+            };
+          } else {
+            maker = {
+              name: byName?.name ?? brandStr,
+              domain: host,
+              affiliateUrl: null,
+              aboutUrl: byName?.aboutUrl ?? `https://${host}/`,
+              logoUrl:
+                byName?.logoUrl ??
+                `https://www.google.com/s2/favicons?sz=128&domain=${host}`,
+              known: false,
+              parentDomain: host,
+              parentVendorId: parent?.id ?? null,
+              existingVendorId: byNameIsChildOfParent ? byName!.id : null,
+            };
+          }
+          // Reseller stays as the host slot already set above.
+        }
       }
       // When the host is a reseller and the page exposes a JSON-LD
       // brand, attach the brand as the maker. We try to map the brand
