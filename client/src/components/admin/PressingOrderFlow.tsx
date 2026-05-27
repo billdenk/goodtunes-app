@@ -7,6 +7,14 @@ import { useToast } from "@/hooks/use-toast";
 import { dispatchPathToPressNavigate } from "@/lib/pathToPressNav";
 import type { AlbumSku, PressingOrderRequest } from "@shared/schema";
 
+// Task #611 — `GoToPressButton` (the bottom "Ready to press this
+// record? → Go to Press!" banner that used to live at the bottom of
+// SellPanel) was removed. It duplicated the `submit` chip in the
+// Path-to-press strip and operators kept clicking the disabled
+// banner expecting it to do something. The submit chip is now the
+// single Go-to-Press affordance — wiring lives in PressingOrderStepper
+// below.
+
 // Task #225 — five-stage "Go to Press!" flow that frames every Sell
 // panel. The strip at the top tells the artist where they are; the
 // button at the bottom is the same flow's terminal action, only
@@ -87,7 +95,31 @@ export function PressingOrderStepper({
    *  so the operator can switch direction without leaving the page. */
   onChangeMode?: () => void;
 }) {
+  const { toast } = useToast();
   const directStages = useStages(albumId, skus);
+  const submitMutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/albums/${albumId}/pressing-order`, {});
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/albums", albumId, "pressing-order"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/pressing-orders"] });
+      toast({
+        title: "Order sent to GoodTunes.",
+        description: "You'll see it switch to Approved once GoodTunes reviews it.",
+      });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't submit",
+        description: e?.message || "Try again.",
+        variant: "destructive",
+      });
+    },
+  });
   if (mode === "shopify") {
     // Slim Shopify variant — same visual chrome, fewer stages. The
     // stage cues here are coarse (we don't have a Shopify-publish
@@ -199,6 +231,36 @@ export function PressingOrderStepper({
         {stages.map((s, i) => {
           const active = i === currentIdx && !s.done;
           const Icon = s.icon;
+          // Task #611 — the `submit` chip is now the single Go-to-Press
+          // affordance (the redundant bottom banner is gone). Active
+          // means stages 0-3 are done; click fires the POST directly.
+          // When the run is already submitted, the chip becomes a
+          // read-only badge (the status pill in the header carries the
+          // state). When prior stages aren't done, the chip stays
+          // pending and clicking it navigates to whichever stage is
+          // blocking — same as every other pending chip.
+          const isSubmitChip = s.key === "submit";
+          const submitReady = isSubmitChip && active;
+          const submitLocked =
+            isSubmitChip && (submittedPending || submittedApproved);
+          const onChipClick = () => {
+            if (submitReady) {
+              if (submitMutation.isPending) return;
+              submitMutation.mutate();
+              return;
+            }
+            if (submitLocked) return;
+            // Submit chip in pending state (prior stages not done) —
+            // route to whichever stage is blocking so the click always
+            // lands on a real control instead of dead-anchoring on the
+            // (now-removed) Go-to-Press button.
+            if (isSubmitChip) {
+              const blocker = stages.slice(0, 4).find((st) => !st.done);
+              dispatchPathToPressNavigate(blocker?.key ?? "package");
+              return;
+            }
+            dispatchPathToPressNavigate(s.key);
+          };
           if (active || s.done) {
             return (
               <button
@@ -207,7 +269,15 @@ export function PressingOrderStepper({
                 role="listitem"
                 aria-label={s.label}
                 aria-current={active ? "step" : undefined}
-                onClick={() => dispatchPathToPressNavigate(s.key)}
+                disabled={submitLocked || (submitReady && submitMutation.isPending)}
+                title={
+                  submitReady
+                    ? "Send this run to GoodTunes for review."
+                    : submitLocked
+                      ? "Already submitted — GoodTunes is reviewing this run."
+                      : undefined
+                }
+                onClick={onChipClick}
                 className={[
                   "flex items-center gap-1.5 rounded-full transition-all duration-200 min-w-0",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-100",
@@ -232,7 +302,7 @@ export function PressingOrderStepper({
               type="button"
               role="listitem"
               aria-label={s.label}
-              onClick={() => dispatchPathToPressNavigate(s.key)}
+              onClick={onChipClick}
               className={[
                 "group flex items-center rounded-full transition-all duration-200 min-w-0",
                 "px-2.5 py-1.5 text-slate-500",
@@ -279,77 +349,3 @@ export function PressingOrderStepper({
   );
 }
 
-export function GoToPressButton({
-  albumId,
-  skus,
-}: {
-  albumId: string;
-  skus: AlbumSku[];
-}) {
-  const { toast } = useToast();
-  const { stages, allDone } = useStages(albumId, skus);
-  const { data: latest } = useQuery<PressingOrderRequest | null>({
-    queryKey: ["/api/admin/albums", albumId, "pressing-order"],
-  });
-  const submit = useMutation({
-    mutationFn: async () => {
-      const r = await apiRequest("POST", `/api/admin/albums/${albumId}/pressing-order`, {});
-      return r.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["/api/admin/albums", albumId, "pressing-order"],
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/pressing-orders"] });
-      toast({
-        title: "Order sent to GoodTunes.",
-        description: "You'll see it switch to Approved once GoodTunes reviews it.",
-      });
-    },
-    onError: (e: any) => {
-      toast({
-        title: "Couldn't submit",
-        description: e?.message || "Try again.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const pending = latest?.status === "pending";
-  const undoneLabels = stages
-    .slice(0, 4)
-    .filter((s) => !s.done)
-    .map((s) => s.label);
-
-  return (
-    <div className="mt-8 mb-2 rounded-lg border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="min-w-0">
-          <div className="text-[15px] font-semibold text-slate-900">Ready to press this record?</div>
-          <div className="text-[12.5px] text-slate-500 mt-0.5">
-            {pending
-              ? "Already submitted — GoodTunes is reviewing your run."
-              : allDone
-                ? "Send the run to GoodTunes for review. We'll approve and push it to the press."
-                : `Finish these first: ${undoneLabels.join(", ")}.`}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => submit.mutate()}
-          disabled={!allDone || submit.isPending || pending}
-          className={[
-            "h-11 px-5 rounded-full text-[13.5px] font-bold transition-all flex items-center gap-2",
-            !allDone || pending
-              ? "bg-slate-200 text-slate-500 cursor-not-allowed"
-              : "bg-[color:var(--brand-purple)] text-white hover:brightness-110 shadow-sm",
-          ].join(" ")}
-          data-testid="button-go-to-press"
-        >
-          <Send className="w-4 h-4" />
-          {pending ? "Submitted" : submit.isPending ? "Submitting…" : "Go to Press!"}
-        </button>
-      </div>
-    </div>
-  );
-}

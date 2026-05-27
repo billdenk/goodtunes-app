@@ -274,17 +274,18 @@ function visibleTabsFor(album: {
     { key: "sell", label: "Design" },
     { key: "tracks", label: "Digital" },
   ];
-  const released = album.isGoodTunesRelease === true && album.isPrepping === false;
-  const fulfillmentUnlocked = !!album.sellQuoteLockedAt || released;
+  // Task #611 — Physical (direct) and Shopify (shopify) are always
+  // visible regardless of `sellQuoteLockedAt` / Prepping state. Bill
+  // runs the flow internally and demos at any point in an album's
+  // life, so hiding the tab pre-lock created dead-clicks on the
+  // Path-to-press strip (the `art` chip routed to a hidden tab and
+  // did nothing). The panels themselves render their own pre-lock
+  // empty/early states.
   if (album.sellMode === "direct") {
-    return fulfillmentUnlocked
-      ? [...base, { key: "press", label: "Physical" }]
-      : base;
+    return [...base, { key: "press", label: "Physical" }];
   }
   if (album.sellMode === "shopify") {
-    return fulfillmentUnlocked
-      ? [...base, { key: "shopify", label: "Shopify" }]
-      : base;
+    return [...base, { key: "shopify", label: "Shopify" }];
   }
   return base;
 }
@@ -490,16 +491,23 @@ export function AdminAlbum() {
       if (key === "art") {
         // "Upload art" in the Path-to-press strip means *press-ready*
         // jacket / label / hype-sticker files — not the digital cover
-        // thumbnail in the page header. Land on the Press tab's art
-        // preflight dropzone, which already takes a drag-and-drop file
-        // matching how every other admin upload works. Slim Shopify
-        // albums don't have a Press tab, so fall back to the cover
-        // thumbnail editor for that mode.
+        // thumbnail in the page header. Task #611 — the Physical tab
+        // is always visible in direct mode now, so we land on the
+        // Press preflight dropzone. Shopify mode has no `press` tab
+        // (label fulfills the physical product themselves; there is
+        // no plant preflight to run) — route to the always-visible
+        // Sell tab's cover-art editor instead, which is the closest
+        // real-art surface the slim Shopify panel exposes.
         if (album?.sellMode === "shopify") {
+          // Shopify mode has no `press` tab (label fulfills the
+          // physical product themselves; there is no plant preflight
+          // to run). The closest real "edit the art" surface is the
+          // album-cover button in the page header, which is always
+          // mounted regardless of which tab is active — just flash it.
           const el = document.querySelector(
             '[data-testid="button-edit-album-cover"]',
           ) as HTMLElement | null;
-          scrollAndFlash(el);
+          if (el) scrollAndFlash(el, { focus: true });
           return;
         }
         setTab("press");

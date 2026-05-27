@@ -69,7 +69,7 @@ import {
   type VinylColorOption,
 } from "@shared/pressing";
 import { VinylPreview } from "@/components/VinylPreview";
-import { PressingOrderStepper, GoToPressButton } from "@/components/admin/PressingOrderFlow";
+import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import { CertSaleWindowPanel } from "@/components/admin/CertSaleWindowPanel";
 
 // Task #393 — Intl-based currency formatter with thousands separators
@@ -508,15 +508,18 @@ export function SellPanel({
           return;
         }
         if (key === "submit") {
-          // Direct-flow CTA when present; Shopify slim panel exposes
-          // its own "Live on Shopify" anchor as a fallback so the chip
-          // in Shopify mode still has a concrete target.
-          const el = (document.querySelector(
-            '[data-testid="button-go-to-press"]',
-          ) ?? document.querySelector(
-            '[data-testid="anchor-shopify-live"]',
-          )) as HTMLElement | null;
-          scrollAndFlash(el);
+          // Task #611 — direct-mode submit fires the pressing-order
+          // mutation directly from the chip (see PressingOrderStepper),
+          // so SellPanel only handles the Shopify slim panel's "Live
+          // on Shopify" anchor here. Direct-mode submit events never
+          // reach this branch in practice, but we still no-op safely
+          // if they do (no dead `button-go-to-press` lookup any more).
+          if (sellMode === "shopify") {
+            const el = document.querySelector(
+              '[data-testid="anchor-shopify-live"]',
+            ) as HTMLElement | null;
+            scrollAndFlash(el);
+          }
           return;
         }
         if (key === "price" || key === "quantity") {
@@ -830,9 +833,10 @@ export function SellPanel({
             on each vinyl SKU (Task #433) is the new affordance, so this
             second source of truth went away. */}
 
-        {/* Task #225 — terminal "Go to Press" action stays at the
-            bottom of the panel. */}
-        <GoToPressButton albumId={albumId} skus={data.skus} />
+        {/* Task #611 — Bottom "Ready to press this record? → Go to
+            Press!" banner removed. The Path-to-press strip's `submit`
+            chip is the single Go-to-Press affordance now (it fires the
+            same POST directly on click). */}
         </>
         )}
       </div>
@@ -2246,14 +2250,23 @@ function SkuRow({
                     : "text-slate-400 hover:text-slate-700 hover:bg-slate-100",
                   !rowLocked && !!albumQuoteLockedAt ? "opacity-60 cursor-not-allowed" : "",
                 ].join(" ")}
-                aria-label={isLocked ? "Unlock row" : "Lock row"}
+                aria-label={
+                  isLocked
+                    ? "Unlock pressing quote for this format"
+                    : "Lock pressing quote for this format"
+                }
                 aria-pressed={isLocked}
                 title={
+                  /* Task #611 — name what this padlock actually does so
+                     it stops being mistaken for "lock the design" or a
+                     partner-permissions edit-metadata gate. It only
+                     freezes the per-format pressing quote (price /
+                     quantity / color) on this SKU row. */
                   !rowLocked && !!albumQuoteLockedAt
-                    ? "Quote is locked — unlock it below to edit this row."
+                    ? "Pressing quote is locked at the album level — unlock it to edit this row."
                     : isLocked
-                      ? "Unlock row (reversible until the run goes to press)"
-                      : "Lock row (finalises this format in the quote)"
+                      ? "Pressing quote locked for this format. Click to unlock (reversible until the run goes to press)."
+                      : "Lock pressing quote for this format (price, quantity, color)."
                 }
                 data-testid={`button-lock-sku-${format}`}
               >
