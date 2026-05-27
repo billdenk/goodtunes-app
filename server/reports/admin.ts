@@ -302,8 +302,23 @@ export async function revenueBreakdown(ctx: AdminReportContext) {
 
 // ─── Top content (plays-based) ─────────────────────────────────────────
 export async function topContent(ctx: AdminReportContext) {
+  // Task #587 — "Listeners" must count distinct *people*, not distinct
+  // sessions. A signed-in fan playing the same track on phone + laptop
+  // is one listener; the prior code keyed on sessionId alone (and
+  // collapsed every signed-out play under a single literal "anon"),
+  // which inflated some rows and silently merged others. Mirror the
+  // pattern used by playsEngagement: identity = COALESCE(user_id,
+  // session_id, event_id). Falling back to the event id keeps a truly
+  // anonymous (no user, no session) event counted as its own listener
+  // instead of crashing every signed-out play together.
   const rows = await db
-    .select({ name: analyticsEvents.name, payload: analyticsEvents.payload, sessionId: analyticsEvents.sessionId })
+    .select({
+      name: analyticsEvents.name,
+      payload: analyticsEvents.payload,
+      sessionId: analyticsEvents.sessionId,
+      userId: analyticsEvents.userId,
+      eventId: analyticsEvents.id,
+    })
     .from(analyticsEvents)
     .where(and(
       eq(analyticsEvents.name, "play_start"),
@@ -317,18 +332,18 @@ export async function topContent(ctx: AdminReportContext) {
 
   for (const r of rows) {
     const p = (r.payload as any) ?? {};
-    const sid = r.sessionId ?? "anon";
+    const identity = r.userId ?? r.sessionId ?? r.eventId;
     if (p.songId) {
       const s = songPlays.get(p.songId) ?? { plays: 0, listeners: new Set() };
-      s.plays += 1; s.listeners.add(sid); songPlays.set(p.songId, s);
+      s.plays += 1; s.listeners.add(identity); songPlays.set(p.songId, s);
     }
     if (p.albumId) {
       const s = albumPlays.get(p.albumId) ?? { plays: 0, listeners: new Set() };
-      s.plays += 1; s.listeners.add(sid); albumPlays.set(p.albumId, s);
+      s.plays += 1; s.listeners.add(identity); albumPlays.set(p.albumId, s);
     }
     if (p.artistId) {
       const s = artistPlays.get(p.artistId) ?? { plays: 0, listeners: new Set() };
-      s.plays += 1; s.listeners.add(sid); artistPlays.set(p.artistId, s);
+      s.plays += 1; s.listeners.add(identity); artistPlays.set(p.artistId, s);
     }
   }
 
