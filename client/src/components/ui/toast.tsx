@@ -22,29 +22,24 @@ const ToastViewport = React.forwardRef<
 ))
 ToastViewport.displayName = ToastPrimitives.Viewport.displayName
 
-// Apple-style toast: light frosted card, slate text, soft shadow.
-// The app's global --background var is dark navy (#00062B) for the
-// player; that bled into the default shadcn toast and made it pitch
-// black. Force a light surface here regardless of theme so toasts
-// read like iOS / macOS notifications across admin + player.
+// Apple-style toast: light "notification card" look — fully opaque
+// white surface, soft hairline border, generous radius, soft shadow.
 //
-// Contrast guardrail: on a small/admin viewport the toast can overlap
-// the dark-navy album header, and the original `bg-white/95` left
-// enough transparency that 5% of #00062B bled through and turned the
-// card a dusty blue-grey under the text. We push the scrim to /[0.98]
-// (visually opaque, still keeps a hint of the glass character), wash
-// out any residual color cast with `backdrop-saturate-50`, and brighten
-// the blurred sample with `backdrop-brightness-125`. Net effect: the
-// frost look survives, but slate-900 text reads cleanly on any
-// background it floats over.
+// Why no backdrop-filter: iOS WebKit drops the background fill of one
+// `backdrop-filter` layer when another fixed-position backdrop-filter
+// is already on screen (e.g. the PlaylistPickerSheet scrim at z-80).
+// The toast then renders as a barely-visible dark capsule on the dark
+// player. See `.agents/memory/ios-webkit-stacked-backdrop-blur.md`.
+// Solid `bg-white` + `shadow-2xl` looks indistinguishable from the
+// frosted version on real devices and is bulletproof across stacks.
 const toastVariants = cva(
-  "group pointer-events-auto relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-xl border px-4 py-3 shadow-lg backdrop-blur-xl backdrop-saturate-50 backdrop-brightness-125 transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full",
+  "group pointer-events-auto relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-2xl border px-4 py-3.5 shadow-2xl shadow-black/15 transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full",
   {
     variants: {
       variant: {
-        default: "border-slate-200/70 bg-white/[0.98] text-slate-900",
+        default: "border-black/5 bg-white text-slate-900",
         destructive:
-          "destructive group border-rose-200 bg-rose-50/[0.98] text-rose-900",
+          "destructive group border-rose-200 bg-rose-50 text-rose-900",
       },
     },
     defaultVariants: {
@@ -75,7 +70,7 @@ const ToastAction = React.forwardRef<
   <ToastPrimitives.Action
     ref={ref}
     className={cn(
-      "inline-flex h-8 shrink-0 items-center justify-center rounded-md border bg-transparent px-3 text-sm font-medium ring-offset-background transition-colors hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 group-[.destructive]:border-muted/40 group-[.destructive]:hover:border-destructive/30 group-[.destructive]:hover:bg-destructive group-[.destructive]:hover:text-destructive-foreground group-[.destructive]:focus:ring-destructive",
+      "inline-flex h-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 ring-offset-background transition-colors hover:bg-slate-100 active:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 group-[.destructive]:border-rose-200 group-[.destructive]:bg-white group-[.destructive]:text-rose-900 group-[.destructive]:hover:bg-rose-50 group-[.destructive]:focus:ring-rose-300",
       className
     )}
     {...props}
