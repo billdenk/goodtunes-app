@@ -3564,15 +3564,9 @@ function GoodDeedPill({
               price fields it controls. Flipping this updates the
               collapsed header's `On · 25% (65 of 260)` echo to `Off`. */}
           <div
-            className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2.5"
+            className="flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2.5"
             data-testid="row-gooddeed-enable"
           >
-            <label
-              htmlFor="toggle-gooddeed-active"
-              className="text-sm font-medium text-slate-900 cursor-pointer select-none"
-            >
-              Enable GoodDeed® Certificate
-            </label>
             <Switch
               id="toggle-gooddeed-active"
               checked={active}
@@ -3580,6 +3574,12 @@ function GoodDeedPill({
               data-testid="toggle-gooddeed-active"
               aria-label="Offer GoodDeed® cert on this release"
             />
+            <label
+              htmlFor="toggle-gooddeed-active"
+              className="text-sm font-medium text-slate-900 cursor-pointer select-none"
+            >
+              Add Signed GoodDeed Certificate
+            </label>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5 items-start">
             {/* LEFT — enlarged cert mock. Album art on top, navy
