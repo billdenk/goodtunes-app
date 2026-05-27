@@ -558,6 +558,42 @@ export function AdminAlbum() {
     },
   });
 
+  // Task #499 — pre-check whether the caller can save edits to this
+  // album so the "Change mode" affordance can disable itself with a
+  // tooltip BEFORE the operator clicks (instead of toasting a 403 on
+  // submit). Same query key as AlbumEditAccessChip so this is a cache
+  // hit. Super-admin / in-scope partners always pass; the chrome only
+  // dims for out-of-scope partners or unrelaxed lock states.
+  const { data: albumEditAccess } = useQuery<{
+    canEdit: boolean;
+    locked: boolean;
+    hasActiveOverride: boolean;
+    requiresApproval: boolean;
+    missingPermissions: string[];
+  }>({
+    queryKey: ["/api/admin/albums", albumId, "edit-access"],
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/albums/${albumId}/edit-access`, { credentials: "include" });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+  });
+  // Mode changes are operational (Task #499) — they bypass the
+  // post-sale lock on the server but still require edit_metadata +
+  // scope. Dim "Change mode" when the caller lacks either, so they
+  // see the block reason BEFORE the click instead of toasting a 403.
+  // A bare post-sale lock (with edit_metadata granted) is NOT a
+  // reason to dim — the operational bypass means the save will land.
+  const modeChangeBlocked =
+    !!albumEditAccess &&
+    (albumEditAccess.missingPermissions.includes("out_of_scope") ||
+      albumEditAccess.missingPermissions.includes("edit_metadata"));
+  const modeChangeBlockedReason = !modeChangeBlocked
+    ? undefined
+    : albumEditAccess?.missingPermissions.includes("out_of_scope")
+      ? "Out of scope for your team"
+      : "Your team doesn't have edit access on this album";
+
   // Task #335 — sell-mode + format + lock toggle live on the album
   // row. One mutation writes any subset; we use it for the modal
   // submit, the "Change mode" link in the Shopify slim panel, and the
@@ -1066,6 +1102,8 @@ export function AdminAlbum() {
                   }
                   onLockToggle={(next) => updateAlbumMode.mutate({ sellQuoteLockedAt: next })}
                   onChangeMode={() => setModeDialogOpen(true)}
+                  changeModeDisabled={modeChangeBlocked}
+                  changeModeDisabledReason={modeChangeBlockedReason}
                   onEditArtwork={() => setArtworkEditorOpen(true)}
                 />
               )}

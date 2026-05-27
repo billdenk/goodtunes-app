@@ -171,6 +171,8 @@ export function SellPanel({
   sellQuoteLockedAt = null,
   onLockToggle,
   onChangeMode,
+  changeModeDisabled = false,
+  changeModeDisabledReason,
   onEditArtwork,
   trackCount = 0,
   anticipatedTrackCount = null,
@@ -208,6 +210,13 @@ export function SellPanel({
   /** Called by the "Change mode" affordance in the slim Shopify panel
    *  so the operator can re-open the two-step picker without leaving. */
   onChangeMode?: () => void;
+  /** Task #499 — pre-disable the "Change mode" link when GET
+   *  /api/admin/albums/:id/edit-access says the caller can't save (e.g.
+   *  out-of-scope partner). The lock itself no longer blocks mode
+   *  changes — they're operational/routing — so this only fires for
+   *  scope/permission gaps, not first-sale lock. */
+  changeModeDisabled?: boolean;
+  changeModeDisabledReason?: string;
   /** Task #390 — opens the album cover-art editor modal. Wired from
    *  AdminAlbum so the per-format card's preview hover-pencil opens
    *  the same drop-zone the page header thumbnail does. */
@@ -610,6 +619,8 @@ export function SellPanel({
             sellQuoteLockedAt={sellQuoteLockedAt ?? null}
             onLockToggle={onLockToggle}
             onChangeMode={onChangeMode}
+            changeModeDisabled={changeModeDisabled}
+            changeModeDisabledReason={changeModeDisabledReason}
             onUpsertAddon={upsertAddon.mutate}
           />
         ) : (
@@ -998,6 +1009,8 @@ function ShopifySlimPanel({
   sellQuoteLockedAt,
   onLockToggle,
   onChangeMode,
+  changeModeDisabled = false,
+  changeModeDisabledReason,
   onUpsertAddon,
 }: {
   albumId: string;
@@ -1006,6 +1019,8 @@ function ShopifySlimPanel({
   sellQuoteLockedAt: string | null;
   onLockToggle?: (next: boolean) => void;
   onChangeMode?: () => void;
+  changeModeDisabled?: boolean;
+  changeModeDisabledReason?: string;
   onUpsertAddon: (body: { priceCents: number; active: boolean; minPriceCents: number; plannedQuantity: number | null }) => void;
 }) {
   return (
@@ -1022,8 +1037,10 @@ function ShopifySlimPanel({
           <button
             type="button"
             onClick={onChangeMode}
+            disabled={changeModeDisabled}
+            title={changeModeDisabled ? changeModeDisabledReason : undefined}
             data-testid="button-change-sell-mode"
-            className="text-xs font-semibold text-[color:var(--brand-blue)] hover:underline shrink-0"
+            className="text-xs font-semibold text-[color:var(--brand-blue)] hover:underline shrink-0 disabled:text-slate-400 disabled:hover:no-underline disabled:cursor-not-allowed"
           >
             Change mode
           </button>

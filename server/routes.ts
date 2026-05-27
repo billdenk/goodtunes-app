@@ -4428,8 +4428,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // scope + post-sale lock, then either lets the request through
     // (super_admin / unscoped admin / authorized partner) or sets
     // req.partnerGate.divert=true so we write the body to the queue.
+    //
+    // Task #499 — sellMode / physicalFormat / sellQuoteLockedAt /
+    // anticipatedTrackCount are platform-routing config (Task #335
+    // intent comment below), not historical metadata. When the patch
+    // ONLY touches those, skip the edit_metadata + post-sale-lock gate
+    // and use a lighter scope-only check (same operational-bypass
+    // pattern as vendor pricing / payouts; see
+    // docs/admin-conventions.md). Otherwise, fall through to the
+    // standard edit_metadata gate so prose fields stay locked post-sale.
+    const OPERATIONAL_FIELDS = new Set([
+      "sellMode",
+      "physicalFormat",
+      "sellQuoteLockedAt",
+      "anticipatedTrackCount",
+    ]);
+    const bodyKeys = Object.keys(req.body ?? {}).filter((k) => k !== "__note");
+    const operationalOnly =
+      bodyKeys.length > 0 && bodyKeys.every((k) => OPERATIONAL_FIELDS.has(k));
     const { requirePartnerPermission } = await import("./auth/partnerPermissions");
-    return requirePartnerPermission("edit_metadata", "albums", (r) => String(r.params.id))(req, res, next);
+    return requirePartnerPermission(
+      "edit_metadata",
+      "albums",
+      (r) => String(r.params.id),
+      { skipPostSaleLock: operationalOnly },
+    )(req, res, next);
   }, async (req, res) => {
     const id = String(req.params.id);
     const gate = req.partnerGate!;

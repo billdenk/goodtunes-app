@@ -292,6 +292,16 @@ export function requirePartnerPermission(
   verb: PartnerVerb,
   targetTable: "albums" | "songs",
   resolveTargetId: (req: Request) => string,
+  opts: {
+    /** Task #499 — skip the post-sale lock for this gate while still
+     *  enforcing scope + the per-verb permission grant. Used for
+     *  operational/routing fields (sell mode, physical format,
+     *  quote-lock, anticipated track count) that are platform
+     *  configuration, not historical metadata. The matching
+     *  vendor-pricing-bypasses-post-sale-lock rule in
+     *  docs/admin-conventions.md is the precedent. */
+    skipPostSaleLock?: boolean;
+  } = {},
 ) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const userId = req.session?.userId;
@@ -348,7 +358,7 @@ export function requirePartnerPermission(
     const isLocked = !!target.firstSoldAt;
     const needsApproval = !!perms.metadataEditsRequireApproval;
 
-    if (verb === "edit_metadata" && isLocked) {
+    if (verb === "edit_metadata" && isLocked && !opts.skipPostSaleLock) {
       // Post-sale lock: partner edit is BLOCKED unless an active
       // admin_overrides row is available. Returning 403 (not a queue
       // divert) is intentional — once an album has sold, the historical
