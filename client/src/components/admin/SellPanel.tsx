@@ -771,8 +771,19 @@ export function SellPanel({
                         onEditArtwork={onEditArtwork}
                         onSave={(body) => {
                           upsertSku.mutate(body, {
-                            onSuccess: () =>
-                              setDraftFormats((prev) => prev.filter((d) => d !== f)),
+                            onSuccess: () => {
+                              // Transfer the disclosure open state from the
+                              // draft key onto the now-configured key BEFORE
+                              // we drop the draft. Otherwise the row re-keys
+                              // (`draft-${f}` → `${f}`) and the disclosure
+                              // lookup misses, collapsing the row mid-edit —
+                              // which is what was closing the panel as soon
+                              // as the operator typed their first price.
+                              if (skuDisclosure.isOpen(`draft-${f}`)) {
+                                skuDisclosure.open(f);
+                              }
+                              setDraftFormats((prev) => prev.filter((d) => d !== f));
+                            },
                           });
                         }}
                         onDelete={() => setDraftFormats((prev) => prev.filter((d) => d !== f))}
@@ -2048,12 +2059,16 @@ function SkuRow({
   };
 
   const lossColor = profitCents !== null && profitCents < 0;
-  const profitLabel =
-    profitCents === null
-      ? "—"
-      : profitCents < 0
-        ? `-${dollars(Math.abs(profitCents))}`
-        : dollars(profitCents);
+  // Render a faded "$0.00" placeholder (slate-300) for the empty state
+  // instead of a dash — Apple-style "shape of the eventual value" cue,
+  // and it lines up with the Total placeholder so the two right-rail
+  // values can't visually drift apart (Bill #2).
+  const profitPending = profitCents === null;
+  const profitLabel = profitPending
+    ? "$0.00"
+    : profitCents < 0
+      ? `-${dollars(Math.abs(profitCents))}`
+      : dollars(profitCents);
 
   // Task #393 — debounced autosave for vinyl rows. The new card has
   // no visible Save button; field changes (price, qty, color, jacket,
@@ -2687,21 +2702,27 @@ function SkuRow({
                 text="This is the price you want to charge per unit for your vinyl."
               />
             </div>
-            <div className="flex items-start gap-2">
-              <span className="text-slate-400 text-sm leading-9">$</span>
-              <div className="flex flex-col">
+            {/* "$" lives INSIDE the input as an absolute prefix so the
+                input's left edge lines up with the Select Qty trigger
+                and Anticipated Tracks input below — keeping every
+                control on this right column flush-left (Bill #1). */}
+            <div className="flex flex-col">
+              <div className="relative w-28">
+                <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
+                  $
+                </span>
                 <input
                   type="text"
                   value={priceStr}
                   onChange={(e) => setPriceStr(e.target.value)}
                   placeholder="0.00"
                   inputMode="decimal"
-                  className={`w-28 ${fieldClass}`}
+                  className={`w-full pl-5 ${fieldClass}`}
                   data-testid={`input-price-${format}`}
                 />
-                <div className="text-xs text-slate-400 mt-1">
-                  Per unit sold to fans.
-                </div>
+              </div>
+              <div className="text-xs text-slate-400 mt-1">
+                Per unit sold to fans.
               </div>
             </div>
           </div>
@@ -2813,8 +2834,12 @@ function SkuRow({
               </span>
               <span
                 className={[
-                  "tabular-nums text-sm font-semibold",
-                  lossColor ? "text-[color:var(--brand-pink)]" : "text-slate-900",
+                  "tabular-nums text-base font-semibold",
+                  profitPending
+                    ? "text-slate-300"
+                    : lossColor
+                      ? "text-[color:var(--brand-pink)]"
+                      : "text-slate-900",
                 ].join(" ")}
                 data-testid={`text-profit-${format}`}
               >
@@ -2831,7 +2856,7 @@ function SkuRow({
                   <span className="tabular-nums">{dollars(breakdown.manufacturingCents)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
-                  <span>{breakdown.publishingTrackCount} tracks × $0.254</span>
+                  <span>Publishing: ($0.127 × 2 [vinyl+digital]) × {breakdown.publishingTrackCount} tracks</span>
                   <span className="tabular-nums">{dollars(breakdown.publishingCents)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
@@ -2871,14 +2896,16 @@ function SkuRow({
               <span
                 className={[
                   "tabular-nums text-base font-semibold",
-                  totalCents !== null && totalCents < 0
-                    ? "text-[color:var(--brand-pink)]"
-                    : "text-slate-900",
+                  totalCents === null
+                    ? "text-slate-300"
+                    : totalCents < 0
+                      ? "text-[color:var(--brand-pink)]"
+                      : "text-slate-900",
                 ].join(" ")}
                 data-testid={`text-total-${format}`}
               >
                 {totalCents === null
-                  ? "—"
+                  ? "$0.00"
                   : totalCents < 0
                     ? `-${dollars(Math.abs(totalCents))}`
                     : dollars(totalCents)}
