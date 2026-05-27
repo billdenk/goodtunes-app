@@ -1397,3 +1397,70 @@ SQL
 }
 migrate_press_invoice_transfer dev  "${DATABASE_URL:-}"
 migrate_press_invoice_transfer prod "${PROD_DATABASE_URL:-}"
+
+# Task #522 — Press portal schema. Default-press wiring on labels/people/
+# admin_invites, per-tier masters_prep_cost_cents, press_switch_history,
+# the press_invoice_* / masters_* / fulfillment_heads_up_* columns on
+# albums, and the rename of the legacy `press_invoice_captured_at` /
+# `press_invoice_billed_outside` to `press_invoice_uploaded_at` /
+# `press_invoice_outside_system`. All-NULL on prod at rename time, so
+# the renames are safe. Everything else is additive + idempotent.
+migrate_press_portal() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press_portal migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+CREATE TABLE IF NOT EXISTS press_switch_history (
+  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_kind text NOT NULL,
+  customer_id varchar NOT NULL,
+  album_id varchar,
+  from_press_id varchar,
+  to_press_id varchar,
+  reason text,
+  switched_at timestamp NOT NULL DEFAULT now(),
+  deleted_at timestamp,
+  deleted_by_user_id varchar,
+  deleted_via_parent_id varchar
+);
+ALTER TABLE labels             ADD COLUMN IF NOT EXISTS default_press_id varchar;
+ALTER TABLE people             ADD COLUMN IF NOT EXISTS default_press_id varchar;
+ALTER TABLE admin_invites      ADD COLUMN IF NOT EXISTS default_press_id varchar;
+ALTER TABLE press_color_tiers  ADD COLUMN IF NOT EXISTS masters_prep_cost_cents integer NOT NULL DEFAULT 0;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS masters_triggered_at           timestamp;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS masters_approved_by_artist_at  timestamp;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS press_invoice_url              text;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS press_invoice_total_cents      integer;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS press_invoice_note             text;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS fulfillment_heads_up_sent_at   timestamp;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS fulfillment_heads_up_qty       integer;
+-- Rename legacy → new column names if the legacy ones still exist.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+              WHERE table_name='albums' AND column_name='press_invoice_captured_at') THEN
+    ALTER TABLE albums RENAME COLUMN press_invoice_captured_at TO press_invoice_uploaded_at;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+              WHERE table_name='albums' AND column_name='press_invoice_billed_outside') THEN
+    ALTER TABLE albums RENAME COLUMN press_invoice_billed_outside TO press_invoice_outside_system;
+  END IF;
+END $$;
+-- Ensure the new column names exist (fresh DBs that never had the legacy ones).
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS press_invoice_uploaded_at    timestamp;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS press_invoice_outside_system boolean NOT NULL DEFAULT false;
+-- Backfill any pre-existing NULLs and enforce NOT NULL on outside_system.
+UPDATE albums SET press_invoice_outside_system = false WHERE press_invoice_outside_system IS NULL;
+ALTER TABLE albums ALTER COLUMN press_invoice_outside_system SET NOT NULL;
+ALTER TABLE albums ALTER COLUMN press_invoice_outside_system SET DEFAULT false;
+SQL
+  then
+    echo "post-merge: press_portal migration ok on $label"
+  else
+    echo "post-merge: WARNING — press_portal migration failed on $label (continuing)"
+  fi
+}
+migrate_press_portal dev  "${DATABASE_URL:-}"
+migrate_press_portal prod "${PROD_DATABASE_URL:-}"
