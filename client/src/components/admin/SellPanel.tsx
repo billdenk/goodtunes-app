@@ -4058,12 +4058,20 @@ function GoodDeedPill({
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(existing?.active ?? false);
+  // Task #612 — new-cert defaults: $35 retail, 20% qty. Bill wants the
+  // top-bar starting point to match how GoodDeeds are actually priced.
+  // Only the unsaved/new path uses these defaults — existing certs
+  // still hydrate from their stored values.
   const [priceStr, setPriceStr] = useState(
-    existing ? (existing.priceCents / 100).toFixed(2) : "12.99",
+    existing ? (existing.priceCents / 100).toFixed(2) : "35.00",
   );
   const [floorStr, setFloorStr] = useState(
     existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99",
   );
+  // Task #612 — prefilled new-cert values are "clean" until the
+  // operator actually edits a field, so opening the pill doesn't
+  // immediately persist a phantom cert via the debounced autosave.
+  const [touched, setTouched] = useState(false);
   // Task #415 — Profit disclosure mirrors the vinyl card's "Profit ·
   // Per unit sold" chevron. Houses the per-unit cost lines, the
   // Cost/unit subtotal, and the Floor $ guardrail (moved out of the
@@ -4074,10 +4082,18 @@ function GoodDeedPill({
   // with the exact percentage pre-filled. Vinyl rows with no qty fall
   // back to 100 (one cert per vinyl pressed) — the default sales pitch.
   const initialPctChoice = useMemo(() => {
-    if (!existing?.plannedQuantity || vinylQty <= 0) return "100";
-    const pct = Math.round((existing.plannedQuantity / vinylQty) * 100);
-    if ([100, 50, 25, 20].includes(pct)) return String(pct);
-    return "other";
+    // Task #612 — new-cert default is 20% (the realistic attach rate
+    // we pitch). Existing certs MUST continue to snap back to
+    // whatever matches their stored plannedQuantity — including
+    // legacy rows whose plannedQuantity is null, which we render as
+    // "Other…" with a 0 raw count so `dirty` stays false on open.
+    if (existing) {
+      if (!existing.plannedQuantity || vinylQty <= 0) return "other";
+      const pct = Math.round((existing.plannedQuantity / vinylQty) * 100);
+      if ([100, 50, 25, 20].includes(pct)) return String(pct);
+      return "other";
+    }
+    return "20";
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [pctChoice, setPctChoice] = useState<string>(initialPctChoice);
@@ -4086,11 +4102,17 @@ function GoodDeedPill({
   // operator needs an odd run (e.g. "only the first 37 buyers get a
   // cert") they type the cert count directly and we clamp it to the
   // vinyl qty (a cert run > pressing run makes no sense).
-  const [otherQtyStr, setOtherQtyStr] = useState(
-    initialPctChoice === "other" && existing?.plannedQuantity
-      ? String(existing.plannedQuantity)
-      : String(Math.max(1, Math.round(vinylQty / 10))),
-  );
+  const [otherQtyStr, setOtherQtyStr] = useState(() => {
+    // Task #612 — existing row hydration takes precedence: a saved
+    // plannedQuantity → render it as-is; an existing row whose
+    // plannedQuantity is null → render "0" so resolvedQty stays 0
+    // and `dirty` doesn't fire on open. Only brand-new pills get the
+    // "10% of vinyl run" placeholder.
+    if (existing) {
+      return existing.plannedQuantity ? String(existing.plannedQuantity) : "0";
+    }
+    return String(Math.max(1, Math.round(vinylQty / 10)));
+  });
 
   const resolvedQty =
     pctChoice === "other"
@@ -4125,21 +4147,45 @@ function GoodDeedPill({
   });
 
   const priceCents = useMemo(() => parseDollars(priceStr), [priceStr]);
-  // Task #511 — Prefer the qty-driven tier preview so the operator sees
-  // wholesale move as they scrub Select Qty. The snapshot stays in the
-  // DB (and continues to inform sale-time / statement readouts) but no
-  // longer overrides the live preview here. Falls back to snapshot or
-  // live platform cost when the preview hasn't returned yet.
-  const costCents: number | null =
-    preview?.totalPerUnitCents ??
-    existing?.costCentsSnapshot ??
-    livePlatformCostCents ??
-    null;
+  // Task #511 / #612 — Prefer the qty-driven tier preview so the
+  // operator sees wholesale move as they scrub Select Qty. Previously
+  // the chain was `preview ?? snapshot ?? livePlatform`, but `??`
+  // treats the server's "no legs resolved" zero as a real value and
+  // shorts out the fallback — which is exactly how the Profit panel
+  // ended up showing $0.00 in production. We now treat a 0/null
+  // preview total as "no data" and walk to snapshot → flat platform
+  // default (`payout_settings.cert_cost_cents`). Only when nothing at
+  // all is configured do we fall through to null and surface the
+  // explanatory note below.
+  const previewCost = preview?.totalPerUnitCents ?? null;
+  const hasPreviewLadder = previewCost != null && previewCost > 0;
+  // Track which source actually produced the displayed wholesale, so
+  // the operator-facing fallback note only fires when we're truly
+  // showing the flat platform-default cost (not when a real per-cert
+  // snapshot is supplying the number).
+  let costCents: number | null;
+  let costSource: "preview" | "snapshot" | "platform" | "none";
+  if (hasPreviewLadder) {
+    costCents = previewCost;
+    costSource = "preview";
+  } else if (existing?.costCentsSnapshot != null) {
+    costCents = existing.costCentsSnapshot;
+    costSource = "snapshot";
+  } else if (livePlatformCostCents != null) {
+    costCents = livePlatformCostCents;
+    costSource = "platform";
+  } else {
+    costCents = null;
+    costSource = "none";
+  }
+  const usingPlatformFallback = costSource === "platform";
   const earnsCents =
     priceCents !== null && costCents !== null ? priceCents - costCents : null;
 
   const storedActive = existing?.active ?? false;
-  const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "12.99";
+  // Task #612 — storedPrice matches the new $35 default so opening a
+  // fresh pill doesn't read as "dirty" before the operator types.
+  const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "35.00";
   const storedFloor = existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99";
   const storedQty = existing?.plannedQuantity ?? null;
   const dirty =
@@ -4149,9 +4195,19 @@ function GoodDeedPill({
     (resolvedQty || null) !== storedQty;
 
   // Debounced autosave — same 700ms beat as the SkuRow's own vinyl
-  // autosave so the experience is consistent across the card.
+  // autosave so the experience is consistent across the card. Task
+  // #612: gate on `touched` so the prefilled defaults on a brand-new
+  // pill don't immediately persist a phantom cert; once the operator
+  // edits anything (or there's already a saved row), normal
+  // dirty-tracking kicks in.
   useEffect(() => {
     if (!dirty) return;
+    // Task #612 — never persist from derived defaults. Even on
+    // existing rows, only an explicit operator edit (price / qty /
+    // floor / active toggle) flips `touched` and unlocks autosave.
+    // This prevents legacy rows whose stored plannedQuantity is null
+    // from being silently rewritten the first time the pill opens.
+    if (!touched) return;
     const t = setTimeout(() => {
       const cents = parseDollars(priceStr);
       if (cents === null) return;
@@ -4273,7 +4329,7 @@ function GoodDeedPill({
             <Switch
               id="toggle-gooddeed-active"
               checked={active}
-              onCheckedChange={setActive}
+              onCheckedChange={(v) => { setTouched(true); setActive(v); }}
               data-testid="toggle-gooddeed-active"
               aria-label="Offer GoodDeed® cert on this release"
             />
@@ -4444,7 +4500,7 @@ function GoodDeedPill({
                     <input
                       type="text"
                       value={priceStr}
-                      onChange={(e) => setPriceStr(e.target.value)}
+                      onChange={(e) => { setTouched(true); setPriceStr(e.target.value); }}
                       inputMode="decimal"
                       className={`${fieldClass} w-32 tabular-nums`}
                       data-testid="input-gooddeed-price"
@@ -4469,7 +4525,7 @@ function GoodDeedPill({
                     text="How many certs to issue against this vinyl run. Capped at the vinyl quantity."
                   />
                 </div>
-                <Select value={pctChoice} onValueChange={setPctChoice}>
+                <Select value={pctChoice} onValueChange={(v) => { setTouched(true); setPctChoice(v); }}>
                   <SelectTrigger
                     className="h-8 w-full text-sm"
                     data-testid="select-gooddeed-pct"
@@ -4490,7 +4546,7 @@ function GoodDeedPill({
                     type="text"
                     inputMode="numeric"
                     value={otherQtyStr}
-                    onChange={(e) => setOtherQtyStr(e.target.value)}
+                    onChange={(e) => { setTouched(true); setOtherQtyStr(e.target.value); }}
                     className={`${fieldClass} mt-1.5`}
                     placeholder={`max ${vinylQty.toLocaleString()}`}
                     aria-label={`Cert count — capped at vinyl qty ${vinylQty.toLocaleString()}`}
@@ -4567,6 +4623,26 @@ function GoodDeedPill({
                             {dollars(costCents)}
                           </span>
                         </div>
+                        {/* Task #612 — When the live per-vendor ladder
+                            preview returned no real number (no press
+                            assigned and/or no platform-default ladder
+                            rows), the wholesale shown above is the
+                            flat platform-default cost rather than a
+                            ladder-driven quote. Surface a one-line
+                            note so the operator knows why it doesn't
+                            scrub with Select Qty. */}
+                        {usingPlatformFallback && (
+                          <div
+                            className="text-xs text-slate-400 italic leading-snug"
+                            data-testid="text-gooddeed-wholesale-fallback-note"
+                          >
+                            No press ladder resolved — showing the
+                            flat platform-default wholesale. Assign a
+                            press (or configure default Printing/
+                            Hologram/Insertion vendors on Platform
+                            Pricing) to see a real per-quantity quote.
+                          </div>
+                        )}
                         {/* Task #498 — CC fee = retail × 2.9% + $0.30
                             (Stripe's flat US rate). Computed off the
                             retail price client-side; rolls into
