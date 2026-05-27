@@ -565,7 +565,10 @@ function PersonAvatar({
 }) {
   return (
     <div
-      className="rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-slate-200 shadow-sm flex-shrink-0"
+      className={[
+        "rounded-full overflow-hidden shadow-sm flex-shrink-0",
+        photoUrl ? "" : "bg-[var(--brand-blue)] ring-1 ring-slate-200",
+      ].join(" ")}
       style={{ width: size, height: size }}
     >
       {photoUrl ? (

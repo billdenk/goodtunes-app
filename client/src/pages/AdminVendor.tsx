@@ -358,7 +358,10 @@ export function AdminVendor() {
           <button
             type="button"
             onClick={() => setLogoEditorOpen(true)}
-            className="group relative w-24 h-24 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 shadow-sm flex-shrink-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2"
+            className={[
+              "group relative w-24 h-24 rounded-xl overflow-hidden shadow-sm flex-shrink-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2",
+              vendor.logoUrl ? "" : "bg-white ring-1 ring-slate-200",
+            ].join(" ")}
             aria-label="Edit vendor logo"
             data-testid="button-edit-vendor-logo"
           >

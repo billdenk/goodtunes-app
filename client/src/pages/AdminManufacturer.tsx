@@ -179,7 +179,10 @@ export function AdminManufacturer() {
           <button
             type="button"
             onClick={() => setLogoEditorOpen(true)}
-            className="group relative w-24 h-24 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 shadow-sm flex-shrink-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2"
+            className={[
+              "group relative w-24 h-24 rounded-xl overflow-hidden shadow-sm flex-shrink-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2",
+              m.logoUrl ? "" : "bg-white ring-1 ring-slate-200",
+            ].join(" ")}
             aria-label="Edit press logo"
             data-testid="button-edit-press-logo"
           >
@@ -187,7 +190,7 @@ export function AdminManufacturer() {
               <img
                 src={m.logoUrl}
                 alt={m.name}
-                className="w-full h-full object-contain p-2 transition-transform group-hover:scale-[1.03]"
+                className="w-full h-full object-cover transition-transform group-hover:scale-[1.03]"
                 data-testid="img-press-logo"
               />
             ) : (

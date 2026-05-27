@@ -112,6 +112,10 @@ Every new page (or material edit to an existing one) gets vetted against this ch
 
 **Refreshing the baseline**: only when a legacy page is intentionally migrated, run `npm run design:lint -- --update-baseline` to snapshot the new known set. Don't refresh to silence drift you introduced — fix the drift instead.
 
+## Entity thumbnails
+
+Brand logos and profile photos on admin entity surfaces (Press / Reseller / Manufacturer / Label / Non-Profit / Fulfillment / Person detail headers, and their matching list cards) must **fill their thumbnail container edge-to-edge** in the filled state — no inner padding, no `object-contain` letterbox, no `bg-white` plate, no `ring-1` framing the silhouette. Use `w-full h-full object-cover` on the `<img>` and let the outer rounded-square (or rounded-full, for people) crop. Reserve the white plate + slate ring for the **placeholder** state only, where it sits behind the centered slate fallback icon. Outer `shadow-sm` and the corner radius stay regardless. Canonical reference: the Vendor detail header thumbnail in `client/src/pages/AdminVendor.tsx` (`button-edit-vendor-logo`).
+
 ## Expandable row lists
 
 Long lists of sibling rows where the user is *scanning* — admin album track rows, future Fan orders rows, anything Stripe-shaped — must use **exclusive disclosure**: at most one row open at a time. Opening a new row collapses whichever sibling was previously open. Toggling the open row by its own affordance still closes it and leaves the list with zero expanded rows. Without this rule, operators end up with five or six rows open at once and the page becomes a wall.

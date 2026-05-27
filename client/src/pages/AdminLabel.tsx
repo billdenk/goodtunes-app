@@ -279,7 +279,12 @@ export function AdminLabel() {
 
         {/* HEADER */}
         <div className="flex items-start gap-5">
-          <div className="w-24 h-24 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 shadow-sm flex-shrink-0 flex items-center justify-center">
+          <div
+            className={[
+              "w-24 h-24 rounded-xl overflow-hidden shadow-sm flex-shrink-0 flex items-center justify-center",
+              label.logoUrl ? "" : "bg-white ring-1 ring-slate-200",
+            ].join(" ")}
+          >
             {label.logoUrl ? (
               <img
                 src={label.logoUrl}

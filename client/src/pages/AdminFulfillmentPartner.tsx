@@ -148,7 +148,10 @@ export function AdminFulfillmentPartner() {
           <button
             type="button"
             onClick={() => setLogoEditorOpen(true)}
-            className="relative w-16 h-16 rounded-2xl overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0 group"
+            className={[
+              "relative w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center flex-shrink-0 group",
+              f.logoUrl ? "" : "bg-white ring-1 ring-slate-200",
+            ].join(" ")}
             data-testid="button-edit-fulfillment-logo"
             aria-label="Edit logo"
           >
