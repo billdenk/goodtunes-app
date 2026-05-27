@@ -2628,20 +2628,22 @@ function SkuRow({
                 text="This is the price you want to charge per unit for your vinyl."
               />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400 text-sm">$</span>
-              <input
-                type="text"
-                value={priceStr}
-                onChange={(e) => setPriceStr(e.target.value)}
-                placeholder="0.00"
-                inputMode="decimal"
-                className={`w-28 ${fieldClass}`}
-                data-testid={`input-price-${format}`}
-              />
-            </div>
-            <div className="text-xs text-slate-400 mt-1">
-              Per unit sold to fans.
+            <div className="flex items-start gap-2">
+              <span className="text-slate-400 text-sm leading-9">$</span>
+              <div className="flex flex-col">
+                <input
+                  type="text"
+                  value={priceStr}
+                  onChange={(e) => setPriceStr(e.target.value)}
+                  placeholder="0.00"
+                  inputMode="decimal"
+                  className={`w-28 ${fieldClass}`}
+                  data-testid={`input-price-${format}`}
+                />
+                <div className="text-xs text-slate-400 mt-1">
+                  Per unit sold to fans.
+                </div>
+              </div>
             </div>
           </div>
 
@@ -3735,20 +3737,22 @@ function GoodDeedPill({
                     text="What fans pay per GoodDeed® certificate."
                   />
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-400 text-sm">$</span>
-                  <input
-                    type="text"
-                    value={priceStr}
-                    onChange={(e) => setPriceStr(e.target.value)}
-                    inputMode="decimal"
-                    className={`${fieldClass} w-32 tabular-nums`}
-                    data-testid="input-gooddeed-price"
-                    aria-label="Retail price per cert"
-                  />
-                </div>
-                <div className="text-xs text-slate-400 mt-1">
-                  Per unit sold to fans.
+                <div className="flex items-start gap-2">
+                  <span className="text-slate-400 text-sm leading-9">$</span>
+                  <div className="flex flex-col">
+                    <input
+                      type="text"
+                      value={priceStr}
+                      onChange={(e) => setPriceStr(e.target.value)}
+                      inputMode="decimal"
+                      className={`${fieldClass} w-32 tabular-nums`}
+                      data-testid="input-gooddeed-price"
+                      aria-label="Retail price per cert"
+                    />
+                    <div className="text-xs text-slate-400 mt-1">
+                      Per unit sold to fans.
+                    </div>
+                  </div>
                 </div>
               </div>
 
