@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
 import {
@@ -198,6 +199,7 @@ export function AdminManufacturers() {
   return (
     <AdminFrame active="manufacturers">
       <div className="space-y-5">
+        <AdminSectionDashboard section="presses" />
         <AdminPageHeader
           title="Presses"
           subtitle="Vinyl pressing plants and duplication houses. Invite them to bid on print runs."

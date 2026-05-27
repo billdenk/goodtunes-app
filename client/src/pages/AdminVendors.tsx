@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
 import {
   ViewModeToggle,
   useViewMode,
@@ -482,6 +483,7 @@ export function AdminVendors() {
   return (
     <AdminFrame active={copy.active}>
       <div className="space-y-5">
+      <AdminSectionDashboard section={mode === "maker" ? "makers" : "resellers"} />
       <AdminPageHeader
         title={copy.title}
         subtitle={copy.subtitle}

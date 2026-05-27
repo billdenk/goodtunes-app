@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
 import {
   ViewModeToggle,
   useViewMode,
@@ -248,6 +249,7 @@ export function AdminLabels() {
   return (
     <AdminFrame active="labels">
       <div className="space-y-5">
+      <AdminSectionDashboard section="labels" />
       <AdminPageHeader
         title="Labels"
         subtitle="Record labels + imprints. Albums link here, so edit once and it reads through everywhere."

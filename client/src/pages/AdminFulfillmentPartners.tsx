@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
 import {
@@ -217,6 +218,7 @@ export function AdminFulfillmentPartners() {
   return (
     <AdminFrame active="fulfillment">
       <div className="space-y-5">
+        <AdminSectionDashboard section="fulfillment" />
         <AdminPageHeader
           title="Fulfillment partners"
           subtitle="Warehouses that ship finished records to fans."

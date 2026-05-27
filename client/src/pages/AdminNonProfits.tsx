@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Heart, Loader2, Search, X } from "lucide-react";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
@@ -171,6 +172,7 @@ export function AdminNonProfits() {
   return (
     <AdminFrame active="nonprofits">
       <div className="space-y-5" data-testid="page-admin-nonprofits">
+        <AdminSectionDashboard section="npos" />
         <AdminPageHeader
           title="NPOs"
           subtitle="Non-profit partners. Each referrer earns $1 per paid unit attributed to them."

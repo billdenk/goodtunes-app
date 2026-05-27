@@ -14183,6 +14183,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { registerPartnerDashboardRoutes } = await import("./partnerDashboard");
   await registerPartnerDashboardRoutes(app);
 
+  // ─── Task #602 — God-View section rollup dashboards ──────────
+  const { registerSectionDashboardRoutes } = await import("./sectionDashboard");
+  await registerSectionDashboardRoutes(app);
+
   // ─── Task #521 / #524 — Combined partner search for the Reports
   // "Viewing as" combobox. Returns labels + artists + non-profits in
   // one shot so the super-admin can type a name without first picking
