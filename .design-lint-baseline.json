@@ -6306,28 +6306,8 @@
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressingOrderFlow.tsx",
-    "snippet": "<div className=\"text-[15px] font-semibold text-slate-900\">Ready to press this record?</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressingOrderFlow.tsx",
-    "snippet": "<div className=\"text-[12.5px] text-slate-500 mt-0.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressingOrderFlow.tsx",
-    "snippet": "\"h-11 px-5 rounded-full text-[13.5px] font-bold transition-all flex items-center gap-2\","
-  },
-  {
-    "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
     "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">Masters on file</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "<p className=\"text-[13px] text-slate-500 mb-4\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -6342,7 +6322,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "className=\"inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-200 bg-white text-[13px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50\""
+    "snippet": "<p className=\"text-[13px] text-slate-500 mb-4\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "className=\"mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -6353,11 +6338,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
     "snippet": "<label className=\"text-[12px] text-slate-600\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "className=\"mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -7246,6 +7226,241 @@
   },
   {
     "rule": "admin-link-missing-shared-treatment",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<Link"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 flex items-center gap-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<p className=\"text-[12.5px] text-slate-500 mt-0.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<div className=\"text-[13px] text-slate-500\">No tracks on this album yet.</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<table className=\"w-full text-[13px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<thead className=\"bg-slate-50 text-slate-600 text-[11.5px] uppercase tracking-wider\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<DialogDescription className=\"text-[13px] text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<td className=\"px-3 py-3 text-slate-400 text-[12px]\">{trackNumber || \"—\"}</td>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<div className=\"text-[11.5px] text-slate-400 mt-0.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "className=\"text-[12.5px] font-medium text-[var(--brand-blue)] hover:underline\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "return <span className=\"text-[12px] text-slate-400\">Not set</span>;"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<span className={`text-[12px] font-medium tabular-nums ${ok ? \"text-emerald-700\" : \"text-slate-700\"}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<div className=\"mt-1 text-[11.5px] text-slate-500 line-clamp-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<h3 className=\"text-[14px] font-semibold text-slate-900\">{title}</h3>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<p className=\"text-[12px] text-slate-500 mt-0.5\">{hint}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<div className={`text-[14px] font-semibold tabular-nums ${balanced ? \"text-emerald-700\" : empty ? \"text-slate-400\" : totalBp > 10000 ? \"text-rose-600\" : \"text-amber-600\"}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<div className=\"text-[11px] text-slate-400\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "className=\"text-[13px] font-medium text-[var(--brand-blue)] hover:underline inline-flex items-center gap-1\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "className=\"h-8 text-[13px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "className=\"h-8 text-[13px] tabular-nums text-right\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<span className=\"text-[12px] text-slate-400\">%</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "className=\"h-7 px-2 rounded-md text-[12px] font-medium bg-[var(--brand-blue)] text-white disabled:opacity-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<Input value={name} onChange={(e) => setName(e.target.value)} placeholder=\"Name\" autoFocus className=\"h-8 text-[13px]\" data-testid={`input-new-split-name-${kind}`} />"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<Input value={role} onChange={(e) => setRole(e.target.value)} placeholder=\"Role\" className=\"h-8 text-[13px]\" data-testid={`input-new-split-role-${kind}`} />"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<Input value={percent} onChange={(e) => setPercent(e.target.value)} inputMode=\"decimal\" placeholder=\"%\" className=\"h-8 text-[13px] tabular-nums text-right\" data-testid={`input-new-split-percent-${kind"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<Input value={pro} onChange={(e) => setPro(e.target.value)} placeholder=\"PRO\" className=\"h-8 text-[13px]\" data-testid={`input-new-split-pro-${kind}`} />"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<button onClick={onCancel} className=\"h-8 px-3 text-[13px] text-slate-600 hover:text-slate-900\" data-testid={`button-cancel-new-split-${kind}`}>Cancel</button>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "className=\"h-8 px-3 rounded-md text-[13px] font-medium bg-[var(--brand-blue)] text-white disabled:opacity-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900\">Import splits from a sheet</DialogTitle>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<Label className=\"text-[12.5px] font-medium text-slate-700\">Google Sheet URL</Label>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<div className=\"text-center text-[11px] text-slate-400 uppercase tracking-wider\">or</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<Label className=\"text-[12.5px] font-medium text-slate-700\">Paste CSV</Label>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "className=\"mt-1 font-mono text-[12px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<Label className=\"text-[12.5px] font-medium text-slate-700\">Default kind</Label>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<div className=\"mt-1 inline-flex border border-slate-200 rounded-md overflow-hidden text-[12.5px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<p className=\"text-[11px] text-slate-400 mt-1\">Rows with a \"kind\" column override this.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<label className=\"flex items-center gap-2 text-[12.5px] text-slate-700\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<div className=\"text-[12.5px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 flex items-start gap-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<table className=\"w-full text-[12.5px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<thead className=\"bg-slate-50 text-slate-500 text-[11px] uppercase\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<div className=\"text-[13px] text-slate-500 py-6\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<h3 className=\"text-[13px] font-semibold text-slate-900 mb-2\">{title} ({rows.length})</h3>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<li key={r.id} className=\"px-3 py-2 flex items-center justify-between gap-3 text-[13px]\" data-testid={`readonly-split-${r.id}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<div className=\"text-[11.5px] text-slate-500 truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<div className=\"text-[13px] font-semibold tabular-nums text-slate-700 shrink-0\">{bpToPct(r.percentBp)}%</div>"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/components/admin/SplitsPanels.tsx",
+    "snippet": "<button onClick={onDelete} disabled={busy} aria-label=\"Delete split\" className=\"h-7 w-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:"
+  },
+  {
+    "rule": "admin-link-missing-shared-treatment",
     "file": "client/src/components/admin/TrackCreditsPanel.tsx",
     "snippet": "<Link"
   },
@@ -7553,26 +7768,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ViewAsSwitcher.tsx",
     "snippet": "<div className=\"p-4 text-[12.5px] text-slate-500 inline-flex items-center gap-2\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/VinylOrderPanel.tsx",
-    "snippet": "<div className=\"text-[11.5px] uppercase tracking-wider text-slate-500 font-semibold\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/VinylOrderPanel.tsx",
-    "snippet": "<p className=\"text-[12px] text-slate-500 mt-0.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/VinylOrderPanel.tsx",
-    "snippet": "className=\"w-[220px] h-9 text-[12.5px]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/VinylOrderPanel.tsx",
-    "snippet": "<p className=\"text-[11.5px] text-slate-500 -mt-2\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -9527,6 +9722,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[11px] leading-relaxed px-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "<div className=\"flex items-center gap-2 text-slate-500 text-[13px]\">"
   },
   {
@@ -9548,11 +9748,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "<p className=\"text-slate-500 text-[11.5px] mt-0.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"ml-2 inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-[11.5px] font-semibold\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -10377,11 +10572,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[11px] leading-relaxed px-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "<h2 className=\"text-slate-900 text-[14px] font-bold inline-flex items-center gap-2\">"
   },
   {
@@ -10398,11 +10588,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "className=\"text-[12.5px] font-medium text-slate-700\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"absolute bottom-2 left-2 right-2 text-white text-[12px] font-semibold truncate drop-shadow\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -10782,12 +10967,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "className=\"w-full h-9 pl-9 pr-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]\""
+    "snippet": "<div className=\"text-slate-500 text-[13px] mt-1\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[13px] mt-1\">"
+    "snippet": "className=\"text-[13px] font-medium text-[var(--brand-blue)] hover:underline disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -10843,11 +11028,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
     "snippet": "<span className=\"sm:hidden text-slate-400 text-[11px] uppercase tracking-wide mr-1\">Signed up</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "className=\"text-[13px] font-medium text-[var(--brand-blue)] hover:underline disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -11522,11 +11702,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "<DialogDescription className=\"text-[13px] text-slate-500 leading-relaxed\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminInstruments.tsx",
     "snippet": "className=\"w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50\""
   },
   {
@@ -11538,16 +11713,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstruments.tsx",
     "snippet": "<p className=\"text-[11.5px] text-slate-400\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminInstruments.tsx",
-    "snippet": "className=\"text-[12.5px] font-semibold\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -13342,27 +13507,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendor.tsx",
-    "snippet": "<p className=\"text-slate-700 text-[14px] font-semibold\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminVendor.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[12.5px] mt-1 max-w-xs mx-auto\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminVendor.tsx",
     "snippet": "<h2 className=\"text-slate-900 text-[14px] font-bold inline-flex items-center gap-2\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminVendor.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[11.5px]\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminVendor.tsx",
-    "snippet": "<div className=\"text-slate-900 text-[13.5px] font-semibold truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -13373,11 +13518,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendor.tsx",
     "snippet": "<span className=\"text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mr-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminVendor.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors px-2 py-0.5 text-[11px] text-slate-700\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -15708,6 +15848,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Player.tsx",
     "snippet": "className=\"text-white/30 text-[10px] font-semibold tracking-[0.18em] uppercase pt-2\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Player.tsx",
+    "snippet": "className=\"text-white/45 text-[12px] italic pt-6\""
   },
   {
     "rule": "hardcoded-font-size",

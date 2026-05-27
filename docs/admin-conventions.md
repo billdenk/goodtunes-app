@@ -147,6 +147,22 @@ The destination consumes the params via the shared `useSmartBackCrumb()` hook at
 
 Currently wired: Gear ↔ Vendor, Gear ↔ Person. Album ↔ Person, Album ↔ Label, Vendor ↔ Label use the same primitive — wire them in when their cross-section tabs ship.
 
+## Per-song splits — publishing + master, basis points, fans see names only
+
+Splits live in two parallel matrices per song: `trackPublishingSplits` (songwriter share + PRO) and `trackMechanicalSplits` (master recording / performance share). Both store `percentBp` (basis points 0–10000) so 33.33% is lossless. Master splits are admin-only — never exposed in any fan-side response.
+
+Admin entry points are intentionally redundant so the operator never has to hunt for the editor:
+
+- **Album → Splits tab** — album-wide matrix with one row per song, dual progress bars (Publishing | Master), 100% balance indicator, and a "Import from sheet" affordance. Edit opens the per-track editor in a dialog.
+- **Album → Tracks tab → expanded row → 4th tile** — the Splits tile sits next to Preview / Lyrics / Credits. The grid reflows from 3-up to 2×2 once a fourth tile is present.
+- **Person admin → Splits tab** — read-only rollup of every song that person earns on, deep-linked back to `/admin/albums/:id?tab=splits&track=:songId`. Splits are owned by the album editor; the Person rail is a viewport only.
+
+Fan side: `/api/songs/:id` returns `writers: string[]` derived from `trackPublishingSplits` (names only, never % or PRO). Player renders `Written by …` as the final line under GoodSync™ lyrics, inside the bottom scroll mask.
+
+All write routes are gated through `partnerEditGate(req, res, "edit_metadata", scope, { albumIdForLock })` — splits respect the same post-sale lock as the rest of the album's fan-facing metadata; super-admin override + audit trail apply. The lock returns 403 (not a divert) — UI surfaces the lock state via the same `/api/admin/albums/:id/edit-access` probe other admin surfaces use.
+
+Import flow: paste a Google Sheet URL (must be share-link-readable) or CSV; the server proxies the gviz CSV export to sidestep browser CORS. Column aliases are case- and whitespace-insensitive (song/track, name/writer/composer, role, %/percent/split, pro, publisher, kind). `replace: true` wipes existing rows on each affected (song, kind) pair before insert — the typical re-pull pattern when an artist updates their songsheet.
+
 ## Vendor-managed GoodDeed pricing (Task #245)
 
 GoodDeed is fulfilled by three independent legs — **Printing**, **Hologram + shrinkwrap**, **Insertion** — each owned by a `vendors` row that has quoted its own price. There are two entry points:

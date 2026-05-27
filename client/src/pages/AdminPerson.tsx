@@ -37,6 +37,7 @@ import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
+import { PersonSplitsRail } from "@/components/admin/SplitsPanels";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import type { PartnerAddressSnapshot } from "@shared/schema";
@@ -166,7 +167,7 @@ interface LabelLite {
 // even though the discography endpoints under the hood still say
 // "discography" — the rename is UI-only on purpose so the iTunes pull
 // machinery doesn't ripple.
-type Tab = "dashboard" | "overview" | "cover" | "members" | "releases" | "streaming" | "gear" | "payouts" | "permissions";
+type Tab = "dashboard" | "overview" | "cover" | "members" | "releases" | "streaming" | "gear" | "splits" | "payouts" | "permissions";
 const BASE_TABS: { key: Tab; label: string }[] = [
   // Task #590 — Dashboard leads on every partner detail page, including
   // artist-scope. Most artist KPIs render Coming soon until the
@@ -177,6 +178,7 @@ const BASE_TABS: { key: Tab; label: string }[] = [
   { key: "releases", label: "GoodTunes\u00AE Releases" },
   { key: "streaming", label: "Streaming" },
   { key: "gear", label: "Gear" },
+  { key: "splits", label: "Splits" },
   { key: "payouts", label: "Payouts" },
   { key: "permissions", label: "Permissions" },
 ];
@@ -219,7 +221,7 @@ export function AdminPerson() {
   const { toast } = useToast();
   // Task #590 — Dashboard is default; `?tab=` deep links keep working.
   const ALL_TAB_KEYS: readonly Tab[] = [
-    "dashboard", "overview", "cover", "members", "releases", "streaming", "gear", "payouts", "permissions",
+    "dashboard", "overview", "cover", "members", "releases", "streaming", "gear", "splits", "payouts", "permissions",
   ];
   const [tab, setTabState] = useState<Tab>(() => {
     if (typeof window === "undefined") return "dashboard";
@@ -511,6 +513,10 @@ export function AdminPerson() {
         )}
         {tab === "streaming" && <DiscographyPanel person={person} />}
         {tab === "gear" && <GearPanel person={person} />}
+        {/* Task #616 — Read-only splits rail. Splits are owned by the
+            album's Splits tab; this is just a rollup of "where does this
+            person earn?" with deep-links back to the source album. */}
+        {tab === "splits" && <PersonSplitsRail personId={person.id} />}
         {tab === "payouts" && (
           <PayoutAccountPanel
             ownerKind="person"

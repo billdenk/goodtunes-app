@@ -1186,6 +1186,11 @@ export const trackMechanicalSplits = pgTable("track_mechanical_splits", {
   role: text("role").notNull(), // "Featured Artist" / "Label" / "Distributor" / …
   percentBp: integer("percent_bp").notNull().default(0),
   position: integer("position").notNull().default(0),
+  // Task #616 — soft-delete so historical payout snapshots can still
+  // resolve the row that paid out (audit trail). Every read MUST
+  // filter isNull(deletedAt) or removed splits leak back into the
+  // editor + writer-name credit line.
+  ...softDeleteCols,
 });
 
 // ----- Publishing (writers-side) splits ---------------------------------
@@ -1203,6 +1208,9 @@ export const trackPublishingSplits = pgTable("track_publishing_splits", {
   proAffiliation: text("pro_affiliation"), // "ASCAP" | "BMI" | "SESAC" | "PRS" | …
   percentBp: integer("percent_bp").notNull().default(0),
   position: integer("position").notNull().default(0),
+  // See note on trackMechanicalSplits — soft-delete for payout-snapshot
+  // resolution. Reads must filter isNull(deletedAt).
+  ...softDeleteCols,
 });
 
 // ----- Credit role catalog ----------------------------------------------
@@ -2645,11 +2653,23 @@ export const insertOrganizationSchema = createInsertSchema(organizations).omit({
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
 
-export const insertTrackMechanicalSplitSchema = createInsertSchema(trackMechanicalSplits).omit({ id: true });
+// percentBp is a basis-point integer in [0, 10000] (0% – 100%).
+// Enforce the range at the API edge — DB column is a bare integer,
+// so without this an operator could PUT 12345 ("over 100%") and a
+// negative typo would skew totals silently.
+export const insertTrackMechanicalSplitSchema = createInsertSchema(trackMechanicalSplits)
+  .omit({ id: true, deletedAt: true })
+  .extend({
+    percentBp: z.number().int().min(0).max(10000),
+  });
 export type InsertTrackMechanicalSplit = z.infer<typeof insertTrackMechanicalSplitSchema>;
 export type TrackMechanicalSplit = typeof trackMechanicalSplits.$inferSelect;
 
-export const insertTrackPublishingSplitSchema = createInsertSchema(trackPublishingSplits).omit({ id: true });
+export const insertTrackPublishingSplitSchema = createInsertSchema(trackPublishingSplits)
+  .omit({ id: true, deletedAt: true })
+  .extend({
+    percentBp: z.number().int().min(0).max(10000),
+  });
 export type InsertTrackPublishingSplit = z.infer<typeof insertTrackPublishingSplitSchema>;
 export type TrackPublishingSplit = typeof trackPublishingSplits.$inferSelect;
 

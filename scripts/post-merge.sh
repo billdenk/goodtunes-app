@@ -1895,3 +1895,27 @@ SQL
 }
 migrate_task_550_gifting dev  "${DATABASE_URL:-}"
 migrate_task_550_gifting prod "${PROD_DATABASE_URL:-}"
+
+# ── Task #616 — Per-song Splits soft-delete columns ──────────────────
+# The track_publishing_splits and track_mechanical_splits tables grew
+# deleted_at columns when splits gained soft-delete semantics (payout
+# snapshots reference rows by id, so deletes must remain resolvable).
+# drizzle-kit push has been stalling on unrelated interactive prompts,
+# so apply the two ALTERs directly here on both DBs — idempotent.
+migrate_task_616_splits_soft_delete() {
+  local label="$1"; local url="$2"
+  [ -z "$url" ] && return 0
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL'
+BEGIN;
+ALTER TABLE track_publishing_splits ADD COLUMN IF NOT EXISTS deleted_at timestamp;
+ALTER TABLE track_mechanical_splits ADD COLUMN IF NOT EXISTS deleted_at timestamp;
+COMMIT;
+SQL
+  then
+    echo "post-merge: task-616 splits soft-delete ok on $label"
+  else
+    echo "post-merge: WARNING — task-616 splits soft-delete failed on $label (continuing)"
+  fi
+}
+migrate_task_616_splits_soft_delete dev  "${DATABASE_URL:-}"
+migrate_task_616_splits_soft_delete prod "${PROD_DATABASE_URL:-}"

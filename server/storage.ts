@@ -98,6 +98,15 @@ import {
   type InsertAdminInvite,
   trackWriters,
   trackPerformers,
+  trackPublishingSplits,
+  trackMechanicalSplits,
+  type TrackPublishingSplit,
+  type InsertTrackPublishingSplit,
+  type TrackMechanicalSplit,
+  type InsertTrackMechanicalSplit,
+  organizations,
+  type Organization,
+  type InsertOrganization,
   creditRoles,
   albumVideos,
   albumPhotos,
@@ -424,6 +433,46 @@ export interface IStorage {
   createTrackPerformer(data: InsertTrackPerformer & { id?: string }): Promise<TrackPerformer>;
   updateTrackPerformer(id: string, data: Partial<TrackPerformer>): Promise<TrackPerformer | undefined>;
   deleteTrackPerformer(id: string): Promise<void>;
+
+  // Per-track Publishing + Master splits (Task #616). Basis-points
+  // (percentBp 0–10000). Rows reference a Person OR Organization but
+  // always carry a `name` snapshot so deleting either keeps the split
+  // ledger intact. Hard delete — splits tables have no soft-delete.
+  getTrackSplits(songId: string): Promise<{
+    publishing: (TrackPublishingSplit & { person: Person | null; organization: Organization | null })[];
+    mechanical: (TrackMechanicalSplit & { person: Person | null; organization: Organization | null })[];
+  }>;
+  getAlbumSplits(albumId: string): Promise<{
+    bySongId: Record<string, {
+      publishing: (TrackPublishingSplit & { person: Person | null; organization: Organization | null })[];
+      mechanical: (TrackMechanicalSplit & { person: Person | null; organization: Organization | null })[];
+    }>;
+  }>;
+  createTrackPublishingSplit(data: InsertTrackPublishingSplit): Promise<TrackPublishingSplit>;
+  updateTrackPublishingSplit(id: string, data: Partial<TrackPublishingSplit>): Promise<TrackPublishingSplit | undefined>;
+  deleteTrackPublishingSplit(id: string): Promise<void>;
+  createTrackMechanicalSplit(data: InsertTrackMechanicalSplit): Promise<TrackMechanicalSplit>;
+  updateTrackMechanicalSplit(id: string, data: Partial<TrackMechanicalSplit>): Promise<TrackMechanicalSplit | undefined>;
+  deleteTrackMechanicalSplit(id: string): Promise<void>;
+  // Read-only feeds used by the Person + Organization admin sheets.
+  listSplitsForPerson(personId: string): Promise<{
+    publishing: (TrackPublishingSplit & { song: { id: string; title: string; albumId: string; albumTitle: string } | null })[];
+    mechanical: (TrackMechanicalSplit & { song: { id: string; title: string; albumId: string; albumTitle: string } | null })[];
+  }>;
+  listSplitsForOrganization(organizationId: string): Promise<{
+    publishing: (TrackPublishingSplit & { song: { id: string; title: string; albumId: string; albumTitle: string } | null })[];
+    mechanical: (TrackMechanicalSplit & { song: { id: string; title: string; albumId: string; albumTitle: string } | null })[];
+  }>;
+  // Distinct writer-credit names for the fan-side "Written by …" line.
+  // Pulls from track_writers first (richer + always populated when the
+  // admin has tagged writers); falls back to publishing splits if writers
+  // are empty. NEVER returns percentages or PRO data.
+  getWriterNamesForSong(songId: string): Promise<string[]>;
+  // Organizations picker for the splits editor (publishers, PROs,
+  // labels). Search is name-prefix, case-insensitive. Create is used
+  // by the inline "+ New publisher" affordance.
+  searchOrganizations(q: string, kinds?: string[], limit?: number): Promise<Array<Pick<Organization, "id" | "name" | "kind">>>;
+  createOrganization(data: InsertOrganization): Promise<Organization>;
 
   // Album-wide production credits (Producer / Mixed by / Mastered by /
   // engineering / A&R). Same person-snapshot pattern as track credits.
@@ -2296,6 +2345,215 @@ export class DbStorage implements IStorage {
   }
   async deleteTrackPerformer(id: string, userId?: string | null): Promise<void> {
     await softDeleteEntity("track_performer", id, userId ?? null);
+  }
+
+  // ----- Per-track splits (Task #616) ------------------------------------
+  // Soft delete: both split tables carry deletedAt. Reads MUST filter
+  // isNull(deletedAt) — historical rows are retained for payout-snapshot
+  // resolution (audit trail) but never resurface in the editor.
+  async getTrackSplits(songId: string) {
+    const [pub, mech] = await Promise.all([
+      db.select().from(trackPublishingSplits)
+        .where(and(eq(trackPublishingSplits.songId, songId), isNull(trackPublishingSplits.deletedAt)))
+        .orderBy(asc(trackPublishingSplits.position)),
+      db.select().from(trackMechanicalSplits)
+        .where(and(eq(trackMechanicalSplits.songId, songId), isNull(trackMechanicalSplits.deletedAt)))
+        .orderBy(asc(trackMechanicalSplits.position)),
+    ]);
+    const personIds = Array.from(new Set(
+      [...pub, ...mech].map((r) => r.personId).filter((v): v is string => !!v),
+    ));
+    const orgIds = Array.from(new Set(
+      [...pub, ...mech].map((r) => r.organizationId).filter((v): v is string => !!v),
+    ));
+    const [peopleRows, orgRows] = await Promise.all([
+      personIds.length
+        ? db.select().from(people).where(inArray(people.id, personIds))
+        : Promise.resolve([] as Person[]),
+      orgIds.length
+        ? db.select().from(organizations).where(inArray(organizations.id, orgIds))
+        : Promise.resolve([] as Organization[]),
+    ]);
+    const peopleById = new Map(peopleRows.map((p) => [p.id, p]));
+    const orgsById = new Map(orgRows.map((o) => [o.id, o]));
+    return {
+      publishing: pub.map((r) => ({
+        ...r,
+        person: r.personId ? peopleById.get(r.personId) ?? null : null,
+        organization: r.organizationId ? orgsById.get(r.organizationId) ?? null : null,
+      })),
+      mechanical: mech.map((r) => ({
+        ...r,
+        person: r.personId ? peopleById.get(r.personId) ?? null : null,
+        organization: r.organizationId ? orgsById.get(r.organizationId) ?? null : null,
+      })),
+    };
+  }
+
+  async getAlbumSplits(albumId: string) {
+    const songRows = await db.select({ id: songs.id })
+      .from(songs)
+      .where(and(eq(songs.albumId, albumId), isNull(songs.deletedAt)));
+    const songIds = songRows.map((s) => s.id);
+    if (!songIds.length) return { bySongId: {} };
+    const [pub, mech] = await Promise.all([
+      db.select().from(trackPublishingSplits)
+        .where(and(inArray(trackPublishingSplits.songId, songIds), isNull(trackPublishingSplits.deletedAt)))
+        .orderBy(asc(trackPublishingSplits.position)),
+      db.select().from(trackMechanicalSplits)
+        .where(and(inArray(trackMechanicalSplits.songId, songIds), isNull(trackMechanicalSplits.deletedAt)))
+        .orderBy(asc(trackMechanicalSplits.position)),
+    ]);
+    const personIds = Array.from(new Set(
+      [...pub, ...mech].map((r) => r.personId).filter((v): v is string => !!v),
+    ));
+    const orgIds = Array.from(new Set(
+      [...pub, ...mech].map((r) => r.organizationId).filter((v): v is string => !!v),
+    ));
+    const [peopleRows, orgRows] = await Promise.all([
+      personIds.length
+        ? db.select().from(people).where(inArray(people.id, personIds))
+        : Promise.resolve([] as Person[]),
+      orgIds.length
+        ? db.select().from(organizations).where(inArray(organizations.id, orgIds))
+        : Promise.resolve([] as Organization[]),
+    ]);
+    const peopleById = new Map(peopleRows.map((p) => [p.id, p]));
+    const orgsById = new Map(orgRows.map((o) => [o.id, o]));
+    const bySongId: Record<string, any> = {};
+    for (const id of songIds) bySongId[id] = { publishing: [], mechanical: [] };
+    for (const r of pub) {
+      bySongId[r.songId].publishing.push({
+        ...r,
+        person: r.personId ? peopleById.get(r.personId) ?? null : null,
+        organization: r.organizationId ? orgsById.get(r.organizationId) ?? null : null,
+      });
+    }
+    for (const r of mech) {
+      bySongId[r.songId].mechanical.push({
+        ...r,
+        person: r.personId ? peopleById.get(r.personId) ?? null : null,
+        organization: r.organizationId ? orgsById.get(r.organizationId) ?? null : null,
+      });
+    }
+    return { bySongId };
+  }
+
+  async createTrackPublishingSplit(data: InsertTrackPublishingSplit): Promise<TrackPublishingSplit> {
+    const [r] = await db.insert(trackPublishingSplits).values(data as any).returning();
+    return r;
+  }
+  async updateTrackPublishingSplit(id: string, data: Partial<TrackPublishingSplit>): Promise<TrackPublishingSplit | undefined> {
+    const { id: _i, songId: _s, createdAt: _c, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) {
+      const [r] = await db.select().from(trackPublishingSplits).where(eq(trackPublishingSplits.id, id));
+      return r;
+    }
+    const [r] = await db.update(trackPublishingSplits).set(rest).where(eq(trackPublishingSplits.id, id)).returning();
+    return r;
+  }
+  async deleteTrackPublishingSplit(id: string): Promise<void> {
+    // Soft delete — payout snapshots may still reference this row by id.
+    await db.update(trackPublishingSplits)
+      .set({ deletedAt: new Date() })
+      .where(eq(trackPublishingSplits.id, id));
+  }
+  async createTrackMechanicalSplit(data: InsertTrackMechanicalSplit): Promise<TrackMechanicalSplit> {
+    const [r] = await db.insert(trackMechanicalSplits).values(data as any).returning();
+    return r;
+  }
+  async updateTrackMechanicalSplit(id: string, data: Partial<TrackMechanicalSplit>): Promise<TrackMechanicalSplit | undefined> {
+    const { id: _i, songId: _s, createdAt: _c, ...rest } = data as any;
+    if (Object.keys(rest).length === 0) {
+      const [r] = await db.select().from(trackMechanicalSplits).where(eq(trackMechanicalSplits.id, id));
+      return r;
+    }
+    const [r] = await db.update(trackMechanicalSplits).set(rest).where(eq(trackMechanicalSplits.id, id)).returning();
+    return r;
+  }
+  async deleteTrackMechanicalSplit(id: string): Promise<void> {
+    // Soft delete — same audit-trail reason as publishing splits.
+    await db.update(trackMechanicalSplits)
+      .set({ deletedAt: new Date() })
+      .where(eq(trackMechanicalSplits.id, id));
+  }
+
+  async listSplitsForPerson(personId: string) {
+    const [pub, mech] = await Promise.all([
+      db.select().from(trackPublishingSplits)
+        .where(and(eq(trackPublishingSplits.personId, personId), isNull(trackPublishingSplits.deletedAt)))
+        .orderBy(asc(trackPublishingSplits.position)),
+      db.select().from(trackMechanicalSplits)
+        .where(and(eq(trackMechanicalSplits.personId, personId), isNull(trackMechanicalSplits.deletedAt)))
+        .orderBy(asc(trackMechanicalSplits.position)),
+    ]);
+    return await this._enrichSplitsWithSong(pub, mech);
+  }
+  async listSplitsForOrganization(organizationId: string) {
+    const [pub, mech] = await Promise.all([
+      db.select().from(trackPublishingSplits)
+        .where(and(eq(trackPublishingSplits.organizationId, organizationId), isNull(trackPublishingSplits.deletedAt)))
+        .orderBy(asc(trackPublishingSplits.position)),
+      db.select().from(trackMechanicalSplits)
+        .where(and(eq(trackMechanicalSplits.organizationId, organizationId), isNull(trackMechanicalSplits.deletedAt)))
+        .orderBy(asc(trackMechanicalSplits.position)),
+    ]);
+    return await this._enrichSplitsWithSong(pub, mech);
+  }
+  private async _enrichSplitsWithSong(pub: TrackPublishingSplit[], mech: TrackMechanicalSplit[]) {
+    const songIds = Array.from(new Set([...pub, ...mech].map((r) => r.songId)));
+    if (!songIds.length) return { publishing: [], mechanical: [] };
+    const songRows = await db
+      .select({
+        id: songs.id,
+        title: songs.title,
+        albumId: songs.albumId,
+        albumTitle: albums.title,
+      })
+      .from(songs)
+      .innerJoin(albums, eq(songs.albumId, albums.id))
+      .where(inArray(songs.id, songIds));
+    const byId = new Map(songRows.map((s) => [s.id, s]));
+    return {
+      publishing: pub.map((r) => ({ ...r, song: byId.get(r.songId) ?? null })),
+      mechanical: mech.map((r) => ({ ...r, song: byId.get(r.songId) ?? null })),
+    };
+  }
+
+  async getWriterNamesForSong(songId: string): Promise<string[]> {
+    const writers = await db.select({ name: trackWriters.name })
+      .from(trackWriters)
+      .where(and(eq(trackWriters.songId, songId), isNull(trackWriters.deletedAt)))
+      .orderBy(asc(trackWriters.position));
+    if (writers.length > 0) {
+      return Array.from(new Set(writers.map((w) => w.name).filter(Boolean)));
+    }
+    // Fall back to publishing-split names (Lyricist / Composer rows are
+    // common when the admin enters splits without seeding writer credits
+    // first). Master-recording splits are NEVER exposed to fans.
+    const pub = await db.select({ name: trackPublishingSplits.name })
+      .from(trackPublishingSplits)
+      .where(and(eq(trackPublishingSplits.songId, songId), isNull(trackPublishingSplits.deletedAt)))
+      .orderBy(asc(trackPublishingSplits.position));
+    return Array.from(new Set(pub.map((p) => p.name).filter(Boolean)));
+  }
+
+  async searchOrganizations(q: string, kinds?: string[], limit = 20) {
+    const like = `%${(q || "").toLowerCase()}%`;
+    const kindFilter = kinds && kinds.length
+      ? sql`AND kind = ANY(${kinds}::text[])`
+      : sql``;
+    const rows = await db.execute<{ id: string; name: string; kind: string }>(sql`
+      SELECT id, name, kind FROM organizations
+      WHERE lower(name) LIKE ${like} ${kindFilter}
+      ORDER BY name ASC
+      LIMIT ${limit}
+    `);
+    return ((rows as any).rows ?? []) as Array<Pick<Organization, "id" | "name" | "kind">>;
+  }
+  async createOrganization(data: InsertOrganization): Promise<Organization> {
+    const [r] = await db.insert(organizations).values(data as any).returning();
+    return r;
   }
 
   async listAlbumProductionCredits(albumId: string): Promise<(AlbumCredit & { person: Person | null })[]> {

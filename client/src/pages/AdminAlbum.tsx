@@ -51,6 +51,7 @@ import {
   UserPlus,
   Wand2,
   Download,
+  PieChart,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { LyricsGapDots } from "@/components/LyricsGapDots";
@@ -84,6 +85,7 @@ import { AlbumPreviewCard } from "@/components/admin/previews/AlbumPreviewCard";
 import { AlbumDesktopPreviewCard } from "@/components/admin/previews/AlbumDesktopPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
+import { AlbumSplitsPanel, TrackSplitsEditor } from "@/components/admin/SplitsPanels";
 import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
@@ -255,7 +257,7 @@ interface SongLite {
   vinylOrder?: number | null;
 }
 
-type Tab = "overview" | "tracks" | "sell" | "press" | "shopify";
+type Tab = "overview" | "tracks" | "sell" | "press" | "shopify" | "splits";
 // Task #335 — the visible tab set is now driven by `sellMode` +
 // `sellQuoteLockedAt`. Before the operator locks a quote we only show
 // Overview/Tracks/Sell so the page stays focused on "decide what we're
@@ -273,6 +275,11 @@ function visibleTabsFor(album: {
     { key: "overview", label: "Overview" },
     { key: "sell", label: "Design" },
     { key: "tracks", label: "Digital" },
+    // Task #616 — Splits is always visible (never blocked by sell-lock)
+    // because it's the publishing+master ledger; partners need to read
+    // it pre-quote even if they can't edit (post-sale lock + edit_metadata
+    // verb gate the writes server-side).
+    { key: "splits", label: "Splits" },
   ];
   // Task #611 — Physical (direct) and Shopify (shopify) are always
   // visible regardless of `sellQuoteLockedAt` / Prepping state. Bill
@@ -1164,6 +1171,12 @@ export function AdminAlbum() {
                   }}
                 />
               )}
+              {safeTab === "splits" && allowed.has("splits") && (
+                <AlbumSplitsPanel
+                  albumId={album.id}
+                  songs={album.songs.map((s) => ({ id: s.id, title: s.title, trackNumber: s.trackNumber ?? 0 }))}
+                />
+              )}
             </>
           );
         })()}
@@ -1900,6 +1913,15 @@ function TracksPanel({
   const { data: albumCredits } = useQuery<AlbumCreditsMap>({
     queryKey: ["/api/albums", album.id, "credits"],
   });
+  // Task #616 — per-song splits totals for the per-track Splits tile.
+  // One album-scoped query feeds every row's dot so we don't N+1 the
+  // server on a 20-track album. Server returns per-song `totals`
+  // ({ publishingBp, mechanicalBp }) so we don't re-sum client-side.
+  const { data: albumSplits } = useQuery<{
+    bySongId: Record<string, { totals?: { publishingBp: number; mechanicalBp: number } }>;
+  }>({
+    queryKey: ["/api/admin/albums", album.id, "splits"],
+  });
 
   // Task #369 — pull the catalog-wide Mux pipeline status so each
   // errored track row can show its auto-retry state (next attempt in
@@ -2547,6 +2569,7 @@ function TracksPanel({
               onOpen={onEdit}
               withBorder={i !== sorted.length - 1}
               credits={songCredits ?? null}
+              splitTotals={albumSplits?.bySongId?.[song.id]?.totals ?? null}
               isDragging={dragId === song.id}
               isDropTarget={dropOnId === song.id && dragId !== song.id}
               onDragStart={handleDragStart(song.id)}
@@ -3459,7 +3482,7 @@ function AddTrackForm({
   );
 }
 
-type TrackMode = "view" | "audio" | "preview" | "lyrics" | "synced" | "credits";
+type TrackMode = "view" | "audio" | "preview" | "lyrics" | "synced" | "credits" | "splits";
 
 type SongCreditsLite = AlbumCreditsMap["bySongId"][string];
 
@@ -5327,6 +5350,7 @@ function TrackRow({
   onOpen,
   withBorder,
   credits,
+  splitTotals,
   isDragging,
   isDropTarget,
   onDragStart,
@@ -5350,6 +5374,7 @@ function TrackRow({
   onOpen: () => void;
   withBorder: boolean;
   credits: SongCreditsLite | null;
+  splitTotals: { publishingBp: number; mechanicalBp: number } | null;
   isDragging: boolean;
   isDropTarget: boolean;
   onDragStart: (e: React.DragEvent) => void;
@@ -6243,9 +6268,28 @@ function TrackRow({
                     credits={credits}
                   />
                 </ExpandedPanel>
+              ) : mode === "splits" ? (
+                <ExpandedPanel
+                  icon={PieChart}
+                  label="Splits"
+                  sublabel="Publishing + Master Recording"
+                  onCollapse={() => setMode("view")}
+                  testId={`panel-splits-${song.id}`}
+                >
+                  <TrackSplitsEditor
+                    songId={song.id}
+                    songTitle={song.title}
+                    albumId={albumId}
+                  />
+                </ExpandedPanel>
               ) : (
                 <>
-                  <div className="grid grid-cols-3 gap-2.5">
+                  {/* Task #616 — reflowed from 3-up to 2×2 so the 4th
+                      tile (Splits) doesn't squeeze the row to four narrow
+                      columns. Order matches the artist's mental model:
+                      Preview → Lyrics on the top, Credits → Splits on the
+                      bottom (creative pieces first, business pieces next). */}
+                  <div className="grid grid-cols-2 gap-2.5">
                     <StatusBadge
                       ok={song.previewStartMs != null}
                       icon={Headphones}
@@ -6308,6 +6352,35 @@ function TrackRow({
                       testId={`tile-credits-${song.id}`}
                       buttonRef={creditsChipRef}
                     />
+                    {/* Task #616 — Splits tile. Album-level splits query
+                        feeds per-song totals so the dot can reflect the
+                        actual state: green when both Publishing AND Master
+                        sum to 100%; soft/empty otherwise. Subtitle reads
+                        "Not set" when there are no rows, otherwise the two
+                        section percents (e.g. "Pub 100% · Mas 50%"). */}
+                    {(() => {
+                      const pubBp = splitTotals?.publishingBp ?? 0;
+                      const mechBp = splitTotals?.mechanicalBp ?? 0;
+                      const hasAny = pubBp > 0 || mechBp > 0;
+                      const balanced = pubBp === 10000 && mechBp === 10000;
+                      const fmt = (bp: number) => `${(bp / 100).toFixed(0)}%`;
+                      const subtitle = !hasAny
+                        ? "Not set"
+                        : `Pub ${fmt(pubBp)} · Mas ${fmt(mechBp)}`;
+                      return (
+                        <StatusBadge
+                          ok={balanced}
+                          icon={PieChart}
+                          label="Splits"
+                          subtitle={subtitle}
+                          severity="soft"
+                          compact
+                          active={false}
+                          onClick={() => setMode("splits")}
+                          testId={`tile-splits-${song.id}`}
+                        />
+                      );
+                    })()}
                   </div>
                 </>
               )}

@@ -792,6 +792,20 @@ export function Player() {
                     </div>
                   );
                 })}
+                {/* Task #616 — "Written by …" credit. Names only; never
+                    percentages, never PROs (those live in admin). Pulled
+                    from /api/songs/:id `writers` which the server derives
+                    from track_publishing_splits. We render it as one final
+                    line below the lyrics so it benefits from the same
+                    bottom mask fade and sits inside the scroll. */}
+                {Array.isArray((currentSong as any).writers) && (currentSong as any).writers.length > 0 && (
+                  <div
+                    className="text-white/45 text-[12px] italic pt-6"
+                    data-testid="text-written-by"
+                  >
+                    Written by {(currentSong as any).writers.join(", ")}
+                  </div>
+                )}
               </div>
             </div>
 

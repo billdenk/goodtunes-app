@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
 import { sql, and, eq, or, ilike, isNull, desc, inArray } from "drizzle-orm";
-import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS } from "@shared/schema";
+import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits } from "@shared/schema";
 import { closeSaleWindow as closeCertSaleWindow } from "./saleWindow";
 import { generateBatchPdf as generateCertBatchPdf, CERT_BATCH_STEPS } from "./certBatch";
 import session from "express-session";
@@ -12,7 +12,7 @@ import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual, randomUUID, createHash } from "crypto";
 import { promisify } from "util";
 import { z } from "zod";
-import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema } from "@shared/schema";
+import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema, insertTrackPublishingSplitSchema, insertTrackMechanicalSplitSchema, insertOrganizationSchema } from "@shared/schema";
 import { SHORT_CATEGORIES } from "@shared/categories";
 import { normalizeAudioUrl } from "@shared/audioUrl";
 import {
@@ -12895,6 +12895,478 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ message: "Deleted" });
   });
 
+  // ----- Per-track Publishing + Master splits (Task #616) ---------------
+  // Gated under the partner "edit_metadata" verb per task spec — the
+  // splits matrix IS metadata for the song, distinct from credits/gear.
+  // edit_metadata also implies edit_credits_and_gear (one-way) per
+  // partnerPermissions.ts; the splits routes therefore stay deny/divert
+  // consistent with the surrounding writers/performers endpoints.
+  // Post-sale lock is honored by partnerEditGate(edit_metadata) — only
+  // super_admin can override (single-shot, audited via the existing
+  // /api/admin/albums/:id/overrides flow). Master splits are admin-only
+  // on the read side too — fans never see percentages or the mechanical
+  // matrix.
+  const publishingCreateBody = insertTrackPublishingSplitSchema.omit({ songId: true, position: true }).extend({
+    position: z.number().int().nonnegative().optional(),
+  });
+  const publishingUpdateBody = insertTrackPublishingSplitSchema.omit({ songId: true }).partial();
+  const mechanicalCreateBody = insertTrackMechanicalSplitSchema.omit({ songId: true, position: true }).extend({
+    position: z.number().int().nonnegative().optional(),
+  });
+  const mechanicalUpdateBody = insertTrackMechanicalSplitSchema.omit({ songId: true }).partial();
+
+  async function getAlbumIdForSplitRow(kind: "publishing" | "mechanical", id: string): Promise<string | null> {
+    const tbl = kind === "publishing" ? "track_publishing_splits" : "track_mechanical_splits";
+    const r = await db.execute<{ album_id: string }>(sql`
+      SELECT s.album_id FROM ${sql.raw(tbl)} t
+      INNER JOIN songs s ON s.id = t.song_id
+      WHERE t.id = ${id} LIMIT 1
+    `);
+    return ((r as any).rows?.[0]?.album_id as string | undefined) ?? null;
+  }
+
+  // Matrix view — used by the Splits tab on AdminAlbum. The shape
+  // is `{ bySongId: { [songId]: { publishing, mechanical, totals } } }`
+  // — per-song basis-point totals are computed server-side so every
+  // surface (matrix dot, tile status, editor section header) renders
+  // the same number without each consumer re-summing.
+  app.get("/api/admin/albums/:id/splits", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.id);
+    const album = await storage.getAlbumById(albumId, { includeHidden: true });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    const data = await storage.getAlbumSplits(albumId);
+    const bySongId: Record<string, any> = {};
+    for (const [songId, rows] of Object.entries(data.bySongId)) {
+      const pubBp = (rows as any).publishing.reduce((a: number, r: any) => a + (r.percentBp ?? 0), 0);
+      const mechBp = (rows as any).mechanical.reduce((a: number, r: any) => a + (r.percentBp ?? 0), 0);
+      bySongId[songId] = {
+        ...(rows as any),
+        totals: { publishingBp: pubBp, mechanicalBp: mechBp },
+      };
+    }
+    return res.json({ bySongId });
+  });
+  // Per-song view — used by the per-track editor sheet. Same totals
+  // contract as the album view so the editor UI doesn't re-implement
+  // the sum (avoids "matrix says 100% / editor says 99.99%" drift).
+  app.get("/api/admin/songs/:id/splits", requireAdmin, async (req, res) => {
+    const songId = String(req.params.id);
+    const song = await storage.getSongById(songId);
+    if (!song) return res.status(404).json({ message: "Song not found" });
+    const data = await storage.getTrackSplits(songId);
+    const pubBp = data.publishing.reduce((a, r: any) => a + (r.percentBp ?? 0), 0);
+    const mechBp = data.mechanical.reduce((a, r: any) => a + (r.percentBp ?? 0), 0);
+    return res.json({
+      ...data,
+      totals: { publishingBp: pubBp, mechanicalBp: mechBp },
+    });
+  });
+
+  // Rebalance helper — proportionally scales every row in the
+  // requested kind to sum to exactly 10000 basis points. Operator-
+  // initiated only (button in the editor). If the rows are all 0
+  // (fresh / empty section), we split evenly. Last row absorbs the
+  // basis-point rounding remainder so the total lands on 10000
+  // exactly. Behind the same edit_metadata gate as the row CRUD.
+  app.post("/api/admin/songs/:id/splits/rebalance", requireAdmin, async (req, res) => {
+    const songId = String(req.params.id);
+    const kind = String(req.body?.kind ?? "");
+    if (kind !== "publishing" && kind !== "mechanical") {
+      return res.status(400).json({ message: "kind must be 'publishing' or 'mechanical'" });
+    }
+    const song = await storage.getSongById(songId);
+    if (!song) return res.status(404).json({ message: "Song not found" });
+    const g = await gateAlbumEditMetadata(req, res, song.albumId);
+    if (g === "deny") return;
+    if (g === "divert") return res.status(202).json({ message: "Splits require GoodTunes approval — contact admin." });
+    const splits = await storage.getTrackSplits(songId);
+    const rows = (kind === "publishing" ? splits.publishing : splits.mechanical) as any[];
+    if (rows.length === 0) {
+      return res.status(400).json({ message: "Add a row before rebalancing." });
+    }
+    const total = rows.reduce((a, r) => a + (r.percentBp ?? 0), 0);
+    let newBp: number[];
+    if (total === 0) {
+      const each = Math.floor(10000 / rows.length);
+      newBp = rows.map(() => each);
+      newBp[newBp.length - 1] += 10000 - each * rows.length;
+    } else {
+      newBp = rows.map((r) => Math.round((r.percentBp / total) * 10000));
+      const diff = 10000 - newBp.reduce((a, b) => a + b, 0);
+      newBp[newBp.length - 1] += diff;
+    }
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i].percentBp === newBp[i]) continue;
+      if (kind === "publishing") {
+        await storage.updateTrackPublishingSplit(rows[i].id, { percentBp: newBp[i] } as any);
+      } else {
+        await storage.updateTrackMechanicalSplit(rows[i].id, { percentBp: newBp[i] } as any);
+      }
+    }
+    return res.json({ ok: true });
+  });
+
+  async function gateAlbumEditMetadata(req: any, res: any, albumId: string): Promise<"ok" | "deny" | "divert"> {
+    const { partnerEditGate, resolveAlbumScope } = await import("./auth/partnerPermissions");
+    const albumScope = await resolveAlbumScope(albumId);
+    if (!albumScope?.scope) return "ok";
+    const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: albumId });
+    return outcome as "ok" | "deny" | "divert";
+  }
+
+  app.post("/api/admin/songs/:id/publishing-splits", requireAdmin, async (req, res) => {
+    const parsed = publishingCreateBody.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid split", issues: parsed.error.issues });
+    const songId = String(req.params.id);
+    const song = await storage.getSongById(songId);
+    if (!song) return res.status(404).json({ message: "Song not found" });
+    const g = await gateAlbumEditMetadata(req, res, song.albumId);
+    if (g === "deny") return;
+    if (g === "divert") return res.status(202).json({ message: "Splits require GoodTunes approval — contact admin." });
+    const existing = await storage.getTrackSplits(songId);
+    try {
+      const r = await storage.createTrackPublishingSplit({
+        ...parsed.data,
+        songId,
+        position: parsed.data.position ?? existing.publishing.length,
+      } as any);
+      return res.status(201).json(r);
+    } catch (e) {
+      if (isFkViolation(e)) return res.status(400).json({ message: "Unknown song, person, or organization reference" });
+      throw e;
+    }
+  });
+  app.put("/api/admin/publishing-splits/:id", requireAdmin, async (req, res) => {
+    const parsed = publishingUpdateBody.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid split", issues: parsed.error.issues });
+    const id = String(req.params.id);
+    const albumId = await getAlbumIdForSplitRow("publishing", id);
+    if (!albumId) return res.status(404).json({ message: "Split not found" });
+    const g = await gateAlbumEditMetadata(req, res, albumId);
+    if (g === "deny") return;
+    if (g === "divert") return res.status(202).json({ message: "Splits require GoodTunes approval — contact admin." });
+    try {
+      const r = await storage.updateTrackPublishingSplit(id, parsed.data as any);
+      if (!r) return res.status(404).json({ message: "Split not found" });
+      return res.json(r);
+    } catch (e) {
+      if (isFkViolation(e)) return res.status(400).json({ message: "Unknown person or organization reference" });
+      throw e;
+    }
+  });
+  app.delete("/api/admin/publishing-splits/:id", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const albumId = await getAlbumIdForSplitRow("publishing", id);
+    if (!albumId) return res.status(404).json({ message: "Split not found" });
+    const g = await gateAlbumEditMetadata(req, res, albumId);
+    if (g === "deny") return;
+    if (g === "divert") return res.status(202).json({ message: "Splits require GoodTunes approval — contact admin." });
+    await storage.deleteTrackPublishingSplit(id);
+    return res.json({ message: "Deleted" });
+  });
+
+  app.post("/api/admin/songs/:id/mechanical-splits", requireAdmin, async (req, res) => {
+    const parsed = mechanicalCreateBody.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid split", issues: parsed.error.issues });
+    const songId = String(req.params.id);
+    const song = await storage.getSongById(songId);
+    if (!song) return res.status(404).json({ message: "Song not found" });
+    const g = await gateAlbumEditMetadata(req, res, song.albumId);
+    if (g === "deny") return;
+    if (g === "divert") return res.status(202).json({ message: "Splits require GoodTunes approval — contact admin." });
+    const existing = await storage.getTrackSplits(songId);
+    try {
+      const r = await storage.createTrackMechanicalSplit({
+        ...parsed.data,
+        songId,
+        position: parsed.data.position ?? existing.mechanical.length,
+      } as any);
+      return res.status(201).json(r);
+    } catch (e) {
+      if (isFkViolation(e)) return res.status(400).json({ message: "Unknown song, person, or organization reference" });
+      throw e;
+    }
+  });
+  app.put("/api/admin/mechanical-splits/:id", requireAdmin, async (req, res) => {
+    const parsed = mechanicalUpdateBody.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid split", issues: parsed.error.issues });
+    const id = String(req.params.id);
+    const albumId = await getAlbumIdForSplitRow("mechanical", id);
+    if (!albumId) return res.status(404).json({ message: "Split not found" });
+    const g = await gateAlbumEditMetadata(req, res, albumId);
+    if (g === "deny") return;
+    if (g === "divert") return res.status(202).json({ message: "Splits require GoodTunes approval — contact admin." });
+    try {
+      const r = await storage.updateTrackMechanicalSplit(id, parsed.data as any);
+      if (!r) return res.status(404).json({ message: "Split not found" });
+      return res.json(r);
+    } catch (e) {
+      if (isFkViolation(e)) return res.status(400).json({ message: "Unknown person or organization reference" });
+      throw e;
+    }
+  });
+  app.delete("/api/admin/mechanical-splits/:id", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const albumId = await getAlbumIdForSplitRow("mechanical", id);
+    if (!albumId) return res.status(404).json({ message: "Split not found" });
+    const g = await gateAlbumEditMetadata(req, res, albumId);
+    if (g === "deny") return;
+    if (g === "divert") return res.status(202).json({ message: "Splits require GoodTunes approval — contact admin." });
+    await storage.deleteTrackMechanicalSplit(id);
+    return res.json({ message: "Deleted" });
+  });
+
+  // Organizations picker (publishers, PROs, labels) for the editor and
+  // inline "+ New publisher" affordance. Kept narrow on purpose — only
+  // returns id/name/kind for the picker, never PII fields.
+  app.get("/api/admin/organizations", requireAdmin, async (req, res) => {
+    const q = String(req.query.q ?? "").trim();
+    const kindsParam = String(req.query.kinds ?? "").trim();
+    const kinds = kindsParam ? kindsParam.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
+    const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit ?? "20"), 10) || 20));
+    return res.json(await storage.searchOrganizations(q, kinds, limit));
+  });
+  const orgCreateBody = insertOrganizationSchema;
+  app.post("/api/admin/organizations", requireAdmin, async (req, res) => {
+    const parsed = orgCreateBody.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid organization", issues: parsed.error.issues });
+    const r = await storage.createOrganization(parsed.data as any);
+    return res.status(201).json(r);
+  });
+
+  // Read-only splits feed for the Person admin sheet. Returns BOTH
+  // publishing and mechanical rows the person appears on, with the
+  // parent song + album joined for the deep-link rail. Admin-only.
+  app.get("/api/admin/people/:id/splits", requireAdmin, async (req, res) => {
+    return res.json(await storage.listSplitsForPerson(String(req.params.id)));
+  });
+  app.get("/api/admin/organizations/:id/splits", requireAdmin, async (req, res) => {
+    return res.json(await storage.listSplitsForOrganization(String(req.params.id)));
+  });
+
+  // ----- Splits import (Google Sheet URL or CSV/XLSX-parsed rows) -------
+  // Two-step flow:
+  //   POST .../splits/import-parse { sheetUrl } → server fetches the
+  //     sheet via the gviz CSV endpoint, parses it, returns preview rows.
+  //     This sidesteps browser CORS on docs.google.com.
+  //   POST .../splits/import { kind, rows } → applies the rows. Songs
+  //     are matched by `songId` if supplied, otherwise by case-insensitive
+  //     trimmed `songTitle` against this album's tracklist. Unmatched
+  //     rows come back in `unmatched[]`. Percent values are accepted as
+  //     either 0–100 (percentBp = round(*100)) OR raw basis-points
+  //     (>100 treated as already-bp).
+  function parseCsv(text: string): string[][] {
+    // RFC-4180-ish CSV parser sufficient for Google Sheets gviz CSV.
+    const rows: string[][] = [];
+    let cur: string[] = [];
+    let cell = "";
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (text[i + 1] === '"') { cell += '"'; i++; }
+          else inQuotes = false;
+        } else cell += ch;
+      } else {
+        if (ch === '"') inQuotes = true;
+        else if (ch === ',') { cur.push(cell); cell = ""; }
+        else if (ch === '\n') { cur.push(cell); rows.push(cur); cur = []; cell = ""; }
+        else if (ch === '\r') { /* skip */ }
+        else cell += ch;
+      }
+    }
+    if (cell.length || cur.length) { cur.push(cell); rows.push(cur); }
+    return rows.filter((r) => r.some((c) => c.trim().length > 0));
+  }
+  function googleSheetCsvUrl(input: string): string | null {
+    const m = input.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (!m) return null;
+    const id = m[1];
+    const gidMatch = input.match(/[#&?]gid=([0-9]+)/);
+    const gid = gidMatch ? gidMatch[1] : "0";
+    return `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
+  }
+  function pickCol(headers: string[], aliases: string[]): number {
+    const norm = headers.map((h) => h.toLowerCase().replace(/[\s_%]/g, ""));
+    for (const a of aliases) {
+      const i = norm.indexOf(a.toLowerCase().replace(/[\s_%]/g, ""));
+      if (i >= 0) return i;
+    }
+    return -1;
+  }
+  type ParsedRow = {
+    songTitle: string;
+    name: string;
+    role: string;
+    percent: number;
+    proAffiliation?: string;
+    publisher?: string;
+    kindHint?: "publishing" | "mechanical";
+  };
+  function parseSheetRows(rows: string[][]): ParsedRow[] {
+    if (rows.length < 2) return [];
+    const header = rows[0].map((c) => c.trim());
+    const songIdx = pickCol(header, ["song", "songtitle", "track", "title"]);
+    const nameIdx = pickCol(header, ["name", "writer", "composer", "songwriter", "splitname"]);
+    const roleIdx = pickCol(header, ["role", "credit", "type", "writerrole"]);
+    const pctIdx = pickCol(header, ["percent", "split", "share", "%"]);
+    const proIdx = pickCol(header, ["pro", "proaffiliation", "ascapbmisesac", "society"]);
+    const pubIdx = pickCol(header, ["publisher", "publishingco", "company"]);
+    const kindIdx = pickCol(header, ["kind", "splitkind", "publishingormaster"]);
+    if (songIdx < 0 || nameIdx < 0 || pctIdx < 0) return [];
+    const out: ParsedRow[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      const songTitle = (r[songIdx] ?? "").trim();
+      const name = (r[nameIdx] ?? "").trim();
+      const role = (roleIdx >= 0 ? (r[roleIdx] ?? "").trim() : "") || "Songwriter";
+      const pctRaw = (r[pctIdx] ?? "").trim().replace(/%/g, "");
+      const percent = Number(pctRaw);
+      if (!songTitle || !name || !isFinite(percent)) continue;
+      const proAffiliation = proIdx >= 0 ? (r[proIdx] ?? "").trim() || undefined : undefined;
+      const publisher = pubIdx >= 0 ? (r[pubIdx] ?? "").trim() || undefined : undefined;
+      const kHint = kindIdx >= 0 ? (r[kindIdx] ?? "").trim().toLowerCase() : "";
+      const kindHint: "publishing" | "mechanical" | undefined =
+        kHint.startsWith("master") || kHint.startsWith("mech") ? "mechanical"
+        : kHint.startsWith("pub") || kHint.startsWith("song") ? "publishing"
+        : undefined;
+      out.push({ songTitle, name, role, percent, proAffiliation, publisher, kindHint });
+    }
+    return out;
+  }
+  app.post("/api/admin/albums/:id/splits/import-parse", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.id);
+    const album = await storage.getAlbumById(albumId, { includeHidden: true });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    const sheetUrl = String(req.body?.sheetUrl ?? "").trim();
+    const csvText = typeof req.body?.csvText === "string" ? req.body.csvText : null;
+    let csv: string | null = null;
+    if (csvText && csvText.length > 0) {
+      csv = csvText;
+    } else if (sheetUrl) {
+      const exportUrl = googleSheetCsvUrl(sheetUrl) ?? sheetUrl;
+      try {
+        const r = await fetch(exportUrl, { redirect: "follow" });
+        if (!r.ok) return res.status(400).json({ message: `Sheet fetch failed (HTTP ${r.status}). Make sure the sheet is shared as "Anyone with the link can view".` });
+        csv = await r.text();
+      } catch (e: any) {
+        return res.status(400).json({ message: `Could not reach the sheet: ${e?.message ?? "unknown error"}` });
+      }
+    } else {
+      return res.status(400).json({ message: "Provide sheetUrl or csvText" });
+    }
+    const rows = parseCsv(csv);
+    const parsed = parseSheetRows(rows);
+    return res.json({ rows: parsed, columns: rows[0] ?? [] });
+  });
+  app.post("/api/admin/albums/:id/splits/import", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.id);
+    const album = await storage.getAlbumById(albumId, { includeHidden: true });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    const g = await gateAlbumEditMetadata(req, res, albumId);
+    if (g === "deny") return;
+    if (g === "divert") return res.status(202).json({ message: "Splits require GoodTunes approval — contact admin." });
+    const bodySchema = z.object({
+      kind: z.enum(["publishing", "mechanical"]).optional(),
+      replace: z.boolean().optional(),
+      rows: z.array(z.object({
+        songId: z.string().optional(),
+        songTitle: z.string().optional(),
+        name: z.string().min(1),
+        role: z.string().optional(),
+        percent: z.number(),
+        proAffiliation: z.string().optional(),
+        publisher: z.string().optional(),
+        kindHint: z.enum(["publishing", "mechanical"]).optional(),
+        personId: z.string().optional(),
+        organizationId: z.string().optional(),
+      })).min(1),
+    });
+    const parsed = bodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid import body", issues: parsed.error.issues });
+    const { kind: defaultKind, rows, replace } = parsed.data;
+    const trackRows = await db
+      .select({ id: songs.id, title: songs.title })
+      .from(songs)
+      .where(and(eq(songs.albumId, albumId), isNull(songs.deletedAt)));
+    const titleToId = new Map(trackRows.map((s) => [s.title.trim().toLowerCase(), s.id]));
+    const songIdsToReplace = new Set<string>();
+    const created: any[] = [];
+    const unmatched: any[] = [];
+    for (const r of rows) {
+      const sid = r.songId
+        ?? (r.songTitle ? titleToId.get(r.songTitle.trim().toLowerCase()) : undefined);
+      if (!sid) { unmatched.push(r); continue; }
+      const kind: "publishing" | "mechanical" = r.kindHint ?? defaultKind ?? "publishing";
+      songIdsToReplace.add(`${sid}:${kind}`);
+    }
+    if (replace) {
+      // Soft-delete the existing rows we're about to replace —
+      // payout snapshots may still reference them by id, so the rows
+      // must remain resolvable in the audit trail even though the
+      // editor no longer surfaces them.
+      const now = new Date();
+      for (const key of songIdsToReplace) {
+        const [sid, k] = key.split(":") as [string, "publishing" | "mechanical"];
+        if (k === "publishing") {
+          await db.update(trackPublishingSplits)
+            .set({ deletedAt: now })
+            .where(and(eq(trackPublishingSplits.songId, sid), isNull(trackPublishingSplits.deletedAt)));
+        } else {
+          await db.update(trackMechanicalSplits)
+            .set({ deletedAt: now })
+            .where(and(eq(trackMechanicalSplits.songId, sid), isNull(trackMechanicalSplits.deletedAt)));
+        }
+      }
+    }
+    const positionBySong: Record<string, number> = {};
+    for (const r of rows) {
+      const sid = r.songId
+        ?? (r.songTitle ? titleToId.get(r.songTitle.trim().toLowerCase()) : undefined);
+      if (!sid) continue;
+      const kind: "publishing" | "mechanical" = r.kindHint ?? defaultKind ?? "publishing";
+      const key = `${sid}:${kind}`;
+      if (!(key in positionBySong)) {
+        if (replace) positionBySong[key] = 0;
+        else {
+          const existing = await storage.getTrackSplits(sid);
+          positionBySong[key] = (kind === "publishing" ? existing.publishing : existing.mechanical).length;
+        }
+      }
+      const percentBp = r.percent > 100 ? Math.round(r.percent) : Math.round(r.percent * 100);
+      const role = (r.role && r.role.trim()) || (kind === "publishing" ? "Songwriter" : "Performer");
+      const base: any = {
+        songId: sid,
+        personId: r.personId ?? null,
+        organizationId: r.organizationId ?? null,
+        name: r.name,
+        role,
+        percentBp,
+        position: positionBySong[key]++,
+      };
+      if (kind === "publishing") {
+        if (r.proAffiliation) base.proAffiliation = r.proAffiliation;
+        try {
+          const row = await storage.createTrackPublishingSplit(base);
+          created.push({ kind, ...row });
+        } catch (e) {
+          if (isFkViolation(e)) unmatched.push({ ...r, error: "FK violation" });
+          else throw e;
+        }
+      } else {
+        try {
+          const row = await storage.createTrackMechanicalSplit(base);
+          created.push({ kind, ...row });
+        } catch (e) {
+          if (isFkViolation(e)) unmatched.push({ ...r, error: "FK violation" });
+          else throw e;
+        }
+      }
+    }
+    return res.json({ createdCount: created.length, unmatchedCount: unmatched.length, unmatched });
+  });
+
   app.get("/api/admin/credit-roles", requireAdmin, async (_req, res) => {
     const rows = await storage.listCreditRoles();
     return res.json(rows);
@@ -13018,7 +13490,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/songs/:id", requireAuth, async (req, res) => {
     const song = await storage.getSongById(String(req.params.id));
     if (!song) return res.status(404).json({ message: "Song not found" });
-    return res.json(song);
+    // Task #616 — surface writer NAMES only (no percentages, no PRO,
+    // no organizationId, never the master/mechanical matrix) so the
+    // Player can render "Written By: …" under the lyrics. Fans must
+    // never see the splits ledger.
+    const writers = await storage.getWriterNamesForSong(song.id);
+    return res.json({ ...song, writers });
   });
 
   app.get("/api/my-albums", requireAuth, async (req, res) => {
