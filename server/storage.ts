@@ -3791,6 +3791,10 @@ async function ensureRuntimeMigrations(): Promise<void> {
     await ensureArtistReportingIndexes();
     // ADD COLUMN is idempotent (IF NOT EXISTS) and cheap.
     await db.execute(sql`ALTER TABLE songs ADD COLUMN IF NOT EXISTS playlist_count INTEGER NOT NULL DEFAULT 0`);
+    // Task #536 — "What's New" welcome-back sheet. Nullable INT — NULL
+    // means "fan has never dismissed", which is the eligible state for
+    // the next first-launch render.
+    await db.execute(sql`ALTER TABLE customer_users ADD COLUMN IF NOT EXISTS whats_new_seen_version INTEGER`);
     // Task #119 — platform-cost pricing + artist profit readout.
     // 1. payout_settings.shopify_fee_cents — new platform-cost knob shown
     //    on the super-admin Platform Pricing page. Default $3.50.

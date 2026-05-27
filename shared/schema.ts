@@ -1293,6 +1293,13 @@ export const customerUsers = pgTable("customer_users", {
   onboardedAt: timestamp("onboarded_at"),
   welcomeEmailSentAt: timestamp("welcome_email_sent_at"),
   mergedIntoId: varchar("merged_into_id"),
+  // Task #536 — "What's New" welcome-back sheet. Stamped with the
+  // current `WHATS_NEW_VERSION` (see shared/whatsNew.ts) the moment the
+  // fan dismisses the sheet. The sheet only re-appears when we ship a
+  // new version (i.e. `whatsNewSeenVersion < WHATS_NEW_VERSION`). NULL
+  // means the fan has never seen the sheet — eligible for the next
+  // first-launch render.
+  whatsNewSeenVersion: integer("whats_new_seen_version"),
 }, (t) => ({
   legacyGogoodsIdUniq: uniqueIndex("customer_users_legacy_gogoods_id_uniq")
     .on(t.legacyGogoodsId)

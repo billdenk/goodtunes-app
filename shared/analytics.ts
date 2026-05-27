@@ -111,6 +111,17 @@ export interface AnalyticsEventMap {
   // buyer-initiated send.
   gift_initiated: EntityRefs & { orderId: string };
 
+  // ─── Welcome-back "What's New" sheet (Task #536) ────────────
+  // `welcome_back_shown` fires once per render — i.e. the first time a
+  // fan's first-launch-after-update lands on a route that mounts the
+  // sheet. `card_tapped` fires when a fan taps one of the capability
+  // cards to dive in; `dismissed` fires when they close the sheet
+  // (either via the CTA or the X). All three carry the current
+  // `version` so funnels can pivot by wave.
+  welcome_back_shown: { version: number; libraryCount: number; recognized: boolean };
+  welcome_back_card_tapped: { version: number; cardKey: string };
+  welcome_back_dismissed: { version: number; via: "cta" | "close" };
+
   // ─── Auth ───────────────────────────────────────────────────
   sign_in: { provider: "password" | "google" | "apple"; kind?: "admin" | "customer" };
   sign_up: { provider: "password" | "google" | "apple"; kind?: "admin" | "customer" };

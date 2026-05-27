@@ -16,6 +16,7 @@ Every event GoodTunes fires has a name and a typed payload declared in [`shared/
 - **gear** — `gear_viewed`, `gear_vendor_clicked`, `gear_vendor_chat_opened`
 - **share** — `share_initiated`, `share_completed`
 - **commerce** — `bundle_viewed` (fan reached the BuySheet's format/add-on picker), `checkout_started`, `checkout_completed`, `gift_initiated` (buyer attached a real recipient to a paid order)
+- **welcome-back** — `welcome_back_shown`, `welcome_back_card_tapped`, `welcome_back_dismissed` (all carry the current `WHATS_NEW_VERSION` from `shared/whatsNew.ts` so funnels can pivot by wave; gated server-side by `GET /api/me/whats-new`)
 - **auth** — `sign_in`, `sign_up`, `sign_out`
 
 To add a new event:

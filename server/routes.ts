@@ -961,6 +961,57 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { registerWelcomeBackRoutes } = await import("./welcomeBack");
   registerWelcomeBackRoutes(app, { requireAuth, requireAdmin, generateAuthToken: generateToken });
 
+  // ─── Task #536 — "What's New" welcome-back sheet ───────────────────
+  // Recognition gate: returns whether the current customer should see
+  // the sheet, their library count, and the current `WHATS_NEW_VERSION`
+  // so the client can render the right variant. Admins + signed-out
+  // viewers get `shouldShow: false`. Brand-new fans with zero owned
+  // albums fall through to the new-fan onboarding flow (separate task)
+  // and also get `shouldShow: false` here so we don't double-greet.
+  app.get("/api/me/whats-new", async (req, res) => {
+    const a = await getAuthFromRequest(req);
+    if (!a || a.kind !== "customer") {
+      return res.json({ shouldShow: false, currentVersion: 0 });
+    }
+    const { WHATS_NEW_VERSION } = await import("@shared/whatsNew");
+    const c = await storage.getCustomer(a.userId);
+    if (!c || c.mergedIntoId) {
+      return res.json({ shouldShow: false, currentVersion: WHATS_NEW_VERSION });
+    }
+    const { userAlbums } = await import("@shared/schema");
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(userAlbums)
+      .where(eq(userAlbums.userId, c.id));
+    const libraryCount = row?.n ?? 0;
+    // "Recognized" = matched by email/phone to an existing fan with
+    // signal they've used GoodTunes (or its predecessor) before. In
+    // practice: owns at least one album OR was imported from gogoods.
+    // Brand-new sign-ups with no library fall through to the new-fan
+    // onboarding surface instead.
+    const recognized = libraryCount > 0 || !!(c as any).legacyGogoodsId;
+    const seenVersion = (c as any).whatsNewSeenVersion as number | null;
+    const shouldShow = recognized && (seenVersion == null || seenVersion < WHATS_NEW_VERSION);
+    return res.json({
+      shouldShow,
+      recognized,
+      libraryCount,
+      currentVersion: WHATS_NEW_VERSION,
+      seenVersion,
+    });
+  });
+
+  // Dismissal — stamps `whatsNewSeenVersion` with the version the fan
+  // just dismissed so the sheet never re-appears for that wave.
+  // Idempotent: a second tap is a no-op.
+  app.post("/api/me/whats-new/dismiss", requireCustomer, async (req, res) => {
+    const { WHATS_NEW_VERSION } = await import("@shared/whatsNew");
+    const requested = Number(req.body?.version);
+    const version = Number.isFinite(requested) && requested > 0 ? requested : WHATS_NEW_VERSION;
+    await storage.updateCustomer(req.session.userId!, { whatsNewSeenVersion: version } as any);
+    return res.json({ ok: true, seenVersion: version });
+  });
+
   // ─── Tap-to-report error capture (Task #284) ───────────────────────
   // Friendly error cards across the app POST here when the user taps
   // "Send this to GoodTunes". We attach the authed identity if any,

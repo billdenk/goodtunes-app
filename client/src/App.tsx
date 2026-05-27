@@ -74,6 +74,8 @@ import { Redeem } from "@/pages/Redeem";
 import { AdminShopify } from "@/pages/AdminShopify";
 import { AdminAlbumEngagement } from "@/pages/AdminAlbumEngagement";
 import { AnalyticsDebugOverlay } from "@/components/admin/AnalyticsDebugOverlay";
+// Task #536 — "What's New" welcome-back sheet for returning fans.
+import { WhatsNewSheet } from "@/components/WhatsNewSheet";
 import { ScreenTag } from "@/components/admin/ScreenTag";
 import { isAnalyticsDebugOverlayEnabled } from "@/lib/analytics";
 import { AdminReports } from "@/pages/AdminReports";
@@ -485,6 +487,10 @@ function Router() {
         </Route>
       </Switch>
       <PlayerOverlay />
+      {/* Task #536 — gates itself on /api/me/whats-new (recognized
+          customer + version behind current) so it's safe to mount
+          globally. Won't render on admin/auth/welcome/checkout routes. */}
+      <WhatsNewSheet />
       {user?.kind === "admin" && isAnalyticsDebugOverlayEnabled() && <AnalyticsDebugOverlay />}
       {/* Super-admin-only screen-code chip. Shown on every page so Nick
           can include the code in a screenshot/comment and we know
