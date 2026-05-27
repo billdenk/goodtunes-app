@@ -1989,6 +1989,14 @@ export const orders = pgTable("orders", {
   legacyGogoodsIdUniq: uniqueIndex("orders_legacy_gogoods_id_uniq")
     .on(t.legacyGogoodsId)
     .where(sql`${t.legacyGogoodsId} IS NOT NULL`),
+  // Task #551 — per-album GoodDeed number is the printed sequence on
+  // the physical cert. Partial uniqueness ensures two orders for the
+  // same album can never share a number, even under a concurrent
+  // webhook race that beats the MAX+1 read. Callers wrap the insert
+  // in a retry loop (see withRetryOnGoodDeedCollision in commerce.ts).
+  goodDeedNumberUniq: uniqueIndex("orders_album_good_deed_number_uniq")
+    .on(t.albumId, t.goodDeedNumber)
+    .where(sql`${t.goodDeedNumber} IS NOT NULL`),
 }));
 
 // ─── Task #73 — Order Desk webhook idempotency ─────────────────────

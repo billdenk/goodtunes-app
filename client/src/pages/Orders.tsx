@@ -573,7 +573,7 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
                   ? "Your certificate has been printed and shipped."
                   : cert.nameStatus === "locked_for_print"
                   ? "Locked for the next print run — name can no longer be changed."
-                  : `Paper: ${cert.paperSize === "a4" ? "A4" : "US Letter"} · You can change the name until it's locked for printing.`}
+                  : `Paper: ${cert.paperSize === "a4" ? "A4" : "US Letter"} · Name is permanent — it will be printed exactly as shown.`}
               </div>
               {/* Task #435 — Download the PDF (works for every cert state
                   so legacy-import certs imported as `printed` AND
@@ -604,16 +604,11 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
                   </Link>
                 )}
               </div>
-              {!locked && !showPicker && (
-                <button
-                  type="button"
-                  onClick={() => setShowPicker(true)}
-                  className="mt-2 text-[12px] text-[#319ED8] font-semibold active:opacity-70"
-                  data-testid={`button-cert-change-${order.id}`}
-                >
-                  Change name
-                </button>
-              )}
+              {/* Task #551 — One-shot lock. Once a fan has confirmed
+                  a name, the cert is permanent and the "Change name"
+                  affordance is removed. Server-side this is enforced
+                  by the cert/confirm endpoint rejecting any nameStatus
+                  other than "awaiting". */}
             </>
           ) : (
             <>
@@ -637,6 +632,20 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
 
       {showPicker && !locked && user && (
         <div className="mt-3 flex flex-col gap-2" data-testid={`cert-picker-${order.id}`}>
+          {/* Task #551 — Permanent-name warning. The cert/confirm
+              endpoint locks the choice on first submit, so the fan
+              gets one shot to pick. */}
+          <div
+            className="text-xs font-semibold rounded-lg px-3 py-2 leading-snug"
+            style={{
+              color: "var(--brand-pink)",
+              backgroundColor: "color-mix(in srgb, var(--brand-pink) 10%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--brand-pink) 30%, transparent)",
+            }}
+            data-testid={`cert-permanent-warning-${order.id}`}
+          >
+            This will be printed permanently on your GoodDeed — you can't change it after you submit.
+          </div>
           <IdentityOption
             label="Display name"
             value={user.displayName}

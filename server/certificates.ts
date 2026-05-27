@@ -30,6 +30,11 @@ import {
   signedCertCertificates,
   type SignedCertCertificate,
 } from "@shared/schema";
+// Task #551 — the ONE locked print template. drawCertOnto below is a
+// thin adapter that maps the legacy CertContext shape onto the
+// template's normalised `{albumId, sequenceNumber, recipientName,
+// qrPayload, paperSize}` inputs.
+import { drawGoodDeedPageOnto, type GoodDeedPrintInputs } from "./goodDeedPrintTemplate";
 
 // ─── Constants ───────────────────────────────────────────────────────
 const LETTER_COUNTRIES = new Set(["US", "USA", "CA", "CAN", "MX", "MEX"]);
@@ -322,8 +327,16 @@ export function registerCertificateRoutes(app: Express) {
       .innerJoin(orders, eq(orders.id, signedCertCertificates.orderId))
       .where(eq(signedCertCertificates.orderId, req.params.orderId));
     if (!row || row.order.customerId !== me.userId) return res.status(404).json({ message: "Not found" });
-    if (row.cert.nameStatus === "locked_for_print" || row.cert.nameStatus === "printed") {
-      return res.status(409).json({ message: "Already locked for printing — contact support to change the name." });
+    // Task #551 — One-shot lock. Once a fan has confirmed a name (any
+    // status other than "awaiting"), the printed cert is permanent and
+    // the fan cannot change it. The picker copy + warning banner make
+    // this explicit on the client; this server-side check is the
+    // authoritative gate against a stale tab POSTing a second pick.
+    if (row.cert.nameStatus !== "awaiting") {
+      return res.status(409).json({
+        message:
+          "Name already confirmed — this is permanent for the printed certificate. Contact support if it needs to change.",
+      });
     }
     const kind = req.body?.identityKind as IdentityKind | undefined;
     if (!kind || !["display", "username", "real"].includes(kind)) {
@@ -683,179 +696,24 @@ export function registerCertificateRoutes(app: Express) {
   });
 }
 
-// Draws a single GoodDeed certificate onto an already-added page of `doc`.
-// Layout mirrors the four reference PDFs Nick has been hand-producing:
-//   - Top ~73% of the mat window: the album artwork, edge-to-edge.
-//   - Bottom band (#00062B dark blue): bleeds to the page edges on
-//     left/right/bottom so an 8×10 / 20×25 cm mat leaves no white gap.
-//     Inside the band, the reference's left column (album thumbnail +
-//     title + certifying paragraph + signature) and right column
-//     (QR + "GoodDeed™" mark) live inside the safe-zone inset.
+// Task #551 — Adapter onto the locked GoodDeedPrintTemplate. The
+// template owns every layout/font/QR decision; this function exists
+// only because the admin print-queue batch-download path assembles its
+// own merged PDF (mixing per-cert paper sizes) and wants to draw onto
+// a doc it already controls. New callers should use
+// renderGoodDeedPdf() / renderGoodDeedBatchPdf() directly.
+function ctxToTemplateInputs(ctx: CertContext): GoodDeedPrintInputs {
+  return {
+    albumId: ctx.album.id,
+    sequenceNumber: ctx.order.goodDeedNumber,
+    recipientName:
+      (ctx.cert.confirmedName && ctx.cert.confirmedName.trim()) ||
+      ctx.order.buyerName ||
+      "GoodTunes Fan",
+    qrPayload: `${ctx.origin}/g/${ctx.cert.shortId}`,
+    paperSize: ctx.cert.paperSize === "a4" ? "a4" : "letter",
+  };
+}
 async function drawCertOnto(doc: PDFKit.PDFDocument, ctx: CertContext): Promise<void> {
-  const { cert, order, album, origin } = ctx;
-  const paperSize: "letter" | "a4" = cert.paperSize === "a4" ? "a4" : "letter";
-  const L = layoutFor(paperSize);
-
-  // ─── Geometry ───────────────────────────────────────────────────
-  // Band height is a fixed fraction of the mat opening — same visual
-  // proportion as the reference PDFs (~26% of the 8×10 window).
-  const bandH = L.matH * 0.26;
-  // Band extends to the BOTTOM and LEFT/RIGHT page edges for bleed.
-  // Its top edge sits at the bottom of the artwork (which is inside
-  // the mat). Visually, when the 1/8" mat is laid over the print, the
-  // mat covers the bleed strip and the band reads as flush to the mat.
-  const bandTop = L.matY + L.matH - bandH;
-  const bandX = 0;
-  const bandW = L.W;
-  const bandBottom = L.H; // bleeds off the bottom of the page
-
-  // ─── Artwork (top) ──────────────────────────────────────────────
-  // Cover-fit into a rectangle that fills the page from the top edge
-  // down to the band top. Bleeds past the mat on top/left/right so
-  // there's never a white sliver under the mat. We let pdfkit do the
-  // cover-fit math via `cover: [w, h]`.
-  const artBox = { x: 0, y: 0, w: L.W, h: bandTop };
-  const artBytes = await fetchArtworkBytes(album.artwork);
-  if (artBytes) {
-    try {
-      doc.image(artBytes, artBox.x, artBox.y, { cover: [artBox.w, artBox.h], align: "center", valign: "center" });
-    } catch {
-      doc.rect(artBox.x, artBox.y, artBox.w, artBox.h).fill("#EEE");
-    }
-  } else {
-    doc.rect(artBox.x, artBox.y, artBox.w, artBox.h).fill("#EEE");
-  }
-
-  // ─── Dark band ──────────────────────────────────────────────────
-  doc.save();
-  doc.rect(bandX, bandTop, bandW, bandBottom - bandTop).fill("#00062B");
-  doc.restore();
-
-  // Safe zone inside the band — keep all text/QR/sig at least
-  // (matX + safeInset) from each page edge and (matY + safeInset) from
-  // the page bottom. This survives a slightly-off mat cut on any side.
-  const safeLeft = L.matX + L.safeInset;
-  const safeRight = L.W - L.matX - L.safeInset;
-  const safeBottom = L.H - L.matY - L.safeInset;
-  const safeTop = bandTop + L.safeInset; // a small inset under the artwork edge too
-
-  // ─── Right column (QR + "GoodDeed™") ────────────────────────────
-  // Build the QR first so we can lay the left column to its left edge.
-  const shortUrl = `${origin}/g/${cert.shortId}`;
-  let qrPng: Buffer | null = null;
-  try {
-    // Rendering at 4x final pt size yields a crisp print at 300dpi.
-    qrPng = await QRCode.toBuffer(shortUrl, {
-      margin: 0,
-      width: 480,
-      color: { dark: "#FFFFFF", light: "#00062B" },
-    });
-  } catch {
-    qrPng = null;
-  }
-  const qrSize = Math.min(78, bandH * 0.55);
-  const qrX = safeRight - qrSize;
-  const qrY = safeTop + 6;
-  // White card behind the QR so the dark/light contrast is sharp on
-  // any cover art tone that bled past the mat.
-  doc.save();
-  doc.rect(qrX - 4, qrY - 4, qrSize + 8, qrSize + 8).fill("#FFFFFF");
-  doc.restore();
-  if (qrPng) {
-    try { doc.image(qrPng, qrX, qrY, { width: qrSize, height: qrSize }); } catch {}
-  }
-  // "GoodDeed™" mark caption, lower-right.
-  doc.font("Helvetica").fontSize(8).fillColor("#FFFFFF").text(
-    "GoodDeed\u2122",
-    qrX - 10,
-    qrY + qrSize + 6,
-    { width: qrSize + 20, align: "center", lineBreak: false },
-  );
-
-  // ─── Left column (title block + certifying copy + signature) ────
-  // The whole left column is bounded by the QR's left edge.
-  const colLeft = safeLeft;
-  const colRight = qrX - 16;
-  const colWidth = colRight - colLeft;
-
-  // Album thumbnail (small square) + title block to its right.
-  const thumbSize = Math.min(44, bandH * 0.32);
-  const thumbX = colLeft;
-  const thumbY = safeTop + 4;
-  if (artBytes) {
-    try { doc.image(artBytes, thumbX, thumbY, { cover: [thumbSize, thumbSize] }); } catch {}
-  } else {
-    doc.rect(thumbX, thumbY, thumbSize, thumbSize).fill("#1A2052");
-  }
-  const titleX = thumbX + thumbSize + 10;
-  const titleW = colRight - titleX;
-  // Artist name — small white.
-  doc.font("Helvetica").fontSize(10).fillColor("#FFFFFF").text(album.artist, titleX, thumbY, {
-    width: titleW,
-    lineBreak: false,
-    ellipsis: true,
-  });
-  // Album title — bold white, larger.
-  doc.font("Helvetica-Bold").fontSize(14).fillColor("#FFFFFF").text(album.title, titleX, thumbY + 12, {
-    width: titleW,
-    lineBreak: false,
-    ellipsis: true,
-  });
-  // Genre • GOODTUNES RELEASE YEAR — small muted.
-  const year = album.year ?? (album.goodTunesReleaseDate ? Number(album.goodTunesReleaseDate.slice(0, 4)) : null);
-  const subPieces: string[] = [];
-  if (album.genre) subPieces.push(album.genre.toUpperCase());
-  subPieces.push(year ? `GOODTUNES RELEASE ${year}` : "GOODTUNES RELEASE");
-  const subline = subPieces.join("\u2022"); // bullet (the reference uses a tight bullet)
-  doc.font("Helvetica").fontSize(7).fillColor("#A6B2D6").text(subline, titleX, thumbY + 28, {
-    width: titleW,
-    characterSpacing: 0.6,
-    lineBreak: false,
-    ellipsis: true,
-  });
-
-  // Certifying paragraph block.
-  const fanName = (cert.confirmedName && cert.confirmedName.trim()) || order.buyerName || "GoodTunes Fan";
-  const goodDeedNum = order.goodDeedNumber != null ? String(order.goodDeedNumber) : cert.shortId.toUpperCase();
-  const certifyY = thumbY + thumbSize + 14;
-
-  // Line 1 — bold, the headline sentence.
-  const headline = `This certifies that ${fanName} owns no. ${goodDeedNum} of ${album.title}.`;
-  doc.font("Helvetica-Bold").fontSize(10).fillColor("#FFFFFF").text(headline, colLeft, certifyY, {
-    width: colWidth,
-    lineGap: 1.5,
-  });
-  const afterHeadlineY = doc.y + 4;
-
-  // Line 2 — smaller, the provenance / transfer paragraph (verbatim
-  // from the reference, with the fan's name substituted in).
-  const provenance =
-    `Digital provenance can be confirmed by accessing the QR code on this GoodDeed. ` +
-    `In the event that ownership has been transferred since this certificate was issued, this GoodDeed\u2122 ` +
-    `will serve as the moment in time in which ${fanName} possessed ownership of this good.`;
-  doc.font("Helvetica").fontSize(7.5).fillColor("#C7CFE8").text(provenance, colLeft, afterHeadlineY, {
-    width: colWidth,
-    lineGap: 1.5,
-  });
-
-  // ─── Signature + founder line (bottom-left) ─────────────────────
-  // The signature PNG is white-on-transparent (2× resolution, 1048×254).
-  // pdfkit will downscale it cleanly — never upscale, per the task spec.
-  const sigW = Math.min(120, colWidth * 0.45);
-  const sigAspect = 254 / 1048;
-  const sigH = sigW * sigAspect;
-  const sigY = safeBottom - sigH - 12;
-  const sigX = colLeft;
-  if (fs.existsSync(SIGNATURE_ASSET)) {
-    try {
-      doc.image(SIGNATURE_ASSET, sigX, sigY, { width: sigW });
-    } catch {}
-  }
-  // Founder line directly under the signature.
-  doc.font("Helvetica").fontSize(6.5).fillColor("#FFFFFF").text(
-    "William E. Denk, CEO/Founder GoodTunes\u2122",
-    sigX,
-    sigY + sigH + 2,
-    { width: sigW * 1.6, lineBreak: false },
-  );
+  await drawGoodDeedPageOnto(doc, ctxToTemplateInputs(ctx));
 }

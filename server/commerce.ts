@@ -389,7 +389,39 @@ async function getOrderItems(orderId: string): Promise<OrderItemWithVinyl[]> {
 // For simplicity in this v1 we use `max(goodDeedNumber)+1` per album,
 // which is monotonic — refunds leave gaps. Acceptable trade-off vs.
 // the user-confusing "your number changed" problem.
-async function assignNextGoodDeedNumber(albumId: string): Promise<number> {
+// Task #551 — Retry wrapper for any insert/update that mints a
+// GoodDeed number. The partial unique index
+// `orders_album_good_deed_number_uniq` (album_id, good_deed_number)
+// turns a concurrent webhook race into a Postgres 23505 instead of a
+// silent duplicate. We catch that one error and retry with a fresh
+// MAX+1 lookup. Anything else bubbles up unchanged.
+export async function withRetryOnGoodDeedCollision<T>(
+  albumId: string,
+  fn: () => Promise<T>,
+  maxRetries = 5,
+): Promise<T> {
+  let lastErr: any = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      const code = e?.code ?? e?.cause?.code;
+      const constraint: string = e?.constraint ?? e?.cause?.constraint ?? "";
+      const detail: string = e?.detail ?? e?.cause?.detail ?? "";
+      const isCollision =
+        code === "23505" &&
+        (/good_deed/i.test(constraint) || /good_deed_number/i.test(detail));
+      if (!isCollision) throw e;
+      lastErr = e;
+      console.warn(
+        `[good-deed-collision] album=${albumId} attempt=${attempt + 1}/${maxRetries} retrying after 23505`,
+      );
+    }
+  }
+  throw lastErr ?? new Error("withRetryOnGoodDeedCollision: exhausted retries");
+}
+
+export async function assignNextGoodDeedNumber(albumId: string): Promise<number> {
   // Floor = max(goodDeedNumber across paid orders, certificateNumber
   // across owned user_albums). The user_albums leg matters because the
   // gogoods.com importer (Task #398) stamps the legacy collectible
@@ -1854,54 +1886,63 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
   // Upsert by session id. If a row exists (pending), flip to paid; if not, insert.
   let order = existing;
   if (!order) {
-    const goodDeedNumber = isPaid ? await assignNextGoodDeedNumber(albumId) : null;
-    const [inserted] = await db
-      .insert(orders)
-      .values({
-        customerId,
-        albumId,
-        totalCents,
-        currency: full.currency ?? "usd",
-        stripeCheckoutSessionId: full.id,
-        stripePaymentIntentId: piId,
-        status: isPaid ? "paid" : "pending",
-        shippingAddress: shipping,
-        billingAddress: billing,
-        buyerEmail,
-        buyerName,
-        buyerPhone,
-        goodDeedNumber,
-        skuKind,
-        artistSnapshotId,
-        labelSnapshotId,
-        fulfillmentStatus: isPaid && skuKind !== "digital" ? "pending" : null,
-      })
-      .onConflictDoNothing({ target: orders.stripeCheckoutSessionId })
-      .returning();
+    // Task #551 — Wrap the GoodDeed-number-bearing insert in the
+    // retry helper. A concurrent webhook race that picks the same
+    // MAX+1 trips the partial unique index (23505) and we re-mint.
+    const inserted = await withRetryOnGoodDeedCollision(albumId, async () => {
+      const goodDeedNumber = isPaid ? await assignNextGoodDeedNumber(albumId) : null;
+      const [row] = await db
+        .insert(orders)
+        .values({
+          customerId,
+          albumId,
+          totalCents,
+          currency: full.currency ?? "usd",
+          stripeCheckoutSessionId: full.id,
+          stripePaymentIntentId: piId,
+          status: isPaid ? "paid" : "pending",
+          shippingAddress: shipping,
+          billingAddress: billing,
+          buyerEmail,
+          buyerName,
+          buyerPhone,
+          goodDeedNumber,
+          skuKind,
+          artistSnapshotId,
+          labelSnapshotId,
+          fulfillmentStatus: isPaid && skuKind !== "digital" ? "pending" : null,
+        })
+        .onConflictDoNothing({ target: orders.stripeCheckoutSessionId })
+        .returning();
+      return row;
+    });
     order = inserted ?? (await getOrderBySessionId(full.id))!;
     if (order && order.id && (await getOrderItems(order.id)).length === 0) {
       await db.insert(orderItems).values(items.map((i) => ({ ...i, orderId: order!.id })));
     }
   } else if (isPaid && order.status === "pending") {
-    const goodDeedNumber = order.goodDeedNumber ?? (await assignNextGoodDeedNumber(albumId));
-    const [u] = await db
-      .update(orders)
-      .set({
-        status: "paid",
-        stripePaymentIntentId: piId,
-        shippingAddress: shipping,
-        billingAddress: billing,
-        buyerEmail,
-        buyerName,
-        buyerPhone,
-        goodDeedNumber,
-        skuKind: order.skuKind ?? skuKind,
-        artistSnapshotId: order.artistSnapshotId ?? artistSnapshotId,
-        labelSnapshotId: order.labelSnapshotId ?? labelSnapshotId,
-        fulfillmentStatus: order.fulfillmentStatus ?? (skuKind !== "digital" ? "pending" : null),
-      })
-      .where(eq(orders.id, order.id))
-      .returning();
+    const u = await withRetryOnGoodDeedCollision(albumId, async () => {
+      const goodDeedNumber = order!.goodDeedNumber ?? (await assignNextGoodDeedNumber(albumId));
+      const [row] = await db
+        .update(orders)
+        .set({
+          status: "paid",
+          stripePaymentIntentId: piId,
+          shippingAddress: shipping,
+          billingAddress: billing,
+          buyerEmail,
+          buyerName,
+          buyerPhone,
+          goodDeedNumber,
+          skuKind: order!.skuKind ?? skuKind,
+          artistSnapshotId: order!.artistSnapshotId ?? artistSnapshotId,
+          labelSnapshotId: order!.labelSnapshotId ?? labelSnapshotId,
+          fulfillmentStatus: order!.fulfillmentStatus ?? (skuKind !== "digital" ? "pending" : null),
+        })
+        .where(eq(orders.id, order!.id))
+        .returning();
+      return row;
+    });
     order = u;
   }
 

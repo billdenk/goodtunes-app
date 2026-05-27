@@ -1678,3 +1678,29 @@ SQL
 }
 migrate_earmarked_artists dev  "${DATABASE_URL:-}"
 migrate_earmarked_artists prod "${PROD_DATABASE_URL:-}"
+# Task #551 — Partial unique index on (album_id, good_deed_number) so
+# two paid orders for the same album can never share a printed
+# sequence number, even under a concurrent webhook race that beats the
+# MAX+1 read. The mint helper in commerce.ts catches the 23505 and
+# retries with a fresh MAX+1 lookup. Idempotent CREATE INDEX IF NOT
+# EXISTS on both DBs so a fresh-clone dev never reintroduces the bug
+# and the publish dev→prod diff stays empty.
+migrate_orders_good_deed_unique() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping orders good_deed unique-index migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+CREATE UNIQUE INDEX IF NOT EXISTS orders_album_good_deed_number_uniq
+  ON orders (album_id, good_deed_number)
+  WHERE good_deed_number IS NOT NULL;
+SQL
+  then
+    echo "post-merge: orders good_deed unique-index migration ok on $label"
+  else
+    echo "post-merge: WARNING — orders good_deed unique-index migration failed on $label (continuing)"
+  fi
+}
+migrate_orders_good_deed_unique dev  "${DATABASE_URL:-}"
+migrate_orders_good_deed_unique prod "${PROD_DATABASE_URL:-}"

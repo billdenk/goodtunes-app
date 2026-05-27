@@ -322,20 +322,14 @@ function snapshotAddress(a: ShopifyAddress | null | undefined) {
 // Shopify-sourced orders share the monotonic sequence with direct ones —
 // fan with GoodDeed #42 doesn't care whether they bought on Shopify or
 // goodtunes.music, the number is the number.
+// Task #551 — Delegate to the canonical mint helper in commerce.ts so
+// Shopify-sourced orders share one MAX+1 implementation with direct
+// orders. Concurrent-race protection lives in the same module via
+// withRetryOnGoodDeedCollision, which the call sites below wrap around
+// the actual insert.
 async function assignNextGoodDeedNumberForAlbum(albumId: string): Promise<number> {
-  // Floor = max(goodDeedNumber across paid orders, certificateNumber
-  // across owned user_albums). The user_albums leg matters because the
-  // gogoods.com importer (Task #398) stamps the legacy collectible
-  // index into `user_albums.certificateNumber` for owned-but-no-paid-
-  // order rows; without considering it here Shopify-sourced sales could
-  // mint a duplicate GoodDeed number on the next purchase.
-  const [row] = await db.execute(sql<{ max: number }>`
-    SELECT GREATEST(
-      COALESCE((SELECT MAX(${orders.goodDeedNumber}) FROM ${orders} WHERE ${orders.albumId} = ${albumId}), 0),
-      COALESCE((SELECT MAX(${userAlbums.certificateNumber}) FROM ${userAlbums} WHERE ${userAlbums.albumId} = ${albumId}), 0)
-    ) AS max
-  `);
-  return Number((row as any)?.max ?? 0) + 1;
+  const { assignNextGoodDeedNumber } = await import("./commerce");
+  return assignNextGoodDeedNumber(albumId);
 }
 
 // Find-or-create a stub customer_users row keyed on email. Shopify hands
@@ -427,7 +421,9 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
     buyerEmail,
     [payload.customer?.first_name, payload.customer?.last_name].filter(Boolean).join(" ") || null,
   );
-  const goodDeedNumber = await assignNextGoodDeedNumberForAlbum(albumId);
+  // Task #551 — Mint moved inside the insert closure below so the
+  // retry helper can re-mint on a 23505 collision (concurrent webhook
+  // race with another sale on the same album).
 
   // Build the order_items snapshot. Two kinds:
   //   "format" → the physical SKU label (we use the line item title)
@@ -459,31 +455,36 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   const artistSnapshotId = albumRow?.primaryArtistId ?? null;
   const labelSnapshotId = albumRow?.labelId ?? null;
 
-  const [order] = await db
-    .insert(orders)
-    .values({
-      customerId,
-      albumId,
-      totalCents,
-      currency: (payload.currency ?? "usd").toLowerCase(),
-      status: "paid",
-      shippingAddress: shipping as any,
-      billingAddress: billing as any,
-      buyerEmail,
-      buyerName,
-      buyerPhone: payload.customer?.phone ?? null,
-      goodDeedNumber,
-      origin: `shopify:${store.id}`,
-      shopifyStoreId: store.id,
-      shopifyOrderId,
-      shopifyOrderToken: payload.token ?? null,
-      skuKind,
-      artistSnapshotId,
-      labelSnapshotId,
-      fulfillmentStatus: isPhysicalSkuKind(skuKind) ? "pending" : null,
-    })
-    .onConflictDoNothing({ target: orders.shopifyOrderId })
-    .returning();
+  const { withRetryOnGoodDeedCollision } = await import("./commerce");
+  const order = await withRetryOnGoodDeedCollision(albumId, async () => {
+    const goodDeedNumber = await assignNextGoodDeedNumberForAlbum(albumId);
+    const [row] = await db
+      .insert(orders)
+      .values({
+        customerId,
+        albumId,
+        totalCents,
+        currency: (payload.currency ?? "usd").toLowerCase(),
+        status: "paid",
+        shippingAddress: shipping as any,
+        billingAddress: billing as any,
+        buyerEmail,
+        buyerName,
+        buyerPhone: payload.customer?.phone ?? null,
+        goodDeedNumber,
+        origin: `shopify:${store.id}`,
+        shopifyStoreId: store.id,
+        shopifyOrderId,
+        shopifyOrderToken: payload.token ?? null,
+        skuKind,
+        artistSnapshotId,
+        labelSnapshotId,
+        fulfillmentStatus: isPhysicalSkuKind(skuKind) ? "pending" : null,
+      })
+      .onConflictDoNothing({ target: orders.shopifyOrderId })
+      .returning();
+    return row;
+  });
   // Task #79 — first paid order stamps the post-sale lock on the album.
   if (order) {
     const { stampFirstSoldAtIfNeeded } = await import("./auth/partnerPermissions");
@@ -1119,7 +1120,6 @@ export function registerShopifyRoutes(app: Express) {
     if (!album) return res.status(404).json({ message: "Album not found" });
 
     const customerId = await findOrCreateStubCustomer(buyerEmail, buyerName);
-    const goodDeedNumber = await assignNextGoodDeedNumberForAlbum(albumId);
     // Synthesize a stable fake Shopify order id so a repeat mint with
     // the same email + album collapses idempotently.
     const fakeShopifyOrderId = `dev-${albumId.slice(0, 8)}-${buyerEmail}`;
@@ -1129,26 +1129,33 @@ export function registerShopifyRoutes(app: Express) {
       if (existingCode) return res.json({ code: existingCode.code, orderId: existing.id, reused: true });
     }
 
-    const [order] = await db
-      .insert(orders)
-      .values({
-        customerId,
-        albumId,
-        totalCents: 1999,
-        currency: "usd",
-        status: "paid",
-        buyerEmail,
-        buyerName,
-        goodDeedNumber,
-        // origin uses the literal "shopify:dev" so OriginBadge still
-        // renders the Shopify pill — the order surfaces look the same
-        // as a real Shopify-sourced order.
-        origin: "shopify:dev",
-        shopifyStoreId: null,
-        shopifyOrderId: fakeShopifyOrderId,
-      })
-      .onConflictDoNothing({ target: orders.shopifyOrderId })
-      .returning();
+    // Task #551 — Mint + insert wrapped in the retry helper so the
+    // dev path exercises the same code path as the real webhook.
+    const { withRetryOnGoodDeedCollision } = await import("./commerce");
+    const order = await withRetryOnGoodDeedCollision(albumId, async () => {
+      const goodDeedNumber = await assignNextGoodDeedNumberForAlbum(albumId);
+      const [row] = await db
+        .insert(orders)
+        .values({
+          customerId,
+          albumId,
+          totalCents: 1999,
+          currency: "usd",
+          status: "paid",
+          buyerEmail,
+          buyerName,
+          goodDeedNumber,
+          // origin uses the literal "shopify:dev" so OriginBadge still
+          // renders the Shopify pill — the order surfaces look the same
+          // as a real Shopify-sourced order.
+          origin: "shopify:dev",
+          shopifyStoreId: null,
+          shopifyOrderId: fakeShopifyOrderId,
+        })
+        .onConflictDoNothing({ target: orders.shopifyOrderId })
+        .returning();
+      return row;
+    });
     if (order) {
       const { stampFirstSoldAtIfNeeded } = await import("./auth/partnerPermissions");
       await stampFirstSoldAtIfNeeded(albumId);

@@ -18678,13 +18678,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const origin = `${proto}://${host}`;
         const out = await generateBatchPdf(String(req.params.id), origin);
         if (!out) return res.status(400).json({ message: "No in-production reservations to print" });
-        // Persist the ZIP artifact to Object Storage so the admin panel
-        // can re-download the exact bytes the press received without
-        // regenerating. Survives across redeploys; ACL = public so the
-        // signed `/objects/uploads/<id>` route works without auth.
+        // Task #551 — Persist the multipage PDF artifact (was a ZIP)
+        // to Object Storage so the admin panel can re-download the
+        // exact bytes the press received without regenerating.
         let assetUrl: string | null = null;
         try {
-          assetUrl = await uploadBufferToObjectStorage(out.buffer, "application/zip");
+          assetUrl = await uploadBufferToObjectStorage(out.buffer, out.contentType);
         } catch (e: any) {
           console.error("[cert-batch/pdf] artifact persist failed", e?.message ?? e);
         }
@@ -18695,8 +18694,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             ...(assetUrl ? { certBatchPdfAssetUrl: assetUrl } : {}),
           })
           .where(eq(albumsTbl.id, String(req.params.id)));
-        res.setHeader("Content-Type", "application/zip");
-        res.setHeader("Content-Disposition", `attachment; filename="gooddeed-batch-${String(req.params.id)}.zip"`);
+        res.setHeader("Content-Type", out.contentType);
+        res.setHeader("Content-Disposition", `attachment; filename="gooddeed-batch-${String(req.params.id)}.pdf"`);
         res.send(out.buffer);
       } catch (e: any) {
         console.error("[cert-batch/pdf]", e);

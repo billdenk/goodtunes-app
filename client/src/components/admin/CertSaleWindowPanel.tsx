@@ -318,7 +318,7 @@ export function CertSaleWindowPanel({ albumId }: { albumId: string }) {
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement("a");
                   a.href = url;
-                  a.download = `gooddeed-batch-${albumId}.zip`;
+                  a.download = `gooddeed-batch-${albumId}.pdf`;
                   document.body.appendChild(a);
                   a.click();
                   a.remove();
@@ -331,7 +331,7 @@ export function CertSaleWindowPanel({ albumId }: { albumId: string }) {
               data-testid="button-download-batch-pdf"
               className="text-xs px-3 py-1.5 rounded bg-[var(--brand-purple)] text-white font-medium inline-flex items-center gap-1.5 disabled:opacity-40"
             >
-              <Download className="w-3.5 h-3.5" /> Send to press (ZIP)
+              <Download className="w-3.5 h-3.5" /> Send to press (PDF)
             </button>
           </div>
           {w.pdfGeneratedAt && (
@@ -347,7 +347,7 @@ export function CertSaleWindowPanel({ albumId }: { albumId: string }) {
                     className="text-[var(--brand-blue)] hover:underline"
                     data-testid="link-batch-pdf-asset"
                   >
-                    Re-download archived ZIP
+                    Re-download archived PDF
                   </a>
                 </>
               )}
