@@ -12,6 +12,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Spinner } from "@/components/ui/Spinner";
+import { X, Search, User, Tag } from "lucide-react";
+import {
   Area,
   AreaChart,
   CartesianGrid,
@@ -93,10 +108,19 @@ interface ScopeInfo {
   viewAs: { kind: "label" | "artist"; id: string } | null;
 }
 
+interface PartnerSearchResult {
+  id: string;
+  kind: "label" | "artist";
+  name: string;
+  secondary: string | null;
+  imageUrl: string | null;
+}
+
 export function AdminReports() {
   const { from, to, setFrom, setTo } = useDateRange();
   const [asPartner, setAsPartner] = useState("");
   const [asKind, setAsKind] = useState<"label" | "artist">("label");
+  const [asPartnerName, setAsPartnerName] = useState("");
   const qs = useMemo(() => buildQs(from, to, asPartner, asKind), [from, to, asPartner, asKind]);
 
   const { data: scope } = useQuery<ScopeInfo>({
@@ -143,70 +167,45 @@ export function AdminReports() {
           <DateRangePicker from={from} to={to} setFrom={setFrom} setTo={setTo} />
         </header>
 
-        {isSuper && (
-          <div
-            className="rounded-lg border border-slate-200 bg-slate-50 p-4 flex flex-wrap items-end gap-3"
-            data-testid="impersonation-bar"
-          >
-            <div className="text-xs uppercase tracking-wider text-slate-500 font-bold mr-2">
-              View as partner
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="as-kind" className="text-[11px] text-slate-500">
-                Kind
-              </Label>
-              <select
-                id="as-kind"
-                value={asKind}
-                onChange={(e) => setAsKind(e.target.value as any)}
-                className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-[var(--brand-blue)]"
-                data-testid="select-as-partner-kind"
-              >
-                <option value="label">Label</option>
-                <option value="artist">Artist</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-1 flex-1 min-w-[260px]">
-              <Label htmlFor="as-id" className="text-[11px] text-slate-500">
-                Partner ID
-              </Label>
-              <Input
-                id="as-id"
-                value={asPartner}
-                onChange={(e) => setAsPartner(e.target.value)}
-                placeholder="Paste label or artist ID"
-                className="h-9"
-                data-testid="input-as-partner-id"
-              />
-            </div>
-            {asPartner && (
-              <Button variant="ghost" onClick={() => setAsPartner("")} data-testid="button-clear-as-partner">
-                Clear
-              </Button>
-            )}
-          </div>
+        {(isSuper || (scope?.role === "super_admin" && scope?.viewAs)) && (
+          <ViewingAsControl
+            asPartner={asPartner}
+            asPartnerName={asPartnerName}
+            asKind={asKind}
+            onPick={(r) => {
+              setAsPartner(r.id);
+              setAsKind(r.kind);
+              setAsPartnerName(r.name);
+            }}
+            onClear={() => {
+              setAsPartner("");
+              setAsPartnerName("");
+            }}
+          />
         )}
 
         <AdminErrorBoundary title="Reports failed to render">
         <Tabs defaultValue={initialTab} className="w-full">
-          <TabsList className="bg-slate-100 border border-slate-200 p-1 h-auto flex-wrap">
-            <TabsTrigger value="sales" data-testid="tab-sales">Sales</TabsTrigger>
-            <TabsTrigger value="plays" data-testid="tab-plays">Plays & GoodSync</TabsTrigger>
-            <TabsTrigger value="payouts" data-testid="tab-payouts">Payouts</TabsTrigger>
-            <TabsTrigger value="redemption" data-testid="tab-redemption">Shopify redemption</TabsTrigger>
-            <TabsTrigger value="fans" data-testid="tab-fans">Top fans</TabsTrigger>
-            <TabsTrigger value="map" data-testid="tab-map">Fan map</TabsTrigger>
-            {showReferrals && (
-              <TabsTrigger value="referrals" data-testid="tab-referrals">Referrals</TabsTrigger>
-            )}
-            {isAdmin && <TabsTrigger value="overview" data-testid="tab-overview">Overview (god-view)</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="revenue" data-testid="tab-revenue">Revenue breakdown</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="engagement" data-testid="tab-engagement">Engagement</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="funnels" data-testid="tab-funnels">Funnels & cohorts</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="ops" data-testid="tab-ops">Ops health</TabsTrigger>}
-            {isSuper && <TabsTrigger value="recon" data-testid="tab-reconciliation">Payout reconciliation</TabsTrigger>}
-            {isSuper && <TabsTrigger value="events" data-testid="tab-events">Raw events</TabsTrigger>}
-          </TabsList>
+          <div className="border-b border-slate-200 -mx-1 overflow-x-auto">
+            <TabsList className="bg-transparent border-0 p-0 h-auto gap-6 px-1 flex-nowrap justify-start rounded-none">
+              <ReportTab value="sales" testId="tab-sales">Sales</ReportTab>
+              <ReportTab value="plays" testId="tab-plays">Plays &amp; GoodSync</ReportTab>
+              <ReportTab value="payouts" testId="tab-payouts">Payouts</ReportTab>
+              <ReportTab value="redemption" testId="tab-redemption">Shopify redemption</ReportTab>
+              <ReportTab value="fans" testId="tab-fans">Top fans</ReportTab>
+              <ReportTab value="map" testId="tab-map">Fan map</ReportTab>
+              {showReferrals && (
+                <ReportTab value="referrals" testId="tab-referrals">Referrals</ReportTab>
+              )}
+              {isAdmin && <ReportTab value="overview" testId="tab-overview">Overview (god-view)</ReportTab>}
+              {isAdmin && <ReportTab value="revenue" testId="tab-revenue">Revenue breakdown</ReportTab>}
+              {isAdmin && <ReportTab value="engagement" testId="tab-engagement">Engagement</ReportTab>}
+              {isAdmin && <ReportTab value="funnels" testId="tab-funnels">Funnels &amp; cohorts</ReportTab>}
+              {isAdmin && <ReportTab value="ops" testId="tab-ops">Ops health</ReportTab>}
+              {isSuper && <ReportTab value="recon" testId="tab-reconciliation">Payout reconciliation</ReportTab>}
+              {isSuper && <ReportTab value="events" testId="tab-events">Raw events</ReportTab>}
+            </TabsList>
+          </div>
 
           <TabsContent value="sales"><SalesTab qs={qs} /></TabsContent>
           <TabsContent value="plays"><PlaysTab qs={qs} /></TabsContent>
@@ -226,6 +225,201 @@ export function AdminReports() {
         </AdminErrorBoundary>
       </div>
     </AdminFrame>
+  );
+}
+
+function ReportTab({ value, testId, children }: { value: string; testId: string; children: React.ReactNode }) {
+  return (
+    <TabsTrigger
+      value={value}
+      data-testid={testId}
+      className="
+        relative rounded-none border-0 bg-transparent px-0 pb-3 pt-2 h-auto
+        text-sm font-medium text-slate-500 whitespace-nowrap shrink-0
+        shadow-none ring-0
+        hover:text-slate-900 transition-colors
+        data-[state=active]:bg-transparent data-[state=active]:text-slate-900
+        data-[state=active]:shadow-none
+        after:absolute after:left-0 after:right-0 after:-bottom-px after:h-[2px]
+        after:bg-[color:var(--brand-blue)] after:scale-x-0 after:transition-transform
+        data-[state=active]:after:scale-x-100
+      "
+    >
+      {children}
+    </TabsTrigger>
+  );
+}
+
+function PartnerKindChip({ kind }: { kind: "label" | "artist" }) {
+  const Icon = kind === "label" ? Tag : User;
+  const text = kind === "label" ? "Label" : "Artist";
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">
+      <Icon className="w-3 h-3" />
+      {text}
+    </span>
+  );
+}
+
+function ViewingAsControl({
+  asPartner,
+  asPartnerName,
+  asKind,
+  onPick,
+  onClear,
+}: {
+  asPartner: string;
+  asPartnerName: string;
+  asKind: "label" | "artist";
+  onPick: (r: PartnerSearchResult) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const { data, isLoading } = useQuery<{ results: PartnerSearchResult[] }>({
+    queryKey: ["/api/admin/partner-search", query],
+    queryFn: () =>
+      fetchJson(`/api/admin/partner-search?q=${encodeURIComponent(query)}`),
+    enabled: open,
+  });
+  const results = data?.results ?? [];
+
+  if (asPartner) {
+    return (
+      <div className="flex flex-col gap-1.5" data-testid="impersonation-bar">
+        <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+          Viewing as
+        </span>
+        <div className="inline-flex items-center gap-2 self-start rounded-full border border-slate-200 bg-white pl-3 pr-1.5 py-1 text-sm text-slate-900 shadow-sm">
+          <span className="font-medium" data-testid="text-as-partner-name">
+            {asPartnerName || asPartner}
+          </span>
+          <span className="text-slate-300">·</span>
+          <PartnerKindChip kind={asKind} />
+          <button
+            type="button"
+            onClick={onClear}
+            data-testid="button-clear-as-partner"
+            aria-label="Stop viewing as partner"
+            className="
+              ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full
+              text-slate-500 hover:bg-slate-100 hover:text-slate-900
+              focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]
+            "
+          >
+            <X className="w-3.5 h-3.5" />
+            <span className="sr-only">Stop viewing as partner</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="impersonation-bar">
+      <Label
+        htmlFor="viewing-as-trigger"
+        className="text-xs uppercase tracking-wider text-slate-500 font-semibold"
+      >
+        Viewing as
+      </Label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            id="viewing-as-trigger"
+            type="button"
+            className="
+              inline-flex items-center gap-2 h-9 self-start min-w-[280px] max-w-[420px]
+              rounded-md border border-slate-300 bg-white px-3 text-sm
+              text-left text-slate-500 hover:border-slate-400
+              focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]
+              focus:border-transparent
+            "
+            data-testid="button-as-partner-search"
+            aria-haspopup="listbox"
+            aria-expanded={open}
+          >
+            <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+            <span className="flex-1 truncate">
+              Search labels and artists…
+            </span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          sideOffset={4}
+          className="p-0 w-[min(420px,calc(100vw-2rem))] bg-white border border-slate-200 text-slate-900 shadow-lg"
+        >
+          <Command
+            shouldFilter={false}
+            className={[
+              "bg-white text-slate-900",
+              "[&_[cmdk-input-wrapper]]:border-slate-200",
+              "[&_[cmdk-item]]:text-slate-700",
+              "[&_[cmdk-item][data-selected=true]]:bg-slate-100",
+              "[&_[cmdk-item][data-selected=true]]:text-slate-900",
+            ].join(" ")}
+          >
+            <CommandInput
+              placeholder="Search labels and artists…"
+              value={query}
+              onValueChange={setQuery}
+              className="text-slate-900 placeholder:text-slate-400"
+              data-testid="input-as-partner-search"
+            />
+            <CommandList>
+              {isLoading ? (
+                <div className="p-4 text-xs text-slate-500 inline-flex items-center gap-2">
+                  <Spinner className="w-3.5 h-3.5 animate-spin" />
+                  Searching…
+                </div>
+              ) : (
+                <>
+                  <CommandEmpty>
+                    <div className="px-3 py-4 text-xs text-slate-500">
+                      {query.trim()
+                        ? `No partners matching "${query.trim()}".`
+                        : "Start typing to search labels and artists."}
+                    </div>
+                  </CommandEmpty>
+                  {results.length > 0 && (
+                    <CommandGroup heading="Partners">
+                      {results.map((r) => (
+                        <CommandItem
+                          key={`${r.kind}-${r.id}`}
+                          value={`${r.name}-${r.kind}-${r.id}`}
+                          onSelect={() => {
+                            onPick(r);
+                            setOpen(false);
+                            setQuery("");
+                          }}
+                          data-testid={`option-as-partner-${r.kind}-${r.id}`}
+                          className="flex items-center gap-2 py-2"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="truncate font-medium text-slate-900">
+                                {r.name}
+                              </span>
+                              <PartnerKindChip kind={r.kind} />
+                            </div>
+                            {r.secondary && (
+                              <div className="truncate text-xs text-slate-500 mt-0.5">
+                                {r.secondary}
+                              </div>
+                            )}
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  )}
+                </>
+              )}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }
 

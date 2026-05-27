@@ -13418,6 +13418,54 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { registerPartnerDashboardRoutes } = await import("./partnerDashboard");
   await registerPartnerDashboardRoutes(app);
 
+  // ─── Task #521 — Combined partner search for the Reports "Viewing as"
+  // combobox. Returns labels + artists in one shot so the super-admin
+  // can type a name without first picking a Kind. Only the two kinds
+  // requireReportScope honors today (label, artist) are returned —
+  // expanding to non-profit/etc. requires extending requireReportScope
+  // first. Capped at ~20 rows per kind.
+  app.get("/api/admin/partner-search", requireAdmin, async (req, res) => {
+    const q = String(req.query.q || "").trim().toLowerCase();
+    const LIMIT = 20;
+    const [labelsAll, peopleAll] = await Promise.all([
+      storage.getLabels(),
+      storage.getPeople(),
+    ]);
+    const matchLabel = (name: string) => !q || name.toLowerCase().includes(q);
+    const labelRows = labelsAll
+      .filter((l) => matchLabel(l.name))
+      .slice(0, LIMIT)
+      .map((l) => ({
+        id: l.id,
+        kind: "label" as const,
+        name: l.name,
+        secondary: l.domain || null,
+        imageUrl: l.logoUrl || null,
+      }));
+    const artistRows = peopleAll
+      .filter((p) => matchLabel(p.name))
+      .slice(0, LIMIT)
+      .map((p) => ({
+        id: p.id,
+        kind: "artist" as const,
+        name: p.name,
+        secondary: null,
+        imageUrl: p.photoUrl || null,
+      }));
+    // Interleave so exact-prefix matches rank first regardless of kind.
+    const score = (name: string) => {
+      const n = name.toLowerCase();
+      if (!q) return 2;
+      if (n === q) return 0;
+      if (n.startsWith(q)) return 1;
+      return 2;
+    };
+    const rows = [...labelRows, ...artistRows]
+      .sort((a, b) => score(a.name) - score(b.name) || a.name.localeCompare(b.name))
+      .slice(0, LIMIT);
+    res.json({ results: rows });
+  });
+
   // ─── Admin invitations ─────────────────────────────────────────
   // A super-admin issues an invite (email + role + optional scope id),
   // we mail a one-shot link, and the recipient sets a username + password
