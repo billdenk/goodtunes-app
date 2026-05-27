@@ -1,6 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Disc3, GripVertical } from "lucide-react";
+import {
+  AlertTriangle,
+  Disc3,
+  GripVertical,
+  RotateCcw,
+  Undo2,
+  Redo2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -23,6 +31,11 @@ import { cn } from "@/lib/utils";
 // chosen press format. Persists `vinylSide` + `vinylOrder` on each
 // song independently of the digital `trackNumber` so streaming +
 // library reads keep using the digital order.
+//
+// Task #594 — Tightened drag-activation + drop semantics so a tiny
+// nudge no longer reorders; added Undo / Redo / Reset-to-original
+// toolbar at the top of the panel so an accidental drop is always
+// recoverable.
 
 export interface VinylSongLite {
   id: string;
@@ -162,6 +175,12 @@ function workingsEqual(a: WorkingState, b: WorkingState): boolean {
   return true;
 }
 
+// Pointer movement under this threshold (px) is treated as a "drop on
+// yourself" — no reorder, no save. Apple Music tolerates roughly this
+// much wiggle before committing a row drag; keeps a misclick from
+// shifting everything below.
+const DRAG_THRESHOLD_PX = 6;
+
 export function VinylOrderPanel({
   albumId,
   songs,
@@ -181,9 +200,31 @@ export function VinylOrderPanel({
   const rule = VINYL_FORMAT_RULES[effectiveFormat];
   const sides = rule.sides;
 
-  const [working, setWorking] = useState<WorkingState>(() =>
-    deriveWorkingState(songs, sides),
+  const initialDerived = useMemo(
+    () => deriveWorkingState(songs, sides),
+    // We deliberately only re-derive when the format or server fingerprint
+    // changes — see the effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
+  const [working, setWorking] = useState<WorkingState>(initialDerived);
+  // Task #594 — per-mount Undo / Redo history. `snapshots[0]` is the
+  // "original" the Reset button reverts to; every successful commit
+  // appends. The cursor moves forward on commit, backward on undo,
+  // forward again on redo. Reset truncates the stack back to [0].
+  const [snapshots, setSnapshots] = useState<WorkingState[]>([initialDerived]);
+  const [cursor, setCursor] = useState(0);
+  // Refs let the serverFingerprint effect read the latest history
+  // without taking it as a dependency (which would loop).
+  const snapshotsRef = useRef(snapshots);
+  const cursorRef = useRef(cursor);
+  useEffect(() => {
+    snapshotsRef.current = snapshots;
+  }, [snapshots]);
+  useEffect(() => {
+    cursorRef.current = cursor;
+  }, [cursor]);
+
   // Fingerprint the server's view of vinyl ordering so failed saves or
   // any external mutation (not just track-count changes) re-syncs the
   // local working state. We key on the persisted shape rather than on
@@ -200,16 +241,31 @@ export function VinylOrderPanel({
       .join("|");
   }, [songs]);
   useEffect(() => {
-    setWorking(deriveWorkingState(songs, sides));
+    const derived = deriveWorkingState(songs, sides);
+    const currentCursorSnap = snapshotsRef.current[cursorRef.current];
+    // If the server already matches whatever the cursor is pointing at
+    // (the common case after a successful save settles), leave the
+    // working state + history alone — otherwise we'd stomp an in-flight
+    // Undo/Redo whose write hasn't round-tripped yet.
+    if (currentCursorSnap && workingsEqual(derived, currentCursorSnap)) {
+      return;
+    }
+    // Server genuinely changed under us (rollback after error, or a
+    // sibling tab edited the album). Treat as a fresh baseline.
+    setWorking(derived);
+    setSnapshots([derived]);
+    setCursor(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveFormat, serverFingerprint]);
 
   const [dragId, setDragId] = useState<string | null>(null);
+  const dragStartPointRef = useRef<{ x: number; y: number } | null>(null);
   const [dropTarget, setDropTarget] = useState<
-    | { kind: "row"; id: string }
+    | { kind: "row"; id: string; position: "before" | "after" }
     | { kind: "side"; side: VinylSide }
     | null
   >(null);
+  const [resetConfirm, setResetConfirm] = useState(false);
 
   const songsById = useMemo(() => {
     const m = new Map<string, VinylSongLite>();
@@ -237,15 +293,32 @@ export function VinylOrderPanel({
     },
   });
 
-  const commit = (next: WorkingState) => {
+  // The single write path for every state change (drag, undo, redo,
+  // reset). `record` controls whether the new state pushes onto the
+  // history stack — drags push, undo/redo/reset jump the cursor and
+  // skip pushing.
+  const applyState = (
+    next: WorkingState,
+    opts: { record: boolean; resetStack?: boolean },
+  ) => {
     if (workingsEqual(next, working)) return;
     setWorking(next);
+    if (opts.resetStack) {
+      setSnapshots([next]);
+      setCursor(0);
+    } else if (opts.record) {
+      // Truncate any redo tail before appending — the new branch
+      // invalidates the prior redo history.
+      setSnapshots((prev) => [...prev.slice(0, cursor + 1), next]);
+      setCursor((c) => c + 1);
+    }
     saveMut.mutate(next);
   };
 
   // ── DnD ───────────────────────────────────────────────────────────
   const onDragStart = (id: string) => (e: React.DragEvent) => {
     setDragId(id);
+    dragStartPointRef.current = { x: e.clientX, y: e.clientY };
     try {
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData("text/plain", id);
@@ -256,15 +329,45 @@ export function VinylOrderPanel({
   const onDragEnd = () => {
     setDragId(null);
     setDropTarget(null);
+    dragStartPointRef.current = null;
   };
-  const onRowDragOver = (id: string) => (e: React.DragEvent) => {
-    if (!dragId || dragId === id) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    setDropTarget({ kind: "row", id });
+
+  // Did the pointer actually move far enough to count as a real drag?
+  // Micro-movements within DRAG_THRESHOLD_PX are treated as a no-op so
+  // a stray nudge can't shift the row below.
+  const isMeaningfulMovement = (e: React.DragEvent): boolean => {
+    const start = dragStartPointRef.current;
+    if (!start) return true;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    return Math.hypot(dx, dy) >= DRAG_THRESHOLD_PX;
   };
+
+  const onRowDragOver =
+    (id: string) => (e: React.DragEvent<HTMLLIElement>) => {
+      if (!dragId || dragId === id) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const rect = e.currentTarget.getBoundingClientRect();
+      const position: "before" | "after" =
+        e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+      setDropTarget((prev) => {
+        if (
+          prev?.kind === "row" &&
+          prev.id === id &&
+          prev.position === position
+        ) {
+          return prev;
+        }
+        return { kind: "row", id, position };
+      });
+    };
   const onSideDragOver = (side: VinylSide) => (e: React.DragEvent) => {
     if (!dragId) return;
+    // Padding hover on a side that already has rows is a no-op — the
+    // ring shouldn't light up and a drop here shouldn't snap the row
+    // to the bottom. Only an empty side accepts a side-level drop.
+    if (working[side].length > 0) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setDropTarget((prev) =>
@@ -274,23 +377,40 @@ export function VinylOrderPanel({
   const onRowDrop = (targetId: string) => (e: React.DragEvent) => {
     e.preventDefault();
     const src = dragId;
+    const target = dropTarget;
+    const meaningful = isMeaningfulMovement(e);
     setDragId(null);
     setDropTarget(null);
+    dragStartPointRef.current = null;
     if (!src || src === targetId) return;
-    moveSong(src, { kind: "row", id: targetId });
+    if (!meaningful) return;
+    const position: "before" | "after" =
+      target?.kind === "row" && target.id === targetId
+        ? target.position
+        : "before";
+    moveSong(src, { kind: "row", id: targetId, position });
   };
   const onSideDrop = (side: VinylSide) => (e: React.DragEvent) => {
     e.preventDefault();
     const src = dragId;
+    const meaningful = isMeaningfulMovement(e);
     setDragId(null);
     setDropTarget(null);
+    dragStartPointRef.current = null;
     if (!src) return;
+    if (!meaningful) return;
+    // Only an empty side accepts the drop; padding on a non-empty side
+    // already short-circuited in onSideDragOver but guard here too in
+    // case a stale dragOver landed us in this branch.
+    if (working[side].length > 0) return;
     moveSong(src, { kind: "side", side });
   };
 
   const moveSong = (
     songId: string,
-    target: { kind: "row"; id: string } | { kind: "side"; side: VinylSide },
+    target:
+      | { kind: "row"; id: string; position: "before" | "after" }
+      | { kind: "side"; side: VinylSide },
   ) => {
     const next: WorkingState = {
       A: [...working.A],
@@ -299,26 +419,76 @@ export function VinylOrderPanel({
       D: [...working.D],
     };
     // Remove from current side.
+    let sourceSide: VinylSide | null = null;
     for (const side of sides) {
       const idx = next[side].indexOf(songId);
       if (idx >= 0) {
+        sourceSide = side;
         next[side].splice(idx, 1);
         break;
       }
     }
+    if (!sourceSide) return;
     if (target.kind === "side") {
       next[target.side].push(songId);
     } else {
-      // Insert before the target row.
+      // Find the target row in the post-removal arrays so before/after
+      // resolves against the right index even when the source sat
+      // earlier on the same side.
+      let targetSide: VinylSide | null = null;
+      let targetIdx = -1;
       for (const side of sides) {
         const idx = next[side].indexOf(target.id);
         if (idx >= 0) {
-          next[side].splice(idx, 0, songId);
+          targetSide = side;
+          targetIdx = idx;
           break;
         }
       }
+      if (!targetSide) return;
+      const insertAt =
+        target.position === "after" ? targetIdx + 1 : targetIdx;
+      next[targetSide].splice(insertAt, 0, songId);
     }
-    commit(next);
+    // applyState's workingsEqual guard catches the "dropped exactly
+    // where you came from" case — e.g. drop on the row directly below
+    // your own with pointer in the top half = "before nextRow" = same
+    // index = no change.
+    applyState(next, { record: true });
+  };
+
+  // ── History controls ──────────────────────────────────────────────
+  const canUndo = cursor > 0;
+  const canRedo = cursor < snapshots.length - 1;
+  const canReset = snapshots.length > 1 || cursor !== 0;
+
+  const onUndo = () => {
+    if (!canUndo) return;
+    const next = snapshots[cursor - 1];
+    setCursor(cursor - 1);
+    if (!workingsEqual(next, working)) {
+      setWorking(next);
+      saveMut.mutate(next);
+    }
+  };
+  const onRedo = () => {
+    if (!canRedo) return;
+    const next = snapshots[cursor + 1];
+    setCursor(cursor + 1);
+    if (!workingsEqual(next, working)) {
+      setWorking(next);
+      saveMut.mutate(next);
+    }
+  };
+  const onResetRequest = () => {
+    if (!canReset) return;
+    setResetConfirm(true);
+  };
+  const onResetCancel = () => setResetConfirm(false);
+  const onResetConfirm = () => {
+    setResetConfirm(false);
+    const original = snapshots[0];
+    applyState(original, { record: false, resetStack: true });
   };
 
   // ── Render helpers ────────────────────────────────────────────────
@@ -358,6 +528,83 @@ export function VinylOrderPanel({
 
   return (
     <div className="space-y-4" data-testid="panel-vinyl-order">
+      {/* Task #594 — Undo / Redo / Reset toolbar. Keeps the chrome
+          quiet (ghost buttons, h-8) so it sits above the side list
+          without competing with the per-side cards. */}
+      <div
+        className="flex items-center gap-1.5"
+        data-testid="toolbar-vinyl-history"
+      >
+        {!resetConfirm ? (
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-slate-700"
+              disabled={!canUndo}
+              onClick={onUndo}
+              data-testid="button-vinyl-undo"
+            >
+              <Undo2 className="w-3.5 h-3.5 mr-1" />
+              Undo
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-slate-700"
+              disabled={!canRedo}
+              onClick={onRedo}
+              data-testid="button-vinyl-redo"
+            >
+              <Redo2 className="w-3.5 h-3.5 mr-1" />
+              Redo
+            </Button>
+            <div className="flex-1" />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-slate-600"
+              disabled={!canReset}
+              onClick={onResetRequest}
+              data-testid="button-vinyl-reset"
+            >
+              <RotateCcw className="w-3.5 h-3.5 mr-1" />
+              Reset to original
+            </Button>
+          </>
+        ) : (
+          <div
+            className="flex items-center gap-2 text-xs text-slate-700 w-full"
+            data-testid="confirm-vinyl-reset"
+          >
+            <span>Revert to the saved vinyl order?</span>
+            <div className="flex-1" />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2"
+              onClick={onResetCancel}
+              data-testid="button-vinyl-reset-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 px-3"
+              onClick={onResetConfirm}
+              data-testid="button-vinyl-reset-confirm"
+            >
+              Reset
+            </Button>
+          </div>
+        )}
+      </div>
+
       {/* Task #583 — the format dropdown was retired with the move into
           the Physical tab; cut format derives from the album's
           Sell-panel `physicalFormat` pick. The disclaimer stays so the
@@ -442,6 +689,10 @@ export function VinylOrderPanel({
                     const isDragging = dragId === id;
                     const isDropTarget =
                       dropTarget?.kind === "row" && dropTarget.id === id;
+                    const dropPosition =
+                      isDropTarget && dropTarget?.kind === "row"
+                        ? dropTarget.position
+                        : null;
                     return (
                       <li
                         key={id}
@@ -451,13 +702,28 @@ export function VinylOrderPanel({
                         onDragOver={onRowDragOver(id)}
                         onDrop={onRowDrop(id)}
                         className={cn(
-                          "flex items-center gap-3 px-4 py-2.5 border-t border-slate-100 cursor-grab active:cursor-grabbing select-none",
+                          "relative flex items-center gap-3 px-4 py-2.5 border-t border-slate-100 cursor-grab active:cursor-grabbing select-none",
                           i === 0 && "border-t-0",
                           isDragging && "opacity-40",
-                          isDropTarget && "bg-[var(--brand-blue)]/5",
                         )}
                         data-testid={`vinyl-row-${id}`}
                       >
+                        {/* Insertion indicator — a thin brand-blue rule
+                            on the top or bottom edge of the hovered
+                            row so the artist sees exactly where the
+                            drop will land. */}
+                        {dropPosition === "before" && (
+                          <span
+                            aria-hidden
+                            className="pointer-events-none absolute left-3 right-3 top-0 h-[2px] bg-[var(--brand-blue)] rounded-full"
+                          />
+                        )}
+                        {dropPosition === "after" && (
+                          <span
+                            aria-hidden
+                            className="pointer-events-none absolute left-3 right-3 bottom-0 h-[2px] bg-[var(--brand-blue)] rounded-full"
+                          />
+                        )}
                         <GripVertical className="w-4 h-4 text-slate-300 shrink-0" />
                         <div className="w-6 text-center text-[11.5px] tabular-nums text-slate-400">
                           {i + 1}
