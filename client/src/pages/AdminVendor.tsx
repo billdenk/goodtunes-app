@@ -26,7 +26,7 @@ import { VendorPreviewCard } from "@/components/admin/previews/VendorPreviewCard
 import { GoodDeedServicesTab } from "@/components/admin/GoodDeedServicesTab";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
-import { AdminPartnerDashboardCard } from "@/components/admin/AdminPartnerDashboardCard";
+import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
 import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
@@ -540,7 +540,7 @@ export function AdminVendor() {
 
         {/* CONTENT */}
         {tab === "dashboard" && (
-          <AdminPartnerDashboardCard
+          <AdminPartnerDashboard
             scope="vendor"
             scopeKindQs="vendor"
             scopeIdQs={vendor.id}

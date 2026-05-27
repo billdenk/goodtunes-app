@@ -9,7 +9,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AddressAutocompleteField } from "@/components/admin/AddressAutocompleteField";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
-import { AdminPartnerDashboardCard } from "@/components/admin/AdminPartnerDashboardCard";
+import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -277,7 +277,7 @@ export function AdminFulfillmentPartner() {
         </div>
 
         {tab === "dashboard" && (
-          <AdminPartnerDashboardCard
+          <AdminPartnerDashboard
             scope="vendor"
             scopeKindQs="fulfillment"
             scopeIdQs={f.id}

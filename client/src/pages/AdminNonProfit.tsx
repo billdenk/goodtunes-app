@@ -10,7 +10,7 @@ import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
 import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
-import { AdminPartnerDashboardCard } from "@/components/admin/AdminPartnerDashboardCard";
+import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { queryClient } from "@/lib/queryClient";
 import type { PartnerAddressSnapshot } from "@shared/schema";
 
@@ -202,7 +202,7 @@ export default function AdminNonProfit() {
         </div>
 
         {tab === "dashboard" && (
-          <AdminPartnerDashboardCard
+          <AdminPartnerDashboard
             scope="npo"
             scopeIdQs={npo.id}
             title={npo.name}

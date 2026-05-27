@@ -32,7 +32,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
-import { AdminPartnerDashboardCard } from "@/components/admin/AdminPartnerDashboardCard";
+import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import {
@@ -409,7 +409,7 @@ export function AdminLabel() {
         </div>
 
         {tab === "dashboard" && (
-          <AdminPartnerDashboardCard
+          <AdminPartnerDashboard
             scope="label"
             scopeIdQs={label.id}
             title={label.name}

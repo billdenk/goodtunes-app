@@ -19,7 +19,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AddressAutocompleteField } from "@/components/admin/AddressAutocompleteField";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
-import { AdminPartnerDashboardCard } from "@/components/admin/AdminPartnerDashboardCard";
+import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
@@ -327,7 +327,7 @@ export function AdminManufacturer() {
         </div>
 
         {tab === "dashboard" && (
-          <AdminPartnerDashboardCard
+          <AdminPartnerDashboard
             scope="vendor"
             scopeKindQs="manufacturer"
             scopeIdQs={m.id}

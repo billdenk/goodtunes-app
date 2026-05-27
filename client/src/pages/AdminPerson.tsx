@@ -35,7 +35,7 @@ import { EditablePanel } from "@/components/admin/EditablePanel";
 import { NewAlbumTitleDialog } from "@/components/admin/NewAlbumTitleDialog";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
-import { AdminPartnerDashboardCard } from "@/components/admin/AdminPartnerDashboardCard";
+import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
@@ -494,7 +494,7 @@ export function AdminPerson() {
 
         {/* TAB CONTENT */}
         {tab === "dashboard" && (
-          <AdminPartnerDashboardCard
+          <AdminPartnerDashboard
             scope="artist"
             scopeIdQs={person.id}
             title={person.name}
