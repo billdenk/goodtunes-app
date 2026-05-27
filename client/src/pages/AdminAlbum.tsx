@@ -255,7 +255,7 @@ interface SongLite {
   vinylOrder?: number | null;
 }
 
-type Tab = "overview" | "tracks" | "bonus" | "sell" | "press" | "shopify";
+type Tab = "overview" | "tracks" | "sell" | "press" | "shopify";
 // Task #335 — the visible tab set is now driven by `sellMode` +
 // `sellQuoteLockedAt`. Before the operator locks a quote we only show
 // Overview/Tracks/Sell so the page stays focused on "decide what we're
@@ -274,21 +274,19 @@ function visibleTabsFor(album: {
     { key: "sell", label: "Design" },
     { key: "tracks", label: "Digital" },
   ];
-  // Bonus is part of the digital offering — always available, no gate.
-  const bonus: { key: Tab; label: string } = { key: "bonus", label: "Bonus" };
   const released = album.isGoodTunesRelease === true && album.isPrepping === false;
   const fulfillmentUnlocked = !!album.sellQuoteLockedAt || released;
   if (album.sellMode === "direct") {
     return fulfillmentUnlocked
-      ? [...base, { key: "press", label: "Physical" }, bonus]
-      : [...base, bonus];
+      ? [...base, { key: "press", label: "Physical" }]
+      : base;
   }
   if (album.sellMode === "shopify") {
     return fulfillmentUnlocked
-      ? [...base, { key: "shopify", label: "Shopify" }, bonus]
-      : [...base, bonus];
+      ? [...base, { key: "shopify", label: "Shopify" }]
+      : base;
   }
-  return [...base, bonus];
+  return base;
 }
 
 // Legacy "Migrate to Mux" admin action — removed 2026-05 once auto-ingest
@@ -350,7 +348,7 @@ export function AdminAlbum() {
     () => new Set(),
   );
   // Selection mode + its checkboxes only make sense on the Tracks tab. If
-  // the operator wanders to Overview/Bonus mid-selection, drop the mode so
+  // the operator wanders to Overview mid-selection, drop the mode so
   // the header reverts to the standalone delete-album trash button instead
   // of stranding a stale "Delete N Tracks" CTA on a tab that has no tracks
   // visible.
@@ -666,7 +664,7 @@ export function AdminAlbum() {
   useEffect(() => {
     if (!album) return;
     const allowed = visibleTabsFor(album).map((t) => t.key);
-    if (!allowed.includes(tab)) setTab("sell");
+    if (!allowed.includes(tab)) setTab(tab === ("bonus" as Tab) ? "tracks" : "sell");
   }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, tab, album]);
 
   // Auto-open the mode picker once the row arrives without a sellMode.
@@ -992,7 +990,7 @@ export function AdminAlbum() {
               </button>
             </div>
           ) : tab !== "tracks" ? (
-            // Overview + Bonus: the operator only needs the "nuke this
+            // Overview tab: the operator only needs the "nuke this
             // album" path; the multi-track delete options are scoped to
             // the Tracks tab where the checkboxes actually live.
             <button
@@ -1117,9 +1115,6 @@ export function AdminAlbum() {
                     })
                   }
                 />
-              )}
-              {safeTab === "bonus" && allowed.has("bonus") && (
-                <BonusPanel album={album} onEdit={openInClassicAdmin} />
               )}
               {safeTab === "sell" && allowed.has("sell") && (
                 <SellPanel
@@ -2284,9 +2279,24 @@ function TracksPanel({
     reorderMut.mutate(next);
   };
 
+  // Shared bonus stack — Videos + Photos + deferred-assets footnote.
+  // Folded into the Tracks tab (used to be its own Bonus tab) and rendered
+  // in BOTH the empty and non-empty branches so operators on a fresh
+  // album can still upload videos/photos before any tracks exist.
+  const bonusStack = (
+    <>
+      <BonusVideos albumId={album.id} onEdit={onEdit} />
+      <BonusPhotos albumId={album.id} onEdit={onEdit} />
+      <p className="text-slate-400 text-[11px] leading-relaxed px-1">
+        Liner notes, lyric sheets, commentary, and press-kit assets are
+        deferred — see roadmap.
+      </p>
+    </>
+  );
+
   if (sorted.length === 0 && !adding) {
     return (
-      <>
+      <div className="space-y-5">
       <Card
         className="rounded-2xl shadow-sm p-8"
         data-testid="panel-tracks-empty"
@@ -2339,13 +2349,15 @@ function TracksPanel({
         nextTrackNumber={1}
         onSaved={invalidateAlbum}
       />
-      </>
+      {bonusStack}
+      </div>
     );
   }
 
   return (
+    <div className="space-y-5 mb-32">
     <Card
-      className="relative rounded-2xl shadow-sm overflow-hidden mb-32"
+      className="relative rounded-2xl shadow-sm overflow-hidden"
       data-testid="panel-tracks"
     >
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
@@ -2658,6 +2670,8 @@ function TracksPanel({
         onOpenChange={setCreditsImportOpen}
       />
     </Card>
+    {bonusStack}
+    </div>
   );
 }
 
@@ -11623,25 +11637,6 @@ type PhotoSheetMode =
   | { kind: "closed" }
   | { kind: "new"; initialFile?: File }
   | { kind: "edit"; photo: AlbumPhoto };
-
-function BonusPanel({
-  album,
-  onEdit,
-}: {
-  album: AlbumFull;
-  onEdit: () => void;
-}) {
-  return (
-    <div className="space-y-5">
-      <BonusVideos albumId={album.id} onEdit={onEdit} />
-      <BonusPhotos albumId={album.id} onEdit={onEdit} />
-      <p className="text-slate-400 text-[11px] leading-relaxed px-1">
-        Liner notes, lyric sheets, commentary, and press-kit assets are
-        deferred — see roadmap.
-      </p>
-    </div>
-  );
-}
 
 function BonusVideos({
   albumId,
