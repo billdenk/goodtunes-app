@@ -13,7 +13,7 @@ type InviteInfo = {
   email: string;
   role: string;
   roleLabel: string;
-  inviteRole?: "identity" | "manager" | "team" | null;
+  inviteRole?: "identity" | "manager" | "team" | "npo_ambassador" | "npo_staff" | null;
   targetPersonName?: string | null;
   preFlightedAlbumTitle?: string | null;
 };
@@ -111,6 +111,8 @@ export default function AcceptInvite() {
           {data.inviteRole === "team" ? "You're on the team"
             : data.inviteRole === "manager" ? "You're a manager"
             : data.inviteRole === "identity" ? "Claim your artist page"
+            : data.inviteRole === "npo_ambassador" ? "You're an ambassador"
+            : data.inviteRole === "npo_staff" ? "You're on the non-profit team"
             : "You're invited"}
         </h1>
         <p className="text-sm text-slate-600 mb-6">

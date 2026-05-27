@@ -1179,6 +1179,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { registerWelcomeBackRoutes } = await import("./welcomeBack");
   registerWelcomeBackRoutes(app, { requireAuth, requireAdmin, generateAuthToken: generateToken });
 
+  // Task #545 — Non-profit portal (ambassador / staff / artist invites).
+  const { registerNpoPortalRoutes } = await import("./npoPortal");
+  registerNpoPortalRoutes(app, requireAdmin);
+
   // ─── Task #536 — "What's New" welcome-back sheet ───────────────────
   // Recognition gate: returns whether the current customer should see
   // the sheet, their library count, and the current `WHATS_NEW_VERSION`
@@ -16099,6 +16103,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       `);
       const existing = ((a as any).rows ?? [])[0]?.id ?? null;
       landingPath = existing ? `/admin/albums/${existing}` : "/welcome-invitee";
+    } else if (ir === "npo_ambassador" || ir === "npo_staff") {
+      // Task #545 — NPO ambassadors and staff land on the NPO
+      // dashboard, where the "Invite an artist" CTA is exposed for them.
+      landingPath = "/non-profit";
     } else {
       landingPath =
         invite.role === "non_profit" ? "/non-profit"
@@ -16689,7 +16697,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const r = await db.execute<any>(sql`SELECT id, name, logo_url, website_url FROM organizations WHERE id = ${orgId} AND kind = 'non_profit' LIMIT 1`);
     const row = ((r as any).rows ?? [])[0];
     if (!row) return res.status(404).json({ message: "Non-profit not found" });
-    res.json({ id: row.id, name: row.name, logoUrl: row.logo_url, websiteUrl: row.website_url });
+    // Task #545 — surface caller capabilities so the dashboard knows
+    // which invite CTAs to show (and which tabs to render).
+    const { npoInviteCapabilities } = await import("./npoPortal");
+    const caller = await npoInviteCapabilities(req.session.userId!, orgId);
+    res.json({
+      id: row.id, name: row.name, logoUrl: row.logo_url, websiteUrl: row.website_url,
+      caller,
+    });
   });
 
   app.get("/api/non-profit/dashboard", requireAdmin, async (req, res) => {
