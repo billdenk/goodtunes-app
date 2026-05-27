@@ -3477,6 +3477,53 @@ function PhotoLightbox({ photos, startIndex, onClose }: { photos: AlbumPhoto[]; 
 interface BonusVideo { id: string; albumId: string; title: string; videoUrl: string; posterUrl: string | null; position: number; }
 interface BonusPhoto { id: string; albumId: string; photoUrl: string; caption: string | null; position: number; }
 
+// Bonus-video tile with poster fallback. When the <video> element
+// can't decode the source (legacy .mov / .m4v rows that slipped past
+// the importer, codec the browser refuses, transient 404 on the
+// object, etc.), we hide the <video>, keep the poster as a still
+// background, and overlay a small "Couldn't play this video" line so
+// the shelf doesn't go visually blank.
+function BonusVideoPlayer({ video }: { video: BonusVideo }) {
+  const [errored, setErrored] = useState(false);
+  return (
+    <div
+      className="relative rounded-lg overflow-hidden bg-black/40"
+      style={{ aspectRatio: "16 / 9" }}
+    >
+      {!errored ? (
+        <video
+          src={video.videoUrl}
+          poster={video.posterUrl ?? undefined}
+          controls
+          playsInline
+          preload="none"
+          className="w-full h-full object-cover"
+          onError={() => setErrored(true)}
+          data-testid={`video-album-bonus-${video.id}`}
+        />
+      ) : (
+        <>
+          {video.posterUrl ? (
+            <img
+              src={video.posterUrl}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full bg-black/60" />
+          )}
+          <div
+            className="absolute inset-x-0 bottom-0 flex items-center justify-center px-3 py-2 text-xs font-medium text-white/90 bg-black/55 backdrop-blur-sm"
+            data-testid={`text-album-bonus-video-unplayable-${video.id}`}
+          >
+            Couldn't play this video
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // Task #190 — fan-side per-album lineup rail. Reads the snapshot the
 // admin captured on the album's Overview → Lineup panel. Renders
 // nothing when the album has no lineup (solo records and ungrouped
@@ -3605,16 +3652,7 @@ export function AlbumBonusContent({ albumId }: { albumId: string }) {
                   className="w-[260px] flex-shrink-0"
                   data-testid={`tile-album-video-${v.id}`}
                 >
-                  <div className="relative rounded-lg overflow-hidden bg-black/40" style={{ aspectRatio: "16 / 9" }}>
-                    <video
-                      src={v.videoUrl}
-                      poster={v.posterUrl ?? undefined}
-                      controls
-                      playsInline
-                      preload="none"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
+                  <BonusVideoPlayer video={v} />
                   <p className="mt-2 text-[14px] text-white font-medium truncate">{v.title}</p>
                 </div>
               ))}
@@ -3654,16 +3692,7 @@ export function AlbumBonusContent({ albumId }: { albumId: string }) {
             <div className="flex flex-col gap-5">
               {videos.map((v) => (
                 <div key={v.id} data-testid={`tile-all-album-video-${v.id}`}>
-                  <div className="relative rounded-lg overflow-hidden bg-black/40" style={{ aspectRatio: "16 / 9" }}>
-                    <video
-                      src={v.videoUrl}
-                      poster={v.posterUrl ?? undefined}
-                      controls
-                      playsInline
-                      preload="none"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
+                  <BonusVideoPlayer video={v} />
                   <p className="mt-2 text-[15px] text-white font-medium">{v.title}</p>
                 </div>
               ))}
