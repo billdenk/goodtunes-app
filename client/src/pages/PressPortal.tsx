@@ -24,11 +24,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
-import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight } from "lucide-react";
+import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DashboardTabs, DashboardPanel } from "@/components/partner/dashboard-controls";
@@ -147,6 +148,11 @@ interface CustomerRow {
   lifetimeUnits: number;
   latestStage: string | null;
   state: "invited" | "accepted" | "active";
+  // Only set on `state === "invited"` rows so the row can render
+  // Resend / Revoke / Copy-link affordances.
+  inviteId?: string;
+  acceptUrl?: string;
+  expiresAt?: string | null;
 }
 interface SwitchingRow { kind: "artist" | "label"; id: string; name: string; photo: string | null; switched_at: string; }
 
@@ -221,14 +227,22 @@ function CustomersTab({ pressId }: { pressId: string }) {
                       {c.latestStage && ` · ${STAGE_LABEL[c.latestStage] ?? c.latestStage}`}
                     </div>
                   </div>
-                  <Link
-                    href={c.kind === "artist" ? `/admin/people/${c.id}` : `/admin/labels/${c.id}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-[color:var(--brand-blue)] text-xs font-semibold hover:underline"
-                    data-testid={`link-customer-${c.id}`}
-                  >
-                    Open <ArrowRight className="inline w-3 h-3" />
-                  </Link>
+                  {c.state === "invited" && c.inviteId && c.acceptUrl ? (
+                    <InviteActions
+                      pressId={pressId}
+                      inviteId={c.inviteId}
+                      acceptUrl={c.acceptUrl}
+                    />
+                  ) : (
+                    <Link
+                      href={c.kind === "artist" ? `/admin/people/${c.id}` : `/admin/labels/${c.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-[color:var(--brand-blue)] text-xs font-semibold hover:underline"
+                      data-testid={`link-customer-${c.id}`}
+                    >
+                      Open <ArrowRight className="inline w-3 h-3" />
+                    </Link>
+                  )}
                 </li>
               );
             })}
@@ -495,7 +509,79 @@ function timeAgo(iso: string | null): string {
   if (h >= 1) return `${h}h ago`;
   return "just now";
 }
-interface PipelineInvited { id: string; email: string; role: string; createdAt: string; expiresAt: string; }
+interface PipelineInvited { id: string; email: string; role: string; createdAt: string; expiresAt: string; acceptUrl: string; }
+
+// Shared Resend / Revoke / Copy-link controls. Used by both the
+// Customers tab (inline on "Invited" rows) and the Pipeline tab
+// (inside the Invited-column cards). All mutations invalidate the
+// two press-scoped lists that surface invites.
+function InviteActions({
+  pressId,
+  inviteId,
+  acceptUrl,
+}: { pressId: string; inviteId: string; acceptUrl: string }) {
+  const { toast } = useToast();
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/customers`] });
+    queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/pipeline`] });
+    queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/summary`] });
+  };
+  const resend = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/press/${pressId}/invites/${inviteId}/resend`),
+    onSuccess: () => { toast({ title: "Invite resent" }); invalidate(); },
+    onError: (e: any) => toast({ title: "Resend failed", description: e?.message ?? "Try again.", variant: "destructive" }),
+  });
+  const revoke = useMutation({
+    mutationFn: () => apiRequest("DELETE", `/api/press/${pressId}/invites/${inviteId}`),
+    onSuccess: () => { toast({ title: "Invite revoked" }); invalidate(); },
+    onError: (e: any) => toast({ title: "Revoke failed", description: e?.message ?? "Try again.", variant: "destructive" }),
+  });
+  const onCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(acceptUrl);
+      toast({ title: "Link copied", description: "Paste it anywhere you want." });
+    } catch {
+      toast({ title: "Couldn't copy", description: acceptUrl, variant: "destructive" });
+    }
+  };
+  return (
+    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+      <IconButton
+        variant="ghost"
+        label="Copy invite link"
+        title="Copy invite link"
+        onClick={onCopy}
+        data-testid={`button-copy-invite-${inviteId}`}
+      >
+        <Link2 />
+      </IconButton>
+      <IconButton
+        variant="ghost"
+        label="Resend invite email"
+        title="Resend invite email"
+        onClick={() => resend.mutate()}
+        disabled={resend.isPending}
+        data-testid={`button-resend-invite-${inviteId}`}
+      >
+        {resend.isPending ? <Loader2 className="animate-spin" /> : <Send />}
+      </IconButton>
+      <IconButton
+        variant="ghost"
+        label="Revoke invite"
+        title="Revoke invite"
+        onClick={() => {
+          if (window.confirm("Revoke this invite? The link will stop working.")) revoke.mutate();
+        }}
+        disabled={revoke.isPending}
+        className="text-[color:var(--brand-heart)]"
+        data-testid={`button-revoke-invite-${inviteId}`}
+      >
+        {revoke.isPending ? <Loader2 className="animate-spin" /> : <XIcon />}
+      </IconButton>
+    </div>
+  );
+}
 interface PipelineAccepted { kind: "artist" | "label"; id: string; name: string; email: string | null; createdAt: string; }
 
 function PipelineTab({ pressId }: { pressId: string }) {
@@ -532,8 +618,13 @@ function PipelineTab({ pressId }: { pressId: string }) {
               <div className="space-y-2 min-h-[80px]">
                 {s.id === "invited" && invited.map((iv) => (
                   <DashboardPanel key={iv.id} padding="sm">
-                    <div className="text-sm font-semibold truncate" data-testid={`card-invite-${iv.id}`}>{iv.email}</div>
-                    <div className="text-white/55 text-xs mt-1">Pending {iv.role}</div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold truncate" data-testid={`card-invite-${iv.id}`}>{iv.email}</div>
+                        <div className="text-white/55 text-xs mt-1">Pending {iv.role}</div>
+                      </div>
+                      <InviteActions pressId={pressId} inviteId={iv.id} acceptUrl={iv.acceptUrl} />
+                    </div>
                   </DashboardPanel>
                 ))}
                 {s.id === "accepted" && accepted.map((c) => (

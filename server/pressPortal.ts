@@ -133,6 +133,19 @@ async function lockedQuoteForAlbum(albumId: string, pressId: string): Promise<{ 
   return { totalCents: Number(row.total_cents) || 0, quantity: Number(row.quantity) || 0 };
 }
 
+// Build the public origin (proto + host) for invite accept links. The
+// press portal puts the resulting URL on a "Copy link" affordance so
+// the operator can paste it into Messenger / iMessage / Slack when
+// email delivery is iffy.
+function pressInviteAcceptBase(req: Request): string {
+  const proto =
+    (req.headers["x-forwarded-proto"] as string) ||
+    (req as any).protocol ||
+    "https";
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  return `${proto}://${host}`;
+}
+
 export function registerPressPortalRoutes(
   app: Express,
   requireAdmin: any,
@@ -293,12 +306,14 @@ export function registerPressPortalRoutes(
     }));
     const invitedRows = await db.execute<any>(sql`
       SELECT ai.id, ai.email, ai.role, ai.role_scope_id AS scope_id,
+             ai.token, ai.expires_at AS expires_at,
              ai.created_at AS joined_at
       FROM admin_invites ai
       WHERE ai.default_press_id = ${pressId}
         AND ai.used_at IS NULL AND ai.revoked_at IS NULL
         AND ai.expires_at > NOW()
     `);
+    const acceptUrlBase = pressInviteAcceptBase(req);
     const invited = ((invitedRows as any).rows ?? []).map((r: any) => ({
       kind: r.role === "label" ? "label" : "artist",
       id: r.scope_id ?? r.id,
@@ -310,6 +325,13 @@ export function registerPressPortalRoutes(
       lifetimeUnits: 0,
       latestStage: null,
       state: "invited",
+      // The press-portal Customers list re-uses these invite rows
+      // to power Resend / Revoke / Copy-link. `inviteId` is the
+      // admin_invites row id (distinct from `id`, which collapses
+      // to the scope row so the Open link works for accepted rows).
+      inviteId: r.id,
+      acceptUrl: `${acceptUrlBase}/invite/${r.token}`,
+      expiresAt: r.expires_at,
     }));
     const switching = await db.execute<any>(sql`
       SELECT h.customer_kind AS kind, h.customer_id AS id, h.switched_at,
@@ -605,8 +627,8 @@ export function registerPressPortalRoutes(
         unitsSoldToDate: a.units_sold ?? 0,
       });
     }
-    const invited = await db.execute<any>(sql`
-      SELECT ai.id, ai.email, ai.role, ai.created_at AS "createdAt",
+    const invitedRaw = await db.execute<any>(sql`
+      SELECT ai.id, ai.email, ai.role, ai.token, ai.created_at AS "createdAt",
              ai.expires_at AS "expiresAt"
       FROM admin_invites ai
       WHERE ai.default_press_id = ${pressId}
@@ -614,6 +636,15 @@ export function registerPressPortalRoutes(
         AND ai.expires_at > NOW()
       ORDER BY ai.created_at DESC
     `);
+    const inviteBase = pressInviteAcceptBase(req);
+    const invited = { rows: ((invitedRaw as any).rows ?? []).map((r: any) => ({
+      id: r.id,
+      email: r.email,
+      role: r.role,
+      createdAt: r.createdAt,
+      expiresAt: r.expiresAt,
+      acceptUrl: `${inviteBase}/invite/${r.token}`,
+    })) };
     // "Accepted" column — customers (artists + labels) who signed up
     // against this press but haven't created an album yet. We exclude
     // anyone with at least one non-deleted album (those land in the
@@ -733,9 +764,7 @@ export function registerPressPortalRoutes(
       UPDATE admin_invites SET default_press_id = ${pressId} WHERE id = ${invite.id}
     `);
 
-    const proto = (req.headers["x-forwarded-proto"] as string) || (req as any).protocol || "https";
-    const host = req.headers["x-forwarded-host"] || req.headers.host;
-    const acceptUrl = `${proto}://${host}/invite/${token}`;
+    const acceptUrl = `${pressInviteAcceptBase(req)}/invite/${token}`;
     const press = await storage.getManufacturerById(pressId);
     const inviterName = press?.name ?? "Your press partner";
     const roleLabel = role === "artist" ? "Artist" : "Label";
@@ -748,6 +777,65 @@ export function registerPressPortalRoutes(
     );
     res.json({ id: invite.id, email: invite.email, acceptUrl, emailDelivered: result.ok });
   });
+
+  // POST /api/press/:id/invites/:inviteId/resend — mint a fresh token,
+  // extend expiry, re-email. Scoped to invites belonging to this press
+  // (default_press_id match) so one press can't touch another's queue.
+  app.post(
+    "/api/press/:id/invites/:inviteId/resend",
+    requireAdmin,
+    requirePressScope,
+    async (req: Request, res: Response) => {
+      const pressId = String(req.params.id);
+      const inviteId = String(req.params.inviteId);
+      const existing = await storage.getAdminInviteById(inviteId);
+      if (!existing || (existing as any).defaultPressId !== pressId) {
+        return res.status(404).json({ message: "Invite not found" });
+      }
+      if (existing.usedAt) return res.status(410).json({ message: "Invite already accepted" });
+      if ((existing as any).revokedAt) {
+        return res.status(410).json({ message: "Invite was revoked — send a new one" });
+      }
+      const crypto = await import("crypto");
+      const newToken = crypto.randomBytes(32).toString("base64url");
+      const INVITE_TTL_DAYS = 14;
+      const newExpiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+      const updated = await storage.resendAdminInvite(existing.id, newToken, newExpiresAt);
+      if (!updated) return res.status(500).json({ message: "Resend failed" });
+      const acceptUrl = `${pressInviteAcceptBase(req)}/invite/${newToken}`;
+      const { sendAdminInviteEmail } = await import("./mail");
+      const press = await storage.getManufacturerById(pressId);
+      const inviterName = press?.name ?? "Your press partner";
+      const roleLabel = updated.role === "artist" ? "Artist" : "Label";
+      const result = await sendAdminInviteEmail(
+        updated.email,
+        acceptUrl,
+        inviterName,
+        roleLabel,
+        INVITE_TTL_DAYS,
+      );
+      res.json({ id: updated.id, acceptUrl, emailDelivered: result.ok });
+    },
+  );
+
+  // DELETE /api/press/:id/invites/:inviteId — soft-revoke a pending
+  // invite. Same scope check as resend; the audit row stays put.
+  app.delete(
+    "/api/press/:id/invites/:inviteId",
+    requireAdmin,
+    requirePressScope,
+    async (req: Request, res: Response) => {
+      const pressId = String(req.params.id);
+      const inviteId = String(req.params.inviteId);
+      const existing = await storage.getAdminInviteById(inviteId);
+      if (!existing || (existing as any).defaultPressId !== pressId) {
+        return res.status(404).json({ message: "Invite not found" });
+      }
+      if (existing.usedAt) return res.status(410).json({ message: "Invite already accepted" });
+      await storage.revokeAdminInvite(inviteId);
+      res.json({ ok: true });
+    },
+  );
 
   // POST /api/press/:id/albums/:albumId/masters/triggered
   // Manual "trigger now" affordance — but the BUSINESS RULE is that
