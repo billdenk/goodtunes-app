@@ -672,20 +672,22 @@ export function SellPanel({
           className="relative rounded-2xl shadow-sm overflow-hidden mb-8"
           data-testid="panel-formats"
         >
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
-            <div>
+          <div className="flex items-start justify-between gap-6 px-5 py-3.5 border-b border-slate-100">
+            <div className="min-w-0">
               <h2 className="text-slate-900 text-[14px] font-bold">Design your Package</h2>
               <p className="text-slate-500 text-[11.5px] mt-0.5">
                 The plan here is to determine what you'd like your package to look like: 12{"\""} LP? Booklet? Printed GoodDeed? It's all up to you. The calculator is for you to see what you could earn. But, in the end it's up to the fans. So, have fun, pick your package, vinyl color, save it. Then, let's get your offering to your fans!
               </p>
             </div>
             {availableFormats.length > 0 && (
-              <AddPhysicalGoodButton
-                availableFormats={availableFormats}
-                onAdd={(format) =>
-                  setDraftFormats((prev) => (prev.includes(format) ? prev : [...prev, format]))
-                }
-              />
+              <div className="flex-shrink-0">
+                <AddPhysicalGoodButton
+                  availableFormats={availableFormats}
+                  onAdd={(format) =>
+                    setDraftFormats((prev) => (prev.includes(format) ? prev : [...prev, format]))
+                  }
+                />
+              </div>
             )}
           </div>
           <div className="px-5 py-4">
