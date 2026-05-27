@@ -12166,29 +12166,91 @@ function VideoTile({
   onEdit: () => void;
   busy: boolean;
 }) {
+  // Primary click on the tile plays the video in place. Edit + Delete
+  // remain reachable as discrete affordances in TileActions (separate
+  // focus stops, keyboard-accessible). If the file genuinely can't
+  // play, surface an inline error instead of a dead click.
+  const [playing, setPlaying] = useState(false);
+  const [errored, setErrored] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
   return (
     <div
       className="group relative aspect-video rounded-xl overflow-hidden bg-slate-900 ring-1 ring-slate-200 shadow-sm"
       data-testid={`tile-video-${video.id}`}
     >
-      {video.posterUrl ? (
-        <img
-          src={video.posterUrl}
-          alt=""
-          className="w-full h-full object-cover"
+      {playing && !errored ? (
+        <video
+          ref={videoRef}
+          src={video.videoUrl}
+          poster={video.posterUrl || undefined}
+          controls
+          autoPlay
+          playsInline
+          preload="metadata"
+          className="w-full h-full object-contain bg-black"
+          onError={() => {
+            setErrored(true);
+            setPlaying(false);
+          }}
+          data-testid={`video-player-${video.id}`}
         />
       ) : (
-        <video
-          src={video.videoUrl}
-          preload="metadata"
-          className="w-full h-full object-cover"
-          muted
-        />
+        <>
+          {video.posterUrl ? (
+            <img
+              src={video.posterUrl}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <video
+              src={video.videoUrl}
+              preload="metadata"
+              className="w-full h-full object-cover"
+              muted
+            />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+          {errored ? (
+            <div className="absolute inset-0 flex items-center justify-center p-3">
+              <div
+                className="text-center text-white text-xs font-medium drop-shadow"
+                data-testid={`text-video-error-${video.id}`}
+              >
+                Couldn't play this video —{" "}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit();
+                  }}
+                  className="underline underline-offset-2 hover:text-[var(--brand-blue)]"
+                  data-testid={`button-video-error-edit-${video.id}`}
+                >
+                  open to edit
+                </button>
+                .
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setErrored(false);
+                setPlaying(true);
+              }}
+              aria-label={`Play ${video.title}`}
+              className="absolute inset-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-inset"
+              data-testid={`button-play-video-${video.id}`}
+            >
+              <Play className="w-9 h-9 text-white/85 drop-shadow-lg" />
+            </button>
+          )}
+        </>
       )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
-      <Play className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-9 h-9 text-white/85 drop-shadow-lg" />
       <div
-        className="absolute bottom-2 left-2 right-2 text-white text-[12px] font-semibold truncate drop-shadow"
+        className="absolute bottom-2 left-2 right-2 text-white text-xs font-semibold truncate drop-shadow pointer-events-none"
         data-testid={`text-video-title-${video.id}`}
       >
         {video.title}
