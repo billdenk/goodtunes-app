@@ -8,6 +8,11 @@ import {
   type VinylFormat,
   type VinylSide,
 } from "@shared/vinylFormatRules";
+import {
+  balancedLayout,
+  computeVinylSuggestion,
+  type VinylSongInput,
+} from "@shared/vinylSideSolver";
 import { cn } from "@/lib/utils";
 
 // Task #541 — Vinyl-order view. Sits inside the Tracks panel under a
@@ -102,19 +107,30 @@ function deriveWorkingState(
   // order on first edit").
   if (unassigned.length > 0) {
     unassigned.sort((a, b) => a.trackNumber - b.trackNumber);
-    // Balanced auto-split across sides when nothing is assigned and we
-    // have multiple sides — better than dumping everything on Side A.
-    const everyoneUnassigned = unassigned.length === songs.length;
-    if (everyoneUnassigned && sides.length > 1) {
-      const perSide = Math.ceil(unassigned.length / sides.length);
-      let cursor = 0;
-      for (const side of sides) {
-        const slice = unassigned.slice(cursor, cursor + perSide);
-        state[side] = slice.map((s) => s.id);
-        cursor += perSide;
+    state[sides[0]].push(...unassigned.map((s) => s.id));
+  }
+  // Task #593 — rebalance when the format gives us more sides than the
+  // persisted layout actually uses (e.g. the operator just bumped from
+  // Single LP to Double LP and Sides C/D would otherwise be empty), or
+  // on first open when nothing has been assigned yet. Greedy longest-
+  // first into the currently-shortest side, deterministic by digital
+  // trackNumber within a side. Once the artist has put something on
+  // every available side we leave their layout alone.
+  if (songs.length > 0 && sides.length > 1) {
+    const usedSides = new Set<VinylSide>();
+    for (const s of songs) {
+      if (s.vinylSide && sides.includes(s.vinylSide as VinylSide)) {
+        usedSides.add(s.vinylSide as VinylSide);
       }
-    } else {
-      state[sides[0]].push(...unassigned.map((s) => s.id));
+    }
+    if (usedSides.size === 0 || usedSides.size < sides.length) {
+      const input: VinylSongInput[] = songs.map((s) => ({
+        id: s.id,
+        title: s.title,
+        duration: s.duration,
+        trackNumber: s.trackNumber,
+      }));
+      return balancedLayout(input, sides);
     }
   }
   return state;
@@ -312,30 +328,33 @@ export function VinylOrderPanel({
       return sum + (s?.duration ?? 0);
     }, 0);
 
-  // Non-prescriptive hint: if a side is over the threshold and there
-  // exists a strictly shorter side, suggest moving its longest track to
-  // that lighter side. Only one hint at a time to keep the panel quiet.
+  // Task #593 — solver lives in `shared/vinylSideSolver.ts`. The panel
+  // only renders copy here; every suggestion the helper returns, if
+  // accepted, leaves every side under its cap. Preference order is
+  // move → swap → format-bump → won't-fit.
   const suggestion = useMemo<string | null>(() => {
-    const overSide = sides.find(
-      (side) => sideTotalSeconds(side) / 60 > rule.maxMinutesPerSide,
-    );
-    if (!overSide) return null;
-    const longestId = [...working[overSide]].sort((a, b) => {
-      const sa = songsById.get(a)?.duration ?? 0;
-      const sb = songsById.get(b)?.duration ?? 0;
-      return sb - sa;
-    })[0];
-    const longest = longestId ? songsById.get(longestId) : null;
-    if (!longest) return null;
-    const lighter = sides
-      .filter((s) => s !== overSide)
-      .map((s) => ({ side: s, total: sideTotalSeconds(s) }))
-      .sort((a, b) => a.total - b.total)[0];
-    if (!lighter) return null;
-    if (lighter.total >= sideTotalSeconds(overSide)) return null;
-    return `Side ${overSide} is over the safe length. Consider moving “${longest.title}” (${formatRuntime(longest.duration)}) to Side ${lighter.side}.`;
+    const input: VinylSongInput[] = songs.map((s) => ({
+      id: s.id,
+      title: s.title,
+      duration: s.duration,
+      trackNumber: s.trackNumber,
+    }));
+    const res = computeVinylSuggestion(working, input, effectiveFormat);
+    if (!res) return null;
+    switch (res.kind) {
+      case "move":
+        return `Side ${res.fromSide} is over the safe length. Consider moving “${res.songTitle}” (${formatRuntime(res.songDuration)}) to Side ${res.toSide}.`;
+      case "swap":
+        return `Swap “${res.aTitle}” (${formatRuntime(res.aDuration)}) on Side ${res.aSide} with “${res.bTitle}” (${formatRuntime(res.bDuration)}) on Side ${res.bSide}.`;
+      case "bump-format":
+        return `This runtime won't fit on ${rule.label}. Consider bumping to ${res.toLabel} — change the physical format in the Sell panel.`;
+      case "wont-fit": {
+        const mins = Math.round(res.totalSeconds / 60);
+        return `This album runs ${mins} minutes — it won't fit on ${res.largestLabel}. Consider trimming a track or splitting the release.`;
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [working, sides, rule, songsById]);
+  }, [working, songs, effectiveFormat, rule]);
 
   return (
     <div className="space-y-4" data-testid="panel-vinyl-order">
