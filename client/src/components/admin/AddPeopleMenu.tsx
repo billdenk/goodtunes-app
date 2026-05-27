@@ -251,6 +251,33 @@ function PersonPicker({
   });
 
   const { toast } = useToast();
+  // Inline "+ Create '<name>' as a new Person" — fires when the People
+  // search returns zero matches and the operator wants to mint a bare
+  // row from just the typed name. Mirrors the same POST /api/admin/people
+  // the Spotify and Prefill paths use; the parent dialog's flow then
+  // takes over (attach as Contact, grant admin role, etc.). For Add
+  // Admin specifically the subsequent grant-admin-role call will return
+  // a clear error if there's no matching admin account, pointing the
+  // operator at Invite Artist.
+  const createBareMut = useMutation({
+    mutationFn: async (name: string) => {
+      const created = await apiRequest("POST", "/api/admin/people", { name });
+      return (await created.json()) as PersonLite;
+    },
+    onSuccess: (p) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/people"] });
+      onChange({ id: p.id, name: p.name, photoUrl: p.photoUrl ?? null });
+      setQ("");
+      toast({ title: `Added ${p.name}` });
+    },
+    onError: (e) =>
+      toast({
+        title: "Couldn't create Person",
+        description: humanizeApiError(e),
+        variant: "destructive",
+      }),
+  });
+
   const createFromSpotify = useMutation({
     mutationFn: async (cand: SpotifyCandidate) => {
       // Mint a Person row from the Spotify candidate using the existing
@@ -512,8 +539,22 @@ function PersonPicker({
               <Loader2 className="w-3.5 h-3.5 animate-spin" /> Searching…
             </li>
           ) : localMatches.length === 0 ? (
-            <li className="px-3 py-2 text-xs text-slate-500">
-              No matches in People.
+            <li className="px-3 py-2 flex items-center justify-between gap-2">
+              <span className="text-xs text-slate-500">No matches in People.</span>
+              <button
+                type="button"
+                onClick={() => createBareMut.mutate(q.trim())}
+                disabled={createBareMut.isPending || !q.trim()}
+                className="text-xs font-semibold text-[var(--brand-blue)] hover:underline inline-flex items-center gap-1 disabled:opacity-60"
+                data-testid={`button-${testIdPrefix}-create-bare`}
+              >
+                {createBareMut.isPending ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Plus className="w-3 h-3" />
+                )}
+                Create “{q.trim()}”
+              </button>
             </li>
           ) : (
             localMatches.map((p) => (
@@ -709,6 +750,13 @@ function AttachContactDialog(
             onChange={setPicked}
             excludeIds={props.attachedIds}
             testIdPrefix={`${props.testIdPrefix}-${props.kind}`}
+            // Bill 2026-05-27: press/NPO/label/maker/reseller admins
+            // are often the same people who already have a Spotify
+            // artist row (label founders who release records, NPO
+            // ambassadors who tour), so surface the same Spotify
+            // fallback here that Invite Artist uses — not just the
+            // paste-a-URL prefill.
+            enableSpotify
             // Paste-a-URL prefill: a scraped JSON-LD `jobTitle`
             // (vendor team pages, label staff pages) maps onto the Role
             // input here so the operator doesn't retype it. Only fills
