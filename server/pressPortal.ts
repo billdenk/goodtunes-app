@@ -464,6 +464,8 @@ export function registerPressPortalRoutes(
              a.masters_triggered_at, a.masters_approved_by_artist_at,
              a.press_invoice_url, a.press_invoice_total_cents,
              a.press_invoice_uploaded_at, a.press_invoice_outside_system,
+             a.press_invoice_transfer_id, a.press_invoice_transferred_at,
+             a.press_invoice_transfer_amount_cents, a.press_invoice_transfer_error,
              a.cert_batch_shipped_to_fulfillment_at,
              a.fulfillment_heads_up_sent_at, a.fulfillment_heads_up_qty,
              a.primary_artist_id, a.label_id,
@@ -588,6 +590,10 @@ export function registerPressPortalRoutes(
         pressInvoiceTotalCents: a.press_invoice_total_cents,
         pressInvoiceUploadedAt: a.press_invoice_uploaded_at,
         pressInvoiceOutsideSystem: a.press_invoice_outside_system,
+        pressInvoiceTransferId: a.press_invoice_transfer_id,
+        pressInvoiceTransferredAt: a.press_invoice_transferred_at,
+        pressInvoiceTransferAmountCents: a.press_invoice_transfer_amount_cents,
+        pressInvoiceTransferError: a.press_invoice_transfer_error,
         invoiceVarianceCents,
         invoiceVariancePct,
         invoiceVarianceTier,
@@ -890,7 +896,90 @@ export function registerPressPortalRoutes(
       }
     }
 
-    res.json({ ok: true });
+    // Task #527 — earmark the captured total to the press's Stripe
+    // Connect account. `outsideSystem` skips this branch entirely (the
+    // press is being paid through a non-GoodTunes channel). Idempotency
+    // is per (album, invoice identity): re-POSTing the same invoice
+    // (HTTP retry, double-click) collapses onto the same transfer; a
+    // corrected invoice (different URL or total) is a new identity and
+    // mints a fresh transfer, with the prior transfer state cleared
+    // here so a failed/skipped remint can never display stale "✓".
+    let transferResult: any = null;
+    if (!outsideSystem && totalCents != null && totalCents > 0) {
+      transferResult = await mintPressInvoiceTransfer(albumId, pressId, totalCents);
+    } else if (outsideSystem) {
+      // Switching to "billed outside" clears any prior earmark UI so
+      // the operator isn't shown a stale transfer chip on a card that
+      // no longer has a system-tracked invoice.
+      await db.execute(sql`
+        UPDATE albums
+        SET press_invoice_transfer_id = NULL,
+            press_invoice_transferred_at = NULL,
+            press_invoice_transfer_amount_cents = NULL,
+            press_invoice_transfer_error = NULL,
+            press_invoice_transfer_invoice_key = NULL
+        WHERE id = ${albumId}
+      `);
+    }
+
+    res.json({ ok: true, transfer: transferResult });
+  });
+
+  // GET /api/press/:id/payouts — Settings → Payouts data: the press's
+  // Stripe Connect account state plus a roll-up of every captured
+  // invoice with its variance vs the locked quote and the transfer
+  // status. Read-only — actual Connect onboarding still lives on
+  // /admin/manufacturers/:id?tab=payouts via the shared payouts panel.
+  app.get("/api/press/:id/payouts", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const acctRows = await db.execute<any>(sql`
+      SELECT id, stripe_account_id AS "stripeAccountId",
+             payouts_enabled AS "payoutsEnabled",
+             charges_enabled AS "chargesEnabled",
+             details_submitted AS "detailsSubmitted",
+             last_synced_at AS "lastSyncedAt"
+      FROM payout_accounts
+      WHERE owner_kind = 'manufacturer' AND owner_id = ${pressId}
+      LIMIT 1
+    `);
+    const account = ((acctRows as any).rows ?? [])[0] ?? null;
+    const invoiceRows = await db.execute<any>(sql`
+      SELECT a.id AS "albumId", a.title, a.cover_url AS "coverUrl",
+             a.press_invoice_total_cents AS "invoiceTotalCents",
+             a.press_invoice_uploaded_at AS "invoiceUploadedAt",
+             a.press_invoice_outside_system AS "outsideSystem",
+             a.press_invoice_transfer_id AS "transferId",
+             a.press_invoice_transferred_at AS "transferredAt",
+             a.press_invoice_transfer_amount_cents AS "transferAmountCents",
+             a.press_invoice_transfer_error AS "transferError",
+             por.total_cents AS "lockedTotalCents"
+      FROM albums a
+      JOIN LATERAL (
+        SELECT por.total_cents
+        FROM pressing_order_requests por
+        WHERE por.album_id = a.id
+          AND por.status <> 'cancelled'
+          AND por.package_snapshot ->> 'pressId' = ${pressId}
+        ORDER BY (por.status = 'approved') DESC, por.submitted_at DESC
+        LIMIT 1
+      ) por ON true
+      WHERE a.deleted_at IS NULL
+        AND (a.press_invoice_uploaded_at IS NOT NULL OR a.press_invoice_outside_system = true)
+      ORDER BY a.press_invoice_uploaded_at DESC NULLS LAST
+      LIMIT 50
+    `);
+    const invoices = ((invoiceRows as any).rows ?? []).map((r: any) => {
+      let varianceCents: number | null = null;
+      let variancePct: number | null = null;
+      let varianceTier: "ok" | "warn" | "flag" | null = null;
+      if (r.invoiceTotalCents != null && r.lockedTotalCents) {
+        varianceCents = r.invoiceTotalCents - r.lockedTotalCents;
+        variancePct = Math.abs(varianceCents) / r.lockedTotalCents;
+        varianceTier = variancePct > 0.1 ? "flag" : variancePct > 0.05 ? "warn" : "ok";
+      }
+      return { ...r, varianceCents, variancePct, varianceTier };
+    });
+    res.json({ account, invoices });
   });
 
   // POST /api/press/:id/albums/:albumId/fulfillment-heads-up — fire a
@@ -1147,6 +1236,157 @@ async function notifyFulfillmentHeadsUp(albumId: string, pressId: string, qty: n
     console.log(`[notify] fulfillment-heads-up album=${albumId} press=${pressId} qty=${qty} update=${isUpdate} mail=${result.ok ? "sent" : `failed:${result.reason}`}`);
   } catch (e) {
     console.log(`[notify] fulfillment-heads-up threw: ${(e as Error).message}`);
+  }
+}
+
+// Task #527 — Mint a Stripe Connect transfer earmarking the press's
+// captured invoice total to its connected account. Looks up the
+// press's payout_accounts row (ownerKind='manufacturer', ownerId=pressId);
+// if there isn't one, or its payouts aren't enabled, we stamp the
+// failure reason on the album so the Payouts subtab can surface a
+// "Connect Stripe" CTA.
+//
+// Idempotency is keyed on (album, invoice identity) — NOT album alone.
+// `invoiceKey` is a short hash of the captured invoice's URL + total,
+// so:
+//   - Re-POSTing the same invoice (HTTP retry, double-click) collapses
+//     onto the same Stripe transfer (stable `idempotencyKey`) AND
+//     short-circuits server-side once we've already stamped that key
+//     on the album.
+//   - Uploading a corrected invoice (new URL or new total) is a
+//     different invoice identity → mints a NEW transfer. The latest
+//     transfer wins on the album row; admins reverse the prior one
+//     out-of-band if double-paying is a concern (see Task #532 for
+//     the planned auto-reversal flow).
+async function mintPressInvoiceTransfer(
+  albumId: string,
+  pressId: string,
+  totalCents: number,
+): Promise<{
+  status: "transferred" | "skipped" | "failed" | "already_transferred";
+  transferId?: string;
+  amountCents?: number;
+  invoiceKey?: string;
+  error?: string;
+}> {
+  // Invoice identity fingerprint: URL + total. Short hash keeps the
+  // Stripe idempotency_key under Stripe's 255-char cap and free of
+  // URL-unsafe characters.
+  const { createHash } = await import("node:crypto");
+  const invoiceRows = await db.execute<any>(sql`
+    SELECT press_invoice_url, press_invoice_total_cents,
+           press_invoice_transfer_id, press_invoice_transfer_amount_cents,
+           press_invoice_transfer_invoice_key
+    FROM albums WHERE id = ${albumId} LIMIT 1
+  `);
+  const albumRow = ((invoiceRows as any).rows ?? [])[0];
+  const invoiceUrl: string = albumRow?.press_invoice_url ?? "";
+  const invoiceKey = createHash("sha1")
+    .update(`${invoiceUrl}|${totalCents}`)
+    .digest("hex")
+    .slice(0, 16);
+  const stripeIdempotencyKey = `press_invoice_${albumId}_${invoiceKey}`;
+  const priorTransferId: string | null = albumRow?.press_invoice_transfer_id ?? null;
+  const priorInvoiceKey: string | null = albumRow?.press_invoice_transfer_invoice_key ?? null;
+
+  // 1) Server-side short-circuit: same invoice identity already minted
+  //    a transfer → return the existing one. (Stripe-side
+  //    idempotency_key is the safety net for the same key creating two
+  //    transfers; this short-circuit saves the network round-trip.)
+  if (priorTransferId && priorInvoiceKey === invoiceKey) {
+    return {
+      status: "already_transferred",
+      transferId: priorTransferId,
+      amountCents: Number(albumRow.press_invoice_transfer_amount_cents) || 0,
+      invoiceKey,
+    };
+  }
+
+  // 2) New invoice identity (or first capture) — clear any prior
+  //    transfer state so a failed/skipped remint can never display a
+  //    stale "✓ earmarked" chip from the previous invoice.
+  if (priorTransferId) {
+    console.log(`[press-transfer] album=${albumId} press=${pressId} superseding prior transfer ${priorTransferId} (key=${priorInvoiceKey ?? "?"}) → new invoiceKey=${invoiceKey} total=${totalCents}c`);
+  }
+  await db.execute(sql`
+    UPDATE albums
+    SET press_invoice_transfer_id = NULL,
+        press_invoice_transferred_at = NULL,
+        press_invoice_transfer_amount_cents = NULL,
+        press_invoice_transfer_error = NULL,
+        press_invoice_transfer_invoice_key = NULL
+    WHERE id = ${albumId}
+  `);
+
+  // 2) Look up the press's Connect account via payout_accounts.
+  const acctRows = await db.execute<any>(sql`
+    SELECT stripe_account_id, payouts_enabled
+    FROM payout_accounts
+    WHERE owner_kind = 'manufacturer' AND owner_id = ${pressId}
+    LIMIT 1
+  `);
+  const acct = ((acctRows as any).rows ?? [])[0];
+  if (!acct?.stripe_account_id) {
+    const reason = "No Stripe Connect account on press";
+    await db.execute(sql`
+      UPDATE albums SET press_invoice_transfer_error = ${reason}
+      WHERE id = ${albumId}
+    `);
+    console.log(`[press-transfer] album=${albumId} press=${pressId} skipped — ${reason}`);
+    return { status: "skipped", error: reason };
+  }
+  if (!acct.payouts_enabled) {
+    const reason = "Stripe Connect account not yet payouts-enabled";
+    await db.execute(sql`
+      UPDATE albums SET press_invoice_transfer_error = ${reason}
+      WHERE id = ${albumId}
+    `);
+    console.log(`[press-transfer] album=${albumId} press=${pressId} skipped — ${reason}`);
+    return { status: "skipped", error: reason };
+  }
+
+  // 3) Mint the transfer. Idempotency-keyed on (album, invoiceKey) so
+  //    a retry of the SAME captured invoice collapses to the same
+  //    Stripe transfer object; a corrected invoice keys differently
+  //    and mints a fresh one.
+  try {
+    const { getStripe } = await import("./stripe");
+    const stripe = await getStripe();
+    const transfer = await stripe.transfers.create(
+      {
+        amount: totalCents,
+        currency: "usd",
+        destination: acct.stripe_account_id,
+        transfer_group: `press_invoice_${albumId}`,
+        metadata: {
+          gt_kind: "press_invoice",
+          gt_album_id: albumId,
+          gt_press_id: pressId,
+          gt_invoice_total_cents: String(totalCents),
+          gt_invoice_key: invoiceKey,
+        },
+      },
+      { idempotencyKey: stripeIdempotencyKey },
+    );
+    await db.execute(sql`
+      UPDATE albums
+      SET press_invoice_transfer_id = ${transfer.id},
+          press_invoice_transferred_at = NOW(),
+          press_invoice_transfer_amount_cents = ${totalCents},
+          press_invoice_transfer_invoice_key = ${invoiceKey},
+          press_invoice_transfer_error = NULL
+      WHERE id = ${albumId}
+    `);
+    console.log(`[press-transfer] album=${albumId} press=${pressId} transfer=${transfer.id} amount=${totalCents}c key=${invoiceKey}`);
+    return { status: "transferred", transferId: transfer.id, amountCents: totalCents, invoiceKey };
+  } catch (e: any) {
+    const reason = e?.message ?? "Stripe transfer failed";
+    await db.execute(sql`
+      UPDATE albums SET press_invoice_transfer_error = ${reason}
+      WHERE id = ${albumId}
+    `);
+    console.log(`[press-transfer] album=${albumId} press=${pressId} FAILED — ${reason}`);
+    return { status: "failed", error: reason };
   }
 }
 

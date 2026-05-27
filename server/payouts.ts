@@ -118,7 +118,16 @@ async function gatePayoutOwner(
     return null;
   }
   const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
-  const scope = { kind: (ownerKind === "person" ? "artist" : "label") as any, id: ownerId };
+  // Task #527 — manufacturer (press) Connect accounts route through
+  // the same partner-permissions gate as artist/label accounts; the
+  // `manufacturer` scope kind is already in PARTNER_SCOPE_KINDS, so
+  // any manufacturer-role admin with `managePayouts` may connect /
+  // refresh their press's Stripe account.
+  const scopeKind =
+    ownerKind === "person" ? "artist"
+    : ownerKind === "manufacturer" ? "manufacturer"
+    : "label";
+  const scope = { kind: scopeKind as any, id: ownerId };
   return checkPartnerVerbForScope(userId, "manage_payouts", scope);
 }
 
@@ -403,6 +412,10 @@ export function registerPayoutRoutes(app: Express) {
     } else if (ownerKind === "label") {
       const [l] = await db.select({ id: labels.id, name: labels.name }).from(labels).where(eq(labels.id, ownerId));
       if (!l) return res.status(404).json({ message: "Label not found" });
+    } else if (ownerKind === "manufacturer") {
+      const { manufacturers } = await import("@shared/schema");
+      const [m] = await db.select({ id: manufacturers.id, name: manufacturers.name }).from(manufacturers).where(eq(manufacturers.id, ownerId));
+      if (!m) return res.status(404).json({ message: "Press not found" });
     } else {
       const [o] = await db.select({ id: organizations.id, name: organizations.name }).from(organizations).where(eq(organizations.id, ownerId));
       if (!o) return res.status(404).json({ message: "Organization not found" });

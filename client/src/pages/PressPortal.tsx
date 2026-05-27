@@ -471,6 +471,10 @@ interface PipelineAlbum {
   pressInvoiceTotalCents: number | null;
   pressInvoiceUploadedAt: string | null;
   pressInvoiceOutsideSystem: boolean;
+  pressInvoiceTransferId: string | null;
+  pressInvoiceTransferredAt: string | null;
+  pressInvoiceTransferAmountCents: number | null;
+  pressInvoiceTransferError: string | null;
   invoiceVarianceCents: number | null;
   invoiceVariancePct: number | null;
   invoiceVarianceTier: "ok" | "warn" | "flag" | null;
@@ -685,6 +689,18 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
         )}
         {a.pressInvoiceOutsideSystem && (
           <div className="text-xs text-white/55 italic">Billed outside the system</div>
+        )}
+        {/* Task #527 — Stripe transfer status. Mint happens on invoice
+            POST; chip reflects last-known state from the pipeline read. */}
+        {a.pressInvoiceTransferId && a.pressInvoiceTransferAmountCents != null && (
+          <div className="text-xs text-[color:var(--brand-mint)]" data-testid={`text-transfer-status-${a.id}`}>
+            ✓ Earmarked ${(a.pressInvoiceTransferAmountCents / 100).toFixed(2)} to your Stripe
+          </div>
+        )}
+        {!a.pressInvoiceTransferId && a.pressInvoiceTransferError && !a.pressInvoiceOutsideSystem && (
+          <div className="text-xs text-[color:var(--brand-pink)]" data-testid={`text-transfer-error-${a.id}`}>
+            Transfer pending: {a.pressInvoiceTransferError}
+          </div>
         )}
         {a.stage === "locked" && !a.fulfillmentHeadsUpSentAt && (
           <div className="flex gap-1">
@@ -923,16 +939,7 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
           >Open catalog editor <ExternalLink className="w-3 h-3" /></Link>
         </DashboardPanel>
       )}
-      {sub === "payouts" && (
-        <DashboardPanel padding="md">
-          <p className="text-sm text-white/75">Payout settings — Stripe earmarking and per-job payout — live on the manufacturer record.</p>
-          <Link
-            href={`/admin/manufacturers/${pressId}?tab=payouts`}
-            className="mt-3 inline-flex items-center gap-1 h-9 px-4 rounded-full bg-white/10 text-white text-sm font-semibold hover:bg-white/15"
-            data-testid="link-payouts-editor"
-          >Open payouts <ExternalLink className="w-3 h-3" /></Link>
-        </DashboardPanel>
-      )}
+      {sub === "payouts" && <PayoutsSubTab pressId={pressId} />}
       {sub === "notifications" && <NotificationsSubTab pressId={pressId} />}
     </div>
   );
@@ -1066,6 +1073,132 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
         >{save.isPending ? "Saving…" : "Save profile"}</Button>
       </div>
     </DashboardPanel>
+  );
+}
+
+// Task #527 — Settings → Payouts subtab. Read-only roll-up of the
+// press's Stripe Connect account state plus every captured invoice
+// with its variance vs the locked quote and the Stripe transfer
+// status. Connect onboarding stays on /admin/manufacturers/:id; this
+// panel just surfaces the data so the press knows whether earmarks
+// are landing.
+type PayoutsResponse = {
+  account: {
+    id: string;
+    stripeAccountId: string | null;
+    payoutsEnabled: boolean;
+    chargesEnabled: boolean;
+    detailsSubmitted: boolean;
+    lastSyncedAt: string | null;
+  } | null;
+  invoices: Array<{
+    albumId: string;
+    title: string;
+    coverUrl: string | null;
+    invoiceTotalCents: number | null;
+    invoiceUploadedAt: string | null;
+    outsideSystem: boolean;
+    transferId: string | null;
+    transferredAt: string | null;
+    transferAmountCents: number | null;
+    transferError: string | null;
+    lockedTotalCents: number | null;
+    varianceCents: number | null;
+    variancePct: number | null;
+    varianceTier: "ok" | "warn" | "flag" | null;
+  }>;
+};
+
+function PayoutsSubTab({ pressId }: { pressId: string }) {
+  const { data, isLoading } = useQuery<PayoutsResponse>({ queryKey: [`/api/press/${pressId}/payouts`] });
+  if (isLoading) return <PanelLoading />;
+  const acct = data?.account ?? null;
+  const invoices = data?.invoices ?? [];
+  return (
+    <div className="space-y-4">
+      <DashboardPanel padding="md">
+        <h3 className="text-base font-semibold mb-2">Stripe payouts</h3>
+        {acct?.stripeAccountId && acct.payoutsEnabled ? (
+          <div className="text-sm text-[color:var(--brand-mint)]" data-testid="text-payouts-enabled">
+            ✓ Connected — invoice captures earmark to your Stripe account automatically.
+          </div>
+        ) : acct?.stripeAccountId ? (
+          <div className="text-sm text-amber-300" data-testid="text-payouts-pending">
+            Stripe account connected but not yet payouts-enabled. Finish onboarding to receive earmarks.
+          </div>
+        ) : (
+          <div className="text-sm text-white/75" data-testid="text-payouts-missing">
+            No Stripe Connect account yet. Captured invoices won't be earmarked until you connect one.
+          </div>
+        )}
+        <Link
+          href={`/admin/manufacturers/${pressId}?tab=payouts`}
+          className="mt-3 inline-flex items-center gap-1 h-9 px-4 rounded-full bg-white/10 text-white text-sm font-semibold hover:bg-white/15"
+          data-testid="link-payouts-editor"
+        >Open payouts <ExternalLink className="w-3 h-3" /></Link>
+      </DashboardPanel>
+
+      <DashboardPanel padding="md">
+        <h3 className="text-base font-semibold mb-3">Recent invoice captures</h3>
+        {invoices.length === 0 ? (
+          <p className="text-sm text-white/55">No invoices captured yet.</p>
+        ) : (
+          <div className="divide-y divide-white/10">
+            {invoices.map((inv) => (
+              <div key={inv.albumId} className="py-2 flex items-start gap-3" data-testid={`row-payout-invoice-${inv.albumId}`}>
+                {inv.coverUrl && <img src={inv.coverUrl} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold truncate">{inv.title}</div>
+                  <div className="text-xs text-white/55 flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                    {inv.outsideSystem ? (
+                      <span className="italic">Billed outside the system</span>
+                    ) : (
+                      <>
+                        {inv.invoiceTotalCents != null && (
+                          <span>Invoice ${(inv.invoiceTotalCents / 100).toFixed(2)}</span>
+                        )}
+                        {inv.lockedTotalCents != null && (
+                          <span>Quote ${(inv.lockedTotalCents / 100).toFixed(2)}</span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  {inv.varianceTier && inv.variancePct != null && (
+                    <span
+                      className={
+                        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold " +
+                        (inv.varianceTier === "flag"
+                          ? "bg-[color:var(--brand-pink)]/20 text-[color:var(--brand-pink)] ring-1 ring-[color:var(--brand-pink)]/40"
+                          : inv.varianceTier === "warn"
+                            ? "bg-amber-400/20 text-amber-300 ring-1 ring-amber-400/30"
+                            : "bg-[color:var(--brand-mint)]/15 text-[color:var(--brand-mint)] ring-1 ring-[color:var(--brand-mint)]/30")
+                      }
+                      data-testid={`badge-payout-variance-${inv.albumId}`}
+                      title={`Variance vs locked quote: ${(inv.varianceCents ?? 0) >= 0 ? "+" : ""}$${((inv.varianceCents ?? 0) / 100).toFixed(2)}`}
+                    >
+                      {(inv.varianceCents ?? 0) >= 0 ? "+" : "−"}{(inv.variancePct * 100).toFixed(0)}%
+                    </span>
+                  )}
+                  {inv.transferId && inv.transferAmountCents != null ? (
+                    <span className="text-xs text-[color:var(--brand-mint)]" data-testid={`text-payout-transferred-${inv.albumId}`}>
+                      ✓ ${(inv.transferAmountCents / 100).toFixed(2)} earmarked
+                    </span>
+                  ) : inv.outsideSystem ? (
+                    <span className="text-xs text-white/55">No transfer</span>
+                  ) : inv.transferError ? (
+                    <span className="text-xs text-[color:var(--brand-pink)]" data-testid={`text-payout-error-${inv.albumId}`}>{inv.transferError}</span>
+                  ) : (
+                    <span className="text-xs text-white/55">Pending</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </DashboardPanel>
+    </div>
   );
 }
 

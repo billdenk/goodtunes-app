@@ -1369,3 +1369,31 @@ SQL
 }
 migrate_fan_recents dev  "${DATABASE_URL:-}"
 migrate_fan_recents prod "${PROD_DATABASE_URL:-}"
+
+# Task #527 — Stripe Connect transfer earmarking for press invoice
+# captures. Adds nullable columns to `albums` so the invoice POST
+# handler can stamp the resulting transfer id / amount / timestamp /
+# invoice-identity key, and surface the last failure reason on the
+# Payouts subtab if Stripe rejected the transfer. Schema-only —
+# additive, idempotent.
+migrate_press_invoice_transfer() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press_invoice_transfer migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS press_invoice_transfer_id           text;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS press_invoice_transferred_at        timestamp;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS press_invoice_transfer_amount_cents integer;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS press_invoice_transfer_error        text;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS press_invoice_transfer_invoice_key  text;
+SQL
+  then
+    echo "post-merge: press_invoice_transfer migration ok on $label"
+  else
+    echo "post-merge: WARNING — press_invoice_transfer migration failed on $label (continuing)"
+  fi
+}
+migrate_press_invoice_transfer dev  "${DATABASE_URL:-}"
+migrate_press_invoice_transfer prod "${PROD_DATABASE_URL:-}"

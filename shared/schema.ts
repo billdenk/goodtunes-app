@@ -297,6 +297,25 @@ export const albums = pgTable("albums", {
   pressInvoiceNote: text("press_invoice_note"),
   pressInvoiceUploadedAt: timestamp("press_invoice_uploaded_at"),
   pressInvoiceOutsideSystem: boolean("press_invoice_outside_system").notNull().default(false),
+  // Task #527 — Stripe Connect transfer earmarking the captured
+  // invoice total to the press's connected account. Set the first
+  // time the invoice POST succeeds (and the press has a payouts-enabled
+  // Connect account); kept stable for the life of the album so the
+  // re-upload path doesn't double-mint. `pressInvoiceTransferError`
+  // captures the most recent failure reason if Stripe rejected the
+  // transfer — surfaced on the press's Payouts subtab so the operator
+  // can fix the underlying account state and retry.
+  pressInvoiceTransferId: text("press_invoice_transfer_id"),
+  pressInvoiceTransferredAt: timestamp("press_invoice_transferred_at"),
+  pressInvoiceTransferAmountCents: integer("press_invoice_transfer_amount_cents"),
+  pressInvoiceTransferError: text("press_invoice_transfer_error"),
+  // Short hash of (invoiceUrl|totalCents) the transfer was minted
+  // against. Lets us tell "same invoice, retry" from "corrected invoice,
+  // remint" without comparing dollars-only (which would collapse two
+  // distinct same-amount invoices). Cleared whenever a new invoice
+  // identity supersedes the prior one, so a failed/skipped remint
+  // can't display a stale prior success.
+  pressInvoiceTransferInvoiceKey: text("press_invoice_transfer_invoice_key"),
   // Heads-up to fulfillment was sent on Locked transition. Re-fires
   // when the locked quantity changes by >5%; we keep the last-sent
   // snapshot so the re-fire check doesn't double-send for tiny drifts.
@@ -2513,7 +2532,7 @@ export type Gift = typeof gifts.$inferSelect;
 // owner row points at `organizations.id`. Payout permission for
 // organization-owned accounts is super-admin only (the partner-permissions
 // scope graph doesn't include non_profit yet).
-export const PAYOUT_OWNER_KINDS = ["person", "label", "organization"] as const;
+export const PAYOUT_OWNER_KINDS = ["person", "label", "organization", "manufacturer"] as const;
 export type PayoutOwnerKind = (typeof PAYOUT_OWNER_KINDS)[number];
 
 export const insertPayoutAccountSchema = createInsertSchema(payoutAccounts)
