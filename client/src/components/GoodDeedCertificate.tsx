@@ -413,8 +413,8 @@ const CertCard = forwardRef(function CertCard(
       ref={ref}
       className="flex-shrink-0 snap-start rounded-3xl overflow-hidden mx-auto flex flex-col"
       style={{
-        width: "min(92vw, calc((100dvh - 220px) / 1.4))",
-        aspectRatio: "1 / 1.4",
+        width: "min(92vw, calc((100dvh - 220px) / 1.22))",
+        aspectRatio: "1 / 1.22",
         boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
         backgroundColor: "var(--brand-bg)",
       }}
@@ -424,47 +424,43 @@ const CertCard = forwardRef(function CertCard(
         <img src={album.artwork} alt={album.title} className="w-full h-full object-cover block" />
       </div>
 
-      {/* Bottom: navy band — wireframe layout matching Bill's mockup.
-          All placeholder content is a single muted slate-blue
-          (rgba(255,255,255,0.32)) rounded rect against brand-navy:
-          solid avatar disc + 2 short top bars + GoodTunes wordmark,
-          3 long body bars in the middle, signature overlaid on a
-          wider bar + solid square QR placeholder at the bottom. No
-          mint, no QR finder pattern, no WILL BOWEN · FOUNDER caption. */}
+      {/* Bottom: compact archival cert strip — art dominates ~82% of
+          the card; this strip is dense, premium, printed-feeling
+          (owner/serial bars + signature + QR only, no body copy). */}
       <div
-        className="relative w-full flex-1 px-5 py-5 flex flex-col justify-between gap-3"
+        className="relative w-full flex-1 px-4 py-3 flex flex-col justify-between gap-2"
         style={{ backgroundColor: "var(--brand-bg)" }}
       >
         {/* Top row */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             {ownerPhotoUrl ? (
               <img
                 src={ownerPhotoUrl}
                 alt=""
-                className="w-[12%] aspect-square rounded-full object-cover flex-shrink-0"
+                className="w-[32px] h-[32px] rounded-full object-cover flex-shrink-0"
                 data-testid="img-cert-owner-photo"
               />
             ) : (
               <div
-                className="w-[12%] aspect-square rounded-full flex-shrink-0"
+                className="w-[32px] h-[32px] rounded-full flex-shrink-0"
                 style={{ background: "rgba(255,255,255,0.32)" }}
                 aria-hidden
                 data-testid="placeholder-cert-owner-avatar"
               />
             )}
             <div
-              className="min-w-0 flex-1 flex flex-col gap-2"
+              className="min-w-0 flex-1 flex flex-col gap-1.5"
               data-testid="text-cert-owner"
               aria-label={`${ownerName} owns no. ${certNumStr} of ${album.title}`}
             >
               <div
-                className="h-[0.55em] min-h-[10px] rounded-full w-[55%]"
+                className="h-2 rounded-full w-[55%]"
                 style={{ background: "rgba(255,255,255,0.32)" }}
                 aria-hidden
               />
               <div
-                className="h-[0.55em] min-h-[10px] rounded-full w-[32%]"
+                className="h-2 rounded-full w-[32%]"
                 style={{ background: "rgba(255,255,255,0.32)" }}
                 aria-hidden
               />
@@ -473,30 +469,23 @@ const CertCard = forwardRef(function CertCard(
           <img
             src="/goodtunes-logo-white.png"
             alt="GoodTunes"
-            className="h-10 w-auto object-contain flex-shrink-0"
+            className="h-8 w-auto object-contain flex-shrink-0"
           />
         </div>
 
-        {/* Middle — 3 body-text bars */}
-        <div className="flex flex-col gap-2" aria-hidden>
-          <div className="h-[0.5em] min-h-[8px] w-[88%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
-          <div className="h-[0.5em] min-h-[8px] w-[80%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
-          <div className="h-[0.5em] min-h-[8px] w-[68%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
-        </div>
-
-        {/* Bottom row — signature overlaid on a bar (left), solid square QR placeholder (right) */}
-        <div className="flex items-end justify-between gap-4">
+        {/* Bottom row — signature overlaid on a bar (left), small square QR placeholder (right) */}
+        <div className="flex items-end justify-between gap-3">
           <div className="flex-1 min-w-0 relative">
-            <div className="h-[0.6em] min-h-[10px] w-[60%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} aria-hidden />
+            <div className="h-2 w-[60%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} aria-hidden />
             <img
               src="/will-signature.png"
               alt="Will Bowen, Founder"
-              className="absolute left-0 bottom-0 h-[2.4em] w-auto max-w-[55%] object-contain object-left-bottom select-none"
+              className="absolute left-0 bottom-0 h-8 w-auto max-w-[55%] object-contain object-left-bottom select-none"
               draggable={false}
             />
           </div>
           <div
-            className="w-[12%] aspect-square rounded-md flex-shrink-0"
+            className="w-8 h-8 rounded-sm flex-shrink-0"
             style={{ background: "rgba(255,255,255,0.32)" }}
             aria-hidden
             title="Per-fan QR — verifies this certificate"

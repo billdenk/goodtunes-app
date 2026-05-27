@@ -3645,29 +3645,34 @@ function GoodDeedPill({
                   bar; bottom-right = solid square QR placeholder. No
                   founder caption, no mint, no QR finder pattern —
                   reads as a pure wireframe template. */}
+              {/* Compact archival-strip footer — art dominates ~80% of
+                  the composition, the cert strip is a thin premium
+                  band carrying only owner/serial bars + signature + QR.
+                  Body-copy bars dropped to keep the strip dense and
+                  collectible, not panel-like. */}
               <div
-                className="w-full text-white flex flex-col justify-between px-5 py-5 aspect-[3/1] gap-3"
+                className="w-full text-white flex flex-col justify-between px-4 py-3 aspect-[4/1] gap-1.5"
                 style={{ backgroundColor: "var(--brand-bg)" }}
                 data-testid="band-gooddeed-cert"
               >
                 {/* Top row — solid avatar + two short bars + GoodTunes wordmark */}
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
                     <div
-                      className="w-[12%] aspect-square rounded-full flex-shrink-0"
+                      className="w-7 h-7 rounded-full flex-shrink-0"
                       style={{ background: "rgba(255,255,255,0.32)" }}
                       aria-label="Owner avatar (per fan)"
                       data-testid="skeleton-gooddeed-avatar"
                     />
-                    <div className="flex-1 min-w-0 flex flex-col gap-2">
+                    <div className="flex-1 min-w-0 flex flex-col gap-1.5">
                       <div
-                        className="h-[40%] min-h-[10px] w-[55%] rounded-full"
+                        className="h-2 w-[55%] rounded-full"
                         style={{ background: "rgba(255,255,255,0.32)" }}
                         aria-label="Owner name (filled in per fan)"
                         data-testid="skeleton-gooddeed-owner"
                       />
                       <div
-                        className="h-[40%] min-h-[10px] w-[32%] rounded-full"
+                        className="h-2 w-[32%] rounded-full"
                         style={{ background: "rgba(255,255,255,0.32)" }}
                         aria-label={`owns no. NN of ${albumTitle || "this release"}`}
                         data-testid="skeleton-gooddeed-serial"
@@ -3677,31 +3682,24 @@ function GoodDeedPill({
                   <img
                     src="/goodtunes-logo-white.png"
                     alt="GoodTunes®"
-                    className="h-8 w-auto object-contain object-right flex-shrink-0"
+                    className="h-7 w-auto object-contain object-right flex-shrink-0"
                     data-testid="mark-goodtunes"
                   />
                 </div>
 
-                {/* Middle — three long body-text bars */}
-                <div className="flex flex-col gap-2" aria-hidden>
-                  <div className="h-[14%] min-h-[8px] w-[88%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
-                  <div className="h-[14%] min-h-[8px] w-[80%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
-                  <div className="h-[14%] min-h-[8px] w-[68%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} />
-                </div>
-
-                {/* Bottom row — signature overlaid on a bar (left), solid square QR placeholder (right) */}
-                <div className="flex items-end justify-between gap-4">
+                {/* Bottom row — signature overlaid on a bar (left), small square QR placeholder (right) */}
+                <div className="flex items-end justify-between gap-3">
                   <div className="flex-1 min-w-0 relative" aria-label="Founder signature" data-testid="signature-gooddeed">
-                    <div className="h-[16%] min-h-[10px] w-[60%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} aria-hidden />
+                    <div className="h-2 w-[60%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} aria-hidden />
                     <img
                       src="/will-signature.png"
                       alt="Will Bowen, Founder"
-                      className="absolute left-0 bottom-0 h-[2.2em] w-auto max-w-[55%] object-contain object-left-bottom select-none"
+                      className="absolute left-0 bottom-0 h-7 w-auto max-w-[55%] object-contain object-left-bottom select-none"
                       draggable={false}
                     />
                   </div>
                   <div
-                    className="w-[12%] aspect-square rounded-md flex-shrink-0"
+                    className="w-7 h-7 rounded-sm flex-shrink-0"
                     style={{ background: "rgba(255,255,255,0.32)" }}
                     aria-hidden
                     title="Per-fan QR — auto-generated at sale time"
