@@ -580,20 +580,20 @@ export function AdminInstruments() {
         }}
       >
         <DialogContent
-          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-0 gap-0 flex flex-col max-h-[calc(100dvh-2rem)] overflow-hidden"
           data-testid="dialog-add-gear"
         >
-          <DialogHeader className="text-left space-y-1">
+          <DialogHeader className="text-left space-y-1 px-6 pt-6 pb-3 flex-shrink-0">
             <DialogTitle className="text-[17px] font-semibold text-slate-900">
               Add gear
             </DialogTitle>
-            <DialogDescription className="text-[13px] text-slate-500 leading-relaxed">
+            <DialogDescription className="text-sm text-slate-500 leading-relaxed pr-6">
               Paste a product URL — Carter Vintage, Reverb, Gibson, Martin,
               Sweetwater, etc. We'll prefill name, category, photo, and
               attach the reseller + maker.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2 pt-1">
+          <div className="space-y-2 px-6 flex-1 overflow-y-auto min-h-0">
             <input
               type="url"
               value={pasteUrl}
@@ -632,10 +632,17 @@ export function AdminInstruments() {
               </p>
             )}
             {scraped && (
-              <div
-                className="mt-2 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3"
-                data-testid="panel-scrape-preview"
-              >
+              <div className="mt-2 space-y-1.5">
+                <p
+                  className="text-xs font-semibold uppercase tracking-wide text-slate-500"
+                  data-testid="text-scrape-preview-label"
+                >
+                  Ready to add — confirm below
+                </p>
+                <div
+                  className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3"
+                  data-testid="panel-scrape-preview"
+                >
                 <div className="flex items-start gap-3">
                   <div className="w-12 h-12 rounded-md overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
                     {scraped.photoUrl ? (
@@ -650,7 +657,7 @@ export function AdminInstruments() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div
-                      className="text-slate-900 text-sm font-semibold truncate"
+                      className="text-slate-900 text-sm font-semibold break-words"
                       data-testid="text-scrape-preview-name"
                     >
                       {scraped.name ?? "Untitled gear"}
@@ -691,17 +698,19 @@ export function AdminInstruments() {
                     {scraped.notice}
                   </p>
                 )}
+                </div>
               </div>
             )}
+            <div className="h-2" />
           </div>
-          <DialogFooter className="gap-2 sm:gap-2">
+          <DialogFooter className="flex-shrink-0 px-6 py-4 border-t border-slate-100 bg-white flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2 sm:space-x-0">
             {scraped ? (
               <>
                 <button
                   type="button"
                   onClick={resetScrape}
                   disabled={createInstrument.isPending}
-                  className="px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  className="w-full sm:w-auto h-9 px-3 rounded-md text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                   data-testid="button-add-gear-reset"
                 >
                   Try another URL
@@ -710,8 +719,7 @@ export function AdminInstruments() {
                   type="button"
                   onClick={confirmCreate}
                   disabled={createInstrument.isPending}
-                  size="sm"
-                  className="text-[12.5px] font-semibold"
+                  className="w-full sm:w-auto h-9 px-4 text-sm font-semibold gap-1.5"
                   data-testid="button-add-gear-confirm"
                 >
                   {createInstrument.isPending && (
@@ -726,7 +734,7 @@ export function AdminInstruments() {
                   type="button"
                   onClick={skipPaste}
                   disabled={scrapeUrl.isPending || createInstrument.isPending}
-                  className="px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  className="w-full sm:w-auto h-9 px-3 rounded-md text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                   data-testid="button-add-gear-skip"
                 >
                   Skip — create blank
@@ -735,8 +743,7 @@ export function AdminInstruments() {
                   type="button"
                   onClick={pullFromUrl}
                   disabled={scrapeUrl.isPending || createInstrument.isPending || !pasteUrl.trim()}
-                  size="sm"
-                  className="text-[12.5px] font-semibold"
+                  className="w-full sm:w-auto h-9 px-4 text-sm font-semibold gap-1.5"
                   data-testid="button-add-gear-pull"
                 >
                   {scrapeUrl.isPending && (
