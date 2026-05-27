@@ -405,7 +405,7 @@ export function AlbumDetailMobileSurface({
             </svg>
             Play
           </button>
-          {ownedNums.length === 0 && album.priceCents != null && (
+          {ownedNums.length === 0 && album.priceCents != null && onOpenBuy && (
             <button
               type="button"
               onClick={onOpenBuy}

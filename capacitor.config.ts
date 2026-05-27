@@ -14,9 +14,12 @@ const config: CapacitorConfig = {
   appId: "fm.goodtunes.player",
   appName: "GoodTunes",
   webDir: "dist/public",
-  bundledWebRuntime: false,
   ios: {
     contentInset: "always",
+    // Background-audio + universal-links capabilities are declared in
+    // Info.plist (UIBackgroundModes=audio) and the Xcode project's
+    // Associated Domains (applinks:goodtunes.music). See
+    // docs/app-store-submission.md.
   },
   android: {
     allowMixedContent: false,

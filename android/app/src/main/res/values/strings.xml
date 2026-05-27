@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">GoodTunes</string>
+    <string name="title_activity_main">GoodTunes</string>
+    <string name="package_name">fm.goodtunes.player</string>
+    <string name="custom_url_scheme">fm.goodtunes.player</string>
+</resources>

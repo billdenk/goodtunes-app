@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["REPLACE_WITH_TEAM_ID.fm.goodtunes.player"],
+        "components": [
+          {
+            "/": "/*",
+            "comment": "Match every path on goodtunes.music — the web SPA router already handles unknown paths, so handing the whole namespace to the app keeps fans in-app on any deep link."
+          }
+        ]
+      }
+    ]
+  }
+}

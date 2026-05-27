@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+        <key>CFBundleDevelopmentRegion</key>
+        <string>en</string>
+        <key>CFBundleDisplayName</key>
+        <string>GoodTunes</string>
+        <key>CFBundleExecutable</key>
+        <string>$(EXECUTABLE_NAME)</string>
+        <key>CFBundleIdentifier</key>
+        <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+        <key>CFBundleInfoDictionaryVersion</key>
+        <string>6.0</string>
+        <key>CFBundleName</key>
+        <string>$(PRODUCT_NAME)</string>
+        <key>CFBundlePackageType</key>
+        <string>APPL</string>
+        <key>CFBundleShortVersionString</key>
+        <string>$(MARKETING_VERSION)</string>
+        <key>CFBundleVersion</key>
+        <string>$(CURRENT_PROJECT_VERSION)</string>
+        <key>LSRequiresIPhoneOS</key>
+        <true/>
+        <key>UILaunchStoryboardName</key>
+        <string>LaunchScreen</string>
+        <key>UIMainStoryboardFile</key>
+        <string>Main</string>
+        <key>UIRequiredDeviceCapabilities</key>
+        <array>
+                <string>armv7</string>
+        </array>
+        <!-- Task #535: phone is portrait-only (mobile-first single column,
+             max width ~440px — landscape is out of scope for v1). iPad
+             keeps multi-orientation so reviewers don't reject it as a
+             phone-only app submitted universal. -->
+        <key>UISupportedInterfaceOrientations</key>
+        <array>
+                <string>UIInterfaceOrientationPortrait</string>
+        </array>
+        <key>UISupportedInterfaceOrientations~ipad</key>
+        <array>
+                <string>UIInterfaceOrientationPortrait</string>
+                <string>UIInterfaceOrientationPortraitUpsideDown</string>
+                <string>UIInterfaceOrientationLandscapeLeft</string>
+                <string>UIInterfaceOrientationLandscapeRight</string>
+        </array>
+        <key>UIViewControllerBasedStatusBarAppearance</key>
+        <true/>
+        <!-- Background audio so playback continues with the screen off or
+             when the user is in another app. Required for any music app. -->
+        <key>UIBackgroundModes</key>
+        <array>
+                <string>audio</string>
+        </array>
+        <!-- App Transport Security: all GoodTunes traffic is HTTPS to
+             goodtunes.music + Mux/Stripe/Object Storage CDNs. No
+             arbitrary loads allowed; this keeps App Review happy and
+             prevents accidental cleartext fetches from sneaking in. -->
+        <key>NSAppTransportSecurity</key>
+        <dict>
+                <key>NSAllowsArbitraryLoads</key>
+                <false/>
+        </dict>
+        <!-- Intentionally NOT declaring NSUserTrackingUsageDescription:
+             we don't use IDFA / cross-app tracking. Adding the key
+             without using it is an App Review guideline 5.1.2 rejection
+             trigger. Re-add only if a tracking SDK ships. -->
+</dict>
+</plist>

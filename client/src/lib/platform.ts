@@ -22,3 +22,21 @@ export const chatEnabled = !isNative;
 
 /** Real on-device file downloads (Capacitor Filesystem). */
 export const nativeDownloadsEnabled = isNative;
+
+/**
+ * Fan-facing Buy affordances (album BuySheet, price pill, etc.).
+ *
+ * Apple's App Review guideline 3.1.1 bans selling digital goods inside an
+ * iOS app without going through StoreKit / IAP (and taking Apple's cut).
+ * GoodTunes albums are bundles of digital downloads + physical media, and
+ * the whole pricing model assumes a Stripe checkout — IAP is out of scope
+ * for v1. The clean answer is: on iOS native, hide every Buy CTA. Fans
+ * already in the app keep playing what they own; new purchases happen on
+ * the web at goodtunes.music.
+ *
+ * Android does not have an equivalent rule for music purchases that
+ * happen through an external website (Play allows external payment for
+ * digital goods, especially physical-media bundles), so Android native
+ * keeps the Buy buttons.
+ */
+export const buyEnabled = !(isNative && nativePlatform === "ios");

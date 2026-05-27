@@ -3,6 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
 import { BuySheet } from "@/components/checkout/BuySheet";
+import { buyEnabled } from "@/lib/platform";
 import { useAuth } from "@/hooks/useAuth";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { AlbumCreditsSheet, type AlbumCreditsRow } from "@/components/ui/AlbumCreditsSheet";
@@ -98,6 +99,7 @@ export function AlbumDetailDesktop() {
   const [tab, setTab] = useState<DesktopAlbumTab>("music");
   const [showBuySheet, setShowBuySheet] = useState(() => {
     if (typeof window === "undefined") return false;
+    if (!buyEnabled) return false;
     return new URL(window.location.href).searchParams.get("buy") === "1";
   });
 
@@ -343,7 +345,7 @@ export function AlbumDetailDesktop() {
             favoriteSongIds={favSongs.set}
             hasAlbumCredits={productionCredits.length > 0}
             onOpenAlbumCredits={() => setShowAlbumCredits(true)}
-            onBuyBundle={handleBuyBundle}
+            onBuyBundle={buyEnabled ? handleBuyBundle : undefined}
             lyricsOpen={player.showLyrics}
             lyrics={lyricsBody}
             onCloseLyrics={() => player.setShowLyrics(false)}

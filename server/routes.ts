@@ -776,6 +776,68 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   //      operator wants to rotate the file without a deploy).
   // Served on BOTH hosts (admin.* and my.*) because Apple verifies
   // every domain listed in the Services ID separately.
+  // Task #535 — Universal Links (iOS) + App Links (Android). Both files
+  // are committed at public/.well-known/ with sentinel team-id /
+  // sha256-fingerprint placeholders. Replace those tokens with the real
+  // values before submitting to TestFlight / Play. Served on both hosts
+  // because Apple and Google each verify the file from the same domain
+  // the user taps a link on.
+  app.get("/.well-known/apple-app-site-association", async (_req, res) => {
+    try {
+      const { promises: fs } = await import("fs");
+      const path = await import("path");
+      let body = await fs.readFile(
+        path.resolve(process.cwd(), "public/.well-known/apple-app-site-association"),
+        "utf8",
+      );
+      // The committed file carries a REPLACE_WITH_TEAM_ID sentinel so
+      // the route shape ships in the repo without leaking the Apple
+      // Team ID. The operator sets APPLE_TEAM_ID in the deployment env
+      // and the substitution happens at request time. Apple verifies
+      // the file every time the OS resolves a Universal Link, so a
+      // rotation of the env var is enough — no redeploy needed.
+      const teamId = process.env.APPLE_TEAM_ID;
+      if (body.includes("REPLACE_WITH_TEAM_ID")) {
+        if (!teamId) {
+          return res
+            .status(503)
+            .type("text/plain")
+            .send("apple-app-site-association: APPLE_TEAM_ID env var is not set");
+        }
+        body = body.replace(/REPLACE_WITH_TEAM_ID/g, teamId);
+      }
+      return res.type("application/json").send(body);
+    } catch {
+      return res.status(404).type("text/plain").send("apple-app-site-association is not configured yet");
+    }
+  });
+  app.get("/.well-known/assetlinks.json", async (_req, res) => {
+    try {
+      const { promises: fs } = await import("fs");
+      const path = await import("path");
+      let body = await fs.readFile(
+        path.resolve(process.cwd(), "public/.well-known/assetlinks.json"),
+        "utf8",
+      );
+      // Same substitution pattern as AASA above. The operator runs
+      // `keytool -list -v -keystore <upload.keystore>` once and pastes
+      // the SHA-256 fingerprint into ANDROID_RELEASE_SHA256.
+      const sha = process.env.ANDROID_RELEASE_SHA256;
+      if (body.includes("REPLACE_WITH_UPLOAD_KEYSTORE_SHA256_FINGERPRINT")) {
+        if (!sha) {
+          return res
+            .status(503)
+            .type("text/plain")
+            .send("assetlinks.json: ANDROID_RELEASE_SHA256 env var is not set");
+        }
+        body = body.replace(/REPLACE_WITH_UPLOAD_KEYSTORE_SHA256_FINGERPRINT/g, sha);
+      }
+      return res.type("application/json").send(body);
+    } catch {
+      return res.status(404).type("text/plain").send("assetlinks.json is not configured yet");
+    }
+  });
+
   app.get("/.well-known/apple-developer-domain-association.txt", async (_req, res) => {
     try {
       const { promises: fs } = await import("fs");

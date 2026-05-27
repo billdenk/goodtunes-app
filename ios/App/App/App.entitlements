@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Task #535 — Universal Links. Pairs with the
+         apple-app-site-association file served at
+         https://goodtunes.music/.well-known/apple-app-site-association.
+         The operator-managed Apple Team ID prefix on the appIDs in that
+         file must match this app's signing team for verification to
+         succeed. -->
+    <key>com.apple.developer.associated-domains</key>
+    <array>
+        <string>applinks:goodtunes.music</string>
+        <string>applinks:my.goodtunes.music</string>
+    </array>
+    <!-- Task #535 — Push entitlement declared now so the binary asks
+         Apple for the right provisioning, even though we don't send any
+         payloads yet (that wiring is a follow-up task). Default to the
+         development APS environment; Xcode's Release scheme automatically
+         swaps this to "production" when archiving for the App Store. -->
+    <key>aps-environment</key>
+    <string>development</string>
+</dict>
+</plist>

@@ -17,7 +17,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { ChevronLeft, Share, MoreHorizontal, X as XIcon } from "lucide-react";
 import { startVendorChatAboutInstrument } from "@/lib/chatStore";
-import { chatEnabled, nativeDownloadsEnabled } from "@/lib/platform";
+import { buyEnabled, chatEnabled, nativeDownloadsEnabled } from "@/lib/platform";
 import { downloadSong, removeDownload, listDownloadedSongs } from "@/lib/nativeDownloads";
 import { track } from "@/lib/analytics";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
@@ -109,7 +109,7 @@ function AlbumDetailMobile() {
   // Task #44 — opens the Buy bottom sheet (format picker + signed-cert
   // add-on + embedded Stripe Checkout). `?buy=1` in the URL auto-opens
   // it so the Login bounce-back lands directly on the format picker.
-  const [showBuySheet, setShowBuySheet] = useState(() => {
+  const [showBuySheet, setShowBuySheet] = useState(() => { if (!buyEnabled) return false;
     if (typeof window === "undefined") return false;
     return new URL(window.location.href).searchParams.get("buy") === "1";
   });
@@ -602,7 +602,7 @@ function AlbumDetailMobile() {
             const full = songs.find((x) => x.id === s.id);
             if (full) handlePlaySong({ ...full, album });
           }}
-          onOpenBuy={() => setShowBuySheet(true)}
+          onOpenBuy={buyEnabled ? () => setShowBuySheet(true) : undefined}
           onToggleAlbumDownload={handleToggleAlbumDownload}
           onToggleSongDownload={(id) => toggleSongDownload(id)}
           onOpenSongMenu={(s, rect) => {
