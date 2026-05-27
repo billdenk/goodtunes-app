@@ -3640,53 +3640,46 @@ function GoodDeedPill({
                   finder pattern so it reads as a template, not
                   filled-in copy the artist is expected to edit. */}
               <div
-                className="px-3.5 pt-3 pb-3 text-white flex flex-col"
-                style={{ backgroundColor: "var(--brand-bg)", minHeight: "8rem" }}
+                className="w-full text-white flex flex-col justify-between px-[5%] py-[4%] aspect-[3/1]"
+                style={{ backgroundColor: "var(--brand-bg)" }}
                 data-testid="band-gooddeed-cert"
               >
-                {/* Top of band — avatar + owner-line skeleton on the
-                    left, GoodTunes mark pinned top-right. */}
-                <div className="flex items-start gap-2.5">
-                  <div
-                    className="w-8 h-8 rounded-full flex-shrink-0 border border-white/20"
-                    style={{ background: "rgba(255,255,255,0.14)" }}
-                    aria-label="Owner avatar (per fan)"
-                    data-testid="skeleton-gooddeed-avatar"
-                  />
-                  <div className="flex-1 min-w-0 pt-1 space-y-1.5">
-                    {/* Owner-name skeleton bar */}
+                {/* Top row — avatar + two skeleton text bars ("owner"
+                    and "owns no. NN of <album>") on the left, stacked
+                    GoodTunes lockup pinned top-right. */}
+                <div className="flex items-start justify-between gap-[4%]">
+                  <div className="flex items-center gap-[4%] min-w-0 flex-1">
                     <div
-                      className="h-2.5 w-24 rounded-full bg-[color:var(--brand-blue)]/70"
-                      aria-label="Owner name (filled in per fan)"
-                      data-testid="skeleton-gooddeed-owner"
+                      className="w-[14%] aspect-square rounded-full flex-shrink-0 border border-white/25"
+                      style={{ background: "rgba(255,255,255,0.18)" }}
+                      aria-label="Owner avatar (per fan)"
+                      data-testid="skeleton-gooddeed-avatar"
                     />
-                    {/* "owns no. NN of <album>" — serial skeleton + real album title */}
-                    <div className="flex items-center gap-1.5 text-xs text-white/70 leading-tight">
-                      <span>owns no.</span>
-                      <span
-                        className="inline-block h-2 w-5 rounded-full bg-[color:var(--brand-blue)]/70"
-                        aria-label="Certificate number (assigned at sale)"
+                    <div className="flex-1 min-w-0 flex flex-col gap-[6%]">
+                      <div
+                        className="h-2 w-1/3 rounded-full bg-white/55"
+                        aria-label="Owner name (filled in per fan)"
+                        data-testid="skeleton-gooddeed-owner"
+                      />
+                      <div
+                        className="h-2 w-2/3 rounded-full bg-white/55"
+                        aria-label={`owns no. NN of ${albumTitle || "this release"}`}
                         data-testid="skeleton-gooddeed-serial"
                       />
-                      <span className="truncate">
-                        of {albumTitle || "this release"}
-                      </span>
                     </div>
                   </div>
                   <img
-                    src="/goodtunes-logo-white-sm.png"
+                    src="/goodtunes-logo-white.png"
                     alt="GoodTunes®"
-                    className="h-4 w-auto object-contain flex-shrink-0 mt-1"
+                    className="h-8 w-auto object-contain object-right flex-shrink-0"
                     data-testid="mark-goodtunes"
                   />
                 </div>
 
-                {/* Spacer so signature/QR pin to the bottom of the band */}
-                <div className="flex-1 min-h-[1rem]" />
-
-                {/* Bottom of band — signature on a thin rule (left),
-                    QR placeholder (right). */}
-                <div className="flex items-end justify-between gap-3">
+                {/* Bottom row — founder signature on a thin rule with
+                    WILL BOWEN · FOUNDER underneath (left), mint QR
+                    placeholder (right). */}
+                <div className="flex items-end justify-between gap-[4%]">
                   <div
                     className="flex-1 min-w-0"
                     aria-label="Founder signature"
@@ -3695,16 +3688,16 @@ function GoodDeedPill({
                     <img
                       src="/will-signature.png"
                       alt="Will Bowen, Founder"
-                      className="h-6 w-auto max-w-[7rem] object-contain object-left select-none"
+                      className="h-[2em] w-auto max-w-[60%] object-contain object-left select-none -mb-1"
                       draggable={false}
                     />
-                    <div className="border-t border-white/35 mt-0.5" />
-                    <div className="text-xs text-white/55 uppercase tracking-wider mt-1">
+                    <div className="border-t border-white/70" />
+                    <div className="text-[0.65rem] text-white uppercase tracking-[0.18em] mt-1.5 font-medium">
                       Will Bowen · Founder
                     </div>
                   </div>
                   <div
-                    className="w-10 h-10 rounded-sm flex-shrink-0 grid place-items-center p-0.5"
+                    className="w-[14%] aspect-square rounded-sm flex-shrink-0 grid place-items-center p-[2%]"
                     style={{ background: "var(--brand-mint)" }}
                     aria-hidden
                     title="Per-fan QR — auto-generated at sale time"
