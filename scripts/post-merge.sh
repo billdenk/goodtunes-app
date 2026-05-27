@@ -1275,6 +1275,12 @@ ALTER TABLE vendors               ADD COLUMN IF NOT EXISTS location_address     
 ALTER TABLE manufacturers         ADD COLUMN IF NOT EXISTS location_address         jsonb;
 ALTER TABLE fulfillment_partners  ADD COLUMN IF NOT EXISTS location_address         jsonb;
 ALTER TABLE fulfillment_partners  ADD COLUMN IF NOT EXISTS shipping_address_struct  jsonb;
+-- Task #517 — Places-picked structured snapshot for the remaining two
+-- partner address surfaces: NPO mailing address and Person shipping
+-- address. Free-text columns above stay the display source of truth;
+-- these jsonb snapshots back filters/reports/mailing pipelines.
+ALTER TABLE organizations         ADD COLUMN IF NOT EXISTS mailing_address_struct   jsonb;
+ALTER TABLE people                ADD COLUMN IF NOT EXISTS shipping_address_struct  jsonb;
 SQL
   then
     echo "post-merge: partner-address snapshots migration ok on $label"

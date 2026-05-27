@@ -11,6 +11,7 @@ import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
 import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { queryClient } from "@/lib/queryClient";
+import type { PartnerAddressSnapshot } from "@shared/schema";
 
 // Task #78 — Super-admin detail page for a non-profit partner.
 // Task #283 brings it under AdminFrame (narrow) with the standard
@@ -23,6 +24,8 @@ type NonProfit = {
   websiteUrl: string | null;
   // Task #490 — NPO partner mailing address.
   mailingAddress: string | null;
+  // Task #517 — Places-picked structured snapshot of the same field.
+  mailingAddressStruct: PartnerAddressSnapshot | null;
 };
 
 export default function AdminNonProfit() {
@@ -187,6 +190,8 @@ export default function AdminNonProfit() {
                 websiteUrl: npo.websiteUrl,
                 // Task #490 — NPO partner mailing address.
                 mailingAddress: npo.mailingAddress ?? "",
+                // Task #517 — Places-picked structured snapshot.
+                mailingAddressStruct: npo.mailingAddressStruct ?? null,
               }}
               invalidate={[
                 [`/api/non-profits/${npo.id}`],
@@ -205,6 +210,8 @@ export default function AdminNonProfit() {
                   label: "Mailing address",
                   type: "address",
                   placeholder: "Where partner mail goes",
+                  // Task #517 — round-trip the Places snapshot too.
+                  addressKey: "mailingAddressStruct",
                 },
               ]}
             />

@@ -38,6 +38,7 @@ import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPa
 import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
+import type { PartnerAddressSnapshot } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -142,6 +143,8 @@ interface PersonFull {
   // Task #490 — formatted shipping/mailing address for artist comp runs.
   // Free-form text written by the shared Places-autocomplete field.
   shippingAddress: string | null;
+  // Task #517 — Places-picked structured snapshot of the same field.
+  shippingAddressStruct: PartnerAddressSnapshot | null;
   // Task #199 — if this artist was invited by a specific press, their
   // Sell-panel Presses surface is hard-locked to that press until
   // their first run ships. Super-admin can clear/switch via Identity.
@@ -639,6 +642,8 @@ function OverviewPanel({
           groupKind: person.groupKind ?? "",
           // Task #490 — artist comp / contact shipping address.
           shippingAddress: person.shippingAddress ?? "",
+          // Task #517 — Places-picked structured snapshot.
+          shippingAddressStruct: person.shippingAddressStruct ?? null,
         }}
         invalidate={invalidate}
         fields={[
@@ -660,6 +665,8 @@ function OverviewPanel({
             label: "Shipping address",
             type: "address",
             placeholder: "Where artist comp copies & mail go",
+            // Task #517 — round-trip the Places snapshot too.
+            addressKey: "shippingAddressStruct",
           },
           {
             key: "bio",

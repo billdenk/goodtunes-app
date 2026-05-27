@@ -720,6 +720,13 @@ export const people = pgTable("people", {
   // orders, because the EditablePanel address field only round-trips
   // a single string.
   shippingAddress: text("shipping_address"),
+  // Task #517 — structured snapshot of the Places-picked shipping
+  // address. Free-text `shippingAddress` above stays the display
+  // source of truth; this jsonb column lets shipping/printer
+  // pipelines read structured line1/city/postal-code without
+  // regexing the formatted string. Populated by
+  // AddressAutocompleteField on the Person Identity panel.
+  shippingAddressStruct: jsonb("shipping_address_struct").$type<PartnerAddressSnapshot>(),
   legacyGogoodsId: text("legacy_gogoods_id"),
   ...softDeleteCols,
 }, (t) => ({
@@ -1017,6 +1024,12 @@ export const organizations = pgTable(
     // `location`). Lets us send partner mail without inventing a parallel
     // address table.
     mailingAddress: text("mailing_address"),
+    // Task #517 — structured snapshot of the Places-picked mailing
+    // address. Free-text `mailingAddress` above stays the display
+    // source of truth; this jsonb column lets partner-mail pipelines
+    // read structured fields without regexing the formatted string.
+    // Populated by AddressAutocompleteField on the NPO Identity panel.
+    mailingAddressStruct: jsonb("mailing_address_struct").$type<PartnerAddressSnapshot>(),
     createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => ({

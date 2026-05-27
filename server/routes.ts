@@ -9508,6 +9508,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({
       ...toPublicPerson(p),
       shippingAddress: (p as any).shippingAddress ?? null,
+      // Task #517 — structured snapshot for the address autocomplete.
+      shippingAddressStruct: (p as any).shippingAddressStruct ?? null,
     });
   });
 
@@ -9595,6 +9597,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.labelId !== undefined) updates.labelId = opt(b.labelId);
     // Task #490 — artist comp / contact shipping address.
     if (b.shippingAddress !== undefined) updates.shippingAddress = opt(b.shippingAddress);
+    // Task #517 — Places-picked structured snapshot of the same field.
+    if (b.shippingAddressStruct !== undefined) updates.shippingAddressStruct = b.shippingAddressStruct ?? null;
     // Task #190 — bands & members. `groupKind` is the surfaced control in
     // the admin (a select like Band / Duo / Orchestra / "Solo artist");
     // `isGroup` is derived from it (non-empty kind ⇒ this Person is a
@@ -13494,16 +13498,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const v = b.mailingAddress == null || String(b.mailingAddress).trim() === "" ? null : String(b.mailingAddress).trim();
       sets.push(sql`mailing_address = ${v}`);
     }
+    // Task #517 — Places-picked structured snapshot.
+    if (b.mailingAddressStruct !== undefined) {
+      const v = b.mailingAddressStruct ?? null;
+      sets.push(sql`mailing_address_struct = ${v === null ? null : JSON.stringify(v)}::jsonb`);
+    }
     if (sets.length === 0) {
       return res.status(400).json({ message: "Nothing to update" });
     }
     const setSql = sets.reduce((acc, frag, i) => (i === 0 ? frag : sql`${acc}, ${frag}`));
     await db.execute(sql`UPDATE organizations SET ${setSql} WHERE id = ${req.params.id}`);
-    const rows = await db.execute<{ id: string; name: string; logo_url: string | null; website_url: string | null; mailing_address: string | null }>(
-      sql`SELECT id, name, logo_url, website_url, mailing_address FROM organizations WHERE id = ${req.params.id} LIMIT 1`,
+    const rows = await db.execute<{ id: string; name: string; logo_url: string | null; website_url: string | null; mailing_address: string | null; mailing_address_struct: any }>(
+      sql`SELECT id, name, logo_url, website_url, mailing_address, mailing_address_struct FROM organizations WHERE id = ${req.params.id} LIMIT 1`,
     );
     const r = ((rows as any).rows ?? [])[0];
-    res.json({ id: r.id, name: r.name, logoUrl: r.logo_url, websiteUrl: r.website_url, mailingAddress: r.mailing_address });
+    res.json({ id: r.id, name: r.name, logoUrl: r.logo_url, websiteUrl: r.website_url, mailingAddress: r.mailing_address, mailingAddressStruct: r.mailing_address_struct ?? null });
   };
   app.put("/api/non-profits/:id", requireAdmin, requireRole("super_admin"), updateNonProfit);
   app.patch("/api/non-profits/:id", requireAdmin, requireRole("super_admin"), updateNonProfit);
@@ -13511,12 +13520,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // GET a single non-profit by id — used by the admin detail page so it
   // doesn't have to fetch the whole list and filter client-side.
   app.get("/api/non-profits/:id", requireAdmin, async (req, res) => {
-    const rows = await db.execute<{ id: string; name: string; logo_url: string | null; website_url: string | null; mailing_address: string | null }>(
-      sql`SELECT id, name, logo_url, website_url, mailing_address FROM organizations WHERE id = ${req.params.id} AND kind = 'non_profit' LIMIT 1`,
+    const rows = await db.execute<{ id: string; name: string; logo_url: string | null; website_url: string | null; mailing_address: string | null; mailing_address_struct: any }>(
+      sql`SELECT id, name, logo_url, website_url, mailing_address, mailing_address_struct FROM organizations WHERE id = ${req.params.id} AND kind = 'non_profit' LIMIT 1`,
     );
     const r = ((rows as any).rows ?? [])[0];
     if (!r) return res.status(404).json({ message: "Non-profit not found" });
-    res.json({ id: r.id, name: r.name, logoUrl: r.logo_url, websiteUrl: r.website_url, mailingAddress: r.mailing_address });
+    res.json({ id: r.id, name: r.name, logoUrl: r.logo_url, websiteUrl: r.website_url, mailingAddress: r.mailing_address, mailingAddressStruct: r.mailing_address_struct ?? null });
   });
 
   // List people attached as contacts/reps for a non-profit. Joined to
