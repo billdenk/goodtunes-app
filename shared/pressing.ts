@@ -283,3 +283,65 @@ export const VINYL_FORMATS: ReadonlyArray<AlbumFormat> = [
 export function isVinylFormat(format: AlbumFormat): boolean {
   return VINYL_FORMATS.includes(format);
 }
+
+// Task #619 — per-side audio capacity (seconds) for each vinyl format
+// at its standard playback speed. Defaults are deliberately
+// conservative so a 22-min side of a 33⅓ rpm 12" stays inside the
+// safe-cut window cited by Hellbender + most US plants; a 7" at 45 rpm
+// holds about 4½ min/side. Press-specific overrides can come later.
+export const VINYL_PER_SIDE_MAX_SECONDS: Partial<Record<AlbumFormat, number>> = {
+  "7_inch": 270,      // 4 min 30 sec
+  "12_lp": 22 * 60,   // 22 min
+  "12_double": 22 * 60,
+};
+
+// Number of usable sides per vinyl format. 12" Double LP is the only
+// multi-disc product we currently sell, so it gets 4 sides; everything
+// else is the standard 2.
+export const VINYL_SIDE_COUNT: Partial<Record<AlbumFormat, number>> = {
+  "7_inch": 2,
+  "12_lp": 2,
+  "12_double": 4,
+};
+
+// The bump ladder: when a format's total capacity is exceeded, what
+// vinyl format should we suggest next? `null` = no further bump
+// available, so the warning shows without a "View Suggestion" CTA.
+const VINYL_BUMP_LADDER: Partial<Record<AlbumFormat, AlbumFormat>> = {
+  "7_inch": "12_lp",
+  "12_lp": "12_double",
+};
+
+export type FormatFitReport = {
+  fits: boolean;
+  perSideMaxSec: number | null;
+  totalCapSec: number | null;
+  suggestedFormat: AlbumFormat | null;
+};
+
+// Returns whether the album's total runtime fits the selected vinyl
+// format, and (if not) the next-up format the SellPanel should
+// suggest. Non-vinyl formats return { fits: true } unconditionally —
+// CD / cassette fit logic is out of scope for #619.
+export function fitForFormat(args: {
+  totalSeconds: number;
+  format: AlbumFormat;
+}): FormatFitReport {
+  const { totalSeconds, format } = args;
+  if (!isVinylFormat(format)) {
+    return { fits: true, perSideMaxSec: null, totalCapSec: null, suggestedFormat: null };
+  }
+  const perSide = VINYL_PER_SIDE_MAX_SECONDS[format] ?? null;
+  const sides = VINYL_SIDE_COUNT[format] ?? null;
+  if (perSide == null || sides == null || totalSeconds <= 0) {
+    return { fits: true, perSideMaxSec: perSide, totalCapSec: perSide && sides ? perSide * sides : null, suggestedFormat: null };
+  }
+  const totalCap = perSide * sides;
+  const fits = totalSeconds <= totalCap;
+  return {
+    fits,
+    perSideMaxSec: perSide,
+    totalCapSec: totalCap,
+    suggestedFormat: fits ? null : VINYL_BUMP_LADDER[format] ?? null,
+  };
+}

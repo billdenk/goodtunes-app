@@ -39,6 +39,16 @@ import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
 import {
   ALBUM_FORMATS,
@@ -65,6 +75,8 @@ import {
   isVinylFormat,
   lookupHellbenderUnitCents,
   snapToQuantityTier,
+  fitForFormat,
+  VINYL_PER_SIDE_MAX_SECONDS,
   type JacketUpgrade,
   type VinylColorOption,
 } from "@shared/pressing";
@@ -177,6 +189,7 @@ export function SellPanel({
   changeModeDisabledReason,
   onEditArtwork,
   trackCount = 0,
+  totalRuntimeSec = 0,
   anticipatedTrackCount = null,
   onAnticipatedTrackCountChange,
 }: {
@@ -193,6 +206,10 @@ export function SellPanel({
   // (industry standard: $0.127/track each for vinyl + digital). Caller
   // (AdminAlbum) derives from `album.songs.length`.
   trackCount?: number;
+  // Task #619 — total runtime (seconds) of all uploaded masters on
+  // this album. Drives the per-format fit check + "View Suggestion"
+  // bump CTA inside each vinyl SkuRow. 0 = no audio yet → no warning.
+  totalRuntimeSec?: number;
   // Task #429 — operator-typed estimate for use BEFORE any masters
   // have been uploaded. When the album has 0 songs the Sell-panel
   // Publishing line uses this number; once songs.length > 0 the live
@@ -612,6 +629,27 @@ export function SellPanel({
   // Formats actually configured on this album — these are the rows we
   // render. The "+ Add Physical Good" picker handles the rest.
   const configuredFormats = ALBUM_FORMATS.filter((f) => skuByFormat.has(f));
+  // Task #619 — Set form for the bump CTA's collision guard.
+  const configuredFormatSet = new Set<AlbumFormat>(configuredFormats);
+  // Task #619 — after a bump, open the new format's disclosure so the
+  // row is mounted, then (for "Accept & adjust price") focus its Price
+  // input. The DOM may not be painted yet — retry briefly.
+  const handleAfterBump = (newFormat: AlbumFormat, { adjustPrice }: { adjustPrice: boolean }) => {
+    skuDisclosure.open(newFormat);
+    if (!adjustPrice) return;
+    const tryFocus = (attempt: number) => {
+      const el = document.querySelector(
+        `[data-testid="input-price-${newFormat}"]`,
+      ) as HTMLInputElement | null;
+      if (el) {
+        try { el.focus({ preventScroll: false }); } catch { el.focus(); }
+        el.select?.();
+      } else if (attempt < 20) {
+        window.setTimeout(() => tryFocus(attempt + 1), 60);
+      }
+    };
+    window.setTimeout(() => tryFocus(0), 80);
+  };
   const availableFormats = offeredFormats.filter(
     (f) => !skuByFormat.has(f) && !liveDrafts.includes(f),
   );
@@ -758,6 +796,11 @@ export function SellPanel({
                           artistName={artistName}
                           artistPhotoUrl={artistPhotoUrl}
                           albumQuoteLockedAt={sellQuoteLockedAt ?? null}
+                          totalRuntimeSec={totalRuntimeSec}
+                          costByFormat={costByFormat}
+                          catalogByFormat={catalogByFormat}
+                          configuredFormats={configuredFormatSet}
+                          onAfterBump={handleAfterBump}
                         />
                       );
                     })}
@@ -810,6 +853,11 @@ export function SellPanel({
                         artistName={artistName}
                         artistPhotoUrl={artistPhotoUrl}
                         albumQuoteLockedAt={sellQuoteLockedAt ?? null}
+                        totalRuntimeSec={totalRuntimeSec}
+                        costByFormat={costByFormat}
+                        catalogByFormat={catalogByFormat}
+                        configuredFormats={configuredFormatSet}
+                        onAfterBump={handleAfterBump}
                       />
                     ))}
                   </>
@@ -1484,10 +1532,31 @@ function SkuRow({
   artistName,
   artistPhotoUrl,
   albumQuoteLockedAt = null,
+  totalRuntimeSec = 0,
+  costByFormat,
+  catalogByFormat,
+  configuredFormats,
+  onAfterBump,
 }: {
   format: AlbumFormat;
   existing: AlbumSku | null;
   liveCost: PayoutFormatCost | null;
+  // Task #619 — total runtime of uploaded masters (seconds), plus
+  // sibling maps so the row can compute the suggested format's cost
+  // when previewing a bump. Maps are owned by SellPanel.
+  totalRuntimeSec?: number;
+  costByFormat?: Map<string, PayoutFormatCost>;
+  catalogByFormat?: Map<AlbumFormat, CatalogFormatRow>;
+  // Task #619 — formats that already have a saved SKU. The bump CTA
+  // is suppressed when the suggested format is already configured
+  // (so accepting wouldn't silently clobber the existing row), and
+  // the inline warning surfaces a pointer instead.
+  configuredFormats?: Set<AlbumFormat>;
+  // Task #619 — parent callback fired after a successful bump so the
+  // disclosure system can pop the new format's row open and (for
+  // "Accept & adjust price") focus its Price input deterministically
+  // once the SKUs query has refreshed.
+  onAfterBump?: (newFormat: AlbumFormat, opts: { adjustPrice: boolean }) => void;
   // Task #218 — when present, the picker switches from the legacy
   // Hellbender matrix to the invited press's catalog (tier → color →
   // quantity ladder). Null = free / non-invited flow.
@@ -1925,6 +1994,122 @@ function SkuRow({
       breakdown.goodtunesCents
     : null;
 
+  // Task #619 — fit check + bump suggestion. Runs only for vinyl rows
+  // with real audio uploaded; the suggested format is filtered against
+  // the invited press's catalog (if any) so we don't offer a bump the
+  // press can't actually press.
+  const fitReport = useMemo(
+    () => fitForFormat({ totalSeconds: totalRuntimeSec ?? 0, format }),
+    [totalRuntimeSec, format],
+  );
+  const catalogScoped = !!catalogByFormat && catalogByFormat.size > 0;
+  const suggestedFormat = useMemo<AlbumFormat | null>(() => {
+    if (!fitReport.suggestedFormat) return null;
+    if (catalogScoped && !catalogByFormat!.has(fitReport.suggestedFormat)) {
+      return null;
+    }
+    return fitReport.suggestedFormat;
+  }, [fitReport.suggestedFormat, catalogScoped, catalogByFormat]);
+  const showFitWarning = isVinyl && !fitReport.fits && (totalRuntimeSec ?? 0) > 0;
+
+  // Preview + commit state for the bump CTA. `previewOpen` flips the
+  // inline message from "View Suggestion" → "Accept / Undo".
+  // `confirmOpen` is the AlertDialog modal; `confirmIntent` carries
+  // whether the operator chose "Accept" or "Accept & adjust price"
+  // so the post-commit focus knows where to land.
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  // Reset preview state when the fit problem disappears (e.g. operator
+  // deleted a song or already accepted the bump).
+  useEffect(() => {
+    if (!showFitWarning || !suggestedFormat) {
+      setPreviewOpen(false);
+      setConfirmOpen(false);
+    }
+  }, [showFitWarning, suggestedFormat]);
+
+  // Manufacturing cost for the suggested format, used by the preview
+  // margin readout + the AlertDialog's "$X.XX → $Y.YY" copy. Picks the
+  // closest catalog tier by name (falls back to first/cheapest), then
+  // snaps to the nearest rung on that tier's ladder. Legacy flow uses
+  // the Hellbender matrix with the row's current color/jacket picks;
+  // when that returns null (e.g. 12" Double LP has no per-rung matrix
+  // yet) we fall back to the platform-default per-format placeholder.
+  // Deterministic tier/color picker for the suggested format. Same
+  // function is used by both the preview cost readout and the commit
+  // path, so the dialog's "new per-unit profit" is exactly what gets
+  // saved. `fellBackTier` / `fellBackColor` drive the disclosure line
+  // shown in the preview ("Closest tier/color not on this format —
+  // using ___ instead.").
+  const suggestedPick = useMemo(() => {
+    if (!suggestedFormat) return null;
+    const row = catalogByFormat?.get(suggestedFormat);
+    if (!row || row.tiers.length === 0) return null;
+    const currentTierName = pickedTier?.name ?? "";
+    const currentColorName =
+      pickedTier?.colors.find((c) => c.id === pressColorId)?.name ?? "";
+    const sortedByCheapest = [...row.tiers].sort((a, b) => {
+      const aMin = Math.min(...a.priceLadder.map((r) => r.unitCents));
+      const bMin = Math.min(...b.priceLadder.map((r) => r.unitCents));
+      return aMin - bMin;
+    });
+    const matchedTier = row.tiers.find((t) => t.name === currentTierName);
+    const tier = matchedTier ?? sortedByCheapest[0];
+    const matchedColor = tier.colors.find((c) => c.name === currentColorName);
+    const color = matchedColor ?? tier.colors[0] ?? null;
+    return {
+      tier,
+      color,
+      fellBackTier: !matchedTier && !!currentTierName,
+      fellBackColor: !matchedColor && !!currentColorName,
+    };
+  }, [suggestedFormat, catalogByFormat, pickedTier, pressColorId]);
+
+  const suggestedManufacturingCents = useMemo<number | null>(() => {
+    if (!suggestedFormat) return null;
+    if (suggestedPick) {
+      const snapped = snapCatalogLadder(suggestedPick.tier.priceLadder, parsedQty);
+      return snapped?.unitCents ?? null;
+    }
+    const matrix = lookupHellbenderUnitCents({
+      format: suggestedFormat,
+      colorTier: vinylColor.tier,
+      qtyTier: qtySnap.tier,
+      jacketUpgrade,
+    });
+    if (matrix != null) return matrix;
+    return costByFormat?.get(suggestedFormat)?.manufacturingCents ?? null;
+  }, [
+    suggestedFormat,
+    suggestedPick,
+    parsedQty,
+    vinylColor.tier,
+    qtySnap.tier,
+    jacketUpgrade,
+    costByFormat,
+  ]);
+
+  // Total cost / per-unit profit for the suggested format. Re-uses
+  // the same publishing / payment-processing / GoodTunes side-cars
+  // the current row's breakdown computes, so the delta the operator
+  // sees in the dialog matches the same model the rest of the row
+  // already reports.
+  const suggestedTotalCostCents = useMemo<number | null>(() => {
+    if (suggestedManufacturingCents == null || !breakdown) return null;
+    return (
+      suggestedManufacturingCents +
+      breakdown.publishingCents +
+      breakdown.paymentProcessingCents +
+      breakdown.goodtunesCents
+    );
+  }, [suggestedManufacturingCents, breakdown]);
+  const suggestedProfitCents = useMemo<number | null>(() => {
+    if (suggestedTotalCostCents == null) return null;
+    const p = parseDollars(priceStr);
+    if (p == null) return null;
+    return p - suggestedTotalCostCents;
+  }, [suggestedTotalCostCents, priceStr]);
+
   const priceCents = useMemo(() => parseDollars(priceStr), [priceStr]);
   const profitCents =
     priceCents !== null && totalCostCents !== null ? priceCents - totalCostCents : null;
@@ -2148,6 +2333,98 @@ function SkuRow({
       `Remove the ${ALBUM_FORMAT_LABEL[format]} format from this album? Fans on the Buy sheet will no longer see it.`,
     );
     if (ok) onDelete();
+  };
+
+  // Task #619 — commit the suggested format bump. Upserts a SKU at the
+  // suggested format carrying over price / active / displayName / qty
+  // (snapped to the new context) plus color/jacket where compatible,
+  // then deletes the current row. The Sell-panel query invalidation
+  // on each mutation refreshes both rows; "Accept & adjust price"
+  // additionally focuses the new row's Price input after a short
+  // beat so the disclosure has time to repaint.
+  // Track in-flight bump so the dialog buttons can't be double-clicked
+  // into duplicate commits.
+  const [bumping, setBumping] = useState(false);
+  const commitBump = async (adjustPrice: boolean) => {
+    if (!suggestedFormat || bumping) return;
+    // Collision guard — the bump CTA is already hidden when the
+    // suggested format is configured, but if somehow we get here
+    // refuse to silently overwrite the existing row.
+    if (configuredFormats?.has(suggestedFormat)) {
+      toast({
+        title: `${ALBUM_FORMAT_LABEL[suggestedFormat]} already configured`,
+        description: "Open that row to adjust it instead of bumping.",
+        variant: "destructive",
+      });
+      setPreviewOpen(false);
+      setConfirmOpen(false);
+      return;
+    }
+    const cents = parseDollars(priceStr);
+    // Same deterministic picker the preview/dialog ran on, so the
+    // saved SKU has the exact margin the operator confirmed.
+    const newPressTierId = suggestedPick?.tier.id ?? null;
+    const newPressColorId = suggestedPick?.color?.id ?? null;
+    const useCatalogForNew = !!suggestedPick;
+    const body = {
+      format: suggestedFormat,
+      priceCents: cents ?? existing?.priceCents ?? 0,
+      trackCount: effectiveTrackCount,
+      stock: null,
+      active,
+      plannedQuantity: parsedQty > 0 ? parsedQty : null,
+      vinylColor: useCatalogForNew ? null : vinylColorId,
+      jacketUpgrade: useCatalogForNew ? null : DEFAULT_JACKET_UPGRADE,
+      pressTierId: useCatalogForNew ? newPressTierId : null,
+      pressColorId: useCatalogForNew ? newPressColorId : null,
+      displayName: displayNameStr.trim() ? displayNameStr.trim() : null,
+    };
+    setBumping(true);
+    try {
+      // Atomic-ish: upsert the new format FIRST, await success, then
+      // (and only then) delete the original. If the upsert fails the
+      // original row stays intact and the operator sees a toast.
+      await apiRequest(
+        "PUT",
+        `/api/admin/albums/${albumId}/skus/${suggestedFormat}`,
+        body,
+      );
+      if (!isDraft) {
+        try {
+          await apiRequest(
+            "DELETE",
+            `/api/admin/albums/${albumId}/skus/${format}`,
+          );
+        } catch (delErr: any) {
+          // New SKU landed but old one wouldn't delete — surface so
+          // the operator can clean up manually instead of leaving
+          // both rows quietly configured.
+          toast({
+            title: "New format saved, original couldn't be removed",
+            description: delErr?.message ?? "Delete the old format row manually.",
+            variant: "destructive",
+          });
+        }
+      }
+      await queryClient.invalidateQueries({
+        queryKey: ["/api/admin/albums", albumId, "skus"],
+      });
+      setPreviewOpen(false);
+      setConfirmOpen(false);
+      toast({
+        title: `Switched to ${ALBUM_FORMAT_LABEL[suggestedFormat]}`,
+        description: `Bumped from ${ALBUM_FORMAT_LABEL[format]} to fit the album's runtime.`,
+      });
+      onAfterBump?.(suggestedFormat, { adjustPrice });
+    } catch (err: any) {
+      toast({
+        title: "Couldn't save the bumped format",
+        description: err?.message ?? "Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setBumping(false);
+    }
   };
 
   // Collapsed summary text for the vinyl header. `12" LP · $25.00 · 1,000`
@@ -2386,6 +2663,125 @@ function SkuRow({
         </span>
         <span className="flex-1 h-px bg-slate-200" aria-hidden />
       </div>
+      {/* Task #619 — runtime-vs-capacity warning. Shows when the
+          album's total runtime exceeds the per-side cap for the
+          currently-selected vinyl format and a sensible bump format
+          is available (filtered against the invited press's catalog
+          if any). Click "View Suggestion" → inline preview of the
+          new format's cost / margin with Accept / Undo; Accept opens
+          the AlertDialog at the bottom of the row. */}
+      {showFitWarning && (
+        <div
+          className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          data-testid={`fit-warning-${format}`}
+        >
+          <div className="flex items-start gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="font-medium">
+                Doesn't fit on {ALBUM_FORMAT_LABEL[format]}
+              </div>
+              <div className="text-xs text-amber-800/90 mt-0.5">
+                {(() => {
+                  const t = Math.max(0, Math.round(totalRuntimeSec ?? 0));
+                  const m = Math.floor(t / 60);
+                  const s = String(t % 60).padStart(2, "0");
+                  const cap = Math.round(VINYL_PER_SIDE_MAX_SECONDS[format] / 60);
+                  const alreadyHasSuggested =
+                    suggestedFormat != null && configuredFormats?.has(suggestedFormat);
+                  const tail = !suggestedFormat
+                    ? `No larger format is available on the invited press — drop a track or shorten the run to fit.`
+                    : alreadyHasSuggested
+                      ? `${ALBUM_FORMAT_LABEL[suggestedFormat]} is already configured on this album — adjust that row instead.`
+                      : `Bump to ${ALBUM_FORMAT_LABEL[suggestedFormat]}?`;
+                  return `Album runs ${m}:${s} — over the ~${cap} min/side cap on ${ALBUM_FORMAT_LABEL[format]}. ${tail}`;
+                })()}
+              </div>
+              {suggestedFormat && previewOpen && (
+                <div
+                  className="mt-2 rounded border border-amber-300/70 bg-white/70 px-2.5 py-2 text-xs text-slate-700"
+                  data-testid={`fit-preview-${format}`}
+                >
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-500">New format</span>
+                    <span className="font-medium text-slate-900">
+                      {ALBUM_FORMAT_LABEL[suggestedFormat]}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3 mt-1">
+                    <span className="text-slate-500">New unit cost</span>
+                    <span className="font-medium text-slate-900" data-testid={`text-preview-cost-${format}`}>
+                      {suggestedTotalCostCents != null ? dollars(suggestedTotalCostCents) : "—"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3 mt-1">
+                    <span className="text-slate-500">New per-unit profit</span>
+                    <span
+                      className={`font-medium ${suggestedProfitCents != null && suggestedProfitCents < 0 ? "text-rose-700" : "text-slate-900"}`}
+                      data-testid={`text-preview-profit-${format}`}
+                    >
+                      {suggestedProfitCents != null ? dollars(suggestedProfitCents) : "—"}
+                    </span>
+                  </div>
+                  {suggestedPick && (suggestedPick.fellBackTier || suggestedPick.fellBackColor) && (
+                    <div
+                      className="mt-1.5 text-xs text-amber-800"
+                      data-testid={`text-preview-fallback-${format}`}
+                    >
+                      Heads up — the press doesn't offer your current{" "}
+                      {suggestedPick.fellBackTier && suggestedPick.fellBackColor
+                        ? "tier or color"
+                        : suggestedPick.fellBackTier
+                          ? "tier"
+                          : "color"}{" "}
+                      on {ALBUM_FORMAT_LABEL[suggestedFormat!]}; using{" "}
+                      <span className="font-medium">{suggestedPick.tier.name}</span>
+                      {suggestedPick.color ? (
+                        <>
+                          {" "}/ <span className="font-medium">{suggestedPick.color.name}</span>
+                        </>
+                      ) : null}{" "}
+                      instead.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            {suggestedFormat && !configuredFormats?.has(suggestedFormat) && (
+              <div className="flex flex-col gap-1.5 shrink-0">
+                {!previewOpen ? (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewOpen(true)}
+                    className="h-7 px-2.5 rounded text-xs font-medium bg-white border border-amber-300 text-amber-900 hover:bg-amber-100"
+                    data-testid={`button-view-suggestion-${format}`}
+                  >
+                    View Suggestion
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmOpen(true)}
+                      className="h-7 px-2.5 rounded text-xs font-medium bg-amber-600 text-white hover:bg-amber-700"
+                      data-testid={`button-accept-suggestion-${format}`}
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewOpen(false)}
+                      className="h-7 px-2.5 rounded text-xs font-medium bg-white border border-amber-300 text-amber-900 hover:bg-amber-100"
+                      data-testid={`button-undo-suggestion-${format}`}
+                    >
+                      Undo
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {/* Task #390 — new two-column vinyl card. LEFT: format dropdown,
           big preview hero with pencil-on-hover (→ cover-art editor),
           color section + swatch row + selected color name, jacket.
@@ -3336,6 +3732,120 @@ function SkuRow({
       </div>
       </>
       ))}
+      {/* Task #619 — confirm-bump modal. Two-step: operator clicks
+          "Accept" in the inline preview, then this dialog spells out
+          the per-unit margin delta and offers Cancel · Accept ·
+          Accept & adjust price. The third action sets a flag the
+          commitBump handler reads to focus the Price input on the
+          new format row after the bump persists. */}
+      {suggestedFormat && (
+        <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <AlertDialogContent data-testid="dialog-confirm-format-bump">
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Bump to {ALBUM_FORMAT_LABEL[suggestedFormat]}?
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-2">
+                  <div>
+                    Switching from {ALBUM_FORMAT_LABEL[format]} to{" "}
+                    {ALBUM_FORMAT_LABEL[suggestedFormat]} keeps the album's
+                    runtime within per-side limits.
+                  </div>
+                  {totalCostCents != null && suggestedTotalCostCents != null && (
+                    <div className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Current per-unit profit</span>
+                        <span className="font-medium" data-testid="text-margin-before">
+                          {(() => {
+                            const p = parseDollars(priceStr);
+                            return p != null ? dollars(p - totalCostCents) : "—";
+                          })()}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">New per-unit profit</span>
+                        <span
+                          className={`font-medium ${suggestedProfitCents != null && suggestedProfitCents < 0 ? "text-rose-700" : ""}`}
+                          data-testid="text-margin-after"
+                        >
+                          {suggestedProfitCents != null ? dollars(suggestedProfitCents) : "—"}
+                        </span>
+                      </div>
+                      {(() => {
+                        const p = parseDollars(priceStr);
+                        if (p == null || suggestedProfitCents == null) return null;
+                        const delta = suggestedProfitCents - (p - totalCostCents);
+                        const sign = delta >= 0 ? "+" : "−";
+                        const cls = delta >= 0 ? "text-emerald-700" : "text-rose-700";
+                        return (
+                          <div className="flex justify-between border-t border-slate-200 pt-1">
+                            <span className="text-slate-500">Delta</span>
+                            <span className={`font-semibold ${cls}`}>
+                              {sign}{dollars(Math.abs(delta))}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                  {suggestedPick && (suggestedPick.fellBackTier || suggestedPick.fellBackColor) && (
+                    <div className="text-xs text-amber-800" data-testid="text-dialog-fallback">
+                      The press doesn't offer your current{" "}
+                      {suggestedPick.fellBackTier && suggestedPick.fellBackColor
+                        ? "tier or color"
+                        : suggestedPick.fellBackTier
+                          ? "tier"
+                          : "color"}{" "}
+                      on {ALBUM_FORMAT_LABEL[suggestedFormat]} — using{" "}
+                      <span className="font-medium">{suggestedPick.tier.name}</span>
+                      {suggestedPick.color ? (
+                        <>
+                          {" "}/ <span className="font-medium">{suggestedPick.color.name}</span>
+                        </>
+                      ) : null}{" "}
+                      instead.
+                    </div>
+                  )}
+                  {suggestedProfitCents != null && suggestedProfitCents < 0 && (
+                    <div className="text-xs text-rose-700">
+                      Heads up: the new format costs more than the current price.
+                      You'll want to raise the price.
+                    </div>
+                  )}
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                className="bg-transparent border-0 hover:bg-slate-100"
+                data-testid="button-cancel-bump"
+              >
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  commitBump(false);
+                }}
+                className="bg-transparent text-slate-900 border border-slate-300 hover:bg-slate-50"
+                data-testid="button-accept-bump"
+              >
+                Accept
+              </AlertDialogAction>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  commitBump(true);
+                }}
+                data-testid="button-accept-bump-adjust-price"
+              >
+                Accept &amp; adjust price
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }

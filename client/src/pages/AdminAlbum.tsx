@@ -1142,6 +1142,10 @@ export function AdminAlbum() {
                   physicalFormat={album.physicalFormat ?? null}
                   sellQuoteLockedAt={album.sellQuoteLockedAt ?? null}
                   trackCount={album.songs.length}
+                  totalRuntimeSec={album.songs.reduce(
+                    (sum, s) => sum + (s.duration ?? 0),
+                    0,
+                  )}
                   anticipatedTrackCount={album.anticipatedTrackCount ?? null}
                   onAnticipatedTrackCountChange={(next) =>
                     updateAlbumMode.mutate({ anticipatedTrackCount: next })
