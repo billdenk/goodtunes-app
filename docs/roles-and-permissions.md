@@ -83,7 +83,7 @@ Overrides land in `partner_permission_overrides (scope_kind, scope_id, user_id, 
 - **Owns:** every `albums` row with `primary_artist_id = role_scope_id` and no `label_id`. When an album has a label set, the label scope wins for partner gating — by design.
 - **Lands on:** `/artist` after sign-in. With `invite_role` of identity/manager/team, see the Task #351 fallback (lands on the most-recent album editor or `/welcome-invitee`).
 - **Reports:** own scope only.
-- **Invites:** **artist-scope teammates only** today, gated on `invite_subusers`. Identity/Manager/Team sub-roles apply to artist-scope invites only. Cannot cross-invite Labels — `GAP-2` covers Bill's expansion.
+- **Invites:** **artist-scope teammates** plus **fresh-artist invites** (Task #546) gated on `invite_subusers`. Identity/Manager/Team sub-roles apply to teammate invites; fresh-artist invites are uncapped on shape but capped at `ARTIST_INVITE_OUTSTANDING_LIMIT` (5) outstanding per artist. The artist-portal wrapper `POST /api/artist/invites/artist` mints a placeholder Person for the invitee, forwards into `/api/admin/invites` with `referrer_kind='artist'`, and accept-time stamps `people.referred_by_person_id` so the $1/unit referral chain attaches without a separate ledger. Cannot cross-invite Labels — `GAP-2` covers the remaining Label expansion.
 - **Referrals:** can refer other artists (creates `artist_referrals` rows; swap-state default `referrer_keeps_full`). Frozen at first paid order on the referred artist's first GoodTunes album.
 
 ### `non_profit`

@@ -15207,6 +15207,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // handler (post-validation). pressInviterScopeId stays null for
     // every other caller / role combination.
     let pressInviterScopeId: string | null = null;
+    // Task #546 — artist→artist invite path: when an artist with
+    // invite_subusers invites another artist onto GoodTunes (no
+    // inviteRole set = not a teammate invite), we let role=artist +
+    // a fresh roleScopeId through unchanged and stamp the referrer to
+    // the caller's artist Person below.
+    let artistInviterScopeId: string | null = null;
     if (callerRole.role !== "super_admin") {
       if (!PARTNER_SCOPE_KINDS.includes(callerRole.role as any) || !callerRole.roleScopeId) {
         return res.status(403).json({ message: "Only super-admins and scoped partners can invite" });
@@ -15221,9 +15227,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // artist/label case we let the requested role/scope through
       // unchanged and stamp the referrer to this press; in every
       // other case we keep the original force-to-own-scope rule.
+      const isTeammateInvite = !!req.body?.inviteRole;
       if (callerRole.role === "manufacturer" && (role === "artist" || role === "label")) {
         pressInviterScopeId = callerRole.roleScopeId;
         // keep client-provided role + roleScopeId
+      } else if (callerRole.role === "artist" && role === "artist" && !isTeammateInvite) {
+        // Task #546 — fresh artist→artist invite. Caller is forwarding
+        // from the artist-portal wrapper which has already minted a
+        // placeholder Person for the invitee and set roleScopeId to
+        // that person id. Pin the referrer to the caller's artist
+        // Person below; everything else falls through unchanged.
+        artistInviterScopeId = callerRole.roleScopeId;
       } else {
         role = callerRole.role;
         roleScopeId = callerRole.roleScopeId;
@@ -15368,6 +15382,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       referrerKind = "manufacturer";
       referrerScopeId = pressInviterScopeId;
     }
+    // Task #546 — artist→artist invite: pin referrer to the caller's
+    // own artist Person + enforce the outstanding-invite cap so a
+    // single artist can't blast out unbounded invites.
+    if (artistInviterScopeId) {
+      referrerKind = "artist";
+      referrerScopeId = artistInviterScopeId;
+      const { ARTIST_INVITE_OUTSTANDING_LIMIT } = await import("@shared/schema");
+      const outstanding = await db.execute<{ ct: number }>(sql`
+        SELECT COUNT(*)::int AS ct FROM admin_invites
+        WHERE referrer_kind = 'artist'
+          AND referrer_scope_id = ${artistInviterScopeId}
+          AND used_at IS NULL
+          AND revoked_at IS NULL
+          AND expires_at > NOW()
+      `);
+      const ct = ((outstanding as any).rows ?? [])[0]?.ct ?? 0;
+      if (ct >= ARTIST_INVITE_OUTSTANDING_LIMIT) {
+        return res.status(429).json({
+          message: `You've hit the cap of ${ARTIST_INVITE_OUTSTANDING_LIMIT} outstanding invites. Revoke one or wait for someone to accept.`,
+          code: "INVITE_CAP_REACHED",
+        });
+      }
+    }
 
     const existing = await storage.getUserByEmail(email);
     if (existing) return res.status(400).json({ message: "An admin with that email already exists" });
@@ -15457,6 +15494,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       preFlightedAlbumId,
       reviewStatus,
     } as any);
+
+    // Task #546 — If this email is on the earmarked-folks list, stamp
+    // it so the row drops off the artist-dashboard suggestion list.
+    // Best-effort: a missing table on a freshly-cloned dev never blocks
+    // the invite.
+    try {
+      await db.execute(sql`
+        UPDATE earmarked_artists
+           SET invited_at = NOW(), invited_invite_id = ${invite.id}
+         WHERE LOWER(email) = ${email} AND invited_at IS NULL
+      `);
+    } catch (e: any) {
+      console.warn(`[invite] earmarked stamp failed: ${e?.message}`);
+    }
 
     // Build absolute accept URL from the request host so prod uses the
     // prod hostname and dev uses the preview host without a hard-coded
@@ -15609,6 +15660,270 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Re-dispatch through the same handler — keeps the claimed-Person
     // gate + duplicate-tree checks + email-sending logic in one place.
     return (app as any)._router.handle({ ...req, url: "/api/admin/invites", method: "POST" }, res, () => {});
+  });
+
+  // ─── Task #546 — Artist→artist invites + earmarked suggestions ────
+  //
+  // Verified artists can invite other artists onto GoodTunes. Caps at
+  // ARTIST_INVITE_OUTSTANDING_LIMIT outstanding (5/artist). Inviter +
+  // invitee both get stamped through the existing referral chain
+  // (referredByPersonId) so future referral payouts attach without a
+  // separate ledger. Out of scope here: public artist signup
+  // (intentionally absent — GoodTunes is invite-only for artists).
+
+  // List the invites this artist has sent. Pending + accepted, newest
+  // first. Counter for the X/5 cap.
+  app.get("/api/artist/invites", requireAdmin, async (req, res) => {
+    const role = await getUserRole(req.session.userId!);
+    if (!role || role.role !== "artist" || !role.roleScopeId) {
+      return res.status(403).json({ message: "Only artist partners can use this endpoint" });
+    }
+    const { ARTIST_INVITE_OUTSTANDING_LIMIT } = await import("@shared/schema");
+    const rows = await db.execute<any>(sql`
+      SELECT ai.id, ai.email, ai.role, ai.role_scope_id AS "roleScopeId",
+             ai.welcome_note AS "welcomeNote", ai.expires_at AS "expiresAt",
+             ai.created_at AS "createdAt", ai.used_at AS "usedAt",
+             ai.revoked_at AS "revokedAt", ai.resent_at AS "resentAt",
+             ai.invite_role AS "inviteRole", ai.review_status AS "reviewStatus",
+             p.name AS "scopeName", p.photo_url AS "scopeThumbUrl"
+        FROM admin_invites ai
+        LEFT JOIN people p ON p.id = ai.role_scope_id AND ai.role = 'artist'
+       WHERE ai.referrer_kind = 'artist'
+         AND ai.referrer_scope_id = ${role.roleScopeId}
+         AND ai.invite_role IS NULL
+       ORDER BY ai.created_at DESC
+       LIMIT 100
+    `);
+    const list = ((rows as any).rows ?? []) as any[];
+    const outstanding = list.filter((r) => !r.usedAt && !r.revokedAt && new Date(r.expiresAt) > new Date()).length;
+    res.json({
+      invites: list,
+      outstanding,
+      cap: ARTIST_INVITE_OUTSTANDING_LIMIT,
+    });
+  });
+
+  // Send an artist→artist invite. Creates a placeholder Person for
+  // the invitee so the existing accept-time referrer wiring lights up
+  // immediately, then forwards into the main /api/admin/invites POST
+  // path which handles email + rate-limit + earmarked stamp.
+  app.post("/api/artist/invites/artist", requireAdmin, async (req, res) => {
+    const role = await getUserRole(req.session.userId!);
+    if (!role || role.role !== "artist" || !role.roleScopeId) {
+      return res.status(403).json({ message: "Only artist partners can use this endpoint" });
+    }
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const name = String(req.body?.name || "").trim();
+    const welcomeNote = req.body?.welcomeNote ? String(req.body.welcomeNote).slice(0, 1000) : null;
+    if (!name) return res.status(400).json({ message: "Enter the artist's name" });
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(email)) return res.status(400).json({ message: "Enter a valid email address" });
+
+    // Reject if there's already a non-rejected invite for this email
+    // from this artist (idempotency — they should resend, not duplicate).
+    const dup = await db.execute<{ id: string }>(sql`
+      SELECT id FROM admin_invites
+       WHERE LOWER(email) = ${email}
+         AND referrer_kind = 'artist' AND referrer_scope_id = ${role.roleScopeId}
+         AND invite_role IS NULL
+         AND used_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()
+       LIMIT 1
+    `);
+    if (((dup as any).rows ?? []).length > 0) {
+      return res.status(409).json({ message: "You already have an outstanding invite to that email — resend it instead." });
+    }
+
+    // Placeholder Person so the accept handler can stamp
+    // referredByPersonId on this row (rather than punting referral
+    // attribution into a separate ledger for invite-only artists).
+    const person = await storage.createPerson({ name, isGroup: false } as any);
+
+    (req as any).body = {
+      email,
+      role: "artist",
+      roleScopeId: person.id,
+      welcomeNote,
+      // No inviteRole / targetPersonId on purpose — this is a
+      // fresh-artist invite, not a teammate invite. The carveout in
+      // /api/admin/invites detects this and pins the referrer to the
+      // caller's artist Person (no claimed-Person review gate fires
+      // because targetPerson stays null).
+    };
+    return (app as any)._router.handle({ ...req, url: "/api/admin/invites", method: "POST" }, res, () => {});
+  });
+
+  // Resend an artist→artist invite the caller sent. Wrapper around the
+  // super-admin resend endpoint, gated to invites with this artist as
+  // the referrer.
+  app.post("/api/artist/invites/:id/resend", requireAdmin, async (req, res) => {
+    const role = await getUserRole(req.session.userId!);
+    if (!role || role.role !== "artist" || !role.roleScopeId) {
+      return res.status(403).json({ message: "Only artist partners can use this endpoint" });
+    }
+    const existing = await storage.getAdminInviteById(String(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Invite not found" });
+    if ((existing as any).referrerKind !== "artist" || (existing as any).referrerScopeId !== role.roleScopeId) {
+      return res.status(403).json({ message: "Not your invite" });
+    }
+    if (existing.usedAt) return res.status(410).json({ message: "Invite already accepted" });
+    if ((existing as any).revokedAt) return res.status(410).json({ message: "Invite was revoked — send a new one" });
+    const newToken = generateToken();
+    const newExpiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+    const updated = await storage.resendAdminInvite(existing.id, newToken, newExpiresAt);
+    if (!updated) return res.status(500).json({ message: "Resend failed" });
+    const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const host = req.headers["x-forwarded-host"] || req.headers.host;
+    const acceptUrl = `${proto}://${host}/invite/${newToken}`;
+    const inviter = await storage.getUser(req.session.userId!);
+    const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes artist";
+    const result = await sendAdminInviteEmail(updated.email, acceptUrl, inviterName, ROLE_LABELS[updated.role] || updated.role, INVITE_TTL_DAYS);
+    res.json({ id: updated.id, acceptUrl, emailDelivered: result.ok });
+  });
+
+  // Revoke an artist→artist invite the caller sent. Soft-revoke (the
+  // row stays for the referral audit). Also drops the placeholder
+  // Person if it was never accepted, to avoid catalog pollution.
+  app.delete("/api/artist/invites/:id", requireAdmin, async (req, res) => {
+    const role = await getUserRole(req.session.userId!);
+    if (!role || role.role !== "artist" || !role.roleScopeId) {
+      return res.status(403).json({ message: "Only artist partners can use this endpoint" });
+    }
+    const existing = await storage.getAdminInviteById(String(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Invite not found" });
+    if ((existing as any).referrerKind !== "artist" || (existing as any).referrerScopeId !== role.roleScopeId) {
+      return res.status(403).json({ message: "Not your invite" });
+    }
+    await storage.revokeAdminInvite(String(req.params.id));
+    // Best-effort placeholder cleanup — only if the Person row has no
+    // releases, no other admin login, and no other invites pointing at
+    // it. Failures are non-fatal.
+    if (existing.roleScopeId && !existing.usedAt) {
+      try {
+        const guard = await db.execute<{ ct: number }>(sql`
+          SELECT (
+            (SELECT COUNT(*) FROM albums WHERE primary_artist_id = ${existing.roleScopeId}) +
+            (SELECT COUNT(*) FROM users WHERE role = 'artist' AND role_scope_id = ${existing.roleScopeId}) +
+            (SELECT COUNT(*) FROM admin_invites WHERE role_scope_id = ${existing.roleScopeId} AND id <> ${existing.id})
+          )::int AS ct
+        `);
+        const ct = ((guard as any).rows ?? [])[0]?.ct ?? 0;
+        if (ct === 0) {
+          await db.execute(sql`DELETE FROM people WHERE id = ${existing.roleScopeId}`);
+        }
+      } catch (e: any) {
+        console.warn(`[invite] placeholder cleanup failed: ${e?.message}`);
+      }
+    }
+    res.json({ ok: true });
+  });
+
+  // Earmarked suggestions for this artist — pre-seeded list of folks
+  // Bill wants onboarded. Filters out anyone already invited (by us or
+  // anyone else) and anyone who already has an admin login.
+  app.get("/api/artist/earmarked", requireAdmin, async (req, res) => {
+    const role = await getUserRole(req.session.userId!);
+    if (!role || role.role !== "artist" || !role.roleScopeId) {
+      return res.status(403).json({ message: "Only artist partners can use this endpoint" });
+    }
+    const rows = await db.execute<any>(sql`
+      SELECT e.id, e.name, e.email, e.notes
+        FROM earmarked_artists e
+       WHERE e.invited_at IS NULL
+         AND NOT EXISTS (SELECT 1 FROM users u WHERE LOWER(u.email) = LOWER(e.email))
+         AND NOT EXISTS (
+           SELECT 1 FROM admin_invites ai
+            WHERE LOWER(ai.email) = LOWER(e.email)
+              AND ai.used_at IS NULL AND ai.revoked_at IS NULL
+              AND ai.expires_at > NOW()
+         )
+       ORDER BY e.added_at DESC
+       LIMIT 50
+    `);
+    res.json({ suggestions: ((rows as any).rows ?? []) });
+  });
+
+  // Admin-side earmarked CRUD (super_admin only). Bill pastes a batch
+  // from one form ("Name <email>" per line, or "Name, email"); the
+  // dashboard renders them as one-tap invite chips for artists.
+  app.get("/api/admin/earmarked-artists", requireAdmin, requireRole("super_admin"), async (_req, res) => {
+    const rows = await db.execute<any>(sql`
+      SELECT e.id, e.name, e.email, e.notes, e.added_by_user_id AS "addedByUserId",
+             e.added_at AS "addedAt", e.invited_at AS "invitedAt",
+             e.invited_invite_id AS "invitedInviteId",
+             ai.email AS "invitedEmail", ai.role_scope_id AS "invitedPersonId",
+             ai.used_at AS "invitedUsedAt"
+        FROM earmarked_artists e
+        LEFT JOIN admin_invites ai ON ai.id = e.invited_invite_id
+       ORDER BY e.added_at DESC
+       LIMIT 500
+    `);
+    res.json({ rows: ((rows as any).rows ?? []) });
+  });
+
+  // Bulk add — accepts either an `entries` array of {name,email,notes}
+  // OR a `bulk` string with one entry per line. Lines are parsed as
+  // "Name <email>" or "Name, email" or just "email". Idempotent on
+  // (email): re-pasting updates name/notes instead of duplicating.
+  app.post("/api/admin/earmarked-artists/bulk", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    type Entry = { name: string; email: string; notes?: string };
+    const entries: Entry[] = [];
+    const seen = new Set<string>();
+    const pushEntry = (name: string, email: string, notes?: string) => {
+      const e = email.trim().toLowerCase();
+      const n = name.trim();
+      if (!e || !n) return;
+      const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRe.test(e)) return;
+      if (seen.has(e)) return;
+      seen.add(e);
+      entries.push({ name: n, email: e, notes: notes?.trim() || undefined });
+    };
+    if (Array.isArray(req.body?.entries)) {
+      for (const row of req.body.entries) {
+        pushEntry(String(row?.name || ""), String(row?.email || ""), row?.notes ? String(row.notes) : undefined);
+      }
+    }
+    if (typeof req.body?.bulk === "string") {
+      for (const raw of String(req.body.bulk).split(/\r?\n/)) {
+        const line = raw.trim();
+        if (!line) continue;
+        // "Name <email>"
+        const angle = line.match(/^(.+?)\s*<([^>]+)>\s*$/);
+        if (angle) { pushEntry(angle[1], angle[2]); continue; }
+        // "Name, email" or "Name | email" or "Name\temail"
+        const split = line.split(/\s*[,|\t]\s*/);
+        if (split.length >= 2 && split[1].includes("@")) { pushEntry(split[0], split[1]); continue; }
+        // bare email — use the local-part as a placeholder name
+        if (line.includes("@") && !line.includes(" ")) {
+          const local = line.split("@")[0];
+          pushEntry(local, line);
+          continue;
+        }
+      }
+    }
+    if (entries.length === 0) {
+      return res.status(400).json({ message: "Nothing parseable — paste one per line as `Name <email>`." });
+    }
+    let inserted = 0;
+    let updated = 0;
+    for (const e of entries) {
+      const r = await db.execute<{ existed: boolean }>(sql`
+        INSERT INTO earmarked_artists (name, email, notes, added_by_user_id)
+        VALUES (${e.name}, ${e.email}, ${e.notes ?? null}, ${req.session.userId!})
+        ON CONFLICT (email) DO UPDATE
+          SET name = EXCLUDED.name,
+              notes = COALESCE(EXCLUDED.notes, earmarked_artists.notes)
+        RETURNING (xmax <> 0) AS existed
+      `);
+      const row = ((r as any).rows ?? [])[0];
+      if (row?.existed) updated += 1; else inserted += 1;
+    }
+    res.json({ ok: true, inserted, updated, parsed: entries.length });
+  });
+
+  app.delete("/api/admin/earmarked-artists/:id", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    await db.execute(sql`DELETE FROM earmarked_artists WHERE id = ${String(req.params.id)}`);
+    res.json({ ok: true });
   });
 
   app.put("/api/admin/people/:id/team/:userId/override", requireAdmin, requireRole("super_admin"), async (req, res) => {

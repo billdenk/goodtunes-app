@@ -1646,3 +1646,35 @@ SQL
 }
 migrate_payout_earmarks dev  "${DATABASE_URL:-}"
 migrate_payout_earmarks prod "${PROD_DATABASE_URL:-}"
+
+# Task #546 — Artist-to-artist invites: pre-seeded "earmarked folks"
+# list super-admin uses to feed the artist dashboard's invite
+# suggestions. Pre-create on both DBs so a fresh-clone dev never 500s
+# the new endpoints and the publish dev→prod diff stays empty.
+migrate_earmarked_artists() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping earmarked_artists migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+CREATE TABLE IF NOT EXISTS earmarked_artists (
+  id                 varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  name               text NOT NULL,
+  email              text NOT NULL UNIQUE,
+  notes              text,
+  added_by_user_id   varchar,
+  added_at           timestamp DEFAULT now(),
+  invited_at         timestamp,
+  invited_invite_id  varchar
+);
+CREATE INDEX IF NOT EXISTS earmarked_artists_invited_idx ON earmarked_artists(invited_at);
+SQL
+  then
+    echo "post-merge: earmarked_artists migration ok on $label"
+  else
+    echo "post-merge: WARNING — earmarked_artists migration failed on $label (continuing)"
+  fi
+}
+migrate_earmarked_artists dev  "${DATABASE_URL:-}"
+migrate_earmarked_artists prod "${PROD_DATABASE_URL:-}"

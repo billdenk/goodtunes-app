@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { LogOut, ShieldCheck, UserPlus } from "lucide-react";
+import { LogOut, ShieldCheck, UserPlus, Heart } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   DropdownMenu,
@@ -71,6 +71,14 @@ export function AdminUserMenu() {
         >
           <UserPlus className="w-4 h-4 mr-2 text-slate-500" />
           Invite teammate
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => navigate("/admin/earmarked-artists")}
+          data-testid="menu-item-earmarked"
+          className="text-[13px] cursor-pointer text-slate-700 focus:bg-slate-100 focus:text-slate-900"
+        >
+          <Heart className="w-4 h-4 mr-2 text-slate-500" />
+          Earmarked artists
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => navigate("/admin/security")}

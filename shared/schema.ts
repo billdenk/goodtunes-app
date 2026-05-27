@@ -3109,6 +3109,30 @@ export type NpoInviteRole = (typeof NPO_INVITE_ROLES)[number];
 export type InsertAdminInvite = z.infer<typeof insertAdminInviteSchema>;
 export type AdminInvite = typeof adminInvites.$inferSelect;
 
+// Task #546 — Cap on how many invites a single artist can have
+// outstanding (not used, not revoked, not expired) at one time. Keeps
+// the artist-to-artist invite system from becoming a spam vector.
+export const ARTIST_INVITE_OUTSTANDING_LIMIT = 5;
+
+// Task #546 — Pre-seeded "earmarked folks" list. Super-admin pastes in
+// names/emails Bill wants to personally onboard; the artist dashboard
+// surfaces these as one-tap invite suggestions. Once an artist sends
+// an invite to a matching email, invitedAt + invitedInviteId stamp
+// so the row drops off the suggestion list. Not auto-imported — the
+// inviting artist still has to click Send.
+export const earmarkedArtists = pgTable("earmarked_artists", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  notes: text("notes"),
+  addedByUserId: varchar("added_by_user_id"),
+  addedAt: timestamp("added_at").defaultNow(),
+  invitedAt: timestamp("invited_at"),
+  invitedInviteId: varchar("invited_invite_id"),
+});
+export type EarmarkedArtist = typeof earmarkedArtists.$inferSelect;
+export type InsertEarmarkedArtist = typeof earmarkedArtists.$inferInsert;
+
 // ─── Task #78 — Referral credit ledger ────────────────────────────────
 // One row per paid unit on an album whose primary artist was referred
 // by another partner. `$1` (100¢) per unit by default — read off

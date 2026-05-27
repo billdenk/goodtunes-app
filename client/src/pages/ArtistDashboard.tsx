@@ -701,6 +701,292 @@ function InviteTeammatePanel() {
   );
 }
 
+// Task #546 — Artist-to-artist invites. Verified artists invite other
+// artists onto GoodTunes (no public signup exists). Capped at 5
+// outstanding/artist. Pre-seeded "earmarked folks" list surfaces here
+// as one-tap suggestions.
+type ArtistInviteRow = {
+  id: string;
+  email: string;
+  scopeName: string | null;
+  scopeThumbUrl: string | null;
+  welcomeNote: string | null;
+  expiresAt: string;
+  createdAt: string;
+  usedAt: string | null;
+  revokedAt: string | null;
+  resentAt: string | null;
+};
+type EarmarkedSuggestion = { id: string; name: string; email: string; notes: string | null };
+
+function InviteArtistPanel() {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [welcomeNote, setWelcomeNote] = useState("");
+
+  const list = useQuery<{ invites: ArtistInviteRow[]; outstanding: number; cap: number }>({
+    queryKey: ["/api/artist/invites"],
+  });
+  const sugg = useQuery<{ suggestions: EarmarkedSuggestion[] }>({
+    queryKey: ["/api/artist/earmarked"],
+  });
+  // Task #546 — Join per-invitee units sold + pending payout onto the
+  // invite rows. Match key is the placeholder Person id we minted at
+  // invite time, which equals invite.roleScopeId and partner.id from
+  // /api/artist/referrals.
+  const refs = useQuery<{ partners: { id: string; units: number; pendingCents: number }[] }>({
+    queryKey: ["/api/artist/referrals"],
+  });
+  const partnerByScope = new Map<string, { units: number; pendingCents: number }>();
+  for (const p of refs.data?.partners ?? []) partnerByScope.set(p.id, { units: p.units, pendingCents: p.pendingCents });
+
+  const send = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", "/api/artist/invites/artist", {
+        email: email.trim(),
+        name: name.trim(),
+        welcomeNote: welcomeNote.trim() || undefined,
+      });
+      return r.json();
+    },
+    onSuccess: (data: any) => {
+      setEmail(""); setName(""); setWelcomeNote(""); setOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/artist/invites"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/artist/earmarked"] });
+      toast({
+        title: data?.reviewStatus === "pending_review" ? "Held for review" : data?.emailDelivered ? "Invite sent" : "Invite created",
+        description: data?.reviewStatus === "pending_review"
+          ? "GoodTunes will review and notify you when approved."
+          : `Emailed ${data?.email ?? "the artist"}.`,
+      });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't invite", description: e.message, variant: "destructive" }),
+  });
+
+  const resend = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await apiRequest("POST", `/api/artist/invites/${id}/resend`);
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/artist/invites"] });
+      toast({ title: "Invite re-sent" });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't resend", description: e.message, variant: "destructive" }),
+  });
+  const revoke = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/artist/invites/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/artist/invites"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/artist/earmarked"] });
+      toast({ title: "Invite revoked" });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't revoke", description: e.message, variant: "destructive" }),
+  });
+
+  const cap = list.data?.cap ?? 5;
+  const outstanding = list.data?.outstanding ?? 0;
+  const atCap = outstanding >= cap;
+  const invites = list.data?.invites ?? [];
+  const suggestions = sugg.data?.suggestions ?? [];
+  // Funnel rollup shown in the panel subtitle: sent → joined → units sold.
+  const joinedCount = invites.filter((iv) => iv.usedAt).length;
+  let totalUnits = 0;
+  let totalPendingCents = 0;
+  for (const iv of invites) {
+    if (!iv.usedAt) continue;
+    const stats = iv.roleScopeId ? partnerByScope.get(iv.roleScopeId) : undefined;
+    if (stats) { totalUnits += stats.units; totalPendingCents += stats.pendingCents; }
+  }
+  const fmtMoney = (c: number) => `$${(c / 100).toFixed(2)}`;
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const subtitle =
+    `${outstanding}/${cap} outstanding · ${joinedCount} joined · ${totalUnits} unit${totalUnits === 1 ? "" : "s"} sold` +
+    (totalPendingCents > 0 ? ` · ${fmtMoney(totalPendingCents)} pending` : "");
+
+  const pickSuggestion = (s: EarmarkedSuggestion) => {
+    setName(s.name);
+    setEmail(s.email);
+    setOpen(true);
+  };
+
+  return (
+    <Card
+      title="Invite an artist"
+      subtitle={subtitle}
+      testId="invite-artist-panel"
+    >
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          disabled={atCap}
+          className="text-xs font-semibold text-white bg-[var(--brand-purple)] hover:opacity-90 rounded-md px-3 py-1.5 disabled:opacity-40"
+          data-testid="button-open-invite-artist"
+        >
+          {atCap ? "Cap reached — revoke one to invite another" : "Invite another artist"}
+        </button>
+      ) : (
+        <form
+          onSubmit={(e) => { e.preventDefault(); if (email.trim() && name.trim() && !atCap) send.mutate(); }}
+          className="flex flex-col gap-2"
+          data-testid="form-invite-artist"
+        >
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Artist name"
+              required
+              className="flex-1 px-3 py-2 rounded-md bg-white/5 border border-white/15 text-white placeholder:text-white/30 text-sm"
+              data-testid="input-artist-name"
+            />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="artist@example.com"
+              required
+              className="flex-1 px-3 py-2 rounded-md bg-white/5 border border-white/15 text-white placeholder:text-white/30 text-sm"
+              data-testid="input-artist-email"
+            />
+          </div>
+          <textarea
+            value={welcomeNote}
+            onChange={(e) => setWelcomeNote(e.target.value)}
+            placeholder="Optional personal note (1-2 sentences)"
+            maxLength={1000}
+            rows={2}
+            className="px-3 py-2 rounded-md bg-white/5 border border-white/15 text-white placeholder:text-white/30 text-sm"
+            data-testid="input-artist-welcome-note"
+          />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={send.isPending || atCap}
+              className="px-3 py-2 text-sm font-semibold text-white bg-[var(--brand-purple)] hover:opacity-90 rounded-md disabled:opacity-40"
+              data-testid="button-send-artist-invite"
+            >
+              {send.isPending ? "Sending…" : "Send invite"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setOpen(false); setEmail(""); setName(""); setWelcomeNote(""); }}
+              className="px-3 py-2 text-sm text-white/70 hover:text-white"
+              data-testid="button-cancel-artist-invite"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
+      {suggestions.length > 0 && (
+        <div className="mt-4" data-testid="earmarked-suggestions">
+          <p className="text-xs uppercase tracking-wider text-white/55 mb-2">Suggested by GoodTunes</p>
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => pickSuggestion(s)}
+                disabled={atCap}
+                title={s.notes ?? s.email}
+                className="text-xs px-2.5 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/15 text-white/85 disabled:opacity-40"
+                data-testid={`button-earmarked-${s.id}`}
+              >
+                <span className="font-semibold">{s.name}</span>
+                <span className="text-white/45 ml-1.5">{s.email}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {invites.length > 0 && (
+        <ul className="mt-4 divide-y divide-white/5" data-testid="list-artist-invites">
+          {invites.map((iv) => {
+            const accepted = !!iv.usedAt;
+            const revoked = !!iv.revokedAt;
+            const expired = !accepted && !revoked && new Date(iv.expiresAt) <= new Date();
+            const status = accepted ? "Joined" : revoked ? "Revoked" : expired ? "Expired" : "Invited";
+            const tone = accepted
+              ? "text-[color:var(--brand-mint)]"
+              : revoked ? "text-white/40"
+              : expired ? "text-white/40"
+              : "text-[color:var(--brand-blue)]";
+            const stats = accepted && iv.roleScopeId ? partnerByScope.get(iv.roleScopeId) : undefined;
+            // Funnel meta line per row: invited date → joined date (if
+            // accepted) + units sold + pending payout (if any). Pending
+            // rows show the resend marker so the artist sees their
+            // recent action.
+            const metaBits: string[] = [];
+            metaBits.push(`Invited ${fmtDate(iv.createdAt)}`);
+            if (accepted && iv.usedAt) metaBits.push(`Joined ${fmtDate(iv.usedAt)}`);
+            if (!accepted && !revoked && iv.resentAt) metaBits.push(`Resent ${fmtDate(iv.resentAt)}`);
+            if (!accepted && !revoked && expired) metaBits.push(`Expired ${fmtDate(iv.expiresAt)}`);
+            return (
+              <li key={iv.id} className="py-2.5" data-testid={`row-artist-invite-${iv.id}`}>
+                <div className="flex items-center gap-3">
+                  {iv.scopeThumbUrl ? (
+                    <img src={iv.scopeThumbUrl} alt="" className="w-11 h-11 rounded-full object-cover bg-white/5" />
+                  ) : (
+                    <div className="w-11 h-11 rounded-full bg-white/5" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate text-sm" data-testid={`text-artist-invite-name-${iv.id}`}>{iv.scopeName ?? iv.email}</p>
+                    <p className="text-xs text-white/55 truncate">{iv.email}</p>
+                  </div>
+                  <span className={`text-xs font-semibold uppercase tracking-wider ${tone}`} data-testid={`text-artist-invite-status-${iv.id}`}>{status}</span>
+                  {!accepted && !revoked && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => resend.mutate(iv.id)}
+                      disabled={resend.isPending}
+                      className="text-xs text-white/70 hover:text-white px-2 py-1 disabled:opacity-40"
+                      data-testid={`button-resend-artist-invite-${iv.id}`}
+                    >
+                      Resend
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { if (confirm(`Revoke invite to ${iv.email}?`)) revoke.mutate(iv.id); }}
+                      disabled={revoke.isPending}
+                      className="text-xs text-[color:var(--brand-heart)]/80 hover:text-[color:var(--brand-heart)] px-2 py-1 disabled:opacity-40"
+                      data-testid={`button-revoke-artist-invite-${iv.id}`}
+                    >
+                      Revoke
+                    </button>
+                  </>
+                  )}
+                </div>
+                <p className="mt-1.5 pl-14 text-xs text-white/55" data-testid={`text-artist-invite-meta-${iv.id}`}>
+                  {metaBits.join(" · ")}
+                  {stats && (
+                    <>
+                      {" · "}
+                      <span className="text-white/85">{stats.units} unit{stats.units === 1 ? "" : "s"} sold</span>
+                      {stats.pendingCents > 0 && (
+                        <span className="text-[color:var(--brand-mint)]"> · {fmtMoney(stats.pendingCents)} pending</span>
+                      )}
+                    </>
+                  )}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
 function ReferralsTab() {
   const swaps = useQuery<{ asReferrer: SwapApiRow[]; asInvitee: SwapApiRow[] }>({
     queryKey: ["/api/artist/referrals/swaps"],
@@ -740,6 +1026,7 @@ function ReferralsTab() {
   const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
   return (
     <>
+      <InviteArtistPanel />
       <InviteTeammatePanel />
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="referrals-kpis">
         <Kpi label="Pending payout" value={fmt(d.pendingCents)} sub={`${d.pendingCount} unit${d.pendingCount === 1 ? "" : "s"} this period`} testId="kpi-ref-pending" />
@@ -757,9 +1044,9 @@ function ReferralsTab() {
             {d.partners.map((p) => (
               <li key={p.id} className="flex items-center gap-3 py-3" data-testid={`row-referred-${p.id}`}>
                 {p.photoUrl ? (
-                  <img src={p.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover bg-white/5" />
+                  <img src={p.photoUrl} alt="" className="w-11 h-11 rounded-full object-cover bg-white/5" />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-white/5" />
+                  <div className="w-11 h-11 rounded-full bg-white/5" />
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold truncate">{p.name}</p>
