@@ -3586,11 +3586,20 @@ function BookletPill({
   const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "9.99";
   const storedFloor = existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99";
   const storedQty = existing?.plannedQuantity ?? null;
+  // Track real operator interaction so we don't autosave a no-op on
+  // mount. Without an `existing` addon, the local defaults
+  // (resolvedQty=500, price/floor strings) don't match the null/empty
+  // stored values, so `dirty` would flip true immediately and the
+  // debounced PUT below would fire — which previously surfaced a
+  // bogus "Add a 7\" vinyl or cassette SKU…" 409 toast on a passive
+  // Design-tab visit.
+  const [touched, setTouched] = useState(false);
   const dirty =
-    active !== storedActive ||
-    priceStr !== storedPrice ||
-    floorStr !== storedFloor ||
-    (resolvedQty || null) !== storedQty;
+    touched &&
+    (active !== storedActive ||
+      priceStr !== storedPrice ||
+      floorStr !== storedFloor ||
+      (resolvedQty || null) !== storedQty);
   useEffect(() => {
     if (!dirty) return;
     const t = setTimeout(() => {
@@ -3661,7 +3670,10 @@ function BookletPill({
             <Switch
               id="toggle-booklet-active"
               checked={active}
-              onCheckedChange={setActive}
+              onCheckedChange={(v) => {
+                setTouched(true);
+                setActive(v);
+              }}
               data-testid="toggle-booklet-active"
               aria-label="Offer 16-page booklet on this release"
             />
@@ -3788,7 +3800,10 @@ function BookletPill({
                     <input
                       type="text"
                       value={priceStr}
-                      onChange={(e) => setPriceStr(e.target.value)}
+                      onChange={(e) => {
+                        setTouched(true);
+                        setPriceStr(e.target.value);
+                      }}
                       inputMode="decimal"
                       className={`${fieldClass} w-32 tabular-nums`}
                       data-testid="input-booklet-price"
@@ -3812,7 +3827,13 @@ function BookletPill({
                     text="PMP only quotes 500 / 1000 / 2000 / 5000 runs. Anything else snaps UP to the next rung."
                   />
                 </div>
-                <Select value={qtyChoice} onValueChange={setQtyChoice}>
+                <Select
+                  value={qtyChoice}
+                  onValueChange={(v) => {
+                    setTouched(true);
+                    setQtyChoice(v);
+                  }}
+                >
                   <SelectTrigger
                     className="h-8 w-full text-sm"
                     data-testid="select-booklet-qty"
@@ -3833,7 +3854,10 @@ function BookletPill({
                     type="text"
                     inputMode="numeric"
                     value={otherQtyStr}
-                    onChange={(e) => setOtherQtyStr(e.target.value)}
+                    onChange={(e) => {
+                      setTouched(true);
+                      setOtherQtyStr(e.target.value);
+                    }}
                     className={`${fieldClass} mt-1.5`}
                     placeholder="e.g. 750 → snaps to 1,000"
                     aria-label="Booklet run quantity (snaps up to next PMP rung)"
@@ -3926,7 +3950,10 @@ function BookletPill({
                           <input
                             type="text"
                             value={floorStr}
-                            onChange={(e) => setFloorStr(e.target.value)}
+                            onChange={(e) => {
+                              setTouched(true);
+                              setFloorStr(e.target.value);
+                            }}
                             inputMode="decimal"
                             className={`${fieldClass} w-20 tabular-nums text-right`}
                             data-testid="input-booklet-floor"

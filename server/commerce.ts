@@ -1034,14 +1034,21 @@ export function registerCommerceRoutes(app: Express) {
     if (parsed.data.kind === "signed_cert") {
       costSnapshot = album.payoutCertCentsOverride ?? settings.certCostCents;
     } else if (parsed.data.kind === "booklet") {
-      const skus = await listAllSkus(album.id);
-      const eligible = skus.some(
-        (s) => s.active && (BOOKLET_ELIGIBLE_FORMATS as readonly string[]).includes(s.format),
-      );
-      if (!eligible) {
-        return res.status(409).json({
-          message: "Add a 7\" vinyl or cassette SKU before offering a booklet.",
-        });
+      // Only enforce eligibility when the operator is turning the
+      // booklet ON. Saving an inactive booklet must always succeed —
+      // both so we can disable a previously-active upsell after its
+      // eligible SKU is deactivated, and so passive no-op saves
+      // never surface a scary 409 toast on the Design tab.
+      if (parsed.data.active) {
+        const skus = await listAllSkus(album.id);
+        const eligible = skus.some(
+          (s) => s.active && (BOOKLET_ELIGIBLE_FORMATS as readonly string[]).includes(s.format),
+        );
+        if (!eligible) {
+          return res.status(409).json({
+            message: "Add a 7\" vinyl or cassette SKU before offering a booklet.",
+          });
+        }
       }
       const { lookupBookletUnitCents } = await import("./pressCatalog");
       costSnapshot = lookupBookletUnitCents(parsed.data.plannedQuantity ?? null);
