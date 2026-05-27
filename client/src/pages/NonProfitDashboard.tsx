@@ -1,14 +1,18 @@
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Heart, Music as MusicIcon, Mail, Clock } from "lucide-react";
-import { DashboardPanel } from "@/components/partner/dashboard-controls";
+import { DashboardPanel, DashboardTabs } from "@/components/partner/dashboard-controls";
+import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-// Task #78 — Non-profit partner shell. Single-page dashboard showing
-// the NPO's referred artists, their for-sale albums + paid units, and
-// the running $1/unit credit roll-up. No analytics surface (yet) — the
-// signal customers told us they want is "are my artists earning?".
+// Task #78 — Non-profit partner shell. Task #518 wraps the original
+// single-page surface in a tabbed shell so Dashboard is the leftmost
+// tab and the default landing — matching the operator AdminDashboard
+// chrome via the shared `PartnerDashboard` primitive. The existing
+// "Your artists" + "Outstanding invites" content lives under its own
+// tab one step to the right.
 type Me = { id: string; name: string; logoUrl: string | null; websiteUrl: string | null };
 type Dashboard = {
   pendingCents: number;
@@ -27,9 +31,16 @@ type Dashboard = {
 
 const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
 
+const NPO_TABS = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "artists", label: "Your artists" },
+  { id: "invites", label: "Invites" },
+] as const;
+type NpoTabId = (typeof NPO_TABS)[number]["id"];
+
 export function NonProfitDashboard() {
   const me = useQuery<Me>({ queryKey: ["/api/non-profit/me"] });
-  const dash = useQuery<Dashboard>({ queryKey: ["/api/non-profit/dashboard"] });
+  const [tab, setTab] = useState<NpoTabId>("dashboard");
 
   if (me.error) {
     const msg = (me.error as any)?.message || "We couldn't load your non-profit scope.";
@@ -68,13 +79,34 @@ export function NonProfitDashboard() {
         </div>
       </header>
 
-      <section className="max-w-5xl mx-auto px-4 sm:px-6 mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="npo-kpis">
+      <DashboardTabs tabs={NPO_TABS} value={tab} onChange={setTab} />
+
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 mt-6">
+        {tab === "dashboard" && (
+          <PartnerDashboard
+            scope="npo"
+            title={me.data?.name ?? "Your dashboard"}
+            subtitle="Referred-artist activity and payout accrual"
+          />
+        )}
+        {tab === "artists" && <ArtistsTab />}
+        {tab === "invites" && <InvitesTab />}
+      </div>
+    </main>
+  );
+}
+
+function ArtistsTab() {
+  const dash = useQuery<Dashboard>({ queryKey: ["/api/non-profit/dashboard"] });
+  return (
+    <>
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="npo-kpis">
         <Kpi label="Pending payout" value={fmt(dash.data?.pendingCents ?? 0)} sub={`${dash.data?.pendingCount ?? 0} unit${(dash.data?.pendingCount ?? 0) === 1 ? "" : "s"}`} testId="kpi-npo-pending" />
         <Kpi label="Paid out" value={fmt(dash.data?.paidCents ?? 0)} testId="kpi-npo-paid" />
         <Kpi label="Referred artists" value={String(dash.data?.artists.length ?? 0)} testId="kpi-npo-artists" />
       </section>
 
-      <section className="max-w-5xl mx-auto px-4 sm:px-6 mt-6">
+      <section className="mt-6">
         <h2 className="text-sm font-semibold text-white/85 mb-3">Your artists</h2>
         {dash.isLoading ? (
           <p className="py-8 text-center text-white/45 text-[13px]">Loading…</p>
@@ -139,24 +171,37 @@ export function NonProfitDashboard() {
           </ul>
         )}
       </section>
+    </>
+  );
+}
 
-      {(dash.data?.pendingInvites.length ?? 0) > 0 && (
-        <section className="max-w-5xl mx-auto px-4 sm:px-6 mt-8">
-          <h2 className="text-sm font-semibold text-white/85 mb-3">Outstanding invites</h2>
-          <DashboardPanel as="ul" padding="none" className="divide-y divide-white/5" data-testid="list-npo-invites">
-            {dash.data!.pendingInvites.map((i) => (
-              <li key={i.id} className="flex items-center gap-3 px-4 py-3 text-[13px]" data-testid={`row-npo-invite-${i.id}`}>
-                <Mail className="w-4 h-4 text-white/45" />
-                <span className="flex-1 truncate">{i.email}</span>
-                <span className="text-[11px] text-white/55 inline-flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> expires {new Date(i.expiresAt).toLocaleDateString()}
-                </span>
-              </li>
-            ))}
-          </DashboardPanel>
-        </section>
+function InvitesTab() {
+  const dash = useQuery<Dashboard>({ queryKey: ["/api/non-profit/dashboard"] });
+  const items = dash.data?.pendingInvites ?? [];
+  return (
+    <section>
+      <h2 className="text-sm font-semibold text-white/85 mb-3">Outstanding invites</h2>
+      {dash.isLoading ? (
+        <p className="py-8 text-center text-white/45 text-[13px]">Loading…</p>
+      ) : items.length === 0 ? (
+        <DashboardPanel className="p-8 text-center" padding="none" data-testid="empty-npo-invites">
+          <Mail className="w-8 h-8 text-white/30 mx-auto mb-3" />
+          <p className="text-sm text-white/65">No outstanding invites.</p>
+        </DashboardPanel>
+      ) : (
+        <DashboardPanel as="ul" padding="none" className="divide-y divide-white/5" data-testid="list-npo-invites">
+          {items.map((i) => (
+            <li key={i.id} className="flex items-center gap-3 px-4 py-3 text-[13px]" data-testid={`row-npo-invite-${i.id}`}>
+              <Mail className="w-4 h-4 text-white/45" />
+              <span className="flex-1 truncate">{i.email}</span>
+              <span className="text-[11px] text-white/55 inline-flex items-center gap-1">
+                <Clock className="w-3 h-3" /> expires {new Date(i.expiresAt).toLocaleDateString()}
+              </span>
+            </li>
+          ))}
+        </DashboardPanel>
       )}
-    </main>
+    </section>
   );
 }
 

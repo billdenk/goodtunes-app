@@ -22,6 +22,7 @@ import {
 // visual cue for what a count means (favorites vs roster size).
 import { Heart, Star } from "lucide-react";
 import { RangePicker, CompareToggle, DashboardTabs } from "@/components/partner/dashboard-controls";
+import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
 import { CertRunsSection } from "@/components/partner/cert-runs-section";
 import { BRAND, CHART_STACK_PALETTE, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 
@@ -122,7 +123,7 @@ type SortKey = "revenue" | "units" | "plays" | "listeners" | "buyers" | "albumCo
 export function LabelDashboard() {
   const [preset, setPreset] = useState<PresetId>("30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"overview" | "roster" | "catalog" | "orders">("overview");
+  const [tab, setTab] = useState<"dashboard" | "overview" | "roster" | "catalog" | "orders">("dashboard");
   const range = useMemo(() => rangeFor(preset), [preset]);
   const qs = useMemo(() => {
     const u = new URLSearchParams({ from: range.from, to: range.to });
@@ -171,6 +172,18 @@ export function LabelDashboard() {
       <Tabs tab={tab} onTab={setTab} />
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-6 space-y-6">
+        {tab === "dashboard" && (
+          <PartnerDashboard
+            scope="label"
+            title={me.data?.name ?? "Your dashboard"}
+            subtitle={
+              me.data
+                ? `${me.data.rosterSize} artist${me.data.rosterSize === 1 ? "" : "s"} · ${me.data.albumCount} album${me.data.albumCount === 1 ? "" : "s"}`
+                : undefined
+            }
+            scopeIdQs={labelIdParam}
+          />
+        )}
         {tab === "overview" && <OverviewTab qs={qs} />}
         {tab === "roster" && <RosterTab qs={qs} labelIdParam={labelIdParam} />}
         {tab === "catalog" && <CatalogTab qs={qs} />}
@@ -254,6 +267,7 @@ function InvitedByPressRow({ press, hasShippedFirst }: {
 }
 
 const LABEL_TABS = [
+  { id: "dashboard", label: "Dashboard" },
   { id: "overview", label: "Overview" },
   { id: "roster", label: "Roster" },
   { id: "catalog", label: "Catalog" },

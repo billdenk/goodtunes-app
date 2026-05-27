@@ -252,7 +252,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Task #245 — vendor partners (a press/printer/holographer quoting
       // their own GoodDeed pricing) land on a dedicated portal that is
       // really just the AdminVendor "GoodDeed Services" tab rebadged.
-      if (role === "vendor") return "/vendor";
+      // Task #518 — manufacturer/fulfillment users share the /vendor
+      // shell (single dark partner-shell tabbed chrome) so the
+      // Dashboard tab is their first landing too. The shell hides
+      // the GoodDeed Services tab for non-vendor supply-chain roles
+      // since the per-leg pricing endpoints are vendor-only.
+      if (role === "vendor" || role === "manufacturer" || role === "fulfillment") return "/vendor";
       return "/admin";
     } catch {
       return "/admin";
@@ -13408,6 +13413,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ─── Task #76 — Label rollup reporting dashboard ──────────────
   const { registerLabelReportRoutes } = await import("./labelReports");
   await registerLabelReportRoutes(app);
+
+  // ─── Task #518 — Scoped partner Dashboard tab ─────────────────
+  const { registerPartnerDashboardRoutes } = await import("./partnerDashboard");
+  await registerPartnerDashboardRoutes(app);
 
   // ─── Admin invitations ─────────────────────────────────────────
   // A super-admin issues an invite (email + role + optional scope id),
