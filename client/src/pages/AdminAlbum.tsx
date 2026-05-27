@@ -491,12 +491,39 @@ export function AdminAlbum() {
       const key = (e as CustomEvent<PathToPressNavigateDetail>).detail?.key;
       if (!key) return;
       if (key === "art") {
-        // Cover thumbnail trigger lives in the page header above the
-        // tabs — no tab switch needed.
-        const el = document.querySelector(
-          '[data-testid="button-edit-album-cover"]',
-        ) as HTMLElement | null;
-        scrollAndFlash(el);
+        // "Upload art" in the Path-to-press strip means *press-ready*
+        // jacket / label / hype-sticker files — not the digital cover
+        // thumbnail in the page header. Land on the Press tab's art
+        // preflight dropzone, which already takes a drag-and-drop file
+        // matching how every other admin upload works. Slim Shopify
+        // albums don't have a Press tab, so fall back to the cover
+        // thumbnail editor for that mode.
+        if (album?.sellMode === "shopify") {
+          const el = document.querySelector(
+            '[data-testid="button-edit-album-cover"]',
+          ) as HTMLElement | null;
+          scrollAndFlash(el);
+          return;
+        }
+        setTab("press");
+        const tryAnchor = (attempt: number) => {
+          const panel = document.querySelector(
+            '[data-testid="panel-upload-validations-art"]',
+          ) as HTMLElement | null;
+          if (panel) {
+            // input-preflight-file is a hidden <input type="file">, so
+            // focusing it scrolls to nothing. Prefer the visible upload
+            // button; otherwise just flash the panel without stealing
+            // focus.
+            const button = panel.querySelector(
+              '[data-testid="button-preflight-upload"]',
+            ) as HTMLElement | null;
+            scrollAndFlash(button ?? panel, { focus: !!button });
+            return;
+          }
+          if (attempt < 8) window.setTimeout(() => tryAnchor(attempt + 1), 40);
+        };
+        requestAnimationFrame(() => tryAnchor(0));
         return;
       }
       // Slim Shopify variant: "Masters on file" jumps to the Tracks
