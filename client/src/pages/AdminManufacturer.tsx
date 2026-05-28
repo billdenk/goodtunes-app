@@ -1561,7 +1561,7 @@ function CatalogFormatBody({
                       <div className="relative" title={isUnconfirmed ? "TBD — awaiting quote" : undefined}>
                         <span
                           className={[
-                            "pointer-events-none absolute left-2 top-1/2 -translate-y-1/2",
+                            "pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs",
                             isUnconfirmed ? "text-amber-500" : "text-slate-400",
                           ].join(" ")}
                         >
@@ -1573,7 +1573,7 @@ function CatalogFormatBody({
                           placeholder={isUnconfirmed ? "TBD" : ""}
                           inputMode="decimal"
                           className={[
-                            "w-20 h-8 pl-5 pr-1.5 rounded-md border text-xs tabular-nums text-right focus:outline-none focus:border-[color:var(--brand-blue)]",
+                            "w-20 h-8 pl-6 pr-2 rounded-md border text-xs tabular-nums text-right focus:outline-none focus:border-[color:var(--brand-blue)]",
                             isUnconfirmed
                               ? "border-amber-400 bg-amber-50 text-amber-900 placeholder:text-amber-400"
                               : "border-slate-200 bg-white",
