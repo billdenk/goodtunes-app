@@ -1,12 +1,28 @@
-// Task #119 — super-admin platform pricing.
+// Task #119 / #471 / #649 — super-admin platform pricing.
 //
-// One page, two knobs: the platform's wholesale cost of a printed +
-// signed GoodDeed certificate (`certCostCents`) and the per-order
-// Shopify checkout fee (`shopifyFeeCents`). Saving here updates the
-// global `payout_settings` singleton; the SellPanel's "You earn
-// $X.XX per unit" readout reads the new cost the next time an artist
-// saves their signed-cert addon (price-lock — see docs/admin-conventions.md).
-import { useEffect, useState } from "react";
+// Two-up grid on desktop, read-only by default with pencil-to-edit on
+// every card. Save dimmed until the card is dirty.
+//
+// Cards (and what they edit):
+//   Platform fees           — `payout_settings.shopify_fee_cents`
+//                             (Shopify checkout fee). Cert wholesale
+//                             cost lives in the Wholesale Ladder below
+//                             — there is no flat per-cert input here.
+//   GoodDeed routing defaults — `payout_settings.default_{print,
+//                             hologram,insertion}_vendor_id`
+//   Wholesale Ladder        — `payout_settings.signed_cert_ladder`
+//                             with each rung expandable to show the
+//                             vendor cost stack at that quantity.
+//   Per-format pricing      — `payout_format_costs` rows
+//   Quickprinter ladder     — the platform-default Quickprinter's
+//                             `vendor_gooddeed_services.size_ladders_json`
+//
+// `cert_cost_cents` stays on the server-side schema for back-compat
+// (existing snapshots + `IStorage.upsertPayoutSettings`); the page no
+// longer edits it. Source of truth for "what does a cert cost?" is the
+// Wholesale Ladder.
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -21,13 +37,19 @@ import {
   SIGNED_CERT_MIN_BATCH,
   type SignedCertLadderRung,
 } from "@shared/signedCertLadder";
-import { Plus, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import { SiShopify } from "react-icons/si";
 
 type RoleInfo = { role: string; roleScopeId: string | null };
 
-// Task #218 — the four per-format lines super-admins edit here. Manufacturing
-// stays as a placeholder for non-vinyl + free flows; invited-press vinyl now
-// pulls its manufacturing cents from the press catalog ladder instead.
 const FORMAT_COST_FIELDS = [
   { key: "manufacturingCents", label: "Manufacturing" },
   { key: "publishingCents", label: "Publishing" },
@@ -43,13 +65,147 @@ const parseDollars = (v: string): number | null => {
   return Math.round(n * 100);
 };
 
+function timeAgo(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "—";
+  const secs = Math.max(1, Math.floor((Date.now() - d.getTime()) / 1000));
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+}
+
+// Quiet ghost Save — at rest dimmed slate; brand-blue + soft pill once
+// the card is dirty. Mirrors the `SaveLink` primitive on SellPanel.
+function SaveLink({
+  dirty,
+  onClick,
+  testId,
+  busy,
+}: {
+  dirty: boolean;
+  onClick: () => void;
+  testId: string;
+  busy?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!dirty || !!busy}
+      className={
+        "h-8 px-3 rounded-md text-xs font-semibold transition-colors " +
+        (dirty
+          ? "bg-[color:var(--brand-blue)] text-white hover:opacity-90"
+          : "bg-slate-100 text-slate-300 cursor-default")
+      }
+      data-testid={testId}
+    >
+      {busy ? "Saving…" : "Save"}
+    </button>
+  );
+}
+
+// Plain pencil affordance — admin chrome ghost button, IconButton-style
+// dimensions (h-8 w-8) without the fan-dark IconButton primitive (which
+// is glass-scrim only and would vanish on white admin cards).
+function EditPencil({
+  active,
+  onClick,
+  testId,
+  label = "Edit",
+}: {
+  active: boolean;
+  onClick: () => void;
+  testId: string;
+  label?: string;
+}) {
+  // IconButton-equivalent ghost variant for admin chrome.
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      className={
+        "h-8 w-8 inline-flex items-center justify-center rounded-md transition-colors " +
+        (active
+          ? "text-[color:var(--brand-blue)] bg-[color:var(--brand-blue-soft)]"
+          : "text-slate-400 hover:text-slate-700 hover:bg-slate-50")
+      }
+      data-testid={testId}
+    >
+      <Pencil className="w-4 h-4" />
+    </button>
+  );
+}
+
+function CardHeader({
+  title,
+  subtitle,
+  icon,
+  editing,
+  dirty,
+  onEnterEdit,
+  onCancelEdit,
+  testId,
+  rightSlot,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  editing: boolean;
+  // When `editing && dirty`, clicking the pencil prompts to discard
+  // local draft state before flipping back to read-only.
+  dirty?: boolean;
+  onEnterEdit: () => void;
+  onCancelEdit: () => void;
+  testId: string;
+  rightSlot?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          {icon}
+          <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+        </div>
+        {subtitle && (
+          <p className="text-sm text-slate-500 mt-1">{subtitle}</p>
+        )}
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        {rightSlot}
+        <EditPencil
+          active={editing}
+          onClick={() => {
+            if (editing) {
+              if (dirty && !window.confirm("Discard unsaved changes?")) return;
+              onCancelEdit();
+            } else {
+              onEnterEdit();
+            }
+          }}
+          testId={`button-edit-${testId}`}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function AdminPlatformPricing() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
     return () => document.body.classList.remove("gt-admin");
   }, []);
   const { user, isLoading: authLoading } = useAuth();
-  const { toast } = useToast();
 
   const { data: role, isLoading: roleLoading } = useQuery<RoleInfo>({
     queryKey: ["/api/me/role"],
@@ -72,42 +228,11 @@ export function AdminPlatformPricing() {
     enabled: !!user?.isAdmin,
   });
 
-  const [certStr, setCertStr] = useState("");
-  const [shopifyStr, setShopifyStr] = useState("");
-
-  useEffect(() => {
-    if (settings) {
-      setCertStr((settings.certCostCents / 100).toFixed(2));
-      setShopifyStr((settings.shopifyFeeCents / 100).toFixed(2));
-    }
-  }, [settings]);
-
-  const save = useMutation({
-    mutationFn: async () => {
-      const body: Record<string, number> = {};
-      const cert = parseDollars(certStr);
-      const shopify = parseDollars(shopifyStr);
-      if (cert === null || shopify === null) {
-        throw new Error("Enter both prices as dollar amounts");
-      }
-      body.certCostCents = cert;
-      body.shopifyFeeCents = shopify;
-      const r = await apiRequest("PUT", "/api/admin/payout-settings", body);
-      return (await r.json()) as PayoutSettings;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/payout-settings"] });
-      toast({ title: "Platform pricing saved" });
-    },
-    onError: (e: any) =>
-      toast({ title: "Couldn't save", description: e?.message, variant: "destructive" }),
-  });
-
   if (authLoading || roleLoading) {
     return (
       <AdminFrame active="platform-pricing">
         <div className="py-20 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
+          <div className="w-6 h-6 border-2 border-[color:var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
       </AdminFrame>
     );
@@ -155,170 +280,305 @@ export function AdminPlatformPricing() {
             {settingsIsFetching ? "Loading…" : "No pricing settings available."}
           </div>
         ) : (
-          <div className="rounded-lg border border-slate-200 bg-white p-5 max-w-2xl space-y-5">
-            <Field
-              label="Printed & signed certificate"
-              hint={`Wholesale cost per unit. Currently ${dollars(settings.certCostCents)}. Default $12.00.`}
-              value={certStr}
-              onChange={setCertStr}
-              testId="input-cert-cost"
-            />
-            <Field
-              label="Shopify checkout fee"
-              hint={`Per-order Shopify checkout fee. Currently ${dollars(settings.shopifyFeeCents)}. Default $3.50.`}
-              value={shopifyStr}
-              onChange={setShopifyStr}
-              testId="input-shopify-fee"
-            />
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => save.mutate()}
-                disabled={save.isPending}
-                className="h-9 px-4 rounded-md bg-[#319ED8] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-60"
-                data-testid="button-save-platform-pricing"
-              >
-                {save.isPending ? "Saving…" : "Save"}
-              </button>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <PlatformFeesCard settings={settings} />
+              <RoutingDefaultsCard settings={settings} />
             </div>
 
-            <p className="text-[12px] text-slate-400 pt-2 border-t border-slate-100">
-              Saving changes the global default. Existing signed-cert add-ons keep their previous
-              cost snapshot until the artist re-saves their Sell panel — re-saving picks up the
-              new platform price.
-            </p>
-          </div>
-        )}
-
-        {settings && <SignedCertLadderCard settings={settings} />}
-
-        {/* Task #471 — platform-default GoodDeed vendor routing.
-            Per-album routing went away; every album resolves printing /
-            hologram / insertion against these three IDs. The Printing
-            picker is filtered to Quickprinters only on the server. */}
-        {settings && <RoutingDefaultsCard settings={settings} />}
-        {settings?.defaultPrintVendorId && (
-          <QuickprinterLadderCard vendorId={settings.defaultPrintVendorId} />
-        )}
-
-        {formatCosts && formatCosts.length > 0 && (
-          <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-format-costs">
-            <div>
-              <h2 className="text-[15px] font-semibold text-slate-900">Per-format pricing</h2>
-              <p className="text-[13px] text-slate-500 mt-1">
-                Publishing fee, payment processing, and the GoodTunes margin charged on every unit
-                of each format. Manufacturing is a placeholder for free / non-invited flows — when
-                a press's catalog covers the format, the catalog's price ladder wins on cost.
-              </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+              <SignedCertLadderCard settings={settings} />
+              {formatCosts && formatCosts.length > 0 && (
+                <FormatCostsCard formatCosts={formatCosts} />
+              )}
             </div>
-            <div className="space-y-3">
-              {ALBUM_FORMATS.map((fmt) => {
-                const row = formatCosts.find((r) => r.format === fmt);
-                if (!row) return null;
-                return <FormatCostRow key={fmt} row={row} />;
-              })}
-            </div>
-          </div>
+
+            {settings.defaultPrintVendorId && (
+              <QuickprinterLadderCard vendorId={settings.defaultPrintVendorId} />
+            )}
+          </>
         )}
       </div>
     </AdminFrame>
   );
 }
 
-function FormatCostRow({ row }: { row: PayoutFormatCost }) {
+// --- Platform fees (Shopify + cert wholesale source-of-truth note) ---------
+
+function PlatformFeesCard({ settings }: { settings: PayoutSettings }) {
   const { toast } = useToast();
-  const [values, setValues] = useState<Record<FormatCostField, string>>(() => ({
-    manufacturingCents: (row.manufacturingCents / 100).toFixed(2),
-    publishingCents: (row.publishingCents / 100).toFixed(2),
-    paymentProcessingCents: (row.paymentProcessingCents / 100).toFixed(2),
-    goodtunesCents: (row.goodtunesCents / 100).toFixed(2),
-  }));
+  const [editing, setEditing] = useState(false);
+  const [shopifyStr, setShopifyStr] = useState(
+    (settings.shopifyFeeCents / 100).toFixed(2),
+  );
   useEffect(() => {
-    setValues({
-      manufacturingCents: (row.manufacturingCents / 100).toFixed(2),
-      publishingCents: (row.publishingCents / 100).toFixed(2),
-      paymentProcessingCents: (row.paymentProcessingCents / 100).toFixed(2),
-      goodtunesCents: (row.goodtunesCents / 100).toFixed(2),
-    });
-  }, [row.manufacturingCents, row.publishingCents, row.paymentProcessingCents, row.goodtunesCents]);
-  const dirty = FORMAT_COST_FIELDS.some((f) => parseDollars(values[f.key]) !== row[f.key]);
+    setShopifyStr((settings.shopifyFeeCents / 100).toFixed(2));
+  }, [settings.shopifyFeeCents]);
+
+  const dirty = parseDollars(shopifyStr) !== settings.shopifyFeeCents;
+
   const save = useMutation({
     mutationFn: async () => {
-      const body: Record<string, number> = {};
-      for (const f of FORMAT_COST_FIELDS) {
-        const c = parseDollars(values[f.key]);
-        if (c == null) throw new Error(`Enter a valid ${f.label.toLowerCase()} amount`);
-        body[f.key] = c;
-      }
-      const r = await apiRequest("PUT", `/api/admin/payout-format-costs/${row.format}`, body);
-      return r.json();
+      const cents = parseDollars(shopifyStr);
+      if (cents == null) throw new Error("Enter a dollar amount");
+      const r = await apiRequest("PUT", "/api/admin/payout-settings", {
+        shopifyFeeCents: cents,
+      });
+      return (await r.json()) as PayoutSettings;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/payout-format-costs"] });
-      // Invited-press calculator on the SellPanel merges these defaults
-      // into `formatCosts` — bust the album list so artists see the new
-      // numbers immediately on the cost readout.
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
-      toast({ title: `Saved ${ALBUM_FORMAT_LABEL[row.format as AlbumFormat]} pricing` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payout-settings"] });
+      toast({ title: "Platform fees saved" });
+      setEditing(false);
     },
     onError: (e: any) =>
       toast({ title: "Couldn't save", description: e?.message, variant: "destructive" }),
   });
-  const total = FORMAT_COST_FIELDS.reduce(
-    (sum, f) => sum + (parseDollars(values[f.key]) ?? 0),
-    0,
-  );
+
   return (
-    <div className="rounded-md border border-slate-200 p-3" data-testid={`row-format-cost-${row.format}`}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[13.5px] font-semibold text-slate-900">
-          {ALBUM_FORMAT_LABEL[row.format as AlbumFormat]}
-        </span>
-        <button
-          type="button"
-          onClick={() => save.mutate()}
-          disabled={!dirty || save.isPending}
-          className="h-8 px-3 rounded-md bg-[color:var(--brand-blue)] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-60"
-          data-testid={`button-save-format-cost-${row.format}`}
-        >
-          {save.isPending ? "Saving…" : "Save"}
-        </button>
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {FORMAT_COST_FIELDS.map((f) => (
-          <label key={f.key} className="block">
-            <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
-              {f.label}
-            </span>
+    <div
+      className="rounded-lg border border-slate-200 bg-white p-5 space-y-4"
+      data-testid="panel-platform-fees"
+    >
+      <CardHeader
+        title="Platform fees"
+        subtitle="Per-order fees billed on every Shopify checkout."
+        icon={<SiShopify className="w-4 h-4 text-[#96BF48]" aria-hidden />}
+        editing={editing}
+        dirty={dirty}
+        onEnterEdit={() => setEditing(true)}
+        onCancelEdit={() => {
+          setShopifyStr((settings.shopifyFeeCents / 100).toFixed(2));
+          setEditing(false);
+        }}
+        testId="platform-fees"
+      />
+
+      <dl className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-sm text-slate-600">Shopify checkout fee</dt>
+          {editing ? (
             <div className="relative">
               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]">$</span>
               <input
-                value={values[f.key]}
-                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                type="text"
                 inputMode="decimal"
-                className="w-full h-8 border border-slate-200 rounded-md pl-5 pr-2 text-[12.5px] focus:outline-none focus:border-[color:var(--brand-blue)]"
-                data-testid={`input-${f.key}-${row.format}`}
+                value={shopifyStr}
+                onChange={(e) => setShopifyStr(e.target.value)}
+                className="w-28 h-8 border border-slate-200 rounded-md pl-5 pr-2 text-right text-xs focus:outline-none focus:border-[color:var(--brand-blue)]"
+                data-testid="input-shopify-fee"
               />
             </div>
-          </label>
-        ))}
-      </div>
-      <div className="mt-2 text-right text-[12px] text-slate-500">
-        Total per unit:{" "}
-        <span className="text-slate-900 font-semibold" data-testid={`text-format-total-${row.format}`}>
-          {dollars(total)}
-        </span>
-      </div>
+          ) : (
+            <dd className="text-sm font-semibold text-slate-900" data-testid="text-shopify-fee">
+              {dollars(settings.shopifyFeeCents)}
+            </dd>
+          )}
+        </div>
+      </dl>
+
+      {editing && (
+        <div className="flex items-center justify-end gap-1 pt-1">
+          <button
+            type="button"
+            onClick={() => {
+              setShopifyStr((settings.shopifyFeeCents / 100).toFixed(2));
+              setEditing(false);
+            }}
+            className="h-8 px-2.5 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-50"
+            data-testid="button-cancel-platform-fees"
+          >
+            Cancel
+          </button>
+          <SaveLink
+            dirty={dirty}
+            busy={save.isPending}
+            onClick={() => save.mutate()}
+            testId="button-save-platform-fees"
+          />
+        </div>
+      )}
+
+      <p className="text-[12px] text-slate-400 pt-2 border-t border-slate-100">
+        Printed &amp; signed certificate wholesale cost lives in the
+        Wholesale Ladder below — every rung's price is the source of truth
+        for what a cert costs at that run size.
+      </p>
     </div>
   );
 }
 
-// Signed-cert wholesale ladder — editable in god-view. Stored as JSONB on
-// payout_settings.signed_cert_ladder. The first rung's batch size is pinned
-// to the SIGNED_CERT_MIN_BATCH print floor (server validates the same).
+// --- GoodDeed routing defaults --------------------------------------------
+
+type GoodDeedVendor = { id: string; name: string; logoUrl: string | null };
+type LegKey = "printing" | "hologram" | "insertion";
+const LEG_FIELD: Record<
+  LegKey,
+  "defaultPrintVendorId" | "defaultHologramVendorId" | "defaultInsertionVendorId"
+> = {
+  printing: "defaultPrintVendorId",
+  hologram: "defaultHologramVendorId",
+  insertion: "defaultInsertionVendorId",
+};
+const LEG_LABEL: Record<LegKey, string> = {
+  printing: "Printing (Quickprinter)",
+  hologram: "Hologram + shrinkwrap",
+  insertion: "Insertion",
+};
+
+function RoutingDefaultsCard({ settings }: { settings: PayoutSettings }) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const printing = useQuery<GoodDeedVendor[]>({
+    queryKey: ["/api/admin/gooddeed-vendors", { service: "printing" }],
+  });
+  const hologram = useQuery<GoodDeedVendor[]>({
+    queryKey: ["/api/admin/gooddeed-vendors", { service: "hologram" }],
+  });
+  const insertion = useQuery<GoodDeedVendor[]>({
+    queryKey: ["/api/admin/gooddeed-vendors", { service: "insertion" }],
+  });
+
+  const live: Record<LegKey, string | null> = {
+    printing: settings.defaultPrintVendorId ?? null,
+    hologram: settings.defaultHologramVendorId ?? null,
+    insertion: settings.defaultInsertionVendorId ?? null,
+  };
+  const [draft, setDraft] = useState<Record<LegKey, string | null>>(live);
+  useEffect(() => {
+    setDraft(live);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    settings.defaultPrintVendorId,
+    settings.defaultHologramVendorId,
+    settings.defaultInsertionVendorId,
+  ]);
+
+  const dirty = (Object.keys(LEG_FIELD) as LegKey[]).some(
+    (leg) => draft[leg] !== live[leg],
+  );
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const patch: Partial<Record<typeof LEG_FIELD[LegKey], string | null>> = {};
+      for (const leg of Object.keys(LEG_FIELD) as LegKey[]) {
+        if (draft[leg] !== live[leg]) patch[LEG_FIELD[leg]] = draft[leg];
+      }
+      const r = await apiRequest("PUT", "/api/admin/payout-settings", patch);
+      return (await r.json()) as PayoutSettings;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payout-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/gooddeed-cost-stack"] });
+      toast({ title: "Routing saved" });
+      setEditing(false);
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't save routing", description: e?.message, variant: "destructive" }),
+  });
+
+  const lists: Record<LegKey, GoodDeedVendor[] | undefined> = {
+    printing: printing.data,
+    hologram: hologram.data,
+    insertion: insertion.data,
+  };
+  const nameOf = (leg: LegKey, id: string | null): string | null => {
+    if (!id) return null;
+    return lists[leg]?.find((v) => v.id === id)?.name ?? null;
+  };
+
+  return (
+    <div
+      className="rounded-lg border border-slate-200 bg-white p-5 space-y-4"
+      data-testid="panel-gooddeed-routing"
+    >
+      <CardHeader
+        title="GoodDeed routing defaults"
+        subtitle="Every album resolves printing, hologram, and insertion against these defaults. The Printing picker only shows Quickprinters."
+        editing={editing}
+        dirty={dirty}
+        onEnterEdit={() => setEditing(true)}
+        onCancelEdit={() => {
+          setDraft(live);
+          setEditing(false);
+        }}
+        testId="gooddeed-routing"
+      />
+
+      <div className="space-y-3">
+        {(Object.keys(LEG_LABEL) as LegKey[]).map((leg) => {
+          const list = lists[leg];
+          const vendorId = editing ? draft[leg] : live[leg];
+          const vendorName = nameOf(leg, vendorId);
+          return (
+            <div key={leg} data-testid={`row-routing-${leg}`}>
+              <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
+                {LEG_LABEL[leg]}
+              </span>
+              {editing ? (
+                <select
+                  value={draft[leg] ?? ""}
+                  disabled={!list}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, [leg]: e.target.value || null }))
+                  }
+                  className="w-full h-9 border border-slate-200 rounded-md px-2 text-sm bg-white focus:outline-none focus:border-[color:var(--brand-blue)]"
+                  data-testid={`select-routing-${leg}`}
+                >
+                  <option value="">— None —</option>
+                  {(list ?? []).map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              ) : vendorId && vendorName ? (
+                <Link href={`/admin/vendors/${vendorId}?tab=gooddeed`} className="inline-flex items-center gap-1.5 text-sm text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors" data-testid={`link-routing-${leg}`}>
+                  {vendorName}
+                  <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+                </Link>
+              ) : (
+                <span className="text-sm text-slate-400" data-testid={`text-routing-${leg}-empty`}>
+                  — None selected —
+                </span>
+              )}
+              {editing && leg === "printing" && list && list.length === 0 && (
+                <p className="text-xs text-[color:var(--brand-heart)] mt-1">
+                  No Quickprinters with active Printing pricing yet — mark a vendor as Quickprinter and add a tier.
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {editing && (
+        <div className="flex items-center justify-end gap-1 pt-1">
+          <button
+            type="button"
+            onClick={() => {
+              if (dirty && !window.confirm("Discard unsaved changes?")) return;
+              setDraft(live);
+              setEditing(false);
+            }}
+            className="h-8 px-2.5 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-50"
+            data-testid="button-cancel-routing"
+          >
+            Cancel
+          </button>
+          <SaveLink
+            dirty={dirty}
+            busy={save.isPending}
+            onClick={() => save.mutate()}
+            testId="button-save-routing"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Signed-cert wholesale ladder ------------------------------------------
+
 type RungDraft = {
-  // Stable key so React + delete-by-index can't desync while editing.
   key: string;
   minQty: string;
   label: string;
@@ -337,9 +597,10 @@ const rungsToDraft = (rungs: SignedCertLadderRung[]): RungDraft[] =>
 
 function SignedCertLadderCard({ settings }: { settings: PayoutSettings }) {
   const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
   const liveRungs = settings.signedCertLadder ?? DEFAULT_SIGNED_CERT_LADDER;
   const [draft, setDraft] = useState<RungDraft[]>(() => rungsToDraft(liveRungs));
-  // Re-seed when the server row changes (e.g. after save).
+  const [expanded, setExpanded] = useState<string | null>(null);
   useEffect(() => {
     setDraft(rungsToDraft(settings.signedCertLadder ?? DEFAULT_SIGNED_CERT_LADDER));
   }, [settings.signedCertLadder]);
@@ -383,13 +644,12 @@ function SignedCertLadderCard({ settings }: { settings: PayoutSettings }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/payout-settings"] });
       toast({ title: "Wholesale ladder saved" });
+      setEditing(false);
     },
     onError: (e: any) =>
       toast({ title: "Couldn't save ladder", description: e?.message, variant: "destructive" }),
   });
 
-  // Detect drift against the server row so the Save button only lights up
-  // when the operator has actually changed something.
   const dirty =
     JSON.stringify(
       draft.map((d) => ({
@@ -408,24 +668,27 @@ function SignedCertLadderCard({ settings }: { settings: PayoutSettings }) {
 
   return (
     <div
-      className="rounded-lg border border-slate-200 bg-white p-5 max-w-2xl space-y-3"
+      className="rounded-lg border border-slate-200 bg-white p-5 space-y-3"
       data-testid="panel-signed-cert-ladder"
     >
-      <div>
-        <h2 className="text-[15px] font-semibold text-slate-900">
-          GoodTunes® Certificate Wholesale Ladder
-        </h2>
-        <p className="text-[13px] text-slate-500 mt-1">
-          Per-unit price GoodTunes charges artists and labels for printed,
-          signed, hologrammed GoodDeed certificates. Snapped to the actual
-          run size at window close — not the artist's hoped-for number.
-        </p>
-      </div>
+      <CardHeader
+        title="GoodTunes® Certificate Wholesale Ladder"
+        subtitle="Per-unit price GoodTunes charges artists and labels for printed, signed, hologrammed GoodDeed certificates. Snapped to the actual run size at window close."
+        editing={editing}
+        dirty={dirty}
+        onEnterEdit={() => setEditing(true)}
+        onCancelEdit={() => {
+          setDraft(rungsToDraft(liveRungs));
+          setEditing(false);
+        }}
+        testId="signed-cert-ladder"
+      />
 
       <div className="overflow-hidden rounded-md border border-slate-200">
         <table className="w-full text-[13px]">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
+              <th className="w-9" />
               <th className="text-left font-semibold uppercase tracking-wider text-[10.5px] px-3 py-2 w-[110px]">
                 Starts at
               </th>
@@ -435,104 +698,80 @@ function SignedCertLadderCard({ settings }: { settings: PayoutSettings }) {
               <th className="text-right font-semibold uppercase tracking-wider text-[10.5px] px-3 py-2 w-[140px]">
                 Wholesale / unit
               </th>
-              <th className="w-9" />
+              {editing && <th className="w-9" />}
             </tr>
           </thead>
           <tbody>
             {draft.map((r, i) => {
               const isFirst = i === 0;
+              const isExpanded = expanded === r.key;
+              const minQty = Number.parseInt(r.minQty, 10) || SIGNED_CERT_MIN_BATCH;
+              const wholesaleCents = Math.round(
+                (Number.parseFloat(r.wholesale) || 0) * 100,
+              );
               return (
-                <tr
+                <FragmentRow
                   key={r.key}
-                  className="border-t border-slate-100"
-                  data-testid={`row-signed-cert-ladder-${i}`}
-                >
-                  <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={r.minQty}
-                      onChange={(e) => update(i, { minQty: e.target.value })}
-                      disabled={isFirst}
-                      title={isFirst ? `Locked to the ${SIGNED_CERT_MIN_BATCH}-unit print floor` : undefined}
-                      className="w-full h-8 border border-slate-200 rounded-md px-2 text-[12.5px] focus:outline-none focus:border-[color:var(--brand-blue)] disabled:bg-slate-50 disabled:text-slate-500"
-                      data-testid={`input-rung-minqty-${i}`}
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      type="text"
-                      value={r.label}
-                      onChange={(e) => update(i, { label: e.target.value })}
-                      placeholder="e.g. 25–49"
-                      className="w-full h-8 border border-slate-200 rounded-md px-2 text-[12.5px] focus:outline-none focus:border-[color:var(--brand-blue)]"
-                      data-testid={`input-rung-label-${i}`}
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="relative">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]">$</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={r.wholesale}
-                        onChange={(e) => update(i, { wholesale: e.target.value })}
-                        className="w-full h-8 border border-slate-200 rounded-md pl-5 pr-2 text-right text-[12.5px] focus:outline-none focus:border-[color:var(--brand-blue)]"
-                        data-testid={`input-rung-wholesale-${i}`}
-                      />
-                    </div>
-                  </td>
-                  <td className="px-2 py-2 text-center">
-                    <button
-                      type="button"
-                      onClick={() => remove(i)}
-                      disabled={isFirst || draft.length === 1}
-                      title={isFirst ? "Can't remove the print-floor rung" : "Remove rung"}
-                      className="h-8 w-8 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-[color:var(--brand-heart)] hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400"
-                      data-testid={`button-rung-remove-${i}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
+                  isFirst={isFirst}
+                  isExpanded={isExpanded}
+                  editing={editing}
+                  draft={r}
+                  draftLen={draft.length}
+                  index={i}
+                  minQty={minQty}
+                  wholesaleCents={wholesaleCents}
+                  ladderUpdatedAt={settings.updatedAt ? new Date(settings.updatedAt).toISOString() : null}
+                  onToggle={() => setExpanded((prev) => (prev === r.key ? null : r.key))}
+                  onUpdate={(patch) => update(i, patch)}
+                  onRemove={() => remove(i)}
+                />
               );
             })}
           </tbody>
         </table>
       </div>
 
-      <div className="flex items-center justify-between pt-1">
-        <button
-          type="button"
-          onClick={add}
-          disabled={draft.length >= 10}
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[12px] font-semibold text-slate-600 hover:text-[color:var(--brand-blue)] hover:bg-slate-50 disabled:opacity-40"
-          data-testid="button-rung-add"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Add rung
-        </button>
-        <div className="flex items-center gap-2">
+      {editing && (
+        <div className="flex items-center justify-between pt-1">
           <button
             type="button"
-            onClick={resetToDefaults}
-            className="h-8 px-3 rounded-md text-[12px] font-semibold text-slate-500 hover:text-slate-900 hover:bg-slate-50"
-            data-testid="button-rung-reset"
+            onClick={add}
+            disabled={draft.length >= 10}
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[12px] font-semibold text-slate-600 hover:text-[color:var(--brand-blue)] hover:bg-slate-50 disabled:opacity-40"
+            data-testid="button-rung-add"
           >
-            Reset to defaults
+            <Plus className="w-3.5 h-3.5" />
+            Add rung
           </button>
-          <button
-            type="button"
-            onClick={() => save.mutate()}
-            disabled={!dirty || save.isPending}
-            className="h-8 px-3 rounded-md bg-[color:var(--brand-blue)] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-50"
-            data-testid="button-save-signed-cert-ladder"
-          >
-            {save.isPending ? "Saving…" : "Save ladder"}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={resetToDefaults}
+              className="h-8 px-3 rounded-md text-xs font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-50"
+              data-testid="button-rung-reset"
+            >
+              Reset to defaults
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(rungsToDraft(liveRungs));
+                setEditing(false);
+              }}
+              className="h-8 px-2.5 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-50"
+              data-testid="button-cancel-signed-cert-ladder"
+            >
+              Cancel
+            </button>
+            <SaveLink
+              dirty={dirty}
+              busy={save.isPending}
+              onClick={() => save.mutate()}
+              testId="button-save-signed-cert-ladder"
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       <ul className="text-[12px] text-slate-500 space-y-1.5 pl-4 list-disc">
         <li>
@@ -552,121 +791,491 @@ function SignedCertLadderCard({ settings }: { settings: PayoutSettings }) {
           of the ladder.
         </li>
       </ul>
-
-      <p className="text-[11.5px] text-slate-400 pt-2 border-t border-slate-100">
-        Live ladder powers the Push-to-Shopify earnings preview and the
-        window-close auto-charge. Vendor-quoted inputs (the cost stack
-        underneath this ladder) will move into a press-managed pricing
-        portal in a later task.
-      </p>
     </div>
   );
 }
 
-// Task #471 — pick the platform-default vendor for each of the three
-// GoodDeed legs. The Printing list is filtered server-side to
-// `is_quickprinter` vendors so a vinyl press can never be selected as
-// the certificate printer. Saves go to the same payout-settings PUT
-// as the cert / Shopify-fee fields above.
-type GoodDeedVendor = { id: string; name: string; logoUrl: string | null };
-type LegKey = "printing" | "hologram" | "insertion";
-const LEG_FIELD: Record<LegKey, "defaultPrintVendorId" | "defaultHologramVendorId" | "defaultInsertionVendorId"> = {
-  printing: "defaultPrintVendorId",
-  hologram: "defaultHologramVendorId",
-  insertion: "defaultInsertionVendorId",
+// One row's worth of <tr>s — the editable rung row plus, when expanded,
+// a second <tr> that hosts the cost-stack breakdown.
+function FragmentRow({
+  isFirst,
+  isExpanded,
+  editing,
+  draft,
+  draftLen,
+  index,
+  minQty,
+  wholesaleCents,
+  ladderUpdatedAt,
+  onToggle,
+  onUpdate,
+  onRemove,
+}: {
+  isFirst: boolean;
+  isExpanded: boolean;
+  editing: boolean;
+  draft: RungDraft;
+  draftLen: number;
+  index: number;
+  minQty: number;
+  wholesaleCents: number;
+  ladderUpdatedAt: string | null;
+  onToggle: () => void;
+  onUpdate: (patch: Partial<RungDraft>) => void;
+  onRemove: () => void;
+}) {
+  const stack = useQuery<CostStack>({
+    queryKey: ["/api/admin/gooddeed-cost-stack", { runQty: minQty }],
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/admin/gooddeed-cost-stack?runQty=${minQty}`,
+        { credentials: "include" },
+      );
+      if (!r.ok) throw new Error("Failed to load cost stack");
+      return r.json();
+    },
+  });
+  const erosion = hasErosion(stack.data, ladderUpdatedAt);
+  return (
+    <>
+      <tr
+        className="border-t border-slate-100"
+        data-testid={`row-signed-cert-ladder-${index}`}
+      >
+        <td className="px-1 py-2 text-center">
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label={isExpanded ? "Collapse cost stack" : "Expand cost stack"}
+            aria-expanded={isExpanded}
+            className="relative h-7 w-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-50"
+            data-testid={`button-toggle-rung-${index}`}
+          >
+            {isExpanded ? (
+              <ChevronDown className="w-4 h-4" />
+            ) : (
+              <ChevronRight className="w-4 h-4" />
+            )}
+            {erosion && (
+              <span
+                className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500"
+                title="A vendor cost rose since this ladder was last saved."
+                data-testid={`rung-erosion-dot-${index}`}
+              />
+            )}
+          </button>
+        </td>
+        <td className="px-3 py-2">
+          {editing ? (
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={draft.minQty}
+              onChange={(e) => onUpdate({ minQty: e.target.value })}
+              disabled={isFirst}
+              title={isFirst ? `Locked to the ${SIGNED_CERT_MIN_BATCH}-unit print floor` : undefined}
+              className="w-full h-8 border border-slate-200 rounded-md px-2 text-xs focus:outline-none focus:border-[color:var(--brand-blue)] disabled:bg-slate-50 disabled:text-slate-500"
+              data-testid={`input-rung-minqty-${index}`}
+            />
+          ) : (
+            <span className="text-slate-900 text-xs font-medium" data-testid={`text-rung-minqty-${index}`}>
+              {draft.minQty}
+            </span>
+          )}
+        </td>
+        <td className="px-3 py-2">
+          {editing ? (
+            <input
+              type="text"
+              value={draft.label}
+              onChange={(e) => onUpdate({ label: e.target.value })}
+              placeholder="e.g. 25–49"
+              className="w-full h-8 border border-slate-200 rounded-md px-2 text-xs focus:outline-none focus:border-[color:var(--brand-blue)]"
+              data-testid={`input-rung-label-${index}`}
+            />
+          ) : (
+            <span className="text-slate-700 text-xs" data-testid={`text-rung-label-${index}`}>
+              {draft.label}
+            </span>
+          )}
+        </td>
+        <td className="px-3 py-2">
+          {editing ? (
+            <div className="relative">
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]">$</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={draft.wholesale}
+                onChange={(e) => onUpdate({ wholesale: e.target.value })}
+                className="w-full h-8 border border-slate-200 rounded-md pl-5 pr-2 text-right text-xs focus:outline-none focus:border-[color:var(--brand-blue)]"
+                data-testid={`input-rung-wholesale-${index}`}
+              />
+            </div>
+          ) : (
+            <span className="text-slate-900 text-xs font-semibold block text-right" data-testid={`text-rung-wholesale-${index}`}>
+              ${draft.wholesale}
+            </span>
+          )}
+        </td>
+        {editing && (
+          <td className="px-2 py-2 text-center">
+            {/* IconButton-equivalent admin destructive ghost — see EditPencil. */}
+            <button
+              type="button"
+              onClick={onRemove}
+              disabled={isFirst || draftLen === 1}
+              title={isFirst ? "Can't remove the print-floor rung" : "Remove rung"}
+              className="h-8 w-8 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-[color:var(--brand-heart)] hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+              data-testid={`button-rung-remove-${index}`}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </td>
+        )}
+      </tr>
+      {isExpanded && (
+        <tr className="bg-slate-50/60">
+          <td className="px-3 py-3" />
+          <td className="px-3 py-3" colSpan={editing ? 4 : 3}>
+            <RungCostStack
+              runQty={minQty}
+              wholesaleCents={wholesaleCents}
+              ladderUpdatedAt={ladderUpdatedAt}
+              data={stack.data}
+              isLoading={stack.isLoading}
+              testId={`rung-stack-${index}`}
+            />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+// --- Cost stack ----------------------------------------------------------
+
+type CostStackLeg = {
+  vendorId: string;
+  vendorName: string;
+  perUnitCents: number | null;
+  updatedAt: string | null;
 };
-const LEG_LABEL: Record<LegKey, string> = {
+type CostStack = {
+  runQty: number;
+  printing: CostStackLeg | null;
+  hologram: CostStackLeg | null;
+  insertion: CostStackLeg | null;
+  totalPerUnitCents: number;
+};
+
+const STACK_LABEL: Record<LegKey, string> = {
   printing: "Printing (Quickprinter)",
   hologram: "Hologram + shrinkwrap",
   insertion: "Insertion",
 };
 
-function RoutingDefaultsCard({ settings }: { settings: PayoutSettings }) {
-  const { toast } = useToast();
-  const printing = useQuery<GoodDeedVendor[]>({ queryKey: ["/api/admin/gooddeed-vendors", { service: "printing" }] });
-  const hologram = useQuery<GoodDeedVendor[]>({ queryKey: ["/api/admin/gooddeed-vendors", { service: "hologram" }] });
-  const insertion = useQuery<GoodDeedVendor[]>({ queryKey: ["/api/admin/gooddeed-vendors", { service: "insertion" }] });
+// Cost-stack tolerance — vendor subtotal within this many cents of the
+// rung's wholesale is treated as matching. Avoids amber-flagging trivial
+// rounding deltas (cents) on a $10+ wholesale price.
+const MISMATCH_TOLERANCE_CENTS = 5;
 
-  const save = useMutation({
-    mutationFn: async (patch: Partial<Record<typeof LEG_FIELD[LegKey], string | null>>) => {
-      const r = await apiRequest("PUT", "/api/admin/payout-settings", patch);
-      return (await r.json()) as PayoutSettings;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/payout-settings"] });
-      toast({ title: "Routing saved" });
-    },
-    onError: (e: any) =>
-      toast({ title: "Couldn't save routing", description: e?.message, variant: "destructive" }),
-  });
+// "Last price change" line — shows `changed Xh ago` when the leg has a
+// recorded updatedAt, and a softer "no recorded changes yet" fallback
+// when it doesn't (newly seeded vendors etc).
+function PriceChangeLine({ updatedAt }: { updatedAt: string | null }) {
+  if (updatedAt) {
+    return <div className="text-xs text-slate-400">changed {timeAgo(updatedAt)}</div>;
+  }
+  return <div className="text-xs text-slate-400 italic">no recorded changes yet</div>;
+}
 
-  const lists: Record<LegKey, GoodDeedVendor[] | undefined> = {
-    printing: printing.data,
-    hologram: hologram.data,
-    insertion: insertion.data,
-  };
-  const current: Record<LegKey, string | null> = {
-    printing: settings.defaultPrintVendorId ?? null,
-    hologram: settings.defaultHologramVendorId ?? null,
-    insertion: settings.defaultInsertionVendorId ?? null,
-  };
+// True when any leg's updatedAt is newer than the ladder's last save —
+// signals that vendor pricing has moved since the rung wholesale was
+// last priced against the cost stack.
+function hasErosion(data: CostStack | undefined, ladderUpdatedAt: string | null): boolean {
+  if (!data || !ladderUpdatedAt) return false;
+  const ladderTs = Date.parse(ladderUpdatedAt);
+  if (!Number.isFinite(ladderTs)) return false;
+  for (const leg of ["printing", "hologram", "insertion"] as LegKey[]) {
+    const u = data[leg]?.updatedAt;
+    if (u && Date.parse(u) > ladderTs) return true;
+  }
+  return false;
+}
+
+function RungCostStack({
+  runQty,
+  wholesaleCents,
+  ladderUpdatedAt,
+  data,
+  isLoading,
+  testId,
+}: {
+  runQty: number;
+  wholesaleCents: number;
+  ladderUpdatedAt: string | null;
+  data: CostStack | undefined;
+  isLoading: boolean;
+  testId: string;
+}) {
+  const legs: LegKey[] = ["printing", "hologram", "insertion"];
+  const subtotalCents = data?.totalPerUnitCents ?? 0;
+  const marginCents = wholesaleCents - subtotalCents;
+  const delta = subtotalCents - wholesaleCents;
+  const mismatch = !!data && delta > MISMATCH_TOLERANCE_CENTS;
+  const erosion = hasErosion(data, ladderUpdatedAt);
 
   return (
-    <div
-      className="rounded-lg border border-slate-200 bg-white p-5 max-w-2xl space-y-4"
-      data-testid="panel-gooddeed-routing"
-    >
+    <div className="space-y-3" data-testid={testId}>
+      <div className="text-xs uppercase tracking-wider font-semibold text-slate-500">
+        Cost stack at {runQty} units
+      </div>
+
+      {isLoading ? (
+        <div className="text-xs text-slate-500">Loading vendor pricing…</div>
+      ) : !data ? (
+        <div className="text-xs text-slate-400">No cost stack available.</div>
+      ) : (
+        <div className="rounded-md bg-white border border-slate-200 divide-y divide-slate-100">
+          {legs.map((leg) => {
+            const row = data[leg];
+            return (
+              <div
+                key={leg}
+                className="flex items-center justify-between gap-3 px-3 py-2"
+                data-testid={`${testId}-leg-${leg}`}
+              >
+                <div className="min-w-0">
+                  <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                    {STACK_LABEL[leg]}
+                  </div>
+                  {row ? (
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <Link href={`/admin/vendors/${row.vendorId}?tab=gooddeed`} className="text-sm text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors inline-flex items-center gap-1" data-testid={`${testId}-leg-${leg}-link`}>
+                        {row.vendorName}
+                        <ExternalLink className="w-3 h-3 opacity-60" />
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-slate-400 mt-0.5">— No vendor assigned —</div>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-sm font-semibold text-slate-900 tabular-nums" data-testid={`${testId}-leg-${leg}-cost`}>
+                    {row?.perUnitCents != null ? dollars(row.perUnitCents) : "—"}
+                  </div>
+                  <PriceChangeLine updatedAt={row?.updatedAt ?? null} />
+                </div>
+              </div>
+            );
+          })}
+
+          <div className="px-3 py-2 text-xs text-slate-500 italic" data-testid={`${testId}-shipping-note`}>
+            Shipping (print → hologram → insertion → fulfillment) is
+            bundled into the Quickprinter rung today. Per-leg shipping
+            vendors will list here individually once the shipping-leg
+            model lands (tracked separately).
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-md bg-white border border-slate-200 text-sm divide-y divide-slate-100">
+        <div className="flex items-center justify-between px-3 py-1.5">
+          <span className="text-slate-600">Vendor subtotal / unit</span>
+          <span className="text-slate-900 font-medium tabular-nums" data-testid={`${testId}-subtotal`}>
+            {dollars(subtotalCents)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between px-3 py-1.5">
+          <span className="text-slate-600">GoodTunes margin / unit</span>
+          <span className={"font-medium tabular-nums " + (marginCents < 0 ? "text-[color:var(--brand-heart)]" : "text-slate-900")} data-testid={`${testId}-margin`}>
+            {dollars(marginCents)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between px-3 py-1.5">
+          <span className="text-slate-900 font-semibold">Rung wholesale / unit</span>
+          <span className="text-slate-900 font-semibold tabular-nums" data-testid={`${testId}-wholesale`}>
+            {dollars(wholesaleCents)}
+          </span>
+        </div>
+      </div>
+
+      {mismatch && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" data-testid={`${testId}-mismatch`}>
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>
+            Doesn't match cost stack — margin = {dollars(marginCents)}{" "}
+            (vendor subtotal {dollars(subtotalCents)} vs rung wholesale{" "}
+            {dollars(wholesaleCents)}). Re-check the ladder rung or the
+            vendor's pricing.
+          </span>
+        </div>
+      )}
+
+      {erosion && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" data-testid={`${testId}-erosion`}>
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>
+            A vendor cost rose since this ladder was last saved
+            {ladderUpdatedAt ? <> ({timeAgo(ladderUpdatedAt)})</> : null}.
+            Re-save the rung to lock in the new cost stack.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Per-format pricing ----------------------------------------------------
+
+function FormatCostsCard({ formatCosts }: { formatCosts: PayoutFormatCost[] }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-format-costs">
       <div>
-        <h2 className="text-sm font-semibold text-slate-900">GoodDeed routing defaults</h2>
-        <p className="text-sm text-slate-500 mt-1">
-          Every album resolves printing, hologram, and insertion against these defaults. The
-          Printing picker only shows Quickprinters (print-only partners like Hoover).
+        <h2 className="text-[15px] font-semibold text-slate-900">Per-format pricing</h2>
+        <p className="text-[13px] text-slate-500 mt-1">
+          Publishing fee, payment processing, and the GoodTunes margin charged on every unit
+          of each format. Manufacturing is a placeholder for free / non-invited flows — when
+          a press's catalog covers the format, the catalog's price ladder wins on cost.
         </p>
       </div>
       <div className="space-y-3">
-        {(Object.keys(LEG_LABEL) as LegKey[]).map((leg) => {
-          const list = lists[leg];
-          const value = current[leg] ?? "";
-          return (
-            <label key={leg} className="block" data-testid={`row-routing-${leg}`}>
-              <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
-                {LEG_LABEL[leg]}
-              </span>
-              <select
-                value={value}
-                disabled={!list || save.isPending}
-                onChange={(e) => {
-                  const next = e.target.value || null;
-                  if (next === current[leg]) return;
-                  save.mutate({ [LEG_FIELD[leg]]: next } as any);
-                }}
-                className="w-full h-9 border border-slate-200 rounded-md px-2 text-sm bg-white focus:outline-none focus:border-[color:var(--brand-blue)]"
-                data-testid={`select-routing-${leg}`}
-              >
-                <option value="">— None —</option>
-                {(list ?? []).map((v) => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
-              {leg === "printing" && list && list.length === 0 && (
-                <p className="text-xs text-[color:var(--brand-heart)] mt-1">
-                  No Quickprinters with active Printing pricing yet — mark a vendor as Quickprinter and add a tier.
-                </p>
-              )}
-            </label>
-          );
+        {ALBUM_FORMATS.map((fmt) => {
+          const row = formatCosts.find((r) => r.format === fmt);
+          if (!row) return null;
+          return <FormatCostRow key={fmt} row={row} />;
         })}
       </div>
     </div>
   );
 }
 
-// Task #471 — per-paper-size price ladder for the platform-default
-// Quickprinter. Letter is the live ladder used by today's certificates;
-// 12×18 is scaffolded as a disabled tab so the next task that ships
-// large-format certs has the editor wired up. Walking rule lives in
-// server/vendorGoodDeedPricing.ts: missing rungs fall through to the
-// next-lower rung at price-resolution time.
+function FormatCostRow({ row }: { row: PayoutFormatCost }) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const initial = useMemo(
+    () => ({
+      manufacturingCents: (row.manufacturingCents / 100).toFixed(2),
+      publishingCents: (row.publishingCents / 100).toFixed(2),
+      paymentProcessingCents: (row.paymentProcessingCents / 100).toFixed(2),
+      goodtunesCents: (row.goodtunesCents / 100).toFixed(2),
+    }),
+    [row.manufacturingCents, row.publishingCents, row.paymentProcessingCents, row.goodtunesCents],
+  );
+  const [values, setValues] = useState<Record<FormatCostField, string>>(initial);
+  useEffect(() => {
+    setValues(initial);
+  }, [initial]);
+
+  const dirty = FORMAT_COST_FIELDS.some((f) => parseDollars(values[f.key]) !== row[f.key]);
+  const save = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, number> = {};
+      for (const f of FORMAT_COST_FIELDS) {
+        const c = parseDollars(values[f.key]);
+        if (c == null) throw new Error(`Enter a valid ${f.label.toLowerCase()} amount`);
+        body[f.key] = c;
+      }
+      const r = await apiRequest("PUT", `/api/admin/payout-format-costs/${row.format}`, body);
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/payout-format-costs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
+      toast({ title: `Saved ${ALBUM_FORMAT_LABEL[row.format as AlbumFormat]} pricing` });
+      setEditing(false);
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't save", description: e?.message, variant: "destructive" }),
+  });
+  const total = FORMAT_COST_FIELDS.reduce(
+    (sum, f) => sum + (parseDollars(values[f.key]) ?? 0),
+    0,
+  );
+
+  return (
+    <div className="rounded-md border border-slate-200 p-3" data-testid={`row-format-cost-${row.format}`}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm font-semibold text-slate-900">
+          {ALBUM_FORMAT_LABEL[row.format as AlbumFormat]}
+        </span>
+        <div className="flex items-center gap-1">
+          {editing && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setValues(initial);
+                  setEditing(false);
+                }}
+                className="h-8 px-2.5 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-50"
+                data-testid={`button-cancel-format-cost-${row.format}`}
+              >
+                Cancel
+              </button>
+              <SaveLink
+                dirty={dirty}
+                busy={save.isPending}
+                onClick={() => save.mutate()}
+                testId={`button-save-format-cost-${row.format}`}
+              />
+            </>
+          )}
+          {/* IconButton-equivalent admin ghost — matches CardHeader. */}
+          <EditPencil
+            active={editing}
+            onClick={() => {
+              if (editing) {
+                if (dirty && !window.confirm("Discard unsaved changes?")) return;
+                setValues(initial);
+                setEditing(false);
+              } else {
+                setEditing(true);
+              }
+            }}
+            testId={`edit-format-cost-${row.format}`}
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {FORMAT_COST_FIELDS.map((f) => (
+          <div key={f.key}>
+            <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
+              {f.label}
+            </span>
+            {editing ? (
+              <div className="relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]">$</span>
+                <input
+                  value={values[f.key]}
+                  onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                  inputMode="decimal"
+                  className="w-full h-8 border border-slate-200 rounded-md pl-5 pr-2 text-xs focus:outline-none focus:border-[color:var(--brand-blue)]"
+                  data-testid={`input-${f.key}-${row.format}`}
+                />
+              </div>
+            ) : (
+              <div className="text-sm text-slate-900 font-medium tabular-nums" data-testid={`text-${f.key}-${row.format}`}>
+                ${values[f.key]}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 text-right text-[12px] text-slate-500">
+        Total per unit:{" "}
+        <span className="text-slate-900 font-semibold" data-testid={`text-format-total-${row.format}`}>
+          {dollars(total)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// --- Quickprinter ladder ---------------------------------------------------
+
 const QP_RUNGS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
 type ServiceRow = {
   id: string;
@@ -682,21 +1291,32 @@ type ServiceRow = {
 
 function QuickprinterLadderCard({ vendorId }: { vendorId: string }) {
   const { toast } = useToast();
-  const { data, isLoading } = useQuery<{ vendor: { id: string; name: string }; services: ServiceRow[] }>({
+  const [editing, setEditing] = useState(false);
+  const { data, isLoading } = useQuery<{
+    vendor: { id: string; name: string };
+    services: ServiceRow[];
+  }>({
     queryKey: ["/api/admin/vendors", vendorId, "gooddeed-services"],
   });
   const printing = data?.services.find((s) => s.service === "printing") ?? null;
-  // Seed the editor map (qty → dollar string) from the row's ladder.
-  const [letter, setLetter] = useState<Record<number, string>>({});
-  useEffect(() => {
+
+  const seed = (): Record<number, string> => {
     const ladder = printing?.sizeLadders?.letter ?? printing?.tiers ?? [];
     const map: Record<number, string> = {};
     for (const rung of QP_RUNGS) {
       const t = ladder.find((x) => x.qty === rung);
       map[rung] = t ? (t.perUnitCents / 100).toFixed(2) : "";
     }
-    setLetter(map);
+    return map;
+  };
+  const [letter, setLetter] = useState<Record<number, string>>(seed);
+  useEffect(() => {
+    setLetter(seed());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [printing?.id, printing?.sizeLadders, printing?.tiers]);
+
+  const baseline = seed();
+  const dirty = QP_RUNGS.some((rung) => (letter[rung] ?? "") !== (baseline[rung] ?? ""));
 
   const save = useMutation({
     mutationFn: async () => {
@@ -723,25 +1343,28 @@ function QuickprinterLadderCard({ vendorId }: { vendorId: string }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/vendors", vendorId, "gooddeed-services"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/gooddeed-cost-stack"] });
       toast({ title: "Quickprinter ladder saved" });
+      setEditing(false);
     },
     onError: (e: any) =>
       toast({ title: "Couldn't save ladder", description: e?.message, variant: "destructive" }),
   });
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 max-w-2xl space-y-3" data-testid="panel-quickprinter-ladder">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-[15px] font-semibold text-slate-900">
-            Quickprinter price ladder{data?.vendor ? ` — ${data.vendor.name}` : ""}
-          </h2>
-          <p className="text-[13px] text-slate-500 mt-1">
-            Per-unit cost at each quantity rung. Quantities between rungs walk down to the
-            next-lower rung's price. Blank cells fall through too.
-          </p>
-        </div>
-      </div>
+    <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-quickprinter-ladder">
+      <CardHeader
+        title={`Quickprinter price ladder${data?.vendor ? ` — ${data.vendor.name}` : ""}`}
+        subtitle="Per-unit cost at each quantity rung. Quantities between rungs walk down to the next-lower rung's price. Blank cells fall through too."
+        editing={editing}
+        dirty={dirty}
+        onEnterEdit={() => setEditing(true)}
+        onCancelEdit={() => {
+          setLetter(seed());
+          setEditing(false);
+        }}
+        testId="quickprinter-ladder"
+      />
 
       <div className="flex items-center gap-1.5 border-b border-slate-100">
         <button
@@ -768,72 +1391,56 @@ function QuickprinterLadderCard({ vendorId }: { vendorId: string }) {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {QP_RUNGS.map((rung) => (
-              <label key={rung} className="block" data-testid={`field-qp-rung-${rung}`}>
+              <div key={rung} data-testid={`field-qp-rung-${rung}`}>
                 <span className="block text-slate-500 text-[10.5px] font-semibold uppercase tracking-wider mb-1">
                   {rung} units
                 </span>
-                <div className="relative">
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]">$</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={letter[rung] ?? ""}
-                    onChange={(e) => setLetter((m) => ({ ...m, [rung]: e.target.value }))}
-                    placeholder="—"
-                    className="w-full h-8 border border-slate-200 rounded-md pl-5 pr-2 text-right text-[12.5px] focus:outline-none focus:border-[color:var(--brand-blue)]"
-                    data-testid={`input-qp-rung-${rung}`}
-                  />
-                </div>
-              </label>
+                {editing ? (
+                  <div className="relative">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]">$</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={letter[rung] ?? ""}
+                      onChange={(e) => setLetter((m) => ({ ...m, [rung]: e.target.value }))}
+                      placeholder="—"
+                      className="w-full h-8 border border-slate-200 rounded-md pl-5 pr-2 text-right text-xs focus:outline-none focus:border-[color:var(--brand-blue)]"
+                      data-testid={`input-qp-rung-${rung}`}
+                    />
+                  </div>
+                ) : (
+                  <div className="text-right text-sm font-medium text-slate-900 tabular-nums" data-testid={`text-qp-rung-${rung}`}>
+                    {letter[rung] ? `$${letter[rung]}` : <span className="text-slate-300">—</span>}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
-          <div className="flex justify-end pt-1">
-            <button
-              type="button"
-              onClick={() => save.mutate()}
-              disabled={save.isPending}
-              className="h-8 px-3 rounded-md bg-[color:var(--brand-blue)] text-white text-[12px] font-semibold hover:opacity-90 disabled:opacity-60"
-              data-testid="button-save-qp-ladder"
-            >
-              {save.isPending ? "Saving…" : "Save ladder"}
-            </button>
-          </div>
+          {editing && (
+            <div className="flex justify-end items-center gap-1 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setLetter(seed());
+                  setEditing(false);
+                }}
+                className="h-8 px-2.5 rounded-md text-xs font-medium text-slate-500 hover:bg-slate-50"
+                data-testid="button-cancel-qp-ladder"
+              >
+                Cancel
+              </button>
+              <SaveLink
+                dirty={dirty}
+                busy={save.isPending}
+                onClick={() => save.mutate()}
+                testId="button-save-qp-ladder"
+              />
+            </div>
+          )}
         </>
       )}
     </div>
-  );
-}
-
-function Field({
-  label,
-  hint,
-  value,
-  onChange,
-  testId,
-}: {
-  label: string;
-  hint: string;
-  value: string;
-  onChange: (v: string) => void;
-  testId: string;
-}) {
-  return (
-    <label className="block">
-      <span className="text-slate-900 text-[13.5px] font-semibold">{label}</span>
-      <div className="mt-1.5 flex items-center gap-2">
-        <span className="text-slate-500 text-[13px]">$</span>
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          inputMode="decimal"
-          className="w-32 h-9 border border-slate-200 rounded-md px-3 text-[13px] focus:outline-none focus:border-[#319ED8]"
-          data-testid={testId}
-        />
-      </div>
-      <p className="text-slate-500 text-[12px] mt-1.5">{hint}</p>
-    </label>
   );
 }

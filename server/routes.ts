@@ -16884,6 +16884,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   );
 
+  // Task #649 — cost-stack for the AdminPlatformPricing wholesale-
+  // ladder rung expander. Returns per-leg vendor name + per-unit cents
+  // at the requested run quantity + last-changed stamp so the page can
+  // show the breakdown and deep-link to each vendor's pricing tab
+  // without a separate price-history table.
+  app.get(
+    "/api/admin/gooddeed-cost-stack",
+    requireAdmin,
+    async (req, res) => {
+      const runQty = Math.max(
+        1,
+        parseInt(String(req.query.runQty || "100"), 10) || 100,
+      );
+      const stack = await vgdp.getDefaultCostStack(runQty);
+      res.json(stack);
+    },
+  );
+
   // Per-album leg assignment. Patch any subset of the three legs;
   // null clears. The matching vendor must have an active row for the
   // matching service (we soft-warn but allow the assignment because

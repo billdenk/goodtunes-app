@@ -347,6 +347,75 @@ export async function listVendorsWithService(
   return filtered.map(({ id, name, logoUrl }) => ({ id, name, logoUrl }));
 }
 
+// Task #649 — cost-stack for the AdminPlatformPricing wholesale-ladder
+// rung expander. Resolves the three platform-default legs at the given
+// run quantity and returns vendor name + per-unit + updatedAt for each
+// so the rung row can deep-link to /admin/vendors/:id?tab=gooddeed and
+// stamp "last changed" without a separate price-history table.
+export interface CostStackLeg {
+  vendorId: string;
+  vendorName: string;
+  perUnitCents: number | null;
+  updatedAt: string | null;
+}
+export interface CostStack {
+  runQty: number;
+  printing: CostStackLeg | null;
+  hologram: CostStackLeg | null;
+  insertion: CostStackLeg | null;
+  totalPerUnitCents: number;
+}
+export async function getDefaultCostStack(
+  runQty: number,
+  paperSize: PaperSize = DEFAULT_PAPER_SIZE,
+): Promise<CostStack> {
+  const defaults = await getDefaultGoodDeedLegs();
+  const live = await resolveLivePricing(defaults, runQty, paperSize);
+  const ids = [defaults.printVendorId, defaults.hologramVendorId, defaults.insertionVendorId]
+    .filter(Boolean) as string[];
+  const vRows = ids.length
+    ? await db
+        .select({ id: vendors.id, name: vendors.name })
+        .from(vendors)
+        .where(inArray(vendors.id, ids))
+    : [];
+  const sRows = ids.length
+    ? await db
+        .select()
+        .from(vendorGoodDeedServices)
+        .where(inArray(vendorGoodDeedServices.vendorId, ids))
+    : [];
+  const nameOf = (id: string | null) =>
+    id ? vRows.find((v) => v.id === id)?.name ?? null : null;
+  const upOf = (id: string | null, service: string) => {
+    if (!id) return null;
+    const r = sRows.find((x: any) => x.vendorId === id && x.service === service);
+    if (!r) return null;
+    const u: any = (r as any).updatedAt;
+    return u?.toISOString?.() ?? (u ? String(u) : null);
+  };
+  const wrap = (
+    id: string | null,
+    service: "printing" | "hologram" | "insertion",
+    price: ServicePrice | null,
+  ): CostStackLeg | null => {
+    if (!id) return null;
+    return {
+      vendorId: id,
+      vendorName: nameOf(id) ?? "Unknown vendor",
+      perUnitCents: price?.perUnitCents ?? null,
+      updatedAt: upOf(id, service),
+    };
+  };
+  return {
+    runQty,
+    printing: wrap(defaults.printVendorId, "printing", live.printing),
+    hologram: wrap(defaults.hologramVendorId, "hologram", live.hologram),
+    insertion: wrap(defaults.insertionVendorId, "insertion", live.insertion),
+    totalPerUnitCents: live.totalPerUnitCents,
+  };
+}
+
 // Task #471 — read the singleton's default GoodDeed routing. The
 // Shopify Sell panel's Cost (live) preview resolves against these IDs
 // when the album_addons row has no per-leg overrides (which is now
