@@ -6847,6 +6847,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
+    "snippet": "<div className=\"text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "\"w-28 text-right tabular-nums text-[15px] font-semibold\","
   },
   {
@@ -6868,11 +6873,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "<div className=\"text-[10.5px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<div className=\"text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -11882,12 +11882,32 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabel.tsx",
+    "snippet": "className=\"w-44 text-[13px] bg-transparent outline-none placeholder:text-slate-400\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminLabel.tsx",
+    "snippet": "className=\"mt-3 w-full text-center text-slate-900 text-[13px] font-semibold truncate px-1\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminLabel.tsx",
+    "snippet": "className=\"text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminLabel.tsx",
     "snippet": "<p className=\"text-slate-700 text-[14px] font-semibold\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminLabel.tsx",
     "snippet": "<p className=\"text-slate-400 text-[12.5px] mt-1 max-w-xs mx-auto\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminLabel.tsx",
+    "snippet": "className=\"mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50\""
   },
   {
     "rule": "hardcoded-font-size",

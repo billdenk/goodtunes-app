@@ -16,7 +16,11 @@ import {
   Instagram,
   RefreshCw,
   Trash2,
+  Search,
+  X,
+  User as UserIcon,
 } from "lucide-react";
+import { SiSpotify, SiApplemusic } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -30,6 +34,9 @@ import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { EditablePanel } from "@/components/admin/EditablePanel";
+import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
+import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
@@ -74,6 +81,19 @@ interface Label {
   invitedByPressId: string | null;
 }
 
+// Mirrors AdminPeople's PersonLite — labelId + the streaming-link
+// signals the StreamingBadge cares about. Reused by the Artists tab.
+interface LabelArtistPerson {
+  id: string;
+  name: string;
+  photoUrl: string | null;
+  bio?: string | null;
+  labelId: string | null;
+  itunesArtistId?: string | null;
+  spotifyUrl?: string | null;
+  spotifyHasMatch?: boolean | null;
+}
+
 interface AlbumLite {
   id: string;
   title: string;
@@ -86,13 +106,17 @@ interface AlbumLite {
   primaryArtistId: string | null;
 }
 
-type Tab = "dashboard" | "overview" | "logo" | "cover" | "releases" | "payouts" | "permissions";
+type Tab = "dashboard" | "overview" | "cover" | "artists" | "releases" | "payouts" | "permissions";
 const TABS: { key: Tab; label: string }[] = [
   // Task #590 — Dashboard leads; Overview demoted to second.
+  // Task #639 — Logo tab removed; header avatar's pencil-chip dialog is
+  // now the only way to edit the logo (matches AdminPerson/AdminVendor).
+  // Artists tab added between Cover and Releases for in-page roster
+  // management without leaving for /admin/people.
   { key: "dashboard", label: "Dashboard" },
   { key: "overview", label: "Overview" },
-  { key: "logo", label: "Logo" },
   { key: "cover", label: "Cover" },
+  { key: "artists", label: "Artists" },
   { key: "releases", label: "Releases" },
   { key: "payouts", label: "Payouts" },
   { key: "permissions", label: "Permissions" },
@@ -106,8 +130,25 @@ export function AdminLabel() {
   const [tab, setTabState] = useState<Tab>(() => {
     if (typeof window === "undefined") return "dashboard";
     const q = new URLSearchParams(window.location.search).get("tab");
+    // Task #639 — old `?tab=logo` deep links quietly fall back to
+    // Dashboard now that the Logo tab is gone (header avatar's pencil-
+    // chip dialog took over).
     return TABS.some((t) => t.key === q) ? (q as Tab) : "dashboard";
   });
+
+  // Task #639 — strip a stale `?tab=logo` from the address bar so the
+  // deep-link looks clean after the silent fallback above.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const u = new URL(window.location.href);
+      const q = u.searchParams.get("tab");
+      if (q && !TABS.some((t) => t.key === q)) {
+        u.searchParams.delete("tab");
+        window.history.replaceState({}, "", u.toString());
+      }
+    } catch {}
+  }, []);
   const setTab = (next: Tab) => {
     setTabState(next);
     try {
@@ -188,7 +229,11 @@ export function AdminLabel() {
     enabled: !!user?.isAdmin,
   });
 
-  const { data: allPeople = [] } = useQuery<LabelPreviewPerson[]>({
+  // Widened past the LabelPreviewPerson shape (id/name/photoUrl/labelId)
+  // so the Artists tab can render the AdminPeople-family StreamingBadge
+  // without a second fetch. Extra fields are optional — the
+  // LabelPreviewCard preview only reads the original four.
+  const { data: allPeople = [] } = useQuery<LabelArtistPerson[]>({
     queryKey: ["/api/people"],
     enabled: !!user?.isAdmin,
   });
@@ -443,8 +488,14 @@ export function AdminLabel() {
             blurb="People at this label — A&R, label manager, accounts, anyone you need to reach."
           />
         )}
-        {tab === "logo" && <LogoPanel label={label} />}
         {tab === "cover" && <CoverPanel label={label} />}
+        {tab === "artists" && (
+          <ArtistsPanel
+            label={label}
+            allPeople={allPeople}
+            onOpenPerson={(id) => navigate(`/admin/people/${id}`)}
+          />
+        )}
         {tab === "releases" && <ReleasesPanel releases={releases} />}
         {tab === "payouts" && (
           <PayoutAccountPanel
@@ -934,6 +985,439 @@ function CoverPanel({ label }: { label: Label }) {
       aspect="wide"
       description="3:1 banner — reserved for a future fan-facing label page header."
     />
+  );
+}
+
+/* ─── Artists ──────────────────────────────────────────────────────── */
+
+/**
+ * In-page roster management — every Person whose `labelId` equals this
+ * label, rendered in the same grid/list visuals the AdminPeople index
+ * uses, plus the same chip cluster (Search · ViewModeToggle · Add).
+ *
+ * Adding an artist mounts `NewAlbumArtistDialog` in `mode="person"`:
+ *   • Local match  → if already on this label, just navigate.
+ *                    If on a *different* label, confirm before reassigning
+ *                    (mirrors the partner-lock pattern; we don't want to
+ *                    silently steal an artist from another label).
+ *                    If unlabeled, PUT labelId and navigate.
+ *   • New person   → newly created with no label, so PUT labelId.
+ *
+ * No remove-from-label affordance here (per task scope — operator can
+ * still clear `labelId` from the Person's Overview tab).
+ */
+function ArtistsPanel({
+  label,
+  allPeople,
+  onOpenPerson,
+}: {
+  label: Label;
+  allPeople: LabelArtistPerson[];
+  onOpenPerson: (id: string) => void;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  // Distinct view-mode key from the People index so "list on Vendors
+  // stays list" semantics extend per-surface without collision.
+  const [view, setView] = useViewMode("label-artists");
+  const [composerOpen, setComposerOpen] = useState(false);
+  // Reassign-from-other-label confirmation state. Captured at pick time
+  // so the dialog can name both sides.
+  const [reassign, setReassign] = useState<{
+    personId: string;
+    personName: string;
+    fromLabelName: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
+
+  // Resolve other-label names for the reassign confirm copy.
+  const { data: allLabels = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/labels"],
+  });
+  const labelNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of allLabels) m.set(l.id, l.name);
+    return m;
+  }, [allLabels]);
+
+  const artists = useMemo(() => {
+    const rows = allPeople.filter((p) => p.labelId === label.id);
+    rows.sort((a, b) => a.name.localeCompare(b.name));
+    return rows;
+  }, [allPeople, label.id]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? artists.filter((p) => p.name.toLowerCase().includes(q)) : artists;
+  }, [artists, search]);
+
+  const assignMut = useMutation({
+    mutationFn: async (personId: string) => {
+      await apiRequest("PUT", `/api/admin/people/${personId}`, {
+        labelId: label.id,
+      });
+      return personId;
+    },
+    onSuccess: (personId) => {
+      qc.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({ title: `Added to ${label.name}` });
+      onOpenPerson(personId);
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't add artist",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handlePicked = ({ id, name }: { id: string; name: string }) => {
+    setComposerOpen(false);
+    const existing = allPeople.find((p) => p.id === id);
+    if (existing && existing.labelId === label.id) {
+      onOpenPerson(id);
+      return;
+    }
+    if (existing && existing.labelId && existing.labelId !== label.id) {
+      setReassign({
+        personId: id,
+        personName: name || existing.name,
+        fromLabelName: labelNameById.get(existing.labelId) ?? "another label",
+      });
+      return;
+    }
+    // Either unlabeled existing person, or freshly created (not yet in
+    // cache because the dialog's invalidate is in-flight). Either way:
+    // PUT labelId.
+    assignMut.mutate(id);
+  };
+
+  return (
+    <div className="space-y-5" data-testid="panel-label-artists">
+      {/* Chip cluster — mirrors AdminPeople's header chrome (Search ·
+          ViewModeToggle · Add) so the two surfaces read as one family. */}
+      <div className="flex items-center justify-end gap-1">
+        {searchOpen ? (
+          <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">
+            <Search className="w-4 h-4 text-slate-400" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search artists"
+              className="w-44 text-[13px] bg-transparent outline-none placeholder:text-slate-400"
+              data-testid="input-search-label-artists"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setSearchOpen(false);
+              }}
+              className="text-slate-400 hover:text-slate-700"
+              aria-label="Close search"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            className="h-9 w-9 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
+            aria-label="Search"
+            data-testid="button-search-label-artists"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+        )}
+        <ViewModeToggle
+          value={view}
+          onChange={setView}
+          testIdPrefix="view-mode-label-artists"
+        />
+        <AddEntityButton
+          label="Add Artist"
+          onClick={() => setComposerOpen(true)}
+          testId="button-add-label-artist"
+        />
+      </div>
+
+      {filtered.length === 0 ? (
+        <ArtistsEmptyState
+          searching={search.trim().length > 0}
+          onAdd={() => setComposerOpen(true)}
+        />
+      ) : view === "grid" ? (
+        <div
+          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-6"
+          data-testid="grid-label-artists"
+        >
+          {filtered.map((p) => (
+            <LabelArtistCard
+              key={p.id}
+              person={p}
+              onOpen={() => onOpenPerson(p.id)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div
+          className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+          data-testid="list-label-artists"
+        >
+          {filtered.map((p) => (
+            <LabelArtistRow
+              key={p.id}
+              person={p}
+              onOpen={() => onOpenPerson(p.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      <NewAlbumArtistDialog
+        open={composerOpen}
+        onOpenChange={setComposerOpen}
+        mode="person"
+        onSelect={handlePicked}
+        onSkip={() => setComposerOpen(false)}
+      />
+
+      <Dialog
+        open={!!reassign}
+        onOpenChange={(v) => !assignMut.isPending && !v && setReassign(null)}
+      >
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-reassign-artist"
+        >
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
+              Reassign <span className="italic">{reassign?.personName}</span>?
+            </DialogTitle>
+            <DialogDescription className="text-[13px] font-normal text-slate-500">
+              They're currently signed to{" "}
+              <span className="font-semibold text-slate-700">
+                {reassign?.fromLabelName}
+              </span>
+              . Continuing will move them to{" "}
+              <span className="font-semibold text-slate-700">{label.name}</span>
+              {" "}— previous label loses the link.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-1">
+            <Button
+              type="button"
+              onClick={() => setReassign(null)}
+              disabled={assignMut.isPending}
+              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              data-testid="button-reassign-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (reassign) assignMut.mutate(reassign.personId);
+                setReassign(null);
+              }}
+              disabled={assignMut.isPending}
+              className="bg-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/90 text-white ml-2"
+              data-testid="button-reassign-confirm"
+            >
+              {assignMut.isPending ? "Moving…" : `Move to ${label.name}`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+/**
+ * StreamingBadge — same priority + visuals as AdminPeople's badge,
+ * inlined here so the Artists tab stays in lock-step without
+ * cross-page imports. (1) Spotify confirmed → full-color, (2) Apple
+ * confirmed → full-color, (3) searched-no-match → dim slate.
+ */
+function StreamingBadge({
+  person,
+  size,
+}: {
+  person: LabelArtistPerson;
+  size: "sm" | "md";
+}) {
+  const dim = size === "md" ? "w-6 h-6" : "w-4 h-4";
+  const icon = size === "md" ? "w-3.5 h-3.5" : "w-2.5 h-2.5";
+
+  let glyph: JSX.Element | null = null;
+  let title = "";
+  let testid = "";
+
+  if (person.spotifyUrl) {
+    glyph = <SiSpotify className={`${icon} text-[#1DB954]`} />;
+    title = "Linked on Spotify";
+    testid = `badge-spotify-linked-${person.id}`;
+  } else if (person.itunesArtistId) {
+    glyph = <SiApplemusic className={`${icon} text-[#FA243C]`} />;
+    title = "Linked on Apple Music";
+    testid = `badge-apple-linked-${person.id}`;
+  } else if (person.spotifyHasMatch === false) {
+    glyph = <SiSpotify className={`${icon} text-slate-300`} />;
+    title = "Searched Spotify — no match found";
+    testid = `badge-spotify-nomatch-${person.id}`;
+  }
+
+  if (!glyph) return null;
+  return (
+    <div
+      className={`absolute bottom-[7%] right-[7%] ${dim} rounded-full bg-white ring-1 ring-slate-200 shadow-sm flex items-center justify-center`}
+      title={title}
+      data-testid={testid}
+    >
+      {glyph}
+    </div>
+  );
+}
+
+function initialFor(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "?";
+  return trimmed.charAt(0).toUpperCase();
+}
+
+function LabelArtistCard({
+  person,
+  onOpen,
+}: {
+  person: LabelArtistPerson;
+  onOpen: () => void;
+}) {
+  // Secondary "Independent / <label>" line is dropped here — every row
+  // in this list is on the current label by definition, so it'd be
+  // wallpaper. Card sticks to avatar + name.
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group text-left flex flex-col items-center"
+      data-testid={`card-label-artist-${person.id}`}
+    >
+      <div className="relative w-full aspect-square">
+        <div className="w-full h-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-slate-200 shadow-sm group-hover:shadow-md group-hover:ring-[var(--brand-blue)]/30 transition-all">
+          {person.photoUrl ? (
+            <img
+              src={person.photoUrl}
+              alt={person.name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <span className="text-white text-3xl font-bold">
+                {initialFor(person.name)}
+              </span>
+            </div>
+          )}
+        </div>
+        <StreamingBadge person={person} size="md" />
+      </div>
+      <div
+        className="mt-3 w-full text-center text-slate-900 text-[13px] font-semibold truncate px-1"
+        data-testid={`text-label-artist-name-${person.id}`}
+      >
+        {person.name}
+      </div>
+    </button>
+  );
+}
+
+function LabelArtistRow({
+  person,
+  onOpen,
+}: {
+  person: LabelArtistPerson;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
+      data-testid={`row-label-artist-${person.id}`}
+    >
+      <div className="relative w-10 h-10 flex-shrink-0">
+        <div className="w-full h-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-slate-200">
+          {person.photoUrl ? (
+            <img
+              src={person.photoUrl}
+              alt={person.name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <span className="text-white text-sm font-bold">
+                {initialFor(person.name)}
+              </span>
+            </div>
+          )}
+        </div>
+        <StreamingBadge person={person} size="sm" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className="text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors"
+          data-testid={`text-label-artist-name-${person.id}`}
+        >
+          {person.name}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function ArtistsEmptyState({
+  searching,
+  onAdd,
+}: {
+  searching: boolean;
+  onAdd: () => void;
+}) {
+  return (
+    <Card
+      className="rounded-2xl shadow-sm p-10 text-center"
+      data-testid="empty-label-artists"
+    >
+      <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
+        <UserIcon className="w-6 h-6" />
+      </div>
+      <p className="text-slate-700 text-[14px] font-semibold">
+        {searching ? "No artists match that search" : "No artists yet"}
+      </p>
+      <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs mx-auto">
+        {searching
+          ? "Try a different name."
+          : "Add the first artist signed to this label — search your local catalog or pull one from Spotify or Apple Music."}
+      </p>
+      {!searching && (
+        <button
+          type="button"
+          onClick={onAdd}
+          className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+          data-testid="button-empty-add-first-artist"
+        >
+          Add your first artist
+        </button>
+      )}
+    </Card>
   );
 }
 
