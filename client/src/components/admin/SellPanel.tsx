@@ -82,6 +82,9 @@ import {
 import { VinylPreview } from "@/components/VinylPreview";
 import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import { CertSaleWindowPanel } from "@/components/admin/CertSaleWindowPanel";
+import { ChangeFormatDialog } from "@/components/admin/ChangeFormatDialog";
+import { adaptSkuToFormat, type SkuPicks } from "@/lib/skuFormatAdapt";
+import { Repeat } from "lucide-react";
 
 // Task #393 — Intl-based currency formatter with thousands separators
 // and proper negative handling, replacing the old `$${(c/100).toFixed(2)}`
@@ -368,6 +371,79 @@ export function SellPanel({
   const deleteSku = useMutation({
     mutationFn: async (format: AlbumFormat) => apiRequest("DELETE", `/api/admin/albums/${albumId}/skus/${format}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "skus"] }),
+  });
+  // Task #654 — Format swap via the album-jacket "change format" icon.
+  // Carries the row's adapted picks over to the new format, persists
+  // the new SKU (when the row has a price), then deletes the old SKU
+  // (saved rows) or removes the draft. Disclosure is transferred so
+  // the row stays open through the swap. Single mutation so toast +
+  // invalidation fire once per swap, not twice.
+  const swapSkuFormat = useMutation({
+    mutationFn: async (args: {
+      oldFormat: AlbumFormat;
+      target: AlbumFormat;
+      isDraft: boolean;
+      // Adjustments the adapter made carrying picks across. NOT sent
+      // to the server — surfaced in the success toast so the operator
+      // sees exactly what snapped (color, qty, jacket) instead of
+      // discovering it on the next render.
+      changes: string[];
+      body: {
+        format: AlbumFormat;
+        priceCents: number;
+        stock: number | null;
+        active: boolean;
+        plannedQuantity: number | null;
+        vinylColor: string | null;
+        jacketUpgrade: JacketUpgrade | null;
+        pressTierId?: string | null;
+        pressColorId?: string | null;
+        displayName?: string | null;
+        trackCount?: number | null;
+      };
+    }) => {
+      await apiRequest(
+        "PUT",
+        `/api/admin/albums/${albumId}/skus/${args.target}`,
+        args.body,
+      );
+      if (!args.isDraft) {
+        await apiRequest(
+          "DELETE",
+          `/api/admin/albums/${albumId}/skus/${args.oldFormat}`,
+        );
+      }
+      return args;
+    },
+    onSuccess: (args) => {
+      if (args.isDraft) {
+        setDraftFormats((prev) => prev.filter((d) => d !== args.oldFormat));
+      }
+      const currentKey = args.isDraft ? `draft-${args.oldFormat}` : args.oldFormat;
+      skuDisclosure.setOpen(currentKey, false);
+      skuDisclosure.open(args.target);
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/albums", albumId, "skus"],
+      });
+      // Task #654 — only confirm success AFTER the PUT/DELETE pair
+      // resolved; the row also bullet-lists each adjustment the
+      // adapter made so the carry-over is never silent.
+      toast({
+        title: `Format changed to ${ALBUM_FORMAT_LABEL[args.target]}`,
+        description:
+          args.changes.length > 0 ? (
+            <ul className="mt-1 space-y-0.5">
+              {args.changes.map((c) => (
+                <li key={c}>• {c}</li>
+              ))}
+            </ul>
+          ) : (
+            "Everything carried over."
+          ),
+      });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't change format", description: e?.message, variant: "destructive" }),
   });
   const upsertAddon = useMutation({
     mutationFn: async (body: {
@@ -868,6 +944,10 @@ export function SellPanel({
                           onEditArtwork={onEditArtwork}
                           onSave={upsertSku.mutate}
                           onDelete={() => deleteSku.mutate(f)}
+                          onChangeFormat={(args) =>
+                            swapSkuFormat.mutate({ ...args, oldFormat: f, isDraft: false })
+                          }
+                          swapBusy={swapSkuFormat.isPending}
                           expanded={skuDisclosure.isOpen(f)}
                           onSetExpanded={(open) => skuDisclosure.setOpen(f, open)}
                           trackCount={trackCount || (localAnticipated ?? 0)}
@@ -931,6 +1011,10 @@ export function SellPanel({
                           });
                         }}
                         onDelete={() => setDraftFormats((prev) => prev.filter((d) => d !== f))}
+                        onChangeFormat={(args) =>
+                          swapSkuFormat.mutate({ ...args, oldFormat: f, isDraft: true })
+                        }
+                        swapBusy={swapSkuFormat.isPending}
                         expanded={skuDisclosure.isOpen(`draft-${f}`)}
                         onSetExpanded={(open) => skuDisclosure.setOpen(`draft-${f}`, open)}
                         trackCount={trackCount || (localAnticipated ?? 0)}
@@ -1640,6 +1724,8 @@ function SkuRow({
   onEditArtwork,
   onSave,
   onDelete,
+  onChangeFormat,
+  swapBusy = false,
   expanded,
   onSetExpanded,
   trackCount,
@@ -1723,6 +1809,29 @@ function SkuRow({
     locked?: boolean;
   }) => void;
   onDelete: () => void;
+  // Task #654 — "Change the physical format" dialog (launched from the
+  // album-jacket overlay icon) calls this with the adapted body for
+  // the NEW format. Parent owns the PUT-new + DELETE-old swap so the
+  // disclosure can be transferred cleanly. Optional — when absent the
+  // overlay icon is hidden.
+  onChangeFormat?: (args: {
+    target: AlbumFormat;
+    changes: string[];
+    body: {
+      format: AlbumFormat;
+      priceCents: number;
+      stock: number | null;
+      active: boolean;
+      plannedQuantity: number | null;
+      vinylColor: string | null;
+      jacketUpgrade: JacketUpgrade | null;
+      pressTierId?: string | null;
+      pressColorId?: string | null;
+      displayName?: string | null;
+      trackCount?: number | null;
+    };
+  }) => void;
+  swapBusy?: boolean;
   // Exclusive-disclosure: owned by SellPanel via `useExclusiveDisclosure`.
   // Draft rows auto-open on mount so the operator can start editing
   // immediately; existing rows open on click. See docs/design-system.md
@@ -1867,6 +1976,11 @@ function SkuRow({
     const n = Number.parseInt(qtyInput.replace(/[^0-9]/g, ""), 10);
     return Number.isFinite(n) && n > 0 ? n : null;
   }, [qtyInput]);
+  // Task #654 — open state for the "Change the physical format" modal
+  // launched from the album-jacket overlay icon. Modal renders + adapts
+  // picks at confirm time; the parent owns the actual PUT/DELETE swap.
+  const [changeFormatOpen, setChangeFormatOpen] = useState(false);
+  const { toast } = useToast();
   // Task #200 — vinyl picks. Initialised from the SKU snapshot (when
   // present) so a saved row re-opens with the picks the artist locked
   // in. New / non-vinyl rows fall back to platform defaults.
@@ -3951,29 +4065,32 @@ function SkuRow({
             }
           : vinylColor;
         const formatOptions = Array.from(new Set<AlbumFormat>([format, ...offeredFormats]));
+        // Task #654 — swap targets are the offered formats MINUS any
+        // format that already has its own SKU (saved or draft). The
+        // swap mutation PUTs the new format then DELETEs the old, so
+        // including an already-configured format would silently
+        // overwrite that other row's picks/price/lock. Operators who
+        // want to land on an already-configured format use the "+ Add
+        // physical good" / existing-row chevron to navigate there.
+        const swapTargets = formatOptions.filter(
+          (f) => f === format || !configuredFormats?.has(f),
+        );
+        const canChangeFormat =
+          !!onChangeFormat && swapTargets.length > 1 && !isLocked;
         return (
       <div
           className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5 items-start"
           data-testid={`vinyl-card-${format}`}
         >
-          {/* Task #646 — PREVIEW column (right on desktop via sm:order-2,
-              top on mobile). Just the VinylPreview hero with the hover-
-              to-edit cover affordance from Task #393. Every input now
-              lives in the sibling CONTROLS column. */}
+          {/* Task #654 — PREVIEW column with a hover overlay that
+              groups two IconButtons (edit-artwork pencil + change-
+              format repeat icon) on the jacket. Replaces the format
+              dropdown that previously sat in the CONTROLS column. */}
           <div className="sm:order-2">
-            {/* Preview hero — Task #393: pencil now lives INSIDE the
-              jacket via VinylPreview's `jacketOverlay` slot so it only
-              hovers over the album art, not the vinyl disc peeking out
-              to the right. Same fade-on-hover the rest of admin uses
-              for cover edits. */}
           <div className="relative">
-            <button
-              type="button"
-              onClick={onEditArtwork}
-              disabled={!onEditArtwork}
-              className="group block w-full rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)] disabled:cursor-default"
-              aria-label="Edit album artwork"
-              data-testid={`button-edit-artwork-${format}`}
+            <div
+              className="group relative w-full rounded-lg"
+              data-testid={`vinyl-preview-group-${format}`}
             >
               <div className="flex items-center justify-center">
                 <VinylPreview
@@ -3981,73 +4098,66 @@ function SkuRow({
                   color={previewColor}
                   jacketUpgrade={jacketUpgrade}
                   size="xl"
-                  jacketOverlay={onEditArtwork ? (
+                  jacketOverlay={(onEditArtwork || canChangeFormat) ? (
                     <>
                       <span
-                        className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 transition-colors pointer-events-none"
+                        className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-within:bg-black/40 transition-colors pointer-events-none"
                         aria-hidden
                       />
                       <span
-                        className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity pointer-events-none"
-                        aria-hidden
+                        className="absolute inset-0 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+                        aria-hidden={false}
                       >
-                        <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
-                          <Pencil className="w-4 h-4" />
-                        </span>
+                        {onEditArtwork && (
+                          <IconButton
+                            variant="ghost"
+                            label="Edit album artwork"
+                            onClick={onEditArtwork}
+                            className="!text-slate-700 shadow-lg ring-1 ring-black/5"
+                            style={{ backgroundColor: "rgba(255,255,255,0.95)" }}
+                            data-testid={`button-edit-artwork-${format}`}
+                          >
+                            <Pencil />
+                          </IconButton>
+                        )}
+                        {canChangeFormat && (
+                          <IconButton
+                            variant="ghost"
+                            label="Change the physical format"
+                            onClick={() => setChangeFormatOpen(true)}
+                            disabled={swapBusy}
+                            className="!text-slate-700 shadow-lg ring-1 ring-black/5"
+                            style={{ backgroundColor: "rgba(255,255,255,0.95)" }}
+                            data-testid={`button-change-format-${format}`}
+                          >
+                            <Repeat />
+                          </IconButton>
+                        )}
                       </span>
                     </>
                   ) : null}
                 />
               </div>
-            </button>
+            </div>
           </div>
           </div>
 
           {/* Task #646 — CONTROLS column (left on desktop via sm:order-1,
-              below preview on mobile). Order: Format → Color →
-              Anticipated tracks → Retail Price → Select Qty → Jacket →
-              Profit (collapsible breakdown) → Total. */}
+              below preview on mobile). Order: Format (read-only label,
+              swap is via the album-jacket overlay icon — Task #654) →
+              Color → Anticipated tracks → Retail Price → Select Qty →
+              Jacket → Profit (collapsible breakdown) → Total. */}
           <div className="sm:order-1 space-y-4">
-            {/* Format dropdown — pivot to any other offered format.
-              Task #446 — 7" is pre-selected from the "+ Add physical
-              good" menu; we render a read-only label so the operator
-              doesn't see a second size pick. To switch off 7", delete
-              the row and add a different format from the menu. */}
           <div>
             <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
               Format
             </div>
-            {sevenInch ? (
-              <div
-                className="h-8 inline-flex items-center text-sm font-medium text-slate-700"
-                data-testid={`text-card-format-${format}`}
-              >
-                {ALBUM_FORMAT_LABEL[format]}
-              </div>
-            ) : (
-              <Select
-                value={format}
-                onValueChange={(v) => onSwitchFormat(v as AlbumFormat)}
-              >
-                <SelectTrigger
-                  className="h-8 w-full text-sm"
-                  data-testid={`select-card-format-${format}`}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white text-slate-900 border-slate-200">
-                  {formatOptions.map((f) => (
-                    <SelectItem
-                      key={f}
-                      value={f}
-                      data-testid={`option-card-format-${format}-${f}`}
-                    >
-                      {ALBUM_FORMAT_LABEL[f]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            <div
+              className="h-8 inline-flex items-center text-sm font-medium text-slate-700"
+              data-testid={`text-card-format-${format}`}
+            >
+              {ALBUM_FORMAT_LABEL[format]}
+            </div>
           </div>
 
             {/* Color section + swatch row + selected color name */}
@@ -4447,7 +4557,7 @@ function SkuRow({
                 </div>
                 {breakdown.needsQuote && (
                   <div
-                    className="text-[11px] text-[color:var(--brand-blue)] leading-snug -mt-1 pl-1"
+                    className="text-xs text-[color:var(--brand-blue)] leading-snug -mt-1 pl-1"
                     data-testid={`text-mfg-needs-quote-inline-${format}`}
                   >
                     {usingCatalog
@@ -5611,6 +5721,81 @@ function SkuRow({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+      )}
+      {/* Task #654 — "Change the physical format" modal. Lives at the
+          row level so the album-jacket overlay icon can pop it. On
+          confirm we adapt the row's *current* picks onto the target
+          (carry color/jacket/qty/price where possible, snap to defaults
+          otherwise), then ask the parent to swap. A toast spells out
+          any adjustments so nothing changes silently. */}
+      {onChangeFormat && (
+        <ChangeFormatDialog
+          open={changeFormatOpen}
+          onOpenChange={setChangeFormatOpen}
+          current={format}
+          // Task #654 — only not-yet-configured formats are swap targets;
+          // see swapTargets comment in the render block above.
+          options={Array.from(
+            new Set<AlbumFormat>([
+              format,
+              ...offeredFormats.filter((f) => !configuredFormats?.has(f)),
+            ]),
+          )}
+          busy={swapBusy}
+          onPick={(target) => {
+            if (target === format) return;
+            const cents = parseDollars(priceStr);
+            // No price set yet (draft row mid-edit) — there's nothing
+            // to persist on the new format, so fall back to the legacy
+            // switch-format affordance (creates an empty draft).
+            if (cents === null) {
+              setChangeFormatOpen(false);
+              onSwitchFormat(target);
+              toast({
+                title: `Format changed to ${ALBUM_FORMAT_LABEL[target]}`,
+                description: "Set a price to lock in the new row.",
+              });
+              return;
+            }
+            const picks: SkuPicks = {
+              vinylColorId,
+              jacketUpgrade,
+              pressTierId: pressTierId ?? null,
+              pressColorId: pressColorId ?? null,
+              plannedQuantity: parsedQty > 0 ? parsedQty : 0,
+              priceCents: cents,
+            };
+            const result = adaptSkuToFormat({
+              currentFormat: format,
+              targetFormat: target,
+              picks,
+              fromCatalog: catalogFormat,
+              toCatalog: catalogByFormat?.get(target) ?? null,
+            });
+            const adapted = result.next;
+            onChangeFormat({
+              target,
+              changes: result.changes,
+              body: {
+                format: target,
+                priceCents: cents,
+                stock: existing?.stock ?? null,
+                active,
+                plannedQuantity:
+                  adapted.plannedQuantity > 0 ? adapted.plannedQuantity : null,
+                vinylColor: adapted.vinylColorId,
+                jacketUpgrade: adapted.jacketUpgrade,
+                pressTierId: adapted.pressTierId,
+                pressColorId: adapted.pressColorId,
+                displayName: displayNameStr.trim() ? displayNameStr.trim() : null,
+                trackCount: effectiveTrackCount,
+              },
+            });
+            // Parent mutation owns the success toast (after PUT/DELETE
+            // resolves) so we never falsely confirm a failed swap.
+            setChangeFormatOpen(false);
+          }}
+        />
       )}
     </div>
   );
