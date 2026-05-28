@@ -44,7 +44,15 @@ async function buildAll() {
     ...Object.keys(pkg.dependencies || {}),
     ...Object.keys(pkg.devDependencies || {}),
   ];
-  const externals = allDeps.filter((dep) => !allowlist.includes(dep));
+  const externals = [
+    ...allDeps.filter((dep) => !allowlist.includes(dep)),
+    // @napi-rs/canvas (used by maskToVinylDisc) loads platform-specific
+    // native .node binaries from sibling packages that are *optional*
+    // deps, so they aren't in package.json deps and don't get externalized
+    // by the filter above. esbuild then tries to bundle the .node files
+    // and fails. Mark the whole @napi-rs/* family external instead.
+    "@napi-rs/canvas-*",
+  ];
 
   await esbuild({
     entryPoints: ["server/index.ts"],
