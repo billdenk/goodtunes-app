@@ -1272,10 +1272,22 @@ const tierBodySchema = z.object({
   name: z.string().min(1).max(80),
   position: z.number().int().min(0).optional(),
 });
+// Accept either an absolute http(s) URL or the app's relative upload path
+// (`/objects/uploads/<id>`). The shared `/api/admin/upload` endpoint returns
+// the relative path, so a stricter `z.string().url()` validator 400s every
+// swatch photo save with "Invalid URL" — see task #667.
+const swatchImageUrlString = z
+  .string()
+  .trim()
+  .min(1)
+  .refine(
+    (s) => /^https?:\/\/\S+$/i.test(s) || /^\/objects\/uploads\/[A-Za-z0-9._-]+$/.test(s),
+    { message: "Must be an absolute http(s) URL or /objects/uploads/<id>" },
+  );
 const colorBodySchema = z.object({
   name: z.string().min(1).max(80),
   swatchHex: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
-  swatchImageUrl: z.string().url().nullable().optional(),
+  swatchImageUrl: swatchImageUrlString.nullable().optional(),
   position: z.number().int().min(0).optional(),
 });
 const jacketBodySchema = z.object({

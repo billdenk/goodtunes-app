@@ -882,12 +882,16 @@ function ReferralsPanel({ pressId }: { pressId: string }) {
 // expected — empty just means "no price set for this rung".
 const DEFAULT_QTY_COLUMNS = [50, 100, 300, 500, 750, 1000, 2000, 3000];
 
-async function uploadSwatchImage(file: File): Promise<string> {
+async function uploadSwatchImage(
+  file: File,
+  opts?: { cropToDisc?: boolean },
+): Promise<{ url: string; maskApplied?: boolean }> {
   const fd = new FormData();
   fd.append("file", file);
   const tok = (await import("@/lib/queryClient")).getAuthToken();
   if (!tok) throw new Error("Sign out and back in — your session token is missing.");
-  const r = await fetch("/api/admin/upload", {
+  const qs = opts?.cropToDisc ? "?mask=disc" : "";
+  const r = await fetch(`/api/admin/upload${qs}`, {
     method: "POST",
     body: fd,
     headers: { Authorization: `Bearer ${tok}` },
@@ -897,8 +901,8 @@ async function uploadSwatchImage(file: File): Promise<string> {
     const body = await r.json().catch(() => ({}));
     throw new Error(body.message || `Upload failed (${r.status})`);
   }
-  const { url } = await r.json();
-  return url as string;
+  const { url, maskApplied } = await r.json();
+  return { url, maskApplied };
 }
 
 function PressCatalogPanel({ pressId }: { pressId: string }) {
@@ -1838,11 +1842,22 @@ function SwatchChip({
       onChanged();
     },
   });
+  const [cropToDisc, setCropToDisc] = useState(false);
   const upload = useMutation({
     mutationFn: async (file: File) => {
-      const url = await uploadSwatchImage(file);
+      return await uploadSwatchImage(file, { cropToDisc });
+    },
+    onSuccess: ({ url, maskApplied }) => {
       setImageUrl(url);
-      return url;
+      // Surfaces the "we couldn't find a clear disc" case so the admin
+      // knows the original mockup landed unchanged and can decide
+      // whether to retouch by hand or upload a tighter source.
+      if (cropToDisc && maskApplied === false) {
+        toast({
+          title: "Couldn't auto-detect the vinyl disc",
+          description: "Saved the original photo as-is. Try a tighter mockup or turn the toggle off.",
+        });
+      }
     },
     onError: (e: any) => toast({ title: "Upload failed", description: e?.message, variant: "destructive" }),
   });
@@ -1907,14 +1922,21 @@ function SwatchChip({
               </label>
               <label className="block">
                 <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">Photo</span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                  {/* Round preview — matches the live catalog chip's
+                      circular swatch dot so admins can tell the photo
+                      will display as a disc, not a square with
+                      whitespace around it (task #667). */}
                   <div
-                    className="w-9 h-9 rounded border border-slate-200 overflow-hidden bg-slate-50"
+                    className={`w-12 h-12 rounded-full overflow-hidden shrink-0 border ${
+                      imageUrl ? "border-slate-200" : "border-dashed border-slate-300 bg-slate-50"
+                    }`}
                     style={
                       imageUrl
                         ? { backgroundImage: `url(${imageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
                         : {}
                     }
+                    data-testid={`preview-swatch-photo-${color.id}`}
                   />
                   <input
                     type="file"
@@ -1938,6 +1960,26 @@ function SwatchChip({
                 </div>
               </label>
             </div>
+            {/* "Crop to vinyl disc" — opt-in disc-mask at upload time.
+                Vendor mockups (Hellbender on gray, MRP on black/checker)
+                ship the record dead-center on a studio backdrop; this
+                masks everything outside the detected disc to transparent
+                so the chip shows just the record + label. */}
+            <label className="flex items-start gap-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={cropToDisc}
+                onChange={(e) => setCropToDisc(e.target.checked)}
+                className="mt-0.5 accent-[color:var(--brand-blue)]"
+                data-testid={`toggle-crop-disc-${color.id}`}
+              />
+              <span>
+                <span className="font-medium text-slate-700">Crop to vinyl disc</span>
+                <span className="block text-xs text-slate-500 mt-0.5">
+                  Best for vendor mockups where the record sits on a studio backdrop — keeps the label and vinyl, drops the background.
+                </span>
+              </span>
+            </label>
             <div className="flex items-center justify-between pt-2">
               <button
                 type="button"
