@@ -631,6 +631,7 @@ function SplitsImportSheet({
   const [sheetUrl, setSheetUrl] = useState("");
   const [csvText, setCsvText] = useState("");
   const [parsed, setParsed] = useState<any[] | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [kind, setKind] = useState<"publishing" | "mechanical">("publishing");
   const [replace, setReplace] = useState(true);
 
@@ -643,7 +644,10 @@ function SplitsImportSheet({
       const r = await apiRequest("POST", `/api/admin/albums/${albumId}/splits/import-parse`, body);
       return r.json();
     },
-    onSuccess: (data) => setParsed(data.rows ?? []),
+    onSuccess: (data) => {
+      setParsed(data.rows ?? []);
+      setNotice(typeof data.notice === "string" && data.notice.length > 0 ? data.notice : null);
+    },
     onError: (e: any) => toast({ title: "Couldn't read sheet", description: e?.message ?? "", variant: "destructive" }),
   });
 
@@ -736,6 +740,13 @@ function SplitsImportSheet({
               </label>
             </div>
 
+            {notice && (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 flex items-start gap-2" data-testid="callout-import-notice">
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <div>{notice}</div>
+              </div>
+            )}
+
             {unmatched.length > 0 && (
               <div className="text-[12.5px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -776,7 +787,7 @@ function SplitsImportSheet({
             </div>
 
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setParsed(null)} data-testid="button-back-import">Back</Button>
+              <Button variant="outline" onClick={() => { setParsed(null); setNotice(null); }} data-testid="button-back-import">Back</Button>
               <Button onClick={() => applyMut.mutate()} disabled={applyMut.isPending || parsed.length === 0} data-testid="button-apply-import">
                 {applyMut.isPending ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Importing…</> : `Import ${parsed.length} row${parsed.length === 1 ? "" : "s"}`}
               </Button>

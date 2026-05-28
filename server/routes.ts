@@ -13213,7 +13213,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     publisher?: string;
     kindHint?: "publishing" | "mechanical";
   };
-  function parseSheetRows(rows: string[][]): ParsedRow[] {
+  function parseFlatSheetRows(rows: string[][]): ParsedRow[] {
     if (rows.length < 2) return [];
     const header = rows[0].map((c) => c.trim());
     const songIdx = pickCol(header, ["song", "songtitle", "track", "title"]);
@@ -13244,6 +13244,86 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     return out;
   }
+  // Wide / "banner" layout used by the NightBirde songsheet and similar:
+  // the header row carries section banners ("Publishing Splits", "Master
+  // Recording Splits") that span several blank columns, the song title
+  // lives in the first non-blank column to the left of the first banner,
+  // and each cell inside a banner range is a free-text "Name PCT%" string
+  // (e.g. `Jane 66.67%`). A single track can have multiple cells per side.
+  function parseWideSheetRows(rows: string[][]): ParsedRow[] {
+    if (rows.length < 2) return [];
+    const header = rows[0].map((c) => (c ?? "").trim());
+    // Metadata columns we must treat as boundaries, never as banners.
+    // Checked BEFORE banner classification so headers like "DATE PUBLISHED"
+    // (contains "publish") don't get mis-detected as a Publishing Splits
+    // banner and turn date cells into bogus "Name PCT%" rows.
+    const isOther = (h: string) => /^(isrc|video|year|date|notes?|upc|tempo|key|duration|length)\b/i.test(h);
+    // Banners must contain the full split-section words, not just substrings.
+    // "publishing" excludes "PUBLISHED"; recording is word-bounded so "PRE-RECORDING"
+    // would still match but generic words like "recordings library" won't.
+    const isPublishingBanner = (h: string) => /\bpublishing\b/i.test(h);
+    const isMasterBanner = (h: string) => /\b(master(?:s)?(?:\s+recording)?|mechanical|recording)\b/i.test(h);
+    type Banner = { col: number; end: number; kind: "publishing" | "mechanical" };
+    const banners: Banner[] = [];
+    for (let i = 0; i < header.length; i++) {
+      const h = header[i];
+      if (!h) continue;
+      if (isOther(h)) continue;
+      if (isPublishingBanner(h)) banners.push({ col: i, end: i, kind: "publishing" });
+      else if (isMasterBanner(h)) banners.push({ col: i, end: i, kind: "mechanical" });
+    }
+    if (banners.length === 0) return [];
+    for (let b = 0; b < banners.length; b++) {
+      let end = header.length - 1;
+      for (let i = banners[b].col + 1; i < header.length; i++) {
+        const h = header[i];
+        if (!h) continue;
+        if (isPublishingBanner(h) || isMasterBanner(h) || isOther(h)) { end = i - 1; break; }
+      }
+      banners[b].end = end;
+    }
+    let songCol = -1;
+    for (let i = banners[0].col - 1; i >= 0; i--) {
+      if (header[i]) { songCol = i; break; }
+    }
+    if (songCol < 0) {
+      for (let i = 0; i < banners[0].col; i++) {
+        if (rows.slice(1).some((r) => (r[i] ?? "").trim())) { songCol = i; break; }
+      }
+    }
+    if (songCol < 0) return [];
+    const cellRe = /^\s*(.+?)\s+(\d+(?:\.\d+)?)\s*%?\s*$/;
+    const out: ParsedRow[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      const songTitle = (r[songCol] ?? "").trim();
+      if (!songTitle) continue;
+      for (const b of banners) {
+        for (let c = b.col; c <= b.end; c++) {
+          const cell = (r[c] ?? "").trim();
+          if (!cell) continue;
+          const m = cell.match(cellRe);
+          if (!m) continue;
+          const name = m[1].trim();
+          const percent = Number(m[2]);
+          if (!name || !isFinite(percent)) continue;
+          out.push({
+            songTitle,
+            name,
+            role: b.kind === "publishing" ? "Songwriter" : "Performer",
+            percent,
+            kindHint: b.kind,
+          });
+        }
+      }
+    }
+    return out;
+  }
+  function parseSheetRows(rows: string[][]): ParsedRow[] {
+    const flat = parseFlatSheetRows(rows);
+    if (flat.length > 0) return flat;
+    return parseWideSheetRows(rows);
+  }
   app.post("/api/admin/albums/:id/splits/import-parse", requireAdmin, async (req, res) => {
     const albumId = String(req.params.id);
     const album = await storage.getAlbumById(albumId, { includeHidden: true });
@@ -13267,7 +13347,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const rows = parseCsv(csv);
     const parsed = parseSheetRows(rows);
-    return res.json({ rows: parsed, columns: rows[0] ?? [] });
+    let notice: string | undefined;
+    if (parsed.length === 0) {
+      const headers = (rows[0] ?? []).map((h) => (h ?? "").trim()).filter(Boolean);
+      notice = `Couldn't recognize the sheet. Expected either a header row with song / name / percent columns, or a "Publishing Splits" / "Master Recording Splits" banner layout. Headers seen: ${headers.length ? headers.join(", ") : "(none)"}`;
+    }
+    return res.json({ rows: parsed, columns: rows[0] ?? [], notice });
   });
   app.post("/api/admin/albums/:id/splits/import", requireAdmin, async (req, res) => {
     const albumId = String(req.params.id);
