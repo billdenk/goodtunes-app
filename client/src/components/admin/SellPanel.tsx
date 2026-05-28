@@ -2086,11 +2086,16 @@ function SkuRow({
           usingSnapshot: true,
         };
       }
+      // If the picked tier has no confirmed rung at this quantity
+      // (snap returns null) OR the rung is priced at 0, fall through
+      // to needsQuote so the operator sees a clear "no rung price"
+      // hint instead of a silent $0.00 in the breakdown.
+      const rungMissing = liveRungCents === null || liveRungCents <= 0;
       return {
         manufacturingCents: liveRungCents ?? 0,
         ...sideCarFor(false),
         source: "catalog" as const,
-        needsQuote: false,
+        needsQuote: rungMissing,
         usingSnapshot: false,
       };
     }
@@ -4373,8 +4378,10 @@ function SkuRow({
             </div>
           )}
 
-            {/* Profit — collapsible inline breakdown */}
-          <div>
+            {/* Profit — collapsible inline breakdown. Top border
+                divides operator-pick controls (Jacket/etc) above from
+                the cost rollup below. */}
+          <div className="pt-3 border-t border-slate-100">
             <button
               type="button"
               onClick={() => setBreakdownOpen((o) => !o)}
@@ -5123,7 +5130,9 @@ function SkuRow({
               className="text-xs text-[color:var(--brand-blue)] leading-snug -mt-1.5"
               data-testid={`text-cost-needs-quote-${format}`}
             >
-              Awaiting Hellbender quote for {ALBUM_FORMAT_LABEL[format]} — manufacturing reads as $0 until a quote lands. Ping Bill.
+              {usingCatalog
+                ? `No confirmed price rung for ${pickedTier?.name ?? "this tier"} at ${parsedQty.toLocaleString()} pcs on ${invitedPressItself?.name ?? "this press"} — manufacturing reads as $0 until the rung is confirmed in Admin → Presses.`
+                : `Awaiting Hellbender quote for ${ALBUM_FORMAT_LABEL[format]} — manufacturing reads as $0 until a quote lands. Ping Bill.`}
             </div>
           )}
 
