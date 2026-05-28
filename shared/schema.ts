@@ -2953,6 +2953,15 @@ export const manufacturers = pgTable("manufacturers", {
   // each SKU at save time via `costSnapshotBrokerDiscountPct` so a
   // mid-quote rate change can't retroactively rewrite finalised SKUs.
   brokerDiscountPct: integer("broker_discount_pct").notNull().default(0),
+  // Task #625 — short free-text operational note shown on the
+  // manufacturer admin page. Used for quote-conditions, overrun
+  // tolerance, pricing rules (e.g. MRP: "Quoted TOTAL is retail —
+  // GoodTunes does not mark up. Margin = 0. Orders may run +10% of
+  // ordered qty for runs ≤1000; quote valid through 6/26/26"). Free
+  // text — no enforcement logic anywhere reads this. Kept separate
+  // from `bio` (which is the marketing intro the scraper fills in)
+  // so a re-scrape doesn't clobber operator-entered quote notes.
+  operationalNote: text("operational_note"),
   // Typical lead-time the plant quotes for a standard 12" LP press run,
   // in calendar days. Admin-entered; surfaces on the RFQ comparison
   // table so the operator can sort by turnaround. Nullable while the

@@ -529,43 +529,282 @@ export async function seedHellbenderCatalog() {
   }
 }
 
-// ─── PMP booklet add-on (Task #579) ──────────────────────────────────
+// ─── Booklet add-on (Task #579, opened to MRP in Task #625) ──────────
 //
-// PMP is the only press currently quoting booklets for the GoodTunes
-// catalog. The trim (7.125"×7.125", 16pp, 4/4 on 100# gloss text) suits
-// 7" jackets and cassette J-card sleeves; other formats hide the add-on.
-// The wholesale price ladder is stored here rather than per-press in the
-// DB — only PMP quotes a booklet, so a dedicated column / table would
-// just be empty rows. When MRP/Hellbender add booklet pricing, lift this
-// into a `press_booklet_ladders` table and back-fill PMP from these
-// constants. Source: docs/vendors/pmp.md.
+// PMP was the only press quoting booklets when the add-on shipped; MRP
+// added their own 7" booklet quote in May 2026. The trim varies by
+// vendor (PMP: 7.125"×7.125", 16pp, 4/4 on 100# gloss; MRP: 16pp CMYK
+// 4/4 on 150gsm art paper, open-top poly bag + assembly, standalone —
+// not auto-bundled into 7" vinyl). Both vendors share the same per-rung
+// shape (totals in dollars; per-unit cents = total ÷ qty, rounded to
+// nearest cent).
+//
+// The ladders live in code rather than a `press_booklet_ladders` table
+// because only two vendors quote booklets today and the rungs change
+// once a year. Lift to a DB table when a third vendor joins or the
+// admin wants to edit rungs without a deploy.
 export const PMP_DOMAIN = "physicalmusicproducts.com";
-export const PMP_BOOKLET_LADDER: ReadonlyArray<{ qty: number; unitCents: number }> = [
-  { qty: 500, unitCents: 407 },   // $2036.27 / 500  ≈ $4.07 ea
-  { qty: 1000, unitCents: 271 },  // $2711.90 / 1000 ≈ $2.71 ea
-  { qty: 2000, unitCents: 202 },  // $4036.06 / 2000 ≈ $2.02 ea
-  { qty: 5000, unitCents: 159 },  // $7965.47 / 5000 ≈ $1.59 ea
-];
-export const PMP_BOOKLET_RUN_TOTALS_CENTS: Readonly<Record<number, number>> = {
-  500: 203627,
-  1000: 271190,
-  2000: 403606,
-  5000: 796547,
+export const MRP_DOMAIN = "memphisrecordpressing.com";
+
+type BookletLadderRung = { qty: number; unitCents: number };
+type BookletLadder = {
+  domain: string;
+  label: string;
+  rungs: ReadonlyArray<BookletLadderRung>;
+  runTotalsCents: Readonly<Record<number, number>>;
+  /** Free-text spec captured on the ladder so admin tooltips/docs can
+   *  read the booklet config without re-parsing the vendor doc. */
+  spec: string;
 };
 
-/** Snap a planned quantity *up* to the nearest configured booklet rung. */
-export function snapBookletQty(plannedQty: number | null): number {
-  const ladder = PMP_BOOKLET_LADDER;
+const PMP_BOOKLET: BookletLadder = {
+  domain: PMP_DOMAIN,
+  label: "PMP",
+  rungs: [
+    { qty: 500, unitCents: 407 },   // $2036.27 / 500  ≈ $4.07 ea
+    { qty: 1000, unitCents: 271 },  // $2711.90 / 1000 ≈ $2.71 ea
+    { qty: 2000, unitCents: 202 },  // $4036.06 / 2000 ≈ $2.02 ea
+    { qty: 5000, unitCents: 159 },  // $7965.47 / 5000 ≈ $1.59 ea
+  ],
+  runTotalsCents: { 500: 203627, 1000: 271190, 2000: 403606, 5000: 796547 },
+  spec: "16pp, 4/4 on 100# gloss text, 7.125\" × 7.125\".",
+};
+
+// Task #625 — MRP's 7" booklet quote (May 2026, valid through 6/26/26).
+// retailCents = costCents on every rung (MRP doesn't give a broker
+// discount, GoodTunes doesn't add markup). Per-unit cents are total ÷
+// qty rounded to nearest cent (e.g. $1121.43 / 500 ≈ $2.24/ea).
+const MRP_BOOKLET: BookletLadder = {
+  domain: MRP_DOMAIN,
+  label: "MRP",
+  rungs: [
+    { qty: 500, unitCents: 224 },   // $1121.43 / 500  ≈ $2.24 ea
+    { qty: 1000, unitCents: 144 },  // $1441.43 / 1000 ≈ $1.44 ea
+    { qty: 2000, unitCents: 133 },  // $2654.29 / 2000 ≈ $1.33 ea
+  ],
+  runTotalsCents: { 500: 112143, 1000: 144143, 2000: 265429 },
+  spec: "16pp, CMYK 4/4, 150gsm art paper, open-top poly bag + assembly. Standalone add-on — not auto-bundled into 7\" vinyl.",
+};
+
+const BOOKLET_LADDERS_BY_DOMAIN: Readonly<Record<string, BookletLadder>> = {
+  [PMP_DOMAIN]: PMP_BOOKLET,
+  [MRP_DOMAIN]: MRP_BOOKLET,
+};
+
+/** Resolve which vendor's booklet ladder applies. Falls back to PMP
+ *  when the routed press doesn't quote a booklet (or isn't supplied)
+ *  so artists on Hellbender / unassigned still see a price. */
+export function resolveBookletLadder(pressDomain: string | null | undefined): BookletLadder {
+  if (pressDomain && BOOKLET_LADDERS_BY_DOMAIN[pressDomain]) {
+    return BOOKLET_LADDERS_BY_DOMAIN[pressDomain];
+  }
+  return PMP_BOOKLET;
+}
+
+// Back-compat exports — these were the names other modules imported
+// before the per-vendor refactor.
+export const PMP_BOOKLET_LADDER: ReadonlyArray<BookletLadderRung> = PMP_BOOKLET.rungs;
+export const PMP_BOOKLET_RUN_TOTALS_CENTS: Readonly<Record<number, number>> = PMP_BOOKLET.runTotalsCents;
+
+/** Snap a planned quantity *up* to the nearest configured rung for
+ *  this vendor's ladder. */
+export function snapBookletQty(
+  plannedQty: number | null,
+  pressDomain: string | null = null,
+): number {
+  const ladder = resolveBookletLadder(pressDomain).rungs;
   if (!plannedQty || plannedQty <= 0) return ladder[0].qty;
   for (const r of ladder) if (plannedQty <= r.qty) return r.qty;
   return ladder[ladder.length - 1].qty;
 }
 
 /** Look up the per-unit booklet wholesale for a planned quantity. */
-export function lookupBookletUnitCents(plannedQty: number | null): number {
-  const snapped = snapBookletQty(plannedQty);
-  const row = PMP_BOOKLET_LADDER.find((r) => r.qty === snapped);
-  return row?.unitCents ?? PMP_BOOKLET_LADDER[PMP_BOOKLET_LADDER.length - 1].unitCents;
+export function lookupBookletUnitCents(
+  plannedQty: number | null,
+  pressDomain: string | null = null,
+): number {
+  const ladder = resolveBookletLadder(pressDomain);
+  const snapped = snapBookletQty(plannedQty, pressDomain);
+  const row = ladder.rungs.find((r) => r.qty === snapped);
+  return row?.unitCents ?? ladder.rungs[ladder.rungs.length - 1].unitCents;
+}
+
+// ─── MRP seed (Task #625) ────────────────────────────────────────────
+
+const MRP_STANDARD_JACKET = "Standard Full-Color Jacket";
+let mrpSeedRan = false;
+
+// MRP's May 2026 quote (valid through 6/26/26): 1LP + 2LP each get a
+// Black / Color / Splatter tier and 7" gets the same three. Color and
+// Splatter on 1LP/2LP and Color on 7" carry confirmed rungs at 500 /
+// 1000 / 2000; every other rung is seeded as `confirmed: false` so
+// the catalog editor renders them yellow with a "TBD — awaiting quote"
+// hint. Per MRP's CEO: retail = cost on every rung (GoodTunes does not
+// mark up; MRP gives no broker discount).
+const MRP_TIER_NAMES = ["Black", "Color", "Splatter"] as const;
+type MrpRungSpec = { qty: number; unitCents: number; confirmed: boolean };
+const MRP_LADDERS: Record<"7_inch" | "12_lp" | "12_double", Record<string, MrpRungSpec[]>> = {
+  "12_lp": {
+    Black: [
+      { qty: 500, unitCents: 0, confirmed: false },
+      { qty: 1000, unitCents: 0, confirmed: false },
+      { qty: 2000, unitCents: 0, confirmed: false },
+    ],
+    Color: [
+      { qty: 500, unitCents: 3875, confirmed: true },
+      { qty: 1000, unitCents: 5430, confirmed: true },
+      { qty: 2000, unitCents: 9150, confirmed: true },
+    ],
+    Splatter: [
+      { qty: 500, unitCents: 4250, confirmed: true },
+      { qty: 1000, unitCents: 6075, confirmed: true },
+      { qty: 2000, unitCents: 10195, confirmed: true },
+    ],
+  },
+  "12_double": {
+    Black: [
+      { qty: 500, unitCents: 0, confirmed: false },
+      { qty: 1000, unitCents: 0, confirmed: false },
+      { qty: 2000, unitCents: 0, confirmed: false },
+    ],
+    Color: [
+      { qty: 500, unitCents: 8215, confirmed: true },
+      { qty: 1000, unitCents: 11380, confirmed: true },
+      { qty: 2000, unitCents: 18280, confirmed: true },
+    ],
+    Splatter: [
+      { qty: 500, unitCents: 8965, confirmed: true },
+      { qty: 1000, unitCents: 12670, confirmed: true },
+      { qty: 2000, unitCents: 20370, confirmed: true },
+    ],
+  },
+  "7_inch": {
+    Black: [
+      { qty: 500, unitCents: 0, confirmed: false },
+      { qty: 1000, unitCents: 0, confirmed: false },
+      { qty: 2000, unitCents: 0, confirmed: false },
+    ],
+    Color: [
+      { qty: 500, unitCents: 2840, confirmed: true },
+      { qty: 1000, unitCents: 4310, confirmed: true },
+      { qty: 2000, unitCents: 7700, confirmed: true },
+    ],
+    Splatter: [
+      { qty: 500, unitCents: 0, confirmed: false },
+      { qty: 1000, unitCents: 0, confirmed: false },
+      { qty: 2000, unitCents: 0, confirmed: false },
+    ],
+  },
+};
+
+export async function seedMrpCatalog() {
+  if (mrpSeedRan) return;
+  mrpSeedRan = true;
+  try {
+    const press = await storage.getManufacturerByDomain(MRP_DOMAIN);
+    if (!press) {
+      mrpSeedRan = false;
+      return;
+    }
+
+    // Ensure the standard jacket exists + is flagged default.
+    let [jacket] = await db
+      .select()
+      .from(pressJackets)
+      .where(and(eq(pressJackets.pressId, press.id), eq(pressJackets.name, MRP_STANDARD_JACKET)));
+    if (!jacket) {
+      [jacket] = await db
+        .insert(pressJackets)
+        .values({
+          pressId: press.id,
+          name: MRP_STANDARD_JACKET,
+          position: 0,
+          isDefault: true,
+        })
+        .returning();
+    } else if (!jacket.isDefault) {
+      await db.update(pressJackets).set({ isDefault: true }).where(eq(pressJackets.id, jacket.id));
+    }
+
+    const formats: AlbumFormat[] = ["7_inch", "12_lp", "12_double"];
+    for (let fi = 0; fi < formats.length; fi++) {
+      const fmt = formats[fi];
+      await db.insert(pressFormats).values({ pressId: press.id, format: fmt, position: fi }).onConflictDoNothing();
+
+      const existingTiers = await db
+        .select()
+        .from(pressColorTiers)
+        .where(and(eq(pressColorTiers.pressId, press.id), eq(pressColorTiers.format, fmt)))
+        .orderBy(asc(pressColorTiers.position));
+      const existingNames = existingTiers.map((t) => t.name);
+      const desiredNames = MRP_TIER_NAMES;
+      const key = fmt as "7_inch" | "12_lp" | "12_double";
+      const buildLadder = (name: string): MrpRungSpec[] => MRP_LADDERS[key]?.[name] ?? [];
+
+      const matches =
+        existingNames.length === desiredNames.length &&
+        existingNames.every((n, i) => n === desiredNames[i]);
+
+      let tiersForFormat = existingTiers;
+      if (!matches) {
+        if (existingTiers.length > 0) {
+          await db
+            .delete(pressColorTiers)
+            .where(inArray(pressColorTiers.id, existingTiers.map((t) => t.id)));
+        }
+        tiersForFormat = [];
+        for (let ti = 0; ti < desiredNames.length; ti++) {
+          const name = desiredNames[ti];
+          const ladder = buildLadder(name);
+          const [tierRow] = await db
+            .insert(pressColorTiers)
+            .values({
+              pressId: press.id,
+              format: fmt,
+              name,
+              position: ti,
+              priceLadder: ladder,
+            })
+            .returning();
+          tiersForFormat.push(tierRow);
+        }
+      }
+
+      // Materialize (tier, standardJacket) ladders, mirroring the
+      // Hellbender seed's rehome logic: prefer the legacy tier-level
+      // jsonb if non-empty so any operator edits carry forward.
+      const existingCombos = await db
+        .select()
+        .from(pressTierJacketLadders)
+        .where(
+          and(
+            inArray(
+              pressTierJacketLadders.tierId,
+              tiersForFormat.map((t) => t.id),
+            ),
+            eq(pressTierJacketLadders.jacketId, jacket.id),
+          ),
+        );
+      const haveCombo = new Set(existingCombos.map((r) => r.tierId));
+      for (const tierRow of tiersForFormat) {
+        if (haveCombo.has(tierRow.id)) continue;
+        const legacy = Array.isArray(tierRow.priceLadder)
+          ? (tierRow.priceLadder as CatalogLadderRung[])
+          : [];
+        let ladder: CatalogLadderRung[] = legacy;
+        if (ladder.length === 0) {
+          ladder = buildLadder(tierRow.name) ?? [];
+        }
+        await db
+          .insert(pressTierJacketLadders)
+          .values({ tierId: tierRow.id, jacketId: jacket.id, priceLadder: ladder })
+          .onConflictDoNothing();
+      }
+    }
+  } catch (e) {
+    console.warn("[pressCatalog] MRP seed failed:", (e as Error).message);
+    mrpSeedRan = false;
+  }
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────
@@ -609,6 +848,20 @@ export function registerPressCatalogRoutes(
     const pressId = String(req.params.id);
     const press = await storage.getManufacturerById(pressId);
     if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+    // Task #625 — cold-start safety. Each founding press carries a
+    // hand-curated quote ladder that we ship in code (see
+    // seedHellbenderCatalog / seedMrpCatalog). Both seeds are guarded
+    // by a module-level "did we run" flag, so calling them on every
+    // catalog read costs one boolean check after the first hit — but
+    // it guarantees that opening Presses → Hellbender or Presses → MRP
+    // on a fresh deploy always shows the seeded formats / tiers /
+    // ladders without waiting for an album-specific invited-press call
+    // to fire the seed first.
+    if (press.domain === HELLBENDER_DOMAIN) {
+      await seedHellbenderCatalog();
+    } else if (press.domain === MRP_DOMAIN) {
+      await seedMrpCatalog();
+    }
     res.json(await getPressCatalog(pressId));
   });
 

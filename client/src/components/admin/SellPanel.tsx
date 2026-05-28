@@ -4097,9 +4097,12 @@ function BookletPill({
     existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99",
   );
   const [breakdownOpen, setBreakdownOpen] = useState(false);
-  // Quantity snaps to a PMP rung. "other" lets the operator type a
-  // custom planned-run, which the server snaps UP to the next rung
-  // anyway — we surface the snapped value live via the preview query.
+  // Quantity snaps to a per-vendor rung. "other" lets the operator
+  // type a custom planned-run, which the server snaps UP to the next
+  // rung anyway — we surface the snapped value live via the preview
+  // query. Task #625 — MRP only quotes 500 / 1000 / 2000; PMP also
+  // has a 5000 rung. We render both rungs unconditionally; the server
+  // snaps any too-high pick down to the vendor's top rung.
   const RUNGS = [500, 1000, 2000, 5000] as const;
   const initialQtyChoice = useMemo<string>(() => {
     const q = existing?.plannedQuantity ?? null;
@@ -4119,12 +4122,19 @@ function BookletPill({
       ? Math.max(1, parseInt(otherQtyStr.replace(/[^0-9]/g, ""), 10) || 0)
       : parseInt(qtyChoice, 10);
 
-  // Live PMP tier preview — mirrors the GoodDeedPill query shape so
-  // costCents has the same `totalPerUnitCents` field to read from.
+  // Live booklet tier preview — mirrors the GoodDeedPill query shape
+  // so costCents has the same `totalPerUnitCents` field to read from.
+  // Task #625 — preview also returns vendorDomain/vendorLabel so the
+  // copy below ("Add 16-Page Booklet (PMP)", "PMP Wholesale", trim
+  // hints) routes by the album's invited press instead of hard-coding
+  // PMP for every release.
   const { data: preview } = useQuery<{
     snappedQty: number;
     totalPerUnitCents: number;
     runTotalCents: number;
+    vendorDomain: string;
+    vendorLabel: string;
+    bookletSpec?: string;
   }>({
     queryKey: ["/api/admin/albums", albumId, "booklet-pricing-preview", resolvedQty],
     queryFn: async () => {
@@ -4313,7 +4323,7 @@ function BookletPill({
               htmlFor="toggle-booklet-active"
               className="text-sm font-medium text-slate-900 cursor-pointer select-none"
             >
-              Add 16-Page Booklet (PMP)
+              Add 16-Page Booklet{preview?.vendorLabel ? ` (${preview.vendorLabel})` : ""}
             </label>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5 items-start">
@@ -4456,7 +4466,11 @@ function BookletPill({
                   <InfoTip
                     label="About booklet quantity"
                     testId="info-booklet-qty"
-                    text="PMP only quotes 500 / 1000 / 2000 / 5000 runs. Anything else snaps UP to the next rung."
+                    text={
+                      preview?.vendorLabel === "MRP"
+                        ? "MRP only quotes 500 / 1000 / 2000 runs. Anything else snaps UP to the next rung; over 2000 stays at the 2000 price."
+                        : "PMP only quotes 500 / 1000 / 2000 / 5000 runs. Anything else snaps UP to the next rung."
+                    }
                   />
                 </div>
                 <Select
@@ -4541,7 +4555,7 @@ function BookletPill({
                       <>
                         <div className="flex items-center justify-between text-xs tabular-nums">
                           <span className="text-slate-600">
-                            PMP Wholesale ({snappedQty.toLocaleString()} run)
+                            {preview?.vendorLabel ?? "PMP"} Wholesale ({snappedQty.toLocaleString()} run)
                           </span>
                           <span
                             className="text-slate-900"

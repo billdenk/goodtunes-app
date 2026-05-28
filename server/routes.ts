@@ -11328,6 +11328,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     turnaroundWeeksMin: number;
     turnaroundWeeksMax: number;
     specialties: string[];
+    operationalNote?: string;
   }> = [
     {
       name: "Memphis Record Pressing",
@@ -11338,6 +11339,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       turnaroundWeeksMin: 12,
       turnaroundWeeksMax: 14,
       specialties: ["7\" / 10\" / 12\"", "180g black", "Colored vinyl", "Picture disc"],
+      operationalNote:
+        "Quoted TOTAL is retail — GoodTunes does not mark up. Margin from MRP = 0. Orders may run +10% of ordered qty for runs ≤1000 (tolerance decreases above 1000). Quote valid through 6/26/26.",
     },
     {
       name: "Hellbender Vinyl",
@@ -11367,6 +11370,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           turnaroundWeeksMin: p.turnaroundWeeksMin,
           turnaroundWeeksMax: p.turnaroundWeeksMax,
           specialties: p.specialties,
+          operationalNote: p.operationalNote ?? null,
         } as any);
       }
     } catch (e) {
@@ -11589,6 +11593,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.logoUrl !== undefined) u.logoUrl = strOrNull(b.logoUrl);
     if (b.coverUrl !== undefined) u.coverUrl = strOrNull(b.coverUrl);
     if (b.bio !== undefined) u.bio = strOrNull(b.bio);
+    // Task #625 — short operational note (quote conditions, overrun
+    // tolerance, pricing rules). Free text; no validation beyond
+    // null-or-string. Distinct from bio so a re-scrape can't clobber
+    // operator-entered quote notes.
+    if (b.operationalNote !== undefined) u.operationalNote = strOrNull(b.operationalNote);
     if (b.location !== undefined) u.location = strOrNull(b.location);
     // Task #489 — structured snapshot, pass through as-is.
     if (b.locationAddress !== undefined) u.locationAddress = b.locationAddress ?? null;

@@ -60,6 +60,8 @@ import {
   getPressCatalog,
   lookupCatalogUnitCents,
   seedHellbenderCatalog,
+  seedMrpCatalog,
+  MRP_DOMAIN,
 } from "./pressCatalog";
 import { registerPressPortalRoutes } from "./pressPortal";
 import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
@@ -484,6 +486,28 @@ async function backfillCustomerFromStripe(opts: {
 }
 
 // ─── Route registrar ──────────────────────────────────────────────────
+// Task #625 — resolve an album's routed press domain (artist
+// invitedByPressId → label invitedByPressId, same fallback chain as
+// the catalog cost lookup) so the booklet add-on can pick MRP's vs.
+// PMP's ladder per-album. Returns null when no press is invited.
+async function resolveAlbumPressDomain(album: {
+  primaryArtistId: string | null;
+  labelId: string | null;
+}): Promise<string | null> {
+  let pressId: string | null = null;
+  if (album.primaryArtistId) {
+    const p = await storage.getPersonById(album.primaryArtistId);
+    if (p && (p as any).invitedByPressId) pressId = String((p as any).invitedByPressId);
+  }
+  if (!pressId && album.labelId) {
+    const l = await storage.getLabelById(album.labelId);
+    if (l && (l as any).invitedByPressId) pressId = String((l as any).invitedByPressId);
+  }
+  if (!pressId) return null;
+  const press = await storage.getManufacturerById(pressId);
+  return (press as any)?.domain ?? null;
+}
+
 export function registerCommerceRoutes(app: Express) {
   // ─── Public catalog reads ────────────────────────────────────────
   // GET /api/albums/:id/buy-options — what the fan-side Buy sheet renders.
@@ -974,7 +998,9 @@ export function registerCommerceRoutes(app: Express) {
     // Task #218 — make sure Hellbender's catalog rows exist on first
     // read so an existing dev/prod DB with the Hellbender press but
     // no catalog yet doesn't show an empty picker.
+    // Task #625 — same idempotent seed pass for MRP.
     await seedHellbenderCatalog();
+    await seedMrpCatalog();
 
     // Has-shipped check: any shipped paid order on any album whose
     // primary_artist (or label) matches our locked scope.
@@ -1100,7 +1126,12 @@ export function registerCommerceRoutes(app: Express) {
         }
       }
       const { lookupBookletUnitCents } = await import("./pressCatalog");
-      costSnapshot = lookupBookletUnitCents(parsed.data.plannedQuantity ?? null);
+      // Task #625 — booklet ladder is vendor-aware. Resolve the
+      // album's routed press (artist → label fallback, same path
+      // /invited-press uses) so MRP-routed albums snapshot MRP's
+      // cheaper booklet quote and everyone else gets PMP's ladder.
+      const pressDomain = await resolveAlbumPressDomain(album);
+      costSnapshot = lookupBookletUnitCents(parsed.data.plannedQuantity ?? null, pressDomain);
     }
     // Preserve any existing minPriceCents so the Shopify path keeps
     // its per-album floor; default 0 on first save.
@@ -1131,12 +1162,18 @@ export function registerCommerceRoutes(app: Express) {
     requireAdmin,
     async (req, res) => {
       const runQty = Math.max(1, parseInt(String(req.query.runQty ?? "1"), 10) || 1);
-      const { lookupBookletUnitCents, snapBookletQty, PMP_BOOKLET_RUN_TOTALS_CENTS } =
+      const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
+      const { lookupBookletUnitCents, snapBookletQty, resolveBookletLadder } =
         await import("./pressCatalog");
-      const snappedQty = snapBookletQty(runQty);
-      const perUnitCents = lookupBookletUnitCents(runQty);
+      // Task #625 — resolve the album's routed press so MRP-routed
+      // releases preview MRP's ladder and everyone else gets PMP's
+      // (resolveBookletLadder falls back to PMP).
+      const pressDomain = album ? await resolveAlbumPressDomain(album) : null;
+      const ladder = resolveBookletLadder(pressDomain);
+      const snappedQty = snapBookletQty(runQty, pressDomain);
+      const perUnitCents = lookupBookletUnitCents(runQty, pressDomain);
       const runTotalCents =
-        PMP_BOOKLET_RUN_TOTALS_CENTS[snappedQty] ?? perUnitCents * snappedQty;
+        ladder.runTotalsCents[snappedQty] ?? perUnitCents * snappedQty;
       res.json({
         runQty,
         snappedQty,
@@ -1145,7 +1182,9 @@ export function registerCommerceRoutes(app: Express) {
         // Mirror the field names the GoodDeed preview uses so the
         // BookletPill can read `totalPerUnitCents` interchangeably.
         totalPerUnitCents: perUnitCents,
-        vendorDomain: "physicalmusicproducts.com",
+        vendorDomain: ladder.domain,
+        vendorLabel: ladder.label,
+        bookletSpec: ladder.spec,
       });
     },
   );

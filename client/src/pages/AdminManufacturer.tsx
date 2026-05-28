@@ -425,6 +425,13 @@ function PartnerProfileForm({
     (initial as any).locationAddress ?? null,
   );
   const [bio, setBio] = useState(initial.bio ?? "");
+  // Task #625 — short operational note for the press: quote
+  // conditions, overrun tolerance, pricing rules. Free text. Lives
+  // alongside Bio so a re-scrape can't clobber operator-entered
+  // quote conditions.
+  const [operationalNote, setOperationalNote] = useState(
+    (initial as any).operationalNote ?? "",
+  );
   // Task #363 — turnaround is captured as a week range. Pre-fill from
   // the legacy `turnaroundDays` (rounded to ±1 week) when min/max
   // weren't set, so legacy rows aren't blanked out on first edit.
@@ -475,6 +482,9 @@ function PartnerProfileForm({
       // one). The PUT route also re-nulls when text is empty.
       locationAddress: location.trim() === "" ? null : locationAddress,
       bio: bio.trim() || null,
+      // Task #625 — null when blanked so the column doesn't carry
+      // empty strings.
+      operationalNote: operationalNote.trim() || null,
       turnaroundWeeksMin: turnaroundWeeksMin === "" ? null : Number(turnaroundWeeksMin),
       turnaroundWeeksMax: turnaroundWeeksMax === "" ? null : Number(turnaroundWeeksMax),
       specialties,
@@ -557,6 +567,21 @@ function PartnerProfileForm({
           className={INPUT + " min-h-[80px] py-2"}
           placeholder="What they're known for, capacity notes, MOQs…"
           data-testid="input-mfr-bio"
+        />
+      </Field>
+
+      {/* Task #625 — operational / quote-conditions note. Free text,
+          no enforcement; displayed on the press admin page so the
+          operator sees overrun tolerance, retail-vs-cost rules, and
+          quote expiry at a glance. */}
+      <Field label="Operational note">
+        <textarea
+          value={operationalNote}
+          onChange={(e) => setOperationalNote(e.target.value)}
+          rows={3}
+          className={INPUT + " min-h-[80px] py-2"}
+          placeholder="Quote conditions, overrun tolerance, retail/cost rules, quote expiry…"
+          data-testid="input-mfr-operational-note"
         />
       </Field>
 

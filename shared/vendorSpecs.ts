@@ -193,10 +193,14 @@ export function getTemplate(vendorId: VendorId, templateId: string): TemplateSpe
 }
 
 // Task #597 — vendors hidden from every preflight / print-PDF /
-// Printer-chip surface pre-meeting. MRP demo is in flight and
-// Hellbender shouldn't render as the default live plant while that
-// pitch is open. Restore by emptying this set.
-export const HIDDEN_PREFLIGHT_VENDORS: ReadonlySet<VendorId> = new Set<VendorId>(["mrp", "hellbender"]);
+// Printer-chip surface pre-meeting. Hellbender shouldn't render as the
+// default live plant while that pitch is open. Restore by emptying
+// this set.
+// Task #625 — MRP is now a first-class press with a loaded quote
+// (1LP/2LP Color+Splatter + 7" Color confirmed; Black left as yellow
+// TBD placeholders). Removed from the hidden set so the SellPanel and
+// preflight surfaces treat it as a real, pickable plant.
+export const HIDDEN_PREFLIGHT_VENDORS: ReadonlySet<VendorId> = new Set<VendorId>(["hellbender"]);
 
 export function visiblePreflightVendors(): VendorSpec[] {
   return Object.values(VENDOR_SPECS).filter((s) => !HIDDEN_PREFLIGHT_VENDORS.has(s.id));

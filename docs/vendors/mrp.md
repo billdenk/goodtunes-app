@@ -28,8 +28,56 @@ As quoted to Bill, May 2026. 140g vinyl in Black or EcoMix; full-color center la
 | 200      | $1,750  | $8.75    |
 | 300      | $2,085  | $6.95    |
 
-- Production tolerance: **±10%** on quantity.
+- Production tolerance: **±10%** on quantity for runs ≤1000 (tolerance decreases above 1000).
 - UPC barcode: **$35** add-on.
+
+## 2026 quoted ladders (loaded into the catalog)
+
+MRP's CEO confirmed: **the quoted TOTAL is retail pricing — what we show and charge the artist. GoodTunes does not add markup, and MRP does not give a broker discount. Margin from MRP = 0.** All rungs below carry `retailCents = costCents = MRP's quoted TOTAL`. Quote valid through **6/26/26**.
+
+Tier rules:
+
+- **Black** rungs are TBD — left as yellow placeholders in the catalog until MRP confirms the numbers.
+- **Color** = solid colored vinyl (full-color jacket + full-color labels, shrinkwrap; 2LP includes gatefold).
+- **Splatter** = translucent base with up to 3 splatter colors.
+
+### 1LP (`12_lp`)
+
+| Quantity | Color total | Splatter total |
+| -------: | ----------: | -------------: |
+|      500 |      $38.75 |         $42.50 |
+|     1000 |      $54.30 |         $60.75 |
+|     2000 |      $91.50 |        $101.95 |
+
+### 2LP (`12_double`, gatefold)
+
+| Quantity | Color total | Splatter total |
+| -------: | ----------: | -------------: |
+|      500 |      $82.15 |         $89.65 |
+|     1000 |     $113.80 |        $126.70 |
+|     2000 |     $182.80 |        $203.70 |
+
+### 7" (`7_inch`, solid color vinyl, full-color jacket + labels)
+
+| Quantity | Color total |
+| -------: | ----------: |
+|      500 |      $28.40 |
+|     1000 |      $43.10 |
+|     2000 |      $77.00 |
+
+7" Black and Splatter tiers are loaded but unconfirmed (yellow placeholders).
+
+## 7" booklet add-on
+
+Standalone add-on — **not** auto-bundled into 7" vinyl. Spec: 16pp, CMYK 4/4, 150gsm art paper, open-top poly bag + assembly.
+
+| Quantity | Total      | Per unit |
+| -------: | ---------: | -------: |
+|      500 |  $1,121.43 |    $2.24 |
+|     1000 |  $1,441.43 |    $1.44 |
+|     2000 |  $2,654.29 |    $1.33 |
+
+Retail = cost on every rung. Per-unit cents = total ÷ qty rounded to the nearest cent. PMP's booklet ladder is unaffected — albums routed to PMP still use PMP's pricing.
 
 ## Art file requirements
 
