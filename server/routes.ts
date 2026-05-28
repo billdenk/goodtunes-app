@@ -4,7 +4,8 @@ import { storage } from "./storage";
 import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
 import { sql, and, eq, or, ilike, isNull, desc, inArray } from "drizzle-orm";
-import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, pressColors, pressColorTiers } from "@shared/schema";
+import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns } from "@shared/schema";
+import { MRP_DOMAIN, getPressCatalog } from "./pressCatalog";
 import { closeSaleWindow as closeCertSaleWindow } from "./saleWindow";
 import { generateBatchPdf as generateCertBatchPdf, CERT_BATCH_STEPS } from "./certBatch";
 import session from "express-session";
@@ -5297,6 +5298,341 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const msg = e?.name === "AbortError" ? "Vendor site took too long to respond." : (e?.message || "Unable to read that page");
       res.status(502).json({ message: msg });
     }
+  });
+
+  // ── Task #668 — Import MRP's published color library ───────────────
+  //
+  // The press operator (or super_admin) clicks "Import colors from
+  // memphisrecordpressing.com" on the Memphis Record Pressing detail
+  // page. We fetch the public color page server-side (SSRF-guarded
+  // through `safeFetch`), parse the color tiles, group them by code
+  // prefix → existing MRP tier, and return a preview the admin can
+  // review. The commit endpoint then downloads each selected swatch
+  // photo, runs it through `maskToVinylDisc` (task #667), uploads to
+  // Object Storage, and creates / updates `press_colors` rows. The
+  // `import_source_url` column is set to the canonical full-resolution
+  // MRP URL so a second run sees "already imported" without
+  // overwriting whatever the admin renamed later.
+  const MRP_COLOR_LIBRARY_URL = "https://memphisrecordpressing.com/all-vinyl-colors/";
+  type MrpParsedTile = {
+    code: string;
+    prefix: string;
+    name: string;
+    sourceUrl: string;
+    family: string;
+  };
+  function parseMrpColorPage(html: string): MrpParsedTile[] {
+    // Each color tile renders as `<h3>CODE - Name</h3>` underneath a
+    // family heading the page prints as `<h2>Translucent</h2>`,
+    // `<h2>Smoke Blends</h2>`, etc. We track the most recently
+    // encountered family heading as we walk h2+h3 in document order
+    // and stamp each tile with it, then group on that string client-
+    // side. Matching is later done case-insensitively against tier
+    // names so the page is free to add/rename families without us
+    // shipping a code change. The image URL lives in a sibling node
+    // whose filename starts with the tile's code, so we build a code
+    // → URL index in a separate pass and join.
+    const tiles: MrpParsedTile[] = [];
+    const seenCodes = new Set<string>();
+    const imgByCode = new Map<string, string>();
+    const imgRe = /(?:data-src|src)\s*=\s*"(https?:\/\/memphisrecordpressing\.com\/wp-content\/uploads\/[^"]+?\.(?:png|jpg|jpeg|webp))"/gi;
+    let m: RegExpExecArray | null;
+    while ((m = imgRe.exec(html))) {
+      const url = m[1];
+      const fname = url.split("/").pop() ?? "";
+      const codeMatch = fname.match(/^([A-Z]{1,4}\d{1,3})\b/);
+      if (!codeMatch) continue;
+      const code = codeMatch[1];
+      const cleaned = url.replace(/-\d+x\d+(\.[a-z]+)$/i, "$1");
+      if (!imgByCode.has(code)) imgByCode.set(code, cleaned);
+    }
+    // Walk h2 and h3 in one regex so document order is preserved.
+    const walkRe = /<h([23])[^>]*>([\s\S]*?)<\/h\1>/g;
+    let currentFamily = "Other";
+    while ((m = walkRe.exec(html))) {
+      const level = m[1];
+      const inner = m[2].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+      if (!inner) continue;
+      if (level === "2") {
+        // Strip trailing decoration like " Series" or " Colors" that
+        // MRP varies between sections so the heading is closer to a
+        // tier name.
+        currentFamily = inner.replace(/\s+(series|colors|collection)$/i, "").trim() || inner;
+        continue;
+      }
+      // h3 → expect "CODE - Name". Anything else (random subhead) is
+      // ignored.
+      const tileMatch = inner.match(/^([A-Z]{1,4}\d{1,3})\s*[-–—]\s*(.+?)\s*$/);
+      if (!tileMatch) continue;
+      const code = tileMatch[1];
+      const rawName = tileMatch[2];
+      if (seenCodes.has(code)) continue;
+      seenCodes.add(code);
+      const prefix = code.match(/^([A-Z]+)/)?.[1] ?? code;
+      const sourceUrl = imgByCode.get(code);
+      if (!sourceUrl) continue;
+      tiles.push({ code, prefix, name: rawName, sourceUrl, family: currentFamily });
+    }
+    return tiles;
+  }
+  // Family heading ↔ tier-name matcher. Both sides are normalized
+  // (lowercased, non-alphanumerics stripped) and we accept either
+  // direction of substring overlap so "Neon-Glow" matches a tier
+  // named "Neon/Glow" (and vice versa).
+  function matchFamilyToTier<T extends { id: string; name: string }>(family: string, tiers: T[]): T | null {
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const fn = norm(family);
+    if (!fn) return null;
+    let best: T | null = null;
+    let bestLen = 0;
+    for (const t of tiers) {
+      const tn = norm(t.name);
+      if (!tn) continue;
+      if (tn === fn) return t;
+      if (tn.includes(fn) || fn.includes(tn)) {
+        // Prefer the longest overlap so "Smoke Blends" wins over a
+        // bare "Smoke" tier when both are present.
+        const overlap = Math.min(tn.length, fn.length);
+        if (overlap > bestLen) { best = t; bestLen = overlap; }
+      }
+    }
+    return best;
+  }
+
+  // Gate identical to commerce.ts:requirePressScope: super_admin /
+  // admin pass; manufacturer-scoped admins pass only for their own
+  // press; everyone else gets 403. Kept inline here so we don't have
+  // to re-export the closure-bound version from commerce.ts.
+  async function requireMrpAdmin(req: Request, res: Response, pressId: string): Promise<boolean> {
+    // requireAdminBearer has already populated req.session.userId; we
+    // just need to confirm role scope matches this press (or that the
+    // caller is a global admin / super_admin).
+    const userId = req.session.userId;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return false; }
+    const { getUserRole } = await import("./auth/roles");
+    const role = await getUserRole(userId);
+    if (!role) { res.status(403).json({ message: "Forbidden" }); return false; }
+    if (role.role === "super_admin" || role.role === "admin") return true;
+    if (role.role === "manufacturer" && role.roleScopeId === pressId) return true;
+    res.status(403).json({ message: "Forbidden" }); return false;
+  }
+
+  async function loadMrpPress(req: Request, res: Response): Promise<{ id: string } | null> {
+    const pressId = String(req.params.id);
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) { res.status(404).json({ message: "Manufacturer not found" }); return null; }
+    if (press.domain !== MRP_DOMAIN) {
+      res.status(400).json({ message: "Importer is MRP-only" });
+      return null;
+    }
+    if (!(await requireMrpAdmin(req, res, pressId))) return null;
+    return { id: pressId };
+  }
+
+  app.post("/api/admin/manufacturers/:id/catalog/mrp-import/preview", requireAdminBearer, async (req, res) => {
+    const press = await loadMrpPress(req, res);
+    if (!press) return;
+    let html: string;
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 15_000);
+      const r = await safeFetch(MRP_COLOR_LIBRARY_URL, {
+        signal: ctrl.signal,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; GoodTunesBot/1.0)" },
+      }).finally(() => clearTimeout(t));
+      if (!r.ok) return res.status(502).json({ message: `MRP returned ${r.status}` });
+      html = await r.text();
+    } catch (e: any) {
+      return res.status(502).json({ message: e?.message || "Couldn't reach memphisrecordpressing.com" });
+    }
+    const tiles = parseMrpColorPage(html);
+    if (tiles.length === 0) {
+      return res.status(502).json({ message: "Parsed 0 colors — MRP page structure may have changed" });
+    }
+    // READ-ONLY: do not mutate the catalog from a preview request. If
+    // the press is fresh and has no tiers yet, the dialog will surface
+    // empty tier dropdowns and the operator can either pre-seed via
+    // the existing catalog editor or pick tiers per-family before
+    // committing.
+    const catalog = await getPressCatalog(press.id);
+    // Vinyl is the only format the MRP library applies to.
+    const vinyl = catalog.formats.find((f) => f.format === "Vinyl");
+    const tiers = vinyl?.tiers ?? [];
+    const allColorsBySource = new Map<string, { tierId: string; colorId: string }>();
+    const allColorsByNorm = new Map<string, { tierId: string; colorId: string }>();
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    for (const t of tiers) {
+      for (const c of t.colors) {
+        if (c.importSourceUrl) allColorsBySource.set(c.importSourceUrl, { tierId: t.id, colorId: c.id });
+        allColorsByNorm.set(`${t.id}:${norm(c.name)}`, { tierId: t.id, colorId: c.id });
+      }
+    }
+    // Group by the on-page family heading (so MRP's own section labels
+    // drive the layout) and run each one through the family↔tier
+    // matcher to suggest an existing tier.
+    const groupsMap = new Map<string, {
+      family: string;
+      suggestedTierName: string | null;
+      suggestedTierId: string | null;
+      items: Array<MrpParsedTile & { action: "create" | "update" | "imported"; existingColorId: string | null }>;
+    }>();
+    for (const tile of tiles) {
+      const suggested = matchFamilyToTier(tile.family, tiers);
+      const g = groupsMap.get(tile.family) ?? {
+        family: tile.family,
+        suggestedTierName: suggested?.name ?? null,
+        suggestedTierId: suggested?.id ?? null,
+        items: [],
+      };
+      let action: "create" | "update" | "imported" = "create";
+      let existingColorId: string | null = null;
+      const bySource = allColorsBySource.get(tile.sourceUrl);
+      if (bySource) {
+        action = "imported";
+        existingColorId = bySource.colorId;
+      } else if (suggested) {
+        const byNorm = allColorsByNorm.get(`${suggested.id}:${norm(tile.name)}`);
+        if (byNorm) {
+          action = "update";
+          existingColorId = byNorm.colorId;
+        }
+      }
+      g.items.push({ ...tile, action, existingColorId });
+      groupsMap.set(tile.family, g);
+    }
+    const groups = Array.from(groupsMap.values()).sort((a, b) => a.family.localeCompare(b.family));
+    res.json({
+      sourceUrl: MRP_COLOR_LIBRARY_URL,
+      tiers: tiers.map((t) => ({ id: t.id, name: t.name })),
+      groups,
+    });
+  });
+
+  app.post("/api/admin/manufacturers/:id/catalog/mrp-import/commit", requireAdminBearer, async (req, res) => {
+    const press = await loadMrpPress(req, res);
+    if (!press) return;
+    const bodySchema = z.object({
+      items: z.array(z.object({
+        code: z.string().min(1).max(16),
+        name: z.string().min(1).max(120),
+        sourceUrl: z.string().url().refine(
+          (u) => { try { return new URL(u).hostname === "memphisrecordpressing.com"; } catch { return false; } },
+          { message: "sourceUrl must be on memphisrecordpressing.com" },
+        ),
+        tierId: z.string().min(1),
+      })).min(1).max(200),
+    });
+    const parsed = bodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid body" });
+    const startedAt = new Date();
+
+    // Look up every referenced tier once, confirming each one belongs
+    // to this press (defense in depth — the importer UI only sends
+    // tier ids it received from preview).
+    const tierIds = Array.from(new Set(parsed.data.items.map((i) => i.tierId)));
+    const tierRows = await db.select().from(pressColorTiers).where(inArray(pressColorTiers.id, tierIds));
+    const tiersById = new Map(tierRows.map((t) => [t.id, t]));
+    for (const tid of tierIds) {
+      const t = tiersById.get(tid);
+      if (!t || t.pressId !== press.id) {
+        return res.status(400).json({ message: `Tier ${tid} doesn't belong to this press` });
+      }
+    }
+
+    // Existing color index per tier for create-vs-update decisions.
+    const existingPerTier = new Map<string, any[]>();
+    for (const tid of tierIds) {
+      const rows = await db.select().from(pressColors).where(eq(pressColors.tierId, tid));
+      existingPerTier.set(tid, rows);
+    }
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    const results: Array<{ code: string; status: "created" | "updated" | "skipped" | "failed"; colorId?: string; message?: string }> = [];
+    for (const item of parsed.data.items) {
+      try {
+        const existing = existingPerTier.get(item.tierId) ?? [];
+        const bySource = existing.find((c) => c.importSourceUrl === item.sourceUrl);
+        if (bySource) {
+          results.push({ code: item.code, status: "skipped", colorId: bySource.id, message: "Already imported" });
+          continue;
+        }
+        // Fetch + mask + upload the photo.
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 20_000);
+        const r = await safeFetch(item.sourceUrl, {
+          signal: ctrl.signal,
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; GoodTunesBot/1.0)" },
+        }).finally(() => clearTimeout(t));
+        if (!r.ok) {
+          results.push({ code: item.code, status: "failed", message: `fetch ${r.status}` });
+          continue;
+        }
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (buf.byteLength > 10 * 1024 * 1024) {
+          results.push({ code: item.code, status: "failed", message: "image >10MB" });
+          continue;
+        }
+        const masked = await maskToVinylDisc(buf);
+        let storedUrl: string;
+        if (masked) {
+          storedUrl = await uploadBufferToObjectStorage(masked, "image/png");
+        } else {
+          const ctHeader = (r.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+          const mime = ctHeader in IMAGE_MIME_TO_EXT ? ctHeader : "image/png";
+          storedUrl = await uploadBufferToObjectStorage(buf, mime);
+        }
+        // Same normalized name in tier → update. Preserve the
+        // existing row's name AND swatchHex so an admin rename or a
+        // hand-picked hex from before the importer ran isn't silently
+        // wiped — we only refresh the photo URL and stamp the source.
+        const byNorm = existing.find((c) => norm(c.name) === norm(item.name));
+        if (byNorm) {
+          await db.update(pressColors).set({
+            swatchImageUrl: storedUrl,
+            importSourceUrl: item.sourceUrl,
+          }).where(eq(pressColors.id, byNorm.id));
+          results.push({ code: item.code, status: "updated", colorId: byNorm.id });
+        } else {
+          const position = existing.length + results.filter((rr) => rr.status === "created").length;
+          const [row] = await db.insert(pressColors).values({
+            tierId: item.tierId,
+            name: item.name,
+            swatchHex: null,
+            swatchImageUrl: storedUrl,
+            position,
+            importSourceUrl: item.sourceUrl,
+          }).returning();
+          results.push({ code: item.code, status: "created", colorId: row.id });
+        }
+      } catch (e: any) {
+        results.push({ code: item.code, status: "failed", message: e?.message || "unknown error" });
+      }
+    }
+
+    const totals = {
+      created: results.filter((r) => r.status === "created").length,
+      updated: results.filter((r) => r.status === "updated").length,
+      skipped: results.filter((r) => r.status === "skipped").length,
+      failed: results.filter((r) => r.status === "failed").length,
+    };
+    // One audit row per batch (jobRuns is the closest existing fit).
+    try {
+      await db.insert(jobRuns).values({
+        jobType: "mrp-color-import",
+        status: totals.failed > 0 ? (totals.failed === results.length ? "error" : "partial") : "ok",
+        summary: {
+          sourceUrl: MRP_COLOR_LIBRARY_URL,
+          pressId: press.id,
+          importedByUserId: req.session.userId ?? null,
+          totals,
+          results,
+        },
+        startedAt,
+      });
+    } catch {
+      // Audit insert is best-effort; never block the response on it.
+    }
+    res.json({ totals, results });
   });
 
   app.post("/api/admin/albums", requireAdmin, async (req, res) => {

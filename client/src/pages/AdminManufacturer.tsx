@@ -725,6 +725,9 @@ type CatalogColor = {
   swatchHex: string | null;
   swatchImageUrl: string | null;
   position: number;
+  // Task #668 — set when the row was created by the MRP color-library
+  // importer. Used to flag "already imported" on subsequent runs.
+  importSourceUrl: string | null;
 };
 type CatalogTier = {
   id: string;
@@ -1251,6 +1254,313 @@ function HellbenderImportButton({
   );
 }
 
+// Task #668 — MRP color-library importer. Lives in PressCatalogPanel
+// header so the operator (or a manufacturer-scoped admin) can pull the
+// canonical MRP catalog from memphisrecordpressing.com/all-vinyl-colors/
+// without hand-uploading every swatch. Server-side fetch is SSRF-
+// guarded; commit runs the disc-mask pipeline + Object Storage upload.
+const MRP_DOMAIN_CLIENT = "memphisrecordpressing.com";
+type MrpPreviewItem = {
+  code: string;
+  prefix: string;
+  name: string;
+  sourceUrl: string;
+  family: string;
+  action: "create" | "update" | "imported";
+  existingColorId: string | null;
+};
+type MrpPreviewGroup = {
+  family: string;
+  suggestedTierName: string | null;
+  suggestedTierId: string | null;
+  items: MrpPreviewItem[];
+};
+type MrpPreview = {
+  sourceUrl: string;
+  tiers: { id: string; name: string }[];
+  groups: MrpPreviewGroup[];
+};
+type MrpCommitResult = {
+  totals: { created: number; updated: number; skipped: number; failed: number };
+  results: { code: string; status: "created" | "updated" | "skipped" | "failed"; colorId?: string; message?: string }[];
+};
+
+function MrpImportDialog({
+  pressId,
+  open,
+  onOpenChange,
+  onImported,
+}: {
+  pressId: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onImported: () => void;
+}) {
+  const { toast } = useToast();
+  const [preview, setPreview] = useState<MrpPreview | null>(null);
+  // Per-family tier picker. Keyed by family heading (e.g. "Translucent")
+  // so MRP's own section labels — not our hardcoded code prefixes —
+  // drive the layout.
+  const [tierByFamily, setTierByFamily] = useState<Record<string, string>>({});
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  // Per-row name override. Admins can rename a swatch before commit so
+  // the catalog reads how they want it (e.g. trim "Pearl" off the
+  // front of every Cream Blend) without having to revisit the row
+  // afterwards. Empty/whitespace falls back to the parsed page name.
+  const [nameByCode, setNameByCode] = useState<Record<string, string>>({});
+  const [result, setResult] = useState<MrpCommitResult | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setPreview(null);
+      setTierByFamily({});
+      setSelected({});
+      setNameByCode({});
+      setResult(null);
+    }
+  }, [open]);
+
+  const previewMut = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/mrp-import/preview`, {});
+      return (await r.json()) as MrpPreview;
+    },
+    onSuccess: (p) => {
+      setPreview(p);
+      const tiers: Record<string, string> = {};
+      const sel: Record<string, boolean> = {};
+      const names: Record<string, string> = {};
+      for (const g of p.groups) {
+        if (g.suggestedTierId) tiers[g.family] = g.suggestedTierId;
+        for (const it of g.items) {
+          sel[it.code] = it.action !== "imported";
+          names[it.code] = it.name;
+        }
+      }
+      setTierByFamily(tiers);
+      setSelected(sel);
+      setNameByCode(names);
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't read MRP color page", description: e?.message, variant: "destructive" }),
+  });
+
+  useEffect(() => {
+    if (open && !preview && !previewMut.isPending) previewMut.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const commitMut = useMutation({
+    mutationFn: async () => {
+      const items: { code: string; name: string; sourceUrl: string; tierId: string }[] = [];
+      for (const g of preview?.groups ?? []) {
+        const tierId = tierByFamily[g.family];
+        if (!tierId) continue;
+        for (const it of g.items) {
+          if (!selected[it.code]) continue;
+          if (it.action === "imported") continue;
+          const editedName = (nameByCode[it.code] ?? it.name).trim() || it.name;
+          items.push({ code: it.code, name: editedName, sourceUrl: it.sourceUrl, tierId });
+        }
+      }
+      if (items.length === 0) throw new Error("Nothing selected to import");
+      const r = await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/mrp-import/commit`, { items });
+      return (await r.json()) as MrpCommitResult;
+    },
+    onSuccess: (res) => {
+      setResult(res);
+      onImported();
+      const { created, updated, skipped, failed } = res.totals;
+      toast({
+        title: "MRP import complete",
+        description: `${created} new · ${updated} updated · ${skipped} skipped · ${failed} failed`,
+        variant: failed > 0 ? "destructive" : "default",
+      });
+    },
+    onError: (e: any) =>
+      toast({ title: "Import failed", description: e?.message, variant: "destructive" }),
+  });
+
+  const selectableCount = (preview?.groups ?? []).reduce(
+    (acc, g) => acc + g.items.filter((it) => it.action !== "imported" && tierByFamily[g.family] && selected[it.code]).length,
+    0,
+  );
+  const familySlug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "family";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto" data-testid="dialog-mrp-import">
+        <DialogHeader>
+          <DialogTitle>Import colors from memphisrecordpressing.com</DialogTitle>
+          <DialogDescription>
+            Pulls the published <a href="https://memphisrecordpressing.com/all-vinyl-colors/" target="_blank" rel="noreferrer" className="text-[var(--brand-blue)] hover:underline underline-offset-2">all-vinyl-colors</a> page,
+            groups tiles by MRP's own section headings (Translucent, Smoke Blends, …), and saves each
+            swatch into the matching Vinyl tier. Rename any swatch in place before committing. Re-runs
+            are safe — rows already imported show as "Already imported" and aren't touched (and
+            existing names, hand-picked hex colors, and ladders are preserved on photo refreshes).
+          </DialogDescription>
+        </DialogHeader>
+
+        {previewMut.isPending && (
+          <div className="py-10 text-center text-sm text-slate-500">Reading MRP color page…</div>
+        )}
+
+        {preview && !result && (
+          <div className="space-y-4">
+            {preview.tiers.length === 0 && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                This press has no Vinyl tiers yet. Add at least one tier (e.g. Translucent, Opaque) on
+                the catalog editor below, then re-open this dialog.
+              </div>
+            )}
+            {preview.groups.map((g) => {
+              const slug = familySlug(g.family);
+              const tierId = tierByFamily[g.family] ?? "";
+              const groupItems = g.items;
+              const selectableItems = groupItems.filter((it) => it.action !== "imported");
+              const allSelected = selectableItems.length > 0 && selectableItems.every((it) => selected[it.code]);
+              return (
+                <div key={g.family} className="rounded-md border border-slate-200 p-3" data-testid={`mrp-group-${slug}`}>
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">
+                        {g.family} <span className="text-slate-400 font-normal">· {groupItems.length} colors</span>
+                      </div>
+                      {g.suggestedTierName && (
+                        <div className="text-xs text-slate-500">Suggested tier: {g.suggestedTierName}</div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={(e) => {
+                            const v = e.target.checked;
+                            setSelected((s) => {
+                              const next = { ...s };
+                              for (const it of selectableItems) next[it.code] = v;
+                              return next;
+                            });
+                          }}
+                          data-testid={`mrp-group-toggle-${slug}`}
+                        />
+                        Select all
+                      </label>
+                      <select
+                        value={tierId}
+                        onChange={(e) => setTierByFamily((t) => ({ ...t, [g.family]: e.target.value }))}
+                        className={INPUT + " w-auto min-w-[10rem]"}
+                        data-testid={`mrp-tier-select-${slug}`}
+                      >
+                        <option value="">Skip (no tier)</option>
+                        {preview.tiers.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {groupItems.map((it) => {
+                      const disabled = it.action === "imported" || !tierId;
+                      const checked = !disabled && !!selected[it.code];
+                      const editedName = nameByCode[it.code] ?? it.name;
+                      const renamed = editedName.trim() !== it.name.trim() && editedName.trim().length > 0;
+                      return (
+                        <li
+                          key={it.code}
+                          className={[
+                            "flex items-start gap-2 rounded-md border p-2 text-xs",
+                            disabled ? "border-slate-100 bg-slate-50/60 opacity-70" : "border-slate-200 bg-white",
+                          ].join(" ")}
+                          data-testid={`mrp-item-${it.code}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={(e) => setSelected((s) => ({ ...s, [it.code]: e.target.checked }))}
+                            className="mt-1.5 flex-shrink-0"
+                            data-testid={`mrp-item-toggle-${it.code}`}
+                          />
+                          <img
+                            src={it.sourceUrl}
+                            alt=""
+                            className="w-9 h-9 rounded-full object-cover bg-slate-100 ring-1 ring-slate-200 flex-shrink-0 mt-0.5"
+                            loading="lazy"
+                          />
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <input
+                              type="text"
+                              value={editedName}
+                              disabled={disabled}
+                              onChange={(e) => setNameByCode((n) => ({ ...n, [it.code]: e.target.value }))}
+                              className="w-full h-7 px-2 rounded border border-slate-200 text-xs focus:outline-none focus:border-[var(--brand-blue)] bg-white disabled:bg-slate-50 disabled:text-slate-400"
+                              placeholder={it.name}
+                              data-testid={`mrp-item-name-${it.code}`}
+                            />
+                            <div className="text-xs text-slate-500 flex items-center gap-1.5 flex-wrap">
+                              <span>{it.code}</span>
+                              <span>·</span>
+                              <span className={
+                                it.action === "imported" ? "text-emerald-600" :
+                                it.action === "update" ? "text-amber-600" :
+                                "text-slate-500"
+                              }>
+                                {it.action === "imported" ? "Already imported" : it.action === "update" ? "Update photo" : "Create"}
+                              </span>
+                              {renamed && (
+                                <span className="text-[var(--brand-blue)]" data-testid={`mrp-item-renamed-${it.code}`}>· renamed</span>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {result && (
+          <div className="space-y-3" data-testid="mrp-import-results">
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <strong>{result.totals.created}</strong> created ·{" "}
+              <strong>{result.totals.updated}</strong> updated ·{" "}
+              <strong>{result.totals.skipped}</strong> skipped ·{" "}
+              <strong className={result.totals.failed > 0 ? "text-rose-600" : ""}>{result.totals.failed}</strong> failed
+            </div>
+            {result.results.some((r) => r.status === "failed") && (
+              <ul className="text-xs text-slate-600 space-y-1 max-h-40 overflow-y-auto">
+                {result.results.filter((r) => r.status === "failed").map((r) => (
+                  <li key={r.code}><strong>{r.code}</strong> — {r.message ?? "failed"}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-mrp-import-close">
+            {result ? "Done" : "Cancel"}
+          </Button>
+          {preview && !result && (
+            <Button
+              onClick={() => commitMut.mutate()}
+              disabled={commitMut.isPending || selectableCount === 0}
+              data-testid="button-mrp-import-commit"
+            >
+              {commitMut.isPending ? "Importing…" : `Import ${selectableCount} ${selectableCount === 1 ? "color" : "colors"}`}
+            </Button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function PressCatalogPanel({ pressId, pressDomain }: { pressId: string; pressDomain: string | null }) {
   // Role gate — server is authoritative; we hide the panel for admins
   // who would just see a 403 either way.
@@ -1281,9 +1591,15 @@ function PressCatalogPanel({ pressId, pressDomain }: { pressId: string; pressDom
     onSuccess: invalidate,
   });
 
+  // Hooks must run unconditionally — declare the MRP dialog state
+  // before any early return so a role flip from undefined → unauthorized
+  // doesn't trip React's "rendered fewer hooks" guard.
+  const [mrpImportOpen, setMrpImportOpen] = useState(false);
+
   if (roleInfo && !canEdit) return null;
 
   const offered = new Set((data?.formats ?? []).map((f) => f.format));
+  const isMrp = pressDomain === MRP_DOMAIN_CLIENT;
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-press-catalog">
       <div className="flex items-start justify-between gap-4">
@@ -1299,7 +1615,27 @@ function PressCatalogPanel({ pressId, pressDomain }: { pressId: string; pressDom
         {pressDomain === "hellbendervinyl.com" && (
           <HellbenderImportButton pressId={pressId} catalog={data ?? null} onImported={invalidate} />
         )}
+        {isMrp && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setMrpImportOpen(true)}
+            className="flex-shrink-0"
+            data-testid="button-mrp-import-open"
+          >
+            Import colors from memphisrecordpressing.com
+          </Button>
+        )}
       </div>
+      {isMrp && (
+        <MrpImportDialog
+          pressId={pressId}
+          open={mrpImportOpen}
+          onOpenChange={setMrpImportOpen}
+          onImported={invalidate}
+        />
+      )}
       {isLoading || !data ? (
         <div className="text-slate-500 text-sm py-4">Loading…</div>
       ) : (

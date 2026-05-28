@@ -2018,3 +2018,25 @@ SQL
 }
 migrate_task_625_operational_note dev  "${DATABASE_URL:-}"
 migrate_task_625_operational_note prod "${PROD_DATABASE_URL:-}"
+
+# ── Task #668 — Press colors get an import_source_url stamp ──────────
+# The MRP color-library importer writes the canonical full-resolution
+# URL on memphisrecordpressing.com to `press_colors.import_source_url`
+# so a second run sees "already imported" without overwriting whatever
+# the admin renamed later. Schema declares it; we hand-apply on both
+# DBs (see memory: dev-prod-schema-drift / albums-schema-drift) so the
+# publish dev→prod diff stays empty.
+migrate_task_668_import_source_url() {
+  local label="$1"; local url="$2"
+  [ -z "$url" ] && return 0
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL'
+ALTER TABLE press_colors ADD COLUMN IF NOT EXISTS import_source_url text;
+SQL
+  then
+    echo "post-merge: task-668 import_source_url ok on $label"
+  else
+    echo "post-merge: WARNING — task-668 import_source_url failed on $label (continuing)"
+  fi
+}
+migrate_task_668_import_source_url dev  "${DATABASE_URL:-}"
+migrate_task_668_import_source_url prod "${PROD_DATABASE_URL:-}"

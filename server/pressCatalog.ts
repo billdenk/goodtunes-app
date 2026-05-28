@@ -68,6 +68,9 @@ export type CatalogColor = {
   swatchHex: string | null;
   swatchImageUrl: string | null;
   position: number;
+  // Task #668 — stamped by the MRP importer with the canonical source
+  // URL on memphisrecordpressing.com (null for hand-added swatches).
+  importSourceUrl: string | null;
 };
 // Task #624 — each rung carries an optional `confirmed` flag. False
 // (or missing on legacy rows) means the rung was seeded as a placeholder
@@ -150,6 +153,7 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
       swatchHex: c.swatchHex,
       swatchImageUrl: c.swatchImageUrl,
       position: c.position,
+      importSourceUrl: c.importSourceUrl ?? null,
     });
     colorsByTier.set(c.tierId, arr);
   }
