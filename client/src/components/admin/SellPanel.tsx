@@ -2056,19 +2056,42 @@ function SkuRow({
         pickedTier.name !== storedTierName ||
         (pickedColor?.name ?? null) !== storedColorName ||
         (storedQtyTier !== null && catalogSnap !== null && catalogSnap.qty !== storedQtyTier);
-      if (existing && existing.costSnapshotManufacturingCents != null && !picksDirty) {
+      // Task #652 — a snapshot is "stale" and must be ignored when
+      // either (a) it's <= 0 (the row was saved before the catalog
+      // ladder rung was filled in, so $0 got persisted and would
+      // silently understate cost forever), or (b) the snapshot
+      // disagrees with the live confirmed rung for the same picks
+      // (a press re-priced its rung after the row was saved). In
+      // both cases we fall through to the live-snap branch so the
+      // breakdown shows the real number, and the source badge below
+      // flips to "live · catalog" until the operator re-Saves and
+      // re-locks the row at the healed value.
+      const liveRungCents = catalogSnap?.unitCents ?? null;
+      const snapshot = existing?.costSnapshotManufacturingCents ?? null;
+      const snapshotStale =
+        snapshot != null &&
+        (snapshot <= 0 ||
+          (liveRungCents != null && snapshot !== liveRungCents));
+      if (
+        existing &&
+        snapshot != null &&
+        !snapshotStale &&
+        !picksDirty
+      ) {
         return {
-          manufacturingCents: existing.costSnapshotManufacturingCents,
+          manufacturingCents: snapshot,
           ...sideCarFor(true),
           source: "catalog" as const,
           needsQuote: false,
+          usingSnapshot: true,
         };
       }
       return {
-        manufacturingCents: catalogSnap?.unitCents ?? 0,
+        manufacturingCents: liveRungCents ?? 0,
         ...sideCarFor(false),
         source: "catalog" as const,
         needsQuote: false,
+        usingSnapshot: false,
       };
     }
     if (isVinyl) {
@@ -2093,12 +2116,18 @@ function SkuRow({
         vinylColorId !== storedColorId ||
         jacketUpgrade !== storedJacketLocal ||
         (storedTier !== null && qtySnap.tier !== storedTier);
-      if (existing && existing.costSnapshotManufacturingCents != null && !picksDirty) {
+      if (
+        existing &&
+        existing.costSnapshotManufacturingCents != null &&
+        existing.costSnapshotManufacturingCents > 0 &&
+        !picksDirty
+      ) {
         return {
           manufacturingCents: existing.costSnapshotManufacturingCents,
           ...sideCarFor(true),
           source: "hellbender" as const,
           needsQuote: false,
+          usingSnapshot: true,
         };
       }
       // Task #624 — legacy non-catalog vinyl rows no longer read from
@@ -2111,17 +2140,28 @@ function SkuRow({
         ...sideCarFor(false),
         source: "placeholder" as const,
         needsQuote: true,
+        usingSnapshot: false,
       };
     }
     // Non-vinyl: snapshot wins until re-save (preserve #194 behaviour).
     // Mirror that for Publishing — if we have a manufacturing snapshot
     // we treat the row as locked and pull the snapshotted track count
-    // too (Task #423).
-    const hasSnapshot = existing?.costSnapshotManufacturingCents != null;
-    const manufacturingCents = existing?.costSnapshotManufacturingCents
-      ?? liveCost?.manufacturingCents
-      ?? 0;
-    return { manufacturingCents, ...sideCarFor(hasSnapshot), source: "placeholder" as const, needsQuote: false };
+    // too (Task #423). Task #652 — a $0 (or negative) snapshot is the
+    // same stale-write trap we hit on catalog rows, so treat it as
+    // absent and fall back to the live placeholder until the operator
+    // re-Saves.
+    const snapshot = existing?.costSnapshotManufacturingCents ?? null;
+    const hasValidSnapshot = snapshot != null && snapshot > 0;
+    const manufacturingCents = hasValidSnapshot
+      ? snapshot
+      : (liveCost?.manufacturingCents ?? 0);
+    return {
+      manufacturingCents,
+      ...sideCarFor(hasValidSnapshot),
+      source: "placeholder" as const,
+      needsQuote: false,
+      usingSnapshot: hasValidSnapshot,
+    };
   }, [
     existing,
     liveCost,
@@ -5050,11 +5090,11 @@ function SkuRow({
                 data-testid={`text-cost-source-${format}`}
               >
                 ({usingCatalog
-                  ? (existing?.costSnapshotManufacturingCents != null ? "locked · catalog" : "live · catalog")
+                  ? (breakdown?.usingSnapshot ? "locked · catalog" : "live · catalog")
                   : isVinyl
                     ? (breakdown?.needsQuote
                         ? "needs quote"
-                        : existing?.costSnapshotManufacturingCents != null
+                        : breakdown?.usingSnapshot
                           ? "locked · Hellbender"
                           : "live · Hellbender")
                     : "placeholder"})
