@@ -498,6 +498,55 @@ async function addMissingRungs(
     );
 }
 
+/** Overwrite a rung's price + confirmed flag unconditionally. Used to
+ *  repair seeded rungs whose stored `unitCents` was the wrong unit
+ *  (e.g. Task #638 fix where MRP/Hellbender seeds had stored
+ *  total-dollars in a field labelled `unitCents`). Inserts the rung
+ *  confirmed if it isn't present. No-op if the combo row is missing. */
+async function forceRungPrice(
+  tierId: string,
+  jacketId: string,
+  qty: number,
+  unitCents: number,
+): Promise<void> {
+  const [existing] = await db
+    .select()
+    .from(pressTierJacketLadders)
+    .where(
+      and(
+        eq(pressTierJacketLadders.tierId, tierId),
+        eq(pressTierJacketLadders.jacketId, jacketId),
+      ),
+    );
+  if (!existing) return;
+  const ladder: CatalogLadderRung[] = Array.isArray(existing.priceLadder)
+    ? [...(existing.priceLadder as CatalogLadderRung[])]
+    : [];
+  const idx = ladder.findIndex((r) => r.qty === qty);
+  const next = { qty, unitCents, confirmed: true };
+  if (idx >= 0) {
+    if (
+      ladder[idx].confirmed === true &&
+      ladder[idx].unitCents === unitCents
+    ) {
+      return;
+    }
+    ladder[idx] = next;
+  } else {
+    ladder.push(next);
+    ladder.sort((a, b) => a.qty - b.qty);
+  }
+  await db
+    .update(pressTierJacketLadders)
+    .set({ priceLadder: ladder })
+    .where(
+      and(
+        eq(pressTierJacketLadders.tierId, tierId),
+        eq(pressTierJacketLadders.jacketId, jacketId),
+      ),
+    );
+}
+
 /** Flip a placeholder rung to confirmed at the given price, or insert
  *  it confirmed if missing. Never overwrites or downgrades a rung that
  *  is already `confirmed:true`. */
@@ -563,22 +612,43 @@ const HELLBENDER_LEGACY_7_TIER_NAMES: string[] = VINYL_COLOR_TIER_ORDER.map(
 );
 const HELLBENDER_NEW_12_TIER_NAMES = ["Black", "Color", "Splatter"] as const;
 type HellbenderRungSpec = { qty: number; unitCents: number; confirmed: boolean };
+// Task #638 — values are per-unit cents (undiscounted) derived from
+// the May-2026 Hellbender PDF quotes (`GoodTunes_1LP-Samples` and
+// `GoodTunes_2LP-Samples`). Undiscounted because `brokerDiscountPct`
+// on the manufacturer row is 10 and the runtime applies it. Earlier
+// seed stored vendor TOTAL dollars in this field, which made the
+// catalog UI render ~$40+/record for $4-ish vinyl — see the lesson in
+// `.agents/memory/press-catalog-units.md`.
+//
+// 1LP has confirmed rungs at every standard qty (100/200/300/500/
+// 1000/2000) from the 1LP quote PDF. 2LP only has 500/1000/2000 (the
+// 2LP quote didn't quote short-run). Black stays as placeholders
+// across the board — Hellbender hasn't quoted Black.
 const HELLBENDER_NEW_12_LADDERS: Record<"12_lp" | "12_double", Record<string, HellbenderRungSpec[]>> = {
   "12_lp": {
     Black: [
+      { qty: 100, unitCents: 0, confirmed: false },
+      { qty: 200, unitCents: 0, confirmed: false },
+      { qty: 300, unitCents: 0, confirmed: false },
       { qty: 500, unitCents: 0, confirmed: false },
       { qty: 1000, unitCents: 0, confirmed: false },
       { qty: 2000, unitCents: 0, confirmed: false },
     ],
     Color: [
-      { qty: 500, unitCents: 4060, confirmed: true },
-      { qty: 1000, unitCents: 6260, confirmed: true },
-      { qty: 2000, unitCents: 10655, confirmed: true },
+      { qty: 100, unitCents: 1931, confirmed: true },   // $1,931 / 100
+      { qty: 200, unitCents: 1256, confirmed: true },   // $2,512 / 200
+      { qty: 300, unitCents: 1032, confirmed: true },   // $3,096 / 300
+      { qty: 500, unitCents: 812, confirmed: true },    // $4,060 / 500
+      { qty: 1000, unitCents: 626, confirmed: true },   // $6,260 / 1000
+      { qty: 2000, unitCents: 533, confirmed: true },   // $10,655 / 2000
     ],
     Splatter: [
-      { qty: 500, unitCents: 4455, confirmed: true },
-      { qty: 1000, unitCents: 7010, confirmed: true },
-      { qty: 2000, unitCents: 12155, confirmed: true },
+      { qty: 100, unitCents: 2015, confirmed: true },   // $2,015 / 100
+      { qty: 200, unitCents: 1340, confirmed: true },   // $2,680 / 200
+      { qty: 300, unitCents: 1116, confirmed: true },   // $3,348 / 300
+      { qty: 500, unitCents: 891, confirmed: true },    // $4,455 / 500
+      { qty: 1000, unitCents: 701, confirmed: true },   // $7,010 / 1000
+      { qty: 2000, unitCents: 608, confirmed: true },   // $12,155 / 2000
     ],
   },
   "12_double": {
@@ -588,14 +658,14 @@ const HELLBENDER_NEW_12_LADDERS: Record<"12_lp" | "12_double", Record<string, He
       { qty: 2000, unitCents: 0, confirmed: false },
     ],
     Color: [
-      { qty: 500, unitCents: 7030, confirmed: true },
-      { qty: 1000, unitCents: 10975, confirmed: true },
-      { qty: 2000, unitCents: 18585, confirmed: true },
+      { qty: 500, unitCents: 1406, confirmed: true },   // $7,030 / 500
+      { qty: 1000, unitCents: 1098, confirmed: true },  // $10,975 / 1000
+      { qty: 2000, unitCents: 929, confirmed: true },   // $18,585 / 2000
     ],
     Splatter: [
-      { qty: 500, unitCents: 7820, confirmed: true },
-      { qty: 1000, unitCents: 12475, confirmed: true },
-      { qty: 2000, unitCents: 21785, confirmed: true },
+      { qty: 500, unitCents: 1404, confirmed: true },   // $7,020 / 500
+      { qty: 1000, unitCents: 1248, confirmed: true },  // $12,475 / 1000
+      { qty: 2000, unitCents: 1089, confirmed: true },  // $21,785 / 2000
     ],
   },
 };
@@ -716,6 +786,14 @@ export async function seedHellbenderCatalog() {
         }
         await ensureCombo(tier.id, defaultJacket.id, build.ladder);
         await addMissingRungs(tier.id, defaultJacket.id, STANDARD_COMPARISON_QUANTITIES);
+        // Task #638 — repair stale rungs from the old seed that stored
+        // total-dollars in the `unitCents` field. Idempotent: no-op
+        // when the rung already matches.
+        for (const r of build.ladder) {
+          if (r.confirmed && r.unitCents > 0) {
+            await forceRungPrice(tier.id, defaultJacket.id, r.qty, r.unitCents);
+          }
+        }
 
         // Each tier × every applicable extra jacket gets an all-
         // unconfirmed comparison ladder so the matrix reads with the
@@ -871,6 +949,15 @@ let mrpSeedRan = false;
 // mark up; MRP gives no broker discount).
 const MRP_TIER_NAMES = ["Black", "Color", "Splatter"] as const;
 type MrpRungSpec = { qty: number; unitCents: number; confirmed: boolean };
+// Task #638 — values are per-unit cents derived from the May-2026 MRP
+// PDF estimate (`MRP_ESTIMATE-GoGoods-Generic-052726`). retail = cost
+// on every rung (MRP gives no broker discount; GoodTunes adds no
+// markup). Earlier seed stored vendor TOTAL dollars in this field
+// labelled `unitCents`, which made the catalog UI render $82+/record
+// for $16-ish vinyl — see `.agents/memory/press-catalog-units.md`.
+// MRP's PDF prices five qtys (300/500/1000/2000/3000); all five are
+// confirmed here. The catalog comparison matrix only renders 100–2000
+// by default, but the 300/3000 rungs persist so the editor reads them.
 const MRP_LADDERS: Record<"7_inch" | "12_lp" | "12_double", Record<string, MrpRungSpec[]>> = {
   "12_lp": {
     Black: [
@@ -879,14 +966,18 @@ const MRP_LADDERS: Record<"7_inch" | "12_lp" | "12_double", Record<string, MrpRu
       { qty: 2000, unitCents: 0, confirmed: false },
     ],
     Color: [
-      { qty: 500, unitCents: 3875, confirmed: true },
-      { qty: 1000, unitCents: 5430, confirmed: true },
-      { qty: 2000, unitCents: 9150, confirmed: true },
+      { qty: 300, unitCents: 1112, confirmed: true },   // $3,337 / 300
+      { qty: 500, unitCents: 775, confirmed: true },    // $3,875 / 500
+      { qty: 1000, unitCents: 543, confirmed: true },   // $5,430 / 1000
+      { qty: 2000, unitCents: 458, confirmed: true },   // $9,150 / 2000
+      { qty: 3000, unitCents: 434, confirmed: true },   // $13,010 / 3000
     ],
     Splatter: [
-      { qty: 500, unitCents: 4250, confirmed: true },
-      { qty: 1000, unitCents: 6075, confirmed: true },
-      { qty: 2000, unitCents: 10195, confirmed: true },
+      { qty: 300, unitCents: 1221, confirmed: true },   // $3,664 / 300
+      { qty: 500, unitCents: 850, confirmed: true },    // $4,250 / 500
+      { qty: 1000, unitCents: 608, confirmed: true },   // $6,075 / 1000
+      { qty: 2000, unitCents: 510, confirmed: true },   // $10,195 / 2000
+      { qty: 3000, unitCents: 482, confirmed: true },   // $14,455 / 3000
     ],
   },
   "12_double": {
@@ -896,14 +987,18 @@ const MRP_LADDERS: Record<"7_inch" | "12_lp" | "12_double", Record<string, MrpRu
       { qty: 2000, unitCents: 0, confirmed: false },
     ],
     Color: [
-      { qty: 500, unitCents: 8215, confirmed: true },
-      { qty: 1000, unitCents: 11380, confirmed: true },
-      { qty: 2000, unitCents: 18280, confirmed: true },
+      { qty: 300, unitCents: 2391, confirmed: true },   // $7,172 / 300
+      { qty: 500, unitCents: 1643, confirmed: true },   // $8,215 / 500
+      { qty: 1000, unitCents: 1138, confirmed: true },  // $11,380 / 1000
+      { qty: 2000, unitCents: 914, confirmed: true },   // $18,280 / 2000
+      { qty: 3000, unitCents: 859, confirmed: true },   // $25,780 / 3000
     ],
     Splatter: [
-      { qty: 500, unitCents: 8965, confirmed: true },
-      { qty: 1000, unitCents: 12670, confirmed: true },
-      { qty: 2000, unitCents: 20370, confirmed: true },
+      { qty: 300, unitCents: 2609, confirmed: true },   // $7,826 / 300
+      { qty: 500, unitCents: 1793, confirmed: true },   // $8,965 / 500
+      { qty: 1000, unitCents: 1267, confirmed: true },  // $12,670 / 1000
+      { qty: 2000, unitCents: 1019, confirmed: true },  // $20,370 / 2000
+      { qty: 3000, unitCents: 956, confirmed: true },   // $28,670 / 3000
     ],
   },
   "7_inch": {
@@ -913,9 +1008,11 @@ const MRP_LADDERS: Record<"7_inch" | "12_lp" | "12_double", Record<string, MrpRu
       { qty: 2000, unitCents: 0, confirmed: false },
     ],
     Color: [
-      { qty: 500, unitCents: 2840, confirmed: true },
-      { qty: 1000, unitCents: 4310, confirmed: true },
-      { qty: 2000, unitCents: 7700, confirmed: true },
+      { qty: 300, unitCents: 753, confirmed: true },    // $2,259 / 300
+      { qty: 500, unitCents: 568, confirmed: true },    // $2,840 / 500
+      { qty: 1000, unitCents: 431, confirmed: true },   // $4,310 / 1000
+      { qty: 2000, unitCents: 385, confirmed: true },   // $7,700 / 2000
+      { qty: 3000, unitCents: 365, confirmed: true },   // $10,950 / 3000
     ],
     Splatter: [
       { qty: 500, unitCents: 0, confirmed: false },
@@ -1006,6 +1103,13 @@ export async function seedMrpCatalog() {
         const initial = MRP_LADDERS[key]?.[name] ?? placeholderLadder();
         await ensureCombo(tier.id, defaultJacket.id, initial as LadderRungSpec[]);
         await addMissingRungs(tier.id, defaultJacket.id, STANDARD_COMPARISON_QUANTITIES);
+        // Task #638 — repair stale rungs from the old seed that stored
+        // MRP's TOTAL dollars in the `unitCents` field. Idempotent.
+        for (const r of initial) {
+          if (r.confirmed && r.unitCents > 0) {
+            await forceRungPrice(tier.id, defaultJacket.id, r.qty, r.unitCents);
+          }
+        }
 
         // Extra jackets get an all-placeholder comparison ladder.
         for (const spec of MRP_EXTRA_JACKETS) {
@@ -1082,6 +1186,12 @@ let pmpSeedRan = false;
 // total ÷ qty rounded to nearest cent (per scratchpad — see task
 // spec). retail = cost on every rung (markup model not yet confirmed;
 // captured as an operational note on the press record).
+//
+// Task #638 — PMP's 2LP Color/Splatter run ~40-65% higher per record
+// than MRP or Hellbender at the same qty. Bill thinks PMP may have
+// quoted each LP separately (i.e. doubled the per-unit), but cross-
+// vendor pricing differences are plausible for a premium boutique
+// press. Numbers stand until PMP re-confirms.
 const PMP_CONFIRMED: Record<"12_double", Record<string, LadderRungSpec[]>> = {
   "12_double": {
     Color: [

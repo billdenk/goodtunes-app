@@ -46,29 +46,37 @@ Tier rules:
 - **Color** = solid colored vinyl (full-color jacket + full-color labels, shrinkwrap; 2LP includes gatefold).
 - **Splatter** = translucent base with up to 3 splatter colors.
 
+MRP's PDF estimate quotes five quantities — **300 / 500 / 1,000 / 2,000 / 3,000**. All five are seeded confirmed; the 300 + 3000 rungs persist on the combo even though the default comparison matrix only renders 100–2,000. Totals below are the full vendor invoice; per-unit is total ÷ qty.
+
 ### 1LP (`12_lp`)
 
-| Quantity | Color total | Splatter total |
-| -------: | ----------: | -------------: |
-|      500 |      $38.75 |         $42.50 |
-|     1000 |      $54.30 |         $60.75 |
-|     2000 |      $91.50 |        $101.95 |
+| Qty   | Color total | Color per-unit | Splatter total | Splatter per-unit |
+| ----: | ----------: | -------------: | -------------: | ----------------: |
+|   300 |     $3,337  |        $11.12  |        $3,664  |           $12.21  |
+|   500 |     $3,875  |         $7.75  |        $4,250  |            $8.50  |
+| 1,000 |     $5,430  |         $5.43  |        $6,075  |            $6.08  |
+| 2,000 |     $9,150  |         $4.58  |       $10,195  |            $5.10  |
+| 3,000 |    $13,010  |         $4.34  |       $14,455  |            $4.82  |
 
 ### 2LP (`12_double`, gatefold)
 
-| Quantity | Color total | Splatter total |
-| -------: | ----------: | -------------: |
-|      500 |      $82.15 |         $89.65 |
-|     1000 |     $113.80 |        $126.70 |
-|     2000 |     $182.80 |        $203.70 |
+| Qty   | Color total | Color per-unit | Splatter total | Splatter per-unit |
+| ----: | ----------: | -------------: | -------------: | ----------------: |
+|   300 |     $7,172  |        $23.91  |        $7,826  |           $26.09  |
+|   500 |     $8,215  |        $16.43  |        $8,965  |           $17.93  |
+| 1,000 |    $11,380  |        $11.38  |       $12,670  |           $12.67  |
+| 2,000 |    $18,280  |         $9.14  |       $20,370  |           $10.19  |
+| 3,000 |    $25,780  |         $8.59  |       $28,670  |            $9.56  |
 
 ### 7" (`7_inch`, solid color vinyl, full-color jacket + labels)
 
-| Quantity | Color total |
-| -------: | ----------: |
-|      500 |      $28.40 |
-|     1000 |      $43.10 |
-|     2000 |      $77.00 |
+| Qty   | Color total | Color per-unit |
+| ----: | ----------: | -------------: |
+|   300 |     $2,259  |         $7.53  |
+|   500 |     $2,840  |         $5.68  |
+| 1,000 |     $4,310  |         $4.31  |
+| 2,000 |     $7,700  |         $3.85  |
+| 3,000 |    $10,950  |         $3.65  |
 
 7" Black and Splatter tiers are loaded but unconfirmed (yellow placeholders).
 

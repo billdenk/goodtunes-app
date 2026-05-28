@@ -5,7 +5,32 @@
 
 Hellbender publishes templates and art-submission rules but not audio specs, color catalog, or pricing tiers on its public templates page. Flag the unpublished fields as **"not stated"** and collect from Bill / a Hellbender CSR when needed.
 
-The press catalog matrix (1LP / 2LP / 7" × Color / Splatter / Black, columns 100 / 200 / 300 / 500 / 1000 / 2000) seeds the **100 / 200 / 300** rungs as unconfirmed yellow placeholders — Hellbender has not quoted short-run pricing. The confirmed 500 / 1000 / 2000 rungs (Color + Splatter on 1LP/2LP) are the May-2026 quote captured under Task #624.
+The press catalog matrix (1LP / 2LP / 7" × Color / Splatter / Black, columns 100 / 200 / 300 / 500 / 1000 / 2000) carries Hellbender's full May-2026 quote on 1LP Color + Splatter (every column confirmed from the 1LP PDF) and 2LP Color + Splatter at 500 / 1000 / 2000 (the 2LP PDF didn't quote short-run, so 100 / 200 / 300 stay as yellow placeholders). Black tiers across both formats remain unconfirmed.
+
+## 2026 quoted ladders (loaded into the catalog)
+
+Per-unit values below are **undiscounted** (the "YOUR SUBTOTAL ÷ qty" line on each Hellbender PDF). The runtime applies the 10% broker discount on the manufacturer row, so per-unit cost on cart = undiscounted × 0.90 (matches the "Discounted Total — Broker discount rate applied" line on Hellbender's PDF).
+
+### 1LP (`12_lp`) — from `GoodTunes_1LP-Samples_Hellbender_Vinyl_Quote`
+
+| Qty   | Color total | Color per-unit | Splatter total | Splatter per-unit |
+| ----: | ----------: | -------------: | -------------: | ----------------: |
+|   100 |     $1,931  |        $19.31  |        $2,015  |           $20.15  |
+|   200 |     $2,512  |        $12.56  |        $2,680  |           $13.40  |
+|   300 |     $3,096  |        $10.32  |        $3,348  |           $11.16  |
+|   500 |     $4,060  |         $8.12  |        $4,455  |            $8.91  |
+| 1,000 |     $6,260  |         $6.26  |        $7,010  |            $7.01  |
+| 2,000 |    $10,655  |         $5.33  |       $12,155  |            $6.08  |
+
+### 2LP (`12_double`) — from `GoodTunes_2LP-Samples_Hellbender_Vinyl_Quote`
+
+| Qty   | Color total | Color per-unit | Splatter total | Splatter per-unit |
+| ----: | ----------: | -------------: | -------------: | ----------------: |
+|   500 |     $7,030  |        $14.06  |        $7,020  |           $14.04  |
+| 1,000 |    $10,975  |        $10.98  |       $12,475  |           $12.48  |
+| 2,000 |    $18,585  |         $9.29  |       $21,785  |           $10.89  |
+
+> Note: an earlier internal price sheet had 2LP Splatter 500 at $7,820 ($15.64/ea). The 5/27/26 PDF quote shows $7,020 ($14.04/ea); the PDF is now the source of truth. Re-confirm with Hellbender's PM if the splatter color count changes (Hellbender charges $35/splatter color, up to 3).
 
 ## Contact
 

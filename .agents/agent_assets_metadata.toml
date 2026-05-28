@@ -12,3 +12,9 @@ id = "X09q7yu14XfohdKnnQSod"
 uri = "file://attached_assets/screenshots/5293185b-8e25-4d4f-b8b2-dc5494b9adc6-00-2smdxrpg586m8_kirk_replit_dev_mockup_preview_how-to-play_Glass.png"
 type = "image"
 title = "How-to-Play variants — open the canvas to compare A · Glass / B · Light brand / C · Listen-on rows"
+
+[[outputs]]
+id = "0L40n7dO4fEtOL9MHQ9nQ"
+uri = "file://SoulChef-Escapism-Instrumentals-Estimate.docx"
+type = "word_document"
+title = "SoulChef — Escapism: Instrumentals — Pricing Estimate"
