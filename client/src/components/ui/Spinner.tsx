@@ -18,13 +18,19 @@ import { cn } from "@/lib/utils";
  * `animate-spin` is baked in here, but leaving it in the className is
  * harmless — Tailwind dedupes the class.
  *
+ * A sensible default size (`w-4 h-4`) and brand-blue color are also baked
+ * in so a bare `<Spinner />` can never balloon to the browser's intrinsic
+ * SVG size (~300×150) and fill its flex parent. Pass `className` only when
+ * you want to override the default size or color — `cn(...)` ordering means
+ * any `w-*`/`h-*`/`text-*` you pass will win over the defaults.
+ *
  * Color: stroke uses `currentColor`, so any `text-*` class on the wrapper
  * still colors the arc the same way it did for the Lucide icon.
  */
 export function Spinner({ className }: { className?: string }) {
   return (
     <svg
-      className={cn("animate-spin", className)}
+      className={cn("w-4 h-4 text-[var(--brand-blue)] animate-spin", className)}
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"

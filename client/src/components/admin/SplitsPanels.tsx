@@ -115,7 +115,7 @@ export function AlbumSplitsPanel({
       </div>
 
       {isLoading ? (
-        <div className="py-10 flex justify-center"><Spinner /></div>
+        <div className="py-10 flex justify-center"><Spinner className="w-5 h-5" /></div>
       ) : ordered.length === 0 ? (
         <div className="text-[13px] text-slate-500">No tracks on this album yet.</div>
       ) : (
@@ -284,7 +284,7 @@ export function TrackSplitsEditor({
     queryKey: ["/api/admin/songs", songId, "splits"],
   });
   if (isLoading || !data) {
-    return <div className="py-8 flex justify-center"><Spinner /></div>;
+    return <div className="py-8 flex justify-center"><Spinner className="w-5 h-5" /></div>;
   }
   return (
     <div className="space-y-6" data-testid={`editor-track-splits-${songId}`}>
@@ -833,7 +833,7 @@ function SplitsReadOnlyRail({
   };
   isLoading: boolean;
 }) {
-  if (isLoading) return <div className="py-6 flex justify-center"><Spinner /></div>;
+  if (isLoading) return <div className="py-6 flex justify-center"><Spinner className="w-5 h-5" /></div>;
   const pub = data?.publishing ?? [];
   const mech = data?.mechanical ?? [];
   if (pub.length === 0 && mech.length === 0) {
