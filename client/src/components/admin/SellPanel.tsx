@@ -4100,6 +4100,9 @@ function SkuRow({
           RIGHT: Retail Price, Select Qty, collapsible Profit with
           inline cost breakdown, Total. Non-vinyl rows keep the legacy
           grid below (else branch). */}
+      {/* Task #655 — thin gray rule above the vinyl card section to
+          separate it from whatever sits above it in the panel. */}
+      <hr className="border-t border-slate-200 my-4" aria-hidden />
       {(() => {
         const catalogPicked = usingCatalog && pickedTier
           ? pickedTier.colors.find((c) => c.id === pressColorId) ?? null
@@ -4145,7 +4148,7 @@ function SkuRow({
                   artworkUrl={artworkUrl}
                   color={previewColor}
                   jacketUpgrade={jacketUpgrade}
-                  size="xl"
+                  size="2xl"
                   jacketOverlay={(onEditArtwork || canChangeFormat) ? (
                     <>
                       <span
@@ -4187,27 +4190,30 @@ function SkuRow({
                 />
               </div>
             </div>
+            {/* Task #655 — 12" LP jacket footnote, demoted from a
+                full labeled control row in the controls column to a
+                small gray caption directly under the preview. The 7"
+                "Standard Full-Color Jacket" tag and the dropdown for
+                other vinyl formats still render down in the controls
+                column below. */}
+            {format === "12_lp" && (
+              <div
+                className="mt-2 text-xs text-slate-500 text-center"
+                data-testid={`text-jacket-standard-${format}`}
+              >
+                Every 12&rdquo; LP ships in the standard jacket.
+              </div>
+            )}
           </div>
           </div>
 
           {/* Task #646 — CONTROLS column (left on desktop via sm:order-1,
-              below preview on mobile). Order: Format (read-only label,
-              swap is via the album-jacket overlay icon — Task #654) →
-              Color → Anticipated tracks → Retail Price → Select Qty →
-              Jacket → Profit (collapsible breakdown) → Total. */}
+              below preview on mobile). Task #655 reorder: Color (Format
+              swap moved onto the cover in #654, read-only Format label
+              removed) → Anticipated tracks → Retail Price + Select Qty
+              side-by-side → Jacket (7"/10" only; 12" LP footnote now
+              lives under the preview) → Profit → Total. */}
           <div className="sm:order-1 space-y-4">
-          <div>
-            <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
-              Format
-            </div>
-            <div
-              className="h-8 inline-flex items-center text-sm font-medium text-slate-700"
-              data-testid={`text-card-format-${format}`}
-            >
-              {ALBUM_FORMAT_LABEL[format]}
-            </div>
-          </div>
-
             {/* Color section + swatch row + selected color name */}
           {usingCatalog && pickedTier ? (
             <div className="space-y-2">
@@ -4379,6 +4385,12 @@ function SkuRow({
             onChange={onAnticipatedTrackCountChange}
           />
 
+            {/* Task #655 — Retail Price + Select Qty on one row.
+                grid-cols-1 stacks on mobile; sm:grid-cols-2 lays them
+                side-by-side from sm: up (matches the card's own
+                two-column breakpoint, so they stay side-by-side at
+                every desktop width the panel supports). */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Retail Price */}
           <div>
             <div className="flex items-center gap-1.5 mb-1">
@@ -4461,7 +4473,7 @@ function SkuRow({
                   else if (e.target.value === "") setParsedQty(0);
                 }}
                 inputMode="numeric"
-                className={`w-24 ${fieldClass}`}
+                className={`w-full ${fieldClass}`}
                 data-testid={`input-sku-quantity-${format}`}
               />
             )}
@@ -4482,8 +4494,12 @@ function SkuRow({
               </div>
             )}
           </div>
+          </div>
 
-            {/* Jacket — Select for 7"; de-emphasized tag for 12"LP */}
+            {/* Jacket — Select for 7"/10"; de-emphasized tag for 7" only.
+                Task #655: 12" LP no longer renders a labeled Jacket row
+                here — its "Standard jacket" copy now lives as a small
+                gray caption directly under the album preview. */}
           {jacketDropdownAllowed ? (
             <div className="space-y-1">
               <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
@@ -4512,7 +4528,7 @@ function SkuRow({
                 </SelectContent>
               </Select>
             </div>
-          ) : (
+          ) : sevenInch ? (
             <div className="space-y-1">
               <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
                 Jacket
@@ -4521,9 +4537,7 @@ function SkuRow({
                 className="h-8 inline-flex items-center text-sm font-medium text-slate-700"
                 data-testid={`text-jacket-standard-${format}`}
               >
-                {sevenInch
-                  ? "Standard Full-Color Jacket"
-                  : "Standard jacket — every 12\u201D LP ships in the standard jacket."}
+                Standard Full-Color Jacket
               </div>
               {sevenInchHiddenJacket && existing?.jacketUpgrade && (
                 <div
@@ -4534,7 +4548,7 @@ function SkuRow({
                 </div>
               )}
             </div>
-          )}
+          ) : null}
 
             {/* Profit — collapsible inline breakdown. Top border
                 divides operator-pick controls (Jacket/etc) above from
@@ -4688,6 +4702,9 @@ function SkuRow({
         </div>
         );
       })()}
+      {/* Task #655 — thin gray rule directly below the vinyl card
+          section, mirroring the rule added above the IIFE. */}
+      <hr className="border-t border-slate-200 my-4" aria-hidden />
 
       {/* Task #646 — close the partner-edit_metadata locked wrapper
           here so the operator-scoped Quote Rows section below stays

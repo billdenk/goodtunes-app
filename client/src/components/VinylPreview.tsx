@@ -30,7 +30,7 @@ export function VinylPreview({
   artworkUrl: string | null | undefined;
   color: VinylColorOption;
   jacketUpgrade: JacketUpgrade;
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "sm" | "md" | "lg" | "xl" | "2xl";
   // Task #393 — optional ReactNode rendered absolutely-positioned
   // INSIDE the jacket div, so a hover-pencil from the SellPanel format
   // card can sit on the jacket itself (top-right) without overlapping
@@ -48,7 +48,9 @@ export function VinylPreview({
         ? { container: "h-44" }
         : size === "xl"
           ? { container: "h-56" }
-          : { container: "h-28" };
+          : size === "2xl"
+            ? { container: "h-72" }
+            : { container: "h-28" };
   const isGatefold = jacketUpgrade === "gatefold" || jacketUpgrade === "gatefold_insert";
   // Jacket aspect: 1:1 standard, 2:1 gatefold (held at every size).
   const jacketAspect = isGatefold ? 2 : 1;
