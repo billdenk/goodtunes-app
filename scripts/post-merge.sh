@@ -1947,3 +1947,25 @@ SQL
 }
 migrate_task_624_broker_discount dev  "${DATABASE_URL:-}"
 migrate_task_624_broker_discount prod "${PROD_DATABASE_URL:-}"
+
+# ── Task #625 — Press operational note column ────────────────────────
+# Adds `operational_note` (text, nullable) to manufacturers. The
+# original Task #625 merge only hand-applied this to dev; the publish
+# dev→prod diff then 500'd /admin/manufacturers in prod because the
+# Drizzle SELECT lists the column. Idempotent ADD COLUMN on both DBs
+# so it can't drift back.
+migrate_task_625_operational_note() {
+  local label="$1"; local url="$2"
+  [ -z "$url" ] && return 0
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL'
+ALTER TABLE manufacturers
+  ADD COLUMN IF NOT EXISTS operational_note text;
+SQL
+  then
+    echo "post-merge: task-625 operational note ok on $label"
+  else
+    echo "post-merge: WARNING — task-625 operational note failed on $label (continuing)"
+  fi
+}
+migrate_task_625_operational_note dev  "${DATABASE_URL:-}"
+migrate_task_625_operational_note prod "${PROD_DATABASE_URL:-}"
