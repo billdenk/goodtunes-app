@@ -1557,8 +1557,12 @@ function CatalogFormatBody({
                       tierHasAnyConfirmed;
                     const isUnconfirmed = explicitTbd || (savedTbd && !draftedValue) || gapInDefaults;
                     return (
-                    <td key={q} className="px-1 py-1.5 align-middle">
-                      <div className="relative" title={isUnconfirmed ? "TBD — awaiting quote" : undefined}>
+                    <td key={q} className="px-1 py-1.5 align-middle" title={isUnconfirmed ? "TBD — awaiting quote" : undefined}>
+                      {/* Task #662 follow-up — the relative wrapper
+                          must scope to ONLY the input or `top-1/2`
+                          centers `$` against the whole input+button
+                          stack (lands between them). */}
+                      <div className="relative">
                         <span
                           className={[
                             "pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs",
@@ -1585,6 +1589,7 @@ function CatalogFormatBody({
                               : `Quantity ${q}`
                           }
                         />
+                        </div>
                         {(() => {
                           // Task #624 — TBD button reflects what Save
                           // will actually persist: explicit-TBD flag
@@ -1616,7 +1621,6 @@ function CatalogFormatBody({
                             </button>
                           );
                         })()}
-                      </div>
                     </td>
                     );
                   })}
