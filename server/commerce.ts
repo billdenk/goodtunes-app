@@ -986,7 +986,31 @@ export function registerCommerceRoutes(app: Express) {
     }
 
     if (!pressId) {
-      return res.json({ press: null, hasShippedFirst: false, formatCosts: await listFormatCosts(), catalog: { formats: [] } });
+      // Task #656 — no press has been invited yet. Default the
+      // manufacturing-cost lookup to MRP's seeded catalog so the
+      // SellPanel's Profit-per-unit breakdown stops reading $0 for
+      // vinyl rows. We keep `press: null` (so the partner-permissions
+      // hard lock, the printer-chip row, and the format picker all
+      // stay on their no-press code paths) and expose MRP's catalog
+      // as `mrpDefaults` instead — the client only consumes it from
+      // the cost-breakdown branch, never to scope the picker UI.
+      let mrpDefaults: Awaited<ReturnType<typeof getPressCatalog>> | null = null;
+      try {
+        const mrp = await storage.getManufacturerByDomain(MRP_DOMAIN);
+        if (mrp) {
+          await seedMrpCatalog();
+          mrpDefaults = await getPressCatalog(mrp.id);
+        }
+      } catch {
+        mrpDefaults = null;
+      }
+      return res.json({
+        press: null,
+        hasShippedFirst: false,
+        formatCosts: await listFormatCosts(),
+        catalog: { formats: [] },
+        mrpDefaults,
+      });
     }
 
     const press = await storage.getManufacturerById(pressId);

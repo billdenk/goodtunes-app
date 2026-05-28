@@ -169,6 +169,13 @@ type InvitedPressResponse = {
   scopeId?: string | null;
   formatCosts: PayoutFormatCost[];
   catalog?: Catalog;
+  // Task #656 — when no press is invited, the server returns MRP's
+  // catalog here as the platform-default manufacturing source so the
+  // cost breakdown stops reading $0 on vinyl. We deliberately keep
+  // this separate from `catalog` so MRP doesn't take over the picker
+  // UI (tier/color dropdowns, format scope) — it's purely a cost
+  // fallback consumed by the breakdown branch in SkuRow.
+  mrpDefaults?: Catalog | null;
 };
 
 // Mirrors `snapToCatalogQuantityTier` server-side. Walks an ordered
@@ -1631,7 +1638,7 @@ function CostTooltip({
     publishingTrackCount: number;
     paymentProcessingCents: number;
     goodtunesCents: number;
-    source?: "hellbender" | "placeholder" | "catalog";
+    source?: "hellbender" | "placeholder" | "catalog" | "mrp-default";
   };
   // Task #624 — admin-only broker-discount preview. When > 0 and the
   // current user is super_admin, the tooltip adds an "Internal mfg
@@ -1705,7 +1712,9 @@ function CostTooltip({
           <div className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100">
             {breakdown.source === "hellbender"
               ? "Source: Hellbender Vinyl reference matrix"
-              : "Placeholder — per-plant matrix pending"}
+              : breakdown.source === "mrp-default"
+                ? "Source: MRP catalog (platform default — no press invited yet)"
+                : "Placeholder — per-plant matrix pending"}
           </div>
         )}
       </PopoverContent>
@@ -1950,6 +1959,18 @@ function SkuRow({
     queryKey: ["/api/admin/albums", albumId, "invited-press"],
   });
   const brokerDiscountPct = invitedPressRow?.press?.brokerDiscountPct ?? 0;
+  // Task #656 — MRP catalog row for this format, surfaced by the
+  // server when no press has been invited. The breakdown's no-catalog
+  // vinyl branch reads its manufacturing rung from here so the Profit
+  // card stops showing $0 manufacturing on un-invited albums. Stays
+  // null on albums that have an invited press (the catalog flow above
+  // already owns the cost lookup) and on non-vinyl rows.
+  const mrpDefaultFormat = useMemo<CatalogFormatRow | null>(() => {
+    if (catalogFormat) return null; // invited-press catalog owns this format
+    if (!isVinyl) return null;
+    const formats = invitedPressRow?.mrpDefaults?.formats ?? [];
+    return formats.find((f) => f.format === format) ?? null;
+  }, [catalogFormat, isVinyl, format, invitedPressRow?.mrpDefaults]);
   const [active, setActive] = useState(existing?.active ?? true);
   const [priceStr, setPriceStr] = useState(existing ? (existing.priceCents / 100).toFixed(2) : "");
   // Task #397 — inline-editable row label (Tracks-row pattern). Empty
@@ -2249,11 +2270,36 @@ function SkuRow({
           usingSnapshot: true,
         };
       }
-      // Task #624 — legacy non-catalog vinyl rows no longer read from
-      // the Hellbender matrix. Without a catalog pick the row is
-      // flagged as needing a quote so the manufacturing cell never
-      // silently reads as $0.00 and never disagrees with the catalog
-      // ladders. The operator must pick a catalog tier/color to price.
+      // Task #656 — no invited press, but MRP's catalog is shipped as
+      // the platform-wide manufacturing default. Map the legacy color-
+      // tier pick to MRP's three-tier scheme (black → "Black",
+      // everything else → "Color") and snap parsedQty up to MRP's
+      // confirmed rungs. We resolve against MRP's default jacket via
+      // the same `priceLadder` the invited-press path uses, so a
+      // missing/unconfirmed rung still falls back to needsQuote (with
+      // updated copy pointing operators at Admin → Presses → MRP).
+      const mrpFormat = mrpDefaultFormat;
+      if (mrpFormat && mrpFormat.tiers.length > 0) {
+        const tierName = vinylColor.tier === "black" ? "Black" : "Color";
+        const mrpTier =
+          mrpFormat.tiers.find((t) => t.name.toLowerCase() === tierName.toLowerCase()) ??
+          mrpFormat.tiers[0];
+        const mrpSnap = snapCatalogLadder(mrpTier.priceLadder, parsedQty);
+        const cents = mrpSnap?.unitCents ?? 0;
+        if (mrpSnap && cents > 0) {
+          return {
+            manufacturingCents: cents,
+            ...sideCarFor(false),
+            source: "mrp-default" as const,
+            needsQuote: false,
+            usingSnapshot: false,
+          };
+        }
+      }
+      // No MRP rung available for this tier × qty (e.g. an off-catalog
+      // size or a rung not yet confirmed by MRP). Surface the same
+      // needsQuote chrome as before but with copy that points at the
+      // real place to confirm a rung (Admin → Presses → MRP).
       return {
         manufacturingCents: 0,
         ...sideCarFor(false),
@@ -2296,6 +2342,8 @@ function SkuRow({
     catalogSnap,
     trackCount,
     priceCentsForCost,
+    mrpDefaultFormat,
+    parsedQty,
   ]);
 
   const totalCostCents = breakdown
@@ -4564,7 +4612,7 @@ function SkuRow({
                       ? `No confirmed price rung for ${pickedTier?.name ?? "this tier"} at ${parsedQty.toLocaleString()} pcs on ${invitedPressItself?.name ?? "this press"}. Confirm the rung in Admin → Presses.`
                       : invitedPressItself
                         ? `No quote yet from ${invitedPressItself.name} for this format. Add an estimate in the Quotes section below.`
-                        : `No press has been invited to quote this album yet. Invite a press from the album's Presses tab (or open the Quotes section below) to land a real manufacturing cost.`}
+                        : `No MRP rung for this tier at ${parsedQty.toLocaleString()} pcs — confirm the rung in Admin → Presses → MRP, or invite a different press.`}
                   </div>
                 )}
                 <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
@@ -5223,9 +5271,11 @@ function SkuRow({
                   : isVinyl
                     ? (breakdown?.needsQuote
                         ? "needs quote"
-                        : breakdown?.usingSnapshot
-                          ? "locked · Hellbender"
-                          : "live · Hellbender")
+                        : breakdown?.source === "mrp-default"
+                          ? "live · MRP default"
+                          : breakdown?.usingSnapshot
+                            ? "locked · Hellbender"
+                            : "live · Hellbender")
                     : "placeholder"})
               </span>
             </span>
@@ -5254,7 +5304,7 @@ function SkuRow({
             >
               {usingCatalog
                 ? `No confirmed price rung for ${pickedTier?.name ?? "this tier"} at ${parsedQty.toLocaleString()} pcs on ${invitedPressItself?.name ?? "this press"} — manufacturing reads as $0 until the rung is confirmed in Admin → Presses.`
-                : `Awaiting Hellbender quote for ${ALBUM_FORMAT_LABEL[format]} — manufacturing reads as $0 until a quote lands. Ping Bill.`}
+                : `No MRP rung for ${ALBUM_FORMAT_LABEL[format]} at ${parsedQty.toLocaleString()} pcs — confirm the rung in Admin → Presses → MRP so this format reads a real manufacturing cost.`}
             </div>
           )}
 
