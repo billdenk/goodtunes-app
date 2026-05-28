@@ -10116,11 +10116,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // be returned by these unauthenticated routes — schema comments on
   // those columns spell this out. Anything not listed here stays admin-
   // only; add a field explicitly when a fan surface needs it.
-  const toPublicPerson = (p: any) => ({
+  const toPublicPerson = (p: any, label?: { id: string; name: string; logoUrl: string | null } | null) => ({
     id: p.id,
     name: p.name,
     photoUrl: p.photoUrl ?? null,
     coverUrl: p.coverUrl ?? null,
+    // Task #661 — denormalize the joined label entity so the fan-side
+    // artist page can render the "Signed to {Label}" subhead + deep
+    // link without a second fetch. Null when the person has no label,
+    // or when the FK points at a soft-deleted label row.
+    label: label
+      ? { id: label.id, name: label.name, logoUrl: label.logoUrl ?? null }
+      : null,
     // The lock flags are admin-curation state, not sensitive — surface
     // them so the admin Person page (which reads through this same
     // projection) can render the lock toggles without a separate
@@ -10151,13 +10158,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     referredByOrgId: p.referredByOrgId ?? null,
   });
   app.get("/api/people", async (_req, res) => {
-    const rows = await storage.getPeople();
-    return res.json(rows.map(toPublicPerson));
+    const [rows, allLabels] = await Promise.all([
+      storage.getPeople(),
+      storage.getLabels(),
+    ]);
+    const labelById = new Map(allLabels.map((l) => [l.id, l]));
+    return res.json(
+      rows.map((p) =>
+        toPublicPerson(p, p.labelId ? labelById.get(p.labelId) ?? null : null),
+      ),
+    );
   });
   app.get("/api/people/:id", async (req, res) => {
     const p = await storage.getPersonById(String(req.params.id));
     if (!p) return res.status(404).json({ message: "Person not found" });
-    return res.json(toPublicPerson(p));
+    const label = p.labelId ? await storage.getLabelById(p.labelId) ?? null : null;
+    return res.json(toPublicPerson(p, label));
   });
   // Gravatar fallback for email-only Person entries. Returns the rehosted
   // photoUrl when Gravatar has a profile for this email, null when it

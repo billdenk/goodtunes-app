@@ -25,6 +25,7 @@ import { ArtistDetail } from "@/pages/ArtistDetail";
 import { ArtistDashboard } from "@/pages/ArtistDashboard";
 import { NonProfitDashboard } from "@/pages/NonProfitDashboard";
 import { LabelDashboard } from "@/pages/LabelDashboard";
+import { FanLabel } from "@/pages/FanLabel";
 import { Chat, ChatThreadPage } from "@/pages/Chat";
 import { SearchPage } from "@/pages/Search";
 import { RecentsPage } from "@/pages/Recents";
@@ -375,6 +376,12 @@ function Router() {
             never see /label* (no host-rewrite); admin/dev hosts can. */}
         <Route path="/label">
           <ProtectedRoute component={LabelDashboard} />
+        </Route>
+        {/* Task #661 — Fan-facing label page. Order matters: the
+            literal `/label` route above must stay first so the
+            label-partner dashboard isn't shadowed by `:id`. */}
+        <Route path="/label/:id">
+          <ProtectedRoute component={FanLabel} />
         </Route>
         <Route path="/playlists">
           <ProtectedRoute component={Playlists} />

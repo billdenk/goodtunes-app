@@ -149,6 +149,10 @@ export function ArtistDetail() {
     // current roster as an Apple-Music-style "Members" rail under About.
     isGroup?: boolean;
     groupKind?: string | null;
+    // Task #661 — denormalized label join from /api/people. Null when
+    // the artist has no label assigned (independent) or the label row
+    // was soft-deleted.
+    label?: { id: string; name: string; logoUrl: string | null } | null;
   };
   // Member row returned by /api/people/:id/members. Mirrors the shape
   // shared/schema.ts's BandMemberWithPerson exposes.
@@ -428,6 +432,19 @@ export function ArtistDetail() {
                   </button>
                 )}
               </div>
+            )}
+            {artistPerson?.label && (
+              <button
+                type="button"
+                onClick={() => navigate(`/label/${artistPerson.label!.id}`)}
+                className="mt-5 -mb-4 inline-flex items-center justify-center min-h-[44px] px-2 active:opacity-70"
+                data-testid={`link-artist-label-${artistPerson.label.id}`}
+              >
+                <span className="text-white/55 text-xs uppercase tracking-[0.14em] font-semibold">
+                  Signed to{" "}
+                  <span className="text-white/80">{artistPerson.label.name}</span>
+                </span>
+              </button>
             )}
             {hasGtReleases ? (
               <button
