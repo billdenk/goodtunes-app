@@ -22,7 +22,7 @@
 // pricing plumbing is tracked separately on the roadmap.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
@@ -2593,23 +2593,6 @@ function SkuRow({
     return bits.join(" · ");
   })();
 
-  // Task #635 — per-rung Artist Net across the picked tier's price
-  // ladder. Picks `profitCents` (= price − manufacturing − publishing
-  // − payment processing − goodtunes) per ladder rung and multiplies
-  // by the rung's qty. Folds in a proportional slice of the GoodDeed
-  // cert's net per-cert when the signed_cert addon is live, so the
-  // header range reflects what the artist would actually take home at
-  // that pressing volume. Returns `null` for non-vinyl, no-catalog,
-  // or pre-price rows so the header can degrade gracefully.
-  const certNetPerUnitCents = useMemo<number | null>(() => {
-    if (!signedAddon?.active) return null;
-    if (livePlatformCostCents == null) return null;
-    const certPrice = signedAddon.priceCents ?? 0;
-    if (certPrice <= 0) return null;
-    const cc = Math.round(certPrice * 0.029) + 30;
-    return certPrice - livePlatformCostCents - cc;
-  }, [signedAddon, livePlatformCostCents]);
-
   const estimateRungs = useMemo<{ qty: number; mfgCents: number }[]>(() => {
     if (!isVinyl) return [];
     if (usingCatalog && pickedTier) {
@@ -2624,6 +2607,94 @@ function SkuRow({
     return [];
   }, [isVinyl, usingCatalog, pickedTier, breakdown, parsedQty]);
 
+  // Task #636 — per-cert wholesale comes from the **tiered ladder**,
+  // not the flat `payout_settings.cert_cost_cents`. Each ladder rung
+  // implies a different signed-copy count (= qty × attachRatio), and
+  // each cert count lands on a different ladder rung ($13/$12/$9/$7/$6).
+  // We fetch the live preview at every distinct cert count we need to
+  // price (one per pressing rung + the currently-resolved cert qty)
+  // and consume `totalPerUnitCents` from each. The flat
+  // `livePlatformCostCents` is only the fallback for rows where the
+  // preview hasn't loaded yet or the platform default ladder isn't
+  // configured.
+  const attachRatio = useMemo<number>(() => {
+    if (!signedAddon?.active) return 0;
+    if (!signedAddon?.plannedQuantity || parsedQty <= 0) return 0;
+    return signedAddon.plannedQuantity / parsedQty;
+  }, [signedAddon, parsedQty]);
+
+  const certQtysToPrice = useMemo<number[]>(() => {
+    if (!signedAddon?.active || attachRatio <= 0) return [];
+    const set = new Set<number>();
+    for (const { qty } of estimateRungs) {
+      const c = Math.max(0, Math.floor(qty * attachRatio));
+      if (c > 0) set.add(c);
+    }
+    if (signedAddon?.plannedQuantity && signedAddon.plannedQuantity > 0) {
+      set.add(signedAddon.plannedQuantity);
+    }
+    return Array.from(set).sort((a, b) => a - b);
+  }, [estimateRungs, attachRatio, signedAddon]);
+
+  const certPreviewQueries = useQueries({
+    queries: certQtysToPrice.map((certQty) => ({
+      queryKey: [
+        "/api/admin/albums",
+        albumId,
+        "gooddeed-pricing-preview",
+        certQty,
+      ] as const,
+      queryFn: async () => {
+        const r = await apiRequest(
+          "GET",
+          `/api/admin/albums/${albumId}/gooddeed-pricing-preview?runQty=${certQty}`,
+        );
+        return r.json();
+      },
+      enabled: !!albumId && certQty > 0 && !!signedAddon?.active,
+    })),
+  });
+
+  const certCostByQty = useMemo<Map<number, number>>(() => {
+    const m = new Map<number, number>();
+    certQtysToPrice.forEach((q, i) => {
+      const total = certPreviewQueries[i]?.data?.totalPerUnitCents;
+      if (typeof total === "number" && total > 0) m.set(q, total);
+    });
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [certQtysToPrice, certPreviewQueries.map((q) => q.data?.totalPerUnitCents).join(",")]);
+
+  const certNetForCertCount = (certQty: number): number | null => {
+    if (!signedAddon?.active) return null;
+    const certPrice = signedAddon.priceCents ?? 0;
+    if (certPrice <= 0 || certQty <= 0) return null;
+    const cost = certCostByQty.get(certQty) ?? livePlatformCostCents ?? null;
+    if (cost == null) return null;
+    const cc = Math.round(certPrice * 0.029) + 30;
+    return certPrice - cost - cc;
+  };
+
+  // Resolved-cert net for the *current* vinyl run — exposed to the
+  // Deductions popover ("+ GoodDeed per cert") so it shows the ladder
+  // rung that matches the saved plannedQuantity, not the flat default.
+  const certNetPerUnitCents = useMemo<number | null>(() => {
+    if (!signedAddon?.active) return null;
+    if (!signedAddon?.plannedQuantity) return null;
+    return certNetForCertCount(signedAddon.plannedQuantity);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedAddon, certCostByQty, livePlatformCostCents]);
+
+  // Task #635 — per-rung Artist Net across the picked tier's price
+  // ladder. Picks `profitCents` (= price − manufacturing − publishing
+  // − payment processing − goodtunes) per ladder rung and multiplies
+  // by the rung's qty. Folds in a proportional slice of the GoodDeed
+  // cert's net per-cert when the signed_cert addon is live, so the
+  // header range reflects what the artist would actually take home at
+  // that pressing volume. Task #636 — uses the *rung-correct* cert
+  // cost (from the ladder via the preview endpoint), not the flat
+  // platform default, so the per-rung range steps through the
+  // wholesale ladder as the pressing run scales up.
   const perRungArtistNet = useMemo<{ qty: number; netCents: number }[]>(() => {
     if (!breakdown || priceCents === null) return [];
     return estimateRungs.map(({ qty, mfgCents }) => {
@@ -2635,22 +2706,17 @@ function SkuRow({
         sidecar.goodtunesCents;
       const profitPerUnit = priceCents - costPerUnit;
       let net = profitPerUnit * qty;
-      // Fold in GoodDeed uplift proportional to this rung's volume.
-      // Attach ratio uses the addon's planned cert qty against the
-      // current vinyl qty so the math matches whatever the operator
-      // last saved in the cert pill.
-      if (
-        certNetPerUnitCents !== null &&
-        signedAddon?.plannedQuantity &&
-        parsedQty > 0
-      ) {
-        const attachRatio = signedAddon.plannedQuantity / parsedQty;
+      if (signedAddon?.active && attachRatio > 0) {
         const certCount = Math.max(0, Math.floor(qty * attachRatio));
-        net += certNetPerUnitCents * certCount;
+        const certNet = certNetForCertCount(certCount);
+        if (certNet !== null && certCount > 0) {
+          net += certNet * certCount;
+        }
       }
       return { qty, netCents: net };
     });
-  }, [estimateRungs, breakdown, priceCents, certNetPerUnitCents, signedAddon, parsedQty]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estimateRungs, breakdown, priceCents, signedAddon, attachRatio, certCostByQty, livePlatformCostCents]);
 
   const artistNetRange = useMemo<{ low: number; high: number } | null>(() => {
     if (perRungArtistNet.length === 0) return null;
@@ -5627,8 +5693,13 @@ function GoodDeedPill({
                     {costCents !== null ? (
                       <>
                         <div className="flex items-center justify-between text-xs tabular-nums">
-                          <span className="text-slate-600">
-                            GoodDeed Wholesale
+                          <span className="flex items-center gap-1.5 text-slate-600">
+                            Quickprinter (rung)
+                            <InfoTip
+                              label="What the Quickprinter rung covers"
+                              testId="info-gooddeed-quickprinter"
+                              text="Per-cert wholesale on the tiered ladder ($13 → $12 → $9 → $7 → $6 as the run grows). The rung covers print + hologram + shrinkwrap + insertion into the jacket and all three shipping legs (Hoover → artist for signing → Spinney for insertion → fulfillment). CC fee on the cert retail is the only other line."
+                            />
                           </span>
                           <span
                             className="text-slate-900"

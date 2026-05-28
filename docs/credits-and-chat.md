@@ -104,3 +104,34 @@ See `docs/admin-conventions.md` → **Press Catalog** for the editor + cost-spli
 - The "download to your device" choice (which would burn Transfer Rights) is deferred to the desktop version. Album-level "Download Music Files" + Transfer Rights warning sheet have been removed for now.
 - Song row layout: track # · title · **download cloud-arrow** · ⋯ menu. Heart moved into the ⋯ sheet.
 - Song ⋯ sheet (Apple-trimmed): Favorite + Share (top two-up), then Add to Playlist · Play Next · Play Last · View Credits. Intentionally omitted: Pin Song, Create Station, Suggest Less, Rate Song.
+
+## GoodDeed cost stack & ladder
+
+What the artist actually owes us per signed copy, and how the Design tab reads it. Source of truth for the rung values: [`docs/shopify-pricing-strategy.md`](./shopify-pricing-strategy.md) § "Signed-cert wholesale ladder".
+
+### One line, not five
+
+Per signed copy the artist sees two cost lines on the Design tab — that's it:
+
+1. **Quickprinter (rung)** — the tiered wholesale rung that matches the resolved signed-copy count for the current vinyl run.
+2. **CC fee** — Stripe's 2.9% + $0.30 on the cert retail price.
+
+The Quickprinter rung covers all six operational legs on a signed copy: **print + hologram + shrinkwrap + insertion into the jacket + all three shipping legs** (Hoover → artist for signing → Spinney for insertion → fulfillment). There is no separate "shipping" or "Sticker Mule" line on the artist's view — it's already inside the rung.
+
+### Wholesale ladder & artist net at $20 retail
+
+`shared/signedCertLadder.ts` is the canonical rung set; the table below is what the artist nets per cert at the recommended $20 retail. CC fee on $20 = $0.88.
+
+| Signed copies | Quickprinter / cert | CC fee | **Artist net / cert** |
+|---|---|---|---|
+| 25–49 | $13.00 | $0.88 | **$6.12** |
+| 50–99 | $12.00 | $0.88 | **$7.12** |
+| 100–199 | $9.00 | $0.88 | **$10.12** |
+| 200–299 | $7.00 | $0.88 | **$12.12** |
+| 300+ | $6.00 | $0.88 | **$13.12** |
+
+A 1,000-unit pressing at the 20% default attach rate → 200 signed copies → $7 rung → ~$12.12 net per cert × 200 = ~$2,424 cert uplift on top of the vinyl net. A 500-unit run at the same attach → 100 signed copies → $9 rung → ~$10.12 net per cert. **The ladder rung must be keyed off the resolved signed-copy count, not the vinyl run size.**
+
+### Don't use the flat default
+
+`payout_settings.cert_cost_cents` is the historical flat platform default ($12). It is only the fallback shown when the per-cert preview hasn't loaded yet or the platform-default Printing/Hologram/Insertion vendors aren't configured. Any Sell-panel / Design-tab readout of cert cost must read the rung from `/api/admin/albums/:id/gooddeed-pricing-preview?runQty=<certCount>` — not the flat default. See `.agents/memory/gooddeed-cost-stack.md`.
