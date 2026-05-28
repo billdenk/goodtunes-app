@@ -1,16 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
   Trash2,
   AlertCircle,
-  Search,
-  Upload,
-  X,
-  PieChart,
   Loader2,
-  Check,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -58,209 +53,12 @@ type SplitRow = {
 };
 type SplitTotals = { publishingBp: number; mechanicalBp: number };
 type TrackSplits = { publishing: SplitRow[]; mechanical: SplitRow[]; totals?: SplitTotals };
-type AlbumSplits = { bySongId: Record<string, TrackSplits & { totals?: SplitTotals }> };
 
 function bpToPct(bp: number): string {
   return (bp / 100).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
 }
 function sumBp(rows: SplitRow[]): number {
   return rows.reduce((acc, r) => acc + (r.percentBp ?? 0), 0);
-}
-
-// ─── Album-tab matrix ────────────────────────────────────────────────
-// Read-mostly summary across every track on the album. Each track
-// renders two stacked progress bars (Publishing | Master) with a
-// percent total + "Edit splits" link that scrolls the Tracks tab to
-// the song row in Splits mode. Also exposes the "Import from sheet"
-// affordance.
-
-export function AlbumSplitsPanel({
-  albumId,
-  songs,
-}: {
-  albumId: string;
-  songs: Array<{ id: string; title: string; trackNumber: number }>;
-}) {
-  const [importOpen, setImportOpen] = useState(false);
-  const [activeSongId, setActiveSongId] = useState<string | null>(null);
-  const { data, isLoading } = useQuery<AlbumSplits>({
-    queryKey: ["/api/admin/albums", albumId, "splits"],
-  });
-  const ordered = useMemo(
-    () => [...songs].sort((a, b) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0)),
-    [songs],
-  );
-
-  return (
-    <div className="space-y-6" data-testid="panel-album-splits">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h2 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2">
-            <PieChart className="w-4 h-4 text-slate-500" />
-            Splits
-          </h2>
-          <p className="text-[12.5px] text-slate-500 mt-0.5">
-            Publishing + Master Recording per song. Master splits never leave the admin.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setImportOpen(true)}
-          data-testid="button-import-splits"
-        >
-          <Upload className="w-3.5 h-3.5 mr-1.5" />
-          Import from sheet
-        </Button>
-      </div>
-
-      {isLoading ? (
-        <div className="py-10 flex justify-center"><Spinner className="w-5 h-5" /></div>
-      ) : ordered.length === 0 ? (
-        <div className="text-[13px] text-slate-500">No tracks on this album yet.</div>
-      ) : (
-        <div className="border border-slate-200 rounded-lg overflow-hidden">
-          <table className="w-full text-[13px]">
-            <thead className="bg-slate-50 text-slate-600 text-[11.5px] uppercase tracking-wider">
-              <tr>
-                <th className="text-left px-3 py-2 w-10">#</th>
-                <th className="text-left px-3 py-2">Track</th>
-                <th className="text-left px-3 py-2 w-[28%]">Publishing</th>
-                <th className="text-left px-3 py-2 w-[28%]">Master</th>
-                <th className="px-3 py-2 w-24" />
-              </tr>
-            </thead>
-            <tbody>
-              {ordered.map((s) => {
-                const row = data?.bySongId?.[s.id] ?? { publishing: [], mechanical: [] };
-                const pubBp = row.totals?.publishingBp ?? sumBp(row.publishing);
-                const mechBp = row.totals?.mechanicalBp ?? sumBp(row.mechanical);
-                return (
-                  <SplitsMatrixRow
-                    key={s.id}
-                    songId={s.id}
-                    songTitle={s.title}
-                    trackNumber={s.trackNumber}
-                    splits={row}
-                    pubBp={pubBp}
-                    mechBp={mechBp}
-                    onOpen={() => setActiveSongId(s.id)}
-                  />
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Per-track editor as a sheet — the same editor the Tracks tab
-          opens inline. Sheet here saves a click for the operator
-          working out of the Splits matrix. */}
-      {activeSongId && (
-        <Dialog open={true} onOpenChange={(v) => !v && setActiveSongId(null)}>
-          <DialogContent
-            className="max-w-3xl bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4 max-h-[85vh] overflow-y-auto"
-            data-testid="dialog-track-splits"
-          >
-            <DialogHeader className="text-left space-y-1">
-              <DialogTitle className="text-[17px] font-semibold text-slate-900">
-                Splits — {ordered.find((s) => s.id === activeSongId)?.title ?? "Track"}
-              </DialogTitle>
-              <DialogDescription className="text-[13px] text-slate-500">
-                Publishing splits feed fan-side "Written by …". Master splits stay admin-only.
-              </DialogDescription>
-            </DialogHeader>
-            <TrackSplitsEditor
-              songId={activeSongId}
-              songTitle={ordered.find((s) => s.id === activeSongId)?.title ?? ""}
-              albumId={albumId}
-            />
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {importOpen && (
-        <SplitsImportSheet
-          albumId={albumId}
-          songs={ordered}
-          onClose={() => setImportOpen(false)}
-        />
-      )}
-    </div>
-  );
-}
-
-function SplitsMatrixRow({
-  songId,
-  songTitle,
-  trackNumber,
-  splits,
-  pubBp,
-  mechBp,
-  onOpen,
-}: {
-  songId: string;
-  songTitle: string;
-  trackNumber: number;
-  splits: TrackSplits;
-  pubBp: number;
-  mechBp: number;
-  onOpen: () => void;
-}) {
-  return (
-    <tr className="border-t border-slate-200 hover:bg-slate-50" data-testid={`row-splits-${songId}`}>
-      <td className="px-3 py-3 text-slate-400 text-[12px]">{trackNumber || "—"}</td>
-      <td className="px-3 py-3">
-        <button
-          onClick={onOpen}
-          className="text-left font-medium text-slate-900 hover:text-[var(--brand-blue)]"
-          data-testid={`link-track-${songId}`}
-        >
-          {songTitle}
-        </button>
-        <div className="text-[11.5px] text-slate-400 mt-0.5">
-          {splits.publishing.length} pub · {splits.mechanical.length} master
-        </div>
-      </td>
-      <td className="px-3 py-3"><PercentBar bp={pubBp} rows={splits.publishing} /></td>
-      <td className="px-3 py-3"><PercentBar bp={mechBp} rows={splits.mechanical} /></td>
-      <td className="px-3 py-3 text-right">
-        <button
-          onClick={onOpen}
-          className="text-[12.5px] font-medium text-[var(--brand-blue)] hover:underline"
-          data-testid={`button-edit-splits-${songId}`}
-        >
-          Edit
-        </button>
-      </td>
-    </tr>
-  );
-}
-
-function PercentBar({ bp, rows }: { bp: number; rows: SplitRow[] }) {
-  if (rows.length === 0) {
-    return <span className="text-[12px] text-slate-400">Not set</span>;
-  }
-  const pct = bp / 100;
-  const ok = bp === 10000;
-  return (
-    <div>
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-          <div
-            className={`h-full ${ok ? "bg-emerald-500" : pct > 100 ? "bg-rose-500" : "bg-amber-400"}`}
-            style={{ width: `${Math.min(100, pct)}%` }}
-          />
-        </div>
-        <span className={`text-[12px] font-medium tabular-nums ${ok ? "text-emerald-700" : "text-slate-700"}`}>
-          {bpToPct(bp)}%
-        </span>
-      </div>
-      <div className="mt-1 text-[11.5px] text-slate-500 line-clamp-1">
-        {rows.map((r) => r.name).join(", ")}
-      </div>
-    </div>
-  );
 }
 
 // ─── Per-track editor ───────────────────────────────────────────────
@@ -273,28 +71,54 @@ function PercentBar({ bp, rows }: { bp: number; rows: SplitRow[] }) {
 
 export function TrackSplitsEditor({
   songId,
-  songTitle,
+  songTitle: _songTitle,
   albumId,
 }: {
   songId: string;
   songTitle: string;
   albumId: string;
 }) {
-  const { data, isLoading } = useQuery<TrackSplits>({
+  // Task #645 — only show the spinner while the request is genuinely
+  // in flight. Anything else — empty payload, 401-coerced-to-null
+  // from the default queryFn, a server error — must drop the operator
+  // into the editor (with an inline error or empty `+ Add` state)
+  // instead of leaving them staring at a perpetual spinner. The
+  // album-level Splits tab is gone, so this editor is now the only
+  // place to edit splits; stalling here strands the workflow.
+  const { data, isLoading, error, refetch, isFetching } = useQuery<TrackSplits | null>({
     queryKey: ["/api/admin/songs", songId, "splits"],
+    enabled: !!songId,
   });
-  if (isLoading || !data) {
+  if (isLoading) {
     return <div className="py-8 flex justify-center"><Spinner className="w-5 h-5" /></div>;
   }
+  const rows: TrackSplits = data ?? { publishing: [], mechanical: [] };
   return (
     <div className="space-y-6" data-testid={`editor-track-splits-${songId}`}>
+      {error && (
+        <div className="flex items-start gap-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2" data-testid={`error-track-splits-${songId}`}>
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="font-medium">Couldn't load splits</div>
+            <div className="text-rose-600">{(error as Error).message}</div>
+          </div>
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="text-xs font-medium text-rose-700 hover:underline disabled:opacity-50"
+            data-testid={`button-retry-track-splits-${songId}`}
+          >
+            {isFetching ? "Retrying…" : "Retry"}
+          </button>
+        </div>
+      )}
       <SplitsSection
         kind="publishing"
         title="Publishing splits"
         hint="Songwriting share. Names + percentages here power the fan-side &quot;Written by …&quot; line."
         songId={songId}
         albumId={albumId}
-        rows={data.publishing}
+        rows={rows.publishing}
       />
       <SplitsSection
         kind="mechanical"
@@ -302,7 +126,7 @@ export function TrackSplitsEditor({
         hint="Performance / master share. Never shown to fans — admin-only."
         songId={songId}
         albumId={albumId}
-        rows={data.mechanical}
+        rows={rows.mechanical}
       />
     </div>
   );
@@ -617,7 +441,7 @@ function NewSplitForm({
 // `replace: true` wipes existing rows on each affected (song, kind)
 // pair before inserting — typical when re-pulling a published sheet.
 
-function SplitsImportSheet({
+export function SplitsImportSheet({
   albumId,
   songs,
   onClose,
@@ -839,7 +663,7 @@ function SplitsReadOnlyRail({
   if (pub.length === 0 && mech.length === 0) {
     return (
       <div className="text-[13px] text-slate-500 py-6">
-        No splits recorded yet. Splits are added from the album's Splits tab.
+        No splits recorded yet. Splits are added from each track's Splits tile on the album's Tracks tab.
       </div>
     );
   }
@@ -868,7 +692,7 @@ function ReadOnlyList({
               <div className="font-medium text-slate-900 truncate">
                 {r.song ? (
                   <Link
-                    href={`/admin/albums/${r.song.albumId}?tab=splits&track=${r.song.id}`}
+                    href={`/admin/albums/${r.song.albumId}?tab=tracks&track=${r.song.id}`}
                     className="text-inherit hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
                   >
                     {r.song.title}

@@ -85,7 +85,7 @@ import { AlbumPreviewCard } from "@/components/admin/previews/AlbumPreviewCard";
 import { AlbumDesktopPreviewCard } from "@/components/admin/previews/AlbumDesktopPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
-import { AlbumSplitsPanel, TrackSplitsEditor } from "@/components/admin/SplitsPanels";
+import { SplitsImportSheet, TrackSplitsEditor } from "@/components/admin/SplitsPanels";
 import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
@@ -257,7 +257,7 @@ interface SongLite {
   vinylOrder?: number | null;
 }
 
-type Tab = "overview" | "tracks" | "sell" | "press" | "shopify" | "splits";
+type Tab = "overview" | "tracks" | "sell" | "press" | "shopify";
 // Task #335 — the visible tab set is now driven by `sellMode` +
 // `sellQuoteLockedAt`. Before the operator locks a quote we only show
 // Overview/Tracks/Sell so the page stays focused on "decide what we're
@@ -275,11 +275,11 @@ function visibleTabsFor(album: {
     { key: "overview", label: "Overview" },
     { key: "sell", label: "Design" },
     { key: "tracks", label: "Digital" },
-    // Task #616 — Splits is always visible (never blocked by sell-lock)
-    // because it's the publishing+master ledger; partners need to read
-    // it pre-quote even if they can't edit (post-sale lock + edit_metadata
-    // verb gate the writes server-side).
-    { key: "splits", label: "Splits" },
+    // Task #645 — Splits used to live on its own tab here; the per-track
+    // Splits tile inside each Tracks row replaced the matrix entirely.
+    // The "Import from sheet" entry point moved to the Tracks tab's
+    // Advanced menu. Any incoming `?tab=splits` URL falls back to the
+    // default tab via the `allowed.has(tab)` guard in the render block.
   ];
   // Task #611 — Physical (direct) and Shopify (shopify) are always
   // visible regardless of `sellQuoteLockedAt` / Prepping state. Bill
@@ -1175,12 +1175,6 @@ export function AdminAlbum() {
                   }}
                 />
               )}
-              {safeTab === "splits" && allowed.has("splits") && (
-                <AlbumSplitsPanel
-                  albumId={album.id}
-                  songs={album.songs.map((s) => ({ id: s.id, title: s.title, trackNumber: s.trackNumber ?? 0 }))}
-                />
-              )}
             </>
           );
         })()}
@@ -1970,6 +1964,11 @@ function TracksPanel({
   const [albumSyncOpen, setAlbumSyncOpen] = useState(false);
   const [lyricsImportOpen, setLyricsImportOpen] = useState(false);
   const [creditsImportOpen, setCreditsImportOpen] = useState(false);
+  // Task #645 — Splits-from-sheet importer. Used to live on the
+  // removed album-level Splits tab; re-homed here under Advanced so
+  // operators still have a way to bulk-load splits from NightBirde-
+  // style songsheets without resurrecting the tab.
+  const [splitsImportOpen, setSplitsImportOpen] = useState(false);
   // Task #583 — the Digital/Vinyl segmented toggle has moved out of
   // this panel: the Digital tab is now strictly the digital tracklist,
   // and the Side A/B cut view lives on the Physical tab beside the
@@ -2548,6 +2547,30 @@ function TracksPanel({
 
               {/* Task #583 — "Download all masters" lives on the Physical
                   tab now (single home for master bulk-actions). */}
+
+              {/* Task #645 — Splits section. The album-level Splits tab is
+                  gone; per-track Splits tiles cover the day-to-day editing.
+                  The sheet importer (NightBirde songsheet → bulk-load) is
+                  the one album-wide affordance worth keeping, so it lives
+                  here under Advanced. */}
+              <DropdownMenuLabel className="px-2.5 pt-2.5 pb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-slate-400">
+                Splits
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onSelect={() => setSplitsImportOpen(true)}
+                data-testid="menu-import-splits"
+                className="gap-2.5 px-2.5 py-2 text-[12.5px] cursor-pointer focus:bg-slate-100 focus:text-slate-900"
+              >
+                <Upload className="w-4 h-4 text-slate-500" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-900">
+                    Import splits from sheet
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Google Sheet or CSV — matched to tracks by title.
+                  </div>
+                </div>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -2704,6 +2727,17 @@ function TracksPanel({
         open={creditsImportOpen}
         onOpenChange={setCreditsImportOpen}
       />
+      {splitsImportOpen && (
+        <SplitsImportSheet
+          albumId={album.id}
+          songs={sorted.map((s) => ({
+            id: s.id,
+            title: s.title,
+            trackNumber: s.trackNumber ?? 0,
+          }))}
+          onClose={() => setSplitsImportOpen(false)}
+        />
+      )}
     </Card>
     {bonusStack}
     </div>
