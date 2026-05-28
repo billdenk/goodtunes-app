@@ -2740,11 +2740,9 @@ function SkuRow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estimateRungs, breakdown, priceCents, signedAddon, attachRatio, certCostByQty, livePlatformCostCents]);
 
-  const artistNetRange = useMemo<{ low: number; high: number } | null>(() => {
-    if (perRungArtistNet.length === 0) return null;
-    const lows = perRungArtistNet.map((r) => r.netCents);
-    return { low: Math.min(...lows), high: Math.max(...lows) };
-  }, [perRungArtistNet]);
+  // Task #646 — artistNetRange definition lives further down (after
+  // the Quote-rows helpers it depends on) so its useMemo deps can
+  // reference quoteRows / catalogByPressId without a TDZ violation.
 
   // Task #642 — Estimates table columns. Generalises the header
   // pill's per-rung Artist Net math to a broader column set the
@@ -2819,11 +2817,8 @@ function SkuRow({
 
   const signedDollars = (c: number) =>
     c < 0 ? `-${dollars(Math.abs(c))}` : dollars(c);
-  const artistNetLabel = artistNetRange
-    ? artistNetRange.low === artistNetRange.high
-      ? signedDollars(artistNetRange.low)
-      : `${signedDollars(artistNetRange.low)} – ${signedDollars(artistNetRange.high)}`
-    : "—";
+  // Task #646 — artistNetLabel is computed further down, after
+  // artistNetRange (which depends on Quote-rows helpers below).
 
   // Color label for the collapsed header meta line. Catalog rows
   // resolve via the picked tier's color list; legacy rows fall back
@@ -2862,7 +2857,561 @@ function SkuRow({
     return out;
   }, [allPresses, invitedPressItself, pressFormatsByPress, format]);
 
+  // ====================================================================
+  // Task #646 — multi-quote scratchpad. Each card represents one
+  // format × one press quote (the SKU we'd save); beneath it we let
+  // the operator stack additional Quote rows scoped to this album +
+  // format (same press at a different qty rung, or another qualified
+  // press). Persisted in localStorage so the comparison survives
+  // reloads but never affects the SKU. Per the
+  // vendor-pricing-bypasses-post-sale-lock memory, these rows stay
+  // editable even when the partner edit_metadata lock disables the
+  // left-column controls.
+  // ====================================================================
+  type QuoteRow = {
+    id: string;
+    pressId: string;
+    tierName: string;
+    colorName: string | null;
+    qty: number;
+    matched?: boolean;
+  };
+  const quoteScratchpadKey = albumId
+    ? `gt:sellpanel:quotes:${albumId}:${format}`
+    : null;
+  const [quoteRows, setQuoteRows] = useState<QuoteRow[]>(() => {
+    if (typeof window === "undefined" || !quoteScratchpadKey) return [];
+    try {
+      const raw = window.localStorage.getItem(quoteScratchpadKey);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      return arr.filter((r: unknown): r is QuoteRow => {
+        const o = r as Record<string, unknown> | null;
+        return (
+          !!o &&
+          typeof o.id === "string" &&
+          typeof o.pressId === "string" &&
+          typeof o.tierName === "string" &&
+          typeof o.qty === "number" &&
+          (o.colorName === null || typeof o.colorName === "string")
+        );
+      });
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined" || !quoteScratchpadKey) return;
+    try {
+      window.localStorage.setItem(
+        quoteScratchpadKey,
+        JSON.stringify(quoteRows),
+      );
+    } catch {
+      /* localStorage quota — operator scratchpad, safe to drop. */
+    }
+  }, [quoteRows, quoteScratchpadKey]);
+  const [matchNotes, setMatchNotes] = useState<
+    { pressName: string; reason: string }[]
+  >([]);
+  // Task #646 — rehydrate when the (album, format) scratchpad key
+  // changes (e.g. album reload reuses this row instance for a
+  // different format). Without this, quote rows would leak across
+  // contexts.
+  useEffect(() => {
+    if (typeof window === "undefined" || !quoteScratchpadKey) {
+      setQuoteRows([]);
+      setMatchNotes([]);
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(quoteScratchpadKey);
+      if (!raw) {
+        setQuoteRows([]);
+      } else {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) {
+          setQuoteRows(
+            arr.filter((r: unknown): r is QuoteRow => {
+              const o = r as Record<string, unknown> | null;
+              return (
+                !!o &&
+                typeof o.id === "string" &&
+                typeof o.pressId === "string" &&
+                typeof o.tierName === "string" &&
+                typeof o.qty === "number" &&
+                (o.colorName === null || typeof o.colorName === "string")
+              );
+            }),
+          );
+        } else {
+          setQuoteRows([]);
+        }
+      }
+    } catch {
+      setQuoteRows([]);
+    }
+    setMatchNotes([]);
+  }, [quoteScratchpadKey]);
+
+  // Distinct press ids referenced by quote rows that aren't the
+  // invited press (whose catalog we already have via catalogFormat).
+  const quoteForeignPressIds = useMemo<string[]>(() => {
+    const s = new Set<string>();
+    for (const r of quoteRows) {
+      if (!invitedPressItself || r.pressId !== invitedPressItself.id)
+        s.add(r.pressId);
+    }
+    return [...s];
+  }, [quoteRows, invitedPressItself]);
+  const quoteCatalogQueries = useQueries({
+    queries: quoteForeignPressIds.map((pid) => ({
+      queryKey: ["/api/admin/manufacturers", pid, "catalog"] as const,
+      queryFn: async () => {
+        const r = await apiRequest(
+          "GET",
+          `/api/admin/manufacturers/${pid}/catalog`,
+        );
+        return r.json() as Promise<Catalog>;
+      },
+      enabled: !!pid,
+    })),
+  });
+  const catalogByPressId = useMemo<Map<string, Catalog>>(() => {
+    const m = new Map<string, Catalog>();
+    quoteForeignPressIds.forEach((pid, i) => {
+      const data = quoteCatalogQueries[i]?.data as Catalog | undefined;
+      if (data && Array.isArray(data.formats)) m.set(pid, data);
+    });
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    quoteForeignPressIds,
+    quoteCatalogQueries.map((q) => q.dataUpdatedAt).join(","),
+  ]);
+  const pressById = useMemo<Map<string, Manufacturer>>(() => {
+    const m = new Map<string, Manufacturer>();
+    if (invitedPressItself) m.set(invitedPressItself.id, invitedPressItself);
+    for (const p of allPresses ?? []) m.set(p.id, p);
+    return m;
+  }, [allPresses, invitedPressItself]);
+
+  type ResolvedQuote = {
+    press: Manufacturer | null;
+    tier: CatalogTier | null;
+    color: CatalogColor | null;
+    mfgCents: number;
+    snappedQty: number;
+    needsCatalog: boolean;
+  };
+  const resolveQuoteRow = (row: QuoteRow): ResolvedQuote => {
+    const press = pressById.get(row.pressId) ?? null;
+    let catalog: Catalog | undefined;
+    if (
+      invitedPressItself &&
+      row.pressId === invitedPressItself.id &&
+      catalogFormat
+    ) {
+      catalog = { formats: [catalogFormat] };
+    } else {
+      catalog = catalogByPressId.get(row.pressId);
+    }
+    if (!catalog) {
+      return {
+        press,
+        tier: null,
+        color: null,
+        mfgCents: 0,
+        snappedQty: row.qty,
+        needsCatalog: true,
+      };
+    }
+    const fr = catalog.formats.find((f) => f.format === format) ?? null;
+    const tier =
+      fr?.tiers.find((t) => t.name === row.tierName) ?? fr?.tiers[0] ?? null;
+    const color = tier?.colors.find((c) => c.name === row.colorName) ?? null;
+    const snap = tier ? snapCatalogLadder(tier.priceLadder, row.qty) : null;
+    return {
+      press,
+      tier,
+      color,
+      mfgCents: snap?.unitCents ?? 0,
+      snappedQty: snap?.qty ?? row.qty,
+      needsCatalog: false,
+    };
+  };
+  const quoteRowNetCents = (row: QuoteRow): number | null => {
+    if (priceCents === null || !breakdown) return null;
+    const r = resolveQuoteRow(row);
+    if (r.needsCatalog || !r.tier) return null;
+    const costPerUnit =
+      r.mfgCents +
+      breakdown.publishingCents +
+      breakdown.paymentProcessingCents +
+      breakdown.goodtunesCents;
+    const profitPerUnit = priceCents - costPerUnit;
+    let net = profitPerUnit * r.snappedQty;
+    if (signedAddon?.active && attachRatio > 0) {
+      const certCount = Math.max(0, Math.floor(r.snappedQty * attachRatio));
+      const certNet = certNetForCertCount(certCount);
+      if (certNet !== null && certCount > 0) net += certNet * certCount;
+    }
+    return net;
+  };
+  // Hold the latest computation in a ref so artistNetRange (defined
+  // earlier in this component) can read it without a forward
+  // reference. quoteRows + upstream deps trigger artistNetRange's
+  // re-run; the closure read is just a value snapshot.
+  const quoteRowNetCentsRef = useRef<(row: QuoteRow) => number | null>(
+    quoteRowNetCents,
+  );
+  quoteRowNetCentsRef.current = quoteRowNetCents;
+
+  // Task #646 — collapsed-header Artist Net range aggregates per-rung
+  // nets PLUS every operator-scoped quote row's resolved net, so the
+  // scan view reflects the whole comparison set, not just the
+  // picked-press ladder. Reads quoteRowNetCentsRef so the closure
+  // tracks the latest computation without forcing a forward ref.
+  const artistNetRange = useMemo<{ low: number; high: number } | null>(() => {
+    const nets: number[] = perRungArtistNet.map((r) => r.netCents);
+    for (const row of quoteRows) {
+      const n = quoteRowNetCentsRef.current?.(row);
+      if (n !== null && n !== undefined) nets.push(n);
+    }
+    if (nets.length === 0) return null;
+    return { low: Math.min(...nets), high: Math.max(...nets) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    perRungArtistNet,
+    quoteRows,
+    priceCents,
+    breakdown,
+    catalogByPressId,
+    attachRatio,
+    certCostByQty,
+    signedAddon,
+    livePlatformCostCents,
+  ]);
+  const artistNetLabel = artistNetRange
+    ? artistNetRange.low === artistNetRange.high
+      ? signedDollars(artistNetRange.low)
+      : `${signedDollars(artistNetRange.low)} – ${signedDollars(artistNetRange.high)}`
+    : "—";
+
+  // Color distance for "Match across presses". Skips entries with no
+  // swatchHex (catalogs only carry hex today; image-only swatches
+  // can't be compared without sampling).
+  const colorDistance = (a: string, b: string): number => {
+    const pa = parseInt(a.replace(/^#/, ""), 16);
+    const pb = parseInt(b.replace(/^#/, ""), 16);
+    if (!Number.isFinite(pa) || !Number.isFinite(pb)) return Infinity;
+    const dr = ((pa >> 16) & 0xff) - ((pb >> 16) & 0xff);
+    const dg = ((pa >> 8) & 0xff) - ((pb >> 8) & 0xff);
+    const db = (pa & 0xff) - (pb & 0xff);
+    return Math.sqrt(dr * dr + dg * dg + db * db);
+  };
+  // Nearest qty rung; ties round UP per task spec.
+  const nearestRung = (
+    ladder: { qty: number; confirmed?: boolean }[],
+    target: number,
+  ): number => {
+    const valid = ladder
+      .filter((r) => r.confirmed !== false)
+      .map((r) => r.qty)
+      .sort((a, b) => a - b);
+    if (valid.length === 0) return target;
+    let best = valid[0];
+    let bestDist = Math.abs(best - target);
+    for (const q of valid) {
+      const d = Math.abs(q - target);
+      if (d < bestDist || (d === bestDist && q > best)) {
+        best = q;
+        bestDist = d;
+      }
+    }
+    return best;
+  };
+
+  const addQuoteSamePress = () => {
+    if (!pickedTier || !invitedPressItself) return;
+    const sorted = [...pickedTier.priceLadder]
+      .filter((r) => r.confirmed !== false)
+      .sort((a, b) => a.qty - b.qty);
+    const above = sorted.find((r) => r.qty > parsedQty);
+    const next = above ?? sorted[sorted.length - 1];
+    const colorName =
+      pickedTier.colors.find((c) => c.id === pressColorId)?.name ?? null;
+    setQuoteRows((prev) => [
+      ...prev,
+      {
+        id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        pressId: invitedPressItself.id,
+        tierName: pickedTier.name,
+        colorName,
+        qty: next?.qty ?? parsedQty,
+      },
+    ]);
+  };
+  // Task #646 — Add Estimate › Another press uses a two-step
+  // popover: this helper preloads the chosen press's catalog so the
+  // qty list can render. addQuoteOnPressWithQty then materialises
+  // the row using the operator-picked qty.
+  // Load a foreign press's catalog into the query cache
+  // so resolveQuoteRow / the qty popover can see it. Returns the
+  // catalog or null on failure.
+  const ensureForeignCatalog = async (
+    pressId: string,
+  ): Promise<Catalog | null> => {
+    const cached = catalogByPressId.get(pressId);
+    if (cached) return cached;
+    const fromCache = queryClient.getQueryData<Catalog>([
+      "/api/admin/manufacturers",
+      pressId,
+      "catalog",
+    ]);
+    if (fromCache) return fromCache;
+    try {
+      const r = await apiRequest(
+        "GET",
+        `/api/admin/manufacturers/${pressId}/catalog`,
+      );
+      const data = (await r.json()) as Catalog;
+      queryClient.setQueryData(
+        ["/api/admin/manufacturers", pressId, "catalog"],
+        data,
+      );
+      return data;
+    } catch {
+      return null;
+    }
+  };
+  // Add-Estimate flow for a different press: caller picks the qty
+  // from that press's ladder before the row materialises (required
+  // by Task #646 — no silent nearest-rung guesses on add).
+  const addQuoteOnPressWithQty = (
+    pressId: string,
+    catalog: Catalog,
+    qty: number,
+  ) => {
+    const fr = catalog.formats.find((f) => f.format === format);
+    if (!fr || fr.tiers.length === 0) return;
+    const tier =
+      fr.tiers.find((t) => t.name === pickedTier?.name) ?? fr.tiers[0];
+    const color = tier.colors[0] ?? null;
+    const snappedQty = nearestRung(tier.priceLadder, qty);
+    setQuoteRows((prev) => [
+      ...prev,
+      {
+        id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        pressId,
+        tierName: tier.name,
+        colorName: color?.name ?? null,
+        qty: snappedQty,
+      },
+    ]);
+  };
+  const duplicateQuoteRow = (id: string) => {
+    setQuoteRows((prev) => {
+      const idx = prev.findIndex((r) => r.id === id);
+      if (idx < 0) return prev;
+      const orig = prev[idx];
+      const copy: QuoteRow = {
+        ...orig,
+        id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        matched: false,
+      };
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      return next;
+    });
+  };
+  const deleteQuoteRow = (id: string) => {
+    setQuoteRows((prev) => prev.filter((r) => r.id !== id));
+  };
+  const updateQuoteRowQty = (id: string, qty: number) => {
+    setQuoteRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, qty, matched: false } : r)),
+    );
+  };
+  // Task #646 — editing any field other than qty (press, color) also
+  // clears the Matched marker so an operator-modified row stops
+  // pretending it came from the auto-matcher.
+  const updateQuoteRowColor = (id: string, colorName: string | null) => {
+    setQuoteRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, colorName, matched: false } : r)),
+    );
+  };
+  const updateQuoteRowPress = async (id: string, pressId: string) => {
+    const catalog =
+      invitedPressItself && pressId === invitedPressItself.id
+        ? catalogFormat
+          ? ({ formats: [catalogFormat] } as Catalog)
+          : null
+        : await ensureForeignCatalog(pressId);
+    setQuoteRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r;
+        if (!catalog) return { ...r, pressId, matched: false };
+        const fr = catalog.formats.find((f) => f.format === format);
+        if (!fr || fr.tiers.length === 0) {
+          return { ...r, pressId, matched: false };
+        }
+        const tier =
+          fr.tiers.find((t) => t.name === r.tierName) ?? fr.tiers[0];
+        const color =
+          tier.colors.find((c) => c.name === r.colorName) ??
+          tier.colors[0] ??
+          null;
+        const snappedQty = nearestRung(tier.priceLadder, r.qty);
+        return {
+          ...r,
+          pressId,
+          tierName: tier.name,
+          colorName: color?.name ?? null,
+          qty: snappedQty,
+          matched: false,
+        };
+      }),
+    );
+  };
+
+  // Idempotent — appends one row per qualified press that doesn't
+  // already have a quote on this card. Closest color = same tier
+  // name + nearest hex; nearest qty rung with ties rounding up.
+  const matchAcrossPresses = async () => {
+    if (!pickedTier || !invitedPressItself) return;
+    const srcColor =
+      pickedTier.colors.find((c) => c.id === pressColorId) ?? null;
+    const existing = new Set<string>([
+      invitedPressItself.id,
+      ...quoteRows.map((r) => r.pressId),
+    ]);
+    const targets = qualifiedPresses.filter((p) => !existing.has(p.id));
+    if (targets.length === 0) return;
+
+    // Fetch any missing catalogs (sequential is fine — N ≤ a few presses).
+    for (const p of targets) {
+      if (!catalogByPressId.has(p.id)) {
+        try {
+          const r = await apiRequest(
+            "GET",
+            `/api/admin/manufacturers/${p.id}/catalog`,
+          );
+          const data = (await r.json()) as Catalog;
+          queryClient.setQueryData(
+            ["/api/admin/manufacturers", p.id, "catalog"],
+            data,
+          );
+        } catch {
+          /* leave unloaded — surfaces as a couldn't-match note below */
+        }
+      }
+    }
+
+    const notes: { pressName: string; reason: string }[] = [];
+    const additions: QuoteRow[] = [];
+    for (const press of targets) {
+      const catalog = queryClient.getQueryData<Catalog>([
+        "/api/admin/manufacturers",
+        press.id,
+        "catalog",
+      ]);
+      if (!catalog) {
+        notes.push({ pressName: press.name, reason: "couldn't load catalog" });
+        continue;
+      }
+      const fr = catalog.formats.find((f) => f.format === format);
+      if (!fr) {
+        notes.push({
+          pressName: press.name,
+          reason: `doesn't press ${ALBUM_FORMAT_LABEL[format]}`,
+        });
+        continue;
+      }
+      const matchedTier = fr.tiers.find((t) => t.name === pickedTier.name);
+      if (!matchedTier) {
+        notes.push({
+          pressName: press.name,
+          reason: `no "${pickedTier.name}" tier — quote manually if you want one`,
+        });
+        continue;
+      }
+      // Task #646 — if the source quote has a color, the matched
+      // row must also have one. Skip presses where the same tier
+      // has no colors OR no swatchHex-matchable color, with a note
+      // so the operator knows why the row didn't appear.
+      let pickColor: CatalogColor | null = null;
+      if (srcColor) {
+        if (matchedTier.colors.length === 0) {
+          notes.push({
+            pressName: press.name,
+            reason: `no colors on "${matchedTier.name}" tier`,
+          });
+          continue;
+        }
+        if (srcColor.swatchHex) {
+          let best = Infinity;
+          for (const c of matchedTier.colors) {
+            if (!c.swatchHex) continue;
+            const d = colorDistance(srcColor.swatchHex, c.swatchHex);
+            if (d < best) {
+              best = d;
+              pickColor = c;
+            }
+          }
+          if (!pickColor) {
+            notes.push({
+              pressName: press.name,
+              reason: `no swatch-matchable color for "${srcColor.name}"`,
+            });
+            continue;
+          }
+        } else {
+          // Source color has no swatchHex — fall back to first
+          // catalog color so we still produce a row, but only when
+          // the target tier actually has one (handled above).
+          pickColor = matchedTier.colors[0] ?? null;
+        }
+      }
+      const rung = nearestRung(matchedTier.priceLadder, parsedQty);
+      additions.push({
+        id: `q_${Date.now()}_${press.id}_${Math.random().toString(36).slice(2, 5)}`,
+        pressId: press.id,
+        tierName: matchedTier.name,
+        colorName: pickColor?.name ?? null,
+        qty: rung,
+        matched: true,
+      });
+    }
+    if (additions.length > 0) setQuoteRows((prev) => [...prev, ...additions]);
+    setMatchNotes(notes);
+  };
+
   const [pressSwitcherOpen, setPressSwitcherOpen] = useState(false);
+  // Task #646 — two-step "Add Estimate › Another press" popover:
+  // pick the press, then pick the qty from that press's ladder
+  // before the row materialises. Null means we're back on the press
+  // list; a string means we're showing that press's qty options.
+  const [addEstimateOpen, setAddEstimateOpen] = useState(false);
+  const [pendingPressId, setPendingPressId] = useState<string | null>(null);
+  const [pendingPressCatalog, setPendingPressCatalog] = useState<Catalog | null>(
+    null,
+  );
+  const [pendingPressLoading, setPendingPressLoading] = useState(false);
+  const beginAddOnPress = async (pressId: string) => {
+    setPendingPressId(pressId);
+    setPendingPressCatalog(null);
+    setPendingPressLoading(true);
+    const c = await ensureForeignCatalog(pressId);
+    setPendingPressCatalog(c);
+    setPendingPressLoading(false);
+  };
+  const resetAddEstimatePopover = () => {
+    setPendingPressId(null);
+    setPendingPressCatalog(null);
+    setPendingPressLoading(false);
+  };
 
   return (
     <div
@@ -3204,6 +3753,7 @@ function SkuRow({
       )}
 
       {expanded && (isVinyl ? (
+      <>
       <div
         className={isLocked ? "pointer-events-none opacity-60" : "contents"}
         aria-disabled={isLocked || undefined}
@@ -3358,12 +3908,62 @@ function SkuRow({
         const formatOptions = Array.from(new Set<AlbumFormat>([format, ...offeredFormats]));
         return (
       <div
-        className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5 items-start"
-        data-testid={`vinyl-card-${format}`}
-      >
-        {/* LEFT */}
-        <div className="space-y-3">
-          {/* Format dropdown — pivot to any other offered format.
+          className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5 items-start"
+          data-testid={`vinyl-card-${format}`}
+        >
+          {/* Task #646 — PREVIEW column (right on desktop via sm:order-2,
+              top on mobile). Just the VinylPreview hero with the hover-
+              to-edit cover affordance from Task #393. Every input now
+              lives in the sibling CONTROLS column. */}
+          <div className="sm:order-2">
+            {/* Preview hero — Task #393: pencil now lives INSIDE the
+              jacket via VinylPreview's `jacketOverlay` slot so it only
+              hovers over the album art, not the vinyl disc peeking out
+              to the right. Same fade-on-hover the rest of admin uses
+              for cover edits. */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={onEditArtwork}
+              disabled={!onEditArtwork}
+              className="group block w-full rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)] disabled:cursor-default"
+              aria-label="Edit album artwork"
+              data-testid={`button-edit-artwork-${format}`}
+            >
+              <div className="flex items-center justify-center">
+                <VinylPreview
+                  artworkUrl={artworkUrl}
+                  color={previewColor}
+                  jacketUpgrade={jacketUpgrade}
+                  size="xl"
+                  jacketOverlay={onEditArtwork ? (
+                    <>
+                      <span
+                        className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 transition-colors pointer-events-none"
+                        aria-hidden
+                      />
+                      <span
+                        className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity pointer-events-none"
+                        aria-hidden
+                      >
+                        <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
+                          <Pencil className="w-4 h-4" />
+                        </span>
+                      </span>
+                    </>
+                  ) : null}
+                />
+              </div>
+            </button>
+          </div>
+          </div>
+
+          {/* Task #646 — CONTROLS column (left on desktop via sm:order-1,
+              below preview on mobile). Order: Format → Color →
+              Anticipated tracks → Retail Price → Select Qty → Jacket →
+              Profit (collapsible breakdown) → Total. */}
+          <div className="sm:order-1 space-y-4">
+            {/* Format dropdown — pivot to any other offered format.
               Task #446 — 7" is pre-selected from the "+ Add physical
               good" menu; we render a read-only label so the operator
               doesn't see a second size pick. To switch off 7", delete
@@ -3405,48 +4005,7 @@ function SkuRow({
             )}
           </div>
 
-          {/* Preview hero — Task #393: pencil now lives INSIDE the
-              jacket via VinylPreview's `jacketOverlay` slot so it only
-              hovers over the album art, not the vinyl disc peeking out
-              to the right. Same fade-on-hover the rest of admin uses
-              for cover edits. */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={onEditArtwork}
-              disabled={!onEditArtwork}
-              className="group block w-full rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)] disabled:cursor-default"
-              aria-label="Edit album artwork"
-              data-testid={`button-edit-artwork-${format}`}
-            >
-              <div className="flex items-center justify-center">
-                <VinylPreview
-                  artworkUrl={artworkUrl}
-                  color={previewColor}
-                  jacketUpgrade={jacketUpgrade}
-                  size="xl"
-                  jacketOverlay={onEditArtwork ? (
-                    <>
-                      <span
-                        className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 transition-colors pointer-events-none"
-                        aria-hidden
-                      />
-                      <span
-                        className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity pointer-events-none"
-                        aria-hidden
-                      >
-                        <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
-                          <Pencil className="w-4 h-4" />
-                        </span>
-                      </span>
-                    </>
-                  ) : null}
-                />
-              </div>
-            </button>
-          </div>
-
-          {/* Color section + swatch row + selected color name */}
+            {/* Color section + swatch row + selected color name */}
           {usingCatalog && pickedTier ? (
             <div className="space-y-2">
               <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
@@ -3602,63 +4161,22 @@ function SkuRow({
             </div>
           )}
 
-          {/* Jacket — Select for 7"; de-emphasized tag for 12"LP */}
-          {jacketDropdownAllowed ? (
-            <div className="space-y-1">
-              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
-                Jacket
-              </div>
-              <Select
-                value={jacketUpgrade}
-                onValueChange={(v) => setJacketUpgrade(v as JacketUpgrade)}
-              >
-                <SelectTrigger
-                  className="h-8 w-full text-sm"
-                  data-testid={`select-jacket-${format}`}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white text-slate-900 border-slate-200">
-                  {(Object.keys(JACKET_UPGRADE_LABEL) as JacketUpgrade[]).map((j) => (
-                    <SelectItem
-                      key={j}
-                      value={j}
-                      data-testid={`option-jacket-${format}-${j}`}
-                    >
-                      {JACKET_UPGRADE_LABEL[j]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
-                Jacket
-              </div>
-              <div
-                className="h-8 inline-flex items-center text-sm font-medium text-slate-700"
-                data-testid={`text-jacket-standard-${format}`}
-              >
-                {sevenInch
-                  ? "Standard Full-Color Jacket"
-                  : "Standard jacket — every 12\u201D LP ships in the standard jacket."}
-              </div>
-              {sevenInchHiddenJacket && existing?.jacketUpgrade && (
-                <div
-                  className="text-xs text-slate-500"
-                  data-testid={`text-jacket-back-compat-${format}`}
-                >
-                  Previously: {JACKET_UPGRADE_LABEL[existing.jacketUpgrade as JacketUpgrade]} — saved as Standard jacket on next save.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+            {/* Task #429 — Anticipated tracks. Drives the Publishing
+              line of the cost breakdown before any masters have been
+              uploaded. Once songs are uploaded the field shows the
+              live count and is disabled. Saves on blur via the
+              album-level PUT (debounced by the operator's typing). */}
+          <AnticipatedTracksInput
+            format={format}
+            liveTrackCount={liveTrackCount ?? 0}
+            anticipatedTrackCount={anticipatedTrackCount ?? null}
+            persistedAnticipatedTrackCount={persistedAnticipatedTrackCount ?? null}
+            lockedValue={sevenInch ? SEVEN_INCH_TRACK_COUNT : null}
+            onLocalChange={onAnticipatedTrackLocalChange}
+            onChange={onAnticipatedTrackCountChange}
+          />
 
-        {/* RIGHT */}
-        <div className="space-y-4">
-          {/* Retail Price */}
+            {/* Retail Price */}
           <div>
             <div className="flex items-center gap-1.5 mb-1">
               <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
@@ -3695,7 +4213,7 @@ function SkuRow({
             </div>
           </div>
 
-          {/* Select Qty */}
+            {/* Select Qty */}
           <div>
             <div className="flex items-center gap-1.5 mb-1">
               <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
@@ -3762,22 +4280,60 @@ function SkuRow({
             )}
           </div>
 
-          {/* Task #429 — Anticipated tracks. Drives the Publishing
-              line of the cost breakdown before any masters have been
-              uploaded. Once songs are uploaded the field shows the
-              live count and is disabled. Saves on blur via the
-              album-level PUT (debounced by the operator's typing). */}
-          <AnticipatedTracksInput
-            format={format}
-            liveTrackCount={liveTrackCount ?? 0}
-            anticipatedTrackCount={anticipatedTrackCount ?? null}
-            persistedAnticipatedTrackCount={persistedAnticipatedTrackCount ?? null}
-            lockedValue={sevenInch ? SEVEN_INCH_TRACK_COUNT : null}
-            onLocalChange={onAnticipatedTrackLocalChange}
-            onChange={onAnticipatedTrackCountChange}
-          />
+            {/* Jacket — Select for 7"; de-emphasized tag for 12"LP */}
+          {jacketDropdownAllowed ? (
+            <div className="space-y-1">
+              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                Jacket
+              </div>
+              <Select
+                value={jacketUpgrade}
+                onValueChange={(v) => setJacketUpgrade(v as JacketUpgrade)}
+              >
+                <SelectTrigger
+                  className="h-8 w-full text-sm"
+                  data-testid={`select-jacket-${format}`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white text-slate-900 border-slate-200">
+                  {(Object.keys(JACKET_UPGRADE_LABEL) as JacketUpgrade[]).map((j) => (
+                    <SelectItem
+                      key={j}
+                      value={j}
+                      data-testid={`option-jacket-${format}-${j}`}
+                    >
+                      {JACKET_UPGRADE_LABEL[j]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                Jacket
+              </div>
+              <div
+                className="h-8 inline-flex items-center text-sm font-medium text-slate-700"
+                data-testid={`text-jacket-standard-${format}`}
+              >
+                {sevenInch
+                  ? "Standard Full-Color Jacket"
+                  : "Standard jacket — every 12\u201D LP ships in the standard jacket."}
+              </div>
+              {sevenInchHiddenJacket && existing?.jacketUpgrade && (
+                <div
+                  className="text-xs text-slate-500"
+                  data-testid={`text-jacket-back-compat-${format}`}
+                >
+                  Previously: {JACKET_UPGRADE_LABEL[existing.jacketUpgrade as JacketUpgrade]} — saved as Standard jacket on next save.
+                </div>
+              )}
+            </div>
+          )}
 
-          {/* Profit — collapsible inline breakdown */}
+            {/* Profit — collapsible inline breakdown */}
           <div>
             <button
               type="button"
@@ -3879,7 +4435,7 @@ function SkuRow({
             )}
           </div>
 
-          {/* Total */}
+            {/* Total */}
           <div className="pt-2 border-t border-slate-100">
             <div className="flex items-center justify-between gap-3">
               <span className="inline-flex items-center gap-1.5">
@@ -3911,10 +4467,505 @@ function SkuRow({
               </span>
             </div>
           </div>
+          </div>
         </div>
-      </div>
         );
       })()}
+
+      {/* Task #646 — close the partner-edit_metadata locked wrapper
+          here so the operator-scoped Quote Rows section below stays
+          interactive even when the SKU is locked
+          (vendor-pricing-bypasses-post-sale-lock memory: operational
+          routing edits stay live; only fan-facing metadata respects
+          the lock). The OPTIONAL upsells below get their own lock
+          wrapper. */}
+      </div>
+      {(() => {
+        if (!isVinyl || !pickedTier || !invitedPressItself) return null;
+        const catalogPicked = usingCatalog
+          ? pickedTier.colors.find((c) => c.id === pressColorId) ?? null
+          : null;
+        const primaryColorName = catalogPicked?.name ?? null;
+        const otherQualified = qualifiedPresses.filter(
+          (p) => p.id !== invitedPressItself.id,
+        );
+        const renderQuote = (params: {
+          key: string;
+          press: Manufacturer | null;
+          tierName: string;
+          colorName: string | null;
+          qty: number;
+          mfgCents: number;
+          isPinned?: boolean;
+          matched?: boolean;
+          needsCatalog?: boolean;
+          onChangeQty?: (q: number) => void;
+          onChangePress?: (pressId: string) => void;
+          onChangeColor?: (colorName: string | null) => void;
+          onDuplicate?: () => void;
+          onDelete?: () => void;
+          qtyOptions?: number[];
+          pressOptions?: Manufacturer[];
+          colorOptions?: CatalogColor[];
+        }) => {
+          const pubC = breakdown?.publishingCents ?? 0;
+          const ppC = breakdown?.paymentProcessingCents ?? 0;
+          const gtC = breakdown?.goodtunesCents ?? 0;
+          const costPerUnit = params.mfgCents + pubC + ppC + gtC;
+          const profitPerUnit = (priceCents ?? 0) - costPerUnit;
+          const total = profitPerUnit * params.qty;
+          return (
+            <div
+              key={params.key}
+              className={[
+                "rounded-md border p-2.5 bg-white",
+                params.isPinned
+                  ? "border-[color:var(--brand-blue)]/40 bg-[color:var(--brand-blue)]/[0.03]"
+                  : "border-slate-200",
+              ].join(" ")}
+              data-testid={`row-quote-${format}-${params.key}`}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                {params.press?.logoUrl ? (
+                  <img
+                    src={params.press.logoUrl}
+                    alt=""
+                    className="w-5 h-5 object-contain flex-shrink-0"
+                  />
+                ) : (
+                  <span
+                    className="w-5 h-5 rounded bg-slate-200 flex-shrink-0"
+                    aria-hidden
+                  />
+                )}
+                <div className="flex-1 min-w-0 text-xs flex items-center gap-1.5 flex-wrap">
+                  {params.pressOptions &&
+                  params.pressOptions.length > 1 &&
+                  params.onChangePress ? (
+                    <Select
+                      value={params.press?.id ?? ""}
+                      onValueChange={(v) => params.onChangePress?.(v)}
+                    >
+                      <SelectTrigger
+                        className="h-6 w-32 text-xs font-medium"
+                        data-testid={`select-quote-press-${format}-${params.key}`}
+                      >
+                        <SelectValue>{params.press?.name ?? "—"}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="bg-white text-slate-900 border-slate-200">
+                        {params.pressOptions.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span className="font-medium text-slate-900">
+                      {params.press?.name ?? "—"}
+                    </span>
+                  )}
+                  <span className="text-slate-500">·</span>
+                  <span className="text-slate-500">{params.tierName}</span>
+                  <span className="text-slate-500">·</span>
+                  {params.colorOptions &&
+                  params.colorOptions.length > 1 &&
+                  params.onChangeColor ? (
+                    <Select
+                      value={params.colorName ?? ""}
+                      onValueChange={(v) =>
+                        params.onChangeColor?.(v === "" ? null : v)
+                      }
+                    >
+                      <SelectTrigger
+                        className="h-6 w-28 text-xs"
+                        data-testid={`select-quote-color-${format}-${params.key}`}
+                      >
+                        <SelectValue>{params.colorName ?? "—"}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="bg-white text-slate-900 border-slate-200">
+                        {params.colorOptions.map((c) => (
+                          <SelectItem key={c.id} value={c.name}>
+                            <span className="inline-flex items-center gap-1.5">
+                              {c.swatchHex && (
+                                <span
+                                  className="w-3 h-3 rounded-full border border-slate-200"
+                                  style={{ backgroundColor: c.swatchHex }}
+                                  aria-hidden
+                                />
+                              )}
+                              {c.name}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span className="text-slate-500">
+                      {params.colorName ?? "—"}
+                    </span>
+                  )}
+                  {params.qtyOptions &&
+                  params.qtyOptions.length > 0 &&
+                  params.onChangeQty ? (
+                    <>
+                      <span className="text-slate-500">·</span>
+                      <Select
+                        value={String(params.qty)}
+                        onValueChange={(v) =>
+                          params.onChangeQty?.(Number.parseInt(v, 10))
+                        }
+                      >
+                        <SelectTrigger
+                          className="h-6 w-24 text-xs"
+                          data-testid={`select-quote-qty-${format}-${params.key}`}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white text-slate-900 border-slate-200">
+                          {params.qtyOptions.map((q) => (
+                            <SelectItem key={q} value={String(q)}>
+                              {q.toLocaleString()}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-slate-500">·</span>
+                      <span className="text-slate-500">
+                        {params.qty.toLocaleString()} pcs
+                      </span>
+                    </>
+                  )}
+                </div>
+                {params.isPinned && (
+                  <span
+                    className="text-xs uppercase tracking-wider font-semibold text-[color:var(--brand-blue)]"
+                    data-testid={`badge-quote-primary-${format}`}
+                  >
+                    Quoting
+                  </span>
+                )}
+                {params.matched && (
+                  <span
+                    className="text-xs uppercase tracking-wider font-semibold text-amber-600"
+                    data-testid={`badge-quote-matched-${format}-${params.key}`}
+                  >
+                    Matched
+                  </span>
+                )}
+                {params.onDuplicate && (
+                  <button
+                    type="button"
+                    onClick={params.onDuplicate}
+                    className="w-6 h-6 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center"
+                    title="Duplicate quote"
+                    data-testid={`button-quote-duplicate-${format}-${params.key}`}
+                  >
+                    <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span className="sr-only">Duplicate quote</span>
+                  </button>
+                )}
+                {params.onDelete && (
+                  <button
+                    type="button"
+                    onClick={params.onDelete}
+                    className="w-6 h-6 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center"
+                    title="Remove quote"
+                    data-testid={`button-quote-delete-${format}-${params.key}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span className="sr-only">Remove quote</span>
+                  </button>
+                )}
+              </div>
+              {params.needsCatalog || !breakdown ? (
+                <div className="text-xs text-slate-400 px-0.5">
+                  Loading catalog…
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs tabular-nums">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Manufacturing</span>
+                    <span>{dollars(params.mfgCents)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Publishing</span>
+                    <span>{dollars(pubC)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Payment proc.</span>
+                    <span>{dollars(ppC)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">GoodTunes</span>
+                    <span>{dollars(gtC)}</span>
+                  </div>
+                  <div className="flex justify-between col-span-2 pt-1 border-t border-slate-100 mt-1 font-medium text-slate-900">
+                    <span>Cost / unit</span>
+                    <span>{dollars(costPerUnit)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">
+                      Artist Net / unit
+                    </span>
+                    <span
+                      className={
+                        profitPerUnit < 0
+                          ? "text-[color:var(--brand-pink)]"
+                          : ""
+                      }
+                    >
+                      {profitPerUnit < 0
+                        ? `-${dollars(Math.abs(profitPerUnit))}`
+                        : dollars(profitPerUnit)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-slate-900">
+                    <span>Total</span>
+                    <span
+                      className={
+                        total < 0 ? "text-[color:var(--brand-pink)]" : ""
+                      }
+                    >
+                      {total < 0
+                        ? `-${dollars(Math.abs(total))}`
+                        : dollars(total)}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        };
+        return (
+          <div className="mt-4" data-testid={`quotes-section-${format}`}>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Quotes
+                </span>
+                <span className="text-xs text-slate-400">
+                  Operator scratchpad — not shown to fans
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={matchAcrossPresses}
+                  disabled={otherQualified.length === 0}
+                  className="h-7 px-2.5 rounded-md text-xs font-medium border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Quote this same color + qty on every qualified press"
+                  data-testid={`button-match-presses-${format}`}
+                >
+                  Match across presses
+                </button>
+                <Popover
+                  open={addEstimateOpen}
+                  onOpenChange={(o) => {
+                    setAddEstimateOpen(o);
+                    if (!o) resetAddEstimatePopover();
+                  }}
+                >
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="h-7 px-2.5 rounded-md text-xs font-medium border border-slate-200 text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
+                      data-testid={`button-add-estimate-${format}`}
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add Estimate
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    className="w-64 p-2 bg-white border-slate-200"
+                  >
+                    {pendingPressId === null ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            addQuoteSamePress();
+                            setAddEstimateOpen(false);
+                          }}
+                          className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-slate-50"
+                          data-testid={`button-add-estimate-same-press-${format}`}
+                        >
+                          Another quantity on this press
+                        </button>
+                        {otherQualified.length > 0 && (
+                          <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold px-2 pt-2 pb-1">
+                            Another press
+                          </div>
+                        )}
+                        {otherQualified.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => beginAddOnPress(p.id)}
+                            className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-slate-50 flex items-center gap-2"
+                            data-testid={`button-add-estimate-press-${format}-${p.id}`}
+                          >
+                            {p.logoUrl ? (
+                              <img
+                                src={p.logoUrl}
+                                alt=""
+                                className="w-4 h-4 object-contain"
+                              />
+                            ) : (
+                              <span
+                                className="w-4 h-4 rounded bg-slate-200"
+                                aria-hidden
+                              />
+                            )}
+                            <span className="flex-1 truncate">{p.name}</span>
+                          </button>
+                        ))}
+                      </>
+                    ) : (
+                      (() => {
+                        const press = pressById.get(pendingPressId);
+                        const fr = pendingPressCatalog?.formats.find(
+                          (f) => f.format === format,
+                        );
+                        const tier = fr
+                          ? fr.tiers.find(
+                              (t) => t.name === pickedTier?.name,
+                            ) ?? fr.tiers[0]
+                          : null;
+                        const rungs = tier
+                          ? [...tier.priceLadder]
+                              .filter((r) => r.confirmed !== false)
+                              .map((r) => r.qty)
+                              .sort((a, b) => a - b)
+                          : [];
+                        return (
+                          <>
+                            <div className="flex items-center gap-2 px-2 pb-1 pt-0.5">
+                              <button
+                                type="button"
+                                onClick={resetAddEstimatePopover}
+                                className="text-xs text-slate-400 hover:text-slate-700"
+                                data-testid={`button-add-estimate-back-${format}`}
+                              >
+                                ← Back
+                              </button>
+                              <span className="text-xs font-medium text-slate-900 truncate">
+                                {press?.name ?? "Press"}
+                              </span>
+                            </div>
+                            <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold px-2 pt-1 pb-1">
+                              Pick a quantity
+                            </div>
+                            {pendingPressLoading ? (
+                              <div className="text-xs text-slate-400 px-2 py-1.5">
+                                Loading catalog…
+                              </div>
+                            ) : !pendingPressCatalog || !tier ? (
+                              <div className="text-xs text-slate-400 px-2 py-1.5">
+                                {`No ${ALBUM_FORMAT_LABEL[format]} tier on this press.`}
+                              </div>
+                            ) : (
+                              <div className="max-h-48 overflow-auto">
+                                {rungs.map((q) => (
+                                  <button
+                                    key={q}
+                                    type="button"
+                                    onClick={() => {
+                                      addQuoteOnPressWithQty(
+                                        pendingPressId,
+                                        pendingPressCatalog,
+                                        q,
+                                      );
+                                      setAddEstimateOpen(false);
+                                      resetAddEstimatePopover();
+                                    }}
+                                    className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-slate-50 tabular-nums"
+                                    data-testid={`button-add-estimate-qty-${format}-${pendingPressId}-${q}`}
+                                  >
+                                    {q.toLocaleString()} pcs
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()
+                    )}
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {renderQuote({
+                key: "primary",
+                press: invitedPressItself,
+                tierName: pickedTier.name,
+                colorName: primaryColorName,
+                qty: parsedQty,
+                mfgCents: breakdown?.manufacturingCents ?? 0,
+                isPinned: true,
+              })}
+              {quoteRows.map((row) => {
+                const r = resolveQuoteRow(row);
+                const qtyOptions = r.tier
+                  ? r.tier.priceLadder
+                      .filter((p) => p.confirmed !== false)
+                      .map((p) => p.qty)
+                      .sort((a, b) => a - b)
+                  : [];
+                return renderQuote({
+                  key: row.id,
+                  press: r.press,
+                  tierName: r.tier?.name ?? row.tierName,
+                  colorName: r.color?.name ?? row.colorName,
+                  qty: r.snappedQty,
+                  mfgCents: r.mfgCents,
+                  matched: !!row.matched,
+                  needsCatalog: r.needsCatalog,
+                  qtyOptions,
+                  pressOptions: qualifiedPresses,
+                  colorOptions: r.tier?.colors ?? [],
+                  onChangeQty: (q) => updateQuoteRowQty(row.id, q),
+                  onChangePress: (pid) => {
+                    void updateQuoteRowPress(row.id, pid);
+                  },
+                  onChangeColor: (name) => updateQuoteRowColor(row.id, name),
+                  onDuplicate: () => duplicateQuoteRow(row.id),
+                  onDelete: () => deleteQuoteRow(row.id),
+                });
+              })}
+            </div>
+            {matchNotes.length > 0 && (
+              <div
+                className="mt-2 text-xs text-slate-500 space-y-0.5"
+                data-testid={`text-match-notes-${format}`}
+              >
+                <div className="font-medium text-slate-600">
+                  Couldn't match:
+                </div>
+                {matchNotes.map((n, i) => (
+                  <div key={i}>
+                    · {n.pressName} — {n.reason}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Task #646 — re-open the locked wrapper so the OPTIONAL
+          upsells below (GoodDeed / Booklet pills) keep the same
+          partner-lock behavior they had before the Quote-Rows split.
+          The existing closing </div> downstream balances this open. */}
+      <div
+        className={isLocked ? "pointer-events-none opacity-60" : "contents"}
+        aria-disabled={isLocked || undefined}
+      >
       {/* Task #393 — OPTIONAL section: GoodDeed certificate pill.
           Full-width, collapsible, mirrors the AddonForm save shape but
           adds a percentage-of-vinyl-qty picker, inline cert preview,
@@ -3957,6 +5008,7 @@ function SkuRow({
         </div>
       ) : null}
       </div>
+      </>
       ) : (
       <>
       <div className={["grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4"].join(" ")}>
