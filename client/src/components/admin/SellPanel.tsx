@@ -298,6 +298,32 @@ export function SellPanel({
   const { data: invitedPress } = useQuery<InvitedPressResponse>({
     queryKey: ["/api/admin/albums", albumId, "invited-press"],
   });
+  // Task #635 — full press list powers the collapsed-header press-
+  // switcher popover. Display-only: shows which presses are qualified
+  // to quote this format (and marks the currently-invited one). Swap
+  // semantics route through the album-level invited-press flow and
+  // aren't wired here, so this list informs without re-binding.
+  const { data: allPresses } = useQuery<Manufacturer[]>({
+    queryKey: ["/api/manufacturers"],
+  });
+  // Task #635 — `(pressId, format)` index used by the collapsed-
+  // header press-switcher popover to filter to presses that have
+  // actually opted into this format (not the full vendor list).
+  const { data: pressFormatRows } = useQuery<{ pressId: string; format: string }[]>({
+    queryKey: ["/api/admin/press-formats"],
+  });
+  const pressFormatsByPress = useMemo<Map<string, Set<string>>>(() => {
+    const m = new Map<string, Set<string>>();
+    for (const r of pressFormatRows ?? []) {
+      let s = m.get(r.pressId);
+      if (!s) {
+        s = new Set();
+        m.set(r.pressId, s);
+      }
+      s.add(r.format);
+    }
+    return m;
+  }, [pressFormatRows]);
   // Task #397 — pull the primary artist's photoUrl so the GoodDeed
   // cert preview tile shows the same round artist headshot fans get
   // on the printed certificate. Disabled when the album has no
@@ -426,6 +452,46 @@ export function SellPanel({
     skuDisclosure.open(`draft-${albumFormat}`);
   }, [data, physicalFormat, sellMode, invitedPress, draftFormats.length, skuDisclosure]);
 
+  // Task #635 — localStorage collapse memory per album+press. On
+  // first mount (per album+invited-press), restore whichever row the
+  // operator last had open. Default collapsed for albums that are
+  // already configured (saved tier + ≥1 saved qty) so a page with N
+  // formats doesn't land as a wall of expanded cards. Draft rows
+  // still auto-open from their own mount effect — we only restore
+  // configured-row state here.
+  const collapseStorageKey = useMemo(() => {
+    const pressKey = invitedPress?.press?.id ?? "no-press";
+    return `gt:sellpanel:open:${albumId}:${pressKey}`;
+  }, [albumId, invitedPress]);
+  const collapseRestoredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (collapseRestoredRef.current === collapseStorageKey) return;
+    if (!data) return;
+    collapseRestoredRef.current = collapseStorageKey;
+    try {
+      const saved = window.localStorage.getItem(collapseStorageKey);
+      if (!saved) return;
+      const configured = new Set(data.skus.map((s) => s.format as string));
+      if (configured.has(saved)) {
+        skuDisclosure.open(saved);
+      }
+    } catch {
+      // localStorage can throw under private-mode / SSR; ignore.
+    }
+  }, [collapseStorageKey, data, skuDisclosure]);
+  useEffect(() => {
+    try {
+      const open = skuDisclosure.openId;
+      if (open && !open.startsWith("draft-")) {
+        window.localStorage.setItem(collapseStorageKey, open);
+      } else if (!open) {
+        window.localStorage.removeItem(collapseStorageKey);
+      }
+    } catch {
+      // ignore
+    }
+  }, [collapseStorageKey, skuDisclosure.openId]);
+
   // Task #218 — when this album is invited by a press that has built
   // its catalog, restrict the Add-Physical menu to the formats that
   // catalog offers. Free / non-invited albums keep the full
@@ -510,7 +576,7 @@ export function SellPanel({
               const isOpen = skuDisclosure.isOpen(firstDisclosureKey);
               const selector = isOpen
                 ? `[data-testid="input-price-${firstFormat}"]`
-                : `[data-testid="button-row-summary-${firstFormat}"]`;
+                : `[data-testid="button-row-collapsed-${firstFormat}"]`;
               const el = document.querySelector(selector) as HTMLElement | null;
               if (el) {
                 try { el.focus({ preventScroll: true }); } catch { el.focus(); }
@@ -818,6 +884,9 @@ export function SellPanel({
                           catalogByFormat={catalogByFormat}
                           configuredFormats={configuredFormatSet}
                           onAfterBump={handleAfterBump}
+                          allPresses={allPresses ?? null}
+                          invitedPressItself={invitedPress?.press ?? null}
+                          pressFormatsByPress={pressFormatsByPress}
                         />
                       );
                     })}
@@ -875,6 +944,9 @@ export function SellPanel({
                         catalogByFormat={catalogByFormat}
                         configuredFormats={configuredFormatSet}
                         onAfterBump={handleAfterBump}
+                        allPresses={allPresses ?? null}
+                        invitedPressItself={invitedPress?.press ?? null}
+                        pressFormatsByPress={pressFormatsByPress}
                       />
                     ))}
                   </>
@@ -1578,6 +1650,9 @@ function SkuRow({
   catalogByFormat,
   configuredFormats,
   onAfterBump,
+  allPresses,
+  invitedPressItself,
+  pressFormatsByPress,
 }: {
   format: AlbumFormat;
   existing: AlbumSku | null;
@@ -1690,6 +1765,15 @@ function SkuRow({
   // (visual + behavioural) so the album lock and per-row lock can't
   // disagree.
   albumQuoteLockedAt?: string | null;
+  // Task #635 — full press list + the album's currently-invited
+  // press, threaded in for the collapsed-header press-switcher
+  // popover. Display-only: shows other presses qualified to quote
+  // this format with a "Currently quoting" pill on the invited one.
+  allPresses?: Manufacturer[] | null;
+  invitedPressItself?: Manufacturer | null;
+  // Task #635 — `(pressId → Set<format>)` index so the popover can
+  // narrow `allPresses` down to those actually offering this format.
+  pressFormatsByPress?: Map<string, Set<string>>;
 }) {
   const isDraft = existing === null;
   const isVinyl = isVinylFormat(format);
@@ -2509,6 +2593,118 @@ function SkuRow({
     return bits.join(" · ");
   })();
 
+  // Task #635 — per-rung Artist Net across the picked tier's price
+  // ladder. Picks `profitCents` (= price − manufacturing − publishing
+  // − payment processing − goodtunes) per ladder rung and multiplies
+  // by the rung's qty. Folds in a proportional slice of the GoodDeed
+  // cert's net per-cert when the signed_cert addon is live, so the
+  // header range reflects what the artist would actually take home at
+  // that pressing volume. Returns `null` for non-vinyl, no-catalog,
+  // or pre-price rows so the header can degrade gracefully.
+  const certNetPerUnitCents = useMemo<number | null>(() => {
+    if (!signedAddon?.active) return null;
+    if (livePlatformCostCents == null) return null;
+    const certPrice = signedAddon.priceCents ?? 0;
+    if (certPrice <= 0) return null;
+    const cc = Math.round(certPrice * 0.029) + 30;
+    return certPrice - livePlatformCostCents - cc;
+  }, [signedAddon, livePlatformCostCents]);
+
+  const estimateRungs = useMemo<{ qty: number; mfgCents: number }[]>(() => {
+    if (!isVinyl) return [];
+    if (usingCatalog && pickedTier) {
+      return [...pickedTier.priceLadder]
+        .filter((r) => r.confirmed !== false)
+        .sort((a, b) => a.qty - b.qty)
+        .map((r) => ({ qty: r.qty, mfgCents: r.unitCents }));
+    }
+    if (breakdown && parsedQty > 0) {
+      return [{ qty: parsedQty, mfgCents: breakdown.manufacturingCents }];
+    }
+    return [];
+  }, [isVinyl, usingCatalog, pickedTier, breakdown, parsedQty]);
+
+  const perRungArtistNet = useMemo<{ qty: number; netCents: number }[]>(() => {
+    if (!breakdown || priceCents === null) return [];
+    return estimateRungs.map(({ qty, mfgCents }) => {
+      const sidecar = breakdown;
+      const costPerUnit =
+        mfgCents +
+        sidecar.publishingCents +
+        sidecar.paymentProcessingCents +
+        sidecar.goodtunesCents;
+      const profitPerUnit = priceCents - costPerUnit;
+      let net = profitPerUnit * qty;
+      // Fold in GoodDeed uplift proportional to this rung's volume.
+      // Attach ratio uses the addon's planned cert qty against the
+      // current vinyl qty so the math matches whatever the operator
+      // last saved in the cert pill.
+      if (
+        certNetPerUnitCents !== null &&
+        signedAddon?.plannedQuantity &&
+        parsedQty > 0
+      ) {
+        const attachRatio = signedAddon.plannedQuantity / parsedQty;
+        const certCount = Math.max(0, Math.floor(qty * attachRatio));
+        net += certNetPerUnitCents * certCount;
+      }
+      return { qty, netCents: net };
+    });
+  }, [estimateRungs, breakdown, priceCents, certNetPerUnitCents, signedAddon, parsedQty]);
+
+  const artistNetRange = useMemo<{ low: number; high: number } | null>(() => {
+    if (perRungArtistNet.length === 0) return null;
+    const lows = perRungArtistNet.map((r) => r.netCents);
+    return { low: Math.min(...lows), high: Math.max(...lows) };
+  }, [perRungArtistNet]);
+
+  const signedDollars = (c: number) =>
+    c < 0 ? `-${dollars(Math.abs(c))}` : dollars(c);
+  const artistNetLabel = artistNetRange
+    ? artistNetRange.low === artistNetRange.high
+      ? signedDollars(artistNetRange.low)
+      : `${signedDollars(artistNetRange.low)} – ${signedDollars(artistNetRange.high)}`
+    : "—";
+
+  // Color label for the collapsed header meta line. Catalog rows
+  // resolve via the picked tier's color list; legacy rows fall back
+  // to the static VINYL_COLOR_BY_ID map.
+  const headerColorLabel = useMemo<string | null>(() => {
+    if (!isVinyl) return null;
+    if (usingCatalog && pickedTier) {
+      const c = pickedTier.colors.find((c) => c.id === pressColorId);
+      return c?.name ?? null;
+    }
+    return VINYL_COLOR_BY_ID[vinylColorId]?.name ?? null;
+  }, [isVinyl, usingCatalog, pickedTier, pressColorId, vinylColorId]);
+
+  // Presses qualified to quote this format. Display-only (swap is
+  // album-level and routed through the invited-press flow elsewhere);
+  // the popover highlights the currently-quoting one and links the
+  // others to their detail page so the operator can see what they'd
+  // offer.
+  const qualifiedPresses = useMemo<Manufacturer[]>(() => {
+    const seen = new Set<string>();
+    const out: Manufacturer[] = [];
+    if (invitedPressItself) {
+      seen.add(invitedPressItself.id);
+      out.push(invitedPressItself);
+    }
+    if (allPresses && pressFormatsByPress && pressFormatsByPress.size > 0) {
+      for (const p of allPresses) {
+        if (seen.has(p.id)) continue;
+        const formats = pressFormatsByPress.get(p.id);
+        if (formats && formats.has(format)) {
+          seen.add(p.id);
+          out.push(p);
+        }
+      }
+    }
+    return out;
+  }, [allPresses, invitedPressItself, pressFormatsByPress, format]);
+
+  const [pressSwitcherOpen, setPressSwitcherOpen] = useState(false);
+
   return (
     <div
       className={[
@@ -2518,12 +2714,13 @@ function SkuRow({
       data-testid={isDraft ? `row-sku-draft-${format}` : `row-sku-${format}`}
     >
       {isVinyl ? (
-        /* Task #393 — vinyl header mirrors the Tracks-row chrome:
+        <>
+        {/* Task #393 — vinyl header mirrors the Tracks-row chrome:
            format name as the title on the left, hide-toggle + trash
            (destructive-confirm) + chevron on the right. No checkbox,
            no SaveLink, no bare ×. Format pivots happen via the
-           Format dropdown inside the expanded REQUIRED body. */
-        <div className={["flex items-center justify-between gap-2", expanded ? "mb-3" : ""].join(" ")}>
+           Format dropdown inside the expanded REQUIRED body. */}
+        <div className={["flex items-center justify-between gap-2", expanded ? "mb-3" : "mb-2"].join(" ")}>
           {/* Task #397 — Tracks-row inline-editable title. Click the
               input to edit; click anywhere else on the header (or the
               chevron) to expand. Task #413 — empty placeholder reads
@@ -2538,6 +2735,26 @@ function SkuRow({
               : `Row title — defaults to ${ALBUM_FORMAT_LABEL[format]}`;
             return (
           <div className="flex-1 min-w-0 flex items-center gap-2">
+            {/* Task #635 — small cover-art thumbnail anchors the
+                collapsed header so a wall of N format cards is
+                visually scannable. Expanded keeps the larger jacket
+                preview in the body, so we only render the thumb
+                when collapsed to avoid duplicating it. */}
+            {!expanded && (
+              <button
+                type="button"
+                onClick={() => onSetExpanded(true)}
+                aria-label="Expand format"
+                className="flex-shrink-0 w-9 h-9 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]/40"
+                data-testid={`button-row-thumb-${format}`}
+              >
+                {artworkUrl ? (
+                  <img src={artworkUrl} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="block w-full h-full" aria-hidden />
+                )}
+              </button>
+            )}
             <input
               type="text"
               value={displayNameStr}
@@ -2554,17 +2771,6 @@ function SkuRow({
               ].join(" ")}
               data-testid={`input-sku-display-name-${format}`}
             />
-            {!expanded && collapsedSummary && (
-              <button
-                type="button"
-                onClick={() => onSetExpanded(true)}
-                className="text-xs text-slate-500 truncate hover:text-slate-700 transition-colors"
-                aria-label="Expand format"
-                data-testid={`button-row-summary-${format}`}
-              >
-                {collapsedSummary}
-              </button>
-            )}
           </div>
             );
           })()}
@@ -2670,6 +2876,127 @@ function SkuRow({
             </button>
           </div>
         </div>
+        {/* Task #635 — collapsed-only summary line: format · color ·
+            qty on the left, press-switcher popover + Artist Net range
+            with deductions (i) on the right. The press swap is
+            display-only (album-level invited-press flow lives in the
+            Vendors tab); we surface qualified presses so the operator
+            can see who else would quote this format. */}
+        {!expanded && (
+          <button
+            type="button"
+            onClick={() => onSetExpanded(true)}
+            className="w-full flex items-center justify-between gap-3 text-left rounded-md px-1 -mx-1 hover:bg-slate-50 transition-colors"
+            aria-label="Expand format"
+            data-testid={`button-row-collapsed-${format}`}
+          >
+            <div className="min-w-0 flex-1 text-xs text-slate-500 truncate">
+              {[
+                ALBUM_FORMAT_LABEL[format],
+                headerColorLabel,
+                parsedQty > 0 ? `${parsedQty.toLocaleString()} pcs` : null,
+                !active ? "off" : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </div>
+            <div
+              className="flex items-center gap-2 flex-shrink-0"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {invitedPressItself && (
+                <Popover open={pressSwitcherOpen} onOpenChange={setPressSwitcherOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 hover:bg-slate-100 transition-colors"
+                      aria-label={`Quoting press: ${invitedPressItself.name}. Click to see other qualified presses.`}
+                      data-testid={`button-press-switcher-${format}`}
+                    >
+                      {invitedPressItself.logoUrl ? (
+                        <img
+                          src={invitedPressItself.logoUrl}
+                          alt=""
+                          className="w-5 h-5 object-contain"
+                        />
+                      ) : (
+                        <span className="text-xs font-medium text-slate-600">
+                          {invitedPressItself.name}
+                        </span>
+                      )}
+                      <ChevronDown className="w-3 h-3 text-slate-400" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-64 p-2">
+                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500 px-1 pb-1">
+                      Qualified presses
+                    </div>
+                    <ul className="space-y-1">
+                      {qualifiedPresses.map((p) => {
+                        const isCurrent = p.id === invitedPressItself.id;
+                        return (
+                          <li
+                            key={p.id}
+                            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs"
+                          >
+                            {p.logoUrl ? (
+                              <img src={p.logoUrl} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
+                            ) : (
+                              <span className="w-5 h-5 rounded bg-slate-200 flex-shrink-0" />
+                            )}
+                            <span className="flex-1 truncate text-slate-700">{p.name}</span>
+                            {isCurrent && (
+                              <span className="text-xs font-medium text-[color:var(--brand-blue)]">
+                                Quoting
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <p className="text-xs text-slate-500 px-2 pt-2 border-t border-slate-100 mt-1">
+                      Switch the quoting press from the Vendors tab.
+                    </p>
+                  </PopoverContent>
+                </Popover>
+              )}
+              <div className="text-xs text-slate-700 tabular-nums">
+                <span className="text-slate-500 mr-1">Artist Net</span>
+                <span className="font-semibold">{artistNetLabel}</span>
+              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Deductions"
+                    className="inline-flex items-center justify-center w-4 h-4 rounded-full text-slate-400 hover:text-[color:var(--brand-blue)] transition-colors"
+                    data-testid={`button-deductions-${format}`}
+                  >
+                    <Info className="w-3.5 h-3.5" />
+                    <span className="sr-only">Deductions</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-64 p-3">
+                  {breakdown && priceCents !== null ? (
+                    <div className="space-y-1 text-xs">
+                      <div className="font-medium text-slate-900">Per copy at {dollars(priceCents)}</div>
+                      <div className="flex justify-between gap-3"><span className="text-slate-500">Manufacturing</span><span className="tabular-nums">{dollars(breakdown.manufacturingCents)}</span></div>
+                      <div className="flex justify-between gap-3"><span className="text-slate-500">Publishing</span><span className="tabular-nums">{dollars(breakdown.publishingCents)}</span></div>
+                      <div className="flex justify-between gap-3"><span className="text-slate-500">Payment processing</span><span className="tabular-nums">{dollars(breakdown.paymentProcessingCents)}</span></div>
+                      <div className="flex justify-between gap-3"><span className="text-slate-500">GoodTunes</span><span className="tabular-nums">{dollars(breakdown.goodtunesCents)}</span></div>
+                      {certNetPerUnitCents !== null && (
+                        <div className="flex justify-between gap-3 pt-1 border-t border-slate-100"><span className="text-slate-500">+ GoodDeed per cert</span><span className="tabular-nums">{signedDollars(certNetPerUnitCents)}</span></div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-slate-500">Set a price to see deductions.</span>
+                  )}
+                </PopoverContent>
+              </Popover>
+            </div>
+          </button>
+        )}
+        </>
       ) : (
         /* Non-vinyl rows keep the legacy header (checkbox + SaveLink +
            chevron + X) — out of scope for the #393 restructure. */
@@ -3451,6 +3778,7 @@ function SkuRow({
           artistName={artistName ?? ""}
           artistPhotoUrl={artistPhotoUrl ?? null}
           vinylQty={parsedQty}
+          vinylQuantityRungs={estimateRungs.map((r) => r.qty)}
           existing={signedAddon ?? null}
           livePlatformCostCents={livePlatformCostCents ?? null}
           onSave={onSaveAddon}
@@ -3627,6 +3955,57 @@ function SkuRow({
               />
             )}
           </div>
+
+          {/* Task #635 — per-rung Estimates table. Generalises the
+              single-quantity Total line to N columns from the picked
+              tier's price ladder so the operator can sanity-check
+              Artist Net across every confirmed pressing volume in
+              one read. Hidden when there's only one rung (the
+              existing Total line below already covers that case). */}
+          {perRungArtistNet.length > 1 && (
+            <div className="rounded-md border border-slate-200 bg-slate-50/60 p-2" data-testid={`table-sku-estimates-${format}`}>
+              <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5">
+                Estimates by quantity
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs tabular-nums">
+                  <thead>
+                    <tr className="text-slate-500">
+                      <th className="text-left font-medium pb-1 pr-2">Qty</th>
+                      {perRungArtistNet.map((r) => (
+                        <th
+                          key={r.qty}
+                          className={[
+                            "text-right font-medium pb-1 px-2",
+                            r.qty === parsedQty ? "text-[color:var(--brand-blue)]" : "",
+                          ].join(" ")}
+                        >
+                          {r.qty.toLocaleString()}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="text-slate-700">
+                      <td className="text-left text-slate-500 py-1 pr-2">Artist Net</td>
+                      {perRungArtistNet.map((r) => (
+                        <td
+                          key={r.qty}
+                          className={[
+                            "text-right py-1 px-2",
+                            r.qty === parsedQty ? "font-semibold text-slate-900" : "",
+                          ].join(" ")}
+                          data-testid={`text-sku-estimate-${format}-${r.qty}`}
+                        >
+                          {signedDollars(r.netCents)}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Estimated sold — 25/50/75 chips + Custom number. */}
           <div className="flex items-center justify-between gap-3 pt-1">
@@ -4657,6 +5036,7 @@ function GoodDeedPill({
   artistName,
   artistPhotoUrl,
   vinylQty,
+  vinylQuantityRungs,
   existing,
   livePlatformCostCents,
   onSave,
@@ -4671,6 +5051,11 @@ function GoodDeedPill({
   artistName: string;
   artistPhotoUrl: string | null;
   vinylQty: number;
+  // Task #635 — when the picked tier exposes multiple confirmed
+  // pressing volumes, render a per-rung uplift table inside the
+  // pill aligned with the SkuRow's Estimates columns. Optional;
+  // single-rung rows skip the extra table.
+  vinylQuantityRungs?: number[];
   existing: AlbumAddon | null;
   livePlatformCostCents: number | null;
   onSave: (b: {
@@ -5364,6 +5749,94 @@ function GoodDeedPill({
               </div>
             </div>
           </div>
+
+          {/* Task #635 — per-quantity GoodDeed uplift. When the vinyl
+              picked tier exposes multiple confirmed pressing volumes,
+              show one column per rung so the operator can read what
+              the cert run nets at every volume in the Estimates row
+              above. Cert count per rung follows the current attach
+              ratio (resolvedQty ÷ vinylQty) so the numbers track the
+              % picker without a second source of truth. */}
+          {canComputeNet &&
+            vinylQuantityRungs &&
+            vinylQuantityRungs.length > 1 &&
+            vinylQty > 0 && (
+              <div
+                className="rounded-md border border-slate-200 bg-slate-50/60 p-2 mt-3"
+                data-testid="table-gooddeed-uplift"
+              >
+                <div className="text-xs font-medium uppercase tracking-wider text-slate-400 mb-1.5">
+                  Uplift by vinyl quantity
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs tabular-nums">
+                    <thead>
+                      <tr className="text-slate-500">
+                        <th className="text-left font-medium pb-1 pr-2">Vinyl qty</th>
+                        {vinylQuantityRungs.map((q) => (
+                          <th
+                            key={q}
+                            className={[
+                              "text-right font-medium pb-1 px-2",
+                              q === vinylQty ? "text-[color:var(--brand-blue)]" : "",
+                            ].join(" ")}
+                          >
+                            {q.toLocaleString()}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="text-slate-700">
+                        <td className="text-left text-slate-500 py-1 pr-2">Certs</td>
+                        {vinylQuantityRungs.map((q) => {
+                          const ratio = resolvedQty / vinylQty;
+                          const certs = Math.max(0, Math.floor(q * ratio));
+                          return (
+                            <td
+                              key={q}
+                              className={[
+                                "text-right py-1 px-2",
+                                q === vinylQty ? "font-medium text-slate-900" : "",
+                              ].join(" ")}
+                              data-testid={`text-gooddeed-uplift-certs-${q}`}
+                            >
+                              {certs.toLocaleString()}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      <tr className="text-slate-700">
+                        <td className="text-left text-slate-500 py-1 pr-2">Net uplift</td>
+                        {vinylQuantityRungs.map((q) => {
+                          const ratio = resolvedQty / vinylQty;
+                          const certs = Math.max(0, Math.floor(q * ratio));
+                          const netPer = netPerUnitCents ?? 0;
+                          const total = netPer * certs;
+                          const label =
+                            total < 0
+                              ? `-${dollars(Math.abs(total))}`
+                              : dollars(total);
+                          return (
+                            <td
+                              key={q}
+                              className={[
+                                "text-right py-1 px-2",
+                                q === vinylQty ? "font-semibold text-slate-900" : "",
+                                total < 0 ? "text-[color:var(--brand-pink)]" : "",
+                              ].join(" ")}
+                              data-testid={`text-gooddeed-uplift-${q}`}
+                            >
+                              {label}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
         </div>
       )}

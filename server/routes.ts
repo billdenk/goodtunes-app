@@ -11401,6 +11401,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!m) return res.status(404).json({ message: "Manufacturer not found" });
     return res.json(m);
   });
+  // Task #635 — lightweight `(pressId, format)` index used by the
+  // SellPanel collapsed-header press-switcher popover to filter
+  // qualified presses by the SKU row's format. Returns only the
+  // tuples needed (no joined manufacturer rows); the client already
+  // has the full manufacturer list cached via `/api/manufacturers`.
+  app.get("/api/admin/press-formats", requireAdmin, async (_req, res) => {
+    const { db } = await import("./db");
+    const { pressFormats } = await import("@shared/schema");
+    const rows = await db
+      .select({ pressId: pressFormats.pressId, format: pressFormats.format })
+      .from(pressFormats);
+    return res.json(rows);
+  });
   app.post("/api/admin/manufacturers", requireAdmin, async (req, res) => {
     const b = req.body ?? {};
     if (!b.name) return res.status(400).json({ message: "name is required" });
