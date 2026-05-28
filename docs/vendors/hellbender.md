@@ -1,6 +1,11 @@
 # Hellbender Vinyl
 
+> **Summary:** Boutique / custom collectible-focused pressing plant based in Pittsburgh, PA.
+> **Turnaround:** 10–12 weeks.
+
 Hellbender publishes templates and art-submission rules but not audio specs, color catalog, or pricing tiers on its public templates page. Flag the unpublished fields as **"not stated"** and collect from Bill / a Hellbender CSR when needed.
+
+The press catalog matrix (1LP / 2LP / 7" × Color / Splatter / Black, columns 100 / 200 / 300 / 500 / 1000 / 2000) seeds the **100 / 200 / 300** rungs as unconfirmed yellow placeholders — Hellbender has not quoted short-run pricing. The confirmed 500 / 1000 / 2000 rungs (Color + Splatter on 1LP/2LP) are the May-2026 quote captured under Task #624.
 
 ## Contact
 

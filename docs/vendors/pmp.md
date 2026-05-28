@@ -1,6 +1,21 @@
 # Physical Music Products (PMP)
 
+> **Summary:** Premium handcrafted / custom-effect specialist.
+> **Turnaround:** Not stated — request from CSR.
+> **Markup model:** Not yet confirmed — treating retail = cost on confirmed rungs until PMP states otherwise.
+
 PMP publishes far less than MRP. The color library is being updated, numeric specs are not posted, and templates are CSR-assigned per project. Capture what is published; flag the rest as **"not stated — request from CSR."**
+
+## 2026 quoted ladders (loaded into the catalog)
+
+The press catalog matrix (1LP / 2LP × Color / Splatter / Black, columns 100 / 200 / 300 / 500 / 1000 / 2000) carries the following confirmed rungs from PMP's May-2026 quote on **12" Double LP × Standard Full-Color Jacket**:
+
+| Tier     | 500     | 1,000   | 2,000   |
+| -------- | ------- | ------- | ------- |
+| Color    | $11,575 ($23.15/ea) | $16,542 ($16.54/ea) | $27,477 ($13.74/ea) |
+| Splatter | $16,325 ($32.65/ea) | $25,142 ($25.14/ea) | $45,477 ($22.74/ea) |
+
+Every other rung — all 100 / 200 / 300 columns, every 12" LP (1×LP) rung, and the entire Black tier on both formats — seeds as unconfirmed yellow placeholders until PMP quotes them. 7" formats are listed on PMP's site as "coming soon" and are not seeded.
 
 ## Contact
 

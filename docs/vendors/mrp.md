@@ -1,6 +1,11 @@
 # Memphis Record Pressing (MRP)
 
+> **Summary:** Large-scale established pressing operation based in Memphis, TN.
+> **Turnaround:** 8–10 weeks (standard runs; short-run program quotes 4–6 weeks separately).
+
 Mid-South pressing plant with a published short-run program, a full online color catalog, and the most thorough public art/audio prep checklists of the three vendors we currently track.
+
+The press catalog matrix (1LP / 2LP / 7" × Color / Splatter / Black, columns 100 / 200 / 300 / 500 / 1000 / 2000) carries MRP's confirmed 500 / 1000 / 2000 rungs from #625 plus the confirmed **12" LP × Single Jacket × Black 100/200/300 short-run rungs** ($1,350 / $1,750 / $2,085, retail = cost). Every other 100 / 200 / 300 rung — and the full ladder under the new EcoMix / Translucent / Opaque / Neon-Glow / Smoke Blends / Cream Blends tiers — seeds as unconfirmed yellow placeholders until MRP quotes them.
 
 ## Contact
 

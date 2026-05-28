@@ -61,6 +61,7 @@ import {
   lookupCatalogUnitCents,
   seedHellbenderCatalog,
   seedMrpCatalog,
+  seedPmpCatalog,
   MRP_DOMAIN,
 } from "./pressCatalog";
 import { registerPressPortalRoutes } from "./pressPortal";
@@ -1001,6 +1002,7 @@ export function registerCommerceRoutes(app: Express) {
     // Task #625 — same idempotent seed pass for MRP.
     await seedHellbenderCatalog();
     await seedMrpCatalog();
+    await seedPmpCatalog();
 
     // Has-shipped check: any shipped paid order on any album whose
     // primary_artist (or label) matches our locked scope.
