@@ -1712,6 +1712,12 @@ export const pressColors = pgTable("press_colors", {
   swatchHex: text("swatch_hex"),
   swatchImageUrl: text("swatch_image_url"),
   position: integer("position").notNull().default(0),
+  // Task #668/#669 — set by the per-vendor color-library importers
+  // (MRP, Hellbender, …) to the upstream product/tile URL we pulled
+  // the photo from. Used to detect "already imported" rows on re-run
+  // and to keep an audit trail in the importer batch entry. Manual
+  // swatches stay null.
+  importSourceUrl: text("import_source_url"),
 });
 export type PressColor = typeof pressColors.$inferSelect;
 

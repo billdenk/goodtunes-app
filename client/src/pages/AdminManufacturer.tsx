@@ -402,7 +402,7 @@ export function AdminManufacturer() {
                 )}
               </div>
             )}
-            <PressCatalogPanel pressId={id} />
+            <PressCatalogPanel pressId={id} pressDomain={m?.domain ?? null} />
           </>
         )}
         {tab === "analytics" && (
@@ -905,7 +905,353 @@ async function uploadSwatchImage(
   return { url, maskApplied };
 }
 
-function PressCatalogPanel({ pressId }: { pressId: string }) {
+// Task #669 — Hellbender color-library importer UI. Only mounted on
+// the Hellbender press detail page. Opens a modal that previews every
+// color tile on https://hellbendervinyl.com/pages/custom-vinyl, lets
+// the admin remap the suggested target tier per row, deselect rows
+// they don't want, and commit the curated set in one batch.
+type ImportPreviewRow = {
+  sourceUrl: string;
+  name: string;
+  imageUrl: string | null;
+  targetTierId: string | null;
+  action: "create" | "update_photo" | "already_imported" | "skip" | "error";
+  existingColorId: string | null;
+  error: string | null;
+};
+type ImportPreviewResponse = {
+  indexUrl: string;
+  tiers: Array<{ id: string; name: string; format: string }>;
+  rows: ImportPreviewRow[];
+};
+type ImportCommitResult = {
+  created: number;
+  updated: number;
+  failed: number;
+  results: Array<{
+    sourceUrl: string;
+    name: string;
+    ok: boolean;
+    action: "created" | "updated" | "skipped";
+    colorId: string | null;
+    error: string | null;
+  }>;
+};
+
+const ACTION_LABEL: Record<ImportPreviewRow["action"], string> = {
+  create: "Create",
+  update_photo: "Update photo",
+  already_imported: "Already imported",
+  skip: "Skip",
+  error: "Error",
+};
+
+function HellbenderImportButton({
+  pressId,
+  catalog,
+  onImported,
+}: {
+  pressId: string;
+  catalog: Catalog | null;
+  onImported: () => void;
+}) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [preview, setPreview] = useState<ImportPreviewResponse | null>(null);
+  const [editedRows, setEditedRows] = useState<ImportPreviewRow[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [commitResult, setCommitResult] = useState<ImportCommitResult | null>(null);
+
+  const previewMut = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest(
+        "POST",
+        `/api/admin/manufacturers/${pressId}/catalog/import-hellbender/preview`,
+        {},
+      );
+      return (await r.json()) as ImportPreviewResponse;
+    },
+    onSuccess: (d) => {
+      setPreview(d);
+      setEditedRows(d.rows);
+      // Default selection: every "create" / "update_photo" row that has
+      // an image. Skip "already_imported" and "error" rows so the admin
+      // can re-import them deliberately by checking the box.
+      const initial = new Set<string>();
+      for (const r of d.rows) {
+        if ((r.action === "create" || r.action === "update_photo") && r.imageUrl) {
+          initial.add(r.sourceUrl);
+        }
+      }
+      setSelected(initial);
+    },
+    onError: (e: any) => {
+      toast({ title: "Preview failed", description: e?.message || "Unknown error", variant: "destructive" });
+    },
+  });
+
+  const commitMut = useMutation({
+    mutationFn: async () => {
+      const rows = editedRows
+        .filter((r) => selected.has(r.sourceUrl) && r.imageUrl && r.targetTierId)
+        .map((r) => ({
+          sourceUrl: r.sourceUrl,
+          name: r.name,
+          imageUrl: r.imageUrl!,
+          targetTierId: r.targetTierId!,
+        }));
+      const r = await apiRequest(
+        "POST",
+        `/api/admin/manufacturers/${pressId}/catalog/import-hellbender/commit`,
+        { rows },
+      );
+      return (await r.json()) as ImportCommitResult;
+    },
+    onSuccess: (d) => {
+      setCommitResult(d);
+      onImported();
+      toast({
+        title: "Import complete",
+        description: `${d.created} created, ${d.updated} updated${d.failed ? `, ${d.failed} failed` : ""}.`,
+      });
+    },
+    onError: (e: any) => {
+      toast({ title: "Import failed", description: e?.message || "Unknown error", variant: "destructive" });
+    },
+  });
+
+  const close = () => {
+    setOpen(false);
+    setPreview(null);
+    setEditedRows([]);
+    setSelected(new Set());
+    setCommitResult(null);
+  };
+
+  const onOpen = () => {
+    setOpen(true);
+    setPreview(null);
+    setEditedRows([]);
+    setSelected(new Set());
+    setCommitResult(null);
+    previewMut.mutate();
+  };
+
+  const allTiers = preview?.tiers ?? [];
+  const selectedCount = editedRows.filter(
+    (r) => selected.has(r.sourceUrl) && r.imageUrl && r.targetTierId,
+  ).length;
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={onOpen}
+        className="shrink-0"
+        data-testid="button-import-hellbender"
+      >
+        Import from Hellbender
+      </Button>
+      <Dialog open={open} onOpenChange={(o) => (o ? null : close())}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Import colors from Hellbender</DialogTitle>
+            <DialogDescription>
+              Scrapes <span className="font-mono text-xs">hellbendervinyl.com/pages/custom-vinyl</span>{" "}
+              for every color tile, runs each photo through the same disc mask used by the manual
+              swatch uploader, and rehosts the result in our object storage. Re-runs update existing
+              rows with a matching name instead of duplicating them.
+            </DialogDescription>
+          </DialogHeader>
+          {previewMut.isPending && (
+            <div className="py-8 text-center text-slate-500 text-sm" data-testid="text-import-preview-loading">
+              Fetching Hellbender's catalog…
+            </div>
+          )}
+          {commitResult && (
+            <div className="space-y-2 py-4">
+              <div className="text-sm" data-testid="text-import-result-summary">
+                Created {commitResult.created} · Updated {commitResult.updated} · Failed{" "}
+                {commitResult.failed}
+              </div>
+              {commitResult.results.some((r) => !r.ok) && (
+                <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900">
+                  <div className="font-semibold mb-1">Failures</div>
+                  <ul className="space-y-1">
+                    {commitResult.results
+                      .filter((r) => !r.ok)
+                      .map((r) => (
+                        <li key={r.sourceUrl} data-testid={`text-import-error-${r.sourceUrl}`}>
+                          <span className="font-medium">{r.name}</span> — {r.error}
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" onClick={close} data-testid="button-import-close">
+                  Done
+                </Button>
+              </div>
+            </div>
+          )}
+          {!previewMut.isPending && !commitResult && preview && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs text-slate-500" data-testid="text-import-row-count">
+                  Found {preview.rows.length} color tiles. {selectedCount} selected for import.
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = new Set<string>();
+                      for (const r of editedRows) {
+                        if (r.imageUrl && r.targetTierId) next.add(r.sourceUrl);
+                      }
+                      setSelected(next);
+                    }}
+                    className="text-xs text-[var(--brand-blue)] hover:underline underline-offset-2"
+                    data-testid="button-import-select-all"
+                  >
+                    Select all eligible
+                  </button>
+                  <span className="text-xs text-slate-300">·</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(new Set())}
+                    className="text-xs text-slate-500 hover:underline underline-offset-2"
+                    data-testid="button-import-deselect-all"
+                  >
+                    Deselect all
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {editedRows.map((row, idx) => {
+                  const isSelected = selected.has(row.sourceUrl);
+                  const disabled = !row.imageUrl;
+                  return (
+                    <div
+                      key={row.sourceUrl}
+                      className="flex items-center gap-3 rounded-md border border-slate-200 p-2"
+                      data-testid={`row-import-${row.sourceUrl}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        disabled={disabled}
+                        onChange={(e) => {
+                          const next = new Set(selected);
+                          if (e.target.checked) next.add(row.sourceUrl);
+                          else next.delete(row.sourceUrl);
+                          setSelected(next);
+                        }}
+                        data-testid={`checkbox-import-${row.sourceUrl}`}
+                      />
+                      <div className="h-12 w-12 shrink-0 rounded bg-slate-100 overflow-hidden">
+                        {row.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={row.imageUrl}
+                            alt={row.name}
+                            className="h-full w-full object-cover"
+                            data-testid={`img-import-${row.sourceUrl}`}
+                          />
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center text-xs text-slate-400">
+                            no img
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <input
+                          type="text"
+                          value={row.name}
+                          onChange={(e) => {
+                            const next = [...editedRows];
+                            next[idx] = { ...row, name: e.target.value };
+                            setEditedRows(next);
+                          }}
+                          className="w-full h-7 px-2 text-sm font-medium text-slate-900 rounded border border-transparent hover:border-slate-200 focus:border-[var(--brand-blue)] focus:outline-none bg-transparent"
+                          data-testid={`input-import-name-${row.sourceUrl}`}
+                        />
+                        <a
+                          href={row.sourceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-slate-500 hover:text-[var(--brand-blue)] truncate block px-2"
+                        >
+                          {row.sourceUrl.replace(/^https?:\/\//, "")}
+                        </a>
+                        {row.error && (
+                          <div className="text-xs text-rose-600 mt-0.5">{row.error}</div>
+                        )}
+                      </div>
+                      <select
+                        value={row.targetTierId ?? ""}
+                        onChange={(e) => {
+                          const next = [...editedRows];
+                          next[idx] = { ...row, targetTierId: e.target.value || null };
+                          setEditedRows(next);
+                        }}
+                        className="h-8 text-xs rounded border border-slate-200 px-1 max-w-[160px]"
+                        data-testid={`select-import-tier-${row.sourceUrl}`}
+                      >
+                        <option value="">— pick tier —</option>
+                        {allTiers.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.format} / {t.name}
+                          </option>
+                        ))}
+                      </select>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
+                          row.action === "already_imported"
+                            ? "bg-slate-100 text-slate-600"
+                            : row.action === "error"
+                            ? "bg-rose-100 text-rose-700"
+                            : row.action === "update_photo"
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-emerald-100 text-emerald-800"
+                        }`}
+                        data-testid={`badge-import-action-${row.sourceUrl}`}
+                      >
+                        {ACTION_LABEL[row.action]}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex justify-end gap-2 pt-2 sticky bottom-0 bg-white">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={close}
+                  data-testid="button-import-cancel"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => commitMut.mutate()}
+                  disabled={commitMut.isPending || selectedCount === 0}
+                  data-testid="button-import-commit"
+                >
+                  {commitMut.isPending ? "Importing…" : `Import ${selectedCount} color${selectedCount === 1 ? "" : "s"}`}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function PressCatalogPanel({ pressId, pressDomain }: { pressId: string; pressDomain: string | null }) {
   // Role gate — server is authoritative; we hide the panel for admins
   // who would just see a 403 either way.
   const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
@@ -940,14 +1286,19 @@ function PressCatalogPanel({ pressId }: { pressId: string }) {
   const offered = new Set((data?.formats ?? []).map((f) => f.format));
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-4" data-testid="panel-press-catalog">
-      <div>
-        <h2 className="text-[15px] font-semibold text-slate-900">Catalog</h2>
-        <p className="text-[13px] text-slate-500 mt-1">
-          Pick the formats this press runs. Under each format, set up the color tiers (Black /
-          Standard / Splatter…) with their swatches, and the jackets this press offers. The price
-          ladder lives on the (tier × jacket) combo — one row per run quantity. Artists invited by
-          this press see the resulting picker on their album's Sell panel.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1">
+          <h2 className="text-[15px] font-semibold text-slate-900">Catalog</h2>
+          <p className="text-[13px] text-slate-500 mt-1">
+            Pick the formats this press runs. Under each format, set up the color tiers (Black /
+            Standard / Splatter…) with their swatches, and the jackets this press offers. The price
+            ladder lives on the (tier × jacket) combo — one row per run quantity. Artists invited by
+            this press see the resulting picker on their album's Sell panel.
+          </p>
+        </div>
+        {pressDomain === "hellbendervinyl.com" && (
+          <HellbenderImportButton pressId={pressId} catalog={data ?? null} onImported={invalidate} />
+        )}
       </div>
       {isLoading || !data ? (
         <div className="text-slate-500 text-sm py-4">Loading…</div>

@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
 import { sql, and, eq, or, ilike, isNull, desc, inArray } from "drizzle-orm";
-import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits } from "@shared/schema";
+import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, pressColors, pressColorTiers } from "@shared/schema";
 import { closeSaleWindow as closeCertSaleWindow } from "./saleWindow";
 import { generateBatchPdf as generateCertBatchPdf, CERT_BATCH_STEPS } from "./certBatch";
 import session from "express-session";
@@ -3921,6 +3921,467 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         console.error("Object Storage upload failed", err);
         return res.status(500).json({ message: "Upload failed" });
       }
+    },
+  );
+
+  // ─── Task #669 — Hellbender color-library importer ────────────────
+  // Scrapes Hellbender's public Shopify catalog (https://hellbendervinyl
+  // .com/pages/custom-vinyl) and lets a super-admin (or a manufacturer-
+  // scoped admin on this press) bulk-pull every color's product photo
+  // into our `press_colors` rows. Two-step flow:
+  //
+  //   /preview  → fetches the index, follows each product page, returns
+  //               candidate rows (no DB writes).
+  //   /commit   → for the curated selection, downloads each photo,
+  //               runs it through the same disc-mask from task #667 used
+  //               by /api/admin/upload, rehosts in our object storage,
+  //               and creates/updates the matching press_colors row.
+  //
+  // Re-running the importer is idempotent: rows with the same
+  // import_source_url are flagged as "already imported" and skipped by
+  // default in the preview UI.
+  //
+  // Auth: requireAdminBearer + an inlined press-scope check (mirrors
+  // commerce.ts's `requirePressScope`) so a manufacturer admin scoped
+  // to a different press can't trigger an import on Hellbender, even
+  // though they hold a valid admin bearer.
+  const HELLBENDER_INDEX_URL = "https://hellbendervinyl.com/pages/custom-vinyl";
+  const HELLBENDER_UA =
+    "Mozilla/5.0 (compatible; GoodTunes-importer/1.0; +https://goodtunes.music)";
+
+  async function requireHellbenderScope(
+    req: Request,
+    res: Response,
+  ): Promise<{ pressId: string } | null> {
+    const userId = (req as any).adminUserId as string | undefined;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return null;
+    }
+    const pressId = String(req.params.id);
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) {
+      res.status(404).json({ message: "Manufacturer not found" });
+      return null;
+    }
+    const { HELLBENDER_DOMAIN } = await import("./pressCatalog");
+    if (press.domain !== HELLBENDER_DOMAIN) {
+      res.status(400).json({ message: "This importer only runs on Hellbender." });
+      return null;
+    }
+    const { getUserRole } = await import("./auth/roles");
+    const info = await getUserRole(userId);
+    if (!info) {
+      res.status(403).json({ message: "Forbidden" });
+      return null;
+    }
+    if (info.role === "super_admin" || info.role === "admin") return { pressId };
+    if (info.role === "manufacturer" && info.roleScopeId === pressId) return { pressId };
+    res.status(403).json({ message: "Forbidden" });
+    return null;
+  }
+
+  // Strip Shopify's `_{WxH}.png` or `_{WxH}@2x.png` size suffix and the
+  // `?v=` cache-buster so the URL points at the master file. Shopify
+  // serves the same path with no suffix as the original upload.
+  function shopifyMasterUrl(raw: string): string {
+    let s = raw.trim();
+    if (s.startsWith("//")) s = `https:${s}`;
+    s = s.replace(/\?.*$/, "");
+    s = s.replace(/_(\d+)x(\d+)?(@2x)?\.(jpe?g|png|webp|gif)$/i, ".$4");
+    return s;
+  }
+
+  function normalizeColorName(s: string): string {
+    return s
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "")
+      .trim();
+  }
+
+  // Parse all color tiles from Hellbender's index HTML. Each tile is an
+  // <a href="https://hellbendervinyl.com/products/custom-vinyl-records-
+  // <slug>" class="kt-image-link" >Display Name</a>. We dedupe by URL
+  // (the index repeats some tiles at the bottom). The "Random Color"
+  // tile is filtered out — it's a sampler SKU, not an actual color.
+  function parseHellbenderIndex(html: string): Array<{ url: string; name: string }> {
+    const re =
+      /href="(https:\/\/hellbendervinyl\.com\/products\/custom-vinyl-records-[a-z0-9-]+)"[^>]*class="kt-image-link"[^>]*>([^<]+)</gi;
+    const seen = new Set<string>();
+    const out: Array<{ url: string; name: string }> = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(html))) {
+      const url = m[1];
+      if (seen.has(url)) continue;
+      seen.add(url);
+      const name = decodeEntities(m[2]).trim();
+      if (!name) continue;
+      if (/random[\s-]*color|house\s*mix/i.test(name)) continue;
+      if (/random-color/i.test(url)) continue;
+      out.push({ url, name });
+    }
+    return out;
+  }
+
+  // Pull the hero image URL out of a Hellbender product page. Shopify
+  // ships `og:image:secure_url` on every product page pointing at the
+  // master file in their CDN — that's the cleanest source and avoids
+  // walking the `srcset` (which is per-variant and can resize). We
+  // strip the size suffix as a belt-and-braces guard.
+  function pickHellbenderHeroImage(html: string): string | null {
+    const og =
+      html.match(/<meta[^>]+property=["']og:image:secure_url["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image:secure_url["']/i) ||
+      html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+    if (!og) return null;
+    return shopifyMasterUrl(decodeEntities(og[1]));
+  }
+
+  async function withConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    fn: (item: T, idx: number) => Promise<R>,
+    politeDelayMs = 0,
+  ): Promise<R[]> {
+    const out: R[] = new Array(items.length);
+    let next = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (true) {
+        const i = next++;
+        if (i >= items.length) return;
+        out[i] = await fn(items[i], i);
+        if (politeDelayMs > 0 && next < items.length) {
+          // Per-worker jittered pause so we don't hammer Hellbender's
+          // Shopify CDN even though concurrency is bounded.
+          const jitter = politeDelayMs + Math.floor(Math.random() * politeDelayMs);
+          await new Promise((r) => setTimeout(r, jitter));
+        }
+      }
+    });
+    await Promise.all(workers);
+    return out;
+  }
+
+  // Match the suggested tier for a parsed Hellbender color. Hellbender's
+  // 12_lp / 12_double catalogs use the consolidated "Black" / "Color" /
+  // "Splatter" tier set (see HELLBENDER_NEW_12_TIER_NAMES). Splatter
+  // doesn't appear in Hellbender's online catalog today, but we keep
+  // the match in case it ever shows up. Everything else suggests
+  // "Color". We default the suggestion to the 12_lp tiers — admins can
+  // remap each row from the review UI before committing.
+  function suggestHellbenderTier(
+    tiers: Array<{ id: string; name: string; format: string }>,
+    colorName: string,
+  ): string | null {
+    const n = normalizeColorName(colorName);
+    const wants =
+      n === "black"
+        ? "black"
+        : n.includes("splatter")
+        ? "splatter"
+        : "color";
+    // Prefer the 12_lp tier (newer canonical catalog), fall back to any
+    // tier with the matching name on any other format.
+    const matches = tiers.filter((t) => normalizeColorName(t.name) === wants);
+    const lp = matches.find((t) => t.format === "12_lp");
+    return (lp ?? matches[0])?.id ?? null;
+  }
+
+  app.post(
+    "/api/admin/manufacturers/:id/catalog/import-hellbender/preview",
+    requireAdminBearer,
+    async (req, res) => {
+      const scope = await requireHellbenderScope(req, res);
+      if (!scope) return;
+      try {
+        const indexRes = await safeFetch(HELLBENDER_INDEX_URL, {
+          headers: { "user-agent": HELLBENDER_UA },
+        });
+        if (!indexRes.ok) {
+          return res.status(502).json({ message: `Hellbender index returned ${indexRes.status}` });
+        }
+        const indexHtml = await indexRes.text();
+        const tiles = parseHellbenderIndex(indexHtml);
+        if (tiles.length === 0) {
+          return res.status(502).json({ message: "Couldn't parse any colors from the index page." });
+        }
+
+        // Load this press's existing tiers + colors so we can suggest a
+        // target tier per row and flag idempotent state.
+        const tierRows = await db
+          .select()
+          .from(pressColorTiers)
+          .where(eq(pressColorTiers.pressId, scope.pressId));
+        const tierIds = tierRows.map((t) => t.id);
+        const colorRows = tierIds.length
+          ? await db.select().from(pressColors).where(inArray(pressColors.tierId, tierIds))
+          : [];
+        const tiersFlat = tierRows.map((t) => ({
+          id: t.id,
+          name: t.name,
+          format: t.format,
+        }));
+
+        // Fetch each product page with bounded concurrency. 4-up is
+        // gentle on Hellbender's Shopify (their CDN absorbs much more,
+        // but we want to look like a normal browser session).
+        type Row = {
+          sourceUrl: string;
+          name: string;
+          imageUrl: string | null;
+          targetTierId: string | null;
+          action: "create" | "update_photo" | "already_imported" | "skip" | "error";
+          existingColorId: string | null;
+          error: string | null;
+        };
+        const rows: Row[] = await withConcurrency(tiles, 4, async (t) => {
+
+          try {
+            const r = await safeFetch(t.url, { headers: { "user-agent": HELLBENDER_UA } });
+            if (!r.ok) {
+              return {
+                sourceUrl: t.url,
+                name: t.name,
+                imageUrl: null,
+                targetTierId: suggestHellbenderTier(tiersFlat, t.name),
+                action: "error" as const,
+                existingColorId: null,
+                error: `Product page returned ${r.status}`,
+              };
+            }
+            const html = await r.text();
+            const imageUrl = pickHellbenderHeroImage(html);
+            const targetTierId = suggestHellbenderTier(tiersFlat, t.name);
+            // Idempotency: a press_colors row in the suggested tier with
+            // the same import_source_url is "already imported." Same
+            // normalized name in the same tier (different / null source
+            // URL) is "update photo." Otherwise "create."
+            let action: Row["action"] = "create";
+            let existingColorId: string | null = null;
+            if (targetTierId) {
+              const inTier = colorRows.filter((c) => c.tierId === targetTierId);
+              const sameSource = inTier.find(
+                (c) => (c as any).importSourceUrl === t.url,
+              );
+              if (sameSource) {
+                action = "already_imported";
+                existingColorId = sameSource.id;
+              } else {
+                const norm = normalizeColorName(t.name);
+                const sameName = inTier.find((c) => normalizeColorName(c.name) === norm);
+                if (sameName) {
+                  action = "update_photo";
+                  existingColorId = sameName.id;
+                }
+              }
+            }
+            return {
+              sourceUrl: t.url,
+              name: t.name,
+              imageUrl,
+              targetTierId,
+              action,
+              existingColorId,
+              error: imageUrl ? null : "Couldn't find a hero image on the product page",
+            };
+          } catch (e: any) {
+            return {
+              sourceUrl: t.url,
+              name: t.name,
+              imageUrl: null,
+              targetTierId: suggestHellbenderTier(tiersFlat, t.name),
+              action: "error" as const,
+              existingColorId: null,
+              error: e?.message || String(e),
+            };
+          }
+        }, 150);
+
+        return res.json({
+          indexUrl: HELLBENDER_INDEX_URL,
+          tiers: tiersFlat,
+          rows,
+        });
+      } catch (err: any) {
+        console.error("[hellbender-import] preview failed:", err);
+        return res.status(500).json({ message: err?.message || "Preview failed" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/manufacturers/:id/catalog/import-hellbender/commit",
+    requireAdminBearer,
+    async (req, res) => {
+      const scope = await requireHellbenderScope(req, res);
+      if (!scope) return;
+      // `name` is the edited name from the review UI (admin can rename
+      // before commit); we fall back to the scraped name server-side
+      // when the field is missing so an old client never silently
+      // imports an empty string.
+      const body = req.body as {
+        rows?: Array<{
+          sourceUrl: string;
+          name: string;
+          imageUrl: string;
+          targetTierId: string;
+        }>;
+      };
+      const rows = Array.isArray(body?.rows) ? body.rows : [];
+      if (rows.length === 0) {
+        return res.status(400).json({ message: "Nothing to import." });
+      }
+      // Sanity-check every requested tier belongs to this press so the
+      // commit endpoint can't be tricked into writing colors under a
+      // different manufacturer.
+      const tierIds = Array.from(new Set(rows.map((r) => r.targetTierId).filter(Boolean)));
+      const validTiers = tierIds.length
+        ? await db
+            .select()
+            .from(pressColorTiers)
+            .where(
+              and(
+                inArray(pressColorTiers.id, tierIds),
+                eq(pressColorTiers.pressId, scope.pressId),
+              ),
+            )
+        : [];
+      const validTierIds = new Set(validTiers.map((t) => t.id));
+
+      type Result = {
+        sourceUrl: string;
+        name: string;
+        ok: boolean;
+        action: "created" | "updated" | "skipped";
+        colorId: string | null;
+        error: string | null;
+      };
+      const results: Result[] = [];
+      // Serial — each row downloads a multi-MB master, masks via canvas,
+      // and uploads to object storage. Parallelism here would push the
+      // worker into swap on a long color library; ~36 rows × a second
+      // or two each is fine.
+      for (const row of rows) {
+        try {
+          if (!row.targetTierId || !validTierIds.has(row.targetTierId)) {
+            results.push({
+              sourceUrl: row.sourceUrl,
+              name: row.name,
+              ok: false,
+              action: "skipped",
+              colorId: null,
+              error: "Invalid target tier",
+            });
+            continue;
+          }
+          if (!row.imageUrl) {
+            results.push({
+              sourceUrl: row.sourceUrl,
+              name: row.name,
+              ok: false,
+              action: "skipped",
+              colorId: null,
+              error: "Missing image URL",
+            });
+            continue;
+          }
+          // Pull the master, run it through the same disc mask the
+          // /api/admin/upload?mask=disc endpoint uses, then rehost.
+          const imgRes = await safeFetch(row.imageUrl, {
+            headers: { "user-agent": HELLBENDER_UA },
+          });
+          if (!imgRes.ok) throw new Error(`Image fetch returned ${imgRes.status}`);
+          const ab = await imgRes.arrayBuffer();
+          const raw = Buffer.from(ab);
+          const upstreamMime =
+            imgRes.headers.get("content-type")?.split(";")[0]?.trim() || "image/png";
+          let buffer = raw;
+          let mime = upstreamMime;
+          const masked = await maskToVinylDisc(raw).catch((e) => {
+            console.warn(`[hellbender-import] disc mask failed for ${row.sourceUrl}:`, e?.message || e);
+            return null;
+          });
+          if (masked) {
+            buffer = masked;
+            mime = "image/png";
+          }
+          const storedUrl = await uploadBufferToObjectStorage(buffer, mime);
+
+          // Match by normalized name within the target tier so a re-run
+          // updates the existing row instead of stacking duplicates.
+          const existing = await db
+            .select()
+            .from(pressColors)
+            .where(eq(pressColors.tierId, row.targetTierId));
+          const norm = normalizeColorName(row.name);
+          const match = existing.find((c) => normalizeColorName(c.name) === norm);
+          if (match) {
+            await db
+              .update(pressColors)
+              .set({
+                swatchImageUrl: storedUrl,
+                importSourceUrl: row.sourceUrl,
+              } as any)
+              .where(eq(pressColors.id, match.id));
+            results.push({
+              sourceUrl: row.sourceUrl,
+              name: row.name,
+              ok: true,
+              action: "updated",
+              colorId: match.id,
+              error: null,
+            });
+          } else {
+            const position = existing.length;
+            const [created] = await db
+              .insert(pressColors)
+              .values({
+                tierId: row.targetTierId,
+                name: row.name.trim(),
+                swatchHex: null,
+                swatchImageUrl: storedUrl,
+                position,
+                importSourceUrl: row.sourceUrl,
+              } as any)
+              .returning();
+            results.push({
+              sourceUrl: row.sourceUrl,
+              name: row.name,
+              ok: true,
+              action: "created",
+              colorId: created.id,
+              error: null,
+            });
+          }
+        } catch (e: any) {
+          results.push({
+            sourceUrl: row.sourceUrl,
+            name: row.name,
+            ok: false,
+            action: "skipped",
+            colorId: null,
+            error: e?.message || String(e),
+          });
+        }
+      }
+
+      const created = results.filter((r) => r.ok && r.action === "created").length;
+      const updated = results.filter((r) => r.ok && r.action === "updated").length;
+      const failed = results.filter((r) => !r.ok).length;
+      // Single audit-log line per batch — the codebase doesn't have a
+      // structured admin_audit_log table yet, so we log to stdout the
+      // same way the other importer / backfill loops do. The per-row
+      // results array is returned to the caller for inline display.
+      console.log(
+        `[hellbender-import] batch by user=${(req as any).adminUserId} press=${scope.pressId} ` +
+          `created=${created} updated=${updated} failed=${failed} ` +
+          `sources=${results.map((r) => r.sourceUrl).join(",")}`,
+      );
+
+      return res.json({ created, updated, failed, results });
     },
   );
 

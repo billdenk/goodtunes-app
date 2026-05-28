@@ -590,7 +590,7 @@ async function upgradeRung(
 
 // ─── Hellbender seed ─────────────────────────────────────────────────
 
-const HELLBENDER_DOMAIN = "hellbendervinyl.com";
+export const HELLBENDER_DOMAIN = "hellbendervinyl.com";
 const HELLBENDER_STANDARD_JACKET = "Standard Full-Color Jacket";
 let hellbenderSeedRan = false;
 
