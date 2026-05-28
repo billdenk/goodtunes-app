@@ -1767,6 +1767,29 @@ export const pressTierJacketLadders = pgTable(
 );
 export type PressTierJacketLadder = typeof pressTierJacketLadders.$inferSelect;
 
+// Task #670 — audit log for automated pricing imports (Hellbender's
+// Shopify scrape today; future MRP/PMP sync rows land here too).
+// One row per scrape attempt with the resolved proposal + counts +
+// any per-color failures so admins can re-run idempotently and trace
+// what changed without diffing the catalog ladders by hand.
+export const pressPricingSyncs = pgTable("press_pricing_syncs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pressId: varchar("press_id").notNull(),
+  source: text("source").notNull(),
+  status: text("status").notNull(),
+  triggeredByUserId: varchar("triggered_by_user_id"),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  finishedAt: timestamp("finished_at"),
+  productsFetched: integer("products_fetched").notNull().default(0),
+  colorsMapped: integer("colors_mapped").notNull().default(0),
+  colorsUnmapped: integer("colors_unmapped").notNull().default(0),
+  rungsWritten: integer("rungs_written").notNull().default(0),
+  unmappedHandles: jsonb("unmapped_handles").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  proposal: jsonb("proposal"),
+  error: text("error"),
+});
+export type PressPricingSync = typeof pressPricingSyncs.$inferSelect;
+
 // Generic per-album add-on. First user: the **signed_cert** add-on (printed
 // & signed GoodDeed certificate). Future shapes (professional framing,
 // full-album-sized framed GoodDeed with QR provenance) drop in here as new

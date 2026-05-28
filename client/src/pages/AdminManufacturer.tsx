@@ -1561,6 +1561,232 @@ function MrpImportDialog({
   );
 }
 
+// Task #670 — Hellbender pricing-sync button. Re-fetches Hellbender's
+// public Shopify catalog (every `/products/<handle>.js`), maps each
+// color's handle prefix to one of this press's tiers, and rewrites
+// the matching rungs on the default-jacket combos. Idempotent: a
+// re-run with unchanged Shopify prices is a no-op (same numbers
+// land; `synced_at` advances). Splatter and 2LP cells stay on their
+// Task #624 private-quote seeds — Shopify doesn't price those.
+type SyncProduct = {
+  handle: string;
+  name: string;
+  mappedTiersByFormat: Record<string, string>;
+  rungs: { format: string; tierName: string; qty: number; unitCents: number }[];
+  error?: string;
+};
+type SyncProposal = {
+  source: string;
+  fetchedAt: string;
+  products: SyncProduct[];
+  unmapped: { handle: string; name: string; reason: string }[];
+  writes: { format: string; tierName: string; qty: number; unitCents: number }[];
+};
+type SyncCommitResult = {
+  syncId: string;
+  rungsWritten: number;
+  rungsSkipped: number;
+  tiersMissing: string[];
+  proposal: SyncProposal;
+};
+function HellbenderPricingSyncButton({
+  pressId,
+  onSynced,
+}: {
+  pressId: string;
+  onSynced: () => void;
+}) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [proposal, setProposal] = useState<SyncProposal | null>(null);
+  const [commitResult, setCommitResult] = useState<SyncCommitResult | null>(null);
+
+  const previewMut = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest(
+        "POST",
+        `/api/admin/manufacturers/${pressId}/pricing-sync/hellbender/preview`,
+        {},
+      );
+      return (await r.json()) as { proposal: SyncProposal };
+    },
+    onSuccess: (d) => setProposal(d.proposal),
+    onError: (e: any) =>
+      toast({
+        title: "Preview failed",
+        description: e?.message || "Unknown error",
+        variant: "destructive",
+      }),
+  });
+
+  const commitMut = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest(
+        "POST",
+        `/api/admin/manufacturers/${pressId}/pricing-sync/hellbender/commit`,
+        {},
+      );
+      return (await r.json()) as SyncCommitResult;
+    },
+    onSuccess: (d) => {
+      setCommitResult(d);
+      onSynced();
+      toast({
+        title: "Pricing synced",
+        description: `${d.rungsWritten} rungs written${d.tiersMissing.length ? ` · ${d.tiersMissing.length} tier(s) missing` : ""}.`,
+      });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Sync failed",
+        description: e?.message || "Unknown error",
+        variant: "destructive",
+      }),
+  });
+
+  const close = () => {
+    setOpen(false);
+    setProposal(null);
+    setCommitResult(null);
+  };
+  const onOpen = () => {
+    setOpen(true);
+    setProposal(null);
+    setCommitResult(null);
+    previewMut.mutate();
+  };
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={onOpen}
+        className="shrink-0"
+        data-testid="button-sync-hellbender-pricing"
+      >
+        Sync pricing from Hellbender
+      </Button>
+      <Dialog open={open} onOpenChange={(o) => (o ? null : close())}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Sync pricing from Hellbender</DialogTitle>
+            <DialogDescription>
+              Fetches every color's <span className="font-mono text-xs">/products/&lt;handle&gt;.js</span>{" "}
+              from hellbendervinyl.com, decodes the Shopify variants (size × quantity × upgrade),
+              and overwrites the matching rungs on this press's default-jacket combos. Splatter, 2LP,
+              and quantities 750/2000/3000 are left untouched — they stay on the seeded private-quote
+              values. Re-running is safe; identical prices are a no-op.
+            </DialogDescription>
+          </DialogHeader>
+          {previewMut.isPending && (
+            <div className="py-8 text-center text-slate-500 text-sm" data-testid="text-pricing-sync-loading">
+              Fetching Hellbender's Shopify catalog…
+            </div>
+          )}
+          {commitResult && (
+            <div className="space-y-3 py-2">
+              <div className="text-sm" data-testid="text-pricing-sync-result">
+                Wrote {commitResult.rungsWritten} rungs · Skipped {commitResult.rungsSkipped} · Missing tiers{" "}
+                {commitResult.tiersMissing.length}
+              </div>
+              {commitResult.tiersMissing.length > 0 && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                  <div className="font-semibold mb-1">Tiers missing on this press — create them, then re-sync:</div>
+                  <ul className="space-y-0.5">
+                    {commitResult.tiersMissing.map((t) => (
+                      <li key={t} className="font-mono">{t}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div className="flex justify-end pt-2">
+                <Button type="button" onClick={close} data-testid="button-pricing-sync-close">
+                  Done
+                </Button>
+              </div>
+            </div>
+          )}
+          {!previewMut.isPending && !commitResult && proposal && (
+            <div className="space-y-3">
+              <div className="text-xs text-slate-500" data-testid="text-pricing-sync-summary">
+                Fetched {proposal.products.length} products · {proposal.writes.length} aggregated rungs ready ·{" "}
+                {proposal.unmapped.length} unmapped
+              </div>
+              {proposal.writes.length > 0 && (
+                <div className="rounded-md border border-slate-200 overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 text-slate-600">
+                      <tr>
+                        <th className="px-2 py-1.5 text-left font-medium">Format</th>
+                        <th className="px-2 py-1.5 text-left font-medium">Tier</th>
+                        <th className="px-2 py-1.5 text-right font-medium">Qty</th>
+                        <th className="px-2 py-1.5 text-right font-medium">Unit ¢</th>
+                        <th className="px-2 py-1.5 text-right font-medium">Total $</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {proposal.writes.map((w) => (
+                        <tr
+                          key={`${w.format}|${w.tierName}|${w.qty}`}
+                          className="border-t border-slate-100"
+                          data-testid={`row-pricing-write-${w.format}-${w.tierName}-${w.qty}`}
+                        >
+                          <td className="px-2 py-1 font-mono">{w.format}</td>
+                          <td className="px-2 py-1">{w.tierName}</td>
+                          <td className="px-2 py-1 text-right">{w.qty}</td>
+                          <td className="px-2 py-1 text-right">{w.unitCents.toLocaleString()}</td>
+                          <td className="px-2 py-1 text-right">
+                            ${((w.unitCents * w.qty) / 100).toFixed(0)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {proposal.unmapped.length > 0 && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                  <div className="font-semibold mb-1">Unmapped colors ({proposal.unmapped.length})</div>
+                  <ul className="space-y-0.5">
+                    {proposal.unmapped.map((u) => (
+                      <li key={u.handle} data-testid={`text-pricing-unmapped-${u.handle}`}>
+                        <span className="font-medium">{u.name}</span>{" "}
+                        <span className="font-mono text-xs">({u.handle})</span> — {u.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2 sticky bottom-0 bg-white">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={close}
+                  data-testid="button-pricing-sync-cancel"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => commitMut.mutate()}
+                  disabled={commitMut.isPending || proposal.writes.length === 0}
+                  data-testid="button-pricing-sync-commit"
+                >
+                  {commitMut.isPending
+                    ? "Writing…"
+                    : `Write ${proposal.writes.length} rung${proposal.writes.length === 1 ? "" : "s"}`}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function PressCatalogPanel({ pressId, pressDomain }: { pressId: string; pressDomain: string | null }) {
   // Role gate — server is authoritative; we hide the panel for admins
   // who would just see a 403 either way.
@@ -1613,7 +1839,10 @@ function PressCatalogPanel({ pressId, pressDomain }: { pressId: string; pressDom
           </p>
         </div>
         {pressDomain === "hellbendervinyl.com" && (
-          <HellbenderImportButton pressId={pressId} catalog={data ?? null} onImported={invalidate} />
+          <div className="flex flex-wrap items-center gap-2">
+            <HellbenderImportButton pressId={pressId} catalog={data ?? null} onImported={invalidate} />
+            <HellbenderPricingSyncButton pressId={pressId} onSynced={invalidate} />
+          </div>
         )}
         {isMrp && (
           <Button

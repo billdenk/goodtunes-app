@@ -1522,6 +1522,72 @@ export function registerPressCatalogRoutes(
 
   // ─── (Tier × Jacket) ladder ────────────────────────────────────────
 
+  // ─── Task #670 — Hellbender Shopify pricing sync ──────────────────
+  app.post(
+    "/api/admin/manufacturers/:id/pricing-sync/hellbender/preview",
+    requireAdmin,
+    requirePressScope,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const press = await storage.getManufacturerById(pressId);
+      if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+      if (press.domain !== HELLBENDER_DOMAIN) {
+        return res.status(400).json({ message: "This sync only runs on Hellbender." });
+      }
+      try {
+        const { buildHellbenderPricingProposal } = await import("./hellbenderPricingSync");
+        const proposal = await buildHellbenderPricingProposal();
+        return res.json({ proposal });
+      } catch (err: any) {
+        console.error("[hellbender-pricing-sync] preview failed:", err);
+        return res.status(502).json({ message: err?.message || "Preview failed" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/manufacturers/:id/pricing-sync/hellbender/commit",
+    requireAdmin,
+    requirePressScope,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const press = await storage.getManufacturerById(pressId);
+      if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+      if (press.domain !== HELLBENDER_DOMAIN) {
+        return res.status(400).json({ message: "This sync only runs on Hellbender." });
+      }
+      try {
+        const { buildHellbenderPricingProposal, applyHellbenderPricingProposal } =
+          await import("./hellbenderPricingSync");
+        // Re-fetch on commit so we never write a stale preview the
+        // admin may have left sitting open.
+        const proposal = await buildHellbenderPricingProposal();
+        const userId = (req as any).adminUserId ?? null;
+        const result = await applyHellbenderPricingProposal(pressId, userId, proposal);
+        console.log(
+          `[hellbender-pricing-sync] commit by user=${userId} press=${pressId} ` +
+            `written=${result.rungsWritten} skipped=${result.rungsSkipped} missing=${result.tiersMissing.join(",")}`,
+        );
+        return res.json({ ...result, proposal });
+      } catch (err: any) {
+        console.error("[hellbender-pricing-sync] commit failed:", err);
+        return res.status(500).json({ message: err?.message || "Commit failed" });
+      }
+    },
+  );
+
+  app.get(
+    "/api/admin/manufacturers/:id/pricing-syncs",
+    requireAdmin,
+    requirePressScope,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const { listPricingSyncs } = await import("./hellbenderPricingSync");
+      const rows = await listPricingSyncs(pressId);
+      return res.json(rows);
+    },
+  );
+
   app.put("/api/admin/manufacturers/:id/catalog/tiers/:tierId/jackets/:jacketId/ladder", requireAdmin, requirePressScope, async (req, res) => {
     const pressId = String(req.params.id);
     const tierId = String(req.params.tierId);

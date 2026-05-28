@@ -2040,3 +2040,41 @@ SQL
 }
 migrate_task_668_import_source_url dev  "${DATABASE_URL:-}"
 migrate_task_668_import_source_url prod "${PROD_DATABASE_URL:-}"
+
+# ── Task #670 — Hellbender pricing sync audit log ───────────────────
+# Adds `press_pricing_syncs` so the admin-triggered Shopify scraper can
+# write its per-run log row on both dev and prod. Idempotent CREATE so
+# the publish dev→prod diff (memory: dev-prod-schema-drift) doesn't try
+# to drop the table when one side ran the migration and the other
+# didn't yet.
+migrate_task_670_pricing_syncs() {
+  local label="$1"; local url="$2"
+  [ -z "$url" ] && return 0
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL'
+CREATE TABLE IF NOT EXISTS press_pricing_syncs (
+  id                    varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id              varchar NOT NULL,
+  source                text    NOT NULL,
+  status                text    NOT NULL,
+  triggered_by_user_id  varchar,
+  started_at            timestamp NOT NULL DEFAULT now(),
+  finished_at           timestamp,
+  products_fetched      integer NOT NULL DEFAULT 0,
+  colors_mapped         integer NOT NULL DEFAULT 0,
+  colors_unmapped       integer NOT NULL DEFAULT 0,
+  rungs_written         integer NOT NULL DEFAULT 0,
+  unmapped_handles      jsonb   NOT NULL DEFAULT '[]'::jsonb,
+  proposal              jsonb,
+  error                 text
+);
+CREATE INDEX IF NOT EXISTS press_pricing_syncs_press_started_idx
+  ON press_pricing_syncs (press_id, started_at DESC);
+SQL
+  then
+    echo "post-merge: task-670 pricing syncs ok on $label"
+  else
+    echo "post-merge: WARNING — task-670 pricing syncs failed on $label (continuing)"
+  fi
+}
+migrate_task_670_pricing_syncs dev  "${DATABASE_URL:-}"
+migrate_task_670_pricing_syncs prod "${PROD_DATABASE_URL:-}"
