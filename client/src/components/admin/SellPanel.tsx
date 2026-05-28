@@ -4550,10 +4550,114 @@ function SkuRow({
             </div>
           ) : null}
 
+            {/* Task #659 — vendor + summary header. Names the press
+                quoting this run (logo + name) and recaps the row
+                (qty / format / color / tracks / retail / total) so
+                a screenshot of just the breakdown is self-describing.
+                Falls back to the MRP/GoodTunes platform-default
+                identity when no press is invited; in that case the
+                color and press-specific bits are omitted from the
+                recap (the system hasn't bound a real quote to a
+                tier yet). */}
+          {(() => {
+            const headerColorName =
+              usingCatalog && pickedTier
+                ? pickedTier.colors.find((c) => c.id === pressColorId)?.name ?? null
+                : vinylColor.name;
+            const headerVendorName = invitedPressItself?.name
+              ?? (breakdown?.source === "mrp-default" ? "MRP (platform default)" : "GoodTunes default press");
+            const headerLogoUrl = invitedPressItself?.logoUrl ?? null;
+            const monogram = headerVendorName
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((w) => w[0]?.toUpperCase() ?? "")
+              .join("");
+            const recapBits: Array<{ key: string; node: React.ReactNode }> = [];
+            if (parsedQty > 0) {
+              recapBits.push({
+                key: "qty",
+                node: (
+                  <span className="font-semibold text-slate-900 tabular-nums">
+                    {parsedQty.toLocaleString()}
+                  </span>
+                ),
+              });
+            }
+            recapBits.push({ key: "format", node: <span>{ALBUM_FORMAT_LABEL[format]}</span> });
+            if (invitedPressItself && headerColorName) {
+              recapBits.push({ key: "color", node: <span>{headerColorName}</span> });
+            }
+            if (trackCount > 0) {
+              recapBits.push({
+                key: "tracks",
+                node: <span>{trackCount} {trackCount === 1 ? "track" : "tracks"}</span>,
+              });
+            }
+            if (priceCents !== null) {
+              recapBits.push({
+                key: "price",
+                node: <span className="tabular-nums">{dollars(priceCents)}</span>,
+              });
+            }
+            if (parsedQty > 0) {
+              recapBits.push({
+                key: "units",
+                node: (
+                  <span className="tabular-nums">
+                    {parsedQty.toLocaleString()} {parsedQty === 1 ? "unit" : "units"}
+                  </span>
+                ),
+              });
+            }
+            return (
+              <div
+                className="pt-3 border-t border-slate-100"
+                data-testid={`header-estimate-${format}`}
+              >
+                <div className="flex items-center gap-2">
+                  {headerLogoUrl ? (
+                    <img
+                      src={headerLogoUrl}
+                      alt=""
+                      className="w-8 h-8 rounded-full object-cover bg-white ring-1 ring-slate-200 flex-shrink-0"
+                      data-testid={`img-estimate-vendor-${format}`}
+                    />
+                  ) : (
+                    <div
+                      className="w-8 h-8 rounded-full bg-white ring-1 ring-slate-200 flex items-center justify-center text-xs font-semibold text-slate-500 flex-shrink-0"
+                      aria-hidden
+                      data-testid={`monogram-estimate-vendor-${format}`}
+                    >
+                      {monogram || "—"}
+                    </div>
+                  )}
+                  <span
+                    className="text-base font-semibold text-slate-900 truncate"
+                    data-testid={`text-estimate-vendor-${format}`}
+                  >
+                    {headerVendorName}
+                  </span>
+                </div>
+                <div
+                  className="mt-1 text-xs text-slate-500 leading-snug"
+                  data-testid={`text-estimate-recap-${format}`}
+                >
+                  {recapBits.map((bit, idx) => (
+                    <span key={bit.key}>
+                      {idx > 0 && <span className="mx-1.5 text-slate-300">·</span>}
+                      {bit.node}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
             {/* Profit — collapsible inline breakdown. Top border
                 divides operator-pick controls (Jacket/etc) above from
                 the cost rollup below. */}
-          <div className="pt-3 border-t border-slate-100">
+          <div className="pt-3">
             <button
               type="button"
               onClick={() => setBreakdownOpen((o) => !o)}
