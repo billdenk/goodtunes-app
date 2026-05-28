@@ -4442,9 +4442,21 @@ function SkuRow({
                   </div>
                 )}
                 <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
-                  <span>Manufacturing</span>
-                  <span className="tabular-nums">{dollars(breakdown.manufacturingCents)}</span>
+                  <span className={breakdown.needsQuote ? "text-[color:var(--brand-blue)]" : ""}>Manufacturing</span>
+                  <span className={["tabular-nums", breakdown.needsQuote ? "text-[color:var(--brand-blue)]" : ""].join(" ")}>{dollars(breakdown.manufacturingCents)}</span>
                 </div>
+                {breakdown.needsQuote && (
+                  <div
+                    className="text-[11px] text-[color:var(--brand-blue)] leading-snug -mt-1 pl-1"
+                    data-testid={`text-mfg-needs-quote-inline-${format}`}
+                  >
+                    {usingCatalog
+                      ? `No confirmed price rung for ${pickedTier?.name ?? "this tier"} at ${parsedQty.toLocaleString()} pcs on ${invitedPressItself?.name ?? "this press"}. Confirm the rung in Admin → Presses.`
+                      : invitedPressItself
+                        ? `No quote yet from ${invitedPressItself.name} for this format. Add an estimate in the Quotes section below.`
+                        : `No press has been invited to quote this album yet. Invite a press from the album's Presses tab (or open the Quotes section below) to land a real manufacturing cost.`}
+                  </div>
+                )}
                 <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
                   <span>Publishing: ($0.127 × 2 [vinyl+digital]) × {breakdown.publishingTrackCount} tracks</span>
                   <span className="tabular-nums">{dollars(breakdown.publishingCents)}</span>
