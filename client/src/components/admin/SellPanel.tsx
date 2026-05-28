@@ -471,8 +471,17 @@ export function SellPanel({
     try {
       const saved = window.localStorage.getItem(collapseStorageKey);
       if (!saved) return;
-      const configured = new Set(data.skus.map((s) => s.format as string));
-      if (configured.has(saved)) {
+      // Task #642 — only auto-restore an OPEN row if the saved SKU is
+      // genuinely "fully configured" (persisted tier OR legacy color
+      // pick + persisted plannedQuantity). A row that's missing
+      // either is still mid-setup and should land collapsed regardless
+      // of stale localStorage from earlier sessions, so a page full of
+      // configured cards doesn't paint as a wall of expanded blocks.
+      const skuRow = data.skus.find((s) => (s.format as string) === saved);
+      if (!skuRow) return;
+      const hasTier = !!skuRow.pressTierId || !!skuRow.vinylColor;
+      const hasQty = (skuRow.plannedQuantity ?? 0) > 0;
+      if (hasTier && hasQty) {
         skuDisclosure.open(saved);
       }
     } catch {
@@ -887,6 +896,9 @@ export function SellPanel({
                           allPresses={allPresses ?? null}
                           invitedPressItself={invitedPress?.press ?? null}
                           pressFormatsByPress={pressFormatsByPress}
+                          allPlannedQuantities={data.skus
+                            .map((s) => s.plannedQuantity ?? 0)
+                            .filter((q) => q > 0)}
                         />
                       );
                     })}
@@ -947,6 +959,9 @@ export function SellPanel({
                         allPresses={allPresses ?? null}
                         invitedPressItself={invitedPress?.press ?? null}
                         pressFormatsByPress={pressFormatsByPress}
+                        allPlannedQuantities={data.skus
+                          .map((s) => s.plannedQuantity ?? 0)
+                          .filter((q) => q > 0)}
                       />
                     ))}
                   </>
@@ -1653,6 +1668,7 @@ function SkuRow({
   allPresses,
   invitedPressItself,
   pressFormatsByPress,
+  allPlannedQuantities,
 }: {
   format: AlbumFormat;
   existing: AlbumSku | null;
@@ -1774,6 +1790,12 @@ function SkuRow({
   // Task #635 — `(pressId → Set<format>)` index so the popover can
   // narrow `allPresses` down to those actually offering this format.
   pressFormatsByPress?: Map<string, Set<string>>;
+  // Task #642 — saved plannedQuantity from every SKU on the album
+  // (any format). Feeds the Estimates table's column union so the
+  // operator can compare Artist Net at every pressing volume already
+  // committed to elsewhere on the album, not just the rungs of this
+  // row's own ladder.
+  allPlannedQuantities?: number[];
 }) {
   const isDraft = existing === null;
   const isVinyl = isVinylFormat(format);
@@ -2724,6 +2746,77 @@ function SkuRow({
     return { low: Math.min(...lows), high: Math.max(...lows) };
   }, [perRungArtistNet]);
 
+  // Task #642 — Estimates table columns. Generalises the header
+  // pill's per-rung Artist Net math to a broader column set the
+  // operator can compare across:
+  //   (a) every plannedQuantity saved on this album (any format) —
+  //       so picking 1,000 here lines up alongside the 500 already
+  //       locked in on the Double LP, etc.
+  //   (b) the picked tier's ladder rungs that bracket the chosen
+  //       Select Qty (one below, one above) — preview the next
+  //       wholesale step in either direction.
+  //   (c) the currently-typed Select Qty itself, even if it doesn't
+  //       land on a rung (snaps up to the next rung's unit cost).
+  // Manufacturing per column comes from snapping the picked tier's
+  // ladder; non-catalog rows fall back to the breakdown's mfg cents
+  // (single-column case, in which the standalone Profit/Total
+  // below still renders).
+  const estimateTableRows = useMemo<
+    { qty: number; netCents: number }[]
+  >(() => {
+    if (!isVinyl || !breakdown || priceCents === null) return [];
+    const set = new Set<number>();
+    for (const q of allPlannedQuantities ?? []) {
+      if (q > 0) set.add(q);
+    }
+    if (usingCatalog && pickedTier && parsedQty > 0) {
+      const sorted = [...pickedTier.priceLadder]
+        .filter((r) => r.confirmed !== false)
+        .sort((a, b) => a.qty - b.qty);
+      const below = [...sorted].reverse().find((r) => r.qty < parsedQty);
+      const above = sorted.find((r) => r.qty > parsedQty);
+      if (below) set.add(below.qty);
+      if (above) set.add(above.qty);
+    }
+    if (parsedQty > 0) set.add(parsedQty);
+    const qtys = [...set].sort((a, b) => a - b);
+    return qtys.map((qty) => {
+      let mfgCents = breakdown.manufacturingCents;
+      if (usingCatalog && pickedTier) {
+        const snap = snapCatalogLadder(pickedTier.priceLadder, qty);
+        if (snap) mfgCents = snap.unitCents;
+      }
+      const costPerUnit =
+        mfgCents +
+        breakdown.publishingCents +
+        breakdown.paymentProcessingCents +
+        breakdown.goodtunesCents;
+      const profitPerUnit = priceCents - costPerUnit;
+      let net = profitPerUnit * qty;
+      if (signedAddon?.active && attachRatio > 0) {
+        const certCount = Math.max(0, Math.floor(qty * attachRatio));
+        const certNet = certNetForCertCount(certCount);
+        if (certNet !== null && certCount > 0) {
+          net += certNet * certCount;
+        }
+      }
+      return { qty, netCents: net };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isVinyl,
+    breakdown,
+    priceCents,
+    usingCatalog,
+    pickedTier,
+    parsedQty,
+    allPlannedQuantities,
+    signedAddon,
+    attachRatio,
+    certCostByQty,
+    livePlatformCostCents,
+  ]);
+
   const signedDollars = (c: number) =>
     c < 0 ? `-${dollars(Math.abs(c))}` : dollars(c);
   const artistNetLabel = artistNetRange
@@ -2781,12 +2874,31 @@ function SkuRow({
     >
       {isVinyl ? (
         <>
-        {/* Task #393 — vinyl header mirrors the Tracks-row chrome:
-           format name as the title on the left, hide-toggle + trash
-           (destructive-confirm) + chevron on the right. No checkbox,
-           no SaveLink, no bare ×. Format pivots happen via the
-           Format dropdown inside the expanded REQUIRED body. */}
-        <div className={["flex items-center justify-between gap-2", expanded ? "mb-3" : "mb-2"].join(" ")}>
+        {/* Task #642 — unified header (collapsed + expanded share the
+           same row): cover thumb · title/artist/spec stack on the left,
+           press-switcher · Artist Net · deductions (i) + button
+           cluster (lock | trash | divider | eye | chevron) on the
+           right. Replaces the prior collapse-only summary block so
+           the operator's eye lands in the same place whether the row
+           is open or closed. Body below picks up at REQUIRED · Vinyl. */}
+        <div className={["flex items-start gap-3", expanded ? "mb-3" : "mb-2"].join(" ")}>
+          {/* Task #635/#642 — small cover-art thumbnail anchors the
+              header in both states. Clicking it toggles expansion so
+              the thumb is itself the row's primary affordance. */}
+          <button
+            type="button"
+            onClick={() => onSetExpanded(!expanded)}
+            aria-label={expanded ? "Collapse format" : "Expand format"}
+            className="flex-shrink-0 w-9 h-9 mt-0.5 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]/40"
+            data-testid={`button-row-thumb-${format}`}
+          >
+            {artworkUrl ? (
+              <img src={artworkUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <span className="block w-full h-full" aria-hidden />
+            )}
+          </button>
+          <div className="flex-1 min-w-0 space-y-1">
           {/* Task #397 — Tracks-row inline-editable title. Click the
               input to edit; click anywhere else on the header (or the
               chevron) to expand. Task #413 — empty placeholder reads
@@ -2800,27 +2912,8 @@ function SkuRow({
               ? "Row title — defaults to album title"
               : `Row title — defaults to ${ALBUM_FORMAT_LABEL[format]}`;
             return (
-          <div className="flex-1 min-w-0 flex items-center gap-2">
-            {/* Task #635 — small cover-art thumbnail anchors the
-                collapsed header so a wall of N format cards is
-                visually scannable. Expanded keeps the larger jacket
-                preview in the body, so we only render the thumb
-                when collapsed to avoid duplicating it. */}
-            {!expanded && (
-              <button
-                type="button"
-                onClick={() => onSetExpanded(true)}
-                aria-label="Expand format"
-                className="flex-shrink-0 w-9 h-9 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]/40"
-                data-testid={`button-row-thumb-${format}`}
-              >
-                {artworkUrl ? (
-                  <img src={artworkUrl} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="block w-full h-full" aria-hidden />
-                )}
-              </button>
-            )}
+          <>
+          <div className="flex items-center gap-2">
             <input
               type="text"
               value={displayNameStr}
@@ -2837,9 +2930,6 @@ function SkuRow({
               ].join(" ")}
               data-testid={`input-sku-display-name-${format}`}
             />
-          </div>
-            );
-          })()}
           {/* Task #433 — pulled tight to the top-right edge (-mr-1) and
               sized to the Tracks-row 7×7 chrome so the cluster reads
               as one affordance. Order matches Tracks-row destructive
@@ -2941,35 +3031,34 @@ function SkuRow({
               <ChevronDown className={["w-3.5 h-3.5 transition-transform", expanded ? "rotate-180" : ""].join(" ")} />
             </button>
           </div>
-        </div>
-        {/* Task #635 — collapsed-only summary line: format · color ·
-            qty on the left, press-switcher popover + Artist Net range
-            with deductions (i) on the right. The press swap is
-            display-only (album-level invited-press flow lives in the
-            Vendors tab); we surface qualified presses so the operator
-            can see who else would quote this format. */}
-        {!expanded && (
-          <button
-            type="button"
-            onClick={() => onSetExpanded(true)}
-            className="w-full flex items-center justify-between gap-3 text-left rounded-md px-1 -mx-1 hover:bg-slate-50 transition-colors"
-            aria-label="Expand format"
-            data-testid={`button-row-collapsed-${format}`}
-          >
-            <div className="min-w-0 flex-1 text-xs text-slate-500 truncate">
+          </div>
+          {/* Task #642 — artist line under the title; muted, single
+              line. Hidden when the album has no artist (rare; new
+              standalone releases). */}
+          {artistName && (
+            <div className="text-xs text-slate-500 truncate" data-testid={`text-row-artist-${format}`}>
+              {artistName}
+            </div>
+          )}
+          {/* Task #642 — spec line + press-switcher + Artist Net + (i)
+              now render in BOTH collapsed and expanded states (was
+              collapse-only). The press swap is display-only
+              (album-level invited-press flow lives in the Vendors
+              tab); we surface qualified presses so the operator can
+              see who else would quote this format. */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1 text-xs text-slate-500 truncate" data-testid={`text-row-spec-${format}`}>
               {[
                 ALBUM_FORMAT_LABEL[format],
                 headerColorLabel,
+                trackCount > 0 ? `${trackCount} ${trackCount === 1 ? "track" : "tracks"}` : null,
                 parsedQty > 0 ? `${parsedQty.toLocaleString()} pcs` : null,
                 !active ? "off" : null,
               ]
                 .filter(Boolean)
                 .join(" · ")}
             </div>
-            <div
-              className="flex items-center gap-2 flex-shrink-0"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <div className="flex items-center gap-2 flex-shrink-0">
               {invitedPressItself && (
                 <Popover open={pressSwitcherOpen} onOpenChange={setPressSwitcherOpen}>
                   <PopoverTrigger asChild>
@@ -3060,8 +3149,12 @@ function SkuRow({
                 </PopoverContent>
               </Popover>
             </div>
-          </button>
-        )}
+          </div>
+          </>
+            );
+          })()}
+          </div>
+        </div>
         </>
       ) : (
         /* Non-vinyl rows keep the legacy header (checkbox + SaveLink +
@@ -4022,13 +4115,12 @@ function SkuRow({
             )}
           </div>
 
-          {/* Task #635 — per-rung Estimates table. Generalises the
-              single-quantity Total line to N columns from the picked
-              tier's price ladder so the operator can sanity-check
-              Artist Net across every confirmed pressing volume in
-              one read. Hidden when there's only one rung (the
-              existing Total line below already covers that case). */}
-          {perRungArtistNet.length > 1 && (
+          {/* Task #642 — per-quantity Estimates table. Columns are the
+              union of (a) saved plannedQuantities across this album,
+              (b) ladder rungs bracketing Select Qty, (c) the current
+              Select Qty. Renders when ≥2 columns; the single-column
+              case falls through to the standalone Profit/Total below. */}
+          {estimateTableRows.length > 1 && (
             <div className="rounded-md border border-slate-200 bg-slate-50/60 p-2" data-testid={`table-sku-estimates-${format}`}>
               <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1.5">
                 Estimates by quantity
@@ -4038,7 +4130,7 @@ function SkuRow({
                   <thead>
                     <tr className="text-slate-500">
                       <th className="text-left font-medium pb-1 pr-2">Qty</th>
-                      {perRungArtistNet.map((r) => (
+                      {estimateTableRows.map((r) => (
                         <th
                           key={r.qty}
                           className={[
@@ -4054,7 +4146,7 @@ function SkuRow({
                   <tbody>
                     <tr className="text-slate-700">
                       <td className="text-left text-slate-500 py-1 pr-2">Artist Net</td>
-                      {perRungArtistNet.map((r) => (
+                      {estimateTableRows.map((r) => (
                         <td
                           key={r.qty}
                           className={[
@@ -4118,40 +4210,51 @@ function SkuRow({
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-3 pt-1">
-            <span className="text-slate-500 text-xs">
-              Profit ${" "}
-              <span className="text-slate-400 text-[11px]">Per unit sold</span>
-            </span>
-            <span
-              className={[
-                "w-28 text-right tabular-nums text-[13.5px]",
-                lossColor ? "text-[color:var(--brand-pink)]" : "text-slate-700",
-              ].join(" ")}
-              data-testid={`text-profit-echo-${format}`}
-            >
-              {profitLabel}
-            </span>
-          </div>
+          {/* Task #642 — single-column fallback. When the Estimates
+              table is rendering (≥2 columns), the per-rung Artist Net
+              row already covers what these two lines were showing for
+              one quantity, so we suppress them to avoid a duplicate
+              single-column "Total" sitting underneath the multi-column
+              table. The bare Estimated-sold caveat below still renders
+              in both modes. */}
+          {estimateTableRows.length <= 1 && (
+            <>
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <span className="text-slate-500 text-xs">
+                  Profit ${" "}
+                  <span className="text-slate-400 text-[11px]">Per unit sold</span>
+                </span>
+                <span
+                  className={[
+                    "w-28 text-right tabular-nums text-[13.5px]",
+                    lossColor ? "text-[color:var(--brand-pink)]" : "text-slate-700",
+                  ].join(" ")}
+                  data-testid={`text-profit-echo-${format}`}
+                >
+                  {profitLabel}
+                </span>
+              </div>
 
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-slate-500 text-xs">Total $</span>
-            <span
-              className={[
-                "w-28 text-right tabular-nums text-[15px] font-semibold",
-                totalCents !== null && totalCents < 0
-                  ? "text-[color:var(--brand-pink)]"
-                  : "text-slate-900",
-              ].join(" ")}
-              data-testid={`text-total-${format}`}
-            >
-              {totalCents === null
-                ? "—"
-                : totalCents < 0
-                  ? `-${dollars(Math.abs(totalCents))}`
-                  : dollars(totalCents)}
-            </span>
-          </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-slate-500 text-xs">Total $</span>
+                <span
+                  className={[
+                    "w-28 text-right tabular-nums text-[15px] font-semibold",
+                    totalCents !== null && totalCents < 0
+                      ? "text-[color:var(--brand-pink)]"
+                      : "text-slate-900",
+                  ].join(" ")}
+                  data-testid={`text-total-${format}`}
+                >
+                  {totalCents === null
+                    ? "—"
+                    : totalCents < 0
+                      ? `-${dollars(Math.abs(totalCents))}`
+                      : dollars(totalCents)}
+                </span>
+              </div>
+            </>
+          )}
 
           {estimatedSold !== null && (
             <div
