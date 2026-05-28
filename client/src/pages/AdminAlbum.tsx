@@ -1641,12 +1641,52 @@ function AlbumEditAccessChip({ albumId }: { albumId: string }) {
 
 /* ─── Overview tab ─────────────────────────────────────────────────── */
 
+type ArtistLabelConflict = {
+  personId: string;
+  personName: string;
+  fromLabelId: string;
+  fromLabelName: string;
+  toLabelId: string;
+  toLabelName: string;
+};
+
 function OverviewPanel({ album }: { album: AlbumFull }) {
   const invalidate: (readonly unknown[])[] = [
     ["/api/albums", album.id],
     ["/api/albums"],
   ];
   const endpoint = `/api/admin/albums/${album.id}`;
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  // Task #644 — when the server detects the album's primary artist is
+  // already signed to a different label than the one we just stamped on
+  // the album, it returns a structured `artistLabelConflict` payload on
+  // the album-PUT response. We surface a confirm dialog (mirrors the
+  // reassign dialog in AdminLabel) so the operator decides whether to
+  // move the artist over. Cancel leaves the artist on their old label;
+  // the album label change has already landed either way.
+  const [reassign, setReassign] = useState<ArtistLabelConflict | null>(null);
+  const reassignMut = useMutation({
+    mutationFn: async (c: ArtistLabelConflict) => {
+      await apiRequest("PUT", `/api/admin/people/${c.personId}`, {
+        labelId: c.toLabelId,
+      });
+    },
+    onSuccess: (_v, c) => {
+      qc.invalidateQueries({ queryKey: ["/api/people"] });
+      qc.invalidateQueries({ queryKey: ["/api/people", c.personId] });
+      qc.invalidateQueries({ queryKey: ["/api/labels"] });
+      toast({ title: `Moved ${c.personName} to ${c.toLabelName}` });
+      setReassign(null);
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't reassign artist",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
   const { data: labels = [] } = useQuery<LabelLite[]>({
     queryKey: ["/api/labels"],
   });
@@ -1812,6 +1852,12 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
             placeholder: "19.99",
           },
         ]}
+        onSaved={(resp) => {
+          // Task #644 — server tells us when the album's primary artist
+          // is on a different label and asks us to confirm the move.
+          const c = resp?.artistLabelConflict as ArtistLabelConflict | undefined;
+          if (c) setReassign(c);
+        }}
       />
       {/* Task #190 — per-album Lineup snapshot. Only meaningful when the
           album's primary artist is a group (band/duo/orchestra). Renders
@@ -1819,6 +1865,56 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
       {album.primaryArtistId && (
         <AlbumLineupPanel album={album} disabled={disabled} disabledReason={disabledReason} />
       )}
+      {/* Task #644 — artist reassign confirm. Mirrors the dialog in
+          AdminLabel's "Add artist already on another label" flow. */}
+      <Dialog
+        open={!!reassign}
+        onOpenChange={(v) => !reassignMut.isPending && !v && setReassign(null)}
+      >
+        <DialogContent
+          className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4"
+          data-testid="dialog-reassign-album-artist"
+        >
+          <DialogHeader className="text-left space-y-1">
+            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
+              Reassign <span className="italic">{reassign?.personName}</span>?
+            </DialogTitle>
+            <DialogDescription className="text-[13px] font-normal text-slate-500">
+              They're currently signed to{" "}
+              <span className="font-semibold text-slate-700">
+                {reassign?.fromLabelName}
+              </span>
+              . Continuing will move them to{" "}
+              <span className="font-semibold text-slate-700">
+                {reassign?.toLabelName}
+              </span>
+              {" "}— previous label loses the link. The album's label change has already been saved.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 pt-1">
+            <Button
+              type="button"
+              onClick={() => setReassign(null)}
+              disabled={reassignMut.isPending}
+              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
+              data-testid="button-reassign-album-artist-cancel"
+            >
+              Keep current label
+            </Button>
+            <Button
+              type="button"
+              onClick={() => reassign && reassignMut.mutate(reassign)}
+              disabled={reassignMut.isPending}
+              className="bg-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/90 text-white ml-2"
+              data-testid="button-reassign-album-artist-confirm"
+            >
+              {reassignMut.isPending
+                ? "Moving…"
+                : `Move to ${reassign?.toLabelName ?? "new label"}`}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

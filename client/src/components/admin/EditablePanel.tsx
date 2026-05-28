@@ -127,6 +127,11 @@ export interface EditablePanelProps {
   // is still the gate; this just keeps the UI honest.
   disabled?: boolean;
   disabledReason?: string;
+  // Optional post-save hook. Receives the parsed JSON response from the
+  // PUT endpoint (or null when nothing changed and no request was sent).
+  // Use when the server returns extra payload the caller needs to act on
+  // — e.g. an `artistLabelConflict` follow-up confirm.
+  onSaved?: (response: any) => void;
 }
 
 export function EditablePanel({
@@ -140,6 +145,7 @@ export function EditablePanel({
   columns = 2,
   disabled = false,
   disabledReason,
+  onSaved,
 }: EditablePanelProps) {
   const [editing, setEditing] = useState(false);
   // Draft holds string values for almost every field; address-snapshot
@@ -231,11 +237,17 @@ export function EditablePanel({
           }
         }
       }
-      if (Object.keys(body).length === 0) return null;
-      await apiRequest("PUT", endpoint, body);
-      return body;
+      if (Object.keys(body).length === 0) return { changed: null, response: null };
+      const res = await apiRequest("PUT", endpoint, body);
+      let response: any = null;
+      try {
+        response = await res.json();
+      } catch {
+        response = null;
+      }
+      return { changed: body, response };
     },
-    onSuccess: async (changed) => {
+    onSuccess: async ({ changed, response }) => {
       // Refresh any combobox option lists that just had a value added /
       // edited from this form — otherwise the freshly-added genre /
       // tag / category won't show up as an existing option next time.
@@ -249,6 +261,7 @@ export function EditablePanel({
       );
       exitEdit();
       if (changed) toast({ title: `${title} updated` });
+      if (changed && onSaved) onSaved(response);
     },
     onError: (e: any) => {
       toast({

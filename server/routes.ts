@@ -207,6 +207,62 @@ function normalizeReleaseDate(value: unknown): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
 }
 
+// Task #644 — structured payload surfaced by the album create/update
+// routes when the album's primary artist is already signed to a
+// *different* label than the one just stamped on the album. The PUT
+// route returns it alongside the updated album so the client can prompt
+// the operator to confirm (or decline) the reassign. POST also surfaces
+// it for parity, though the create-flow UI doesn't currently prompt.
+export type AlbumArtistLabelConflict = {
+  personId: string;
+  personName: string;
+  fromLabelId: string;
+  fromLabelName: string;
+  toLabelId: string;
+  toLabelName: string;
+};
+
+// Task #644 — keep `people.labelId` in lock-step with `albums.labelId`
+// after every write to the album row. If the primary artist has no
+// label, silently set it to the album's new label. If the artist is
+// already signed to a different label, return a structured conflict
+// object so the caller can prompt the operator (PUT) or log and skip
+// (POST / approval-apply / backfill). Clearing the album's label does
+// NOT un-sign the artist — artists outlive a single release on a label.
+async function syncPrimaryArtistLabel(album: {
+  id: string;
+  labelId?: string | null;
+  primaryArtistId?: string | null;
+  isGoodTunesRelease?: boolean | null;
+}): Promise<AlbumArtistLabelConflict | null> {
+  const newLabelId = album.labelId ?? null;
+  const personId = album.primaryArtistId ?? null;
+  // Clearing the label or albums with no primary artist: no-op.
+  if (!newLabelId || !personId) return null;
+  // Streaming-only rows never trigger artist signing (see
+  // docs/admin-conventions.md — streaming-row vs GoodTunes-release).
+  if (!album.isGoodTunesRelease) return null;
+  const person = await storage.getPersonById(personId);
+  if (!person) return null;
+  if (!person.labelId) {
+    await storage.updatePerson(personId, { labelId: newLabelId } as any);
+    return null;
+  }
+  if (person.labelId === newLabelId) return null;
+  const [fromLabel, toLabel] = await Promise.all([
+    storage.getLabelById(person.labelId),
+    storage.getLabelById(newLabelId),
+  ]);
+  return {
+    personId,
+    personName: person.name,
+    fromLabelId: person.labelId,
+    fromLabelName: fromLabel?.name ?? "another label",
+    toLabelId: newLabelId,
+    toLabelName: toLabel?.name ?? "the new label",
+  };
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   const PgSession = connectPgSimple(session);
   const sessionSecret = process.env.SESSION_SECRET;
@@ -4667,7 +4723,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       sellMode: rawSellMode ?? null,
       physicalFormat: rawPhysicalFormat ?? null,
     } as any);
-    return res.status(201).json(album);
+    // Task #644 — same auto-sign behaviour the PUT path uses. On create
+    // we don't have a UI to confirm a reassign, so a conflict is left
+    // as-is (the operator can resolve it from the artist row); on a
+    // clean unsigned artist the labelId is propagated silently.
+    let artistLabelConflict: AlbumArtistLabelConflict | null = null;
+    if (album.labelId) {
+      artistLabelConflict = await syncPrimaryArtistLabel(album);
+    }
+    return res.status(201).json(artistLabelConflict ? { ...album, artistLabelConflict } : album);
   });
 
   // One-shot backfill: flips `isGoodTunesRelease=true` on the small,
@@ -5057,7 +5121,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const updated = await storage.updateAlbum(id, updates);
     if (!updated) return res.status(404).json({ message: "Album not found" });
-    return res.json(updated);
+    // Task #644 — auto-sign the album's primary artist to the album's
+    // label. If the artist has no label, silently set it. If the artist
+    // is already signed to a *different* label, surface a structured
+    // `artistLabelConflict` payload so the client can confirm before
+    // reassigning. The album save itself has already landed either way.
+    let artistLabelConflict: AlbumArtistLabelConflict | null = null;
+    if (updates.labelId !== undefined) {
+      artistLabelConflict = await syncPrimaryArtistLabel(updated);
+    }
+    return res.json(artistLabelConflict ? { ...updated, artistLabelConflict } : updated);
   });
 
   app.delete("/api/admin/albums/:id", requireAdmin, async (req, res) => {

@@ -717,6 +717,28 @@ export async function applyPendingChange(
         return true;
       }
       const updated = await storage.updateAlbum(targetId, payload as any);
+      // Task #644 — mirror the live PUT path's auto-sign behaviour so an
+      // approved label change still propagates to the primary artist.
+      // Conflicts (artist already on a different label) are logged and
+      // skipped here — there's no operator session to prompt.
+      if (updated && Object.prototype.hasOwnProperty.call(payload, "labelId")) {
+        try {
+          // Streaming-only rows are out of scope (see
+          // docs/admin-conventions.md). Same gate the live PUT path uses.
+          const person = updated.primaryArtistId && updated.isGoodTunesRelease
+            ? await storage.getPersonById(updated.primaryArtistId)
+            : null;
+          if (person && updated.labelId && !person.labelId) {
+            await storage.updatePerson(person.id, { labelId: updated.labelId } as any);
+          } else if (person && updated.labelId && person.labelId && person.labelId !== updated.labelId) {
+            console.warn(
+              `[task-644] approved album ${targetId} label change skipped artist auto-sign: ${person.id} already on label ${person.labelId}`,
+            );
+          }
+        } catch (err) {
+          console.warn(`[task-644] applyPendingChange artist auto-sign failed for album ${targetId}:`, err);
+        }
+      }
       return !!updated;
     }
     case "songs": {
