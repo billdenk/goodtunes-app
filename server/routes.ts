@@ -11595,6 +11595,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.websiteUrl !== undefined) u.websiteUrl = strOrNull(b.websiteUrl);
     if (b.contactEmail !== undefined) u.contactEmail = strOrNull(b.contactEmail);
     if (b.contactPhone !== undefined) u.contactPhone = strOrNull(b.contactPhone);
+    // Task #624 — broker / wholesale discount percentage (0–100).
+    // Coerce to integer + clamp; reject anything outside the range.
+    if (b.brokerDiscountPct !== undefined) {
+      const v = intOrNull(b.brokerDiscountPct);
+      if (v === INVALID || v === null || v < 0 || v > 100) {
+        return res.status(400).json({ message: "brokerDiscountPct must be an integer 0–100" });
+      }
+      u.brokerDiscountPct = v;
+    }
     if (b.turnaroundDays !== undefined) {
       const ta = intOrNull(b.turnaroundDays);
       if (ta === INVALID) return res.status(400).json({ message: "turnaroundDays must be a number" });

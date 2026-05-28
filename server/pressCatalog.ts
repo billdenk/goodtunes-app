@@ -35,7 +35,7 @@
 // jacket name).
 
 import type { Express, Request, Response } from "express";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "./db";
 import { storage } from "./storage";
@@ -69,15 +69,21 @@ export type CatalogColor = {
   swatchImageUrl: string | null;
   position: number;
 };
+// Task #624 — each rung carries an optional `confirmed` flag. False
+// (or missing on legacy rows) means the rung was seeded as a placeholder
+// and needs a real quote from the press; admin UI renders these yellow
+// with a "TBD — awaiting quote" hint. Saving a value through the
+// catalog editor marks the rung confirmed=true automatically.
+export type CatalogLadderRung = { qty: number; unitCents: number; confirmed?: boolean };
 export type CatalogTier = {
   id: string;
   name: string;
   position: number;
   // For back-compat: the default jacket's ladder (what /invited-press
   // exposes today). New editor consumers should use `laddersByJacket`.
-  priceLadder: { qty: number; unitCents: number }[];
+  priceLadder: CatalogLadderRung[];
   // jacketId → ladder for every (tier, jacket) combo that has one.
-  laddersByJacket: Record<string, { qty: number; unitCents: number }[]>;
+  laddersByJacket: Record<string, CatalogLadderRung[]>;
   colors: CatalogColor[];
 };
 export type CatalogFormat = {
@@ -192,11 +198,18 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
 // Returns the matched rung + `requiresQuote=true` when the typed
 // quantity exceeds the top rung. Returns null when the ladder is empty.
 export function snapToCatalogQuantityTier(
-  ladder: { qty: number; unitCents: number }[],
+  ladder: { qty: number; unitCents: number; confirmed?: boolean }[],
   input: number | null | undefined,
 ): { qty: number; unitCents: number; requiresQuote: boolean } | null {
   if (!Array.isArray(ladder) || ladder.length === 0) return null;
-  const sorted = [...ladder].sort((a, b) => a.qty - b.qty);
+  // Task #624 — unconfirmed rungs are TBD placeholders; they MUST
+  // never resolve as $0 manufacturing. Filter them out of pricing
+  // lookup; the caller bubbles `requiresQuote=true` whenever the
+  // remaining (confirmed) ladder can't price the typed quantity.
+  const sorted = [...ladder]
+    .filter((r) => r.confirmed !== false)
+    .sort((a, b) => a.qty - b.qty);
+  if (sorted.length === 0) return null;
   const n = typeof input === "number" && Number.isFinite(input) ? Math.max(1, Math.floor(input)) : 1;
   for (const r of sorted) if (n <= r.qty) return { qty: r.qty, unitCents: r.unitCents, requiresQuote: false };
   const top = sorted[sorted.length - 1];
@@ -280,9 +293,60 @@ const HELLBENDER_DOMAIN = "hellbendervinyl.com";
 const HELLBENDER_STANDARD_JACKET = "Standard Full-Color Jacket";
 let hellbenderSeedRan = false;
 
-const HELLBENDER_DESIRED_TIER_NAMES: string[] = VINYL_COLOR_TIER_ORDER.map(
+// Task #624 — Hellbender's May 2026 quote consolidated their tier menu
+// down to Black / Color / Splatter for the 1LP and 2LP runs they care
+// about. Color + Splatter ship with confirmed rungs at 500 / 1000 /
+// 2000 (the only quantities Hellbender priced). Black is materialised
+// at the same three rungs as `confirmed:false` placeholders so the
+// catalog editor renders the cells in yellow with a "TBD — awaiting
+// quote" hint until Hellbender comes back with Black numbers. Every
+// other rung is intentionally absent — admins fill them in via the
+// editor and the rung gets confirmed=true on save.
+//
+// 7" is left on the older multi-tier seed for back-compat (the new
+// quote doesn't touch 7"), so the per-format desired-tier maps drive
+// which tiers each format is allowed to carry.
+const HELLBENDER_LEGACY_7_TIER_NAMES: string[] = VINYL_COLOR_TIER_ORDER.map(
   (k) => VINYL_COLOR_TIER_LABEL[k],
 );
+const HELLBENDER_NEW_12_TIER_NAMES = ["Black", "Color", "Splatter"] as const;
+type HellbenderRungSpec = { qty: number; unitCents: number; confirmed: boolean };
+const HELLBENDER_NEW_12_LADDERS: Record<"12_lp" | "12_double", Record<string, HellbenderRungSpec[]>> = {
+  "12_lp": {
+    Black: [
+      { qty: 500, unitCents: 0, confirmed: false },
+      { qty: 1000, unitCents: 0, confirmed: false },
+      { qty: 2000, unitCents: 0, confirmed: false },
+    ],
+    Color: [
+      { qty: 500, unitCents: 4060, confirmed: true },
+      { qty: 1000, unitCents: 6260, confirmed: true },
+      { qty: 2000, unitCents: 10655, confirmed: true },
+    ],
+    Splatter: [
+      { qty: 500, unitCents: 4455, confirmed: true },
+      { qty: 1000, unitCents: 7010, confirmed: true },
+      { qty: 2000, unitCents: 12155, confirmed: true },
+    ],
+  },
+  "12_double": {
+    Black: [
+      { qty: 500, unitCents: 0, confirmed: false },
+      { qty: 1000, unitCents: 0, confirmed: false },
+      { qty: 2000, unitCents: 0, confirmed: false },
+    ],
+    Color: [
+      { qty: 500, unitCents: 7030, confirmed: true },
+      { qty: 1000, unitCents: 10975, confirmed: true },
+      { qty: 2000, unitCents: 18585, confirmed: true },
+    ],
+    Splatter: [
+      { qty: 500, unitCents: 7820, confirmed: true },
+      { qty: 1000, unitCents: 12475, confirmed: true },
+      { qty: 2000, unitCents: 21785, confirmed: true },
+    ],
+  },
+};
 
 export async function seedHellbenderCatalog() {
   if (hellbenderSeedRan) return;
@@ -292,6 +356,18 @@ export async function seedHellbenderCatalog() {
     if (!press) {
       hellbenderSeedRan = false;
       return;
+    }
+
+    // Task #624 — Hellbender's quoted broker arrangement is a 10%
+    // discount off the catalog price. We seed it once (only when the
+    // column is still at the schema default of 0) so an admin can
+    // edit the number later from the Manufacturer page without the
+    // seed clobbering them on every boot.
+    if (Number((press as any).brokerDiscountPct ?? 0) === 0) {
+      await db.execute(sql`
+        UPDATE manufacturers SET broker_discount_pct = 10
+        WHERE id = ${press.id} AND broker_discount_pct = 0
+      `);
     }
 
     // Ensure the standard jacket exists + is flagged default.
@@ -313,13 +389,14 @@ export async function seedHellbenderCatalog() {
       await db.update(pressJackets).set({ isDefault: true }).where(eq(pressJackets.id, jacket.id));
     }
 
-    // Hellbender presses 7" and 12" LP only.
-    const formats: AlbumFormat[] = ["7_inch", "12_lp"];
+    // Hellbender presses 7", 1LP, and 2LP. 7" keeps the legacy
+    // multi-tier seed (no new quote covers it); 12_lp + 12_double use
+    // the May-2026 Black/Color/Splatter set seeded with the confirmed
+    // 500/1000/2000 rungs and a Black placeholder.
+    const formats: AlbumFormat[] = ["7_inch", "12_lp", "12_double"];
 
     for (let fi = 0; fi < formats.length; fi++) {
       const fmt = formats[fi];
-      const size = pressingSizeForFormat(fmt);
-      if (!size) continue;
       await db.insert(pressFormats).values({ pressId: press.id, format: fmt, position: fi }).onConflictDoNothing();
 
       const existingTiers = await db
@@ -328,9 +405,50 @@ export async function seedHellbenderCatalog() {
         .where(and(eq(pressColorTiers.pressId, press.id), eq(pressColorTiers.format, fmt)))
         .orderBy(asc(pressColorTiers.position));
       const existingNames = existingTiers.map((t) => t.name);
+
+      // Format-specific desired-tier spec.
+      let desiredNames: readonly string[];
+      let buildLadder: (tierName: string) => HellbenderRungSpec[] | null;
+      let buildColors: (tierName: string) => { name: string; swatchHex: string | null }[];
+
+      if (fmt === "7_inch") {
+        desiredNames = HELLBENDER_LEGACY_7_TIER_NAMES;
+        const size = pressingSizeForFormat(fmt);
+        buildLadder = (name) => {
+          const tierKey = VINYL_COLOR_TIER_ORDER.find(
+            (k) => VINYL_COLOR_TIER_LABEL[k] === name,
+          );
+          if (!tierKey || !size) return null;
+          const sizeMatrix = HELLBENDER_MATRIX[tierKey][size];
+          return VINYL_QUANTITY_TIERS.map((q) => ({
+            qty: q as number,
+            unitCents: sizeMatrix[q].none,
+            confirmed: true,
+          }));
+        };
+        buildColors = (name) => {
+          const tierKey = VINYL_COLOR_TIER_ORDER.find(
+            (k) => VINYL_COLOR_TIER_LABEL[k] === name,
+          );
+          if (!tierKey) return [];
+          return VINYL_COLORS.filter((c) => c.tier === tierKey).map((c) => ({
+            name: c.name,
+            swatchHex: c.swatch.startsWith("#") ? c.swatch : null,
+          }));
+        };
+      } else {
+        const key = fmt as "12_lp" | "12_double";
+        desiredNames = HELLBENDER_NEW_12_TIER_NAMES;
+        buildLadder = (name) => HELLBENDER_NEW_12_LADDERS[key]?.[name] ?? null;
+        // Splatter / Color / Black on 12" don't preset any swatch
+        // chips — Hellbender's quote was just for the tier price, so
+        // the admin can add color names later via the catalog editor.
+        buildColors = () => [];
+      }
+
       const matches =
-        existingNames.length === HELLBENDER_DESIRED_TIER_NAMES.length &&
-        existingNames.every((n, i) => n === HELLBENDER_DESIRED_TIER_NAMES[i]);
+        existingNames.length === desiredNames.length &&
+        existingNames.every((n, i) => n === desiredNames[i]);
 
       let tiersForFormat = existingTiers;
       if (!matches) {
@@ -340,31 +458,27 @@ export async function seedHellbenderCatalog() {
             .where(inArray(pressColorTiers.id, existingTiers.map((t) => t.id)));
         }
         tiersForFormat = [];
-        for (let ti = 0; ti < VINYL_COLOR_TIER_ORDER.length; ti++) {
-          const tierKey = VINYL_COLOR_TIER_ORDER[ti];
-          const sizeMatrix = HELLBENDER_MATRIX[tierKey][size];
-          const priceLadder = VINYL_QUANTITY_TIERS.map((q) => ({
-            qty: q as number,
-            unitCents: sizeMatrix[q].none,
-          }));
+        for (let ti = 0; ti < desiredNames.length; ti++) {
+          const name = desiredNames[ti];
+          const ladder = buildLadder(name) ?? [];
           const [tierRow] = await db
             .insert(pressColorTiers)
             .values({
               pressId: press.id,
               format: fmt,
-              name: VINYL_COLOR_TIER_LABEL[tierKey],
+              name,
               position: ti,
-              priceLadder,
+              priceLadder: ladder,
             })
             .returning();
           tiersForFormat.push(tierRow);
-          const colors = VINYL_COLORS.filter((c) => c.tier === tierKey);
+          const colors = buildColors(name);
           if (colors.length > 0) {
             await db.insert(pressColors).values(
               colors.map((c, ci) => ({
                 tierId: tierRow.id,
                 name: c.name,
-                swatchHex: c.swatch.startsWith("#") ? c.swatch : null,
+                swatchHex: c.swatchHex,
                 swatchImageUrl: null,
                 position: ci,
               })),
@@ -394,23 +508,14 @@ export async function seedHellbenderCatalog() {
         // tier-level `price_ladder` jsonb if it's non-empty, so any
         // pricing Bill (or Hellbender) had already edited in place
         // carries forward into the new combo table. Only fall back to
-        // the HELLBENDER_MATRIX defaults for tier rows whose legacy
+        // the per-format default ladder for tier rows whose legacy
         // ladder is empty (e.g. tiers we just created above).
         const legacy = Array.isArray(tierRow.priceLadder)
-          ? (tierRow.priceLadder as { qty: number; unitCents: number }[])
+          ? (tierRow.priceLadder as CatalogLadderRung[])
           : [];
-        let ladder: { qty: number; unitCents: number }[] = legacy;
+        let ladder: CatalogLadderRung[] = legacy;
         if (ladder.length === 0) {
-          const tierKey = VINYL_COLOR_TIER_ORDER.find(
-            (k) => VINYL_COLOR_TIER_LABEL[k] === tierRow.name,
-          );
-          if (tierKey) {
-            const sizeMatrix = HELLBENDER_MATRIX[tierKey][size];
-            ladder = VINYL_QUANTITY_TIERS.map((q) => ({
-              qty: q as number,
-              unitCents: sizeMatrix[q].none,
-            }));
-          }
+          ladder = buildLadder(tierRow.name) ?? [];
         }
         await db
           .insert(pressTierJacketLadders)
@@ -482,7 +587,15 @@ const jacketBodySchema = z.object({
 });
 const ladderBodySchema = z.object({
   priceLadder: z.array(
-    z.object({ qty: z.number().int().min(1), unitCents: z.number().int().min(0) }),
+    z.object({
+      qty: z.number().int().min(1),
+      unitCents: z.number().int().min(0),
+      // Task #624 — optional per-rung "this is a real quote" flag.
+      // Defaults to true on save so any rung the admin actually keys
+      // is treated as confirmed. Pass `false` explicitly to keep a
+      // rung marked as a placeholder (e.g. seeded Black rungs).
+      confirmed: z.boolean().optional(),
+    }),
   ),
 });
 

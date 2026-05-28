@@ -73,7 +73,6 @@ import {
   DEFAULT_VINYL_QUANTITY,
   DEFAULT_JACKET_UPGRADE,
   isVinylFormat,
-  lookupHellbenderUnitCents,
   snapToQuantityTier,
   fitForFormat,
   VINYL_PER_SIDE_MAX_SECONDS,
@@ -120,6 +119,11 @@ type Manufacturer = {
   turnaroundWeeksMin: number | null;
   turnaroundWeeksMax: number | null;
   specialties: string[];
+  // Task #624 — broker / wholesale discount we've negotiated with
+  // this press. Surfaced in the admin-only cost tooltip so super-
+  // admins can see what GoodTunes pockets per unit; never shown to
+  // artists.
+  brokerDiscountPct?: number;
 };
 
 // Task #199 — response from /api/admin/albums/:id/invited-press.
@@ -140,7 +144,12 @@ type CatalogTier = {
   id: string;
   name: string;
   position: number;
-  priceLadder: { qty: number; unitCents: number }[];
+  // Task #624 — rungs carry an optional `confirmed` flag; legacy /
+  // unseeded rungs come back without it (treated as confirmed=true
+  // for non-admin consumers). The admin catalog editor renders
+  // confirmed===false cells in yellow with a "TBD — awaiting quote"
+  // hint.
+  priceLadder: { qty: number; unitCents: number; confirmed?: boolean }[];
   colors: CatalogColor[];
 };
 type CatalogFormatRow = {
@@ -163,11 +172,19 @@ type InvitedPressResponse = {
 // ladder and returns the matched rung + a `requiresQuote` flag when
 // the typed quantity exceeds the top rung.
 function snapCatalogLadder(
-  ladder: { qty: number; unitCents: number }[],
+  ladder: { qty: number; unitCents: number; confirmed?: boolean }[],
   n: number,
 ): { qty: number; unitCents: number; requiresQuote: boolean } | null {
   if (!Array.isArray(ladder) || ladder.length === 0) return null;
-  const sorted = [...ladder].sort((a, b) => a.qty - b.qty);
+  // Task #624 — unconfirmed rungs (TBD placeholders) MUST NOT resolve
+  // as $0 manufacturing in the SellPanel preview. Filter them out
+  // here so the snap behaves as if the rung weren't there at all.
+  // Above the top confirmed rung the preview surfaces `requiresQuote`
+  // (custom-quote prompt) instead of pricing against a stub.
+  const sorted = [...ladder]
+    .filter((r) => r.confirmed !== false)
+    .sort((a, b) => a.qty - b.qty);
+  if (sorted.length === 0) return null;
   const q = Math.max(1, Math.floor(n));
   for (const r of sorted) if (q <= r.qty) return { qty: r.qty, unitCents: r.unitCents, requiresQuote: false };
   const top = sorted[sorted.length - 1];
@@ -1433,6 +1450,8 @@ function AddPhysicalGoodButton({
 function CostTooltip({
   format,
   breakdown,
+  brokerDiscountPct,
+  isSuperAdmin,
 }: {
   format: AlbumFormat;
   breakdown: {
@@ -1443,6 +1462,13 @@ function CostTooltip({
     goodtunesCents: number;
     source?: "hellbender" | "placeholder" | "catalog";
   };
+  // Task #624 — admin-only broker-discount preview. When > 0 and the
+  // current user is super_admin, the tooltip adds an "Internal mfg
+  // (−N%)" line showing the discounted cost (= what we actually pay
+  // the press) and the GoodTunes broker-margin delta. Artists never
+  // see this; their breakdown is the retail stack above.
+  brokerDiscountPct?: number;
+  isSuperAdmin?: boolean;
 }) {
   const total =
     breakdown.manufacturingCents +
@@ -1489,6 +1515,21 @@ function CostTooltip({
         <Row label="Payment processing" cents={breakdown.paymentProcessingCents} />
         <Row label="GoodTunes" cents={breakdown.goodtunesCents} />
         <Row label="Total" cents={total} bold />
+        {isSuperAdmin && brokerDiscountPct && brokerDiscountPct > 0 && (
+          <div className="mt-2 pt-2 border-t border-slate-100 space-y-1">
+            <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+              Internal — GoodTunes only
+            </div>
+            <Row
+              label={`Discounted mfg (−${brokerDiscountPct}%)`}
+              cents={Math.floor((breakdown.manufacturingCents * (100 - brokerDiscountPct)) / 100)}
+            />
+            <Row
+              label="Broker margin to GoodTunes"
+              cents={breakdown.manufacturingCents - Math.floor((breakdown.manufacturingCents * (100 - brokerDiscountPct)) / 100)}
+            />
+          </div>
+        )}
         {breakdown.source && (
           <div className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100">
             {breakdown.source === "hellbender"
@@ -1683,6 +1724,17 @@ function SkuRow({
     if (isDraft && !expanded) onSetExpanded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Task #624 — admin-only broker discount preview in the cost
+  // tooltip. Both queries are keyed identically to existing fetches
+  // elsewhere in the page so TanStack Query dedupes them for free.
+  const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
+    queryKey: ["/api/me/role"],
+  });
+  const isSuperAdmin = roleInfo?.role === "super_admin" || roleInfo?.role === "admin";
+  const { data: invitedPressRow } = useQuery<InvitedPressResponse>({
+    queryKey: ["/api/admin/albums", albumId, "invited-press"],
+  });
+  const brokerDiscountPct = invitedPressRow?.press?.brokerDiscountPct ?? 0;
   const [active, setActive] = useState(existing?.active ?? true);
   const [priceStr, setPriceStr] = useState(existing ? (existing.priceCents / 100).toFixed(2) : "");
   // Task #397 — inline-editable row label (Tracks-row pattern). Empty
@@ -1943,22 +1995,16 @@ function SkuRow({
           needsQuote: false,
         };
       }
-      const m = lookupHellbenderUnitCents({
-        format,
-        colorTier: vinylColor.tier,
-        qtyTier: qtySnap.tier,
-        jacketUpgrade,
-      });
-      // Task #456 — `lookupHellbenderUnitCents` returns null for vinyl
-      // sizes we don't carry a per-rung matrix for (today: 12" Double
-      // LP). The row still renders vinyl chrome, but we flag the
-      // manufacturing cell as awaiting a manual quote so it doesn't
-      // silently read as $0.00 (which made profit look free).
+      // Task #624 — legacy non-catalog vinyl rows no longer read from
+      // the Hellbender matrix. Without a catalog pick the row is
+      // flagged as needing a quote so the manufacturing cell never
+      // silently reads as $0.00 and never disagrees with the catalog
+      // ladders. The operator must pick a catalog tier/color to price.
       return {
-        manufacturingCents: m ?? 0,
+        manufacturingCents: 0,
         ...sideCarFor(false),
-        source: "hellbender" as const,
-        needsQuote: m === null,
+        source: "placeholder" as const,
+        needsQuote: true,
       };
     }
     // Non-vinyl: snapshot wins until re-save (preserve #194 behaviour).
@@ -2071,21 +2117,15 @@ function SkuRow({
       const snapped = snapCatalogLadder(suggestedPick.tier.priceLadder, parsedQty);
       return snapped?.unitCents ?? null;
     }
-    const matrix = lookupHellbenderUnitCents({
-      format: suggestedFormat,
-      colorTier: vinylColor.tier,
-      qtyTier: qtySnap.tier,
-      jacketUpgrade,
-    });
-    if (matrix != null) return matrix;
+    // Task #624 — legacy Hellbender matrix is retired as a pricing
+    // source. When the suggested format has no catalog pick we fall
+    // straight to the per-format platform placeholder; the preview
+    // surfaces "needs quote" rather than a stale matrix number.
     return costByFormat?.get(suggestedFormat)?.manufacturingCents ?? null;
   }, [
     suggestedFormat,
     suggestedPick,
     parsedQty,
-    vinylColor.tier,
-    qtySnap.tier,
-    jacketUpgrade,
     costByFormat,
   ]);
 
@@ -2113,6 +2153,35 @@ function SkuRow({
   const priceCents = useMemo(() => parseDollars(priceStr), [priceStr]);
   const profitCents =
     priceCents !== null && totalCostCents !== null ? priceCents - totalCostCents : null;
+
+  // Task #624 — admin-only internal margin. Same stack as the
+  // artist-facing total cost above, but with retail manufacturing
+  // replaced by the discounted amount GoodTunes actually pays the
+  // press. Drives the visible "Internal margin" row admins see under
+  // the breakdown; surfaces the broker-discount lift on the same
+  // number the artist sees as profit.
+  const effectiveManufacturingCents = useMemo<number | null>(() => {
+    if (!breakdown) return null;
+    if (!brokerDiscountPct || brokerDiscountPct <= 0) return breakdown.manufacturingCents;
+    return Math.floor((breakdown.manufacturingCents * (100 - brokerDiscountPct)) / 100);
+  }, [breakdown, brokerDiscountPct]);
+  const internalTotalCostCents = useMemo<number | null>(() => {
+    if (!breakdown || effectiveManufacturingCents === null) return null;
+    return (
+      effectiveManufacturingCents +
+      breakdown.publishingCents +
+      breakdown.paymentProcessingCents +
+      breakdown.goodtunesCents
+    );
+  }, [breakdown, effectiveManufacturingCents]);
+  const internalProfitCents = useMemo<number | null>(() => {
+    if (priceCents === null || internalTotalCostCents === null) return null;
+    return priceCents - internalTotalCostCents;
+  }, [priceCents, internalTotalCostCents]);
+  const brokerDeltaCents = useMemo<number>(() => {
+    if (!breakdown || !brokerDiscountPct || brokerDiscountPct <= 0) return 0;
+    return breakdown.manufacturingCents - Math.floor((breakdown.manufacturingCents * (100 - brokerDiscountPct)) / 100);
+  }, [breakdown, brokerDiscountPct]);
 
   // Task #385 — Estimated sold control. 25/50/75 chips plus a "Custom"
   // numeric input. Default is 25% of the picked quantity. Total =
@@ -3264,6 +3333,25 @@ function SkuRow({
                 className="mt-2 ml-1 pl-3 border-l border-slate-200 space-y-1"
                 data-testid={`breakdown-${format}`}
               >
+                {isSuperAdmin && brokerDiscountPct > 0 && (
+                  <div className="-ml-3 -mr-1 mb-1 px-3 py-1.5 rounded-md bg-amber-50 border border-amber-200 space-y-0.5">
+                    <div className="text-xs uppercase tracking-wider text-amber-700 font-semibold">
+                      Internal — GoodTunes only
+                    </div>
+                    <div className="flex items-center justify-between gap-6 text-xs text-amber-900">
+                      <span>{`Discounted mfg (−${brokerDiscountPct}%)`}</span>
+                      <span className="tabular-nums">
+                        {dollars(Math.floor((breakdown.manufacturingCents * (100 - brokerDiscountPct)) / 100))}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-6 text-xs text-amber-900 font-semibold">
+                      <span>Broker margin to GoodTunes</span>
+                      <span className="tabular-nums">
+                        {dollars(breakdown.manufacturingCents - Math.floor((breakdown.manufacturingCents * (100 - brokerDiscountPct)) / 100))}
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
                   <span>Manufacturing</span>
                   <span className="tabular-nums">{dollars(breakdown.manufacturingCents)}</span>
@@ -3289,6 +3377,18 @@ function SkuRow({
                     {totalCostCents === null ? "—" : dollars(totalCostCents)}
                   </span>
                 </div>
+                {isSuperAdmin && brokerDiscountPct > 0 && internalProfitCents !== null && (
+                  <div className="flex items-center justify-between gap-6 text-xs text-amber-800 font-semibold">
+                    <span>{`Internal margin (− mfg discount)`}</span>
+                    <span
+                      className="tabular-nums"
+                      data-testid={`text-internal-margin-${format}`}
+                    >
+                      {dollars(internalProfitCents)}
+                      <span className="ml-1 text-amber-600 font-normal">{`(+${dollars(brokerDeltaCents)})`}</span>
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -3396,7 +3496,12 @@ function SkuRow({
             <span className="text-slate-500 text-xs inline-flex items-center gap-1">
               Cost $
               {breakdown && (
-                <CostTooltip format={format} breakdown={breakdown} />
+                <CostTooltip
+                  format={format}
+                  breakdown={breakdown}
+                  brokerDiscountPct={brokerDiscountPct}
+                  isSuperAdmin={isSuperAdmin}
+                />
               )}
               <span
                 className={[

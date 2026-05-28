@@ -446,6 +446,13 @@ function PartnerProfileForm({
   const [specialties, setSpecialties] = useState<string[]>(initial.specialties ?? []);
   const [specInput, setSpecInput] = useState("");
   const [defaultFp, setDefaultFp] = useState<string>(initial.defaultFulfillmentPartnerId ?? "");
+  // Task #624 — broker / wholesale discount we've negotiated with this
+  // press. Stored as a whole-number percentage 0–100. Internal only;
+  // the artist-facing catalog price never changes — the discount
+  // becomes GoodTunes platform margin at payout time.
+  const [brokerDiscountPct, setBrokerDiscountPct] = useState<string>(
+    String((initial as any).brokerDiscountPct ?? 0),
+  );
 
   function addSpec() {
     const v = specInput.trim();
@@ -472,7 +479,9 @@ function PartnerProfileForm({
       turnaroundWeeksMax: turnaroundWeeksMax === "" ? null : Number(turnaroundWeeksMax),
       specialties,
       defaultFulfillmentPartnerId: defaultFp || null,
-    });
+      // Task #624 — clamp to 0–100; blank treated as 0.
+      brokerDiscountPct: Math.max(0, Math.min(100, Number(brokerDiscountPct) || 0)),
+    } as Partial<Manufacturer>);
   }
 
   return (
@@ -607,6 +616,35 @@ function PartnerProfileForm({
             </option>
           ))}
         </select>
+      </Field>
+
+      {/* Task #624 — vendor-level broker discount. The artist-facing
+          catalog price never shifts; this discount becomes GoodTunes
+          margin at payout time. Snapshotted onto each SKU so a rate
+          tweak doesn't retroactively rewrite finalised rows. */}
+      <Field label="GoodTunes broker discount (%)">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              value={brokerDiscountPct}
+              onChange={(e) => setBrokerDiscountPct(e.target.value)}
+              className={INPUT + " w-24"}
+              placeholder="0"
+              aria-label="Broker discount percent"
+              data-testid="input-mfr-broker-discount-pct"
+            />
+            <span className="text-slate-500 text-sm">%</span>
+          </div>
+          <p className="text-xs text-slate-500">
+            GoodTunes' wholesale cut from this press. Never shown to the artist —
+            their price ladder always displays the retail catalog number, and the
+            discount becomes platform margin at payout.
+          </p>
+        </div>
       </Field>
 
       <div className="flex justify-end">
@@ -1039,28 +1077,84 @@ function CatalogFormatBody({
   })();
 
   // Resolve cell value: draft override first, then saved ladder, else "".
+  // Task #624 — a rung saved as `confirmed:false` (a TBD placeholder)
+  // intentionally renders as a blank input so the admin can either
+  // type the real price (promotes it to confirmed) or leave it as TBD.
   const cellValue = (qty: number): string => {
     if (!comboKey) return "";
     const d = drafts[comboKey];
     if (d && Object.prototype.hasOwnProperty.call(d, qty)) return d[qty];
     const saved = savedLadder.find((r) => r.qty === qty);
-    return saved ? formatDollars(saved.unitCents) : "";
+    if (!saved) return "";
+    if (saved.confirmed === false) return "";
+    return formatDollars(saved.unitCents);
   };
   const setCellValue = (qty: number, v: string) => {
     if (!comboKey) return;
     setDrafts((prev) => ({ ...prev, [comboKey]: { ...(prev[comboKey] ?? {}), [qty]: v } }));
+    // Typing a value implicitly clears the explicit-TBD flag for this
+    // cell — Save will land it as confirmed:true.
+    if (v.trim().length > 0) {
+      setUnconfirmedDrafts((prev) => {
+        const s = prev[comboKey!];
+        if (!s || !s.has(qty)) return prev;
+        const next = new Set(s);
+        next.delete(qty);
+        return { ...prev, [comboKey!]: next };
+      });
+    }
+  };
+
+  // Task #624 — explicit TBD state per cell. Initialised from the
+  // saved ladder's `confirmed:false` rungs whenever the combo
+  // (tier+jacket) changes; admin toggles via the per-cell TBD button.
+  const [unconfirmedDrafts, setUnconfirmedDrafts] = useState<Record<string, Set<number>>>({});
+  const savedUnconfirmedKey = comboKey
+    ? savedLadder.filter((r) => r.confirmed === false).map((r) => r.qty).sort((a, b) => a - b).join(",")
+    : "";
+  useEffect(() => {
+    if (!comboKey) return;
+    const seed = new Set<number>();
+    for (const r of savedLadder) if (r.confirmed === false) seed.add(r.qty);
+    setUnconfirmedDrafts((prev) => ({ ...prev, [comboKey]: seed }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comboKey, savedUnconfirmedKey]);
+  const isUnconfirmedDraft = (qty: number): boolean => {
+    if (!comboKey) return false;
+    return unconfirmedDrafts[comboKey]?.has(qty) ?? false;
+  };
+  const toggleUnconfirmed = (qty: number) => {
+    if (!comboKey) return;
+    setUnconfirmedDrafts((prev) => {
+      const cur = prev[comboKey] ?? new Set<number>();
+      const next = new Set(cur);
+      if (next.has(qty)) {
+        next.delete(qty);
+      } else {
+        next.add(qty);
+      }
+      return { ...prev, [comboKey]: next };
+    });
+    // Marking TBD clears any drafted dollar value for this cell.
+    setDrafts((prev) => ({ ...prev, [comboKey]: { ...(prev[comboKey] ?? {}), [qty]: "" } }));
   };
 
   const dirty = (() => {
     if (!comboKey) return false;
     const d = drafts[comboKey];
-    if (!d) return false;
-    for (const q of Object.keys(d)) {
-      const qty = Number(q);
-      const saved = savedLadder.find((r) => r.qty === qty);
-      const savedStr = saved ? formatDollars(saved.unitCents) : "";
-      if ((d[qty] ?? "") !== savedStr) return true;
+    if (d) {
+      for (const q of Object.keys(d)) {
+        const qty = Number(q);
+        const saved = savedLadder.find((r) => r.qty === qty);
+        const savedStr = saved && saved.confirmed !== false ? formatDollars(saved.unitCents) : "";
+        if ((d[qty] ?? "") !== savedStr) return true;
+      }
     }
+    // Explicit TBD toggle is also "dirty" when it diverges from saved.
+    const tbdNow = unconfirmedDrafts[comboKey] ?? new Set<number>();
+    const tbdSaved = new Set<number>(savedLadder.filter((r) => r.confirmed === false).map((r) => r.qty));
+    if (tbdNow.size !== tbdSaved.size) return true;
+    for (const q of tbdNow) if (!tbdSaved.has(q)) return true;
     return false;
   })();
 
@@ -1123,14 +1217,24 @@ function CatalogFormatBody({
   const saveLadder = useMutation({
     mutationFn: async () => {
       if (!selectedTier || !selectedJacket) throw new Error("Pick a tier and jacket first.");
-      // Build ladder from every column that has a parseable dollar value.
-      const ladder: { qty: number; unitCents: number }[] = [];
+      // Build ladder from every column that has a parseable dollar
+      // value. Task #624 — any rung the admin actually types lands as
+      // confirmed:true, promoting a seeded `confirmed:false`
+      // placeholder out of the yellow "TBD — awaiting quote" state.
+      const ladder: { qty: number; unitCents: number; confirmed: boolean }[] = [];
       for (const q of columns) {
+        // Explicit TBD wins: persist a `confirmed:false` placeholder
+        // even with no dollar value so the cell keeps rendering
+        // yellow on next load.
+        if (isUnconfirmedDraft(q)) {
+          ladder.push({ qty: q, unitCents: 0, confirmed: false });
+          continue;
+        }
         const v = cellValue(q).trim();
         if (!v) continue;
         const cents = parseDollars(v);
         if (cents === null) throw new Error(`"${v}" at qty ${q} isn't a valid dollar amount`);
-        ladder.push({ qty: q, unitCents: cents });
+        ladder.push({ qty: q, unitCents: cents, confirmed: true });
       }
       const r = await apiRequest(
         "PUT",
@@ -1372,21 +1476,92 @@ function CatalogFormatBody({
               </thead>
               <tbody>
                 <tr>
-                  {columns.map((q) => (
+                  {columns.map((q) => {
+                    // Task #624 — a cell is "unconfirmed / TBD" when:
+                    //   1) admin explicitly toggled TBD on it (draft), OR
+                    //   2) the saved rung has `confirmed:false`
+                    //      (e.g. a seeded Black placeholder), OR
+                    //   3) it's a default-qty column the press hasn't
+                    //      priced yet but neighbours are priced —
+                    //      surfaces the gap so it gets quoted.
+                    const saved = savedLadder.find((r) => r.qty === q);
+                    const explicitTbd = isUnconfirmedDraft(q);
+                    const savedTbd = saved !== undefined && saved.confirmed === false;
+                    const draftedValue = (drafts[comboKey ?? ""] ?? {})[q];
+                    const hasAnyValueOrDraft =
+                      (draftedValue !== undefined && draftedValue.trim() !== "") ||
+                      (saved !== undefined && saved.confirmed !== false);
+                    const tierHasAnyConfirmed = savedLadder.some((r) => r.confirmed !== false) ||
+                      Object.values(drafts[comboKey ?? ""] ?? {}).some((s) => s && s.trim() !== "");
+                    const gapInDefaults =
+                      DEFAULT_QTY_COLUMNS.includes(q) &&
+                      !hasAnyValueOrDraft &&
+                      tierHasAnyConfirmed;
+                    const isUnconfirmed = explicitTbd || (savedTbd && !draftedValue) || gapInDefaults;
+                    return (
                     <td key={q} className="px-1 py-1.5 align-middle">
-                      <div className="relative">
-                        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                      <div className="relative" title={isUnconfirmed ? "TBD — awaiting quote" : undefined}>
+                        <span
+                          className={[
+                            "pointer-events-none absolute left-2 top-1/2 -translate-y-1/2",
+                            isUnconfirmed ? "text-amber-500" : "text-slate-400",
+                          ].join(" ")}
+                        >
+                          $
+                        </span>
                         <input
                           value={cellValue(q)}
                           onChange={(e) => setCellValue(q, e.target.value)}
-                          placeholder=""
+                          placeholder={isUnconfirmed ? "TBD" : ""}
                           inputMode="decimal"
-                          className="w-20 h-8 pl-5 pr-1.5 rounded-md border border-slate-200 text-xs bg-white focus:outline-none focus:border-[color:var(--brand-blue)] tabular-nums text-right"
+                          className={[
+                            "w-20 h-8 pl-5 pr-1.5 rounded-md border text-xs tabular-nums text-right focus:outline-none focus:border-[color:var(--brand-blue)]",
+                            isUnconfirmed
+                              ? "border-amber-400 bg-amber-50 text-amber-900 placeholder:text-amber-400"
+                              : "border-slate-200 bg-white",
+                          ].join(" ")}
                           data-testid={`input-ladder-cell-${selectedTier.id}-${selectedJacket.id}-${q}`}
+                          aria-label={
+                            isUnconfirmed
+                              ? `Quantity ${q} — TBD, awaiting quote`
+                              : `Quantity ${q}`
+                          }
                         />
+                        {(() => {
+                          // Task #624 — TBD button reflects what Save
+                          // will actually persist: explicit-TBD flag
+                          // wins; otherwise a saved-TBD rung whose
+                          // value hasn't been typed yet stays TBD;
+                          // typing into the cell promotes to confirmed
+                          // and the button flips back to "Mark TBD".
+                          const willPersistTbd =
+                            explicitTbd ||
+                            (savedTbd && (draftedValue ?? "").trim() === "");
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => toggleUnconfirmed(q)}
+                              className={[
+                                "mt-1 block w-20 text-xs rounded-md border px-1.5 py-0.5",
+                                willPersistTbd
+                                  ? "border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200"
+                                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50",
+                              ].join(" ")}
+                              title={
+                                willPersistTbd
+                                  ? "Clear TBD flag"
+                                  : "Mark this rung as TBD — awaiting quote"
+                              }
+                              data-testid={`button-toggle-tbd-${selectedTier.id}-${selectedJacket.id}-${q}`}
+                            >
+                              {willPersistTbd ? "✓ TBD" : "Mark TBD"}
+                            </button>
+                          );
+                        })()}
                       </div>
                     </td>
-                  ))}
+                    );
+                  })}
                   <td className="px-2 py-1.5" />
                 </tr>
               </tbody>

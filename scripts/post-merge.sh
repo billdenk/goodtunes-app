@@ -1919,3 +1919,31 @@ SQL
 }
 migrate_task_616_splits_soft_delete dev  "${DATABASE_URL:-}"
 migrate_task_616_splits_soft_delete prod "${PROD_DATABASE_URL:-}"
+
+# ── Task #624 — Press broker discount + per-SKU snapshot column ──────
+# Adds `broker_discount_pct` to manufacturers (default 0) and
+# `cost_snapshot_broker_discount_pct` to album_skus (nullable for
+# legacy rows). Idempotent CREATE/ALTER on both DBs so the publish
+# dev→prod diff (memory: dev-prod-schema-drift) doesn't try to
+# DROP either column.
+migrate_task_624_broker_discount() {
+  local label="$1"; local url="$2"
+  [ -z "$url" ] && return 0
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL'
+BEGIN;
+ALTER TABLE manufacturers
+  ADD COLUMN IF NOT EXISTS broker_discount_pct integer NOT NULL DEFAULT 0;
+ALTER TABLE album_skus
+  ADD COLUMN IF NOT EXISTS cost_snapshot_broker_discount_pct integer;
+ALTER TABLE album_skus
+  ADD COLUMN IF NOT EXISTS cost_snapshot_manufacturing_discounted_cents integer;
+COMMIT;
+SQL
+  then
+    echo "post-merge: task-624 broker discount ok on $label"
+  else
+    echo "post-merge: WARNING — task-624 broker discount failed on $label (continuing)"
+  fi
+}
+migrate_task_624_broker_discount dev  "${DATABASE_URL:-}"
+migrate_task_624_broker_discount prod "${PROD_DATABASE_URL:-}"

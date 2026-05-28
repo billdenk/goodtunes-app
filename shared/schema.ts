@@ -1545,6 +1545,21 @@ export const albumSkus = pgTable(
     // readout is stable until they re-save (mirrors the addon
     // `costCentsSnapshot` pattern). Nullable until first save.
     costSnapshotManufacturingCents: integer("cost_snapshot_manufacturing_cents"),
+    // Task #624 — broker / wholesale discount applied to the press at
+    // the moment this SKU was last saved (snapshot of
+    // `manufacturers.brokerDiscountPct`). Nullable for legacy rows
+    // saved before the column existed (treated as 0). The artist-facing
+    // breakdown keeps showing the retail manufacturing number above;
+    // the discount becomes GoodTunes margin at payout (we pay the
+    // press the discounted amount).
+    costSnapshotBrokerDiscountPct: integer("cost_snapshot_broker_discount_pct"),
+    // Task #624 — discounted manufacturing snapshot. Computed at save
+    // time as floor(retail × (100 - brokerDiscountPct)/100). Persisted
+    // alongside the retail snapshot + pct so payout/margin reporting
+    // can read what GoodTunes actually pays the press without
+    // recomputing from a (potentially changed) live pct. Null for
+    // legacy rows / no-broker presses.
+    costSnapshotManufacturingDiscountedCents: integer("cost_snapshot_manufacturing_discounted_cents"),
     costSnapshotPublishingCents: integer("cost_snapshot_publishing_cents"),
     costSnapshotPaymentProcessingCents: integer("cost_snapshot_payment_processing_cents"),
     costSnapshotGoodtunesCents: integer("cost_snapshot_goodtunes_cents"),
@@ -2929,6 +2944,15 @@ export const manufacturers = pgTable("manufacturers", {
   websiteUrl: text("website_url"),
   contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
+  // Task #624 — broker / wholesale discount we negotiated with this
+  // press, expressed as a whole-number percentage off every catalog
+  // unit price (0–100). The artist-facing price ladder always shows
+  // the retail/catalog number — this discount becomes additional
+  // GoodTunes platform margin at payout time (we pay the press the
+  // discounted amount, the delta stays with us). Snapshotted onto
+  // each SKU at save time via `costSnapshotBrokerDiscountPct` so a
+  // mid-quote rate change can't retroactively rewrite finalised SKUs.
+  brokerDiscountPct: integer("broker_discount_pct").notNull().default(0),
   // Typical lead-time the plant quotes for a standard 12" LP press run,
   // in calendar days. Admin-entered; surfaces on the RFQ comparison
   // table so the operator can sort by turnaround. Nullable while the

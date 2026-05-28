@@ -241,6 +241,16 @@ const HB_HOUSE_12 = { 50: M(2873, 3026, 4830, 4981), 100: M(1628, 1746, 2583, 27
 const HB_STD_7    = { 50: M(2280, 2420, 2708, 2846), 100: M(1299, 1407, 1493, 1600), 300: M(646, 734, 696, 784), 500: M(493, 577, 526, 610), 1000: M(365, 440, 414, 488), 2000: M(365, 440, 414, 488), 3000: M(365, 440, 414, 488) };
 const HB_STD_12   = { 50: M(3049, 3202, 5007, 5158), 100: M(1755, 1873, 2710, 2827), 300: M(893, 989, 1306, 1401), 500: M(680, 771, 900, 991),  1000: M(503, 583, 622, 702),  2000: M(503, 583, 622, 702),  3000: M(503, 583, 622, 702) };
 
+// Task #624 — DEPRECATED for Hellbender. The press catalog
+// (`press_color_tiers` + `press_tier_jacket_ladders`) is now the
+// source of truth for Hellbender pricing, including the new May-2026
+// Black/Color/Splatter ladder on 1LP/2LP. This matrix only fires
+// from `lookupHellbenderUnitCents` as the legacy fallback when a
+// SellPanel row has no catalog pick (cost source = "placeholder").
+// Do NOT edit these values to track a future Hellbender quote — add
+// the rung in the admin Manufacturer page so it lands in the
+// catalog table instead. Remove this constant once we've audited
+// callers and confirmed nothing relies on it.
 export const HELLBENDER_MATRIX: Matrix = {
   black:       { "7": HB_BLACK_7, "12": HB_BLACK_12 },
   house_mix:   { "7": HB_HOUSE_7, "12": HB_HOUSE_12 },

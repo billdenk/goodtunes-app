@@ -46,7 +46,6 @@ import {
   type OrderCopy,
 } from "@shared/schema";
 import {
-  lookupHellbenderUnitCents,
   snapToQuantityTier,
   isVinylFormat,
   VINYL_COLOR_BY_ID,
@@ -170,6 +169,15 @@ async function upsertSku(input: {
   plannedQuantity: number | null;
   displayName: string | null;
   costSnapshotManufacturingCents: number;
+  // Task #624 — broker / wholesale discount applied to the press at
+  // save time (snapshot of `manufacturers.brokerDiscountPct`). Null
+  // when no invited press was resolved.
+  costSnapshotBrokerDiscountPct: number | null;
+  // Task #624 — discounted manufacturing snapshot (floor of retail ×
+  // (100 - brokerDiscountPct)/100). Persisted alongside the retail
+  // snapshot + pct so payout/margin reporting reads what GoodTunes
+  // actually pays the press without recomputing from a live pct.
+  costSnapshotManufacturingDiscountedCents: number | null;
   costSnapshotPublishingCents: number;
   costSnapshotPaymentProcessingCents: number;
   costSnapshotGoodtunesCents: number;
@@ -194,6 +202,8 @@ async function upsertSku(input: {
     plannedQuantity: input.plannedQuantity,
     displayName: input.displayName,
     costSnapshotManufacturingCents: input.costSnapshotManufacturingCents,
+    costSnapshotBrokerDiscountPct: input.costSnapshotBrokerDiscountPct,
+    costSnapshotManufacturingDiscountedCents: input.costSnapshotManufacturingDiscountedCents,
     costSnapshotPublishingCents: input.costSnapshotPublishingCents,
     costSnapshotPaymentProcessingCents: input.costSnapshotPaymentProcessingCents,
     costSnapshotGoodtunesCents: input.costSnapshotGoodtunesCents,
@@ -571,7 +581,24 @@ export function registerCommerceRoutes(app: Express) {
     const albumId = String(req.params.id);
     const skus = await listAllSkus(albumId);
     const addons = await listAllAddons(albumId);
-    res.json({ skus, addons });
+    // Task #624 — server-side canonical "effective manufacturing"
+    // (discounted when the snapshot pair is set, retail otherwise) +
+    // derived internal margin per SKU. Admin reporting / margin
+    // surfaces must read these instead of recomputing from the live
+    // press broker pct (which can change after the row was saved).
+    const skusWithInternal = skus.map((s) => {
+      const retail = s.costSnapshotManufacturingCents ?? 0;
+      const discounted = (s as any).costSnapshotManufacturingDiscountedCents as number | null | undefined;
+      const effectiveManufacturingCents =
+        discounted != null && discounted >= 0 ? discounted : retail;
+      const brokerDeltaCents = retail - effectiveManufacturingCents;
+      return {
+        ...s,
+        effectiveManufacturingCents,
+        brokerDeltaCents,
+      };
+    });
+    res.json({ skus: skusWithInternal, addons });
   });
 
   const skuBodySchema = z.object({
@@ -628,6 +655,12 @@ export function registerCommerceRoutes(app: Express) {
     let vinylColorTier: string | null = null;
     let jacketUpgrade: JacketUpgrade | null = null;
     let quantityTier: number | null = null;
+    // Task #624 — broker discount snapshot. Resolved alongside the
+    // press lookup below so downstream payout math can recompute the
+    // discounted "what we actually pay the press" amount from the
+    // (retail) `costSnapshotManufacturingCents`. Null when no invited
+    // press resolves (the placeholder / non-catalog path).
+    let brokerDiscountPct: number | null = null;
 
     if (parsed.data.pressTierId) {
       // Resolve the press for this album (artist invitedByPressId →
@@ -656,13 +689,27 @@ export function registerCommerceRoutes(app: Express) {
           vinylColorId = looked.colorName; // snapshot as display name
           quantityTier = looked.snappedQty;
         }
+        // Task #624 — capture the press's broker discount rate at save
+        // time so finalised SKUs aren't retroactively repriced if Bill
+        // tunes the rate later. Always snapshot — even when the
+        // catalog lookup miss falls through to the platform placeholder
+        // above — so reporting can still attribute the press correctly.
+        const press = await storage.getManufacturerById(pressId);
+        const pct = (press as any)?.brokerDiscountPct;
+        if (typeof pct === "number" && pct >= 0 && pct <= 100) {
+          brokerDiscountPct = pct;
+        }
       }
     }
 
     if (costSource === "placeholder" && vinyl) {
-      // Back-compat: rows still posting the pre-T218 vinyl picks fall
-      // through to the legacy Hellbender matrix so an existing SKU can
-      // re-save without errors while the SellPanel rolls over.
+      // Task #624 — retire the legacy Hellbender matrix as a runtime
+      // pricing source. Pre-T218 vinyl picks (no pressTierId) still
+      // record the color/jacket/quantity for reporting, but
+      // manufacturing stays on the platform-default placeholder until
+      // the row is re-saved through the catalog picker. This removes
+      // the second Hellbender pricing source so saved costs can't
+      // diverge from the per-rung catalog ladders.
       const colorOption =
         (parsed.data.vinylColor && VINYL_COLOR_BY_ID[parsed.data.vinylColor]) ||
         VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
@@ -671,16 +718,6 @@ export function registerCommerceRoutes(app: Express) {
       jacketUpgrade = parsed.data.jacketUpgrade ?? DEFAULT_JACKET_UPGRADE;
       const snap = snapToQuantityTier(parsed.data.plannedQuantity ?? DEFAULT_VINYL_QUANTITY);
       quantityTier = snap.tier;
-      const looked = lookupHellbenderUnitCents({
-        format: parsed.data.format,
-        colorTier: colorOption.tier,
-        qtyTier: snap.tier,
-        jacketUpgrade,
-      });
-      if (looked !== null) {
-        manufacturingCents = looked;
-        costSource = "hellbender";
-      }
     }
     // Task #433 — per-row Lock semantics. Reject unlock once the run
     // has actually gone to press (pressing_order_requests with status
@@ -707,6 +744,14 @@ export function registerCommerceRoutes(app: Express) {
       plannedQuantity: parsed.data.plannedQuantity ?? null,
       displayName: (parsed.data.displayName ?? "").trim() || null,
       costSnapshotManufacturingCents: manufacturingCents,
+      costSnapshotBrokerDiscountPct: brokerDiscountPct,
+      // Discounted "what we actually pay the press" amount. Mirrors
+      // SellPanel's admin Internal-margin readout so payout/margin
+      // reporting reads the same number the admin saw at save time.
+      costSnapshotManufacturingDiscountedCents:
+        brokerDiscountPct !== null && brokerDiscountPct > 0
+          ? Math.floor((manufacturingCents * (100 - brokerDiscountPct)) / 100)
+          : null,
       costSnapshotPublishingCents: platformCost.publishingCents,
       costSnapshotPaymentProcessingCents: platformCost.paymentProcessingCents,
       costSnapshotGoodtunesCents: platformCost.goodtunesCents,
@@ -980,6 +1025,10 @@ export function registerCommerceRoutes(app: Express) {
         turnaroundWeeksMin: (press as any).turnaroundWeeksMin ?? null,
         turnaroundWeeksMax: (press as any).turnaroundWeeksMax ?? null,
         specialties: (press as any).specialties ?? [],
+        // Task #624 — broker discount drives the admin-only "Internal
+        // margin" line in SellPanel + cost tooltip. Always send (0
+        // when unset) so the client renders consistently.
+        brokerDiscountPct: Number((press as any).brokerDiscountPct ?? 0),
       },
       hasShippedFirst,
       scopeKind,
