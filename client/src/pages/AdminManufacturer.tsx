@@ -1813,10 +1813,12 @@ function SwatchChip({
   const [name, setName] = useState(color.name);
   const [hex, setHex] = useState(color.swatchHex ?? "#000000");
   const [imageUrl, setImageUrl] = useState<string | null>(color.swatchImageUrl);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   useEffect(() => {
     setName(color.name);
     setHex(color.swatchHex ?? "#000000");
     setImageUrl(color.swatchImageUrl);
+    setSelectedFileName(null);
   }, [color.id, color.name, color.swatchHex, color.swatchImageUrl]);
 
   const save = useMutation({
@@ -1920,9 +1922,9 @@ function SwatchChip({
                   />
                 </div>
               </label>
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="block text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">Photo</span>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   {/* Round preview — matches the live catalog chip's
                       circular swatch dot so admins can tell the photo
                       will display as a disc, not a square with
@@ -1938,21 +1940,27 @@ function SwatchChip({
                     }
                     data-testid={`preview-swatch-photo-${color.id}`}
                   />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) upload.mutate(f);
-                    }}
-                    className="text-xs"
-                    data-testid={`input-swatch-upload-${color.id}`}
-                  />
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) {
+                          setSelectedFileName(f.name);
+                          upload.mutate(f);
+                        }
+                      }}
+                      title={selectedFileName ?? undefined}
+                      className="text-xs block max-w-full"
+                      data-testid={`input-swatch-upload-${color.id}`}
+                    />
+                  </div>
                   {imageUrl && (
                     <button
                       type="button"
                       onClick={() => setImageUrl(null)}
-                      className="text-xs text-slate-500 hover:underline underline-offset-2"
+                      className="shrink-0 text-xs text-slate-500 hover:underline underline-offset-2"
                     >
                       Clear
                     </button>
