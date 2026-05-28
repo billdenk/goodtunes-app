@@ -26,6 +26,7 @@ import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
 import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
 import { CertRunsSection } from "@/components/partner/cert-runs-section";
+import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { BRAND, CHART_STACK_PALETTE, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 
 type Range = { from: string; to: string };
@@ -194,7 +195,7 @@ export function LabelDashboard() {
           scopeIdQs={labelIdParam}
         />
       )}
-      {tab === "overview" && <OverviewTab qs={qs} />}
+      {tab === "overview" && <OverviewTab qs={qs} labelId={me.data?.labelId ?? null} labelName={labelName} />}
       {tab === "roster" && <RosterTab qs={qs} labelIdParam={labelIdParam} />}
       {tab === "catalog" && <CatalogTab qs={qs} />}
       {tab === "orders" && <OrdersTab qs={qs} labelIdParam={labelIdParam} />}
@@ -270,7 +271,7 @@ function Kpi({ label, value, sub, prev, testId }: { label: React.ReactNode; valu
 }
 
 // ─── Overview tab ─────────────────────────────────────────────────────
-function OverviewTab({ qs }: { qs: string }) {
+function OverviewTab({ qs, labelId, labelName }: { qs: string; labelId: string | null; labelName: string }) {
   const summary = useQuery<Summary>({ queryKey: [`/api/label/summary?${qs}`] });
   const series = useQuery<Timeseries>({ queryKey: [`/api/label/timeseries?${qs}`] });
   const byArtist = useQuery<RevByArtist>({ queryKey: [`/api/label/revenue-by-artist?${qs}`] });
@@ -308,7 +309,44 @@ function OverviewTab({ qs }: { qs: string }) {
       </Card>
 
       <CertRunsSection kind="label" qs={qs} />
+
+      {/* Task #665 — Contacts panel parity with /admin/labels/:id.
+          Same Add Admin dialog (pick existing Person or fill in
+          name+title+email+phone). Server gates POSTs by invite_subusers
+          on the caller; super-admins always pass. UI also gates the
+          "+ Add ▾" menu via the can-invite probe so label staff
+          without the verb don't see a button that would only 403. */}
+      {labelId && (
+        <LabelContactsPanel labelId={labelId} labelName={labelName} />
+      )}
     </>
+  );
+}
+
+function LabelContactsPanel({ labelId, labelName }: { labelId: string; labelName: string }) {
+  const probe = useQuery<{ ok: boolean }>({
+    queryKey: ["/api/admin/partner-contacts/can-invite", { entityKind: "label", entityId: labelId }],
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/partner-contacts/can-invite?entityKind=label&entityId=${encodeURIComponent(labelId)}`, { credentials: "include" });
+      if (!r.ok) return { ok: false };
+      return r.json();
+    },
+  });
+  return (
+    <section className="rounded-2xl bg-white/[0.04] p-1">
+      <div className="bg-white rounded-2xl">
+        <OrganizationPeople
+          apiPath={`/api/labels/${labelId}/people`}
+          testIdPrefix="label-shell"
+          entityKind="label"
+          entityId={labelId}
+          entityName={labelName}
+          title="Contacts"
+          blurb="Invite teammates to your label. We'll grant the role if they already have an admin account, otherwise we mint an invite link."
+          canInviteSubusers={probe.data?.ok === true}
+        />
+      </div>
+    </section>
   );
 }
 

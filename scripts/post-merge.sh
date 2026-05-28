@@ -387,6 +387,31 @@ SQL
 migrate_entity_contacts dev  "${DATABASE_URL:-}"
 migrate_entity_contacts prod "${PROD_DATABASE_URL:-}"
 
+# Task #665 — people.contact_phone + people.is_artist_promoted. The Add
+# Admin partner-contact flow writes phone alongside contact_email, and
+# operators flip is_artist_promoted from the contact-shape Person page
+# to turn a business contact into a full artist record. Additive
+# columns; idempotent on both DBs.
+migrate_people_contact_phone() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping people.contact_phone migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE people
+  ADD COLUMN IF NOT EXISTS contact_phone        text,
+  ADD COLUMN IF NOT EXISTS is_artist_promoted   boolean NOT NULL DEFAULT false;
+SQL
+  then
+    echo "post-merge: people.contact_phone migration ok on $label"
+  else
+    echo "post-merge: WARNING — people.contact_phone migration failed on $label (continuing)"
+  fi
+}
+migrate_people_contact_phone dev  "${DATABASE_URL:-}"
+migrate_people_contact_phone prod "${PROD_DATABASE_URL:-}"
+
 # Task #363 — press turnaround is now an inclusive week range (min/max)
 # instead of a raw day count. Additive ALTERs on both DBs so the
 # publish dev→prod diff stays empty and a fresh-clone dev never 500s

@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Heart, Music as MusicIcon, Mail, Clock, UserPlus, Users, Trash2, Send, Copy, Check, ChevronDown } from "lucide-react";
 import { DashboardPanel } from "@/components/partner/dashboard-controls";
+import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
@@ -365,6 +366,40 @@ function InvitesTab({ npoId, caps }: { npoId: string | undefined; caps: CallerCa
           onSent={(url) => { setLastUrl(url); setOpenKind(null); }}
         />
       )}
+
+      {/* Task #665 — Contacts parity with /admin/non-profits/:id. Same
+          Add Admin / Ambassador dialog; server gates POSTs by
+          invite_subusers on the caller, super-admins always pass.
+          UI also hides "+ Add ▾" for staff/ambassador sub-roles via
+          the can-invite probe so they don't see a button that 403s. */}
+      {npoId && <NpoContactsPanel npoId={npoId} />}
+    </section>
+  );
+}
+
+function NpoContactsPanel({ npoId }: { npoId: string }) {
+  const probe = useQuery<{ ok: boolean }>({
+    queryKey: ["/api/admin/partner-contacts/can-invite", { entityKind: "non_profit", entityId: npoId }],
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/partner-contacts/can-invite?entityKind=non_profit&entityId=${encodeURIComponent(npoId)}`, { credentials: "include" });
+      if (!r.ok) return { ok: false };
+      return r.json();
+    },
+  });
+  return (
+    <section className="mt-6 rounded-2xl bg-white/[0.04] p-1">
+      <div className="bg-white rounded-2xl">
+        <OrganizationPeople
+          apiPath={`/api/non-profits/${npoId}/people`}
+          testIdPrefix="npo-shell"
+          entityKind="non_profit"
+          entityId={npoId}
+          entityName="this non-profit"
+          title="Contacts"
+          blurb="People who represent this non-profit. Add as many as you need."
+          canInviteSubusers={probe.data?.ok === true}
+        />
+      </div>
     </section>
   );
 }

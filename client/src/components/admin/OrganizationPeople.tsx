@@ -1,7 +1,15 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Linkedin } from "lucide-react";
+import { Check, Copy, Linkedin } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -32,6 +40,14 @@ type Contact = {
   photoUrl: string | null;
   linkedinUrl?: string | null;
   role: string | null;
+  // Task #665 — set when this Person has a still-valid partner-scoped
+  // admin_invite for the org owning the Contacts panel. Drives the
+  // "Invite pending" chip + the copy-link mini-dialog reopen flow.
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  invitePending?: boolean;
+  inviteId?: string | null;
+  acceptUrl?: string | null;
 };
 
 function humanizeApiError(err: unknown): string {
@@ -69,6 +85,14 @@ export interface OrganizationPeopleProps {
   title?: string;
   /** Optional one-liner under the title. */
   blurb?: string;
+  /**
+   * Task #665 — gate the "+ Add ▾" menu. Defaults true (admin pages
+   * are super_admin only). Partner shells fetch their own verb status
+   * and pass false to hide the button for users without
+   * `invite_subusers`. The server still enforces the verb on every
+   * POST regardless of this flag.
+   */
+  canInviteSubusers?: boolean;
 }
 
 export function OrganizationPeople({
@@ -79,6 +103,7 @@ export function OrganizationPeople({
   entityName,
   title = "Contacts",
   blurb = "People who represent this partner. Add as many as you need.",
+  canInviteSubusers = true,
 }: OrganizationPeopleProps) {
   const { toast } = useToast();
   const contactsKey = [apiPath] as const;
@@ -88,6 +113,18 @@ export function OrganizationPeople({
     () => new Set((contactsQ.data ?? []).map((c) => c.personId)),
     [contactsQ.data],
   );
+
+  // Task #665 — reopening the Invite-Ready state from the chip. Same
+  // "Invite ready" surface AttachContactDialog flips to after a fresh
+  // mint (URL + Copy), plus a Revoke button so operators can kill a
+  // pending invite without leaving the Contacts panel.
+  const [openInvite, setOpenInvite] = useState<{
+    inviteId: string | null;
+    personId: string;
+    name: string;
+    email: string;
+    url: string;
+  } | null>(null);
 
   const detach = useMutation({
     mutationFn: async (personId: string) => {
@@ -120,6 +157,7 @@ export function OrganizationPeople({
           contactsQueryKey={contactsKey}
           testIdPrefix={testIdPrefix}
           attachedIds={attachedIds}
+          canInviteSubusers={canInviteSubusers}
         />
       </div>
 
@@ -150,9 +188,27 @@ export function OrganizationPeople({
                 <div className="w-9 h-9 rounded-full bg-slate-100" />
               )}
               <div className="flex-1 min-w-0">
-                <Link href={`/admin/people/${c.personId}`} className="text-sm font-semibold text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate block" data-testid={`link-${testIdPrefix}-contact-${c.personId}`}>
-                  {c.name}
-                </Link>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Link href={`/admin/people/${c.personId}`} className="text-sm font-semibold text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate block" data-testid={`link-${testIdPrefix}-contact-${c.personId}`}>
+                    {c.name}
+                  </Link>
+                  {c.invitePending && c.acceptUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setOpenInvite({
+                        inviteId: c.inviteId ?? null,
+                        personId: c.personId,
+                        name: c.name,
+                        email: c.contactEmail ?? "",
+                        url: c.acceptUrl!,
+                      })}
+                      className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide flex-shrink-0"
+                      data-testid={`chip-${testIdPrefix}-invite-pending-${c.personId}`}
+                    >
+                      Invite pending
+                    </button>
+                  )}
+                </div>
                 {c.role && <p className="text-xs text-slate-500 truncate">{c.role}</p>}
               </div>
               {c.linkedinUrl && (
@@ -182,6 +238,118 @@ export function OrganizationPeople({
           ))
         )}
       </ul>
+      <InvitePendingDialog
+        open={!!openInvite}
+        onOpenChange={(v) => !v && setOpenInvite(null)}
+        invite={openInvite}
+        testIdPrefix={testIdPrefix}
+        onRevoked={() => {
+          queryClient.invalidateQueries({ queryKey: contactsKey });
+          setOpenInvite(null);
+        }}
+      />
     </section>
+  );
+}
+
+function InvitePendingDialog({
+  open,
+  onOpenChange,
+  invite,
+  testIdPrefix,
+  onRevoked,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  invite: { inviteId: string | null; personId: string; name: string; email: string; url: string } | null;
+  testIdPrefix: string;
+  onRevoked: () => void;
+}) {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
+  async function copyUrl() {
+    if (!invite?.url) return;
+    try {
+      await navigator.clipboard.writeText(invite.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      toast({ title: "Couldn't copy", description: "Select and copy the link manually.", variant: "destructive" });
+    }
+  }
+  // Task #665 — revoke the pending invite from inside the reopen
+  // dialog. DELETE /api/admin/invites/:id soft-revokes; the token is
+  // immediately rejected at /api/invites/:token. Endpoint is super-admin
+  // only on the server; partner-shell operators will see a clear
+  // "Couldn't revoke" toast (the chip stays).
+  const revoke = useMutation({
+    mutationFn: async () => {
+      if (!invite?.inviteId) throw new Error("No invite to revoke");
+      await apiRequest("DELETE", `/api/admin/invites/${invite.inviteId}`);
+    },
+    onSuccess: () => {
+      toast({ title: "Invite revoked" });
+      onRevoked();
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't revoke invite",
+        description: humanizeApiError(err),
+        variant: "destructive",
+      }),
+  });
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md" data-testid={`dialog-${testIdPrefix}-invite-pending`}>
+        <DialogHeader>
+          <DialogTitle>Invite ready</DialogTitle>
+          <DialogDescription>
+            {invite
+              ? `${invite.name} hasn't accepted yet${invite.email ? ` — sent to ${invite.email}` : ""}. Re-share this link if needed.`
+              : ""}
+          </DialogDescription>
+        </DialogHeader>
+        {invite && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Accept link</div>
+            <div className="flex items-center gap-2">
+              <code
+                className="flex-1 text-xs text-slate-800 bg-white border border-slate-200 rounded-md px-2 py-1.5 truncate"
+                data-testid={`text-${testIdPrefix}-invite-pending-url`}
+              >{invite.url}</code>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={copyUrl}
+                data-testid={`button-${testIdPrefix}-invite-pending-copy`}
+              >
+                {copied ? (<><Check className="w-3.5 h-3.5 mr-1.5" /> Copied</>) : (<><Copy className="w-3.5 h-3.5 mr-1.5" /> Copy</>)}
+              </Button>
+            </div>
+            <p className="text-xs text-slate-500 leading-snug">
+              Valid for 14 days from when it was created.
+            </p>
+          </div>
+        )}
+        <DialogFooter className="sm:justify-between gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => revoke.mutate()}
+            disabled={!invite?.inviteId || revoke.isPending}
+            className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+            data-testid={`button-${testIdPrefix}-invite-pending-revoke`}
+          >
+            {revoke.isPending ? "Revoking…" : "Revoke invite"}
+          </Button>
+          <Button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            data-testid={`button-${testIdPrefix}-invite-pending-done`}
+          >Done</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

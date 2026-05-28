@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, Copy, Loader2, Plus, Search, X } from "lucide-react";
 import {
@@ -75,6 +75,13 @@ export interface AddPeopleMenuProps {
   testIdPrefix: string;
   /** People already attached — hidden from the picker. */
   attachedIds: Set<string>;
+  /**
+   * Task #665 — When false, hide the Add menu entirely. Partner shells
+   * (Press/Label/NPO) pass `false` for users who lack the
+   * `invite_subusers` verb so the menu doesn't appear and trigger a
+   * 403 toast. Admin pages default true (super_admin always passes).
+   */
+  canInviteSubusers?: boolean;
 }
 
 type PersonLite = { id: string; name: string; photoUrl: string | null };
@@ -106,6 +113,11 @@ export function AddPeopleMenu(props: AddPeopleMenuProps) {
   >(null);
 
   const showAmbassador = props.entityKind === "non_profit";
+
+  // Server still enforces invite_subusers on every POST; this is a UI
+  // gate so partner staff without the verb don't see a button that
+  // would only 403.
+  if (props.canInviteSubusers === false) return null;
 
   return (
     <>
@@ -198,6 +210,8 @@ function PersonPicker({
   testIdPrefix,
   enableSpotify,
   onPrefilled,
+  prefillOnly,
+  onPrefillFields,
 }: {
   value: PersonLite | null;
   onChange: (p: PersonLite | null) => void;
@@ -209,6 +223,22 @@ function PersonPicker({
       fields the parent dialog can hydrate (e.g. AttachContactDialog
       prefilling its Role input from JSON-LD `jobTitle`). */
   onPrefilled?: (info: { title: string | null }) => void;
+  /** Task #665 — when true, the picker becomes a paste-a-URL prefill
+      helper only: search + Spotify + Create-from-name are hidden, and
+      the staged-prefill commit button reads "Use these fields" and
+      pipes the scraped fields into `onPrefillFields` instead of
+      creating a Person row. Used by AttachContactDialog's "New
+      contact" mode so operators can paste a Bandcamp / LinkedIn /
+      bio URL to fill the Name + Title (and any contact link) before
+      submitting the dialog. */
+  prefillOnly?: boolean;
+  onPrefillFields?: (fields: {
+    name: string;
+    title: string | null;
+    email: string | null;
+    phone: string | null;
+    photoUrl: string | null;
+  }) => void;
 }) {
   const [q, setQ] = useState("");
   const [spotifyQuery, setSpotifyQuery] = useState<string | null>(null);
@@ -354,6 +384,32 @@ function PersonPicker({
   // prefill is correct. Maps classified links onto the named columns
   // POST /api/admin/people already accepts; surfaces the scraped
   // title back up to the parent dialog via onPrefilled.
+  // Prefill-only commit — no DB write, just pipe fields back to the
+  // parent form (AttachContactDialog "New contact" mode). Extracts
+  // email/phone from the classified links if present.
+  function commitPrefillFieldsOnly() {
+    if (!pastePrefill || !onPrefillFields) return;
+    const linkVal = (kind: string): string | null => {
+      const hit = pastePrefill.links.find((l) => l.kind === kind);
+      return hit?.url ?? null;
+    };
+    const rawEmail = linkVal("email") || linkVal("contactEmail");
+    const email = rawEmail ? rawEmail.replace(/^mailto:/i, "").trim() || null : null;
+    const rawPhone = linkVal("phone") || linkVal("contactPhone");
+    const phone = rawPhone ? rawPhone.replace(/^tel:/i, "").trim() || null : null;
+    onPrefillFields({
+      name: pastePrefill.name,
+      title: pastePrefill.title,
+      email,
+      phone,
+      photoUrl: pastePrefill.photoUrl,
+    });
+    setPasteUrl("");
+    setPasteError(null);
+    setPastePrefill(null);
+    toast({ title: `Prefilled from ${pastePrefill.name}` });
+  }
+
   const commitPrefillMut = useMutation({
     mutationFn: async () => {
       if (!pastePrefill) throw new Error("No prefill staged");
@@ -508,31 +564,35 @@ function PersonPicker({
             </button>
             <button
               type="button"
-              onClick={() => commitPrefillMut.mutate()}
+              onClick={() => (prefillOnly ? commitPrefillFieldsOnly() : commitPrefillMut.mutate())}
               disabled={commitPrefillMut.isPending}
               className="h-8 px-3 rounded-md bg-[var(--brand-blue)] text-white text-xs font-semibold hover:bg-[#2890c8] inline-flex items-center gap-1.5 disabled:opacity-60"
               data-testid={`button-${testIdPrefix}-paste-prefill-commit`}
             >
               {commitPrefillMut.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Add to People
+              {prefillOnly ? "Use these fields" : "Add to People"}
             </button>
           </div>
         </div>
       )}
-      <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 pt-1">
-        or search
-      </div>
-      <Input
-        type="text"
-        placeholder="Search People (2+ chars)…"
-        value={q}
-        onChange={(e) => {
-          setQ(e.target.value);
-          setSpotifyQuery(null);
-        }}
-        data-testid={`input-${testIdPrefix}-person-search`}
-      />
-      {q.trim().length >= 2 && (
+      {!prefillOnly && (
+        <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 pt-1">
+          or search
+        </div>
+      )}
+      {!prefillOnly && (
+        <Input
+          type="text"
+          placeholder="Search People (2+ chars)…"
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setSpotifyQuery(null);
+          }}
+          data-testid={`input-${testIdPrefix}-person-search`}
+        />
+      )}
+      {!prefillOnly && q.trim().length >= 2 && (
         <ul className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100 max-h-56 overflow-y-auto">
           {results.isLoading ? (
             <li className="px-3 py-2 text-xs text-slate-500 flex items-center gap-2">
@@ -581,7 +641,7 @@ function PersonPicker({
           )}
         </ul>
       )}
-      {showSpotifyButton && (
+      {!prefillOnly && showSpotifyButton && (
         <button
           type="button"
           onClick={() => setSpotifyQuery(q)}
@@ -592,7 +652,7 @@ function PersonPicker({
           Search Spotify for “{q.trim()}”
         </button>
       )}
-      {spotifyQuery && (
+      {!prefillOnly && spotifyQuery && (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-2 space-y-1">
           <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 px-1">
             Spotify matches
@@ -648,6 +708,16 @@ function PersonPicker({
 
 // ─── Add Admin / Add Ambassador dialog ───────────────────────────────
 
+// Task #665 — exported so OrganizationPeople can reopen the dialog
+// straight onto the Invite-Ready state when an operator clicks the
+// "Invite pending" chip on an existing contact row.
+export type AttachContactInitialInvite = {
+  personId: string;
+  personName: string;
+  email: string;
+  acceptUrl: string;
+};
+
 function AttachContactDialog(
   props: AddPeopleMenuProps & {
     open: boolean;
@@ -656,77 +726,147 @@ function AttachContactDialog(
     description: string;
     submitLabel: string;
     kind: "admin" | "ambassador";
+    /** When set, opens straight into the "Invite ready" copy-link state. */
+    initialInvite?: AttachContactInitialInvite | null;
   },
 ) {
   const { toast } = useToast();
+  // Task #665 — dual-mode UX: "Pick existing" tab shows the PersonPicker
+  // (search People, paste URL, Spotify fallback); "New contact" tab
+  // collapses the picker and exposes a plain Name input. The server's
+  // /api/admin/partner-contacts route accepts either {personId} OR
+  // {name+email} — this UI mirrors that contract so operators can't
+  // hit the "Name is required" dead-end the reviewer flagged.
+  const [mode, setMode] = useState<"existing" | "new">("existing");
   const [picked, setPicked] = useState<PersonLite | null>(null);
-  const [role, setRole] = useState("");
+  const [name, setName] = useState("");
+  const [title, setTitleField] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  // Invite-Ready state — populated after submit when the email doesn't
+  // resolve to an existing users row so we minted a partner-scoped
+  // invite. The dialog flips to a single "Copy link / Done" surface
+  // instead of dismissing, mirroring InviteArtistDialog's confirmation
+  // state. Reused when OrganizationPeople reopens this dialog from the
+  // "Invite pending" chip on an existing contact row.
+  const [invite, setInvite] = useState<{ url: string; email: string; personName: string } | null>(
+    props.initialInvite
+      ? { url: props.initialInvite.acceptUrl, email: props.initialInvite.email, personName: props.initialInvite.personName }
+      : null,
+  );
+  const [copied, setCopied] = useState(false);
 
   function reset() {
+    setMode("existing");
     setPicked(null);
-    setRole("");
+    setName("");
+    setTitleField("");
+    setEmail("");
+    setPhone("");
+    setInvite(null);
+    setCopied(false);
   }
+
+  // When a picker selection resolves to an existing Person row,
+  // hydrate the Email + Phone fields from the admin-only contact_email
+  // / contact_phone columns so the operator doesn't retype. Never
+  // clobber what the operator typed.
+  useEffect(() => {
+    if (!picked || props.kind !== "admin") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await apiRequest("GET", `/api/admin/people/${picked.id}`);
+        const body = (await r.json()) as { contactEmail?: string | null; contactPhone?: string | null };
+        if (cancelled) return;
+        if (body.contactEmail && !email.trim()) setEmail(body.contactEmail);
+        if (body.contactPhone && !phone.trim()) setPhone(body.contactPhone);
+      } catch { /* silent — operator can fill the fields by hand */ }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked?.id]);
 
   const submit = useMutation({
     mutationFn: async () => {
-      if (!picked) throw new Error("Pick a Person first");
-      // Step 1: attach as Contact. For ambassador we tolerate a 409
-      // (already attached) so the operator can re-run on an existing
-      // contact just to flip the ambassador bit. Any non-409 error
-      // still bubbles up.
-      try {
-        await apiRequest("POST", props.contactsApiPath, {
-          personId: picked.id,
-          role: role.trim() || null,
-        });
-      } catch (e) {
-        const status = errorStatus(e);
-        if (props.kind !== "ambassador" || status !== 409) throw e;
-      }
       if (props.kind === "ambassador") {
+        // Ambassador path retains the legacy two-call shape — attach
+        // (idempotent) then flip the ambassador bit. Requires a picked
+        // Person; there's no "create-from-contact-form" path for
+        // ambassadors because the invite-mint side doesn't apply.
+        if (!picked) throw new Error("Pick a Person first");
+        try {
+          await apiRequest("POST", props.contactsApiPath, {
+            personId: picked.id,
+            role: title.trim() || null,
+          });
+        } catch (e) {
+          if (errorStatus(e) !== 409) throw e;
+        }
         await apiRequest(
           "PATCH",
           `/api/admin/people/${picked.id}/can-invite-ambassadors`,
           { enabled: true },
         );
+        return { mode: "ambassador" as const };
       }
-      if (props.kind === "admin") {
-        // Step 2: grant partner-scoped admin role via the same
-        // setUserRole plumbing AdminCustomers' "Make admin…" uses.
-        await apiRequest(
-          "POST",
-          `/api/admin/people/${picked.id}/grant-admin-role`,
-          {
-            role: ENTITY_ROLE[props.entityKind],
-            roleScopeId: props.entityId,
-          },
-        );
-      }
-      return picked;
+      // Admin path — unified partner-contacts endpoint does upsert +
+      // attach + (grant role OR mint invite) in one round-trip.
+      if (mode === "existing" && !picked) throw new Error("Pick a Person first");
+      if (mode === "new" && !name.trim()) throw new Error("Name is required");
+      if (!email.trim()) throw new Error("Email is required");
+      const r = await apiRequest("POST", "/api/admin/partner-contacts", {
+        entityKind: props.entityKind === "fulfillment" ? "fulfillment_partner" : props.entityKind,
+        entityId: props.entityId,
+        personId: mode === "existing" ? picked?.id ?? null : null,
+        name: mode === "existing" ? picked?.name ?? null : name.trim(),
+        title: title.trim() || null,
+        email: email.trim(),
+        phone: phone.trim() || null,
+      });
+      return { mode: "admin" as const, body: await r.json() };
     },
-    onSuccess: (person) => {
+    onSuccess: (out) => {
       queryClient.invalidateQueries({ queryKey: props.contactsQueryKey });
       queryClient.invalidateQueries({ queryKey: ["/api/people"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/people"] });
-      toast({
-        title:
-          props.kind === "admin"
-            ? `Added ${person.name} as admin`
-            : `${person.name} is now an ambassador`,
-      });
-      reset();
-      props.onOpenChange(false);
+      if (out.mode === "ambassador") {
+        toast({ title: `${picked!.name} is now an ambassador` });
+        reset();
+        props.onOpenChange(false);
+        return;
+      }
+      const body = out.body as { mode: "granted" | "invited"; personName: string; acceptUrl?: string };
+      if (body.mode === "granted") {
+        toast({ title: `Added ${body.personName} as admin` });
+        reset();
+        props.onOpenChange(false);
+      } else {
+        setInvite({
+          url: body.acceptUrl ?? "",
+          email: email.trim(),
+          personName: body.personName,
+        });
+      }
     },
     onError: (e) =>
       toast({
-        title:
-          props.kind === "admin"
-            ? "Couldn't add admin"
-            : "Couldn't add ambassador",
+        title: props.kind === "admin" ? "Couldn't add admin" : "Couldn't add ambassador",
         description: humanizeApiError(e),
         variant: "destructive",
       }),
   });
+
+  async function copyInviteUrl() {
+    if (!invite?.url) return;
+    try {
+      await navigator.clipboard.writeText(invite.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      toast({ title: "Couldn't copy", description: "Select and copy the link manually.", variant: "destructive" });
+    }
+  }
 
   return (
     <Dialog
@@ -741,70 +881,212 @@ function AttachContactDialog(
         data-testid={`dialog-${props.testIdPrefix}-${props.kind}`}
       >
         <DialogHeader>
-          <DialogTitle>{props.title}</DialogTitle>
-          <DialogDescription>{props.description}</DialogDescription>
+          <DialogTitle>
+            {invite ? "Invite ready" : props.title}
+          </DialogTitle>
+          <DialogDescription>
+            {invite
+              ? `We don't have an admin account for ${invite.email} yet — send this link so ${invite.personName} can finish setup.`
+              : props.description}
+          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
-          <PersonPicker
-            value={picked}
-            onChange={setPicked}
-            excludeIds={props.attachedIds}
-            testIdPrefix={`${props.testIdPrefix}-${props.kind}`}
-            // Spotify search is intentionally NOT enabled here — admins
-            // for a press / NPO / label / maker / reseller aren't
-            // artists, so an artist-name search would return mostly
-            // noise. The Paste-a-URL prefill above already covers the
-            // edge case where an admin happens to also be a Spotify
-            // artist (paste their artist URL); for everyone else the
-            // "+ Create" inline fallback in PersonPicker is the right
-            // path. Only Invite Artist sets enableSpotify.
-            // Paste-a-URL prefill: a scraped JSON-LD `jobTitle`
-            // (vendor team pages, label staff pages) maps onto the Role
-            // input here so the operator doesn't retype it. Only fills
-            // when the field is still empty — never clobber.
-            onPrefilled={(info) => {
-              if (info.title && !role.trim()) setRole(info.title);
-            }}
-          />
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
-              Role (optional)
-            </label>
-            <Input
-              type="text"
-              placeholder="e.g. Director"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              data-testid={`input-${props.testIdPrefix}-${props.kind}-role`}
-            />
+        {invite ? (
+          <div className="space-y-3">
+            <div
+              className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2"
+              data-testid={`card-${props.testIdPrefix}-${props.kind}-invite-ready`}
+            >
+              <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Accept link
+              </div>
+              <div className="flex items-center gap-2">
+                <code
+                  className="flex-1 text-xs text-slate-800 bg-white border border-slate-200 rounded-md px-2 py-1.5 truncate"
+                  data-testid={`text-${props.testIdPrefix}-${props.kind}-accept-url`}
+                >
+                  {invite.url}
+                </code>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={copyInviteUrl}
+                  data-testid={`button-${props.testIdPrefix}-${props.kind}-copy-invite`}
+                >
+                  {copied ? (
+                    <><Check className="w-3.5 h-3.5 mr-1.5" /> Copied</>
+                  ) : (
+                    <><Copy className="w-3.5 h-3.5 mr-1.5" /> Copy</>
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-slate-500 leading-snug">
+                Valid for 14 days. Copy this link and paste it into Slack / email / a DM — we don't send invite emails from this dialog.
+              </p>
+            </div>
           </div>
-          {props.kind === "admin" && (
-            <p className="text-xs text-slate-500">
-              The Person must have a contact email on file that matches an
-              existing admin account. If not, use Invite Artist instead.
-            </p>
-          )}
-        </div>
+        ) : (
+          <div className="space-y-3">
+            {props.kind === "admin" && (
+              // Task #665 — explicit mode switch so "Add Admin" matches
+              // the spec's dual flow: pick an existing Person, or fill
+              // in a new contact's name/title/email/phone in one shot.
+              <div
+                className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs font-semibold"
+                data-testid={`tabs-${props.testIdPrefix}-${props.kind}-mode`}
+              >
+                <button
+                  type="button"
+                  onClick={() => { setMode("existing"); setName(""); }}
+                  className={[
+                    "px-3 py-1 rounded-md transition-colors",
+                    mode === "existing" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
+                  ].join(" ")}
+                  data-testid={`tab-${props.testIdPrefix}-${props.kind}-mode-existing`}
+                >
+                  Pick existing
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMode("new"); setPicked(null); }}
+                  className={[
+                    "px-3 py-1 rounded-md transition-colors",
+                    mode === "new" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
+                  ].join(" ")}
+                  data-testid={`tab-${props.testIdPrefix}-${props.kind}-mode-new`}
+                >
+                  New contact
+                </button>
+              </div>
+            )}
+            {(props.kind !== "admin" || mode === "existing") && (
+              <PersonPicker
+                value={picked}
+                onChange={setPicked}
+                excludeIds={props.attachedIds}
+                testIdPrefix={`${props.testIdPrefix}-${props.kind}`}
+                onPrefilled={(info) => {
+                  if (info.title && !title.trim()) setTitleField(info.title);
+                }}
+              />
+            )}
+            {props.kind === "admin" && mode === "new" && (
+              <div className="space-y-3">
+                {/* Task #665 — paste-a-URL prefill in New Contact mode.
+                    Bandcamp / Apple / Spotify / LinkedIn / generic bio
+                    URLs scrape Name + Title (and any contact links)
+                    straight into the form without minting a Person row;
+                    the partner-contacts POST will create the Person on
+                    submit. */}
+                <PersonPicker
+                  value={null}
+                  onChange={() => { /* prefill-only: no Person ever picked here */ }}
+                  excludeIds={props.attachedIds}
+                  testIdPrefix={`${props.testIdPrefix}-${props.kind}-new`}
+                  prefillOnly
+                  onPrefillFields={(f) => {
+                    if (f.name) setName(f.name);
+                    if (f.title && !title.trim()) setTitleField(f.title);
+                    if (f.email && !email.trim()) setEmail(f.email);
+                    if (f.phone && !phone.trim()) setPhone(f.phone);
+                  }}
+                />
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                    Name
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. Pat Williams"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    data-testid={`input-${props.testIdPrefix}-${props.kind}-name`}
+                  />
+                </div>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                  Title {props.kind === "ambassador" ? "(optional)" : ""}
+                </label>
+                <Input
+                  type="text"
+                  placeholder="e.g. Director"
+                  value={title}
+                  onChange={(e) => setTitleField(e.target.value)}
+                  data-testid={`input-${props.testIdPrefix}-${props.kind}-title`}
+                />
+              </div>
+              {props.kind === "admin" && (
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                    Phone (optional)
+                  </label>
+                  <Input
+                    type="tel"
+                    placeholder="(555) 123-4567"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    data-testid={`input-${props.testIdPrefix}-${props.kind}-phone`}
+                  />
+                </div>
+              )}
+            </div>
+            {props.kind === "admin" && (
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                  Email
+                </label>
+                <Input
+                  type="email"
+                  placeholder="contact@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  data-testid={`input-${props.testIdPrefix}-${props.kind}-email`}
+                />
+                <p className="text-xs text-slate-500 mt-1 leading-snug">
+                  If they already have a GoodTunes admin account we'll grant the partner role; otherwise we'll mint an invite link you can copy.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
         <DialogFooter>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              reset();
-              props.onOpenChange(false);
-            }}
-            data-testid={`button-${props.testIdPrefix}-${props.kind}-cancel`}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={() => submit.mutate()}
-            disabled={!picked || submit.isPending}
-            data-testid={`button-${props.testIdPrefix}-${props.kind}-submit`}
-          >
-            {submit.isPending ? "Adding…" : props.submitLabel}
-          </Button>
+          {invite ? (
+            <Button
+              type="button"
+              onClick={() => { reset(); props.onOpenChange(false); }}
+              data-testid={`button-${props.testIdPrefix}-${props.kind}-done`}
+            >
+              Done
+            </Button>
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => { reset(); props.onOpenChange(false); }}
+                data-testid={`button-${props.testIdPrefix}-${props.kind}-cancel`}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => submit.mutate()}
+                disabled={
+                  submit.isPending ||
+                  (props.kind === "ambassador"
+                    ? !picked
+                    : !email.trim() ||
+                      (mode === "existing" ? !picked : !name.trim()))
+                }
+                data-testid={`button-${props.testIdPrefix}-${props.kind}-submit`}
+              >
+                {submit.isPending ? "Adding…" : props.submitLabel}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

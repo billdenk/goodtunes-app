@@ -151,6 +151,21 @@ interface PersonFull {
   // Sell-panel Presses surface is hard-locked to that press until
   // their first run ships. Super-admin can clear/switch via Identity.
   invitedByPressId: string | null;
+  // Task #665 — contact-led vs artist-led rendering. Server derives
+  // `shape` from users.role/role_scope_id, owned albums, discography
+  // rows, or the operator-set `isArtistPromoted` flag. The contact
+  // shape collapses the tab strip to Overview/Cover/Permissions and
+  // leads the Overview with contact info + attached orgs.
+  shape?: "artist" | "contact";
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  isArtistPromoted?: boolean;
+  attachments?: Array<{
+    entityKind: "vendor" | "manufacturer" | "label" | "fulfillment_partner" | "non_profit";
+    entityId: string;
+    entityName: string;
+    role: string | null;
+  }>;
 }
 
 interface LabelLite {
@@ -186,6 +201,18 @@ const BASE_TABS: { key: Tab; label: string }[] = [
 // a band/duo/orchestra (is_group=true). Splice it in next to Overview so
 // the band-curation surfaces sit together.
 function tabsForPerson(person: PersonFull): { key: Tab; label: string }[] {
+  // Task #665 — contact-shape people are partner reps (label staff,
+  // press contacts, vendor account managers), not performers. Collapse
+  // to Overview/Cover/Permissions so the artist-only surfaces
+  // (Dashboard, Streaming, Gear, Splits, Payouts, Releases, Members)
+  // don't render an empty shell on a row that never had any of those.
+  if (person.shape === "contact") {
+    return [
+      { key: "overview", label: "Overview" },
+      { key: "cover", label: "Cover" },
+      { key: "permissions", label: "Permissions" },
+    ];
+  }
   if (!person.isGroup) return BASE_TABS;
   const out = [...BASE_TABS];
   const after = out.findIndex((t) => t.key === "cover");
@@ -302,6 +329,26 @@ export function AdminPerson() {
     person?.labelId
       ? labels.find((l) => l.id === person.labelId)?.name ?? null
       : null;
+
+  // Task #665 — once the Person resolves, coerce the tab to a key
+  // tabsForPerson() actually renders. Contact-shape people don't have
+  // Dashboard/Releases/Streaming/Gear/Splits/Payouts tabs, so a direct
+  // `/admin/people/:id` load (or a stale `?tab=dashboard` deep link)
+  // must fall back to Overview instead of rendering the artist
+  // Dashboard shell on a partner contact.
+  useEffect(() => {
+    if (!person) return;
+    const allowed = new Set(tabsForPerson(person).map((t) => t.key));
+    if (!allowed.has(tab)) {
+      setTabState("overview");
+      try {
+        const u = new URL(window.location.href);
+        u.searchParams.delete("tab");
+        window.history.replaceState({}, "", u.toString());
+      } catch {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [person?.shape, person?.isGroup]);
 
   if (authLoading || isLoading) {
     return (
@@ -435,7 +482,16 @@ export function AdminPerson() {
           />
           <div className="flex-1 min-w-0">
             <div className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
-              {labelName ? `Signed to ${labelName}` : "Independent"}
+              {/* Task #665 — contact-shape Persons are partner reps, not
+                  artists, so the artist "Signed to / Independent" org
+                  line doesn't apply. Show the partner they're attached
+                  to instead (first attachment wins; the Overview tab
+                  lists the full set). */}
+              {person.shape === "contact"
+                ? (person.attachments && person.attachments.length > 0
+                    ? `Contact at ${person.attachments[0].entityName}`
+                    : "Contact")
+                : (labelName ? `Signed to ${labelName}` : "Independent")}
             </div>
             <h1
               className="text-slate-900 text-[26px] font-bold tracking-tight mt-0.5 truncate"
@@ -504,7 +560,9 @@ export function AdminPerson() {
           />
         )}
         {tab === "overview" && (
-          <OverviewPanel person={person} labels={labels} />
+          person.shape === "contact"
+            ? <ContactOverviewPanel person={person} />
+            : <OverviewPanel person={person} labels={labels} />
         )}
         {tab === "cover" && <ImageUploadPanel person={person} field="cover" />}
         {tab === "members" && person.isGroup && <MembersPanel person={person} />}
@@ -624,6 +682,110 @@ function PersonAvatar({
           </span>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ─── Contact-shape Overview tab (Task #665) ───────────────────────── */
+
+const CONTACT_ATTACHMENT_HREF: Record<NonNullable<PersonFull["attachments"]>[number]["entityKind"], (id: string) => string> = {
+  vendor: (id) => `/admin/vendors/${id}`,
+  manufacturer: (id) => `/admin/manufacturers/${id}`,
+  label: (id) => `/admin/labels/${id}`,
+  fulfillment_partner: (id) => `/admin/fulfillment/${id}`,
+  non_profit: (id) => `/admin/non-profits/${id}`,
+};
+const CONTACT_ATTACHMENT_LABEL: Record<NonNullable<PersonFull["attachments"]>[number]["entityKind"], string> = {
+  vendor: "Vendor",
+  manufacturer: "Press",
+  label: "Label",
+  fulfillment_partner: "Fulfillment partner",
+  non_profit: "Non-profit",
+};
+
+function ContactOverviewPanel({ person }: { person: PersonFull }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const endpoint = `/api/admin/people/${person.id}`;
+  const invalidate: (readonly unknown[])[] = [
+    ["/api/admin/people", person.id],
+    ["/api/people", person.id],
+    ["/api/people"],
+  ];
+  const promote = useMutation({
+    mutationFn: async () => apiRequest("POST", `/api/admin/people/${person.id}/promote-artist`),
+    onSuccess: () => {
+      toast({ title: `${person.name} is now an artist`, description: "Artist-only tabs (Discography, Gear, Splits, Payouts) are now live on this Person." });
+      invalidate.forEach((k) => qc.invalidateQueries({ queryKey: k }));
+    },
+    onError: (e: any) => toast({ title: "Couldn't promote", description: e?.message ?? "Try again in a moment.", variant: "destructive" }),
+  });
+  const attachments = person.attachments ?? [];
+  return (
+    <div className="space-y-5">
+      <EditablePanel
+        title="Contact"
+        testId="panel-overview-contact"
+        endpoint={endpoint}
+        values={{
+          name: person.name,
+          bio: person.bio,
+          contactEmail: person.contactEmail ?? "",
+          contactPhone: person.contactPhone ?? "",
+        }}
+        invalidate={invalidate}
+        fields={[
+          { key: "name", label: "Name", type: "text", required: true },
+          { key: "contactEmail", label: "Email", type: "text", placeholder: "name@example.com" },
+          { key: "contactPhone", label: "Phone", type: "text", placeholder: "(555) 123-4567" },
+          { key: "bio", label: "Title / note", type: "textarea", placeholder: "Director, A&R, plant manager — anything that orients future operators." },
+        ]}
+      />
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-overview-attachments">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900">Attached to</h2>
+          <p className="text-xs text-slate-500">Partners where this person is listed as a contact.</p>
+        </div>
+        {attachments.length === 0 ? (
+          <p className="text-xs text-slate-500" data-testid="text-overview-no-attachments">Not attached to any partner yet.</p>
+        ) : (
+          <ul className="divide-y divide-slate-100 -mx-1">
+            {attachments.map((a) => (
+              <li key={`${a.entityKind}-${a.entityId}`} className="flex items-center gap-3 px-1 py-2" data-testid={`row-overview-attachment-${a.entityId}`}>
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 w-28 flex-shrink-0">
+                  {CONTACT_ATTACHMENT_LABEL[a.entityKind]}
+                </span>
+                <Link
+                  href={CONTACT_ATTACHMENT_HREF[a.entityKind](a.entityId)}
+                  className="flex-1 text-sm font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 truncate"
+                  data-testid={`link-overview-attachment-${a.entityId}`}
+                >
+                  {a.entityName}
+                </Link>
+                {a.role && <span className="text-xs text-slate-500 truncate">{a.role}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-overview-promote">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900">Is this person actually an artist?</h2>
+          <p className="text-xs text-slate-500">
+            Flip this Person from a partner contact into a full artist record. Unlocks Discography, Gear, Splits, and Payouts tabs.
+          </p>
+        </div>
+        <Button
+          type="button"
+          onClick={() => promote.mutate()}
+          disabled={promote.isPending}
+          data-testid="button-promote-to-artist"
+        >
+          {promote.isPending ? "Promoting…" : "Promote to artist"}
+        </Button>
+      </section>
     </div>
   );
 }

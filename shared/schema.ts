@@ -752,6 +752,19 @@ export const people = pgTable("people", {
   // roster for verified-artist invites + label-side follow-ups. NEVER
   // surfaced on the public Person page — only readable on admin endpoints.
   contactEmail: text("contact_email"),
+  // Task #665 — admin-only contact phone. Same provenance + privacy
+  // contract as contactEmail: captured by the partner-detail "Add
+  // Admin" flow so we have a non-email outreach handle, never surfaced
+  // on the public Person page.
+  contactPhone: text("contact_phone"),
+  // Task #665 — admin override that flips a contact-shape Person into
+  // the artist shape (Albums/Members/etc tabs). Normally derived from
+  // role-scope + primary-artist albums + discography, but operators
+  // sometimes need to mark a business contact who turns out to be an
+  // artist before any of those signals exist. Cleared automatically
+  // when one of those signals shows up — the flag is the floor, not
+  // the ceiling.
+  isArtistPromoted: boolean("is_artist_promoted").notNull().default(false),
   // Task #80 — referrer chain. When THIS person is the *referred* artist,
   // either or both of these point at who referred them in. The referrer
   // gets `referrerPerUnitCents` (default 100¢ = $1) for every paid order

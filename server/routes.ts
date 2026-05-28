@@ -10364,13 +10364,72 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // artist comp shipments — physical-mail PII). New admin-only fields
   // belong here, not in `toPublicPerson`.
   app.get("/api/admin/people/:id", requireAdmin, async (req, res) => {
-    const p = await storage.getPersonById(String(req.params.id));
+    const id = String(req.params.id);
+    const p = await storage.getPersonById(id);
     if (!p) return res.status(404).json({ message: "Person not found" });
+    // Task #665 — derive a person's shape so the admin Person page can
+    // render the contact-shape variant (Overview/Cover/Permissions
+    // only, contact-led copy) for business contacts who aren't artists.
+    // A Person is shaped 'artist' when any of:
+    //   • a users row exists with role='artist' and role_scope_id=:id
+    //   • any non-deleted album has primary_artist_id=:id
+    //   • any person_discography row exists for :id
+    //   • the admin override is_artist_promoted is true
+    // Otherwise the row is a 'contact' (business person attached to a
+    // partner via entity_contacts / organization_people, with no
+    // artistic surface attached yet).
+    const isPromoted = !!(p as any).isArtistPromoted;
+    let shape: "artist" | "contact" = "contact";
+    if (isPromoted || (p as any).isGroup) {
+      shape = "artist";
+    } else {
+      const sig = await db.execute<{ has_role: boolean; has_album: boolean; has_disco: boolean }>(sql`
+        SELECT
+          EXISTS(SELECT 1 FROM users WHERE role = 'artist' AND role_scope_id = ${id}) AS has_role,
+          EXISTS(SELECT 1 FROM albums WHERE primary_artist_id = ${id} AND deleted_at IS NULL) AS has_album,
+          EXISTS(SELECT 1 FROM person_discography WHERE person_id = ${id}) AS has_disco
+      `);
+      const row = ((sig as any).rows ?? [])[0];
+      if (row?.has_role || row?.has_album || row?.has_disco) shape = "artist";
+    }
+    // Partner attachments — every entity this contact is attached to,
+    // so the contact-shape Overview can list them as deep links.
+    const attachments: Array<{ entityKind: string; entityId: string; entityName: string; role: string | null }> = [];
+    try {
+      const npoRows = await db.execute<any>(sql`
+        SELECT 'non_profit' AS kind, o.id, o.name, op.role
+        FROM organization_people op JOIN organizations o ON o.id = op.organization_id
+        WHERE op.person_id = ${id} AND o.kind = 'non_profit'
+        ORDER BY o.name ASC
+      `);
+      for (const r of ((npoRows as any).rows ?? [])) attachments.push({ entityKind: r.kind, entityId: r.id, entityName: r.name, role: r.role ?? null });
+      const ecRows = await db.execute<any>(sql`
+        SELECT ec.entity_kind, ec.entity_id, ec.role,
+               COALESCE(v.name, m.name, l.name, fp.name) AS name
+        FROM entity_contacts ec
+        LEFT JOIN vendors v               ON ec.entity_kind = 'vendor'              AND v.id = ec.entity_id
+        LEFT JOIN manufacturers m         ON ec.entity_kind = 'manufacturer'        AND m.id = ec.entity_id
+        LEFT JOIN labels l                ON ec.entity_kind = 'label'               AND l.id = ec.entity_id
+        LEFT JOIN fulfillment_partners fp ON ec.entity_kind = 'fulfillment_partner' AND fp.id = ec.entity_id
+        WHERE ec.person_id = ${id}
+      `);
+      for (const r of ((ecRows as any).rows ?? [])) {
+        if (r.name) attachments.push({ entityKind: r.entity_kind, entityId: r.entity_id, entityName: r.name, role: r.role ?? null });
+      }
+    } catch (e: any) {
+      console.warn(`[person:${id}] attachments lookup failed: ${e?.message}`);
+    }
     return res.json({
       ...toPublicPerson(p),
       shippingAddress: (p as any).shippingAddress ?? null,
       // Task #517 — structured snapshot for the address autocomplete.
       shippingAddressStruct: (p as any).shippingAddressStruct ?? null,
+      // Task #665 — contact-shape support fields.
+      shape,
+      isArtistPromoted: isPromoted,
+      contactEmail: (p as any).contactEmail ?? null,
+      contactPhone: (p as any).contactPhone ?? null,
+      attachments,
     });
   });
 
@@ -10453,6 +10512,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.twitterUrl !== undefined) updates.twitterUrl = opt(b.twitterUrl);
     if (b.blueskyUrl !== undefined) updates.blueskyUrl = opt(b.blueskyUrl);
     if (b.facebookUrl !== undefined) updates.facebookUrl = opt(b.facebookUrl);
+    // Task #665 — contact-led fields (phone + admin contact email) edited from the
+    // contact-shape Person Overview. Empty string clears.
+    if (b.contactEmail !== undefined) updates.contactEmail = opt(b.contactEmail);
+    if (b.contactPhone !== undefined) updates.contactPhone = opt(b.contactPhone);
     if (b.websiteUrl !== undefined) updates.websiteUrl = opt(b.websiteUrl);
     if (b.linkedinUrl !== undefined) updates.linkedinUrl = opt(b.linkedinUrl);
     if (b.labelId !== undefined) updates.labelId = opt(b.labelId);
@@ -15372,15 +15435,50 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/non-profits/:id/people", requireAdmin, async (req, res) => {
     const npo = await db.execute(sql`SELECT 1 FROM organizations WHERE id = ${req.params.id} AND kind = 'non_profit' LIMIT 1`);
     if (((npo as any).rows ?? []).length === 0) return res.status(404).json({ message: "Non-profit not found" });
-    const rows = await db.execute<{ person_id: string; name: string; photo_url: string | null; role: string | null }>(sql`
-      SELECT op.person_id, p.name, p.photo_url, op.role
+    // Task #665 — Invite tokens are bearer credentials. Only return
+    // inviteId / acceptUrl to callers who would have been allowed to
+    // mint or revoke the invite in the first place — super_admin OR
+    // the scope-matching partner admin holding invite_subusers. Every
+    // other admin (sibling partners, broad helpdesk roles) sees the
+    // "Invite pending" boolean but not the link.
+    const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
+    const callerRole = await getUserRole(req.session.userId!);
+    let canSeeInvite = callerRole?.role === "super_admin";
+    if (!canSeeInvite && callerRole?.role === "non_profit" && callerRole.roleScopeId === req.params.id) {
+      const verbErr = await checkPartnerVerbForScope(
+        req.session.userId!,
+        "invite_subusers",
+        { kind: "non_profit", id: req.params.id },
+      );
+      canSeeInvite = !verbErr;
+    }
+    // Task #665 — left-join admin_invites so Contacts rows can render
+    // the "Invite pending" chip + reopen the copy-link state without
+    // a second round-trip. Matches on lower(email) + role='non_profit'
+    // + scope=this NPO; ignores used/revoked/expired rows.
+    const rows = await db.execute<any>(sql`
+      SELECT op.person_id, p.name, p.photo_url, p.contact_email, p.contact_phone, op.role,
+             ai.id AS invite_id, ai.token AS invite_token
       FROM organization_people op
       JOIN people p ON p.id = op.person_id
+      LEFT JOIN admin_invites ai ON lower(ai.email) = lower(COALESCE(p.contact_email, ''))
+        AND ai.role = 'non_profit' AND ai.role_scope_id = ${req.params.id}
+        AND ai.used_at IS NULL AND ai.revoked_at IS NULL AND ai.expires_at > NOW()
       WHERE op.organization_id = ${req.params.id}
       ORDER BY p.name ASC
     `);
+    const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const host = req.headers["x-forwarded-host"] || req.headers.host;
     res.json(((rows as any).rows ?? []).map((r: any) => ({
-      personId: r.person_id, name: r.name, photoUrl: r.photo_url, role: r.role,
+      personId: r.person_id,
+      name: r.name,
+      photoUrl: r.photo_url,
+      role: r.role,
+      contactEmail: r.contact_email ?? null,
+      contactPhone: r.contact_phone ?? null,
+      invitePending: !!r.invite_id,
+      inviteId: canSeeInvite ? (r.invite_id ?? null) : null,
+      acceptUrl: canSeeInvite && r.invite_token ? `${proto}://${host}/invite/${r.invite_token}` : null,
     })));
   });
 
@@ -15953,15 +16051,55 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   function _registerEntityContacts(basePath: string, kind: "vendor" | "manufacturer" | "label" | "fulfillment_partner") {
     app.get(`${basePath}/:id/people`, requireAdmin, async (req, res) => {
       if (!(await _entityExists(kind, req.params.id))) return res.status(404).json({ message: "Not found" });
-      const rows = await db.execute<{ person_id: string; name: string; photo_url: string | null; linkedin_url: string | null; role: string | null }>(sql`
-        SELECT ec.person_id, p.name, p.photo_url, p.linkedin_url, ec.role
+      // Task #665 — invite-pending chip uses admin_invites left-joined
+      // on (lower(email), role, scope). The role key follows the
+      // entity_contacts entity_kind → admin role mapping
+      // (fulfillment_partner → fulfillment; everything else 1:1).
+      const inviteRole = kind === "fulfillment_partner" ? "fulfillment" : kind;
+      // Token leakage gate — see the NPO route above for rationale.
+      // Only the caller who could mint/revoke the invite gets the link.
+      const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
+      const callerRole = await getUserRole(req.session.userId!);
+      const VERB_SCOPE_FOR_KIND: Record<string, "label" | "manufacturer" | "fulfillment" | "vendor"> = {
+        label: "label",
+        manufacturer: "manufacturer",
+        fulfillment_partner: "fulfillment",
+        vendor: "vendor",
+      };
+      let canSeeInvite = callerRole?.role === "super_admin";
+      if (!canSeeInvite && callerRole?.role === inviteRole && callerRole.roleScopeId === req.params.id) {
+        const verbErr = await checkPartnerVerbForScope(
+          req.session.userId!,
+          "invite_subusers",
+          { kind: VERB_SCOPE_FOR_KIND[kind], id: req.params.id },
+        );
+        canSeeInvite = !verbErr;
+      }
+      const rows = await db.execute<any>(sql`
+        SELECT ec.person_id, p.name, p.photo_url, p.linkedin_url,
+               p.contact_email, p.contact_phone, ec.role,
+               ai.id AS invite_id, ai.token AS invite_token
         FROM entity_contacts ec
         JOIN people p ON p.id = ec.person_id
+        LEFT JOIN admin_invites ai ON lower(ai.email) = lower(COALESCE(p.contact_email, ''))
+          AND ai.role = ${inviteRole} AND ai.role_scope_id = ${req.params.id}
+          AND ai.used_at IS NULL AND ai.revoked_at IS NULL AND ai.expires_at > NOW()
         WHERE ec.entity_kind = ${kind} AND ec.entity_id = ${req.params.id}
         ORDER BY p.name ASC
       `);
+      const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+      const host = req.headers["x-forwarded-host"] || req.headers.host;
       res.json(((rows as any).rows ?? []).map((r: any) => ({
-        personId: r.person_id, name: r.name, photoUrl: r.photo_url, linkedinUrl: r.linkedin_url, role: r.role,
+        personId: r.person_id,
+        name: r.name,
+        photoUrl: r.photo_url,
+        linkedinUrl: r.linkedin_url,
+        role: r.role,
+        contactEmail: r.contact_email ?? null,
+        contactPhone: r.contact_phone ?? null,
+        invitePending: !!r.invite_id,
+        inviteId: canSeeInvite ? (r.invite_id ?? null) : null,
+        acceptUrl: canSeeInvite && r.invite_token ? `${proto}://${host}/invite/${r.invite_token}` : null,
       })));
     });
     app.post(`${basePath}/:id/people`, requireAdmin, requireRole("super_admin"), async (req, res) => {
@@ -17899,14 +18037,254 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ id: personId, canInviteAmbassadors: enabled });
   });
 
-  // Task #421 — partner-detail "Add Admin" path. After the People panel
-  // attaches a Person as a Contact, it calls this to grant the person
-  // a partner-scoped admin role using the existing setUserRole plumbing
-  // (same path as /api/admin/customers/:id/promote, but keyed off a
-  // Person's contactEmail instead of a customer_users row). Looks up an
-  // existing users row by lower(email); does NOT mint new users rows
-  // here — if the Person has never signed in we surface a clear error
-  // so the operator falls back to the Invite Artist flow.
+  // Task #665 — unified partner-contact endpoint. Replaces the older
+  // Task #421 /grant-admin-role + separate "attach-as-contact" round-
+  // trips. One POST does the whole flow:
+  //   1. Upsert a Person (create if no `personId`; patch missing
+  //      contact_email / contact_phone if `personId` provided).
+  //   2. Attach to the partner via entity_contacts (or
+  //      organization_people for non_profit) — idempotent.
+  //   3. If an admin users row exists for this email, flip is_admin +
+  //      setUserRole to the partner role. Otherwise mint a partner-
+  //      scoped admin_invite and return the acceptUrl so the operator
+  //      can copy the "Invite ready" link straight into Slack / email.
+  // Gated: super_admin OR partner admin with invite_subusers on the
+  // exact scope (entityKind + entityId) they're attaching to.
+  app.post("/api/admin/partner-contacts", requireAdmin, async (req, res) => {
+    const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
+    const b = req.body ?? {};
+    const entityKind = String(b.entityKind || "").trim();
+    const entityId = String(b.entityId || "").trim();
+    const KIND_TO_ROLE: Record<string, string> = {
+      non_profit: "non_profit",
+      manufacturer: "manufacturer",
+      label: "label",
+      fulfillment_partner: "fulfillment",
+      vendor: "vendor",
+    };
+    const KIND_TO_VERB_SCOPE: Record<string, "label" | "artist" | "manufacturer" | "fulfillment" | "non_profit" | "vendor"> = {
+      non_profit: "non_profit",
+      manufacturer: "manufacturer",
+      label: "label",
+      fulfillment_partner: "fulfillment",
+      vendor: "vendor",
+    };
+    const targetRole = KIND_TO_ROLE[entityKind];
+    if (!targetRole || !entityId) {
+      return res.status(400).json({ message: "entityKind and entityId are required" });
+    }
+    // Auth: super_admin OR matching partner with invite_subusers verb.
+    const callerRole = await getUserRole(req.session.userId!);
+    if (!callerRole) return res.status(401).json({ message: "Unauthorized" });
+    if (callerRole.role !== "super_admin") {
+      const scopeKind = KIND_TO_VERB_SCOPE[entityKind];
+      if (
+        callerRole.role !== targetRole ||
+        callerRole.roleScopeId !== entityId
+      ) {
+        return res.status(403).json({ message: "You can only add admins to your own partner scope." });
+      }
+      const verbErr = await checkPartnerVerbForScope(
+        req.session.userId!,
+        "invite_subusers",
+        { kind: scopeKind, id: entityId },
+      );
+      if (verbErr) return res.status(403).json({ message: verbErr.message });
+    }
+    // Existence check on the partner row.
+    const ENTITY_TABLE: Record<string, string> = {
+      non_profit: "organizations",
+      manufacturer: "manufacturers",
+      label: "labels",
+      fulfillment_partner: "fulfillment_partners",
+      vendor: "vendors",
+    };
+    const table = ENTITY_TABLE[entityKind];
+    const exists = await db.execute(sql`
+      SELECT 1 FROM ${sql.raw(table)} WHERE id = ${entityId}
+      ${entityKind === "non_profit" ? sql`AND kind = 'non_profit'` : sql``}
+      LIMIT 1
+    `);
+    if (((exists as any).rows ?? []).length === 0) {
+      return res.status(404).json({ message: "Partner not found" });
+    }
+
+    const name = b.name ? String(b.name).trim() : null;
+    const title = b.title ? String(b.title).trim() || null : null;
+    const emailRaw = b.email ? String(b.email).trim() : "";
+    const email = emailRaw ? emailRaw.toLowerCase() : null;
+    const phone = b.phone ? String(b.phone).trim() || null : null;
+    const personIdInput = b.personId ? String(b.personId).trim() : null;
+
+    if (!email) return res.status(400).json({ message: "Email is required" });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: "That email doesn't look right." });
+    }
+
+    // 1. Upsert Person — either patch the row identified by personId
+    //    with whatever contact fields the operator supplied (so stale
+    //    email/phone get corrected in the same flow), or create a new
+    //    Person row.
+    let personId = personIdInput;
+    let personName = name;
+    if (personId) {
+      const exP = await db.execute<{ id: string; name: string }>(sql`
+        SELECT id, name FROM people WHERE id = ${personId} LIMIT 1
+      `);
+      const row = ((exP as any).rows ?? [])[0];
+      if (!row) return res.status(404).json({ message: "Person not found" });
+      personName = row.name;
+      // Apply submitted email/phone as overwrites. The form always
+      // surfaces the current values and the operator can blank/edit
+      // them — treat what comes back as authoritative. (Email is
+      // required by the route, so it's always written; phone only
+      // when the operator typed something.)
+      const sets: any[] = [sql`contact_email = ${email}`];
+      if (phone) sets.push(sql`contact_phone = ${phone}`);
+      const setSql = sets.reduce((acc, frag, i) => (i === 0 ? frag : sql`${acc}, ${frag}`));
+      await db.execute(sql`UPDATE people SET ${setSql} WHERE id = ${personId}`);
+    } else {
+      if (!name) return res.status(400).json({ message: "Name is required for a new contact" });
+      let photoUrl: string | null = null;
+      try { photoUrl = await tryGravatarRehost(email); } catch { /* ignore */ }
+      const created = await storage.createPerson({
+        name, photoUrl, contactEmail: email, contactPhone: phone,
+      } as any);
+      personId = created.id;
+      personName = created.name;
+    }
+
+    // 2. Attach as a contact (idempotent).
+    if (entityKind === "non_profit") {
+      await db.execute(sql`
+        INSERT INTO organization_people (organization_id, person_id, role)
+        VALUES (${entityId}, ${personId}, ${title})
+        ON CONFLICT (organization_id, person_id) DO UPDATE SET role = COALESCE(EXCLUDED.role, organization_people.role)
+      `);
+    } else {
+      await db.execute(sql`
+        INSERT INTO entity_contacts (entity_kind, entity_id, person_id, role)
+        VALUES (${entityKind}, ${entityId}, ${personId}, ${title})
+        ON CONFLICT (entity_kind, entity_id, person_id) DO UPDATE SET role = COALESCE(EXCLUDED.role, entity_contacts.role)
+      `);
+    }
+
+    // 3. Grant existing admin role OR mint partner-scoped invite.
+    const u = await db.execute<{ id: string }>(sql`
+      SELECT id FROM users WHERE lower(email) = ${email} LIMIT 1
+    `);
+    const adminUserId = ((u as any).rows ?? [])[0]?.id as string | undefined;
+    if (adminUserId) {
+      await db.execute(sql`UPDATE users SET is_admin = true WHERE id = ${adminUserId}`);
+      await setUserRole(adminUserId, targetRole as any, entityId);
+      return res.json({ mode: "granted", personId, personName, adminUserId, role: targetRole });
+    }
+    // No admin row — check for an existing pending invite on the same
+    // email + role + scope before minting a new one.
+    const existingInvite = await db.execute<{ id: string; token: string }>(sql`
+      SELECT id, token FROM admin_invites
+      WHERE lower(email) = ${email}
+        AND role = ${targetRole}
+        AND role_scope_id = ${entityId}
+        AND used_at IS NULL
+        AND revoked_at IS NULL
+        AND expires_at > NOW()
+      ORDER BY created_at DESC
+      LIMIT 1
+    `);
+    const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const host = req.headers["x-forwarded-host"] || req.headers.host;
+    const existingRow = ((existingInvite as any).rows ?? [])[0];
+    if (existingRow) {
+      const acceptUrl = `${proto}://${host}/invite/${existingRow.token}`;
+      return res.json({ mode: "invited", personId, personName, inviteId: existingRow.id, acceptUrl, reused: true });
+    }
+    const token = generateToken();
+    const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+    const welcomeNote = phone ? `Phone: ${phone}` : null;
+    const invite = await storage.createAdminInvite({
+      email,
+      role: targetRole as any,
+      roleScopeId: entityId,
+      token,
+      expiresAt,
+      createdByUserId: req.session.userId!,
+      welcomeNote,
+      targetPersonId: personId,
+    } as any);
+    const acceptUrl = `${proto}://${host}/invite/${token}`;
+    // Task #665 — email send is intentionally out-of-scope for the
+    // partner-contacts flow. The dialog is copy-link only; the
+    // response carries the URL and the operator pastes it into Slack
+    // / DMs / their own email. Keep the audit log token-free.
+    console.log(`[partner-contacts] invite issued role=${targetRole} scope=${entityId} inviteId=${invite.id}`);
+    res.json({ mode: "invited", personId, personName, inviteId: invite.id, acceptUrl });
+  });
+
+  // Task #665 — lightweight verb-check used by partner shells
+  // (Press/Label/NPO dashboards) to gate the "+ Add ▾" menu without
+  // round-tripping the full /me payload. Returns {ok} where ok=true
+  // iff caller would be allowed to POST /api/admin/partner-contacts
+  // for this scope. Super_admin always true; matching partner needs
+  // invite_subusers on the scope; everyone else false.
+  app.get("/api/admin/partner-contacts/can-invite", requireAdmin, async (req, res) => {
+    const entityKind = String(req.query.entityKind || "").trim();
+    const entityId = String(req.query.entityId || "").trim();
+    const KIND_TO_ROLE: Record<string, string> = {
+      non_profit: "non_profit",
+      manufacturer: "manufacturer",
+      label: "label",
+      fulfillment_partner: "fulfillment",
+      vendor: "vendor",
+    };
+    const KIND_TO_VERB_SCOPE: Record<string, "label" | "manufacturer" | "fulfillment" | "non_profit" | "vendor"> = {
+      non_profit: "non_profit",
+      manufacturer: "manufacturer",
+      label: "label",
+      fulfillment_partner: "fulfillment",
+      vendor: "vendor",
+    };
+    const targetRole = KIND_TO_ROLE[entityKind];
+    if (!targetRole || !entityId) return res.status(400).json({ message: "entityKind and entityId are required" });
+    const callerRole = await getUserRole(req.session.userId!);
+    if (!callerRole) return res.status(401).json({ message: "Unauthorized" });
+    if (callerRole.role === "super_admin") return res.json({ ok: true });
+    if (callerRole.role !== targetRole || callerRole.roleScopeId !== entityId) return res.json({ ok: false });
+    const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
+    const verbErr = await checkPartnerVerbForScope(
+      req.session.userId!,
+      "invite_subusers",
+      { kind: KIND_TO_VERB_SCOPE[entityKind], id: entityId },
+    );
+    res.json({ ok: !verbErr });
+  });
+
+  // Task #665 — flip a contact-shape Person into the artist shape.
+  // Super-admin only; the action surfaces on the Person Overview when
+  // the shape is 'contact' but the operator realises this contact is
+  // also an artist (e.g. a manager who's also a credited performer).
+  app.post(
+    "/api/admin/people/:id/promote-artist",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const id = String(req.params.id);
+      const r = await db.execute(sql`
+        UPDATE people SET is_artist_promoted = true
+        WHERE id = ${id}
+        RETURNING id
+      `);
+      if ((((r as any).rows ?? [])[0]) == null) {
+        return res.status(404).json({ message: "Person not found" });
+      }
+      res.json({ id, isArtistPromoted: true });
+    },
+  );
+
+  // Legacy alias — Task #421 callers expect this URL. The new
+  // /api/admin/partner-contacts endpoint is the canonical path; this
+  // shim preserves backwards-compat for any external automation that
+  // wired against the old shape.
   app.post(
     "/api/admin/people/:id/grant-admin-role",
     requireAdmin,
@@ -17938,7 +18316,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const adminUserId = ((u as any).rows ?? [])[0]?.id as string | undefined;
       if (!adminUserId) {
         return res.status(400).json({
-          message: `No admin account exists for ${person.email} yet — send them an Invite Artist link, or have them sign up first.`,
+          message: `No admin account exists for ${person.email} yet — use the partner-contacts invite path instead.`,
         });
       }
       await db.execute(sql`UPDATE users SET is_admin = true WHERE id = ${adminUserId}`);

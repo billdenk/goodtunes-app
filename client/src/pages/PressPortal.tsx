@@ -37,6 +37,7 @@ import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
+import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -996,9 +997,17 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
       </div>
       {sub === "profile" && <ProfileSubTab pressId={pressId} />}
       {sub === "staff" && (
-        <DashboardPanel padding="md">
-          <PartnerPermissionsPanel scopeKind="manufacturer" scopeId={pressId} scopeName={pressName} />
-        </DashboardPanel>
+        <div className="space-y-4">
+          {/* Task #665 — same Contacts panel admins see on
+              /admin/manufacturers/:id. Server gates POSTs by
+              invite_subusers on the caller; super-admins always pass. */}
+          <DashboardPanel padding="md">
+            <PressContactsPanel pressId={pressId} pressName={pressName} />
+          </DashboardPanel>
+          <DashboardPanel padding="md">
+            <PartnerPermissionsPanel scopeKind="manufacturer" scopeId={pressId} scopeName={pressName} />
+          </DashboardPanel>
+        </div>
       )}
       {sub === "catalog" && (
         <DashboardPanel padding="md">
@@ -1013,6 +1022,29 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
       {sub === "payouts" && <PayoutsSubTab pressId={pressId} />}
       {sub === "notifications" && <NotificationsSubTab pressId={pressId} />}
     </div>
+  );
+}
+
+function PressContactsPanel({ pressId, pressName }: { pressId: string; pressName: string }) {
+  const probe = useQuery<{ ok: boolean }>({
+    queryKey: ["/api/admin/partner-contacts/can-invite", { entityKind: "manufacturer", entityId: pressId }],
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/partner-contacts/can-invite?entityKind=manufacturer&entityId=${encodeURIComponent(pressId)}`, { credentials: "include" });
+      if (!r.ok) return { ok: false };
+      return r.json();
+    },
+  });
+  return (
+    <OrganizationPeople
+      apiPath={`/api/manufacturers/${pressId}/people`}
+      testIdPrefix="press-shell"
+      entityKind="manufacturer"
+      entityId={pressId}
+      entityName={pressName}
+      title="Contacts"
+      blurb="Invite teammates and partners to this press. We'll grant the role if they already have an admin account, otherwise we mint an invite link."
+      canInviteSubusers={probe.data?.ok === true}
+    />
   );
 }
 
