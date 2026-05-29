@@ -77,7 +77,21 @@ export type CatalogColor = {
 // and needs a real quote from the press; admin UI renders these yellow
 // with a "TBD — awaiting quote" hint. Saving a value through the
 // catalog editor marks the rung confirmed=true automatically.
-export type CatalogLadderRung = { qty: number; unitCents: number; confirmed?: boolean };
+// Task #684 — rungs can additionally carry provenance: `source` /
+// `syncedAt` stamp where the number came from (importer or a manual
+// site-sourced load), `lockedFromSync` protects an operator/site value
+// from being overwritten by a future Hellbender Shopify re-sync, and
+// `estimated` flags a Bill-approved interpolated cell (displays like
+// any other price; tracked in docs/vendors/hellbender.md).
+export type CatalogLadderRung = {
+  qty: number;
+  unitCents: number;
+  confirmed?: boolean;
+  source?: string;
+  syncedAt?: string;
+  lockedFromSync?: boolean;
+  estimated?: boolean;
+};
 export type CatalogTier = {
   id: string;
   name: string;
@@ -674,6 +688,117 @@ async function upgradeRung(
     );
 }
 
+/** Task #684 — write a confirmed rung carrying provenance: a `source` +
+ *  `syncedAt` stamp, `lockedFromSync:true` so a future Hellbender
+ *  Shopify re-sync can't clobber the operator/site value, and an
+ *  optional `estimated` flag for Bill-approved interpolated cells.
+ *  Overwrites unconditionally (like {@link forceRungPrice}) but is
+ *  idempotent — a rung that already matches on value + provenance is
+ *  left as-is so its original `syncedAt` survives restarts. No-op if the
+ *  combo row is missing. */
+async function setSiteRung(
+  tierId: string,
+  jacketId: string,
+  rung: { qty: number; unitCents: number; estimated?: boolean },
+  source: string,
+  syncedAt: string,
+): Promise<void> {
+  const [existing] = await db
+    .select()
+    .from(pressTierJacketLadders)
+    .where(
+      and(
+        eq(pressTierJacketLadders.tierId, tierId),
+        eq(pressTierJacketLadders.jacketId, jacketId),
+      ),
+    );
+  if (!existing) return;
+  const ladder: CatalogLadderRung[] = Array.isArray(existing.priceLadder)
+    ? [...(existing.priceLadder as CatalogLadderRung[])]
+    : [];
+  const estimated = rung.estimated ?? false;
+  const idx = ladder.findIndex((r) => r.qty === rung.qty);
+  if (idx >= 0) {
+    const cur = ladder[idx];
+    if (
+      cur.confirmed === true &&
+      cur.unitCents === rung.unitCents &&
+      cur.lockedFromSync === true &&
+      (cur.estimated ?? false) === estimated &&
+      cur.source === source
+    ) {
+      return;
+    }
+    ladder[idx] = {
+      qty: rung.qty,
+      unitCents: rung.unitCents,
+      confirmed: true,
+      source,
+      syncedAt,
+      lockedFromSync: true,
+      estimated,
+    };
+  } else {
+    ladder.push({
+      qty: rung.qty,
+      unitCents: rung.unitCents,
+      confirmed: true,
+      source,
+      syncedAt,
+      lockedFromSync: true,
+      estimated,
+    });
+    ladder.sort((a, b) => a.qty - b.qty);
+  }
+  await db
+    .update(pressTierJacketLadders)
+    .set({ priceLadder: ladder })
+    .where(
+      and(
+        eq(pressTierJacketLadders.tierId, tierId),
+        eq(pressTierJacketLadders.jacketId, jacketId),
+      ),
+    );
+}
+
+/** Task #684 — demote an existing rung back to an unconfirmed "awaiting
+ *  quote" placeholder ({unitCents:0, confirmed:false}). Used to drop the
+ *  legacy 7" 2,000 + 3,000 rungs the old matrix seed pinned to the 1,000
+ *  value as confirmed — Hellbender doesn't actually quote those runs.
+ *  Idempotent; no-op if the rung is already a placeholder or absent. */
+async function demoteRungToPlaceholder(
+  tierId: string,
+  jacketId: string,
+  qty: number,
+): Promise<void> {
+  const [existing] = await db
+    .select()
+    .from(pressTierJacketLadders)
+    .where(
+      and(
+        eq(pressTierJacketLadders.tierId, tierId),
+        eq(pressTierJacketLadders.jacketId, jacketId),
+      ),
+    );
+  if (!existing) return;
+  const ladder: CatalogLadderRung[] = Array.isArray(existing.priceLadder)
+    ? [...(existing.priceLadder as CatalogLadderRung[])]
+    : [];
+  const idx = ladder.findIndex((r) => r.qty === qty);
+  if (idx < 0) return;
+  if (ladder[idx].confirmed === false && ladder[idx].unitCents === 0) return;
+  ladder[idx] = { qty, unitCents: 0, confirmed: false };
+  await db
+    .update(pressTierJacketLadders)
+    .set({ priceLadder: ladder })
+    .where(
+      and(
+        eq(pressTierJacketLadders.tierId, tierId),
+        eq(pressTierJacketLadders.jacketId, jacketId),
+      ),
+    );
+}
+
 // ─── Hellbender seed ─────────────────────────────────────────────────
 
 export const HELLBENDER_DOMAIN = "hellbendervinyl.com";
@@ -752,6 +877,162 @@ const HELLBENDER_NEW_12_LADDERS: Record<"12_lp" | "12_double", Record<string, He
       { qty: 500, unitCents: 1404, confirmed: true },   // $7,020 / 500
       { qty: 1000, unitCents: 1248, confirmed: true },  // $12,475 / 1000
       { qty: 2000, unitCents: 1089, confirmed: true },  // $21,785 / 2000
+    ],
+  },
+};
+
+// Task #684 — Bill's upgrade-inclusive Hellbender pricing, sourced from
+// Hellbender's public per-record builder (screenshot-confirmed) plus a
+// handful of Bill-approved interpolated fills. Values are UNDISCOUNTED
+// per-unit cents — the manufacturer row's 10% broker discount applies at
+// lookup, never stored (same convention as Task #638; see
+// `.agents/memory/press-catalog-units.md`).
+//
+// Per-size upgrade basis (what each "Black"/color-group price already
+// bundles, so Manufacturing reads as a complete record cost):
+//   • 12″ Black            → Double-Sided Insert
+//   • 7″  Black            → Gatefold Jacket (Hellbender has no single-
+//                            pocket 7″ sleeve)
+//   • all color groups     → Double-Sided Insert, at both sizes
+//
+// `estimated:true` marks a Bill-approved interpolation from the shared
+// color ladder / Hellbender's own single→double ratio (it displays like
+// any other confirmed price but stays flagged in the rung metadata and
+// is listed in docs/vendors/hellbender.md). Everything else is screenshot
+// -confirmed. 2,000 isn't published by Hellbender for either size, so it
+// stays an unconfirmed "awaiting quote" placeholder (handled in the
+// loader, not listed here). These rungs are written with a
+// `lockedFromSync` stamp so a future Hellbender Shopify re-sync leaves
+// them intact instead of replacing them with the base "no-upgrade" price.
+const HELLBENDER_SITE_SOURCE = "hellbender-site-2026";
+type SiteRungSpec = { qty: number; unitCents: number; estimated?: boolean };
+// 12″ color groups beyond Black/Color/Splatter that Task #684 adds so
+// the 12″ catalog carries the same House Mix / Translucent / Clear /
+// Metallic / Opaque tiers 7″ already has.
+const HELLBENDER_12_COLOR_GROUP_TIER_KEYS: VinylColorTier[] = [
+  "house_mix",
+  "translucent",
+  "clear",
+  "metallic",
+  "opaque",
+];
+const HELLBENDER_SITE_LADDERS: Record<
+  "12_lp" | "7_inch" | "12_double",
+  Record<string, SiteRungSpec[]>
+> = {
+  "12_lp": {
+    Black: [
+      { qty: 50, unitCents: 3049 },
+      { qty: 100, unitCents: 1769 },
+      { qty: 200, unitCents: 1132 },
+      { qty: 300, unitCents: 918 },
+      { qty: 500, unitCents: 690 },
+      { qty: 1000, unitCents: 522 },
+    ],
+    "House Mix": [
+      { qty: 50, unitCents: 3026 },
+      { qty: 100, unitCents: 1746 },
+      { qty: 200, unitCents: 1109 },
+      { qty: 300, unitCents: 895 },
+      { qty: 500, unitCents: 658 },
+      { qty: 1000, unitCents: 494 },
+    ],
+    "Translucent Colors": [
+      { qty: 50, unitCents: 3202 },
+      { qty: 100, unitCents: 1873 },
+      { qty: 200, unitCents: 1210 },
+      { qty: 300, unitCents: 989 },
+      { qty: 500, unitCents: 771 },
+      { qty: 1000, unitCents: 583 },
+    ],
+    "Clear Colors": [
+      { qty: 50, unitCents: 3202 },
+      { qty: 100, unitCents: 1873, estimated: true },
+      { qty: 200, unitCents: 1210 },
+      { qty: 300, unitCents: 989 },
+      { qty: 500, unitCents: 771 },
+      { qty: 1000, unitCents: 583 },
+    ],
+    "Metallic Colors": [
+      { qty: 50, unitCents: 3202 },
+      { qty: 100, unitCents: 1873 },
+      { qty: 200, unitCents: 1210 },
+      { qty: 300, unitCents: 989 },
+      { qty: 500, unitCents: 771 },
+      { qty: 1000, unitCents: 583 },
+    ],
+    "Opaque Colors": [
+      { qty: 50, unitCents: 3202 },
+      { qty: 100, unitCents: 1873 },
+      { qty: 200, unitCents: 1210, estimated: true },
+      { qty: 300, unitCents: 989, estimated: true },
+      { qty: 500, unitCents: 771, estimated: true },
+      { qty: 1000, unitCents: 583, estimated: true },
+    ],
+  },
+  "7_inch": {
+    Black: [
+      { qty: 50, unitCents: 2594 },
+      { qty: 100, unitCents: 1429 },
+      { qty: 200, unitCents: 857 },
+      { qty: 300, unitCents: 665 },
+      { qty: 500, unitCents: 472 },
+      { qty: 1000, unitCents: 381 },
+    ],
+    "House Mix": [
+      { qty: 50, unitCents: 2276 },
+      { qty: 100, unitCents: 1313 },
+      { qty: 200, unitCents: 834 },
+      { qty: 300, unitCents: 673 },
+      { qty: 500, unitCents: 495 },
+      { qty: 1000, unitCents: 380 },
+    ],
+    "Translucent Colors": [
+      { qty: 50, unitCents: 2420 },
+      { qty: 100, unitCents: 1407 },
+      { qty: 200, unitCents: 903 },
+      { qty: 300, unitCents: 734 },
+      { qty: 500, unitCents: 577 },
+      { qty: 1000, unitCents: 440 },
+    ],
+    "Clear Colors": [
+      { qty: 50, unitCents: 2420 },
+      { qty: 100, unitCents: 1407 },
+      { qty: 200, unitCents: 903 },
+      { qty: 300, unitCents: 734 },
+      { qty: 500, unitCents: 577 },
+      { qty: 1000, unitCents: 440 },
+    ],
+    "Metallic Colors": [
+      { qty: 50, unitCents: 2420 },
+      { qty: 100, unitCents: 1407 },
+      { qty: 200, unitCents: 903, estimated: true },
+      { qty: 300, unitCents: 734, estimated: true },
+      { qty: 500, unitCents: 577, estimated: true },
+      { qty: 1000, unitCents: 440, estimated: true },
+    ],
+    "Opaque Colors": [
+      { qty: 50, unitCents: 2420 },
+      { qty: 100, unitCents: 1407 },
+      { qty: 200, unitCents: 903, estimated: true },
+      { qty: 300, unitCents: 734, estimated: true },
+      { qty: 500, unitCents: 577, estimated: true },
+      { qty: 1000, unitCents: 440, estimated: true },
+    ],
+  },
+  // 2LP short-run estimates: Hellbender's 1LP→2LP ratio applied to the
+  // confirmed 1LP color/splatter rungs (Bill-approved). 500/1000/2000
+  // stay on the confirmed PDF quote already seeded by Task #638.
+  "12_double": {
+    Color: [
+      { qty: 100, unitCents: 3365, estimated: true },
+      { qty: 200, unitCents: 2189, estimated: true },
+      { qty: 300, unitCents: 1799, estimated: true },
+    ],
+    Splatter: [
+      { qty: 100, unitCents: 3598, estimated: true },
+      { qty: 200, unitCents: 2393, estimated: true },
+      { qty: 300, unitCents: 1993, estimated: true },
     ],
   },
 };
@@ -858,6 +1139,23 @@ export async function seedHellbenderCatalog() {
           else if (name === "Color") colors = color12Swatches;
           tierBuilds.push({ name, ladder, colors });
         }
+        // Task #684 — give the 12" catalog the same color-group tiers
+        // 7" already carries (House Mix / Translucent / Clear / Metallic
+        // / Opaque) so Bill's site-sourced 12" color pricing has a home.
+        // 12_double keeps only Black/Color/Splatter — Hellbender doesn't
+        // publish per-group 2LP pricing. Ladders are force-written in the
+        // post-loop block; here we only scaffold the tier + its colors so
+        // the combo + placeholder rungs exist to be overwritten.
+        if (key === "12_lp") {
+          for (const tierKey of HELLBENDER_12_COLOR_GROUP_TIER_KEYS) {
+            const name = VINYL_COLOR_TIER_LABEL[tierKey];
+            const colors = VINYL_COLORS.filter((c) => c.tier === tierKey).map((c) => ({
+              name: c.name,
+              hex: representativeHex(c.swatch),
+            }));
+            tierBuilds.push({ name, ladder: [], colors });
+          }
+        }
       }
 
       // Ensure tiers + their default-jacket combo + the standard
@@ -890,6 +1188,36 @@ export async function seedHellbenderCatalog() {
           if (!extra) continue;
           await ensureCombo(tier.id, extra.id, placeholderLadder());
           await addMissingRungs(tier.id, extra.id, STANDARD_COMPARISON_QUANTITIES);
+        }
+      }
+    }
+
+    // Task #684 — load Bill's upgrade-inclusive Hellbender site pricing
+    // onto every loaded tier's default-jacket ladder. These overwrite
+    // the legacy 7" `.none` matrix values + the 12" placeholders, carry a
+    // `source`/`lockedFromSync` stamp so the Shopify importer leaves them
+    // alone, and flag interpolated cells via `estimated`. 2,000 (+ the
+    // legacy 7" 3,000 the old seed pinned to the 1,000 value) drop back
+    // to "awaiting quote" — Hellbender doesn't publish those runs.
+    {
+      const syncedAt = new Date().toISOString();
+      const allTiers = await db
+        .select()
+        .from(pressColorTiers)
+        .where(eq(pressColorTiers.pressId, press.id));
+      const tierByFmtName = new Map<string, PressColorTier>();
+      for (const t of allTiers) tierByFmtName.set(`${t.format}|${t.name}`, t);
+      for (const [fmt, byTier] of Object.entries(HELLBENDER_SITE_LADDERS)) {
+        for (const [tierName, rungs] of Object.entries(byTier)) {
+          const tier = tierByFmtName.get(`${fmt}|${tierName}`);
+          if (!tier) continue;
+          for (const rung of rungs) {
+            await setSiteRung(tier.id, defaultJacket.id, rung, HELLBENDER_SITE_SOURCE, syncedAt);
+          }
+          if (fmt === "7_inch") {
+            await demoteRungToPlaceholder(tier.id, defaultJacket.id, 2000);
+            await demoteRungToPlaceholder(tier.id, defaultJacket.id, 3000);
+          }
         }
       }
     }

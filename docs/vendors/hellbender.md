@@ -32,6 +32,37 @@ Per-unit values below are **undiscounted** (the "YOUR SUBTOTAL ÷ qty" line on e
 
 > Note: an earlier internal price sheet had 2LP Splatter 500 at $7,820 ($15.64/ea). The 5/27/26 PDF quote shows $7,020 ($14.04/ea); the PDF is now the source of truth. Re-confirm with Hellbender's PM if the splatter color count changes (Hellbender charges $35/splatter color, up to 3).
 
+## 2026 upgrade-inclusive ladders (Hellbender site builder)
+
+Sourced from Hellbender's public per-record builder (screenshot-confirmed) plus a few Bill-approved interpolated fills. Loaded onto the **default-jacket** ladder of each tier as confirmed, undiscounted per-unit cents (10% broker discount still applies at lookup, never stored). Each price already **bundles a packaging upgrade** so Manufacturing reads as a complete record cost:
+
+- **12″ Black** → includes the **Double-Sided Insert**.
+- **7″ Black** → includes the **Gatefold Jacket** (Hellbender has no single-pocket 7″ sleeve).
+- **All color groups** (House Mix / Translucent / Clear / Metallic / Opaque), both sizes → include the **Double-Sided Insert**.
+
+These rungs carry a `lockedFromSync` stamp so a future Hellbender Shopify re-sync can't overwrite them with the base "no-upgrade" number. **2,000 is unpublished for either size** (and the legacy 7″ 3,000 rung) so both stay yellow "awaiting quote" placeholders. Quantities loaded: 50 / 100 / 200 / 300 / 500 / 1,000.
+
+Per-unit (¢, undiscounted):
+
+| Tier               | Size | 50   | 100  | 200  | 300  | 500  | 1000 |
+| ------------------ | ---- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Black              | 12″  | 3049 | 1769 | 1132 |  918 |  690 |  522 |
+| House Mix          | 12″  | 3026 | 1746 | 1109 |  895 |  658 |  494 |
+| Translucent/Clear/Metallic/Opaque | 12″ | 3202 | 1873 | 1210 | 989 | 771 | 583 |
+| Black              | 7″   | 2594 | 1429 |  857 |  665 |  472 |  381 |
+| House Mix          | 7″   | 2276 | 1313 |  834 |  673 |  495 |  380 |
+| Translucent/Clear/Metallic/Opaque | 7″ | 2420 | 1407 | 903 | 734 | 577 | 440 |
+
+**Estimated (interpolated) cells** — Bill-approved fills from the shared color ladder / Hellbender's single→double ratio; flagged `estimated:true` in the rung metadata, displayed like any confirmed price:
+
+- 12″ Clear **100** (filled from the shared color ladder).
+- 12″ Opaque **200 / 300 / 500 / 1000**.
+- 7″ Metallic **200 / 300 / 500 / 1000**.
+- 7″ Opaque **200 / 300 / 500 / 1000**.
+- 2LP (`12_double`) Color **100 / 200 / 300** = $33.65 / $21.89 / $17.99 per-unit; Splatter **100 / 200 / 300** = $35.98 / $23.93 / $19.93 (single→double ratio applied to the confirmed 1LP rungs; the 2LP 500 / 1000 / 2000 stay on the PDF quote above).
+
+Everything else in the table is screenshot-confirmed. Re-confirm interpolated cells (and the missing 2,000 rung) with Hellbender's PM when they next quote.
+
 ## Contact
 
 Not stated on the templates page — submissions are coordinated with the assigned **project manager (PM)**. Capture PM contact per project.

@@ -435,10 +435,18 @@ export async function applyHellbenderPricingProposal(
         confirmed?: boolean;
         source?: string;
         syncedAt?: string;
+        lockedFromSync?: boolean;
       }>;
       const byQty = new Map<number, (typeof existingLadder)[number]>();
       for (const r of existingLadder) byQty.set(r.qty, { ...r });
       for (const r of g.rungs) {
+        // Task #684 — operator/site-sourced rungs carry lockedFromSync so
+        // a re-sync from Hellbender's Shopify feed can't replace Bill's
+        // upgrade-inclusive prices with the base "no-upgrade" number.
+        if (byQty.get(r.qty)?.lockedFromSync) {
+          rungsSkipped++;
+          continue;
+        }
         byQty.set(r.qty, {
           qty: r.qty,
           unitCents: r.unitCents,
