@@ -1520,7 +1520,7 @@ function AnticipatedTracksInput({
         <InfoTip
           label="About anticipated tracks"
           testId={`info-anticipated-tracks-${format}`}
-          text="Type the number of tracks you expect this album to have so the Publishing estimate is realistic before you upload masters. Publishing = N × $0.254 (mechanicals × 2 for vinyl + digital). Once songs are uploaded this switches to the live tracklist count."
+          text="Type the number of tracks you expect this album to have so the Publishing estimate is realistic before you upload masters. Publishing = N × $0.254 (mechanicals × 2 for vinyl + digital). Used until you upload masters — once songs are uploaded this switches to the live tracklist count."
         />
       </div>
       <input
@@ -1538,12 +1538,9 @@ function AnticipatedTracksInput({
         readOnly={locked}
         inputMode="numeric"
         placeholder="0"
-        className="w-24 h-8 px-2 rounded-md border border-slate-200 text-sm bg-white disabled:bg-slate-50 disabled:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]"
+        className="w-full h-8 px-2 rounded-md border border-slate-200 text-sm bg-white disabled:bg-slate-50 disabled:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]"
         data-testid={`input-anticipated-tracks-${format}`}
       />
-      <div className="text-xs text-slate-400 mt-1">
-        {hasLive ? "from tracklist" : "Used until you upload masters."}
-      </div>
     </div>
   );
 }
@@ -4315,14 +4312,196 @@ function SkuRow({
           </div>
           </div>
 
-          {/* Task #646 — CONTROLS column (left on desktop via sm:order-1,
-              below preview on mobile). Task #655 reorder: Color (Format
-              swap moved onto the cover in #654, read-only Format label
-              removed) → Anticipated tracks → Retail Price + Select Qty
-              side-by-side → Jacket (7"/10" only; 12" LP footnote now
-              lives under the preview) → Profit → Total. */}
+          {/* Task #682 — CONTROLS column (left on desktop via sm:order-1,
+              below preview on mobile). Reorder: the three numeric controls
+              (Anticipated tracks · Retail Price · Select Qty) sit together on
+              one responsive row → Jacket (full width, 7"/10" only; 12" LP
+              footnote lives under the preview) → Color (full width, LAST) →
+              Profit → Total. Color is last because its swatch grid is the one
+              control with unpredictable height; placing it at the bottom lets
+              it grow downward without reflowing the controls above it. */}
           <div className="sm:order-1 space-y-4">
-            {/* Color section + swatch row + selected color name */}
+            {/* Task #682 numbers band — Anticipated tracks · Retail Price ·
+                Select Qty grouped on one responsive row ("the commercial
+                math"). grid-cols-1 stacks when the column is narrow;
+                sm:grid-cols-3 lays all three side-by-side from the card's own
+                two-column breakpoint up, so the band stays single-row without
+                clipping. The two former inline helper notes ("Used until you
+                upload masters." / "Per unit sold to fans.") now live in each
+                field's (i) tooltip to keep the band compact. */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Anticipated tracks — drives the Publishing line of the cost
+                breakdown before any masters have been uploaded. Once songs
+                are uploaded the field shows the live count and is disabled.
+                Saves on blur via the album-level PUT. */}
+          <AnticipatedTracksInput
+            format={format}
+            liveTrackCount={liveTrackCount ?? 0}
+            anticipatedTrackCount={anticipatedTrackCount ?? null}
+            persistedAnticipatedTrackCount={persistedAnticipatedTrackCount ?? null}
+            lockedValue={sevenInch ? SEVEN_INCH_TRACK_COUNT : null}
+            onLocalChange={onAnticipatedTrackLocalChange}
+            onChange={onAnticipatedTrackCountChange}
+          />
+
+            {/* Retail Price */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                Retail Price
+              </span>
+              <InfoTip
+                label="About retail price"
+                testId={`info-price-${format}`}
+                text="This is the price you want to charge per unit for your vinyl. Per unit sold to fans."
+              />
+            </div>
+            {/* "$" lives INSIDE the input as an absolute prefix so the
+                amount lines up flush-left in the field. */}
+            <div className="relative w-full">
+              <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
+                $
+              </span>
+              <input
+                type="text"
+                value={priceStr}
+                onChange={(e) => setPriceStr(e.target.value)}
+                placeholder="0.00"
+                inputMode="decimal"
+                className={`w-full pl-5 ${fieldClass}`}
+                data-testid={`input-price-${format}`}
+              />
+            </div>
+          </div>
+
+            {/* Select Qty */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                Select Qty
+              </span>
+              <InfoTip
+                label="About quantity"
+                testId={`info-qty-${format}`}
+                text="Your margin will improve based on quantity. This estimate is for you to choose the absolute lowest quantity you believe you'll sell — anything above that is more profit due to lower per-unit costs from scale."
+              />
+            </div>
+            {quantityRungs.length > 0 ? (
+              <Select
+                value={String(parsedQty)}
+                onValueChange={(v) => setParsedQty(Number.parseInt(v, 10))}
+              >
+                <SelectTrigger
+                  className="h-8 w-full text-sm"
+                  data-testid={`select-sku-quantity-${format}`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white text-slate-900 border-slate-200">
+                  {quantityRungs.map((q) => (
+                    <SelectItem
+                      key={q}
+                      value={String(q)}
+                      data-testid={`option-sku-quantity-${format}-${q}`}
+                    >
+                      {q.toLocaleString()} units
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <input
+                type="text"
+                value={String(parsedQty)}
+                onChange={(e) => {
+                  const n = Number.parseInt(e.target.value.replace(/[^0-9]/g, ""), 10);
+                  if (Number.isFinite(n) && n > 0) setParsedQty(n);
+                  else if (e.target.value === "") setParsedQty(0);
+                }}
+                inputMode="numeric"
+                className={`w-full ${fieldClass}`}
+                data-testid={`input-sku-quantity-${format}`}
+              />
+            )}
+            {!usingCatalog && qtySnap.requiresQuote && (
+              <div
+                className="text-xs text-slate-500 mt-1"
+                data-testid={`text-qty-tier-${format}`}
+              >
+                {qtySnap.tier}+ — request a custom quote
+              </div>
+            )}
+            {usingCatalog && catalogSnap?.requiresQuote && (
+              <div
+                className="text-xs text-slate-500 mt-1"
+                data-testid={`text-qty-tier-${format}`}
+              >
+                {catalogSnap.qty}+ — request a custom quote
+              </div>
+            )}
+          </div>
+          </div>
+
+            {/* Jacket — Select for 7"/10"; de-emphasized tag for 7" only.
+                Task #655: 12" LP no longer renders a labeled Jacket row
+                here — its "Standard jacket" copy now lives as a small
+                gray caption directly under the album preview. */}
+          {jacketDropdownAllowed ? (
+            <div className="space-y-1">
+              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                Jacket
+              </div>
+              <Select
+                value={jacketUpgrade}
+                onValueChange={(v) => setJacketUpgrade(v as JacketUpgrade)}
+              >
+                <SelectTrigger
+                  className="h-8 w-full text-sm"
+                  data-testid={`select-jacket-${format}`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white text-slate-900 border-slate-200">
+                  {(Object.keys(JACKET_UPGRADE_LABEL) as JacketUpgrade[]).map((j) => (
+                    <SelectItem
+                      key={j}
+                      value={j}
+                      data-testid={`option-jacket-${format}-${j}`}
+                    >
+                      {JACKET_UPGRADE_LABEL[j]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : sevenInch ? (
+            <div className="space-y-1">
+              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                Jacket
+              </div>
+              <div
+                className="h-8 inline-flex items-center text-sm font-medium text-slate-700"
+                data-testid={`text-jacket-standard-${format}`}
+              >
+                Standard Full-Color Jacket
+              </div>
+              {sevenInchHiddenJacket && existing?.jacketUpgrade && (
+                <div
+                  className="text-xs text-slate-500"
+                  data-testid={`text-jacket-back-compat-${format}`}
+                >
+                  Previously: {JACKET_UPGRADE_LABEL[existing.jacketUpgrade as JacketUpgrade]} — saved as Standard jacket on next save.
+                </div>
+              )}
+            </div>
+          ) : null}
+
+            {/* Color — full width, LAST. Catalog tier picker or legacy
+                vinyl-color picker, plus the swatch row + selected color name.
+                Kept at the bottom of the controls column because the swatch
+                grid is the one control with unpredictable height (one row vs.
+                several); placing it last lets it grow downward without
+                reflowing the Tracks/Retail/Qty/Jacket controls above it. */}
           {usingCatalog && pickedTier ? (
             <div className="space-y-2">
               <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
@@ -4481,186 +4660,6 @@ function SkuRow({
               </div>
             </div>
           )}
-
-            {/* Task #429 — Anticipated tracks. Drives the Publishing
-              line of the cost breakdown before any masters have been
-              uploaded. Once songs are uploaded the field shows the
-              live count and is disabled. Saves on blur via the
-              album-level PUT (debounced by the operator's typing). */}
-          <AnticipatedTracksInput
-            format={format}
-            liveTrackCount={liveTrackCount ?? 0}
-            anticipatedTrackCount={anticipatedTrackCount ?? null}
-            persistedAnticipatedTrackCount={persistedAnticipatedTrackCount ?? null}
-            lockedValue={sevenInch ? SEVEN_INCH_TRACK_COUNT : null}
-            onLocalChange={onAnticipatedTrackLocalChange}
-            onChange={onAnticipatedTrackCountChange}
-          />
-
-            {/* Task #655 — Retail Price + Select Qty on one row.
-                grid-cols-1 stacks on mobile; sm:grid-cols-2 lays them
-                side-by-side from sm: up (matches the card's own
-                two-column breakpoint, so they stay side-by-side at
-                every desktop width the panel supports). */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Retail Price */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-1">
-              <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
-                Retail Price
-              </span>
-              <InfoTip
-                label="About retail price"
-                testId={`info-price-${format}`}
-                text="This is the price you want to charge per unit for your vinyl."
-              />
-            </div>
-            {/* "$" lives INSIDE the input as an absolute prefix so the
-                input's left edge lines up with the Select Qty trigger
-                and Anticipated Tracks input below — keeping every
-                control on this right column flush-left (Bill #1). */}
-            <div className="flex flex-col">
-              <div className="relative w-28">
-                <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
-                  $
-                </span>
-                <input
-                  type="text"
-                  value={priceStr}
-                  onChange={(e) => setPriceStr(e.target.value)}
-                  placeholder="0.00"
-                  inputMode="decimal"
-                  className={`w-full pl-5 ${fieldClass}`}
-                  data-testid={`input-price-${format}`}
-                />
-              </div>
-              <div className="text-xs text-slate-400 mt-1">
-                Per unit sold to fans.
-              </div>
-            </div>
-          </div>
-
-            {/* Select Qty */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-1">
-              <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
-                Select Qty
-              </span>
-              <InfoTip
-                label="About quantity"
-                testId={`info-qty-${format}`}
-                text="Your margin will improve based on quantity. This estimate is for you to choose the absolute lowest quantity you believe you'll sell — anything above that is more profit due to lower per-unit costs from scale."
-              />
-            </div>
-            {quantityRungs.length > 0 ? (
-              <Select
-                value={String(parsedQty)}
-                onValueChange={(v) => setParsedQty(Number.parseInt(v, 10))}
-              >
-                <SelectTrigger
-                  className="h-8 w-full text-sm"
-                  data-testid={`select-sku-quantity-${format}`}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white text-slate-900 border-slate-200">
-                  {quantityRungs.map((q) => (
-                    <SelectItem
-                      key={q}
-                      value={String(q)}
-                      data-testid={`option-sku-quantity-${format}-${q}`}
-                    >
-                      {q.toLocaleString()} units
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <input
-                type="text"
-                value={String(parsedQty)}
-                onChange={(e) => {
-                  const n = Number.parseInt(e.target.value.replace(/[^0-9]/g, ""), 10);
-                  if (Number.isFinite(n) && n > 0) setParsedQty(n);
-                  else if (e.target.value === "") setParsedQty(0);
-                }}
-                inputMode="numeric"
-                className={`w-full ${fieldClass}`}
-                data-testid={`input-sku-quantity-${format}`}
-              />
-            )}
-            {!usingCatalog && qtySnap.requiresQuote && (
-              <div
-                className="text-xs text-slate-500 mt-1"
-                data-testid={`text-qty-tier-${format}`}
-              >
-                {qtySnap.tier}+ — request a custom quote
-              </div>
-            )}
-            {usingCatalog && catalogSnap?.requiresQuote && (
-              <div
-                className="text-xs text-slate-500 mt-1"
-                data-testid={`text-qty-tier-${format}`}
-              >
-                {catalogSnap.qty}+ — request a custom quote
-              </div>
-            )}
-          </div>
-          </div>
-
-            {/* Jacket — Select for 7"/10"; de-emphasized tag for 7" only.
-                Task #655: 12" LP no longer renders a labeled Jacket row
-                here — its "Standard jacket" copy now lives as a small
-                gray caption directly under the album preview. */}
-          {jacketDropdownAllowed ? (
-            <div className="space-y-1">
-              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
-                Jacket
-              </div>
-              <Select
-                value={jacketUpgrade}
-                onValueChange={(v) => setJacketUpgrade(v as JacketUpgrade)}
-              >
-                <SelectTrigger
-                  className="h-8 w-full text-sm"
-                  data-testid={`select-jacket-${format}`}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white text-slate-900 border-slate-200">
-                  {(Object.keys(JACKET_UPGRADE_LABEL) as JacketUpgrade[]).map((j) => (
-                    <SelectItem
-                      key={j}
-                      value={j}
-                      data-testid={`option-jacket-${format}-${j}`}
-                    >
-                      {JACKET_UPGRADE_LABEL[j]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : sevenInch ? (
-            <div className="space-y-1">
-              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
-                Jacket
-              </div>
-              <div
-                className="h-8 inline-flex items-center text-sm font-medium text-slate-700"
-                data-testid={`text-jacket-standard-${format}`}
-              >
-                Standard Full-Color Jacket
-              </div>
-              {sevenInchHiddenJacket && existing?.jacketUpgrade && (
-                <div
-                  className="text-xs text-slate-500"
-                  data-testid={`text-jacket-back-compat-${format}`}
-                >
-                  Previously: {JACKET_UPGRADE_LABEL[existing.jacketUpgrade as JacketUpgrade]} — saved as Standard jacket on next save.
-                </div>
-              )}
-            </div>
-          ) : null}
 
             {/* Task #659 — vendor + summary header. Names the press
                 quoting this run (logo + name) and recaps the row
