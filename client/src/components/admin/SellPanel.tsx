@@ -20,7 +20,7 @@
 // A new Presses panel above Formats surfaces the pressing-plant
 // directory (MRP, PMP, Hellbender …) as info cards — per-press RFQ
 // pricing plumbing is tracked separately on the roadmap.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { anchorScrollToElement } from "@/lib/anchorScroll";
@@ -3267,8 +3267,38 @@ function SkuRow({
   // ladder; non-catalog rows fall back to the breakdown's mfg cents
   // (single-column case, in which the standalone Profit/Total
   // below still renders).
+  //
+  // Task #757 — single source of truth for "what does ONE unit of
+  // manufacturing cost at run size N?". Vinyl manufacturing steps down
+  // by quantity, so every surface that compares quantities (pricing
+  // blocks, the estimate table, the quote PDF) must re-snap the
+  // confirmed ladder for each quantity rather than reusing one frozen
+  // number. Resolution order mirrors the `breakdown` useMemo:
+  //   invited-press catalog tier ladder → MRP platform-default ladder.
+  // Returns `null` when no confirmed rung exists for that quantity on
+  // the resolved ladder, so callers can surface a "needs quote" state
+  // instead of silently presenting another quantity's price. The final
+  // fallback (non-vinyl, or vinyl with no catalog + no MRP) is
+  // qty-independent by design, so it reads the live breakdown snapshot.
+  const resolveMfgCentsForQty = useCallback(
+    (qty: number): number | null => {
+      if (usingCatalog && pickedTier) {
+        return snapCatalogLadder(pickedTier.priceLadder, qty)?.unitCents ?? null;
+      }
+      if (isVinyl && mrpDefaultFormat && mrpDefaultFormat.tiers.length > 0) {
+        const tierName = vinylColor.tier === "black" ? "Black" : "Color";
+        const mrpTier =
+          mrpDefaultFormat.tiers.find(
+            (t) => t.name.toLowerCase() === tierName.toLowerCase(),
+          ) ?? mrpDefaultFormat.tiers[0];
+        return snapCatalogLadder(mrpTier.priceLadder, qty)?.unitCents ?? null;
+      }
+      return breakdown?.manufacturingCents ?? null;
+    },
+    [usingCatalog, pickedTier, isVinyl, mrpDefaultFormat, vinylColor, breakdown],
+  );
   const estimateTableRows = useMemo<
-    { qty: number; netCents: number }[]
+    { qty: number; netCents: number | null }[]
   >(() => {
     if (!isVinyl || !breakdown || priceCents === null) return [];
     const set = new Set<number>();
@@ -3287,10 +3317,14 @@ function SkuRow({
     if (parsedQty > 0) set.add(parsedQty);
     const qtys = [...set].sort((a, b) => a - b);
     return qtys.map((qty) => {
-      let mfgCents = breakdown.manufacturingCents;
-      if (usingCatalog && pickedTier) {
-        const snap = snapCatalogLadder(pickedTier.priceLadder, qty);
-        if (snap) mfgCents = snap.unitCents;
+      // Task #757 — re-snap the confirmed ladder for THIS quantity so
+      // larger runs reflect their real volume discount instead of
+      // reusing one frozen number. A null rung means "no confirmed
+      // price at this quantity" — surface it as an unknown net rather
+      // than silently pricing against another quantity's number.
+      const mfgCents = resolveMfgCentsForQty(qty);
+      if (mfgCents === null || mfgCents <= 0) {
+        return { qty, netCents: null };
       }
       const costPerUnit =
         mfgCents +
@@ -3321,6 +3355,7 @@ function SkuRow({
     attachRatio,
     certCostByQty,
     livePlatformCostCents,
+    resolveMfgCentsForQty,
   ]);
 
   const signedDollars = (c: number) =>
@@ -4644,34 +4679,13 @@ function SkuRow({
         );
         const canChangeFormat =
           !!onChangeFormat && swapTargets.length > 1 && !isLocked;
-        // Task #705 — manufacturing cost for an arbitrary run size, so a
-        // duplicated pricing block can re-snap the cost ladder at its own
-        // quantity (the primary block reuses the live `breakdown`). Mirrors
-        // the manufacturing resolution inside the `breakdown` useMemo:
-        // catalog tier ladder → MRP platform-default ladder → snapshot.
-        const mfgCentsForQty = (qty: number): number => {
-          if (usingCatalog && pickedTier) {
-            return (
-              snapCatalogLadder(pickedTier.priceLadder, qty)?.unitCents ??
-              breakdown?.manufacturingCents ??
-              0
-            );
-          }
-          const mrpFormat = mrpDefaultFormat;
-          if (isVinyl && mrpFormat && mrpFormat.tiers.length > 0) {
-            const tierName = vinylColor.tier === "black" ? "Black" : "Color";
-            const mrpTier =
-              mrpFormat.tiers.find(
-                (t) => t.name.toLowerCase() === tierName.toLowerCase(),
-              ) ?? mrpFormat.tiers[0];
-            return (
-              snapCatalogLadder(mrpTier.priceLadder, qty)?.unitCents ??
-              breakdown?.manufacturingCents ??
-              0
-            );
-          }
-          return breakdown?.manufacturingCents ?? 0;
-        };
+        // Task #757 — more than one quantity is on screen whenever the
+        // operator has added a comparison block. In that case even the
+        // primary option must re-snap the ladder for its OWN quantity
+        // instead of reusing the saved per-SKU snapshot, so a larger run
+        // shows its real volume discount. A lone primary (single-quote,
+        // saved-quantity, unchanged picks) still reads the snapshot.
+        const comparingQuantities = pricingBlocks.length > 0;
         // Per-block economics. Publishing + GoodTunes are qty-independent
         // (pulled from the live breakdown); manufacturing re-snaps per qty
         // and payment processing tracks the block's own price.
@@ -4683,18 +4697,27 @@ function SkuRow({
           const bPriceCents = parseDollars(blockPriceStr);
           const pub = breakdown?.publishingCents ?? 0;
           const gt = breakdown?.goodtunesCents ?? 0;
-          const mfg = isPrimary
-            ? breakdown?.manufacturingCents ?? 0
-            : mfgCentsForQty(qty);
+          // The genuine single-quote primary keeps the saved snapshot;
+          // every other case (comparison blocks, and the primary once a
+          // comparison exists) resolves the confirmed rung for its own
+          // quantity. A null/0 rung means "no confirmed price" → the
+          // option surfaces a needs-quote state rather than a fake number.
+          const useSnapshot = isPrimary && !comparingQuantities;
+          const resolvedMfg = useSnapshot
+            ? breakdown?.manufacturingCents ?? null
+            : resolveMfgCentsForQty(qty);
+          const mfgMissing = resolvedMfg === null || resolvedMfg <= 0;
+          const mfg = resolvedMfg ?? 0;
           const pp =
             bPriceCents !== null ? Math.round(bPriceCents * 0.029) + 30 : 0;
-          const costPerUnit = breakdown ? mfg + pub + pp + gt : null;
+          const costPerUnit =
+            breakdown && !mfgMissing ? mfg + pub + pp + gt : null;
           const profit =
             bPriceCents !== null && costPerUnit !== null
               ? bPriceCents - costPerUnit
               : null;
           const total = profit !== null && qty > 0 ? profit * qty : null;
-          return { priceCents: bPriceCents, mfg, pub, pp, gt, costPerUnit, profit, total };
+          return { priceCents: bPriceCents, mfg, mfgMissing, pub, pp, gt, costPerUnit, profit, total };
         };
         // One independent pricing scenario (Retail · Qty · collapsible
         // Profit · Total). The primary block keeps the original
@@ -4733,9 +4756,15 @@ function SkuRow({
               : econ.total < 0
                 ? `-${dollars(Math.abs(econ.total))}`
                 : dollars(econ.total);
-          const blockNeedsQuote = opts.isPrimary
-            ? !!breakdown?.needsQuote
-            : econ.mfg <= 0;
+          // Task #757 — the lone primary trusts the breakdown's own
+          // needsQuote flag (snapshot path); every re-snapped option
+          // (comparison blocks + the primary once comparing) flags a
+          // missing/zero rung directly so a quantity with no confirmed
+          // price can't masquerade as a real volume number.
+          const blockNeedsQuote =
+            opts.isPrimary && !comparingQuantities
+              ? !!breakdown?.needsQuote
+              : econ.mfgMissing;
           const blockEffMfg =
             brokerDiscountPct > 0
               ? Math.floor((econ.mfg * (100 - brokerDiscountPct)) / 100)
@@ -5055,7 +5084,9 @@ function SkuRow({
             costPerUnitCents: primary.costPerUnit,
             profitCents: primary.profit,
             totalCents: primary.total,
-            needsQuote: !!breakdown?.needsQuote,
+            needsQuote: comparingQuantities
+              ? primary.mfgMissing
+              : !!breakdown?.needsQuote,
           });
           pricingBlocks.forEach((block, idx) => {
             const e = blockEconomics(block.priceStr, block.qty, false);
@@ -5071,7 +5102,7 @@ function SkuRow({
               costPerUnitCents: e.costPerUnit,
               profitCents: e.profit,
               totalCents: e.total,
-              needsQuote: e.mfg <= 0,
+              needsQuote: e.mfgMissing,
             });
           });
           return out;
@@ -6373,7 +6404,13 @@ function SkuRow({
                           ].join(" ")}
                           data-testid={`text-sku-estimate-${format}-${r.qty}`}
                         >
-                          {signedDollars(r.netCents)}
+                          {r.netCents === null ? (
+                            <span className="text-[color:var(--brand-blue)]">
+                              Needs quote
+                            </span>
+                          ) : (
+                            signedDollars(r.netCents)
+                          )}
                         </td>
                       ))}
                     </tr>
