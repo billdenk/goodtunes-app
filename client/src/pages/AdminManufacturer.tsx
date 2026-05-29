@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { AddressAutocompleteField } from "@/components/admin/AddressAutocompleteField";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { NotificationsCard, NotificationsBadge } from "@/components/admin/NotificationsCard";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
@@ -384,6 +385,9 @@ export function AdminManufacturer() {
             >
               {m.name}
             </h1>
+            <div className="mt-1.5">
+              <NotificationsBadge partnerKind="manufacturer" partnerId={m.id} onActivate={() => setTab("overview")} />
+            </div>
             {m.websiteUrl && (
               <div className="flex items-center gap-3 text-slate-500 text-[12.5px] mt-1">
                 <a
@@ -491,6 +495,8 @@ export function AdminManufacturer() {
             />
 
             {isSuperAdmin && <PressAutoTriggerConsentPanel m={m} />}
+
+            <NotificationsCard partnerKind="manufacturer" partnerId={m.id} partnerName={m.name} />
 
             <ReferralsPanel pressId={m.id} />
           </>

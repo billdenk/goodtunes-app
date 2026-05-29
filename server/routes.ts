@@ -12780,6 +12780,92 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!f) return res.status(404).json({ message: "Fulfillment partner not found" });
     return res.json(f);
   });
+
+  // ---- Task #534 — Partner notification recipients (CRUD) ----------------
+  // Generic across vendor / manufacturer / fulfillment via :kind in the
+  // path. The detail pages fetch the list (badge count = list length) and
+  // each row carries lastNotifiedAt for the "Last notified:" line.
+  app.get(
+    "/api/admin/partner-notifications/:kind/:id/recipients",
+    requireAdmin,
+    async (req, res) => {
+      const { PARTNER_NOTIFICATION_KINDS } = await import("@shared/partnerNotifications");
+      const kind = String(req.params.kind);
+      if (!(PARTNER_NOTIFICATION_KINDS as readonly string[]).includes(kind)) {
+        return res.status(400).json({ message: "Unknown partner kind" });
+      }
+      const { listRecipients } = await import("./partnerNotifications");
+      const rows = await listRecipients(kind as any, String(req.params.id));
+      return res.json(rows);
+    },
+  );
+
+  app.post(
+    "/api/admin/partner-notifications/:kind/:id/recipients",
+    requireAdmin,
+    async (req, res) => {
+      const {
+        PARTNER_NOTIFICATION_KINDS,
+        PARTNER_NOTIFICATION_CHANNELS,
+        PARTNER_NOTIFICATION_ROLES,
+        PARTNER_NOTIFICATION_EVENTS,
+      } = await import("@shared/partnerNotifications");
+      const kind = String(req.params.kind);
+      if (!(PARTNER_NOTIFICATION_KINDS as readonly string[]).includes(kind)) {
+        return res.status(400).json({ message: "Unknown partner kind" });
+      }
+      const b = req.body ?? {};
+      const name = String(b.name ?? "").trim();
+      const address = String(b.address ?? "").trim();
+      const channel = String(b.channel ?? "email");
+      const role = String(b.role ?? "ops");
+      const events = Array.isArray(b.events)
+        ? b.events
+            .map((e: unknown) => String(e))
+            .filter((e: string) =>
+              (PARTNER_NOTIFICATION_EVENTS as readonly string[]).includes(e),
+            )
+        : [];
+      if (!name) return res.status(400).json({ message: "Name is required" });
+      if (!address) return res.status(400).json({ message: "Email address is required" });
+      if (!(PARTNER_NOTIFICATION_CHANNELS as readonly string[]).includes(channel)) {
+        return res.status(400).json({ message: "Unknown channel" });
+      }
+      if (!(PARTNER_NOTIFICATION_ROLES as readonly string[]).includes(role)) {
+        return res.status(400).json({ message: "Unknown role" });
+      }
+      // v1 only delivers email; reject other channels at the door so the
+      // operator never thinks a Slack/webhook recipient is live.
+      if (channel === "email") {
+        const okEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address);
+        if (!okEmail) return res.status(400).json({ message: "Enter a valid email address" });
+      } else {
+        return res.status(400).json({ message: "Only the email channel is available right now" });
+      }
+      const { createRecipient } = await import("./partnerNotifications");
+      const row = await createRecipient({
+        partnerKind: kind as any,
+        partnerId: String(req.params.id),
+        name,
+        channel,
+        address,
+        role,
+        events,
+      });
+      return res.status(201).json(row);
+    },
+  );
+
+  app.delete(
+    "/api/admin/partner-notifications/recipients/:recipientId",
+    requireAdmin,
+    async (req, res) => {
+      const { softDeleteRecipient } = await import("./partnerNotifications");
+      const id = await softDeleteRecipient(String(req.params.recipientId));
+      if (!id) return res.status(404).json({ message: "Recipient not found" });
+      return res.json({ ok: true });
+    },
+  );
   app.post("/api/admin/fulfillment-partners", requireAdmin, async (req, res) => {
     const b = req.body ?? {};
     if (!b.name) return res.status(400).json({ message: "name is required" });
@@ -20903,6 +20989,65 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         patch.signedCertWindowStatus = "shipped";
       }
       await db.update(albumsTbl).set(patch).where(eq(albumsTbl.id, String(req.params.id)));
+
+      // Task #534 — the "Shipped to fulfillment" step is the pipeline
+      // transition partners care about: it tells the press the batch is
+      // out the door and the fulfillment partner that units are inbound.
+      // Fire once, only when the step is freshly completed (not on
+      // re-saves of a step that already had a timestamp, and not on undo).
+      if (
+        step.key === "shipped_to_fulfillment" &&
+        action === "complete" &&
+        !album[step.column as keyof typeof album]
+      ) {
+        const albumId = String(req.params.id);
+        (async () => {
+          try {
+            const {
+              resolvePressIdForAlbum,
+              dispatchPartnerNotification,
+              partnerEmailHtml,
+            } = await import("./partnerNotifications");
+            const stageLabel = "Shipped to fulfillment";
+            const albumTitle = album.title ?? "an album";
+            const pressId = await resolvePressIdForAlbum(albumId);
+            const subject = `${albumTitle}: ${stageLabel.toLowerCase()}`;
+            const bodyLines = [
+              `${albumTitle} has moved to a new stage in the GoodTunes pipeline.`,
+              `New status: ${stageLabel}.`,
+            ];
+            const payloadSnapshot = { albumId, pressId, albumTitle, newStage: "shipped", stageLabel };
+            if (pressId) {
+              await dispatchPartnerNotification({
+                partnerKind: "manufacturer",
+                partnerId: pressId,
+                eventType: "pipeline_state_change",
+                subject,
+                html: partnerEmailHtml({ heading: stageLabel, bodyLines, partnerName: "your team" }),
+                text: bodyLines.join("\n\n"),
+                payloadSnapshot,
+              });
+            }
+            if (album.fulfillmentPartnerId) {
+              const fpLines = [
+                `Units for ${albumTitle} have shipped from the press and are inbound to your warehouse.`,
+                "Expected delivery and tracking will follow from the press directly.",
+              ];
+              await dispatchPartnerNotification({
+                partnerKind: "fulfillment",
+                partnerId: String(album.fulfillmentPartnerId),
+                eventType: "pipeline_state_change",
+                subject: `Inbound: ${albumTitle} shipped from the press`,
+                html: partnerEmailHtml({ heading: "Units inbound", bodyLines: fpLines, partnerName: "your team" }),
+                text: fpLines.join("\n\n"),
+                payloadSnapshot,
+              });
+            }
+          } catch (e) {
+            console.log(`[notify] cert-batch shipped threw: ${(e as Error).message}`);
+          }
+        })().catch(() => {});
+      }
       res.json({ ok: true });
     });
 

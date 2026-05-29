@@ -522,7 +522,8 @@ export function registerPressPortalRoutes(
              COALESCE(p.name, l.name) AS owner_name,
              COALESCE(a.primary_artist_id, a.label_id) AS owner_id,
              CASE WHEN a.primary_artist_id IS NOT NULL THEN 'artist' ELSE 'label' END AS owner_kind,
-             sold.units_sold AS units_sold
+             sold.units_sold AS units_sold,
+             notif.last_notified_at AS last_notified_at
       FROM albums a
       JOIN LATERAL (
         SELECT por.quantity, por.total_cents
@@ -540,6 +541,12 @@ export function registerPressPortalRoutes(
         WHERE oi.kind = 'format' AND o.album_id = a.id
           AND o.paid_at IS NOT NULL AND o.refunded_at IS NULL
       ) sold ON true
+      LEFT JOIN LATERAL (
+        SELECT MAX(pnl.sent_at) AS last_notified_at
+        FROM partner_notification_log pnl
+        WHERE pnl.status = 'sent'
+          AND pnl.payload_snapshot ->> 'albumId' = a.id
+      ) notif ON true
       LEFT JOIN people p ON p.id = a.primary_artist_id
       LEFT JOIN labels l ON l.id = a.label_id
       WHERE a.deleted_at IS NULL
@@ -659,6 +666,7 @@ export function registerPressPortalRoutes(
         shippedAt: a.cert_batch_shipped_to_fulfillment_at,
         fulfillmentHeadsUpSentAt: a.fulfillment_heads_up_sent_at,
         fulfillmentHeadsUpQty: a.fulfillment_heads_up_qty,
+        lastNotifiedAt: a.last_notified_at,
         lockedQuantity: a.locked_quantity,
         lockedTotalCents: a.locked_total_cents,
         unitsSoldToDate: a.units_sold ?? 0,
@@ -1007,6 +1015,15 @@ export function registerPressPortalRoutes(
         pressInvoiceOutsideSystem: !!outsideSystem,
       } as any)
       .where(eq(albums.id, albumId));
+
+    // Task #534 — uploading (or marking-outside) the invoice is what
+    // advances an album from Locked → In production, so fire the
+    // pipeline-state-change notification to the press's recipients once
+    // per upload. Only on first upload (no prior uploaded_at) so an
+    // operator correcting a total doesn't re-spam the press.
+    if (!(album as any).pressInvoiceUploadedAt) {
+      notifyPipelineStateChange(albumId, pressId, "in_production", "In production").catch(() => {});
+    }
 
     // Variance flag — spec calls for admin alert when invoice total
     // differs from the locked quote by >10%. We compute here (not at
@@ -1638,11 +1655,33 @@ async function notifyArtistMastersReady(artistId: string | null, albumId: string
   }
 }
 
+// Build an admin pipeline deep-link for a press, so heads-up emails carry
+// a one-click jump straight to the album's pressing pipeline.
+function pressPipelineUrl(pressId: string): string {
+  const origin = process.env.PUBLIC_ORIGIN || "https://admin.goodtunes.music";
+  return `${origin}/admin/manufacturers/${pressId}?tab=pipeline`;
+}
+
+// Compute the press's target ship-by date from its standard turnaround
+// (week-range preferred, then turnaround_days, then a 4-week default),
+// measured from now — the moment the run is locked and the heads-up fires.
+function shipByLabelFromTurnaround(row: any): string {
+  const weeks =
+    (row?.turnaround_weeks_max as number | null) ??
+    (row?.turnaround_weeks_min as number | null) ??
+    null;
+  const days = weeks != null ? weeks * 7 : ((row?.turnaround_days as number | null) ?? 28);
+  const d = new Date(Date.now() + days * 86_400_000);
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
 async function notifyFulfillmentHeadsUp(albumId: string, pressId: string, qty: number, isUpdate: boolean) {
+  const pipelineUrl = pressPipelineUrl(pressId);
   try {
     const r = await db.execute<any>(sql`
       SELECT a.title AS album_title,
              m.name AS press_name,
+             m.turnaround_weeks_min, m.turnaround_weeks_max, m.turnaround_days,
              fp.name AS partner_name,
              fp.contact_email AS partner_email
       FROM albums a
@@ -1656,6 +1695,7 @@ async function notifyFulfillmentHeadsUp(albumId: string, pressId: string, qty: n
       console.log(`[notify] fulfillment-heads-up skip — no fulfillment partner email album=${albumId} qty=${qty}`);
       return;
     }
+    const shipByLabel = shipByLabelFromTurnaround(row);
     const { sendFulfillmentHeadsUpEmail } = await import("./mail");
     const result = await sendFulfillmentHeadsUpEmail(
       row.partner_email,
@@ -1664,10 +1704,102 @@ async function notifyFulfillmentHeadsUp(albumId: string, pressId: string, qty: n
       row.press_name ?? "the press",
       qty,
       isUpdate,
+      { shipByLabel, pipelineUrl },
     );
     console.log(`[notify] fulfillment-heads-up album=${albumId} press=${pressId} qty=${qty} update=${isUpdate} mail=${result.ok ? "sent" : `failed:${result.reason}`}`);
   } catch (e) {
     console.log(`[notify] fulfillment-heads-up threw: ${(e as Error).message}`);
+  }
+
+  // Task #534 — fan the same heads-up out to every configured
+  // notification recipient on the routed fulfillment partner (the
+  // legacy single contact_email send above stays for back-compat and
+  // is logged to console only). Best-effort; never blocks the request.
+  try {
+    const r = await db.execute<any>(sql`
+      SELECT a.fulfillment_partner_id AS fp_id,
+             a.title AS album_title,
+             m.name AS press_name,
+             m.turnaround_weeks_min, m.turnaround_weeks_max, m.turnaround_days,
+             fp.name AS partner_name
+      FROM albums a
+      LEFT JOIN manufacturers m ON m.id = ${pressId}
+      LEFT JOIN fulfillment_partners fp ON fp.id = a.fulfillment_partner_id
+      WHERE a.id = ${albumId}
+      LIMIT 1
+    `);
+    const row = ((r as any).rows ?? [])[0];
+    if (row?.fp_id) {
+      const { dispatchPartnerNotification, partnerEmailHtml } = await import("./partnerNotifications");
+      const partnerName = row.partner_name ?? "team";
+      const albumTitle = row.album_title ?? "an album";
+      const pressName = row.press_name ?? "the press";
+      const shipByLabel = shipByLabelFromTurnaround(row);
+      const verb = isUpdate ? "Updated quantity" : "Incoming run";
+      const subject = `${verb}: ${qty} units of ${albumTitle} from ${pressName} — ship by ${shipByLabel}`;
+      const bodyLines = [
+        isUpdate
+          ? "The expected quantity changed:"
+          : "Heads-up — a run is on the way:",
+        `${qty} units of ${albumTitle}, pressed by ${pressName}.`,
+        `Target ship-by date: ${shipByLabel}.`,
+      ];
+      await dispatchPartnerNotification({
+        partnerKind: "fulfillment",
+        partnerId: String(row.fp_id),
+        eventType: "fulfillment_heads_up",
+        subject,
+        html: partnerEmailHtml({
+          heading: verb,
+          bodyLines,
+          partnerName,
+          cta: { label: "View the pipeline", url: pipelineUrl },
+        }),
+        text: `${bodyLines.join("\n\n")}\n\nView the pipeline: ${pipelineUrl}`,
+        payloadSnapshot: { albumId, pressId, albumTitle, pressName, quantity: qty, isUpdate, shipByLabel, pipelineUrl },
+      });
+    }
+  } catch (e) {
+    console.log(`[notify] fulfillment-heads-up recipients threw: ${(e as Error).message}`);
+  }
+}
+
+// Task #534 — pipeline-state-change fan-out to the press's notification
+// recipients (e.g. "in production" when an invoice lands). Best-effort.
+async function notifyPipelineStateChange(
+  albumId: string,
+  pressId: string,
+  newStage: string,
+  stageLabel: string,
+) {
+  try {
+    const r = await db.execute<any>(sql`
+      SELECT a.title AS album_title, m.name AS press_name
+      FROM albums a
+      LEFT JOIN manufacturers m ON m.id = ${pressId}
+      WHERE a.id = ${albumId}
+      LIMIT 1
+    `);
+    const row = ((r as any).rows ?? [])[0];
+    const albumTitle = row?.album_title ?? "an album";
+    const pressName = row?.press_name ?? "the press";
+    const { dispatchPartnerNotification, partnerEmailHtml } = await import("./partnerNotifications");
+    const subject = `${albumTitle}: now ${stageLabel}`;
+    const bodyLines = [
+      `${albumTitle} has moved to a new stage in the GoodTunes pressing pipeline.`,
+      `New status: ${stageLabel}.`,
+    ];
+    await dispatchPartnerNotification({
+      partnerKind: "manufacturer",
+      partnerId: pressId,
+      eventType: "pipeline_state_change",
+      subject,
+      html: partnerEmailHtml({ heading: `Now ${stageLabel}`, bodyLines, partnerName: pressName }),
+      text: bodyLines.join("\n\n"),
+      payloadSnapshot: { albumId, pressId, albumTitle, newStage, stageLabel },
+    });
+  } catch (e) {
+    console.log(`[notify] pipeline-state-change threw: ${(e as Error).message}`);
   }
 }
 

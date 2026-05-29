@@ -479,6 +479,7 @@ interface PipelineAlbum {
   shippedAt: string | null;
   fulfillmentHeadsUpSentAt: string | null;
   fulfillmentHeadsUpQty: number | null;
+  lastNotifiedAt: string | null;
   lockedQuantity: number | null;
   lockedTotalCents: number | null;
   unitsSoldToDate: number;
@@ -827,6 +828,11 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
         {a.fulfillmentHeadsUpSentAt && (
           <div className="text-xs text-white/55">
             Heads-up sent · {a.fulfillmentHeadsUpQty ?? "?"} units
+          </div>
+        )}
+        {a.lastNotifiedAt && (
+          <div className="text-xs text-white/55" data-testid={`text-last-notified-${a.id}`}>
+            Last notified {timeAgo(a.lastNotifiedAt)}
           </div>
         )}
       </div>

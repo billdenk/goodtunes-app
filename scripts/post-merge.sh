@@ -2370,3 +2370,51 @@ SQL
 }
 migrate_task_533_early_cut dev  "${DATABASE_URL:-}"
 migrate_task_533_early_cut prod "${PROD_DATABASE_URL:-}"
+
+# Task #534 — Partner notifications (multi-recipient + heads-up email).
+# Two new tables: partner_notification_recipients (who hears about a
+# partner's events) + partner_notification_log (one row per delivery
+# attempt). Idempotent CREATE TABLE on both DBs so a fresh-clone dev
+# never 500s the recipient CRUD and the publish dev→prod diff stays
+# empty (these tables are otherwise prod-missing on first ship).
+migrate_partner_notifications() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping partner_notifications migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+CREATE TABLE IF NOT EXISTS partner_notification_recipients (
+  id           varchar   PRIMARY KEY DEFAULT gen_random_uuid(),
+  partner_kind text      NOT NULL,
+  partner_id   varchar   NOT NULL,
+  name         text      NOT NULL,
+  channel      text      NOT NULL DEFAULT 'email',
+  address      text      NOT NULL,
+  role         text      NOT NULL DEFAULT 'ops',
+  events       jsonb     NOT NULL DEFAULT '[]'::jsonb,
+  created_at   timestamp DEFAULT now(),
+  deleted_at   timestamp
+);
+CREATE INDEX IF NOT EXISTS partner_notif_recipients_partner_idx
+  ON partner_notification_recipients (partner_kind, partner_id);
+CREATE TABLE IF NOT EXISTS partner_notification_log (
+  id               varchar   PRIMARY KEY DEFAULT gen_random_uuid(),
+  recipient_id     varchar   NOT NULL REFERENCES partner_notification_recipients(id) ON DELETE CASCADE,
+  event_type       text      NOT NULL,
+  payload_snapshot jsonb,
+  status           text      NOT NULL,
+  sent_at          timestamp DEFAULT now(),
+  error            text
+);
+CREATE INDEX IF NOT EXISTS partner_notif_log_recipient_idx
+  ON partner_notification_log (recipient_id);
+SQL
+  then
+    echo "post-merge: partner_notifications migration ok on $label"
+  else
+    echo "post-merge: WARNING — partner_notifications migration failed on $label (continuing)"
+  fi
+}
+migrate_partner_notifications dev  "${DATABASE_URL:-}"
+migrate_partner_notifications prod "${PROD_DATABASE_URL:-}"

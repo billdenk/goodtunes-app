@@ -3227,6 +3227,65 @@ export const insertFulfillmentPartnerSchema = createInsertSchema(fulfillmentPart
 export type InsertFulfillmentPartner = z.infer<typeof insertFulfillmentPartnerSchema>;
 export type FulfillmentPartner = typeof fulfillmentPartners.$inferSelect;
 
+// Task #534 — Partner notifications. One row per person/endpoint that
+// should hear about events for a partner (vendor / press / fulfillment).
+// `partnerKind` + `partnerId` is a soft pointer into vendors /
+// manufacturers / fulfillment_partners (no FK because it spans three
+// tables). `events` is an allow-list; empty = subscribe to all (see
+// recipientWantsEvent in shared/partnerNotifications.ts). Only the
+// `email` channel is delivered in v1.
+export const partnerNotificationRecipients = pgTable(
+  "partner_notification_recipients",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    partnerKind: text("partner_kind").notNull(),
+    partnerId: varchar("partner_id").notNull(),
+    name: text("name").notNull(),
+    channel: text("channel").notNull().default("email"),
+    address: text("address").notNull(),
+    role: text("role").notNull().default("ops"),
+    events: jsonb("events").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    createdAt: timestamp("created_at").defaultNow(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => ({
+    partnerIdx: index("partner_notif_recipients_partner_idx").on(
+      t.partnerKind,
+      t.partnerId,
+    ),
+  }),
+);
+export const insertPartnerNotificationRecipientSchema = createInsertSchema(
+  partnerNotificationRecipients,
+).omit({ id: true, createdAt: true, deletedAt: true });
+export type InsertPartnerNotificationRecipient = z.infer<
+  typeof insertPartnerNotificationRecipientSchema
+>;
+export type PartnerNotificationRecipient =
+  typeof partnerNotificationRecipients.$inferSelect;
+
+// One row per delivery attempt. `payloadSnapshot` captures the event
+// context at send time so the operator can see exactly what went out
+// even after the underlying album/order moves on.
+export const partnerNotificationLog = pgTable(
+  "partner_notification_log",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    recipientId: varchar("recipient_id")
+      .notNull()
+      .references(() => partnerNotificationRecipients.id, { onDelete: "cascade" }),
+    eventType: text("event_type").notNull(),
+    payloadSnapshot: jsonb("payload_snapshot").$type<Record<string, unknown>>(),
+    status: text("status").notNull(),
+    sentAt: timestamp("sent_at").defaultNow(),
+    error: text("error"),
+  },
+  (t) => ({
+    recipientIdx: index("partner_notif_log_recipient_idx").on(t.recipientId),
+  }),
+);
+export type PartnerNotificationLog = typeof partnerNotificationLog.$inferSelect;
+
 export const RFQ_STATUSES = ["open", "awarded", "cancelled"] as const;
 export type RfqStatus = (typeof RFQ_STATUSES)[number];
 export const RFQ_REPLY_STATUSES = ["invited", "quoted", "declined", "won"] as const;

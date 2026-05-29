@@ -590,6 +590,20 @@ export async function sendMastersReadyEmail(
   return sendViaResend("press-masters-ready", toEmail, subject, html, text);
 }
 
+// Task #534 — Generic partner-notification send. The dispatcher in
+// server/partnerNotifications.ts composes the subject/html/text per
+// event and fans out to N recipients; this is the thin transport so
+// the synthetic-recipient guard, RESEND_API_KEY check, and failure
+// buffer all stay in one place.
+export async function sendPartnerNotificationEmail(
+  toEmail: string,
+  subject: string,
+  html: string,
+  text: string,
+): Promise<SendResult> {
+  return sendViaResend("partner-notification", toEmail, subject, html, text);
+}
+
 // Press portal — fulfillment heads-up. Sent when an album enters Locked
 // (or when locked qty drifts >5%) so the routed fulfillment partner can
 // prep dock space and reserve packing-slot capacity for the run.
@@ -600,9 +614,17 @@ export async function sendFulfillmentHeadsUpEmail(
   pressName: string,
   quantity: number,
   isUpdate: boolean,
+  opts?: { shipByLabel?: string | null; pipelineUrl?: string | null },
 ): Promise<SendResult> {
   const verb = isUpdate ? "Updated quantity" : "Incoming run";
-  const subject = `${verb}: ${quantity} units of ${albumTitle} from ${pressName}`;
+  const shipByLabel = opts?.shipByLabel ?? null;
+  const pipelineUrl = opts?.pipelineUrl ?? null;
+  const subject = shipByLabel
+    ? `${verb}: ${quantity} units of ${albumTitle} from ${pressName} — ship by ${shipByLabel}`
+    : `${verb}: ${quantity} units of ${albumTitle} from ${pressName}`;
+  const shipLine = shipByLabel
+    ? `Target ship-by date: ${shipByLabel}.`
+    : `Expected ship date and tracking will follow from the press directly.`;
   const text = [
     `Hi ${partnerName},`,
     ``,
@@ -610,14 +632,19 @@ export async function sendFulfillmentHeadsUpEmail(
     ``,
     `${quantity} units of ${albumTitle}, pressed by ${pressName}.`,
     ``,
-    `Expected ship date and tracking will follow from the press directly.`,
+    shipLine,
+    ...(pipelineUrl ? [``, `View the pipeline: ${pipelineUrl}`] : []),
   ].join("\n");
+  const ctaHtml = pipelineUrl
+    ? `<p style="margin: 20px 0 8px;"><a href="${escapeHtml(pipelineUrl)}" style="display: inline-block; background: #319ED8; color: #fff; text-decoration: none; font-size: 15px; font-weight: 600; padding: 11px 20px; border-radius: 8px;">View the pipeline</a></p>`
+    : "";
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
       <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">GoodTunes</div>
       <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700;">${verb}</h1>
       <p style="font-size: 16px; line-height: 1.5; color: #333;"><strong>${quantity}</strong> units of <strong>${escapeHtml(albumTitle)}</strong>, pressed by <strong>${escapeHtml(pressName)}</strong>.</p>
-      <p style="font-size: 14px; color: #555; line-height: 1.5;">Expected ship date and tracking will follow from the press directly.</p>
+      <p style="font-size: 14px; color: #555; line-height: 1.5;">${escapeHtml(shipLine)}</p>
+      ${ctaHtml}
     </div>
   `;
   return sendViaResend("press-fulfillment-heads-up", toEmail, subject, html, text);

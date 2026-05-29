@@ -322,6 +322,48 @@ async function applySourceSideEffectsOnRelease(earmark: PayoutEarmark, transferI
              press_invoice_transfer_error        = NULL
        WHERE id = ${earmark.albumId}
     `);
+    // Task #534 — the press's captured invoice just got paid out, so
+    // notify its configured recipients (invoice_paid). Best-effort; a
+    // notification failure must never roll back the transfer bookkeeping.
+    try {
+      const { resolvePressIdForAlbum, dispatchPartnerNotification, partnerEmailHtml } =
+        await import("./partnerNotifications");
+      const pressId = await resolvePressIdForAlbum(earmark.albumId);
+      if (pressId) {
+        const r = await db.execute<any>(sql`
+          SELECT a.title AS album_title, m.name AS press_name
+          FROM albums a LEFT JOIN manufacturers m ON m.id = ${pressId}
+          WHERE a.id = ${earmark.albumId} LIMIT 1
+        `);
+        const row = ((r as any).rows ?? [])[0];
+        const albumTitle = row?.album_title ?? "an album";
+        const pressName = row?.press_name ?? "your account";
+        const dollars = (earmark.amountCents / 100).toFixed(2);
+        const subject = `Payment sent: $${dollars} for ${albumTitle}`;
+        const bodyLines = [
+          `GoodTunes has transferred payment for your invoice on ${albumTitle}.`,
+          `Amount: $${dollars}.`,
+          "Funds settle to your connected payout account on the usual schedule.",
+        ];
+        await dispatchPartnerNotification({
+          partnerKind: "manufacturer",
+          partnerId: pressId,
+          eventType: "invoice_paid",
+          subject,
+          html: partnerEmailHtml({ heading: "Invoice paid", bodyLines, partnerName: pressName }),
+          text: bodyLines.join("\n\n"),
+          payloadSnapshot: {
+            albumId: earmark.albumId,
+            pressId,
+            albumTitle,
+            amountCents: earmark.amountCents,
+            transferId,
+          },
+        });
+      }
+    } catch (e) {
+      console.log(`[notify] invoice-paid threw: ${(e as Error).message}`);
+    }
     return;
   }
   if (earmark.sourceKind === "referral_credit") {
