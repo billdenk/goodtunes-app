@@ -18,3 +18,129 @@ id = "0L40n7dO4fEtOL9MHQ9nQ"
 uri = "file://SoulChef-Escapism-Instrumentals-Estimate.docx"
 type = "word_document"
 title = "SoulChef — Escapism: Instrumentals — Pricing Estimate"
+
+[[outputs]]
+id = "LkfHIGmX2DSRTQQhZR7le"
+uri = "file://exports/sample-gooddeed-certificate-letter.pdf"
+type = "pdf"
+title = "GoodDeed Certificate — Letter"
+
+[[outputs]]
+id = "8Rmu--ZULQNVb5TwuEsDX"
+uri = "file://exports/sample-gooddeed-certificate-a4.pdf"
+type = "pdf"
+title = "GoodDeed Cert — A4 (print PDF)"
+
+[[outputs]]
+id = "GechCfh1p9_LMei0_tEAY"
+uri = "file://exports/preview-letter.png"
+type = "image"
+title = "GoodDeed Certificate — Letter (full preview)"
+
+[[outputs]]
+id = "xQubgKvsgBkyWo7ZDVHaz"
+uri = "file://exports/preview-a4.png"
+type = "image"
+title = "GoodDeed Cert — A4 (preview)"
+
+[[outputs]]
+id = "AXrwp_er27ebKyK3NmjWe"
+uri = "file://exports/preview-v1-asis-1line.png"
+type = "image"
+title = "Version 1 — As-is (single line)"
+
+[[outputs]]
+id = "Yhs0bq_1bkt9gBjFZpP5o"
+uri = "file://exports/preview-v2-dynamic-2line.png"
+type = "image"
+title = "Version 2 — Dynamic (long name, two lines)"
+
+[[outputs]]
+id = "bRB_wyAlHMXaidgmz31FG"
+uri = "file://exports/preview-v3-fixed-1line.png"
+type = "image"
+title = "Version 3 — Fixed slot (single line)"
+
+[[outputs]]
+id = "hJt_KRqCTb8qEQA0M_Zcv"
+uri = "file://exports/preview-v3-fixed-2line.png"
+type = "image"
+title = "Version 3 — Fixed slot (long name, two lines)"
+
+[[outputs]]
+id = "yqt31JabU9giSu2XoxN3s"
+uri = "file://exports/compare-1-asis-1line.pdf"
+type = "pdf"
+title = "PDF — V1 As-is (single line)"
+
+[[outputs]]
+id = "ohbrcUOnwzq9Te0XWAOQW"
+uri = "file://exports/compare-2-dynamic-2line.pdf"
+type = "pdf"
+title = "PDF — V2 Dynamic (two lines)"
+
+[[outputs]]
+id = "suf4CRNJ2GpKUETo-SVyU"
+uri = "file://exports/compare-3-fixed-1line.pdf"
+type = "pdf"
+title = "PDF — Fixed, one line"
+
+[[outputs]]
+id = "lD7D86P_o8CscDmjvhmL6"
+uri = "file://exports/compare-3-fixed-2line.pdf"
+type = "pdf"
+title = "PDF — Fixed, two lines"
+
+[[outputs]]
+id = "js9_oDErgayNQ6IiCTZyo"
+uri = "file://exports/preview-letter-band.png"
+type = "image"
+title = "Lower band — signature restored to agreed fixed position"
+
+[[outputs]]
+id = "BKMe8HUIIIQesMhJcRXKH"
+uri = "file://exports/band-compare-3-fixed-1line.png"
+type = "image"
+title = "Fixed — one line (short name)"
+
+[[outputs]]
+id = "anI3yoS0lmQ7NzukVInDH"
+uri = "file://exports/band-compare-3-fixed-2line.png"
+type = "image"
+title = "Fixed — two lines (long name)"
+
+[[outputs]]
+id = "d1g7m5RB3SUaXKOQLzPyq"
+uri = "file://exports/preview-border-quarter.png"
+type = "image"
+title = "Border ¼\" (recommended)"
+
+[[outputs]]
+id = "0n-tYXOEENl83xCaitn8D"
+uri = "file://exports/preview-border-eighth.png"
+type = "image"
+title = "Border ⅛\""
+
+[[outputs]]
+id = "VXcNTKnb0-Q2dJHrXXVCD"
+uri = "file://exports/border-quarter.pdf"
+type = "pdf"
+title = "PDF — ¼\" border"
+
+[[outputs]]
+id = "luPLVaRSd4HMkNsI7_pdx"
+uri = "file://exports/border-eighth.pdf"
+type = "pdf"
+title = "PDF — ⅛\" border"
+
+[[outputs]]
+id = "98yEH_MvntBroMG7xv_I2"
+uri = "file://exports/a4-today.pdf"
+type = "pdf"
+title = "A4 — as it is today (old centered layout)"
+
+[[outputs]]
+id = "iNTiP6f7L-cafLCk-Bhwk"
+uri = "file://exports/a4-new.pdf"
+type = "pdf"
+title = "GoodDeed Certificate — A4 (footnote baseline aligned)"
