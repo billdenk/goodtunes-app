@@ -1990,7 +1990,21 @@ function SkuRow({
     return formats.find((f) => f.format === format) ?? null;
   }, [catalogFormat, isVinyl, format, invitedPressRow?.mrpDefaults]);
   const [active, setActive] = useState(existing?.active ?? true);
-  const [priceStr, setPriceStr] = useState(existing ? (existing.priceCents / 100).toFixed(2) : "");
+  // Task #705 — sensible per-format defaults on a fresh (unsaved) card so
+  // the artist lands on a real price + run size instead of an empty field.
+  // Saved rows always re-open at their stored values.
+  const FRESH_CARD_DEFAULTS: Record<string, { qty: number; priceCents: number }> = {
+    "12_lp": { qty: 500, priceCents: 3500 },
+    "12_double": { qty: 500, priceCents: 5000 },
+    "7_inch": { qty: 500, priceCents: 2500 },
+  };
+  const [priceStr, setPriceStr] = useState(
+    existing
+      ? (existing.priceCents / 100).toFixed(2)
+      : FRESH_CARD_DEFAULTS[format]
+        ? (FRESH_CARD_DEFAULTS[format].priceCents / 100).toFixed(2)
+        : "",
+  );
   // Task #397 — inline-editable row label (Tracks-row pattern). Empty
   // string serialises to NULL server-side and the read path falls
   // back to the format label, so the header never renders as
@@ -2122,13 +2136,16 @@ function SkuRow({
   // existing rows to the nearest available rung on first mount so a
   // legacy SKU with a weird qty (75) opens at the next-up rung (100).
   const initialQty = useMemo<number>(() => {
+    // Task #705 — fresh cards default to the per-format run size (500)
+    // instead of the platform-wide DEFAULT_VINYL_QUANTITY.
+    const freshDefaultQty = FRESH_CARD_DEFAULTS[format]?.qty ?? DEFAULT_VINYL_QUANTITY;
     const saved = existing?.plannedQuantity;
     if (usingCatalog && pickedTier) {
-      const snapped = snapCatalogLadder(pickedTier.priceLadder, saved ?? DEFAULT_VINYL_QUANTITY);
-      return snapped?.qty ?? DEFAULT_VINYL_QUANTITY;
+      const snapped = snapCatalogLadder(pickedTier.priceLadder, saved ?? freshDefaultQty);
+      return snapped?.qty ?? freshDefaultQty;
     }
-    if (isVinyl) return snapToQuantityTier(saved ?? DEFAULT_VINYL_QUANTITY).tier;
-    return saved ?? DEFAULT_VINYL_QUANTITY;
+    if (isVinyl) return snapToQuantityTier(saved ?? freshDefaultQty).tier;
+    return saved ?? freshDefaultQty;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [parsedQty, setParsedQty] = useState<number>(initialQty);
@@ -2533,7 +2550,19 @@ function SkuRow({
   // vinyl card layout. Closed by default; the chevron reveals the
   // per-unit cost breakdown inline (replaces the old CostTooltip
   // popover for vinyl rows).
-  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  // Task #705 — per-pricing-block Profit disclosure. The primary block
+  // defaults open (so the breakdown reads at a glance); duplicated
+  // blocks default closed to keep the 2-up grid compact.
+  const [openProfitKeys, setOpenProfitKeys] = useState<Set<string>>(
+    () => new Set(["primary"]),
+  );
+  const toggleProfit = (key: string) =>
+    setOpenProfitKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const estimatedSold = useMemo(() => {
     if (estPct === "custom") {
       const n = Number.parseInt(estCustomStr.replace(/[^0-9]/g, ""), 10);
@@ -3187,6 +3216,86 @@ function SkuRow({
     }
     setMatchNotes([]);
   }, [quoteScratchpadKey]);
+
+  // Task #705 — artist-facing "Pricing" duplicate-to-grid. Each extra
+  // block clones the primary block's price + qty into an independent
+  // pricing scenario (its own price, qty, profit, total). Persisted to
+  // the same localStorage-scratchpad pattern as quoteRows so a refresh
+  // keeps the comparison the artist was building.
+  type PricingBlock = { id: string; priceStr: string; qty: number };
+  const pricingBlocksKey = albumId
+    ? `gt:sellpanel:pricingblocks:${albumId}:${format}`
+    : null;
+  const parsePricingBlocks = (raw: string | null): PricingBlock[] => {
+    if (!raw) return [];
+    try {
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      return arr.filter((b: unknown): b is PricingBlock => {
+        const o = b as Record<string, unknown> | null;
+        return (
+          !!o &&
+          typeof o.id === "string" &&
+          typeof o.priceStr === "string" &&
+          typeof o.qty === "number"
+        );
+      });
+    } catch {
+      return [];
+    }
+  };
+  const [pricingBlocks, setPricingBlocks] = useState<PricingBlock[]>(() => {
+    if (typeof window === "undefined" || !pricingBlocksKey) return [];
+    return parsePricingBlocks(window.localStorage.getItem(pricingBlocksKey));
+  });
+  useEffect(() => {
+    if (typeof window === "undefined" || !pricingBlocksKey) return;
+    try {
+      window.localStorage.setItem(
+        pricingBlocksKey,
+        JSON.stringify(pricingBlocks),
+      );
+    } catch {
+      /* localStorage quota — pricing scratchpad, safe to drop. */
+    }
+  }, [pricingBlocks, pricingBlocksKey]);
+  useEffect(() => {
+    if (typeof window === "undefined" || !pricingBlocksKey) {
+      setPricingBlocks([]);
+      return;
+    }
+    setPricingBlocks(
+      parsePricingBlocks(window.localStorage.getItem(pricingBlocksKey)),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pricingBlocksKey]);
+  const addPricingBlock = () => {
+    setPricingBlocks((prev) => [
+      ...prev,
+      {
+        id: `pb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        priceStr,
+        qty: parsedQty,
+      },
+    ]);
+  };
+  const updatePricingBlock = (
+    id: string,
+    patch: Partial<Omit<PricingBlock, "id">>,
+  ) => {
+    setPricingBlocks((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, ...patch } : b)),
+    );
+  };
+  const removePricingBlock = (id: string) => {
+    setPricingBlocks((prev) => prev.filter((b) => b.id !== id));
+    setOpenProfitKeys((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
 
   // Distinct press ids referenced by quote rows that aren't the
   // invited press (whose catalog we already have via catalogFormat).
@@ -4252,7 +4361,377 @@ function SkuRow({
         );
         const canChangeFormat =
           !!onChangeFormat && swapTargets.length > 1 && !isLocked;
+        // Task #705 — manufacturing cost for an arbitrary run size, so a
+        // duplicated pricing block can re-snap the cost ladder at its own
+        // quantity (the primary block reuses the live `breakdown`). Mirrors
+        // the manufacturing resolution inside the `breakdown` useMemo:
+        // catalog tier ladder → MRP platform-default ladder → snapshot.
+        const mfgCentsForQty = (qty: number): number => {
+          if (usingCatalog && pickedTier) {
+            return (
+              snapCatalogLadder(pickedTier.priceLadder, qty)?.unitCents ??
+              breakdown?.manufacturingCents ??
+              0
+            );
+          }
+          const mrpFormat = mrpDefaultFormat;
+          if (isVinyl && mrpFormat && mrpFormat.tiers.length > 0) {
+            const tierName = vinylColor.tier === "black" ? "Black" : "Color";
+            const mrpTier =
+              mrpFormat.tiers.find(
+                (t) => t.name.toLowerCase() === tierName.toLowerCase(),
+              ) ?? mrpFormat.tiers[0];
+            return (
+              snapCatalogLadder(mrpTier.priceLadder, qty)?.unitCents ??
+              breakdown?.manufacturingCents ??
+              0
+            );
+          }
+          return breakdown?.manufacturingCents ?? 0;
+        };
+        // Per-block economics. Publishing + GoodTunes are qty-independent
+        // (pulled from the live breakdown); manufacturing re-snaps per qty
+        // and payment processing tracks the block's own price.
+        const blockEconomics = (
+          blockPriceStr: string,
+          qty: number,
+          isPrimary: boolean,
+        ) => {
+          const bPriceCents = parseDollars(blockPriceStr);
+          const pub = breakdown?.publishingCents ?? 0;
+          const gt = breakdown?.goodtunesCents ?? 0;
+          const mfg = isPrimary
+            ? breakdown?.manufacturingCents ?? 0
+            : mfgCentsForQty(qty);
+          const pp =
+            bPriceCents !== null ? Math.round(bPriceCents * 0.029) + 30 : 0;
+          const costPerUnit = breakdown ? mfg + pub + pp + gt : null;
+          const profit =
+            bPriceCents !== null && costPerUnit !== null
+              ? bPriceCents - costPerUnit
+              : null;
+          const total = profit !== null && qty > 0 ? profit * qty : null;
+          return { priceCents: bPriceCents, mfg, pub, pp, gt, costPerUnit, profit, total };
+        };
+        // One independent pricing scenario (Retail · Qty · collapsible
+        // Profit · Total). The primary block keeps the original
+        // `…-${format}` test ids so existing references hold; duplicated
+        // blocks suffix their own key and gain a label + remove control.
+        const renderPricingBlock = (opts: {
+          blockKey: string;
+          label: string | null;
+          blockPriceStr: string;
+          blockQty: number;
+          onPriceChange: (v: string) => void;
+          onQtyChange: (q: number) => void;
+          onRemove?: () => void;
+          isPrimary: boolean;
+        }) => {
+          const econ = blockEconomics(
+            opts.blockPriceStr,
+            opts.blockQty,
+            opts.isPrimary,
+          );
+          const open = openProfitKeys.has(opts.blockKey);
+          const idSuffix = opts.isPrimary
+            ? format
+            : `${format}-${opts.blockKey}`;
+          const blockCatalogSnap =
+            usingCatalog && pickedTier
+              ? snapCatalogLadder(pickedTier.priceLadder, opts.blockQty)
+              : null;
+          const blockQtySnap = snapToQuantityTier(opts.blockQty);
+          const blockProfitPending = econ.profit === null;
+          const blockLoss = econ.profit !== null && econ.profit < 0;
+          const blockProfitLabel =
+            econ.profit === null
+              ? "$0.00"
+              : econ.profit < 0
+                ? `-${dollars(Math.abs(econ.profit))}`
+                : dollars(econ.profit);
+          const blockTotalLabel =
+            econ.total === null
+              ? "$0.00"
+              : econ.total < 0
+                ? `-${dollars(Math.abs(econ.total))}`
+                : dollars(econ.total);
+          const blockNeedsQuote = opts.isPrimary
+            ? !!breakdown?.needsQuote
+            : econ.mfg <= 0;
+          const blockEffMfg =
+            brokerDiscountPct > 0
+              ? Math.floor((econ.mfg * (100 - brokerDiscountPct)) / 100)
+              : econ.mfg;
+          const blockBrokerDelta = econ.mfg - blockEffMfg;
+          const blockInternalProfit =
+            econ.priceCents !== null && econ.costPerUnit !== null
+              ? econ.priceCents - (blockEffMfg + econ.pub + econ.pp + econ.gt)
+              : null;
+          return (
+            <div
+              key={opts.blockKey}
+              className="rounded-lg border border-slate-200 bg-white p-3 space-y-3"
+              data-testid={`pricing-block-${idSuffix}`}
+            >
+              {(opts.label || opts.onRemove) && (
+                <div className="flex items-center justify-between gap-2 min-h-7">
+                  <span
+                    className="text-xs uppercase tracking-wider text-slate-400 font-semibold truncate"
+                    data-testid={`text-pricing-block-label-${idSuffix}`}
+                  >
+                    {opts.label}
+                  </span>
+                  {opts.onRemove && (
+                    <IconButton
+                      variant="ghost"
+                      label="Remove pricing option"
+                      onClick={opts.onRemove}
+                      className="!w-7 !h-7 text-slate-400 hover:text-[color:var(--brand-pink)]"
+                      data-testid={`button-remove-pricing-block-${idSuffix}`}
+                    >
+                      <X />
+                    </IconButton>
+                  )}
+                </div>
+              )}
+              {/* Retail Price */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                    Retail Price
+                  </span>
+                  <InfoTip
+                    label="About retail price"
+                    testId={`info-price-${idSuffix}`}
+                    text="This is the price you want to charge per unit for your vinyl. Per unit sold to fans."
+                  />
+                </div>
+                <div className="relative w-full">
+                  <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
+                    $
+                  </span>
+                  <input
+                    type="text"
+                    value={opts.blockPriceStr}
+                    onChange={(e) => opts.onPriceChange(e.target.value)}
+                    placeholder="0.00"
+                    inputMode="decimal"
+                    className={`w-full pl-5 ${fieldClass}`}
+                    data-testid={`input-price-${idSuffix}`}
+                  />
+                </div>
+              </div>
+              {/* Select Qty */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                    Select Qty
+                  </span>
+                  <InfoTip
+                    label="About quantity"
+                    testId={`info-qty-${idSuffix}`}
+                    text="Your margin will improve based on quantity. This estimate is for you to choose the absolute lowest quantity you believe you'll sell — anything above that is more profit due to lower per-unit costs from scale."
+                  />
+                </div>
+                {quantityRungs.length > 0 ? (
+                  <Select
+                    value={String(opts.blockQty)}
+                    onValueChange={(v) => opts.onQtyChange(Number.parseInt(v, 10))}
+                  >
+                    <SelectTrigger
+                      className="h-8 w-full text-sm"
+                      data-testid={`select-sku-quantity-${idSuffix}`}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white text-slate-900 border-slate-200">
+                      {quantityRungs.map((q) => (
+                        <SelectItem
+                          key={q}
+                          value={String(q)}
+                          data-testid={`option-sku-quantity-${idSuffix}-${q}`}
+                        >
+                          {q.toLocaleString()} units
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <input
+                    type="text"
+                    value={String(opts.blockQty)}
+                    onChange={(e) => {
+                      const n = Number.parseInt(
+                        e.target.value.replace(/[^0-9]/g, ""),
+                        10,
+                      );
+                      if (Number.isFinite(n) && n > 0) opts.onQtyChange(n);
+                      else if (e.target.value === "") opts.onQtyChange(0);
+                    }}
+                    inputMode="numeric"
+                    className={`w-full ${fieldClass}`}
+                    data-testid={`input-sku-quantity-${idSuffix}`}
+                  />
+                )}
+                {!usingCatalog && blockQtySnap.requiresQuote && (
+                  <div
+                    className="text-xs text-slate-500 mt-1"
+                    data-testid={`text-qty-tier-${idSuffix}`}
+                  >
+                    {blockQtySnap.tier}+ — request a custom quote
+                  </div>
+                )}
+                {usingCatalog && blockCatalogSnap?.requiresQuote && (
+                  <div
+                    className="text-xs text-slate-500 mt-1"
+                    data-testid={`text-qty-tier-${idSuffix}`}
+                  >
+                    {blockCatalogSnap.qty}+ — request a custom quote
+                  </div>
+                )}
+              </div>
+              {/* Profit — collapsible inline breakdown */}
+              <div className="pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => toggleProfit(opts.blockKey)}
+                  className="w-full flex items-center justify-between gap-2 text-left rounded-md hover:bg-slate-50 -mx-1 px-1 py-0.5 transition-colors"
+                  aria-expanded={open}
+                  data-testid={`button-toggle-breakdown-${idSuffix}`}
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                      Profit
+                    </span>
+                    <span className="text-xs text-slate-400 normal-case font-normal">
+                      Per unit sold
+                    </span>
+                    <ChevronDown
+                      className={[
+                        "w-3.5 h-3.5 text-slate-400 transition-transform",
+                        open ? "rotate-180" : "",
+                      ].join(" ")}
+                    />
+                  </span>
+                  <span
+                    className={[
+                      "tabular-nums text-base font-semibold",
+                      blockProfitPending
+                        ? "text-slate-300"
+                        : blockLoss
+                          ? "text-[color:var(--brand-pink)]"
+                          : "text-slate-900",
+                    ].join(" ")}
+                    data-testid={`text-profit-${idSuffix}`}
+                  >
+                    {blockProfitLabel}
+                  </span>
+                </button>
+                {open && breakdown && (
+                  <div
+                    className="mt-2 ml-1 pl-3 border-l border-slate-200 space-y-1"
+                    data-testid={`breakdown-${idSuffix}`}
+                  >
+                    {isSuperAdmin && brokerDiscountPct > 0 && (
+                      <div className="-ml-3 -mr-1 mb-1 px-3 py-1.5 rounded-md bg-amber-50 border border-amber-200 space-y-0.5">
+                        <div className="text-xs uppercase tracking-wider text-amber-700 font-semibold">
+                          Internal — GoodTunes only
+                        </div>
+                        <div className="flex items-center justify-between gap-6 text-xs text-amber-900">
+                          <span>{`Discounted mfg (−${brokerDiscountPct}%)`}</span>
+                          <span className="tabular-nums">{dollars(blockEffMfg)}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-6 text-xs text-amber-900 font-semibold">
+                          <span>Broker margin to GoodTunes</span>
+                          <span className="tabular-nums">{dollars(blockBrokerDelta)}</span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
+                      <span className={blockNeedsQuote ? "text-[color:var(--brand-blue)]" : ""}>Manufacturing</span>
+                      <span className={["tabular-nums", blockNeedsQuote ? "text-[color:var(--brand-blue)]" : ""].join(" ")}>{dollars(econ.mfg)}</span>
+                    </div>
+                    {blockNeedsQuote && (
+                      <div
+                        className="text-xs text-[color:var(--brand-blue)] leading-snug -mt-1 pl-1"
+                        data-testid={`text-mfg-needs-quote-inline-${idSuffix}`}
+                      >
+                        {usingCatalog
+                          ? `No confirmed price rung for ${pickedTier?.name ?? "this tier"} at ${opts.blockQty.toLocaleString()} pcs on ${invitedPressItself?.name ?? "this press"}. Confirm the rung in Admin → Presses.`
+                          : invitedPressItself
+                            ? `No quote yet from ${invitedPressItself.name} for this format. Add an estimate in the Quotes section below.`
+                            : `No MRP rung for this tier at ${opts.blockQty.toLocaleString()} pcs — confirm the rung in Admin → Presses → MRP, or invite a different press.`}
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
+                      <span>Publishing: ($0.127 × 2 [vinyl+digital]) × {breakdown.publishingTrackCount} tracks</span>
+                      <span className="tabular-nums">{dollars(econ.pub)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
+                      <span>Payment processing</span>
+                      <span className="tabular-nums">{dollars(econ.pp)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
+                      <span>GoodTunes</span>
+                      <span className="tabular-nums">{dollars(econ.gt)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-6 text-xs text-slate-900 font-semibold pt-1.5 border-t border-slate-100 mt-1">
+                      <span>Cost / unit</span>
+                      <span
+                        className="tabular-nums"
+                        data-testid={`text-cost-${idSuffix}`}
+                      >
+                        {econ.costPerUnit === null ? "—" : dollars(econ.costPerUnit)}
+                      </span>
+                    </div>
+                    {isSuperAdmin && brokerDiscountPct > 0 && blockInternalProfit !== null && (
+                      <div className="flex items-center justify-between gap-6 text-xs text-amber-800 font-semibold">
+                        <span>{`Internal margin (− mfg discount)`}</span>
+                        <span
+                          className="tabular-nums"
+                          data-testid={`text-internal-margin-${idSuffix}`}
+                        >
+                          {dollars(blockInternalProfit)}
+                          <span className="ml-1 text-amber-600 font-normal">{`(+${dollars(blockBrokerDelta)})`}</span>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* Total */}
+              <div className="pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                      Total
+                    </span>
+                    <InfoTip
+                      label="About total"
+                      testId={`info-total-${idSuffix}`}
+                      text="Estimated total revenue at this quantity and price."
+                    />
+                  </span>
+                  <span
+                    className={[
+                      "tabular-nums text-base font-semibold",
+                      econ.total === null
+                        ? "text-slate-300"
+                        : econ.total < 0
+                          ? "text-[color:var(--brand-pink)]"
+                          : "text-slate-900",
+                    ].join(" ")}
+                    data-testid={`text-total-${idSuffix}`}
+                  >
+                    {blockTotalLabel}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        };
         return (
+      <>
       <div
           className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5 items-start"
           data-testid={`vinyl-card-${format}`}
@@ -4269,7 +4748,7 @@ function SkuRow({
               className="group relative w-full rounded-lg"
               data-testid={`vinyl-preview-group-${format}`}
             >
-              <div className="flex items-center justify-center">
+              <div className="flex items-center justify-start">
                 <VinylPreview
                   artworkUrl={artworkUrl}
                   color={previewColor}
@@ -4334,7 +4813,7 @@ function SkuRow({
                 column below. */}
             {format === "12_lp" && (
               <div
-                className="mt-2 text-xs text-slate-500 text-center"
+                className="mt-2 text-xs text-slate-500 text-left"
                 data-testid={`text-jacket-standard-${format}`}
               >
                 Every 12&rdquo; LP ships in the standard jacket.
@@ -4352,126 +4831,27 @@ function SkuRow({
               control with unpredictable height; placing it at the bottom lets
               it grow downward without reflowing the controls above it. */}
           <div className="sm:order-1 space-y-4">
-            {/* Task #682 numbers band — Anticipated tracks · Retail Price ·
-                Select Qty grouped on one responsive row ("the commercial
-                math"). grid-cols-1 stacks when the column is narrow;
-                sm:grid-cols-3 lays all three side-by-side from the card's own
-                two-column breakpoint up, so the band stays single-row without
-                clipping. The two former inline helper notes ("Used until you
-                upload masters." / "Per unit sold to fans.") now live in each
-                field's (i) tooltip to keep the band compact. */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Anticipated tracks — drives the Publishing line of the cost
-                breakdown before any masters have been uploaded. Once songs
-                are uploaded the field shows the live count and is disabled.
-                Saves on blur via the album-level PUT. */}
-          <AnticipatedTracksInput
-            format={format}
-            liveTrackCount={liveTrackCount ?? 0}
-            anticipatedTrackCount={anticipatedTrackCount ?? null}
-            persistedAnticipatedTrackCount={persistedAnticipatedTrackCount ?? null}
-            lockedValue={sevenInch ? SEVEN_INCH_TRACK_COUNT : null}
-            onLocalChange={onAnticipatedTrackLocalChange}
-            onChange={onAnticipatedTrackCountChange}
-          />
-
-            {/* Retail Price */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-1">
-              <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
-                Retail Price
-              </span>
-              <InfoTip
-                label="About retail price"
-                testId={`info-price-${format}`}
-                text="This is the price you want to charge per unit for your vinyl. Per unit sold to fans."
-              />
-            </div>
-            {/* "$" lives INSIDE the input as an absolute prefix so the
-                amount lines up flush-left in the field. */}
-            <div className="relative w-full">
-              <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
-                $
-              </span>
-              <input
-                type="text"
-                value={priceStr}
-                onChange={(e) => setPriceStr(e.target.value)}
-                placeholder="0.00"
-                inputMode="decimal"
-                className={`w-full pl-5 ${fieldClass}`}
-                data-testid={`input-price-${format}`}
-              />
-            </div>
-          </div>
-
-            {/* Select Qty */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-1">
-              <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
-                Select Qty
-              </span>
-              <InfoTip
-                label="About quantity"
-                testId={`info-qty-${format}`}
-                text="Your margin will improve based on quantity. This estimate is for you to choose the absolute lowest quantity you believe you'll sell — anything above that is more profit due to lower per-unit costs from scale."
-              />
-            </div>
-            {quantityRungs.length > 0 ? (
-              <Select
-                value={String(parsedQty)}
-                onValueChange={(v) => setParsedQty(Number.parseInt(v, 10))}
-              >
-                <SelectTrigger
-                  className="h-8 w-full text-sm"
-                  data-testid={`select-sku-quantity-${format}`}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white text-slate-900 border-slate-200">
-                  {quantityRungs.map((q) => (
-                    <SelectItem
-                      key={q}
-                      value={String(q)}
-                      data-testid={`option-sku-quantity-${format}-${q}`}
-                    >
-                      {q.toLocaleString()} units
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <input
-                type="text"
-                value={String(parsedQty)}
-                onChange={(e) => {
-                  const n = Number.parseInt(e.target.value.replace(/[^0-9]/g, ""), 10);
-                  if (Number.isFinite(n) && n > 0) setParsedQty(n);
-                  else if (e.target.value === "") setParsedQty(0);
-                }}
-                inputMode="numeric"
-                className={`w-full ${fieldClass}`}
-                data-testid={`input-sku-quantity-${format}`}
-              />
-            )}
-            {!usingCatalog && qtySnap.requiresQuote && (
-              <div
-                className="text-xs text-slate-500 mt-1"
-                data-testid={`text-qty-tier-${format}`}
-              >
-                {qtySnap.tier}+ — request a custom quote
-              </div>
-            )}
-            {usingCatalog && catalogSnap?.requiresQuote && (
-              <div
-                className="text-xs text-slate-500 mt-1"
-                data-testid={`text-qty-tier-${format}`}
-              >
-                {catalogSnap.qty}+ — request a custom quote
-              </div>
-            )}
-          </div>
-          </div>
+            {/* Task #705 — the Package section now leads with the album
+                art and carries only the package-shaping controls (Tracks
+                + Jacket + Color). Retail Price / Select Qty / Profit /
+                Total moved down into the dedicated "Pricing" section below
+                so the commercial math reads as one block (and so each
+                duplicated quote owns its own price + qty).
+                Anticipated tracks drives the Publishing line before any
+                masters are uploaded; once real audio exists the live count
+                wins and the input disappears entirely (no point showing a
+                disabled mirror of the tracklist). */}
+          {!songsUploaded && (
+            <AnticipatedTracksInput
+              format={format}
+              liveTrackCount={liveTrackCount ?? 0}
+              anticipatedTrackCount={anticipatedTrackCount ?? null}
+              persistedAnticipatedTrackCount={persistedAnticipatedTrackCount ?? null}
+              lockedValue={sevenInch ? SEVEN_INCH_TRACK_COUNT : null}
+              onLocalChange={onAnticipatedTrackLocalChange}
+              onChange={onAnticipatedTrackCountChange}
+            />
+          )}
 
             {/* Jacket — Select for 7"/10"; de-emphasized tag for 7" only.
                 Task #655: 12" LP no longer renders a labeled Jacket row
@@ -4692,260 +5072,69 @@ function SkuRow({
             </div>
           )}
 
-            {/* Task #659 — vendor + summary header. Names the press
-                quoting this run (logo + name) and recaps the row
-                (qty / format / color / tracks / retail / total) so
-                a screenshot of just the breakdown is self-describing.
-                Falls back to the MRP/GoodTunes platform-default
-                identity when no press is invited; in that case the
-                color and press-specific bits are omitted from the
-                recap (the system hasn't bound a real quote to a
-                tier yet). */}
-          {(() => {
-            const headerColorName =
-              usingCatalog && pickedTier
-                ? pickedTier.colors.find((c) => c.id === pressColorId)?.name ?? null
-                : vinylColor.name;
-            const headerVendorName = invitedPressItself?.name
-              ?? (breakdown?.source === "mrp-default" ? "MRP (platform default)" : "GoodTunes default press");
-            const headerLogoUrl = invitedPressItself?.logoUrl ?? null;
-            const monogram = headerVendorName
-              .split(/\s+/)
-              .filter(Boolean)
-              .slice(0, 2)
-              .map((w) => w[0]?.toUpperCase() ?? "")
-              .join("");
-            const recapBits: Array<{ key: string; node: React.ReactNode }> = [];
-            if (parsedQty > 0) {
-              recapBits.push({
-                key: "qty",
-                node: (
-                  <span className="font-semibold text-slate-900 tabular-nums">
-                    {parsedQty.toLocaleString()}
-                  </span>
-                ),
-              });
-            }
-            recapBits.push({ key: "format", node: <span>{ALBUM_FORMAT_LABEL[format]}</span> });
-            if (invitedPressItself && headerColorName) {
-              recapBits.push({ key: "color", node: <span>{headerColorName}</span> });
-            }
-            if (trackCount > 0) {
-              recapBits.push({
-                key: "tracks",
-                node: <span>{trackCount} {trackCount === 1 ? "track" : "tracks"}</span>,
-              });
-            }
-            if (priceCents !== null) {
-              recapBits.push({
-                key: "price",
-                node: <span className="tabular-nums">{dollars(priceCents)}</span>,
-              });
-            }
-            if (parsedQty > 0) {
-              recapBits.push({
-                key: "units",
-                node: (
-                  <span className="tabular-nums">
-                    {parsedQty.toLocaleString()} {parsedQty === 1 ? "unit" : "units"}
-                  </span>
-                ),
-              });
-            }
-            return (
-              <div
-                className="pt-3 border-t border-slate-100"
-                data-testid={`header-estimate-${format}`}
-              >
-                <div className="flex items-center gap-2">
-                  {headerLogoUrl ? (
-                    <img
-                      src={headerLogoUrl}
-                      alt=""
-                      className="w-8 h-8 rounded-full object-cover bg-white ring-1 ring-slate-200 flex-shrink-0"
-                      data-testid={`img-estimate-vendor-${format}`}
-                    />
-                  ) : (
-                    <div
-                      className="w-8 h-8 rounded-full bg-white ring-1 ring-slate-200 flex items-center justify-center text-xs font-semibold text-slate-500 flex-shrink-0"
-                      aria-hidden
-                      data-testid={`monogram-estimate-vendor-${format}`}
-                    >
-                      {monogram || "—"}
-                    </div>
-                  )}
-                  <span
-                    className="text-base font-semibold text-slate-900 truncate"
-                    data-testid={`text-estimate-vendor-${format}`}
-                  >
-                    {headerVendorName}
-                  </span>
-                </div>
-                <div
-                  className="mt-1 text-xs text-slate-500 leading-snug"
-                  data-testid={`text-estimate-recap-${format}`}
-                >
-                  {recapBits.map((bit, idx) => (
-                    <span key={bit.key}>
-                      {idx > 0 && <span className="mx-1.5 text-slate-300">·</span>}
-                      {bit.node}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
-
-            {/* Profit — collapsible inline breakdown. Top border
-                divides operator-pick controls (Jacket/etc) above from
-                the cost rollup below. */}
-          <div className="pt-3">
-            <button
-              type="button"
-              onClick={() => setBreakdownOpen((o) => !o)}
-              className="w-full flex items-center justify-between gap-2 text-left rounded-md hover:bg-slate-50 -mx-1 px-1 py-0.5 transition-colors"
-              aria-expanded={breakdownOpen}
-              data-testid={`button-toggle-breakdown-${format}`}
-            >
-              <span className="inline-flex items-center gap-1.5">
-                <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
-                  Profit
-                </span>
-                <span className="text-xs text-slate-400 normal-case font-normal">
-                  Per unit sold
-                </span>
-                <ChevronDown
-                  className={[
-                    "w-3.5 h-3.5 text-slate-400 transition-transform",
-                    breakdownOpen ? "rotate-180" : "",
-                  ].join(" ")}
-                />
-              </span>
-              <span
-                className={[
-                  "tabular-nums text-base font-semibold",
-                  profitPending
-                    ? "text-slate-300"
-                    : lossColor
-                      ? "text-[color:var(--brand-pink)]"
-                      : "text-slate-900",
-                ].join(" ")}
-                data-testid={`text-profit-${format}`}
-              >
-                {profitLabel}
-              </span>
-            </button>
-            {breakdownOpen && breakdown && (
-              <div
-                className="mt-2 ml-1 pl-3 border-l border-slate-200 space-y-1"
-                data-testid={`breakdown-${format}`}
-              >
-                {isSuperAdmin && brokerDiscountPct > 0 && (
-                  <div className="-ml-3 -mr-1 mb-1 px-3 py-1.5 rounded-md bg-amber-50 border border-amber-200 space-y-0.5">
-                    <div className="text-xs uppercase tracking-wider text-amber-700 font-semibold">
-                      Internal — GoodTunes only
-                    </div>
-                    <div className="flex items-center justify-between gap-6 text-xs text-amber-900">
-                      <span>{`Discounted mfg (−${brokerDiscountPct}%)`}</span>
-                      <span className="tabular-nums">
-                        {dollars(Math.floor((breakdown.manufacturingCents * (100 - brokerDiscountPct)) / 100))}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-6 text-xs text-amber-900 font-semibold">
-                      <span>Broker margin to GoodTunes</span>
-                      <span className="tabular-nums">
-                        {dollars(breakdown.manufacturingCents - Math.floor((breakdown.manufacturingCents * (100 - brokerDiscountPct)) / 100))}
-                      </span>
-                    </div>
-                  </div>
-                )}
-                <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
-                  <span className={breakdown.needsQuote ? "text-[color:var(--brand-blue)]" : ""}>Manufacturing</span>
-                  <span className={["tabular-nums", breakdown.needsQuote ? "text-[color:var(--brand-blue)]" : ""].join(" ")}>{dollars(breakdown.manufacturingCents)}</span>
-                </div>
-                {breakdown.needsQuote && (
-                  <div
-                    className="text-xs text-[color:var(--brand-blue)] leading-snug -mt-1 pl-1"
-                    data-testid={`text-mfg-needs-quote-inline-${format}`}
-                  >
-                    {usingCatalog
-                      ? `No confirmed price rung for ${pickedTier?.name ?? "this tier"} at ${parsedQty.toLocaleString()} pcs on ${invitedPressItself?.name ?? "this press"}. Confirm the rung in Admin → Presses.`
-                      : invitedPressItself
-                        ? `No quote yet from ${invitedPressItself.name} for this format. Add an estimate in the Quotes section below.`
-                        : `No MRP rung for this tier at ${parsedQty.toLocaleString()} pcs — confirm the rung in Admin → Presses → MRP, or invite a different press.`}
-                  </div>
-                )}
-                <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
-                  <span>Publishing: ($0.127 × 2 [vinyl+digital]) × {breakdown.publishingTrackCount} tracks</span>
-                  <span className="tabular-nums">{dollars(breakdown.publishingCents)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
-                  <span>Payment processing</span>
-                  <span className="tabular-nums">{dollars(breakdown.paymentProcessingCents)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
-                  <span>GoodTunes</span>
-                  <span className="tabular-nums">{dollars(breakdown.goodtunesCents)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-6 text-xs text-slate-900 font-semibold pt-1.5 border-t border-slate-100 mt-1">
-                  <span>Cost / unit</span>
-                  <span
-                    className="tabular-nums"
-                    data-testid={`text-cost-${format}`}
-                  >
-                    {totalCostCents === null ? "—" : dollars(totalCostCents)}
-                  </span>
-                </div>
-                {isSuperAdmin && brokerDiscountPct > 0 && internalProfitCents !== null && (
-                  <div className="flex items-center justify-between gap-6 text-xs text-amber-800 font-semibold">
-                    <span>{`Internal margin (− mfg discount)`}</span>
-                    <span
-                      className="tabular-nums"
-                      data-testid={`text-internal-margin-${format}`}
-                    >
-                      {dollars(internalProfitCents)}
-                      <span className="ml-1 text-amber-600 font-normal">{`(+${dollars(brokerDeltaCents)})`}</span>
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-            {/* Total */}
-          <div className="pt-2 border-t border-slate-100">
-            <div className="flex items-center justify-between gap-3">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
-                  Total
-                </span>
-                <InfoTip
-                  label="About total"
-                  testId={`info-total-${format}`}
-                  text="Estimated total revenue at this quantity and price."
-                />
-              </span>
-              <span
-                className={[
-                  "tabular-nums text-base font-semibold",
-                  totalCents === null
-                    ? "text-slate-300"
-                    : totalCents < 0
-                      ? "text-[color:var(--brand-pink)]"
-                      : "text-slate-900",
-                ].join(" ")}
-                data-testid={`text-total-${format}`}
-              >
-                {totalCents === null
-                  ? "$0.00"
-                  : totalCents < 0
-                    ? `-${dollars(Math.abs(totalCents))}`
-                    : dollars(totalCents)}
-              </span>
-            </div>
-          </div>
           </div>
         </div>
+
+        {/* Task #705 — PRICING section. Lifts Retail Price / Select Qty /
+            Profit / Total out of the package controls into their own
+            full-width block so the commercial math reads as one unit. The
+            duplicate (+) control clones the current quote into a second
+            independent pricing block (own price + qty + profit + total) so
+            an artist can compare, e.g., $35 @ 500 vs. $45 @ 1,000 side by
+            side. Artist-facing — NOT gated behind an invited press (the
+            operator-only "Quotes" comparison section still lives below). */}
+        <div className="mt-5" data-testid={`pricing-section-${format}`}>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-semibold text-slate-900">
+                Pricing
+              </span>
+              <InfoTip
+                label="About pricing"
+                testId={`info-pricing-${format}`}
+                text="Set your retail price and run size. Duplicate this to compare two scenarios side by side — each has its own price, quantity, profit and total."
+              />
+            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <IconButton
+                  variant="ghost"
+                  label="Add pricing option"
+                  onClick={addPricingBlock}
+                  className="!w-8 !h-8 text-slate-400 hover:text-[color:var(--brand-blue)]"
+                  data-testid={`button-add-pricing-block-${format}`}
+                >
+                  <Plus />
+                </IconButton>
+              </TooltipTrigger>
+              <TooltipContent>Duplicate pricing</TooltipContent>
+            </Tooltip>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+            {renderPricingBlock({
+              blockKey: "primary",
+              label: pricingBlocks.length > 0 ? "Option 1" : null,
+              blockPriceStr: priceStr,
+              blockQty: parsedQty,
+              onPriceChange: setPriceStr,
+              onQtyChange: setParsedQty,
+              isPrimary: true,
+            })}
+            {pricingBlocks.map((block, idx) =>
+              renderPricingBlock({
+                blockKey: block.id,
+                label: `Option ${idx + 2}`,
+                blockPriceStr: block.priceStr,
+                blockQty: block.qty,
+                onPriceChange: (v) => updatePricingBlock(block.id, { priceStr: v }),
+                onQtyChange: (q) => updatePricingBlock(block.id, { qty: q }),
+                onRemove: () => removePricingBlock(block.id),
+                isPrimary: false,
+              }),
+            )}
+          </div>
+        </div>
+      </>
         );
       })()}
       {/* Task #655 — thin gray rule directly below the vinyl card

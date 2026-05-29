@@ -169,7 +169,7 @@ export function VinylPreview({
             visible against the disc instead of being covered by the
             jacket. Rendered last so it stacks on top of the disc. */}
         <div
-          className="absolute top-[6%] bottom-[6%] bg-black/90"
+          className="absolute top-[2%] bottom-[2%] bg-black/90"
           style={{
             left: "100%",
             width: "5px",
