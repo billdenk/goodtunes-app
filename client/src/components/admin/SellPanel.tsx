@@ -3301,14 +3301,23 @@ function SkuRow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pricingBlocksKey]);
   const addPricingBlock = () => {
+    const newId = `pb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const sourceOpen = openProfitKeys.has("primary");
     setPricingBlocks((prev) => [
       ...prev,
       {
-        id: `pb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        id: newId,
         priceStr,
         qty: parsedQty,
       },
     ]);
+    if (sourceOpen) {
+      setOpenProfitKeys((prev) => {
+        const next = new Set(prev);
+        next.add(newId);
+        return next;
+      });
+    }
   };
   const updatePricingBlock = (
     id: string,
