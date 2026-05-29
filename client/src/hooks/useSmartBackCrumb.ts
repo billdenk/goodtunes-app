@@ -89,7 +89,11 @@ export interface SmartBackCrumbTrack {
 }
 
 export interface SmartBackCrumb {
-  origin: SmartBackOrigin;
+  // "partner" is a generic origin used by the shared org Contacts panel
+  // (OrganizationPeople): the origin page passes its own href + display
+  // name directly via the URL, so it needs no ORIGINS config or name
+  // fetch. Every other origin is a keyed ORIGINS entry.
+  origin: SmartBackOrigin | "partner";
   id: string;
   name: string;
   href: string;
@@ -110,10 +114,21 @@ export function useSmartBackCrumb(): SmartBackCrumb | null {
   let origin: SmartBackOrigin | null = null;
   let id: string | null = null;
   let trackId: string | null = null;
+  // Generic partner Contacts-panel back-link: the origin page passes its
+  // own href + display name directly so no ORIGINS entry / name fetch is
+  // needed. See OrganizationPeople.
+  let partnerHref: string | null = null;
+  let partnerName: string | null = null;
   try {
     const sp = new URLSearchParams(search);
     const from = sp.get("from");
-    if (from && (from in ORIGINS)) {
+    if (from === "partner") {
+      const href = sp.get("backHref");
+      // Only honor internal admin paths — a crafted URL must not be able
+      // to point the breadcrumb at an off-site/arbitrary destination.
+      partnerHref = href && href.startsWith("/admin/") ? href : null;
+      partnerName = sp.get("backName");
+    } else if (from && (from in ORIGINS)) {
       origin = from as SmartBackOrigin;
       const cfg = ORIGINS[origin];
       id = sp.get(cfg.param);
@@ -135,6 +150,16 @@ export function useSmartBackCrumb(): SmartBackCrumb | null {
     queryKey: cfg && id ? cfg.apiKey(id) : ["smart-back-crumb-disabled"],
     enabled: !!user?.isAdmin && !!cfg && !!id,
   });
+
+  if (partnerHref) {
+    return {
+      origin: "partner",
+      id: partnerHref,
+      name: partnerName ?? "Back",
+      href: partnerHref,
+      testId: "link-back-to-partner",
+    };
+  }
 
   if (!cfg || !id) return null;
   const name = data?.name ?? data?.title ?? cfg.fallbackName;

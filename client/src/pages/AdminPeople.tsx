@@ -41,6 +41,11 @@ interface PersonLite {
   // pick), false = scan returned zero results. Drives the small badge on
   // the People grid card so admins know who's been searched already.
   spotifyHasMatch: boolean | null;
+  // Partner org this person is attached to (press / vendor / label /
+  // fulfillment partner / non-profit) when they have no signed label.
+  // Drives the People-index subtitle so a Hellbender contact reads
+  // "Hellbender Vinyl" instead of "Independent".
+  affiliation: { entityKind: string; entityId: string; name: string } | null;
 }
 
 interface LabelLite {
@@ -237,7 +242,11 @@ export function AdminPeople() {
             <PersonCard
               key={p.id}
               person={p}
-              labelName={p.labelId ? labelById.get(p.labelId) ?? null : null}
+              labelName={
+                (p.labelId ? labelById.get(p.labelId) ?? null : null) ??
+                p.affiliation?.name ??
+                null
+              }
               onOpen={() => openPerson(p.id)}
             />
           ))}
@@ -251,7 +260,11 @@ export function AdminPeople() {
             <PersonRow
               key={p.id}
               person={p}
-              labelName={p.labelId ? labelById.get(p.labelId) ?? null : null}
+              labelName={
+                (p.labelId ? labelById.get(p.labelId) ?? null : null) ??
+                p.affiliation?.name ??
+                null
+              }
               onOpen={() => openPerson(p.id)}
             />
           ))}

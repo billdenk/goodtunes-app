@@ -10899,10 +10899,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       storage.getLabels(),
     ]);
     const labelById = new Map(allLabels.map((l) => [l.id, l]));
+    // Partner affiliation fallback so a contact attached to a press /
+    // vendor / label / fulfillment partner / non-profit shows that org's
+    // name on the People index instead of "Independent". Batched into two
+    // queries (not N) and only used when the person has no label.
+    const affiliationByPerson = new Map<
+      string,
+      { entityKind: string; entityId: string; name: string }
+    >();
+    try {
+      const ec = await db.execute<any>(sql`
+        SELECT person_id, entity_kind, entity_id, name FROM (
+          SELECT ec.person_id, ec.entity_kind, ec.entity_id,
+                 COALESCE(v.name, m.name, l.name, fp.name) AS name,
+                 ROW_NUMBER() OVER (PARTITION BY ec.person_id ORDER BY ec.entity_kind) AS rn
+          FROM entity_contacts ec
+          LEFT JOIN vendors v               ON ec.entity_kind = 'vendor'              AND v.id = ec.entity_id
+          LEFT JOIN manufacturers m         ON ec.entity_kind = 'manufacturer'        AND m.id = ec.entity_id
+          LEFT JOIN labels l                ON ec.entity_kind = 'label'               AND l.id = ec.entity_id
+          LEFT JOIN fulfillment_partners fp ON ec.entity_kind = 'fulfillment_partner' AND fp.id = ec.entity_id
+        ) x WHERE x.name IS NOT NULL AND x.rn = 1
+      `);
+      for (const r of ((ec as any).rows ?? [])) {
+        affiliationByPerson.set(r.person_id, {
+          entityKind: r.entity_kind,
+          entityId: r.entity_id,
+          name: r.name,
+        });
+      }
+      const npo = await db.execute<any>(sql`
+        SELECT op.person_id, o.id AS entity_id, o.name
+        FROM organization_people op JOIN organizations o ON o.id = op.organization_id
+        WHERE o.kind = 'non_profit'
+      `);
+      for (const r of ((npo as any).rows ?? [])) {
+        if (r.name && !affiliationByPerson.has(r.person_id)) {
+          affiliationByPerson.set(r.person_id, {
+            entityKind: "non_profit",
+            entityId: r.entity_id,
+            name: r.name,
+          });
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[people] affiliation lookup failed: ${e?.message}`);
+    }
     return res.json(
-      rows.map((p) =>
-        toPublicPerson(p, p.labelId ? labelById.get(p.labelId) ?? null : null),
-      ),
+      rows.map((p) => ({
+        ...toPublicPerson(p, p.labelId ? labelById.get(p.labelId) ?? null : null),
+        affiliation: affiliationByPerson.get(p.id) ?? null,
+      })),
     );
   });
   app.get("/api/people/:id", async (req, res) => {

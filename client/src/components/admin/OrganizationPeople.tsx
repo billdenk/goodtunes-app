@@ -65,6 +65,17 @@ function humanizeApiError(err: unknown): string {
   return raw || "Something went wrong.";
 }
 
+// Each org kind's admin detail route. Used to build the breadcrumb
+// back-link so a contact opened from a press/label/vendor Contacts tab
+// returns to that org's People tab (not the global People catalog).
+const PARTNER_ROUTE_BASE: Record<AddPeopleMenuEntityKind, string> = {
+  manufacturer: "/admin/manufacturers",
+  vendor: "/admin/vendors",
+  label: "/admin/labels",
+  non_profit: "/admin/non-profits",
+  fulfillment: "/admin/fulfillment-partners",
+};
+
 export interface OrganizationPeopleProps {
   /**
    * Base URL of the contacts collection, e.g.
@@ -189,7 +200,7 @@ export function OrganizationPeople({
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
-                  <Link href={`/admin/people/${c.personId}`} className="text-sm font-semibold text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate block" data-testid={`link-${testIdPrefix}-contact-${c.personId}`}>
+                  <Link href={`/admin/people/${c.personId}?from=partner&backHref=${encodeURIComponent(`${PARTNER_ROUTE_BASE[entityKind]}/${entityId}?tab=people`)}&backName=${encodeURIComponent(entityName)}`} className="text-sm font-semibold text-inherit hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors truncate block" data-testid={`link-${testIdPrefix}-contact-${c.personId}`}>
                     {c.name}
                   </Link>
                   {c.invitePending && c.acceptUrl && (
