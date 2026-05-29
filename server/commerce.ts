@@ -2085,6 +2085,13 @@ export function registerCommerceRoutes(app: Express) {
           .update(orders)
           .set({ status: "refunded", refundedAt: new Date(), goodDeedNumber: null })
           .where(eq(orders.id, o.id));
+        // Task #533 — back the refunded sale's earmark out of the pool.
+        if (o.albumId) {
+          const { reversePressPoolForOrder } = await import("./earlyCut");
+          await reversePressPoolForOrder(o.albumId, o.id).catch((e) =>
+            console.error(`[refund] press-pool reversal failed for ${o.id}`, e?.message),
+          );
+        }
         const remaining = await db
           .select({ id: orders.id })
           .from(orders)
@@ -2601,6 +2608,16 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
     }
   }
 
+  // Task #533 — accrue this paid sale's per-unit press earmark into the
+  // album's early-cut funding pool. Idempotent per order; no-ops when the
+  // album has no resolvable press tier.
+  if (isPaid && order) {
+    const { accruePressPool } = await import("./earlyCut");
+    await accruePressPool(albumId, order.id, quantity).catch((e) =>
+      console.error(`[commerce] press-pool accrual failed for ${order!.id}`, e?.message),
+    );
+  }
+
   return order!;
 }
 
@@ -2629,6 +2646,14 @@ async function handleRefund(paymentIntentId: string): Promise<void> {
     .update(orders)
     .set({ status: "refunded", refundedAt: new Date(), goodDeedNumber: null })
     .where(eq(orders.id, order.id));
+  // Task #533 — back the refunded sale's earmark out of the early-cut pool
+  // so a refund can never leave the funding pool overstated.
+  if (order.albumId) {
+    const { reversePressPoolForOrder } = await import("./earlyCut");
+    await reversePressPoolForOrder(order.albumId, order.id).catch((e) =>
+      console.error(`[commerce] press-pool reversal failed for ${order.id}`, e?.message),
+    );
+  }
   // Task #550 — revert any unclaimed gifts on this order so the share
   // link stops working and the entitlement stays with the sender (the
   // user_albums sweep below removes the album entirely when no other

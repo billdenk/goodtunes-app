@@ -40,6 +40,7 @@ import {
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { ShareQuoteWithArtist } from "@/components/admin/ShareQuoteWithArtist";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -203,6 +204,118 @@ function snapCatalogLadder(
   for (const r of sorted) if (q <= r.qty) return { qty: r.qty, unitCents: r.unitCents, requiresQuote: false };
   const top = sorted[sorted.length - 1];
   return { qty: top.qty, unitCents: top.unitCents, requiresQuote: true };
+}
+
+// Task #533 — Gate #2. The artist's per-album opt-in to having their
+// masters cut early once the per-sale funding pool covers the press's
+// minimum-run floor. Default OFF. The popover explains the deal: fans
+// fund it, GoodTunes fronts nothing, and the artist + admin both still
+// have to say yes. The consent is snapshotted against the live tier +
+// format, so re-picking either silently invalidates it.
+function EarlyCutOptIn({ albumId }: { albumId: string }) {
+  const { toast } = useToast();
+  type EarlyCutState = {
+    tier: { tierName: string; format: string; minRun: number; unitPriceCents: number; mastersPrepCents: number; perSaleEarmarkCents: number } | null;
+    unitsSold: number;
+    pressFloorTotalCents: number;
+    poolAccruedCents: number;
+    poolReleasedCents: number;
+    poolAvailableCents: number;
+    poolReady: boolean;
+    mastersTriggeredAt: string | null;
+    artistConsent: { at: string | null; tierName: string | null; format: string | null; appliesToCurrentTier: boolean };
+  };
+  const { data } = useQuery<EarlyCutState>({
+    queryKey: ["/api/admin/albums", albumId, "early-cut"],
+    enabled: !!albumId,
+  });
+  const consent = useMutation({
+    mutationFn: async (next: boolean) => {
+      const r = await apiRequest("POST", `/api/admin/albums/${albumId}/early-cut-consent`, { consent: next });
+      if (!r.ok) {
+        const b = await r.json().catch(() => ({}));
+        throw new Error(b?.message ?? "Couldn't update");
+      }
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "early-cut"] });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't opt in", description: e.message, variant: "destructive" }),
+  });
+  const dollars = (c: number) => `$${(Math.max(0, c) / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  if (!data?.tier) return null;
+  const t = data.tier;
+  const checked = data.artistConsent.appliesToCurrentTier;
+  const pct = data.pressFloorTotalCents > 0
+    ? Math.min(100, Math.round((data.poolAvailableCents / data.pressFloorTotalCents) * 100))
+    : 0;
+  return (
+    <Card className="rounded-2xl shadow-sm overflow-hidden mb-8" data-testid="panel-early-cut-optin">
+      <div className="px-5 py-4">
+        <div className="flex items-start gap-3">
+          <Checkbox
+            id="early-cut-optin"
+            checked={checked}
+            disabled={consent.isPending || !!data.mastersTriggeredAt}
+            onCheckedChange={(v) => consent.mutate(v === true)}
+            className="mt-0.5"
+            data-testid="checkbox-early-cut-optin"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <label htmlFor="early-cut-optin" className="text-slate-900 text-sm font-bold cursor-pointer">
+                Start my masters cut early once fans fund it
+              </label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button type="button" className="text-slate-400 hover:text-slate-600" aria-label="How pool-funded early cuts work" data-testid="button-early-cut-info">
+                    <Info className="w-3.5 h-3.5" />
+                    <span className="sr-only">How pool-funded early cuts work</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 text-xs" data-testid="popover-early-cut">
+                  <div className="font-semibold text-slate-900 mb-1">How pool-funded early cuts work</div>
+                  <p className="text-slate-600 mb-2">
+                    A slice of every paid sale is set aside into a funding pool for this
+                    release. The moment the pool covers the press's minimum-run floor,
+                    we can start your masters cut early — GoodTunes fronts no money, and
+                    nothing happens without your opt-in and an admin's approval.
+                  </p>
+                  <dl className="space-y-1">
+                    <div className="flex justify-between"><dt className="text-slate-500">Tier</dt><dd className="text-slate-800 font-medium" data-testid="text-early-cut-tier">{t.tierName} · {t.format}</dd></div>
+                    <div className="flex justify-between"><dt className="text-slate-500">Min run</dt><dd className="text-slate-800">{t.minRun}</dd></div>
+                    <div className="flex justify-between"><dt className="text-slate-500">Set aside / sale</dt><dd className="text-slate-800">{dollars(t.perSaleEarmarkCents)}</dd></div>
+                    <div className="flex justify-between"><dt className="text-slate-500">Floor to clear</dt><dd className="text-slate-800 font-medium">{dollars(data.pressFloorTotalCents)}</dd></div>
+                  </dl>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <p className="text-slate-500 text-xs mt-0.5">
+              {data.mastersTriggeredAt
+                ? "Masters cut already started for this release."
+                : checked
+                  ? "You're opted in. We'll cut as soon as the pool clears the floor and an admin approves."
+                  : "Off by default. Turn on to let fans fund an early cut of your masters."}
+            </p>
+            <div className="mt-2">
+              <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all"
+                  style={{ width: `${pct}%` }}
+                  data-testid="bar-early-cut-pool"
+                />
+              </div>
+              <div className="flex justify-between text-xs text-slate-500 mt-1">
+                <span data-testid="text-early-cut-pool">{dollars(data.poolAvailableCents)} pooled</span>
+                <span>{dollars(data.pressFloorTotalCents)} floor · {pct}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 export function SellPanel({
@@ -376,12 +489,20 @@ export function SellPanel({
       const r = await apiRequest("PUT", `/api/admin/albums/${albumId}/skus/${body.format}`, body);
       return r.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "skus"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "skus"] });
+      // Task #533 — tier/format change can move the resolved press tier the
+      // early-cut consent was snapshotted against; refresh the opt-in state.
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "early-cut"] });
+    },
     onError: (e: any) => toast({ title: "Couldn't save", description: e?.message, variant: "destructive" }),
   });
   const deleteSku = useMutation({
     mutationFn: async (format: AlbumFormat) => apiRequest("DELETE", `/api/admin/albums/${albumId}/skus/${format}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "skus"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "skus"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "early-cut"] });
+    },
   });
   // Task #654 — Format swap via the album-jacket "change format" icon.
   // Carries the row's adapted picks over to the new format, persists
@@ -886,6 +1007,9 @@ export function SellPanel({
             card explains the press. MRP + PMP stay "Soon" until we
             wire their catalogs. */}
         <PrinterAndPressPanel invited={invitedPress ?? null} />
+
+        {/* Task #533 — Gate #2 artist opt-in for pool-funded early cut. */}
+        <EarlyCutOptIn albumId={albumId} />
 
         {/* SKUs */}
         <Card

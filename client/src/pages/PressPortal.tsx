@@ -24,7 +24,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
-import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2 } from "lucide-react";
+import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLink, BellRing, Sparkles, ArrowRight, Send, X as XIcon, Link2, Zap } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -482,6 +482,12 @@ interface PipelineAlbum {
   lockedQuantity: number | null;
   lockedTotalCents: number | null;
   unitsSoldToDate: number;
+  // Task #533 — pool-funded early-cut chip.
+  earlyCutEligible?: boolean;
+  earlyCutPoolReady?: boolean;
+  earlyCutMissingConsents?: ("press" | "artist" | "tier")[];
+  earlyCutFloorCents?: number;
+  earlyCutPoolAvailableCents?: number;
 }
 
 function timeAgo(iso: string | null): string {
@@ -707,6 +713,27 @@ function PipelineCard({ a, pressId }: { a: PipelineAlbum; pressId: string }) {
           <div data-testid={`text-locked-qty-${a.id}`}>{a.lockedQuantity} locked</div>
         )}
       </div>
+      {/* Task #533 — pool-funded early-cut state. "Eligible" means the
+          pool covers the floor AND both prior consents are in — a review
+          row is now waiting for Bill in the Early Cut queue. "Pool ready"
+          means the money's there but a consent is still missing. */}
+      {a.earlyCutEligible ? (
+        <div
+          className="mt-2 flex items-center gap-1.5 rounded-md bg-[color:var(--brand-mint)]/15 px-2 py-1 text-xs font-semibold text-[color:var(--brand-mint)]"
+          data-testid={`chip-early-cut-eligible-${a.id}`}
+        >
+          <Zap className="w-3 h-3" />
+          Early cut ready — in review queue
+        </div>
+      ) : a.earlyCutPoolReady ? (
+        <div
+          className="mt-2 flex items-center gap-1.5 rounded-md bg-white/5 px-2 py-1 text-xs text-white/60"
+          data-testid={`chip-early-cut-pool-ready-${a.id}`}
+        >
+          <Zap className="w-3 h-3" />
+          Pool funded — waiting on {(a.earlyCutMissingConsents ?? []).includes("press") ? "press" : "artist"} opt-in
+        </div>
+      ) : null}
       <div className="mt-2 space-y-1.5">
         {a.stage === "selling" && (
           <Button

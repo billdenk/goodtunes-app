@@ -80,6 +80,76 @@ function fmtDur(s: number | null | undefined): string {
   return `${m}:${String(r).padStart(2, "0")}`;
 }
 
+// Task #533 — admin readout of the per-album pool-funded early-cut
+// ledger. Shows what's been set aside from fan sales, what's been
+// released to fund a cut, what's available, and which of the three
+// consent gates are still outstanding. Read-only — the toggles live on
+// the press (super-admin) and the Sell tab (artist opt-in); approval
+// happens in the Early Cut Review queue.
+function EarlyCutPoolReadout({ albumId }: { albumId: string }) {
+  type EarlyCutState = {
+    tier: { tierName: string; format: string } | null;
+    pressFloorTotalCents: number;
+    poolAccruedCents: number;
+    poolReleasedCents: number;
+    poolAvailableCents: number;
+    poolReady: boolean;
+    missingConsents: string[];
+    mastersTriggeredAt: string | null;
+  };
+  const { data } = useQuery<EarlyCutState>({
+    queryKey: ["/api/admin/albums", albumId, "early-cut"],
+    enabled: !!albumId,
+  });
+  if (!data?.tier) return null;
+  const dollars = (c: number) => `$${(Math.max(0, c) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const pct = data.pressFloorTotalCents > 0
+    ? Math.min(100, Math.round((data.poolAvailableCents / data.pressFloorTotalCents) * 100))
+    : 0;
+  const CONSENT_LABEL: Record<string, string> = {
+    press: "press auto-trigger toggle",
+    artist: "artist opt-in",
+    approval: "admin approval",
+  };
+  return (
+    <div className="mb-8 rounded-xl border border-slate-200 bg-white p-4" data-testid="panel-early-cut-pool">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <h3 className="text-sm font-bold text-slate-900">Pool-funded early cut</h3>
+        <span className="text-xs text-slate-500">{data.tier.tierName} · {data.tier.format}</span>
+      </div>
+      <div className="grid grid-cols-3 gap-3 mb-3">
+        <div>
+          <div className="text-xs text-slate-500">Accrued</div>
+          <div className="text-sm font-semibold text-slate-900" data-testid="text-pool-accrued">{dollars(data.poolAccruedCents)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-slate-500">Released</div>
+          <div className="text-sm font-semibold text-slate-900" data-testid="text-pool-released">{dollars(data.poolReleasedCents)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-slate-500">Available</div>
+          <div className="text-sm font-semibold text-slate-900" data-testid="text-pool-available">{dollars(data.poolAvailableCents)}</div>
+        </div>
+      </div>
+      <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+        <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="flex justify-between text-xs text-slate-500 mt-1">
+        <span>{pct}% of {dollars(data.pressFloorTotalCents)} floor</span>
+        {data.mastersTriggeredAt ? (
+          <span className="text-emerald-700 font-medium" data-testid="text-pool-status">Masters cut started</span>
+        ) : data.missingConsents.length === 0 ? (
+          <span className="text-emerald-700 font-medium" data-testid="text-pool-status">Ready — awaiting approval</span>
+        ) : (
+          <span data-testid="text-pool-status">
+            Waiting on: {data.missingConsents.map((c) => CONSENT_LABEL[c] ?? c).join(", ")}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function PressPanel({
   albumId,
   songs,
@@ -230,6 +300,8 @@ export function PressPanel({
     <div className="py-6" data-testid="panel-press">
       <div>
         <MastersApprovalBanner albumId={albumId} />
+        {/* Task #533 — pool-funded early-cut ledger readout. */}
+        <EarlyCutPoolReadout albumId={albumId} />
         {/* ── Masters on file ─────────────────────────────────────────── */}
         <div className="mb-10" data-testid="section-masters-on-file">
           {/* Task #583 / #618 — header is a flex row: title + subhead

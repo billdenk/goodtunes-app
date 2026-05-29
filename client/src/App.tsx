@@ -67,6 +67,7 @@ import { CertProvenance } from "@/pages/CertProvenance";
 import AdminSecurity from "@/pages/AdminSecurity";
 import { AdminInvites } from "@/pages/AdminInvites";
 import { AdminEarmarkedArtists } from "@/pages/AdminEarmarkedArtists";
+import { AdminPressEarlyCutQueue } from "@/pages/AdminPressEarlyCutQueue";
 import { AdminInviteTree } from "@/pages/AdminInviteTree";
 import { AdminReview } from "@/pages/AdminReview";
 import { AdminPressingOrders } from "@/pages/AdminPressingOrders";
@@ -327,6 +328,10 @@ function Router() {
             curates; artists see these as one-tap invite chips. */}
         <Route path="/admin/earmarked-artists">
           <ProtectedRoute component={AdminEarmarkedArtists} />
+        </Route>
+        {/* Task #533 — Pool-funded early masters cut review queue. */}
+        <Route path="/admin/early-cut">
+          <ProtectedRoute component={AdminPressEarlyCutQueue} />
         </Route>
         {/* Task #350 — Invite tree (multi-level referral visualiser). */}
         <Route path="/admin/invite-tree">

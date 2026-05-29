@@ -27,6 +27,7 @@ import {
   Tablet,
   Trash2,
   Wallet,
+  Zap,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
@@ -114,6 +115,7 @@ export type EntityKey =
   | "manufacturers"
   | "pressing-orders"
   | "fan-orders"
+  | "early-cut"
   | "fulfillment"
   | "customers"
   | "reports"
@@ -585,6 +587,16 @@ export function AdminFrame({
                 active={active === "fan-orders"}
                 onClick={() => navigate("/admin/fan-orders")}
                 testId="nav-fan-orders"
+              />
+              {/* Task #533 — pool-funded early masters cut review inbox.
+                  Tool, not a CRUD list, so -1 suppresses the count. */}
+              <SidebarLink
+                icon={Zap}
+                label="Early cut review"
+                count={-1}
+                active={active === "early-cut"}
+                onClick={() => navigate("/admin/early-cut")}
+                testId="nav-early-cut"
               />
               {/* Task #136 — Auto-sync-lyrics job history. Tool, not a CRUD
                   list, so we pass -1 to suppress the count. */}

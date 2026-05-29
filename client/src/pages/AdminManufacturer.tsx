@@ -11,6 +11,7 @@ import {
   Trash2,
   UserPlus,
   X,
+  Zap,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
@@ -50,12 +51,86 @@ import { ALBUM_FORMATS, ALBUM_FORMAT_LABEL, type AlbumFormat, type Manufacturer,
  * once that UI ships in a follow-up; today the link to RFQs is implicit
  * via the route layer.
  */
+// Task #533 — Gate #1. Super-admin-only standing consent that pool-funded
+// early masters cuts may be auto-staged for albums homed to this press,
+// plus a readout of how many of the press's albums currently have a pool
+// building. GoodTunes fronts no capital — the toggle only authorizes the
+// flow; the pool still has to cover each album's floor before anything
+// reaches the review queue.
+function PressAutoTriggerConsentPanel({ m }: { m: Manufacturer }) {
+  const { toast } = useToast();
+  const consented = !!(m as any).autoTriggerConsentAt;
+  const toggle = useMutation({
+    mutationFn: async (consent: boolean) => {
+      const r = await apiRequest("PATCH", `/api/admin/manufacturers/${m.id}/auto-trigger-consent`, { consent });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body?.message ?? "Couldn't update");
+      }
+    },
+    onSuccess: () => {
+      void invalidateAdminEntity(queryClient, "manufacturer", m.id);
+      queryClient.invalidateQueries({ queryKey: ["/api/manufacturers", m.id] });
+      toast({ title: "Auto-trigger consent updated" });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't update", description: e.message, variant: "destructive" }),
+  });
+  return (
+    <div className="rounded-xl bg-white/5 ring-1 ring-white/10 p-4" data-testid="panel-auto-trigger-consent">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-semibold flex items-center gap-2">
+            <Zap className="w-4 h-4 text-[color:var(--brand-mint)]" />
+            Pool-funded early cut
+          </div>
+          <p className="text-white/55 text-sm mt-1 max-w-xl">
+            Allow GoodTunes to stage masters cuts early for this press's
+            albums once their per-sale funding pool covers the minimum-run
+            floor. Each cut still needs the artist's opt-in and your approval
+            in the Early Cut Review queue — and no GoodTunes capital is ever
+            fronted.
+          </p>
+          <div className="text-xs mt-2" data-testid="text-consent-state">
+            {consented ? (
+              <span className="text-[color:var(--brand-mint)]">Consent on — early cuts can be staged.</span>
+            ) : (
+              <span className="text-white/45">Consent off — pools still build, but no cut is ever staged.</span>
+            )}
+          </div>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => toggle.mutate(!consented)}
+          disabled={toggle.isPending}
+          className={
+            consented
+              ? "bg-transparent text-white ring-1 ring-white/15 hover:bg-white/5 border-0"
+              : "bg-[color:var(--brand-mint)] text-[color:var(--brand-bg)] hover:brightness-110 font-semibold"
+          }
+          data-testid="button-toggle-auto-trigger"
+        >
+          {consented ? "Turn off" : "Turn on"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function AdminManufacturer() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
     return () => document.body.classList.remove("gt-admin");
   }, []);
   const { user, isLoading: authLoading } = useAuth();
+  // Task #533 — Gate #1 toggle is super-admin only. Role lives server-side
+  // (not on AuthUser), so resolve it via /api/me/role like other admin
+  // surfaces that gate on super_admin.
+  const { data: meRole } = useQuery<{ role: string }>({
+    queryKey: ["/api/me/role"],
+    enabled: !!user?.isAdmin,
+  });
+  const isSuperAdmin = meRole?.role === "super_admin";
   const [, params] = useRoute<{ id: string }>("/admin/manufacturers/:id");
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -350,6 +425,8 @@ export function AdminManufacturer() {
               scopeId={m.id}
               scopeName={m.name}
             />
+
+            {isSuperAdmin && <PressAutoTriggerConsentPanel m={m} />}
 
             <ReferralsPanel pressId={m.id} />
           </>

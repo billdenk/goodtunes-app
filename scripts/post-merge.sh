@@ -2302,3 +2302,71 @@ SQL
 }
 backfill_task_727_gooddeed_25_20 dev  "${DATABASE_URL:-}"
 backfill_task_727_gooddeed_25_20 prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #533 — Pool-funded early masters cut ─────────────────────────
+# New ledger + queue tables and the per-album pool / consent columns plus
+# the per-press auto-trigger consent columns. Schema-only DDL — idempotent
+# CREATE TABLE / ADD COLUMN IF NOT EXISTS so it's safe to re-run on every
+# merge against both dev and prod. No data backfill: the pool starts at
+# zero on rollout (pre-rollout sales do not retroactively contribute).
+migrate_task_533_early_cut() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-533 early-cut migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE IF EXISTS albums
+  ADD COLUMN IF NOT EXISTS press_pool_accrued_cents     integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS press_pool_released_cents    integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS early_cut_consent_at         timestamp,
+  ADD COLUMN IF NOT EXISTS early_cut_consent_by_user_id varchar,
+  ADD COLUMN IF NOT EXISTS early_cut_consent_for_tier_name text,
+  ADD COLUMN IF NOT EXISTS early_cut_consent_for_format    text;
+ALTER TABLE IF EXISTS manufacturers
+  ADD COLUMN IF NOT EXISTS auto_trigger_consent_at timestamp,
+  ADD COLUMN IF NOT EXISTS auto_trigger_consent_by varchar;
+CREATE TABLE IF NOT EXISTS album_press_pool_ledger (
+  id             varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id       varchar NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  kind           text    NOT NULL,
+  cents          integer NOT NULL,
+  source_order_id varchar,
+  note           text,
+  occurred_at    timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS album_press_pool_ledger_accrue_order_uniq
+  ON album_press_pool_ledger (album_id, source_order_id)
+  WHERE kind = 'accrue' AND source_order_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS album_press_pool_ledger_deaccrue_order_uniq
+  ON album_press_pool_ledger (album_id, source_order_id)
+  WHERE kind = 'deaccrue' AND source_order_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS press_early_cut_queue (
+  id                     varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id               varchar NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  press_id               varchar NOT NULL,
+  status                 text    NOT NULL DEFAULT 'pending',
+  press_floor_total_cents integer NOT NULL,
+  pool_available_cents   integer NOT NULL,
+  units_sold             integer NOT NULL DEFAULT 0,
+  tier_name              text,
+  format                 text,
+  decline_reason         text,
+  created_at             timestamp NOT NULL DEFAULT now(),
+  decided_at             timestamp,
+  decided_by_user_id     varchar
+);
+CREATE UNIQUE INDEX IF NOT EXISTS press_early_cut_queue_pending_album_uniq
+  ON press_early_cut_queue (album_id)
+  WHERE status = 'pending';
+COMMIT;
+SQL
+  then
+    echo "post-merge: task-533 early-cut migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-533 early-cut migration failed on $label (continuing)"
+  fi
+}
+migrate_task_533_early_cut dev  "${DATABASE_URL:-}"
+migrate_task_533_early_cut prod "${PROD_DATABASE_URL:-}"

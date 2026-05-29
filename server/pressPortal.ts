@@ -26,6 +26,7 @@ import {
   pressSwitchHistory,
   pressColorTiers,
 } from "@shared/schema";
+import { evaluateEarlyCut, syncEarlyCutQueue, resolveAlbumPressTier } from "./earlyCut";
 
 // Pipeline stage IDs the Pipeline tab renders columns for. Derived in
 // `deriveStage` below — never persisted on the album row.
@@ -590,6 +591,17 @@ export function registerPressPortalRoutes(
       if (a.signed_cert_window_closed_at) {
         recordPressEarmark(a.id, pressId, a.locked_total_cents ?? 0).catch(() => {});
       }
+      // Task #533 — pool-funded early-cut eligibility (3-gate). Separate
+      // from the legacy masters-prep auto-fire above: this only stages a
+      // review-queue row once the pool covers the FULL min-run floor AND
+      // the press + artist consents are both in place. Admin approval in
+      // the Early Cut Review queue is the third, manual gate.
+      const earlyCut = await evaluateEarlyCut(a.id);
+      if (earlyCut.eligible) {
+        await syncEarlyCutQueue(a.id).catch((e) =>
+          console.log(`[early-cut] queue sync failed album=${a.id}: ${(e as Error).message}`),
+        );
+      }
       const stage = deriveStage(a);
       // Stage-entered timestamp: the most recent timestamp column that
       // moved the album INTO its current stage. Lets the card show how
@@ -650,6 +662,12 @@ export function registerPressPortalRoutes(
         lockedQuantity: a.locked_quantity,
         lockedTotalCents: a.locked_total_cents,
         unitsSoldToDate: a.units_sold ?? 0,
+        // Task #533 — early-cut chip data.
+        earlyCutEligible: earlyCut.eligible,
+        earlyCutPoolReady: earlyCut.poolReady,
+        earlyCutMissingConsents: earlyCut.missingConsents,
+        earlyCutFloorCents: earlyCut.pressFloorTotalCents,
+        earlyCutPoolAvailableCents: earlyCut.poolAvailableCents,
       });
     }
     const invitedRaw = await db.execute<any>(sql`
@@ -1278,6 +1296,273 @@ export function registerPressPortalRoutes(
     }
     const uploadUrl = await oss.getObjectEntityUploadURL();
     res.json({ uploadUrl });
+  });
+
+  // ─── Task #533 — Pool-funded early masters cut (3-gate) ──────────────
+  //
+  // Gate #1 (press auto-trigger consent) lives on the manufacturer and is
+  // a one-time super-admin switch. Gate #2 (artist per-album opt-in) is on
+  // the album, scoped to the currently-picked tier/format. Gate #3 is the
+  // admin approving the Early Cut Review queue row. None of these front
+  // GoodTunes capital: the per-album pool must already cover the press's
+  // minimum-run floor before a row ever becomes eligible (see
+  // server/earlyCut.ts).
+
+  // PATCH /api/admin/manufacturers/:id/auto-trigger-consent — Gate #1.
+  // Super-admin only: flips the press's standing consent that pool-funded
+  // early cuts may be auto-staged for albums homed to this press.
+  app.patch("/api/admin/manufacturers/:id/auto-trigger-consent", requireAdmin, async (req: any, res) => {
+    const { getUserRole } = await import("./auth/roles");
+    const role = await getUserRole(req.session?.userId);
+    if (role?.role !== "super_admin") {
+      return res.status(403).json({ message: "Only a super-admin can change a press's auto-trigger consent." });
+    }
+    const pressId = String(req.params.id);
+    const consent = req.body?.consent === true;
+    await db.execute(sql`
+      UPDATE manufacturers
+         SET auto_trigger_consent_at = ${consent ? sql`NOW()` : null},
+             auto_trigger_consent_by = ${consent ? req.session.userId : null}
+       WHERE id = ${pressId}
+    `);
+    res.json({ ok: true, consent });
+  });
+
+  // GET /api/admin/albums/:albumId/early-cut — eligibility + tier + pool
+  // ledger summary + the album's current artist-opt-in state. Powers the
+  // SellPanel popover, the AdminAlbum readout, and the AdminManufacturer
+  // pool readout.
+  app.get("/api/admin/albums/:albumId/early-cut", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.albumId);
+    const e = await evaluateEarlyCut(albumId);
+    const rows = await db.execute<any>(sql`
+      SELECT press_pool_accrued_cents::int        AS accrued,
+             press_pool_released_cents::int       AS released,
+             early_cut_consent_at                 AS consent_at,
+             early_cut_consent_for_tier_name      AS consent_tier,
+             early_cut_consent_for_format         AS consent_format,
+             masters_triggered_at                 AS masters_triggered_at
+        FROM albums WHERE id = ${albumId} LIMIT 1
+    `);
+    const a = ((rows as any).rows ?? [])[0] ?? {};
+    res.json({
+      tier: e.tier,
+      eligible: e.eligible,
+      poolReady: e.poolReady,
+      unitsSold: e.unitsSold,
+      pressFloorTotalCents: e.pressFloorTotalCents,
+      poolAccruedCents: Number(a.accrued) || 0,
+      poolReleasedCents: Number(a.released) || 0,
+      poolAvailableCents: e.poolAvailableCents,
+      missingConsents: e.missingConsents,
+      mastersTriggeredAt: a.masters_triggered_at ?? null,
+      artistConsent: {
+        at: a.consent_at ?? null,
+        tierName: a.consent_tier ?? null,
+        format: a.consent_format ?? null,
+        // Whether the stored consent still matches the live tier/format.
+        appliesToCurrentTier:
+          !!a.consent_at &&
+          !!e.tier &&
+          a.consent_tier === e.tier.tierName &&
+          a.consent_format === e.tier.format,
+      },
+    });
+  });
+
+  // POST /api/admin/albums/:albumId/early-cut-consent — Gate #2. The
+  // artist opt-in. We snapshot the tier name + format the consent was
+  // given against so re-picking a different tier/format silently
+  // invalidates it (evaluateEarlyCut compares against the live tier).
+  app.post("/api/admin/albums/:albumId/early-cut-consent", requireAdmin, async (req: any, res) => {
+    const albumId = String(req.params.albumId);
+    const consent = req.body?.consent === true;
+    if (!consent) {
+      await db.execute(sql`
+        UPDATE albums
+           SET early_cut_consent_at = NULL,
+               early_cut_consent_by_user_id = NULL,
+               early_cut_consent_for_tier_name = NULL,
+               early_cut_consent_for_format = NULL
+         WHERE id = ${albumId}
+      `);
+      return res.json({ ok: true, consent: false });
+    }
+    const tier = await resolveAlbumPressTier(albumId);
+    if (!tier) {
+      return res.status(409).json({
+        message: "This album has no resolvable press tier yet — pick a press tier on the Sell tab before opting in.",
+      });
+    }
+    await db.execute(sql`
+      UPDATE albums
+         SET early_cut_consent_at = NOW(),
+             early_cut_consent_by_user_id = ${req.session.userId},
+             early_cut_consent_for_tier_name = ${tier.tierName},
+             early_cut_consent_for_format = ${tier.format}
+       WHERE id = ${albumId}
+    `);
+    res.json({ ok: true, consent: true, tierName: tier.tierName, format: tier.format });
+  });
+
+  // GET /api/admin/early-cut/queue — Gate #3 inbox. Pending review rows
+  // across all presses (global admin surface, not press-scoped) joined to
+  // album + press display fields.
+  app.get("/api/admin/early-cut/queue", requireAdmin, async (_req, res) => {
+    const rows = await db.execute<any>(sql`
+      SELECT q.id, q.album_id AS "albumId", q.press_id AS "pressId",
+             q.status, q.press_floor_total_cents AS "pressFloorTotalCents",
+             q.pool_available_cents AS "poolAvailableCents",
+             q.units_sold AS "unitsSold", q.tier_name AS "tierName",
+             q.format, q.created_at AS "createdAt",
+             a.title AS "albumTitle", a.cover_url AS "coverUrl",
+             m.name AS "pressName"
+        FROM press_early_cut_queue q
+        JOIN albums a ON a.id = q.album_id
+        LEFT JOIN manufacturers m ON m.id = q.press_id
+       WHERE q.status = 'pending'
+       ORDER BY q.created_at ASC
+    `);
+    res.json(((rows as any).rows ?? []));
+  });
+
+  // POST /api/admin/early-cut/:queueId/approve — Gate #3 fires. Re-checks
+  // eligibility (the pool/consents could have changed since the sweep
+  // enqueued it), stamps masters_triggered_at via the same path the
+  // manual trigger uses, writes a `release` ledger row sized to the press
+  // floor, bumps press_pool_released_cents, and mints the #527-style
+  // Stripe Connect earmark that releases the floor to the press at the
+  // next payout cycle. The masters-cut click is permanent by design.
+  app.post("/api/admin/early-cut/:queueId/approve", requireAdmin, async (req: any, res) => {
+    const queueId = String(req.params.queueId);
+    const qRows = await db.execute<any>(sql`
+      SELECT id, album_id, press_id, status
+        FROM press_early_cut_queue WHERE id = ${queueId} LIMIT 1
+    `);
+    const q = ((qRows as any).rows ?? [])[0];
+    if (!q) return res.status(404).json({ message: "Queue row not found." });
+    if (q.status !== "pending") {
+      return res.status(409).json({ message: `This request was already ${q.status}.` });
+    }
+    const albumId = String(q.album_id);
+
+    // Re-evaluate against live data — never approve a row that has fallen
+    // out of eligibility (pool drained by a refund, consent revoked, tier
+    // changed, or the cut already triggered another way).
+    const e = await evaluateEarlyCut(albumId);
+    if (!e.eligible || !e.tier) {
+      return res.status(409).json({
+        message: "This album is no longer eligible for an early cut.",
+        missingConsents: e.missingConsents,
+        poolReady: e.poolReady,
+      });
+    }
+    const floorCents = e.pressFloorTotalCents;
+    const tier = e.tier;
+    // Pay the press that is actually quoting the album *now*, not whatever
+    // was snapshotted when the row was enqueued (routing can change while a
+    // row waits for approval).
+    const pressId = tier.pressId;
+
+    // Atomically claim the row: flip pending → approved in a single
+    // conditional UPDATE so two concurrent approvals can't both fall
+    // through to the release/earmark side effects. Only the request that
+    // actually moves the row proceeds; the loser sees a 409. The claim and
+    // every pool/trigger side effect run in ONE transaction so a failure
+    // anywhere rolls the claim back too — the row stays `pending` and the
+    // approval can simply be retried, never stranded half-applied.
+    let claimed = false;
+    try {
+      claimed = await db.transaction(async (tx) => {
+        const claim = await tx.execute<any>(sql`
+          UPDATE press_early_cut_queue
+             SET status = 'approved', decided_at = NOW(),
+                 decided_by_user_id = ${req.session.userId}
+           WHERE id = ${queueId} AND status = 'pending'
+          RETURNING id
+        `);
+        if (((claim as any).rows ?? []).length === 0) return false;
+
+        // 1) Stamp the trigger (idempotent — only when not already triggered).
+        await tx
+          .update(albums)
+          .set({ mastersTriggeredAt: new Date() } as any)
+          .where(and(eq(albums.id, albumId), isNull(albums.mastersTriggeredAt)));
+
+        // 2) Pool accounting: record the release and bump the denormalized
+        //    running total so the available pool reflects the drawdown.
+        await tx.execute(sql`
+          INSERT INTO album_press_pool_ledger (album_id, kind, cents, note)
+          VALUES (${albumId}, 'release', ${floorCents},
+                  ${`Early cut approved — ${tier.format}/${tier.tierName}`})
+        `);
+        await tx.execute(sql`
+          UPDATE albums
+             SET press_pool_released_cents = press_pool_released_cents + ${floorCents}
+           WHERE id = ${albumId}
+        `);
+        return true;
+      });
+    } catch (err) {
+      console.error(`[early-cut] approve tx failed album=${albumId}: ${(err as Error).message}`);
+      return res.status(500).json({ message: "Couldn't stage the cut — nothing was changed. Try again." });
+    }
+    if (!claimed) {
+      return res.status(409).json({ message: "This request was already decided." });
+    }
+
+    // 3) #527 Stripe Connect plumbing: hold an earmark for the floor to
+    //    the press, released to its connected account at the next payout
+    //    cycle. Idempotent by (sourceKind, sourceRef=queueId).
+    let earmarkId: string | null = null;
+    try {
+      const { createEarmarkIfAbsent } = await import("./payoutEarmarks");
+      const earmark = await createEarmarkIfAbsent({
+        sourceKind: "early_cut",
+        sourceRef: queueId,
+        albumId,
+        ownerKind: "manufacturer",
+        ownerId: pressId,
+        amountCents: floorCents,
+        currency: "usd",
+        notes: `Early cut floor — ${tier.format}/${tier.tierName}`,
+      });
+      earmarkId = earmark.id;
+    } catch (err) {
+      console.log(`[early-cut] approve earmark failed album=${albumId}: ${(err as Error).message}`);
+    }
+
+    // 4) Tell the artist their cut is starting (fire-and-forget).
+    const artistRow = await db.execute<any>(sql`
+      SELECT primary_artist_id FROM albums WHERE id = ${albumId} LIMIT 1
+    `);
+    const artistId = ((artistRow as any).rows ?? [])[0]?.primary_artist_id ?? null;
+    notifyArtistMastersReady(artistId, albumId, pressId).catch(() => {});
+
+    res.json({ ok: true, releasedCents: floorCents, earmarkId });
+  });
+
+  // POST /api/admin/early-cut/:queueId/decline — soft-defer with reason.
+  // The album stays in the pool; a future sweep can re-enqueue it if it's
+  // still eligible, so this is a "not now" rather than a permanent block.
+  app.post("/api/admin/early-cut/:queueId/decline", requireAdmin, async (req: any, res) => {
+    const queueId = String(req.params.queueId);
+    const reason = String(req.body?.reason ?? "").slice(0, 1000);
+    const qRows = await db.execute<any>(sql`
+      SELECT status FROM press_early_cut_queue WHERE id = ${queueId} LIMIT 1
+    `);
+    const q = ((qRows as any).rows ?? [])[0];
+    if (!q) return res.status(404).json({ message: "Queue row not found." });
+    if (q.status !== "pending") {
+      return res.status(409).json({ message: `This request was already ${q.status}.` });
+    }
+    await db.execute(sql`
+      UPDATE press_early_cut_queue
+         SET status = 'declined', decline_reason = ${reason || null},
+             decided_at = NOW(), decided_by_user_id = ${req.session.userId}
+       WHERE id = ${queueId}
+    `);
+    res.json({ ok: true });
   });
 }
 

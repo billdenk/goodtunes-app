@@ -339,6 +339,28 @@ export const albums = pgTable("albums", {
   // safe-length warnings per side. Defaults to a value derived from
   // `physicalFormat` if the artist hasn't picked one yet.
   vinylFormat: text("vinyl_format"),
+  // Task #533 — Pool-funded early masters cut. On every paid fan sale a
+  // per-unit slice (the "press earmark") is set aside into a per-album
+  // press funding pool sized to exactly cover the picked tier's
+  // minimum-run press cost. These two columns are the running derived
+  // totals (the authoritative per-event rows live in
+  // `album_press_pool_ledger`); we denorm the sums here so the SellPanel
+  // popover, AdminAlbum readout, and the eligibility evaluator can read
+  // `available = accrued - released` without aggregating the ledger on
+  // every request. The pool starts at zero on rollout — sales that
+  // happened before this task landed do NOT retroactively contribute.
+  pressPoolAccruedCents: integer("press_pool_accrued_cents").notNull().default(0),
+  pressPoolReleasedCents: integer("press_pool_released_cents").notNull().default(0),
+  // Artist opt-in for the early cut (gate #2 of three). Default OFF —
+  // the artist ticks the SellPanel checkbox after seeing the cost
+  // breakdown for their currently-picked POR tier. We record WHICH
+  // tier + format they consented against so re-picking a different
+  // format/tier invalidates the consent (the server clears these
+  // columns when the SKU tier changes), forcing a fresh tick.
+  earlyCutConsentAt: timestamp("early_cut_consent_at"),
+  earlyCutConsentByUserId: varchar("early_cut_consent_by_user_id"),
+  earlyCutConsentForTierName: text("early_cut_consent_for_tier_name"),
+  earlyCutConsentForFormat: text("early_cut_consent_for_format"),
   ...softDeleteCols,
 }, (t) => ({
   legacyGogoodsIdUniq: uniqueIndex("albums_legacy_gogoods_id_uniq")
@@ -2880,6 +2902,7 @@ export const PAYOUT_EARMARK_SOURCE_KINDS = [
   "referral_credit",
   "fulfillment_fee",
   "vendor_payout",
+  "early_cut",
 ] as const;
 export type PayoutEarmarkSourceKind = (typeof PAYOUT_EARMARK_SOURCE_KINDS)[number];
 export const PAYOUT_EARMARK_STATUSES = [
@@ -3036,6 +3059,15 @@ export const manufacturers = pgTable("manufacturers", {
     (): any => fulfillmentPartners.id,
     { onDelete: "set null" },
   ),
+  // Task #533 — One-time super-admin consent that GoodTunes may
+  // auto-stage an early masters cut for this press's albums once their
+  // per-album pool covers the picked tier's minimum-run floor (gate #1
+  // of three). Null = never consented; the eligibility evaluator
+  // refuses to enqueue an early cut for any album homed to a press that
+  // hasn't switched this on. `autoTriggerConsentBy` is the user id that
+  // flipped it (audit trail only).
+  autoTriggerConsentAt: timestamp("auto_trigger_consent_at"),
+  autoTriggerConsentBy: varchar("auto_trigger_consent_by"),
   createdAt: timestamp("created_at").defaultNow(),
   ...softDeleteCols,
 });
@@ -3718,6 +3750,80 @@ export const pressingOrderRequests = pgTable("pressing_order_requests", {
 
 export type PressingOrderRequest = typeof pressingOrderRequests.$inferSelect;
 export type InsertPressingOrderRequest = typeof pressingOrderRequests.$inferInsert;
+
+// ─── Task #533 — Pool-funded early masters cut ─────────────────────────
+// Authoritative per-event log of contributions to (and releases from)
+// an album's press funding pool. `albums.press_pool_accrued_cents` /
+// `press_pool_released_cents` are the denormalized running sums.
+//   kind='accrue'  — a paid fan sale set aside its per-unit press
+//                    earmark. `sourceOrderId` is the order it came from;
+//                    the partial unique index on (album_id, source_order_id)
+//                    WHERE kind='accrue' makes the accrual idempotent so a
+//                    replayed webhook / double-materialization can't
+//                    double-count. `cents` is the full earmark for the
+//                    order (per-unit earmark × quantity).
+//   kind='release' — an approved early cut drew the press floor back out
+//                    of the pool to fund the masters run. `sourceOrderId`
+//                    is null; `cents` is the press_floor_total snapshot.
+export const albumPressPoolLedger = pgTable(
+  "album_press_pool_ledger",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    albumId: varchar("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // accrue | deaccrue | release
+    cents: integer("cents").notNull(),
+    sourceOrderId: varchar("source_order_id"),
+    note: text("note"),
+    occurredAt: timestamp("occurred_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    accrueOncePerOrder: uniqueIndex("album_press_pool_ledger_accrue_order_uniq")
+      .on(t.albumId, t.sourceOrderId)
+      .where(sql`${t.kind} = 'accrue' AND ${t.sourceOrderId} IS NOT NULL`),
+    // A refund reverses an order's accrual exactly once.
+    deaccrueOncePerOrder: uniqueIndex("album_press_pool_ledger_deaccrue_order_uniq")
+      .on(t.albumId, t.sourceOrderId)
+      .where(sql`${t.kind} = 'deaccrue' AND ${t.sourceOrderId} IS NOT NULL`),
+  }),
+);
+export type AlbumPressPoolLedger = typeof albumPressPoolLedger.$inferSelect;
+export type InsertAlbumPressPoolLedger = typeof albumPressPoolLedger.$inferInsert;
+
+// One row per album that has crossed the early-cut funding threshold
+// with all three consents in place (gate #3 of three — admin approval).
+// The pipeline sweep upserts a `pending` row; an admin approves or
+// declines it from the Early Cut Review queue. Snapshot the cents at
+// enqueue time so the queue card shows the numbers that made it
+// eligible even if later sales/refunds move the live pool.
+export const pressEarlyCutQueue = pgTable(
+  "press_early_cut_queue",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    albumId: varchar("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    pressId: varchar("press_id").notNull(),
+    status: text("status").notNull().default("pending"), // pending | approved | declined
+    pressFloorTotalCents: integer("press_floor_total_cents").notNull(),
+    poolAvailableCents: integer("pool_available_cents").notNull(),
+    unitsSold: integer("units_sold").notNull().default(0),
+    tierName: text("tier_name"),
+    format: text("format"),
+    declineReason: text("decline_reason"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    decidedAt: timestamp("decided_at"),
+    decidedByUserId: varchar("decided_by_user_id"),
+  },
+  (t) => ({
+    onePendingPerAlbum: uniqueIndex("press_early_cut_queue_pending_album_uniq")
+      .on(t.albumId)
+      .where(sql`${t.status} = 'pending'`),
+  }),
+);
+export type PressEarlyCutQueue = typeof pressEarlyCutQueue.$inferSelect;
+export type InsertPressEarlyCutQueue = typeof pressEarlyCutQueue.$inferInsert;
 
 // Task #217 — Pressing-plant print PDF generations.
 //

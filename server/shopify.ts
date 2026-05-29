@@ -526,6 +526,15 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   }
   await db.insert(orderItems).values(itemRows);
 
+  // Task #533 — accrue this paid Shopify sale's per-unit press earmark
+  // into the album's early-cut funding pool. Idempotent per order.
+  {
+    const { accruePressPool } = await import("./earlyCut");
+    await accruePressPool(albumId, order.id, matchedLine.quantity).catch((e) =>
+      console.error(`[shopify] press-pool accrual failed for ${order.id}`, (e as Error)?.message),
+    );
+  }
+
   // Task #246 — Mint a cert_reservations row if the order carries the
   // signed-cert add-on. Window status drives variantKind: in-window =
   // printed (eligible for batch); post-window = digital_only (fan keeps
@@ -692,6 +701,13 @@ async function handleShopifyRefund(payload: { order_id?: number; id?: number }):
     .update(orders)
     .set({ status: "refunded", refundedAt: new Date(), goodDeedNumber: null })
     .where(eq(orders.id, order.id));
+  // Task #533 — back the refunded sale's earmark out of the early-cut pool.
+  if (order.albumId) {
+    const { reversePressPoolForOrder } = await import("./earlyCut");
+    await reversePressPoolForOrder(order.albumId, order.id).catch((e) =>
+      console.error(`[shopify] press-pool reversal failed for ${order.id}`, e?.message),
+    );
+  }
   // Same lock-return logic as the Stripe refund path: only revoke the
   // album unlock if this is the *only* paid order for the customer +
   // album. Other paid orders (direct or another Shopify cart) still
