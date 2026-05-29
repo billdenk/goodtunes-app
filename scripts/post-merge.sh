@@ -2208,3 +2208,97 @@ SQL
 }
 migrate_task_670_pricing_syncs dev  "${DATABASE_URL:-}"
 migrate_task_670_pricing_syncs prod "${PROD_DATABASE_URL:-}"
+
+# ── Task #727 — Reset every configured GoodDeed to $25 / 20% ─────────
+# Bill wants the Printed & Signed GoodDeed® cert upsell to start at $25
+# retail and 20% of the vinyl run. New-cert defaults are handled in the
+# SellPanel; this is the one-time reset of ALREADY-configured certs so
+# old saved values ($12.99 / 100% etc.) don't keep masking the new
+# default.
+#
+# This is a TRUE ONE-TIME backfill, NOT a per-merge reset: a marker row
+# in `post_merge_data_backfills` gates it so a later operator edit (say,
+# bumping a cert back to $30) is never clobbered on the next merge. The
+# whole thing runs in one transaction; the guard + the writes share the
+# session so a half-applied state can't strand the marker.
+#
+# Quantity = round(vinylRun * 0.20) capped at vinylRun, where vinylRun
+# is the album's PRIMARY vinyl SKU planned_quantity (lowest-position
+# vinyl-format SKU with a non-null planned run). Albums whose vinyl run
+# is NULL / "as many as will sell" get the $25 price reset only and keep
+# their existing quantity (20% of an unknown run can't be computed) —
+# those rows are reported in the per-DB summary line below.
+backfill_task_727_gooddeed_25_20() {
+  local label="$1"; local url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-727 gooddeed 25/20 backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_total       integer := 0;
+  v_qty_set     integer := 0;
+  v_price_only  integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills
+    WHERE name = 'task_727_gooddeed_25_20'
+  ) THEN
+    -- Step 1: reset retail to $25 for every configured cert (covers the
+    -- unlimited-run albums too, which keep their existing quantity).
+    UPDATE album_addons
+       SET price_cents = 2500
+     WHERE kind = 'signed_cert';
+    GET DIAGNOSTICS v_total = ROW_COUNT;
+
+    -- Step 2: reset quantity to 20% of the primary vinyl run, rounded
+    -- and capped at the run. Only albums with a fixed vinyl run match.
+    UPDATE album_addons a
+       SET planned_quantity = LEAST(
+             GREATEST(round(v.vinyl_run * 0.20)::int, 0),
+             v.vinyl_run
+           )
+      FROM (
+        SELECT DISTINCT ON (s.album_id)
+               s.album_id,
+               s.planned_quantity AS vinyl_run
+          FROM album_skus s
+         WHERE s.format IN ('12_33_single','12_33_double','12_45','7_45')
+           AND s.planned_quantity IS NOT NULL
+         ORDER BY s.album_id, s.position ASC
+      ) v
+     WHERE a.kind = 'signed_cert'
+       AND a.album_id = v.album_id;
+    GET DIAGNOSTICS v_qty_set = ROW_COUNT;
+
+    v_price_only := v_total - v_qty_set;
+
+    INSERT INTO post_merge_data_backfills (name)
+    VALUES ('task_727_gooddeed_25_20');
+
+    RAISE NOTICE 'task-727 backfill applied: % certs reset to $25, % got 20%% qty, % price-only (unlimited run)',
+      v_total, v_qty_set, v_price_only;
+  ELSE
+    RAISE NOTICE 'task-727 backfill already applied — skipping (operator edits preserved)';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-727 gooddeed 25/20 backfill ok on $label"
+    echo "$out" | grep -i 'task-727' || true
+  else
+    echo "post-merge: WARNING — task-727 gooddeed 25/20 backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_727_gooddeed_25_20 dev  "${DATABASE_URL:-}"
+backfill_task_727_gooddeed_25_20 prod "${PROD_DATABASE_URL:-}"

@@ -7463,12 +7463,12 @@ function GoodDeedPill({
   bodyContainer: HTMLElement | null;
 }) {
   const [active, setActive] = useState(existing?.active ?? false);
-  // Task #612 — new-cert defaults: $35 retail, 20% qty. Bill wants the
+  // Task #727 — new-cert defaults: $25 retail, 20% qty. Bill wants the
   // top-bar starting point to match how GoodDeeds are actually priced.
-  // Only the unsaved/new path uses these defaults — existing certs
-  // still hydrate from their stored values.
+  // (Was $35 under Task #612.) Only the unsaved/new path uses these
+  // defaults — existing certs still hydrate from their stored values.
   const [priceStr, setPriceStr] = useState(
-    existing ? (existing.priceCents / 100).toFixed(2) : "35.00",
+    existing ? (existing.priceCents / 100).toFixed(2) : "25.00",
   );
   const [floorStr, setFloorStr] = useState(
     existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99",
@@ -7588,9 +7588,9 @@ function GoodDeedPill({
     priceCents !== null && costCents !== null ? priceCents - costCents : null;
 
   const storedActive = existing?.active ?? false;
-  // Task #612 — storedPrice matches the new $35 default so opening a
+  // Task #727 — storedPrice matches the new $25 default so opening a
   // fresh pill doesn't read as "dirty" before the operator types.
-  const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "35.00";
+  const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "25.00";
   const storedFloor = existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99";
   const storedQty = existing?.plannedQuantity ?? null;
   const dirty =
@@ -8421,7 +8421,10 @@ function AddonForm({
   }) => void;
 }) {
   const [active, setActive] = useState(existing?.active ?? false);
-  const [price, setPrice] = useState(existing ? (existing.priceCents / 100).toFixed(2) : "12.99");
+  // Task #727 — legacy/Shopify GoodDeed editor new-addon retail default
+  // raised from $12.99 to $25.00 so it doesn't drift from the direct-sell
+  // panel. Quantity controls unchanged.
+  const [price, setPrice] = useState(existing ? (existing.priceCents / 100).toFixed(2) : "25.00");
   const [floor, setFloor] = useState(existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99");
   // Task #121 — quantity mode. Existing rows without a planned quantity
   // (everything pre-#121) default to "unlimited" so we don't invent a
@@ -8471,7 +8474,9 @@ function AddonForm({
       : null;
 
   const storedActive = existing?.active ?? false;
-  const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "12.99";
+  // Task #727 — baseline matches the new $25 default so a fresh legacy
+  // addon form opens clean (was $12.99).
+  const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "25.00";
   const storedFloor = existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99";
   const storedMode: "fixed" | "unlimited" = initialMode;
   const storedQty = existing?.plannedQuantity ?? null;
