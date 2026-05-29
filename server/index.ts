@@ -6,9 +6,68 @@ import { seedCatalog } from "./storage";
 import { prewarmSpotifyToken } from "./lib/spotify";
 import { authKindMiddleware, canonicalHostRedirect } from "./auth/host";
 import { forwardToPostHog, geoFromRequest } from "./analytics";
+import { alertOps } from "./opsAlert";
 
 const app = express();
 app.set("trust proxy", 1);
+
+// Health probe for external uptime monitors. Verifies the process is up
+// AND the database is reachable (a `SELECT 1` with a hard timeout) so the
+// "server is up but the DB is dead" failure mode — which is exactly what
+// the login outage looked like from the outside — reports DOWN, not OK.
+// No auth, no host gating: mounted before everything (even the canonical
+// host redirect) so any monitor on any host gets a straight JSON answer.
+app.get("/api/health", async (_req, res) => {
+  const startedAt = Date.now();
+  const { pool } = await import("./db");
+
+  // Two layers of bounding so a slow/dead DB can't make this probe *worse*
+  // than the outage it detects:
+  //   1. An overall 4s deadline so the endpoint always answers fast.
+  //   2. A driver-level statement_timeout on a dedicated client so the
+  //      SELECT itself can't linger and tie up a pooled connection if the
+  //      deadline wins the race — the client is always released.
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error("health probe timed out")), 4000);
+  });
+
+  const probe = (async () => {
+    const client = await pool.connect();
+    try {
+      await client.query("SET statement_timeout = 3000");
+      await client.query("SELECT 1");
+    } finally {
+      client.release();
+    }
+  })();
+  // If the deadline wins, the probe still settles on its own and releases
+  // its client; swallow its rejection so it never surfaces as unhandled.
+  probe.catch(() => {});
+
+  try {
+    await Promise.race([probe, deadline]);
+    res.status(200).json({
+      status: "ok",
+      db: "ok",
+      uptimeSec: Math.round(process.uptime()),
+      checkMs: Date.now() - startedAt,
+      ts: new Date().toISOString(),
+    });
+  } catch (e: any) {
+    // Don't leak internal failure detail to an unauthenticated probe — the
+    // verbose reason goes to the server log (and the ops alert) instead.
+    console.error(`[health] db probe failed: ${e?.message ?? e}`);
+    res.status(503).json({
+      status: "error",
+      db: "unreachable",
+      checkMs: Date.now() - startedAt,
+      ts: new Date().toISOString(),
+    });
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+});
 
 // Tag every request with `req.authKind` (admin | customer) from the host,
 // and redirect *.replit.app traffic to the canonical subdomain in prod.
@@ -134,6 +193,31 @@ app.use((req, res, next) => {
             },
           ]);
         }
+      }
+
+      // Page on-call for ANY server-side 5xx on an /api route — not just
+      // the admin GETs handled above. This is the net the login outage
+      // fell through: the failing lookup was POST /api/auth/*, which the
+      // admin-only alarm never watched. Throttled + deduped in opsAlert;
+      // strictly fire-and-forget so it can't affect the response.
+      if (res.statusCode >= 500) {
+        const errMsg =
+          (capturedJsonResponse && typeof capturedJsonResponse.message === "string"
+            ? capturedJsonResponse.message
+            : null) || "unknown error";
+        const detail = [
+          `When:    ${new Date().toISOString()}`,
+          `Where:   ${req.method} ${path}`,
+          `Status:  ${res.statusCode}`,
+          `Took:    ${duration}ms`,
+          `Host:    ${req.headers.host ?? "(unknown)"}`,
+          `Message: ${errMsg}`,
+        ].join("\n");
+        alertOps({
+          signature: `${res.statusCode} ${req.method} ${path}`,
+          subject: `[GoodTunes] ${res.statusCode} on ${req.method} ${path}`,
+          detail,
+        });
       }
     }
   });

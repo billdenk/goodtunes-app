@@ -2476,3 +2476,60 @@ SQL
 }
 migrate_task_736_press_mode dev  "${DATABASE_URL:-}"
 migrate_task_736_press_mode prod "${PROD_DATABASE_URL:-}"
+
+# Latent schema drift sweep — objects that landed in shared/schema.ts
+# without a matching post-merge migration, so they never reached main-dev
+# or prod and 500 the moment active code touches them:
+#   - phone_otp_codes.last_sent_at — phoneOtp.ts reads existing.lastSentAt;
+#     the original CREATE TABLE block above predates this column, so existing
+#     DBs need the ALTER (fresh clones get it here too since this runs after).
+#   - shopify_push_log — shopify.ts insert/select on every catalog push.
+#   - print_generations / print_artifacts — storage.ts print-PDF history
+#     (artifacts FK→generations, so create generations first).
+# Idempotent on both DBs so the publish dev→prod diff stays empty.
+migrate_latent_drift_sweep() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping latent-drift sweep on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE phone_otp_codes ADD COLUMN IF NOT EXISTS last_sent_at timestamp NOT NULL DEFAULT now();
+CREATE TABLE IF NOT EXISTS shopify_push_log (
+  id            varchar   PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id      varchar   NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  store_id      varchar   NOT NULL,
+  product_id    varchar   NOT NULL,
+  action        text      NOT NULL,
+  forced        boolean   NOT NULL DEFAULT false,
+  conflicts     text[],
+  actor_user_id varchar,
+  created_at    timestamp NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS print_generations (
+  id                    varchar   PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id              varchar   NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  vendor_id             text      NOT NULL,
+  created_by_user_id    varchar,
+  override_justification text,
+  created_at            timestamp NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS print_artifacts (
+  id             varchar   PRIMARY KEY DEFAULT gen_random_uuid(),
+  generation_id  varchar   NOT NULL REFERENCES print_generations(id) ON DELETE CASCADE,
+  template_id    text      NOT NULL,
+  template_label text      NOT NULL,
+  file_name      text      NOT NULL,
+  asset_url      text      NOT NULL,
+  size_bytes     integer   NOT NULL,
+  created_at     timestamp NOT NULL DEFAULT now()
+);
+SQL
+  then
+    echo "post-merge: latent-drift sweep ok on $label"
+  else
+    echo "post-merge: WARNING — latent-drift sweep failed on $label (continuing)"
+  fi
+}
+migrate_latent_drift_sweep dev  "${DATABASE_URL:-}"
+migrate_latent_drift_sweep prod "${PROD_DATABASE_URL:-}"

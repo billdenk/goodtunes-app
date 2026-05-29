@@ -271,6 +271,26 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 
+// Generic operational-alert email used by server/opsAlert.ts. Plain,
+// unbranded, monospace body so on-call reads the signal fast. All
+// throttling/dedup lives in opsAlert.ts; this only handles delivery and
+// reuses the same Resend transport (synthetic-recipient guard + failure
+// ring buffer) as every other template.
+export async function sendOpsAlertEmail(
+  toEmail: string,
+  subject: string,
+  bodyText: string,
+): Promise<SendResult> {
+  const html = `
+    <div style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; max-width: 640px; margin: 0 auto; padding: 24px; color: #1a1a1a;">
+      <div style="font-size: 13px; color: #FF5470; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 700;">GoodTunes ops alert</div>
+      <h1 style="font-size: 18px; margin: 10px 0 16px; font-weight: 700; line-height: 1.3;">${escapeHtml(subject)}</h1>
+      <pre style="white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.5; background: #f4f4f7; padding: 16px; border-radius: 8px; color: #1a1a1a; margin: 0;">${escapeHtml(bodyText)}</pre>
+    </div>
+  `;
+  return sendViaResend("ops-alert", toEmail, subject, html, bodyText);
+}
+
 // Task #256 — Notify super-admins that a customer landed on the admin
 // shell and is asking to be promoted. One email per (customer, day) is
 // enforced by the caller via admin_access_requests.last_notified_at;
