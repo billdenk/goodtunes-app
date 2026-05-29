@@ -2418,3 +2418,34 @@ SQL
 }
 migrate_partner_notifications dev  "${DATABASE_URL:-}"
 migrate_partner_notifications prod "${PROD_DATABASE_URL:-}"
+
+# Task #734 — Stream-elsewhere credited tracks. Added four nullable
+# columns that the publish dev→prod diff failed to carry, so prod was
+# left missing them: customer_users.favorite_streaming_service (the
+# fan's preferred service for handoffs) plus songs.stream_only /
+# songs.spotify_track_url / songs.apple_music_track_url (per-track
+# stream-elsewhere routing). The missing customer_users column 500s the
+# full-column login lookup (Google/Apple/email all funnel through it),
+# and the missing songs columns 500 any songs select (player/track
+# lists). Idempotent ADD COLUMN IF NOT EXISTS on both DBs so login is
+# restored, the player loads, and the publish dev→prod diff stays empty.
+migrate_task_734_stream_elsewhere() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-734 stream-elsewhere migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE customer_users ADD COLUMN IF NOT EXISTS favorite_streaming_service text;
+ALTER TABLE songs ADD COLUMN IF NOT EXISTS stream_only boolean NOT NULL DEFAULT false;
+ALTER TABLE songs ADD COLUMN IF NOT EXISTS spotify_track_url text;
+ALTER TABLE songs ADD COLUMN IF NOT EXISTS apple_music_track_url text;
+SQL
+  then
+    echo "post-merge: task-734 stream-elsewhere migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-734 stream-elsewhere migration failed on $label (continuing)"
+  fi
+}
+migrate_task_734_stream_elsewhere dev  "${DATABASE_URL:-}"
+migrate_task_734_stream_elsewhere prod "${PROD_DATABASE_URL:-}"
