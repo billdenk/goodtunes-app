@@ -606,6 +606,21 @@ export const songs = pgTable("songs", {
   // trackNumber so legacy albums keep cutting in digital order.
   vinylSide: text("vinyl_side"),
   vinylOrder: integer("vinyl_order"),
+  // Task #734 — "stream-elsewhere" track type. A credits-bearing track
+  // GoodTunes does NOT host: no uploaded master (`audioUrl` stays null),
+  // but it carries full SuperCredits and a per-track link out to the
+  // streaming services that DO host it. When true, the fan player must
+  // NEVER attempt in-app playback (no Mux, no raw audio) — taps route to
+  // the streaming handoff instead. Distinct from "master not ready yet",
+  // which pauses; a stream-only track never plays here by design.
+  streamOnly: boolean("stream_only").notNull().default(false),
+  // Canonical per-track web links for the streaming handoff. Pasted or
+  // looked up via the Spotify API in the album editor. Spotify is the
+  // confirmed source; Apple Music is optional when a per-track link is
+  // available. Album-level fallbacks live on the album row
+  // (`albums.spotifyUrl` / `albums.appleMusicUrl`).
+  spotifyTrackUrl: text("spotify_track_url"),
+  appleMusicTrackUrl: text("apple_music_track_url"),
   legacyGogoodsId: text("legacy_gogoods_id"),
   ...softDeleteCols,
 }, (t) => ({
@@ -1415,6 +1430,14 @@ export const customerUsers = pgTable("customer_users", {
   contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
   signupCompletedAt: timestamp("signup_completed_at"),
+  // Task #734 — the fan's preferred streaming service for "stream-
+  // elsewhere" handoffs (credits-bearing tracks GoodTunes doesn't host).
+  // One of "spotify" / "apple_music". NULL until the fan makes their
+  // first pick from the service picker; once set, future handoffs go
+  // straight to that service without re-asking. Changeable any time from
+  // the Apple-style settings screen. Mirrored to localStorage client-
+  // side for instant/anon resolution.
+  favoriteStreamingService: text("favorite_streaming_service"),
 }, (t) => ({
   legacyGogoodsIdUniq: uniqueIndex("customer_users_legacy_gogoods_id_uniq")
     .on(t.legacyGogoodsId)

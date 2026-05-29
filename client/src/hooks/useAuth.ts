@@ -22,6 +22,9 @@ interface AuthUser {
   contactPhone?: string | null;
   signupCompletedAt?: string | null;
   isPrivateRelay?: boolean;
+  // Task #734 — fan's chosen streaming service for stream-elsewhere
+  // handoffs ("spotify" | "apple_music"). Null until they pick one.
+  favoriteStreamingService?: string | null;
 }
 
 // Login can return one of:
@@ -141,7 +144,7 @@ export function useAuth() {
   });
 
   const updateProfileMutation = useMutation({
-    mutationFn: async (data: { displayName?: string; username?: string; realName?: string | null }) => {
+    mutationFn: async (data: { displayName?: string; username?: string; realName?: string | null; favoriteStreamingService?: string | null }) => {
       const res = await apiRequest("PUT", "/api/me", data);
       return res.json() as Promise<AuthUser>;
     },

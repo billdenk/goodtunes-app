@@ -41,6 +41,23 @@ Surfaces:
 
 Same slot can later host partner-brand lockups ("Gear by Gretsch", "Strings by D'Addario") on sponsored albums. One slot, two kinds of signal — design the slot now.
 
+## Stream-elsewhere tracks (credits without the master)
+
+A third track type sits alongside owned masters and previews: **stream-only** tracks. GoodTunes carries the full SuperCredits™ for these but does **not** host the audio — the operator adds the track to a GoodTunes album and pastes a Spotify link (Apple Music optional), and the fan is handed off to their own streaming service to actually listen. Masters never leave our infrastructure, and a track we never hosted never tries to.
+
+**Operator (admin):** the Add Track form has a stream-only toggle. With it on, the audio-upload requirement drops (no Mux ingest, no probe) and a Spotify / Apple Music URL pair appears. A **Look up** button resolves a pasted Spotify URL to title/artist/artwork so the operator can confirm the right track before saving. The track stays fully creditable — writers, performers, instruments, gear links all work exactly as on a hosted track.
+
+**Fan-facing gating** (this is the important part):
+
+- **Album WITH SuperCredits** (any production credit, or any writer/performer on any track) → per-track handoff: tapping a stream-only row sends the fan to their service for *that track*, and the `SuperCredits™` badge shows over the album art. The big primary control reads **"Stream this."** Shuffle and download are hidden when every track is stream-only (nothing to shuffle locally, nothing to download).
+- **Album WITHOUT SuperCredits** → a single album-level **"open whole album on Spotify"** handoff and **no badge**. There's no per-track handoff and no credit theater on an album that hasn't earned the badge.
+
+The three-dots → **View Credits** entry is unchanged on every track type.
+
+**Streaming-service preference (handoff target):** the first time a fan taps a stream handoff, a picker sheet asks which service to use (only services with a link for that release are tappable). The pick is saved and reused so every later tap opens that service directly — no picker. It persists in `localStorage` (`gt:fav-streaming-service`) for guest fans and mirrors to the customer profile (`PUT /api/me` → `favoriteStreamingService`) for signed-in fans so it follows them across devices. Fans change or clear it from **Account → Settings → Streaming Service**, an Apple-Settings-style sub-screen (tap the active service again to clear it back to first-tap-picker behavior).
+
+**Data shape:** `songs.streamOnly` (bool), `songs.spotifyTrackUrl`, `songs.appleMusicTrackUrl`; album-level `spotifyUrl` / `appleMusicUrl` for the no-credit album handoff; `customerUsers.favoriteStreamingService`. The fan player (`PlayerContext`) hard-guards stream-only songs — they can never reach Mux or a raw audio URL.
+
 ## Chat / vendor messaging (demo)
 
 > **Hidden on the gear surfaces (current state).** The Chat tab is off the bottom nav, and the vendor chat-bubbles have been removed from the InstrumentSheet "Where to buy" rows and the VendorSheet (top bar + instruments tab). Those were the only entry points to start a thread, so the chat demo below is effectively dark for fans. The chat store + route still exist (existing threads/unread count survive); restore the bubbles to bring it back. The notes below describe the design if/when it returns.

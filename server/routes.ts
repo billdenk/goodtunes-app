@@ -26,7 +26,7 @@ import {
 } from "@shared/jobAlerts";
 import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
 import { geoFromRequest, forwardToPostHog, isPostHogEnabled } from "./analytics";
-import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, type SpotifyArtistCandidate } from "./lib/spotify";
+import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, fetchSpotifyTrackByUrl, searchTrackCandidates, type SpotifyArtistCandidate } from "./lib/spotify";
 
 const scryptAsync = promisify(scrypt);
 
@@ -359,6 +359,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       contactPhone: (c as any).contactPhone ?? null,
       signupCompletedAt: (c as any).signupCompletedAt ?? null,
       isPrivateRelay,
+      // Task #734 — the fan's saved streaming-service preference for
+      // stream-elsewhere handoffs. NULL until they pick one.
+      favoriteStreamingService: (c as any).favoriteStreamingService ?? null,
     };
   }
 
@@ -623,10 +626,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.put("/api/me", requireAuth, async (req, res) => {
-    const { displayName, username, realName } = req.body;
+    const { displayName, username, realName, favoriteStreamingService } = req.body;
     const updates: any = {};
     if (displayName) updates.displayName = displayName;
     if (realName !== undefined) updates.realName = realName || null;
+    // Task #734 — customer-only streaming-service preference. Whitelist
+    // the known services; "" / null clears it back to "ask me next time".
+    if (favoriteStreamingService !== undefined) {
+      if (req.session.kind !== "customer") {
+        return res.status(400).json({ message: "Only fan accounts have a streaming preference" });
+      }
+      const v = favoriteStreamingService ? String(favoriteStreamingService) : null;
+      if (v !== null && v !== "spotify" && v !== "apple_music") {
+        return res.status(400).json({ message: "Unknown streaming service" });
+      }
+      updates.favoriteStreamingService = v;
+    }
     if (username) {
       const usernameNorm = String(username).trim().replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, "");
       if (usernameNorm.length < 3) return res.status(400).json({ message: "Username must be at least 3 characters (letters, numbers, underscore)" });
@@ -5898,7 +5913,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/admin/songs", requireAdmin, async (req, res) => {
-    const { albumId, title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl, servedSpecs, sourceSpecs } = req.body ?? {};
+    const { albumId, title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl, servedSpecs, sourceSpecs, streamOnly, spotifyTrackUrl, appleMusicTrackUrl } = req.body ?? {};
     if (!albumId || !title || trackNumber == null) {
       return res.status(400).json({ message: "albumId, title, trackNumber are required" });
     }
@@ -5963,9 +5978,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // values from any previous master that shared the same row.
       ...(probedServed ? audioSpecsToColumnsForceWrite(probedServed, "served") : {}),
       ...(probedSource ? audioSpecsToColumnsForceWrite(probedSource, "source") : {}),
+      // Task #734 — stream-elsewhere track: no master, just SuperCredits +
+      // links out. When marked stream-only we never ingest to Mux below
+      // (there's no audioUrl anyway). Persist the per-track links so the
+      // fan handoff can route to the right service.
+      streamOnly: !!streamOnly,
+      spotifyTrackUrl: spotifyTrackUrl ? String(spotifyTrackUrl).trim() : null,
+      appleMusicTrackUrl: appleMusicTrackUrl ? String(appleMusicTrackUrl).trim() : null,
     } as any);
     // Kick off Mux ingest the moment the master lands in object storage —
-    // fire-and-forget; the admin UI polls muxStatus.
+    // fire-and-forget; the admin UI polls muxStatus. Stream-only tracks
+    // have no master so this is a no-op (maybeIngestToMux guards on URL).
     void maybeIngestToMux(song.id, (song as any).audioUrl);
     return res.status(201).json(song);
   });
@@ -5998,7 +6021,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         message: "Your edit was sent to GoodTunes for review.",
       });
     }
-    const { title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl, syncedLyrics, instrumental, isExplicit, previewStartMs, previewEndMs, servedSpecs, sourceSpecs } = req.body ?? {};
+    const { title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl, syncedLyrics, instrumental, isExplicit, previewStartMs, previewEndMs, servedSpecs, sourceSpecs, streamOnly, spotifyTrackUrl, appleMusicTrackUrl } = req.body ?? {};
     // Task #79 — body-shape gating: the outer middleware enforces
     // edit_metadata + lock for ANY song PUT, but writes that touch the
     // master file additionally require upload_masters. This keeps a
@@ -6176,6 +6199,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       } else {
         updates.syncedLyrics = null;
       }
+    }
+    // Task #734 — stream-elsewhere fields. Marking a track stream-only
+    // means GoodTunes never hosts the master; the SuperCredits + handoff
+    // links carry it. Persist the per-track Spotify / Apple links so the
+    // fan handoff can route to the right service.
+    if (streamOnly !== undefined) updates.streamOnly = Boolean(streamOnly);
+    if (spotifyTrackUrl !== undefined) {
+      updates.spotifyTrackUrl = spotifyTrackUrl ? String(spotifyTrackUrl).trim() : null;
+    }
+    if (appleMusicTrackUrl !== undefined) {
+      updates.appleMusicTrackUrl = appleMusicTrackUrl ? String(appleMusicTrackUrl).trim() : null;
     }
     // If the master URL actually changed, the previously-attached Mux
     // asset is now stale. Reset to 'errored' BEFORE the update commits so
@@ -11246,6 +11280,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
     }
     return res.json({ query: q, candidates: result.candidates });
+  });
+
+  // Task #734 — stream-elsewhere track lookup. The admin Add-Track form
+  // (when "stream-only" is on) posts either a pasted Spotify track URL OR
+  // a free-text query; we resolve it to canonical track metadata so the
+  // operator can confirm the right track and prefill the SuperCredits.
+  // A pasted URL takes priority over a search query.
+  app.post("/api/admin/spotify/track-lookup", requireAdmin, async (req, res) => {
+    if (!spotifyConfigured()) {
+      return res.status(503).json({ message: "Spotify is not configured." });
+    }
+    const url = String(req.body?.url ?? "").trim();
+    const query = String(req.body?.query ?? "").trim();
+    if (url) {
+      const match = await fetchSpotifyTrackByUrl(url);
+      if (!match) {
+        return res.status(404).json({ message: "Couldn't resolve that Spotify track link." });
+      }
+      return res.json({ match, candidates: [match] });
+    }
+    if (query) {
+      const candidates = await searchTrackCandidates(query, 8);
+      return res.json({ match: candidates[0] ?? null, candidates });
+    }
+    return res.status(400).json({ message: "Provide a Spotify track URL or a search query." });
   });
 
   // iTunes Search API for artist-name → Apple Music profile resolution.

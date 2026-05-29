@@ -455,3 +455,92 @@ export async function searchArtistCandidates(
   return r.ok ? r.candidates : [];
 }
 
+// Task #734 — stream-elsewhere track lookup. When Bill adds a
+// credits-bearing track GoodTunes doesn't host, he pastes a Spotify
+// track URL (or searches by title) and we pull back the canonical
+// open.spotify.com track URL + title/artist/art so the admin form can
+// prefill the SuperCredits and confirm the right track. Server-to-
+// server (client-credentials), same token plumbing as artist lookup.
+export type SpotifyTrackMatch = {
+  id: string;
+  name: string;
+  spotifyUrl: string;
+  artistNames: string[];
+  albumName: string | null;
+  artworkUrl: string | null;
+  durationMs: number | null;
+};
+
+function mapSpotifyTrack(t: any): SpotifyTrackMatch | null {
+  const spotifyUrl = t?.external_urls?.spotify;
+  if (!t?.id || !spotifyUrl) return null;
+  const artwork =
+    (t?.album?.images ?? []).slice().sort((a: any, b: any) => (b.width ?? 0) - (a.width ?? 0))[0]?.url ?? null;
+  return {
+    id: String(t.id),
+    name: String(t.name ?? ""),
+    spotifyUrl: String(spotifyUrl),
+    artistNames: Array.isArray(t.artists) ? t.artists.map((a: any) => String(a?.name ?? "")).filter(Boolean) : [],
+    albumName: t?.album?.name ? String(t.album.name) : null,
+    artworkUrl: artwork,
+    durationMs: typeof t?.duration_ms === "number" ? t.duration_ms : null,
+  };
+}
+
+async function fetchSpotifyJson(url: string): Promise<any | null> {
+  let token = await getAccessToken();
+  if (!token) return null;
+  const fetchOnce = async (bearer: string) =>
+    fetchWithTimeout(url, { headers: { Authorization: `Bearer ${bearer}` } }, SEARCH_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetchOnce(token);
+  } catch (err) {
+    console.warn("[spotify] track fetch errored", (err as Error)?.message);
+    return null;
+  }
+  if (res.status === 401) {
+    token = await getAccessToken(true);
+    if (!token) return null;
+    try {
+      res = await fetchOnce(token);
+    } catch {
+      return null;
+    }
+  }
+  if (!res.ok) {
+    console.warn("[spotify] track fetch failed", res.status);
+    return null;
+  }
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+// Resolve a pasted Spotify track URL/URI to its canonical metadata.
+// Accepts https://open.spotify.com/track/{id} (with optional locale
+// segment + query) and spotify:track:{id}. Returns null on any failure.
+export async function fetchSpotifyTrackByUrl(rawUrl: string): Promise<SpotifyTrackMatch | null> {
+  const m =
+    /\/track\/([A-Za-z0-9]+)/.exec(rawUrl) ||
+    /spotify:track:([A-Za-z0-9]+)/.exec(rawUrl);
+  const trackId = m?.[1];
+  if (!trackId) return null;
+  const json = await fetchSpotifyJson(`https://api.spotify.com/v1/tracks/${encodeURIComponent(trackId)}`);
+  if (!json) return null;
+  return mapSpotifyTrack(json);
+}
+
+// Search Spotify for tracks by free text (title, or "title artist").
+// Returns the top N candidates for the admin picker.
+export async function searchTrackCandidates(rawQuery: string, limit = 5): Promise<SpotifyTrackMatch[]> {
+  const q = rawQuery.trim();
+  if (!q) return [];
+  const url = `${SEARCH_URL}?q=${encodeURIComponent(q)}&type=track&limit=${Math.min(20, Math.max(1, limit))}`;
+  const json = await fetchSpotifyJson(url);
+  const items = (json?.tracks?.items ?? []) as any[];
+  return items.map(mapSpotifyTrack).filter((t): t is SpotifyTrackMatch => t !== null).slice(0, limit);
+}
+

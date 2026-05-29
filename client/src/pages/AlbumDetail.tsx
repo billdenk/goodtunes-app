@@ -12,6 +12,16 @@ import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { BuySheet } from "@/components/checkout/BuySheet";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
+import { StreamServicePickerSheet } from "@/components/StreamServicePickerSheet";
+import {
+  getFavoriteStreamingService,
+  setFavoriteStreamingService,
+  availableServices,
+  linkForService,
+  openStreamLink,
+  type StreamingServiceId,
+  type StreamLinks,
+} from "@/lib/streamingService";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { toast } from "@/hooks/use-toast";
 import { IconButton } from "@/components/ui/IconButton";
@@ -115,7 +125,7 @@ function AlbumDetailMobile() {
   // behavior since IAP isn't wired and the player is for owned content.
   const previewFirst = buyEnabled && !isOwned;
   const queueHasUpcoming = queue.length - currentIndex - 1 > 0;
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
   const favSongs = useFavoriteSongs();
   const [showCert, setShowCert] = useState(false);
   // Task #44 — opens the Buy bottom sheet (format picker + signed-cert
@@ -131,6 +141,13 @@ function AlbumDetailMobile() {
   const [shareToast, setShareToast] = useState("");
   const [showPlaylistPicker, setShowPlaylistPicker] = useState<Song | null>(null);
   const [showAlbumPlaylistPicker, setShowAlbumPlaylistPicker] = useState(false);
+  // Task #734 — stream-elsewhere handoff. When a fan taps a "Stream this"
+  // control and hasn't chosen a service yet (or it's missing for this
+  // release), we stash the candidate links + subtitle and open the picker.
+  const [streamPicker, setStreamPicker] = useState<{
+    links: StreamLinks;
+    subtitle?: string;
+  } | null>(null);
   const [activeVideo, setActiveVideo] = useState<AlbumVideo | null>(null);
   const [photoIndex, setPhotoIndex] = useState<number | null>(null);
   const [songMenuFor, setSongMenuFor] = useState<{ song: Song; rect: DOMRect } | null>(null);
@@ -202,6 +219,9 @@ function AlbumDetailMobile() {
     isExplicit: boolean;
     goodTunesReleaseDate: string | null;
     streamingReleaseDate: string | null;
+    // Album-level streaming handoff links (Task #734).
+    spotifyUrl: string | null;
+    appleMusicUrl: string | null;
     // Denormalized record-label entity (or null). Comes from the album's
     // LEFT JOIN on `labels` so we render name/logo without a second fetch.
     label: {
@@ -223,6 +243,10 @@ function AlbumDetailMobile() {
       // plain-text `lyrics` field across `duration`.
       syncedLyrics: { timeMs: number; text: string }[] | null;
       isExplicit: boolean;
+      // Task #734 — stream-elsewhere track + handoff links.
+      streamOnly: boolean;
+      spotifyTrackUrl: string | null;
+      appleMusicTrackUrl: string | null;
     }[];
   };
   const { data: apiAlbum, isLoading: isAlbumLoading } = useQuery<ApiAlbum>({
@@ -256,6 +280,8 @@ function AlbumDetailMobile() {
         type: apiAlbum.type,
         description: apiAlbum.description ?? staticAlbum?.description ?? "",
         isExplicit: apiAlbum.isExplicit,
+        spotifyUrl: apiAlbum.spotifyUrl ?? staticAlbum?.spotifyUrl ?? null,
+        appleMusicUrl: apiAlbum.appleMusicUrl ?? staticAlbum?.appleMusicUrl ?? null,
       };
     }
     return staticAlbum;
@@ -275,6 +301,9 @@ function AlbumDetailMobile() {
           audioUrl: s.audioUrl ?? undefined,
           syncedLyrics: s.syncedLyrics ?? null,
           isExplicit: !!s.isExplicit,
+          streamOnly: !!s.streamOnly,
+          spotifyTrackUrl: s.spotifyTrackUrl ?? null,
+          appleMusicTrackUrl: s.appleMusicTrackUrl ?? null,
         }));
     }
     return album ? getSongsByAlbum(id) : [];
@@ -339,6 +368,85 @@ function AlbumDetailMobile() {
   // Helper: live API credits for a song, falling back to the static seed.
   const getCredits = (songId: string): TrackCredits | undefined =>
     creditsBySongId.get(songId) ?? getCreditsForSong(songId);
+
+  // Task #734 — gating. The SuperCredits badge + per-track handoff only show
+  // on albums that actually carry credits (any album-production credit, or
+  // any writer/performer on any track). Albums with no credits get a single
+  // album-level "open whole album on Spotify" handoff instead.
+  const albumHasSuperCredits = useMemo(() => {
+    if (productionCredits.length > 0) return true;
+    for (const c of Array.from(creditsBySongId.values())) {
+      if (c.writers.length > 0 || c.performers.length > 0) return true;
+    }
+    // Fall back to the static seed for songs not yet migrated into the DB.
+    return songs.some((s) => {
+      const c = getCreditsForSong(s.id);
+      return !!c && ((c.writers?.length ?? 0) > 0 || (c.performers?.length ?? 0) > 0);
+    });
+  }, [productionCredits, creditsBySongId, songs]);
+  // Every track is stream-only → GoodTunes hosts no master, so the primary
+  // control becomes "Stream this".
+  const isStreamOnlyAlbum =
+    songs.length > 0 && songs.every((s) => !!s.streamOnly);
+
+  // Hand the fan off to their chosen streaming service. If they've picked a
+  // favorite and a link exists for it, open it straight away; otherwise open
+  // the picker (first tap) which saves the choice for next time.
+  const handleStreamHandoff = (links: StreamLinks, subtitle?: string) => {
+    const services = availableServices(links);
+    if (services.length === 0) return;
+    const fav =
+      (user?.favoriteStreamingService as StreamingServiceId | undefined) ??
+      getFavoriteStreamingService();
+    if (fav) {
+      const url = linkForService(fav, links);
+      if (url) {
+        openStreamLink(url);
+        return;
+      }
+    }
+    // Only one service available + no saved favorite → skip the picker.
+    if (services.length === 1) {
+      const url = linkForService(services[0], links);
+      if (url) {
+        openStreamLink(url);
+        return;
+      }
+    }
+    setStreamPicker({ links, subtitle });
+  };
+  const handleStreamSong = (song: Song) => {
+    handleStreamHandoff(
+      { spotify: song.spotifyTrackUrl, apple: song.appleMusicTrackUrl },
+      song.title,
+    );
+  };
+  const handleStreamAlbum = () => {
+    // Prefer album-level links; fall back to the first stream-only track so a
+    // credited album with only per-track links still has a working primary
+    // control.
+    const firstStream = songs.find((s) => s.streamOnly);
+    handleStreamHandoff(
+      {
+        spotify: (album as any)?.spotifyUrl ?? firstStream?.spotifyTrackUrl ?? null,
+        apple: (album as any)?.appleMusicUrl ?? firstStream?.appleMusicTrackUrl ?? null,
+      },
+      album?.title,
+    );
+  };
+  // Picker pick → save favorite (localStorage + customer profile) and stream.
+  const handlePickStreamService = (id: StreamingServiceId) => {
+    setFavoriteStreamingService(id);
+    if (user?.kind === "customer") {
+      updateProfile({ favoriteStreamingService: id }).catch(() => {});
+    }
+    const links = streamPicker?.links;
+    setStreamPicker(null);
+    if (links) {
+      const url = linkForService(id, links);
+      if (url) openStreamLink(url);
+    }
+  };
   // Helper: every track on this album where this performer is credited.
   // Matches by personId when available, falling back to creditId so a
   // single unlinked snapshot row still resolves. Unlinked performers won't
@@ -638,6 +746,9 @@ function AlbumDetailMobile() {
             trackNumber: s.trackNumber,
             duration: s.duration,
             isExplicit: s.isExplicit,
+            streamOnly: s.streamOnly,
+            spotifyTrackUrl: s.spotifyTrackUrl,
+            appleMusicTrackUrl: s.appleMusicTrackUrl,
           }))}
           label={apiAlbum?.label ?? null}
           ownedNums={ownedNums}
@@ -648,6 +759,13 @@ function AlbumDetailMobile() {
           nativeDownloadsEnabled={nativeDownloadsEnabled}
           hasAlbumCredits={productionCredits.length > 0}
           onOpenAlbumCredits={() => setShowAlbumCredits(true)}
+          hasSuperCredits={albumHasSuperCredits}
+          isStreamOnlyAlbum={isStreamOnlyAlbum}
+          onStreamSong={(s) => {
+            const full = songs.find((x) => x.id === s.id);
+            if (full) handleStreamSong(full);
+          }}
+          onStreamAlbum={handleStreamAlbum}
           bonusSlot={<AlbumBonusContent albumId={album.id} />}
           lineupSlot={<AlbumLineupRail albumId={album.id} onPickMember={(name) => navigate(`/artist/${encodeURIComponent(name)}`)} />}
           onBack={() => navigate("/collection")}
@@ -726,6 +844,15 @@ function AlbumDetailMobile() {
             songTitle={`${album.title} · ${songs.length} song${songs.length === 1 ? "" : "s"}`}
             heading="Add Album to Playlist"
             onClose={() => setShowAlbumPlaylistPicker(false)}
+          />
+        )}
+
+        {streamPicker && (
+          <StreamServicePickerSheet
+            available={availableServices(streamPicker.links)}
+            subtitle={streamPicker.subtitle}
+            onPick={handlePickStreamService}
+            onClose={() => setStreamPicker(null)}
           />
         )}
 

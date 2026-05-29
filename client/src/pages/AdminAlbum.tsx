@@ -73,6 +73,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SiSpotify, SiApplemusic } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -3206,6 +3207,21 @@ function AddTrackForm({
   const [audioFilename, setAudioFilename] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  // Task #734 — "stream-elsewhere" track: a credits-bearing song
+  // GoodTunes does NOT host. When on, the operator pastes a Spotify
+  // track link (optionally an Apple Music link), we look it up to confirm
+  // + prefill title/duration, and the row saves with no master. The fan
+  // reaches it via the "Stream this" handoff instead of in-app playback.
+  const [streamOnly, setStreamOnly] = useState(false);
+  const [spotifyUrl, setSpotifyUrl] = useState("");
+  const [appleMusicUrl, setAppleMusicUrl] = useState("");
+  const [lookupResult, setLookupResult] = useState<{
+    name: string;
+    artistNames: string[];
+    albumName: string | null;
+    artworkUrl: string | null;
+    spotifyUrl: string;
+  } | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   // Staleness guard for duration probes. Each new attach bumps the token;
@@ -3353,6 +3369,42 @@ function AddTrackForm({
     setAudioFilename(null);
   };
 
+  // Task #734 — resolve a pasted Spotify track link (or, if the field
+  // holds free text, a title search) into canonical track metadata so
+  // the operator can confirm the right track and prefill title/duration.
+  const lookupMut = useMutation({
+    mutationFn: async () => {
+      const raw = spotifyUrl.trim();
+      const isUrl = /open\.spotify\.com\/.*track|spotify:track:/i.test(raw);
+      const res = await apiRequest("POST", "/api/admin/spotify/track-lookup", {
+        ...(isUrl ? { url: raw } : { query: raw }),
+      });
+      return res.json() as Promise<{ match: any | null; candidates: any[] }>;
+    },
+    onSuccess: (data) => {
+      const m = data.match;
+      if (!m) {
+        setError("No Spotify track found. Paste the track link or refine your search.");
+        return;
+      }
+      setError(null);
+      setSpotifyUrl(m.spotifyUrl);
+      setLookupResult({
+        name: m.name,
+        artistNames: m.artistNames ?? [],
+        albumName: m.albumName ?? null,
+        artworkUrl: m.artworkUrl ?? null,
+        spotifyUrl: m.spotifyUrl,
+      });
+      if (!title.trim() && m.name) setTitle(m.name);
+      if (!durationText.trim() && typeof m.durationMs === "number" && m.durationMs > 0) {
+        setDurationText(formatSecondsAsMmSs(Math.round(m.durationMs / 1000)));
+      }
+    },
+    onError: (e: any) =>
+      setError(e?.message || "Spotify lookup failed. Try again in a moment."),
+  });
+
   const createMut = useMutation({
     mutationFn: async (input: {
       title: string;
@@ -3361,6 +3413,9 @@ function AddTrackForm({
       audioSourceUrl: string | null;
       servedSpecs: AudioSpecsPayload | null;
       sourceSpecs: AudioSpecsPayload | null;
+      streamOnly: boolean;
+      spotifyTrackUrl: string | null;
+      appleMusicTrackUrl: string | null;
     }) => {
       const res = await apiRequest("POST", "/api/admin/songs", {
         albumId,
@@ -3374,6 +3429,15 @@ function AddTrackForm({
         // with null spec columns until the backfill sweep catches up.
         ...(input.servedSpecs ? { servedSpecs: input.servedSpecs } : {}),
         ...(input.sourceSpecs ? { sourceSpecs: input.sourceSpecs } : {}),
+        // Task #734 — stream-elsewhere fields. When on, no master ships;
+        // the per-track links carry the fan handoff.
+        ...(input.streamOnly
+          ? {
+              streamOnly: true,
+              spotifyTrackUrl: input.spotifyTrackUrl,
+              appleMusicTrackUrl: input.appleMusicTrackUrl,
+            }
+          : {}),
       });
       return res.json();
     },
@@ -3392,6 +3456,12 @@ function AddTrackForm({
       setPendingServedSpecs(null);
       setPendingSourceSpecs(null);
       setAudioFilename(null);
+      // Task #734 — clear the stream-only fields too so the next row
+      // starts clean. Keep the `streamOnly` toggle ON so Bill can rip
+      // through a run of stream-elsewhere tracks without re-toggling.
+      setSpotifyUrl("");
+      setAppleMusicUrl("");
+      setLookupResult(null);
       setError(null);
       queueMicrotask(() => titleRef.current?.focus());
     },
@@ -3412,6 +3482,34 @@ function AddTrackForm({
     if (!trimmed) {
       setError("Title is required.");
       titleRef.current?.focus();
+      return;
+    }
+    // Task #734 — stream-elsewhere path. No master, no probe; we just
+    // need a Spotify link and (default) duration. The fan handoff routes
+    // off the per-track links so a Spotify link is required.
+    if (streamOnly) {
+      const sp = spotifyUrl.trim();
+      if (!sp) {
+        setError("Paste a Spotify track link (or look one up) for a stream-elsewhere track.");
+        return;
+      }
+      const parsed = parseDurationInput(durationText);
+      if (parsed.error) {
+        setError(parsed.error);
+        return;
+      }
+      setError(null);
+      createMut.mutate({
+        title: trimmed,
+        duration: parsed.seconds,
+        audioUrl: null,
+        audioSourceUrl: null,
+        servedSpecs: null,
+        sourceSpecs: null,
+        streamOnly: true,
+        spotifyTrackUrl: sp,
+        appleMusicTrackUrl: appleMusicUrl.trim() || null,
+      });
       return;
     }
     // Click-faster-than-probe guard. When audio is attached but the
@@ -3463,6 +3561,9 @@ function AddTrackForm({
       audioSourceUrl,
       servedSpecs: pendingServedSpecs,
       sourceSpecs: pendingSourceSpecs,
+      streamOnly: false,
+      spotifyTrackUrl: null,
+      appleMusicTrackUrl: null,
     });
   };
 
@@ -3576,21 +3677,58 @@ function AddTrackForm({
           className="w-20 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[13.5px] text-slate-900 placeholder:text-slate-400 tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-50"
           data-testid="input-new-track-duration"
         />
+        {/* Task #734 — stream-elsewhere toggle. On = no master; the row
+            saves with Spotify/Apple links and the fan reaches it via the
+            "Stream this" handoff. Off = normal hosted master flow. */}
         <button
           type="button"
-          onClick={() => fileRef.current?.click()}
+          onClick={() => {
+            setStreamOnly((v) => {
+              const next = !v;
+              if (next) {
+                // Switching to stream-only — clear any attached master so
+                // we never ship audio with a stream-elsewhere row.
+                clearAttachedAudio();
+              } else {
+                setSpotifyUrl("");
+                setAppleMusicUrl("");
+                setLookupResult(null);
+              }
+              return next;
+            });
+            if (error) setError(null);
+          }}
           disabled={createMut.isPending || uploading}
-          aria-label="Attach audio file"
-          title="Attach audio file"
-          className="px-2 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center"
-          data-testid="button-attach-new-track-audio"
+          aria-pressed={streamOnly}
+          title="Stream-elsewhere track (not hosted by GoodTunes)"
+          className={[
+            "px-2 h-8 rounded-md border text-[11.5px] font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-1",
+            streamOnly
+              ? "bg-[var(--brand-purple)]/10 border-[var(--brand-purple)]/40 text-[var(--brand-purple)]"
+              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50",
+          ].join(" ")}
+          data-testid="button-toggle-stream-only"
         >
-          {uploading ? (
-            <Spinner className="w-3.5 h-3.5 animate-spin text-[var(--brand-blue)]" />
-          ) : (
-            <Upload className="w-3.5 h-3.5" />
-          )}
+          <SiSpotify className="w-3.5 h-3.5" />
+          Stream-only
         </button>
+        {!streamOnly && (
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={createMut.isPending || uploading}
+            aria-label="Attach audio file"
+            title="Attach audio file"
+            className="px-2 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center"
+            data-testid="button-attach-new-track-audio"
+          >
+            {uploading ? (
+              <Spinner className="w-3.5 h-3.5 animate-spin text-[var(--brand-blue)]" />
+            ) : (
+              <Upload className="w-3.5 h-3.5" />
+            )}
+          </button>
+        )}
         <button
           type="button"
           onClick={submit}
@@ -3639,6 +3777,89 @@ function AddTrackForm({
           >
             <XIcon className="w-3 h-3" />
           </button>
+        </div>
+      )}
+      {/* Task #734 — stream-elsewhere inputs. Only shown when the
+          "Stream-only" toggle is on: paste a Spotify track link (or type a
+          title to search), look it up to confirm + prefill, and optionally
+          paste an Apple Music link. No master is uploaded for these. */}
+      {streamOnly && (
+        <div className="mt-2 ml-9 space-y-2" data-testid="section-stream-only-links">
+          <div className="flex items-center gap-2">
+            <SiSpotify className="w-4 h-4 text-[#1DB954] flex-shrink-0" />
+            <input
+              type="text"
+              value={spotifyUrl}
+              onChange={(e) => {
+                setSpotifyUrl(e.target.value);
+                if (error) setError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (spotifyUrl.trim() && !lookupMut.isPending) lookupMut.mutate();
+                }
+              }}
+              placeholder="Spotify track link — or type a title to search"
+              disabled={createMut.isPending}
+              className="flex-1 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-50"
+              data-testid="input-new-track-spotify-url"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (spotifyUrl.trim()) lookupMut.mutate();
+              }}
+              disabled={createMut.isPending || lookupMut.isPending || !spotifyUrl.trim()}
+              className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1"
+              data-testid="button-lookup-spotify-track"
+            >
+              {lookupMut.isPending ? (
+                <Spinner className="w-3.5 h-3.5 animate-spin text-[var(--brand-blue)]" />
+              ) : (
+                "Look up"
+              )}
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <SiApplemusic className="w-4 h-4 text-[#FA243C] flex-shrink-0" />
+            <input
+              type="text"
+              value={appleMusicUrl}
+              onChange={(e) => setAppleMusicUrl(e.target.value)}
+              placeholder="Apple Music track link (optional)"
+              disabled={createMut.isPending}
+              className="flex-1 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-50"
+              data-testid="input-new-track-apple-url"
+            />
+          </div>
+          {lookupResult && (
+            <div
+              className="flex items-center gap-2 rounded-md bg-white border border-slate-200 px-2 py-1.5"
+              data-testid="card-stream-track-match"
+            >
+              {lookupResult.artworkUrl ? (
+                <img
+                  src={lookupResult.artworkUrl}
+                  alt=""
+                  className="w-8 h-8 rounded object-cover flex-shrink-0"
+                />
+              ) : (
+                <Music className="w-4 h-4 text-slate-400 flex-shrink-0" />
+              )}
+              <div className="min-w-0">
+                <div className="text-[12.5px] font-semibold text-slate-900 truncate">
+                  {lookupResult.name}
+                </div>
+                <div className="text-[11px] text-slate-500 truncate">
+                  {[lookupResult.artistNames.join(", "), lookupResult.albumName]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
       <p className="text-[11px] text-slate-500 mt-1.5 pl-9">

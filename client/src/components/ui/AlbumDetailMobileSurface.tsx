@@ -6,6 +6,7 @@ import {
   type RefObject,
 } from "react";
 import { ChevronLeft, Share, MoreHorizontal, Info } from "lucide-react";
+import { SiSpotify, SiApplemusic } from "react-icons/si";
 import { IconButton } from "@/components/ui/IconButton";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 
@@ -20,6 +21,9 @@ export interface AlbumDetailMobileSurfaceAlbum {
   isExplicit?: boolean;
   genre?: string | null;
   priceCents?: number | null;
+  // Album-level streaming handoff links (Task #734).
+  spotifyUrl?: string | null;
+  appleMusicUrl?: string | null;
 }
 
 export interface AlbumDetailMobileSurfaceSong {
@@ -28,6 +32,10 @@ export interface AlbumDetailMobileSurfaceSong {
   trackNumber: number;
   duration: number;
   isExplicit?: boolean | null;
+  // Task #734 — stream-elsewhere track + per-track handoff links.
+  streamOnly?: boolean;
+  spotifyTrackUrl?: string | null;
+  appleMusicTrackUrl?: string | null;
 }
 
 export interface AlbumDetailMobileSurfaceLabel {
@@ -52,6 +60,19 @@ export interface AlbumDetailMobileSurfaceProps {
    *  Play/Shuffle row and `onOpenAlbumCredits` is invoked on tap. */
   hasAlbumCredits?: boolean;
   onOpenAlbumCredits?: () => void;
+  /** Task #734 — album carries SuperCredits. Gates the SuperCredits badge
+   *  over the artwork and the per-track stream handoff affordance. */
+  hasSuperCredits?: boolean;
+  /** Every track on the album is stream-only (GoodTunes hosts no master),
+   *  so the primary Play control becomes a "Stream this" handoff and the
+   *  Shuffle/Download controls are suppressed. */
+  isStreamOnlyAlbum?: boolean;
+  /** Hands the fan off to their chosen streaming service for one track. */
+  onStreamSong?: (song: AlbumDetailMobileSurfaceSong) => void;
+  /** Hands the fan off to their chosen streaming service for the whole
+   *  album (used by the album-level control on no-credit stream-only
+   *  albums and the "Stream this" primary control). */
+  onStreamAlbum?: () => void;
   bonusSlot?: ReactNode;
   lineupSlot?: ReactNode;
   /** Optional ref attached to the scroll container — used by the fan
@@ -103,6 +124,10 @@ export function AlbumDetailMobileSurface({
   nativeDownloadsEnabled = false,
   hasAlbumCredits = false,
   onOpenAlbumCredits,
+  hasSuperCredits = false,
+  isStreamOnlyAlbum = false,
+  onStreamSong,
+  onStreamAlbum,
   bonusSlot,
   lineupSlot,
   scrollRef,
@@ -292,7 +317,7 @@ export function AlbumDetailMobileSurface({
         <div style={{ background: "#00062B" }}>
           <div className="pt-32 px-6 flex justify-center">
             <div
-              className="w-[72%] max-w-[300px] rounded-xl overflow-hidden"
+              className="relative w-[72%] max-w-[300px] rounded-xl overflow-hidden"
               style={{
                 aspectRatio: "1 / 1",
                 boxShadow: "0 18px 50px rgba(0,0,0,0.55)",
@@ -304,6 +329,26 @@ export function AlbumDetailMobileSurface({
                   alt=""
                   className="w-full h-full object-cover block"
                 />
+              )}
+              {/* Task #734 — SuperCredits™ badge. Only shown on albums that
+                  actually carry credits, so it doubles as the "this album
+                  has full liner notes" signal even when the master streams
+                  elsewhere. */}
+              {hasSuperCredits && (
+                <div
+                  className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 backdrop-blur-md"
+                  style={{ background: "rgba(0,6,43,0.55)" }}
+                  data-testid="badge-supercredits"
+                >
+                  <Info
+                    strokeWidth={2.2}
+                    className="w-3.5 h-3.5"
+                    style={{ color: "var(--brand-mint)" }}
+                  />
+                  <span className="text-[11px] font-semibold tracking-tight text-white">
+                    SuperCredits™
+                  </span>
+                </div>
               )}
             </div>
           </div>
@@ -364,47 +409,77 @@ export function AlbumDetailMobileSurface({
 
         {/* Play / Shuffle / Add bar */}
         <div className="flex items-center justify-center gap-3 px-5 mt-1 mb-3">
-          <button
-            type="button"
-            onClick={onShuffle}
-            aria-label="Shuffle album"
-            className="w-12 h-12 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
-            style={{ background: "rgba(255,255,255,0.08)" }}
-            data-testid="button-shuffle-album"
-          >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+          {/* Shuffle is meaningless when GoodTunes hosts no master, so a
+              stream-only album hides it. */}
+          {!isStreamOnlyAlbum && (
+            <button
+              type="button"
+              onClick={onShuffle}
+              aria-label="Shuffle album"
+              className="w-12 h-12 rounded-full flex items-center justify-center text-white active:scale-[0.94] transition-transform flex-shrink-0"
+              style={{ background: "rgba(255,255,255,0.08)" }}
+              data-testid="button-shuffle-album"
             >
-              <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={onPlayAll}
-            className="flex items-center justify-center gap-2.5 h-12 px-10 rounded-full font-semibold text-[17px] active:scale-[0.98] transition-transform"
-            style={{ background: "#fff", color: "#00062B" }}
-            data-testid="button-play-album"
-          >
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinejoin="round"
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
+              </svg>
+            </button>
+          )}
+          {isStreamOnlyAlbum ? (
+            /* Task #734 — the master lives on a streaming service, so the
+               primary control hands the fan off instead of playing in-app. */
+            <button
+              type="button"
+              onClick={onStreamAlbum}
+              className="flex items-center justify-center gap-2.5 h-12 px-9 rounded-full font-semibold text-[17px] text-white active:scale-[0.98] transition-transform"
+              style={{ background: "linear-gradient(135deg, var(--brand-purple), var(--brand-blue))" }}
+              data-testid="button-stream-album"
             >
-              <path d="M8 5.14v14l11-7-11-7z" />
-            </svg>
-            Play
-          </button>
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M7 17L17 7M9 7h8v8" />
+              </svg>
+              Stream this
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onPlayAll}
+              className="flex items-center justify-center gap-2.5 h-12 px-10 rounded-full font-semibold text-[17px] active:scale-[0.98] transition-transform"
+              style={{ background: "#fff", color: "#00062B" }}
+              data-testid="button-play-album"
+            >
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              >
+                <path d="M8 5.14v14l11-7-11-7z" />
+              </svg>
+              Play
+            </button>
+          )}
           {ownedNums.length === 0 && album.priceCents != null && onOpenBuy && (
             <button
               type="button"
@@ -442,7 +517,7 @@ export function AlbumDetailMobileSurface({
               <Info strokeWidth={2} />
             </IconButton>
           )}
-          {nativeDownloadsEnabled && (
+          {nativeDownloadsEnabled && !isStreamOnlyAlbum && (
             <button
               type="button"
               onClick={onToggleAlbumDownload}
@@ -502,7 +577,16 @@ export function AlbumDetailMobileSurface({
               >
                 <button
                   type="button"
-                  onClick={() => onPlaySong?.(song)}
+                  onClick={() => {
+                    if (song.streamOnly) {
+                      // Per-track handoff on credited albums; otherwise the
+                      // single album-level handoff (no per-track control).
+                      if (hasSuperCredits) onStreamSong?.(song);
+                      else onStreamAlbum?.();
+                    } else {
+                      onPlaySong?.(song);
+                    }
+                  }}
                   className="flex items-center gap-4 flex-1 min-w-0 h-full text-left"
                 >
                   <div className="flex-shrink-0 flex items-center gap-1.5">
@@ -537,6 +621,21 @@ export function AlbumDetailMobileSurface({
                             />
                           ))}
                         </div>
+                      ) : song.streamOnly ? (
+                        <svg
+                          width="15"
+                          height="15"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="rgba(255,255,255,0.45)"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden
+                          data-testid={`icon-stream-${song.id}`}
+                        >
+                          <path d="M7 17L17 7M9 7h8v8" />
+                        </svg>
                       ) : (
                         <span
                           className="text-[15px] tabular-nums"

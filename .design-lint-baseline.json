@@ -8090,6 +8090,11 @@
     "snippet": "className=\"flex-shrink-0 px-3.5 py-1.5 rounded-full text-[13px] font-semibold transition-all\""
   },
   {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/components/StreamServicePickerSheet.tsx",
+    "snippet": "className=\"w-10 h-1 rounded-full mx-auto mb-5\""
+  },
+  {
     "rule": "brand-hex-literal",
     "file": "client/src/components/ui/AlbumDesktopSidebar.tsx",
     "snippet": "export const BRAND_BG = \"#00062B\";"
@@ -8237,6 +8242,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "<span className=\"text-[11px] font-semibold tracking-tight text-white\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
     "snippet": "className=\"text-white text-[22px] font-bold leading-tight tracking-tight flex items-center justify-center gap-2 flex-wrap\""
   },
   {
@@ -8248,6 +8258,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
     "snippet": "className=\"text-[13px] mt-1 flex items-center justify-center gap-1.5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "className=\"flex items-center justify-center gap-2.5 h-12 px-9 rounded-full font-semibold text-[17px] text-white active:scale-[0.98] transition-transform\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -8688,6 +8703,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Account.tsx",
     "snippet": "<h1 className=\"text-white text-[17px] font-semibold\">Privacy</h1>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Account.tsx",
+    "snippet": "<h1 className=\"text-white text-[17px] font-semibold\">Streaming Service</h1>"
   },
   {
     "rule": "naked-icon-button",
@@ -9762,6 +9782,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "\"px-2 h-8 rounded-md border text-[11.5px] font-semibold disabled:opacity-50 inline-flex items-center justify-center gap-1\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "className=\"px-2 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center\""
   },
   {
@@ -9778,6 +9803,26 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "className=\"mt-1.5 ml-9 inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "className=\"flex-1 h-8 rounded-md border border-slate-300 bg-white px-2.5 text-[13px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:bord"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "className=\"px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50 inline-flex items-center gap-1\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"text-[12.5px] font-semibold text-slate-900 truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"text-[11px] text-slate-500 truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14198,11 +14243,6 @@
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "{!isFull && <div className=\"w-10 h-1 bg-white/20 rounded-full mx-auto mb-4\" />}"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"w-8 h-8 rounded-full flex items-center justify-center text-white/70 active:opacity-70 flex-shrink-0\""
   },
   {
     "rule": "player-touch-target-too-small",

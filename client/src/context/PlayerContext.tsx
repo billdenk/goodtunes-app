@@ -604,7 +604,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     // surface assembled the queue (album page, artist page, Songs tab,
     // playlists, ⋯-menu).
     const hydratedSong = hydrate(song);
-    const rawQueue = newQueue ?? [song];
+    // Task #734 — stream-elsewhere tracks (credits-bearing songs GoodTunes
+    // does NOT host) must never enter the player. They carry no master, so
+    // there is nothing to play in-app; the fan reaches them via the
+    // "Stream this" handoff on the album surface instead. Guard here so any
+    // surface that accidentally queues one (⋯-menu, shuffle, autoplay)
+    // simply no-ops rather than starting a silent/forever-loading instance.
+    if ((hydratedSong as any).streamOnly) return;
+    const rawQueue = (newQueue ?? [song]).filter((s) => !(hydrate(s) as any).streamOnly);
     const q = rawQueue.map(hydrate);
     const idx = q.findIndex((s) => s.id === hydratedSong.id);
     setQueue(q);
@@ -687,6 +694,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const addToQueue = useCallback((song: PlayerSong) => {
     const h = hydrate(song);
+    // Task #734 — never queue a stream-elsewhere track; it has no master.
+    if ((h as any).streamOnly) return;
     setQueue((q) => [...q, h]);
   }, [hydrate]);
 
@@ -694,6 +703,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // If nothing is playing, start it now so the action isn't silently a no-op.
   const playNext = useCallback((song: PlayerSong) => {
     const h = hydrate(song);
+    // Task #734 — stream-elsewhere tracks never enter the player queue.
+    if ((h as any).streamOnly) return;
     setQueue((q) => {
       if (q.length === 0) {
         setCurrentIndex(0);
@@ -710,6 +721,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // Same fallback: start playback if there's nothing in the queue yet.
   const playLast = useCallback((song: PlayerSong) => {
     const h = hydrate(song);
+    // Task #734 — stream-elsewhere tracks never enter the player queue.
+    if ((h as any).streamOnly) return;
     setQueue((q) => {
       if (q.length === 0) {
         setCurrentIndex(0);

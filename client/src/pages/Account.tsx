@@ -10,7 +10,16 @@ import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { clearLocalAnalytics } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 import { ChevronLeft, Pencil } from "lucide-react";
+import { SiSpotify, SiApplemusic } from "react-icons/si";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
+import {
+  STREAMING_SERVICES,
+  getFavoriteStreamingService,
+  setFavoriteStreamingService,
+  serviceLabel,
+  isStreamingServiceId,
+  type StreamingServiceId,
+} from "@/lib/streamingService";
 
 // Task #74 — minimal order shape for the "My Orders" card on the
 // profile. We only need a few fields to render the count + most-recent
@@ -196,7 +205,7 @@ const PRIVACY_POLICY_URL = "https://goodtunes.music/privacy";
 const profilePhotoKey = (userId: string) => `gt:profile-photo:${userId}`;
 
 export function Account() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateProfile } = useAuth();
   const [, navigate] = useLocation();
   // Customer OAuth callback redirects to `/account#token=<jwt>` (server
   // sets a session cookie too, but the SPA's Bearer token in
@@ -225,6 +234,25 @@ export function Account() {
   const [clearing, setClearing] = useState(false);
   const [clearedToast, setClearedToast] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  // Task #734 — favorite streaming service. Sourced from the customer
+  // profile when signed in, falling back to the localStorage copy that
+  // also serves guest fans. Mirrored back to both on change.
+  const [favService, setFavService] = useState<StreamingServiceId | null>(
+    () => getFavoriteStreamingService(),
+  );
+  useEffect(() => {
+    if (user?.favoriteStreamingService && isStreamingServiceId(user.favoriteStreamingService)) {
+      setFavService(user.favoriteStreamingService);
+    }
+  }, [user?.favoriteStreamingService]);
+  const [showStreaming, setShowStreaming] = useState(false);
+  const handlePickStreamingService = (id: StreamingServiceId | null) => {
+    setFavService(id);
+    setFavoriteStreamingService(id);
+    if (user?.kind === "customer") {
+      updateProfile({ favoriteStreamingService: id }).catch(() => {});
+    }
+  };
 
   const handleClearHistory = async () => {
     setClearing(true);
@@ -441,6 +469,26 @@ export function Account() {
               history + the public Privacy Policy link). */}
           <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Settings</p>
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
+            {/* Task #734 — favorite streaming service. Tapping pushes a
+                sub-screen to pick/clear the service GoodTunes hands off to
+                when a fan streams a non-hosted track. */}
+            <button
+              type="button"
+              onClick={() => setShowStreaming(true)}
+              className="w-full flex items-center justify-between px-4 py-3.5 text-left active:bg-white/[0.06] border-b"
+              style={{ borderColor: "rgba(255,255,255,0.07)" }}
+              data-testid="row-streaming-service"
+            >
+              <span className="text-white text-base">Streaming Service</span>
+              <span className="flex items-center gap-1.5">
+                <span className="text-white/45 text-base" data-testid="text-streaming-service-current">
+                  {favService ? serviceLabel(favService) : "Not set"}
+                </span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
+                  <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+            </button>
             {([
               { label: "Notifications", onClick: undefined },
               { label: "Privacy", onClick: () => setShowPrivacy(true) },
@@ -533,6 +581,14 @@ export function Account() {
             clearing={clearing}
             clearedToast={clearedToast}
             onClearHistory={handleClearHistory}
+          />
+        )}
+
+        {showStreaming && (
+          <StreamingServiceSheet
+            current={favService}
+            onPick={handlePickStreamingService}
+            onClose={() => setShowStreaming(false)}
           />
         )}
       </section>
@@ -764,6 +820,104 @@ function PrivacySheet({
         </div>
         <p className="text-white/35 text-xs leading-relaxed px-1">
           Opens goodtunes.music/privacy in your browser.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────── StreamingServiceSheet ──────────────────────
+ * Task #734 — Apple-Settings-style sub-screen for picking the streaming
+ * service GoodTunes hands off to when a fan plays a track GoodTunes
+ * doesn't host. The choice is saved (localStorage + customer profile)
+ * so the in-album "Stream this" control skips the picker next time. A
+ * checkmark marks the current pick; tapping the active one again clears
+ * it (back to first-tap picker behavior).
+ * ──────────────────────────────────────────────────────────────────── */
+const STREAMING_ICON: Record<StreamingServiceId, { Icon: typeof SiSpotify; color: string }> = {
+  spotify: { Icon: SiSpotify, color: "#1DB954" },
+  apple_music: { Icon: SiApplemusic, color: "#FA243C" },
+};
+
+function StreamingServiceSheet({
+  current,
+  onPick,
+  onClose,
+}: {
+  current: StreamingServiceId | null;
+  onPick: (id: StreamingServiceId | null) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="absolute inset-0 z-[60] flex flex-col"
+      style={{ background: "#00062B" }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Streaming Service"
+      data-testid="sheet-streaming-service"
+    >
+      <div className="relative flex items-center justify-center pt-12 pb-3 px-4">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Back"
+          className="absolute left-3 top-11 w-11 h-11 rounded-full flex items-center justify-center active:scale-[0.94] transition-transform"
+          style={{ background: "rgba(255,255,255,0.10)" }}
+          data-testid="button-streaming-back"
+        >
+          <ChevronLeft className="w-[22px] h-[22px] text-white" style={{ transform: "translateX(-1px)" }} strokeWidth={2.2} />
+        </button>
+        <h1 className="text-white text-[17px] font-semibold">Streaming Service</h1>
+      </div>
+
+      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 pb-10">
+        <p className="text-white/55 text-xs leading-relaxed mb-4 px-1">
+          Some tracks on GoodTunes are credited here but stream on another service. Pick where you'd like to listen — we'll send you straight there.
+        </p>
+        <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
+          {STREAMING_SERVICES.map((svc, i, arr) => {
+            const { Icon, color } = STREAMING_ICON[svc.id];
+            const active = current === svc.id;
+            return (
+              <button
+                key={svc.id}
+                type="button"
+                onClick={() => onPick(active ? null : svc.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-white/[0.06] ${i < arr.length - 1 ? "border-b" : ""}`}
+                style={i < arr.length - 1 ? { borderColor: "rgba(255,255,255,0.07)" } : undefined}
+                data-testid={`row-streaming-pick-${svc.id}`}
+              >
+                <div
+                  className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: "rgba(255,255,255,0.08)" }}
+                >
+                  <Icon className="w-5 h-5" style={{ color }} />
+                </div>
+                <span className="flex-1 text-white text-base">{svc.label}</span>
+                {active && (
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="var(--brand-mint)"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    data-testid={`icon-streaming-active-${svc.id}`}
+                  >
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-white/35 text-xs leading-relaxed px-1">
+          {current
+            ? `Tap ${serviceLabel(current)} again to clear it — we'll ask each time instead.`
+            : "Until you pick one, we'll ask which service to use the first time you stream."}
         </p>
       </div>
     </div>

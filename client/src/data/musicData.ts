@@ -72,6 +72,11 @@ export interface Album {
   purchases?: CertPurchase[];
   videos?: AlbumVideo[];
   photos?: AlbumPhoto[];
+  // Album-level streaming handoff links (Task #734). Used for the
+  // album-level "open whole album on Spotify" control on stream-only
+  // albums that carry no SuperCredits.
+  spotifyUrl?: string | null;
+  appleMusicUrl?: string | null;
 }
 
 export interface Song {
@@ -99,6 +104,13 @@ export interface Song {
   muxAssetId?: string | null;
   muxPlaybackId?: string | null;
   muxStatus?: "preparing" | "ready" | "errored" | string | null;
+  // Task #734 — stream-elsewhere tracks. When `streamOnly` is true,
+  // GoodTunes does NOT host the master: the player must never attempt
+  // Mux/raw playback and instead hands the fan off to their chosen
+  // streaming service via these links.
+  streamOnly?: boolean;
+  spotifyTrackUrl?: string | null;
+  appleMusicTrackUrl?: string | null;
 }
 
 // SuperCredits™
