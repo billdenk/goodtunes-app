@@ -82,6 +82,21 @@ export interface AddPeopleMenuProps {
    * 403 toast. Admin pages default true (super_admin always passes).
    */
   canInviteSubusers?: boolean;
+  /**
+   * Task #699 — the entity's website URL (press website for a
+   * manufacturer). Used by Add Admin to flag a non-blocking warning when
+   * the invitee's email domain doesn't match the press domain. Optional;
+   * when absent the warning simply never fires.
+   */
+  entityWebsiteUrl?: string | null;
+  /**
+   * Task #699 — gate the "Add Admin" item independently of the menu. A
+   * press Staff teammate holds `invite_subusers` (so the menu shows and
+   * they can Invite Artist) but is NOT an Owner/Admin, so they can't mint
+   * admin grants. Defaults true (super_admin / owner pages). The server
+   * 403s the partner-contacts POST regardless of this flag.
+   */
+  canAddAdmins?: boolean;
 }
 
 type PersonLite = { id: string; name: string; photoUrl: string | null };
@@ -134,12 +149,14 @@ export function AddPeopleMenu(props: AddPeopleMenuProps) {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuItem
-            onSelect={() => setOpenDialog("admin")}
-            data-testid={`menu-${props.testIdPrefix}-add-admin`}
-          >
-            Add Admin
-          </DropdownMenuItem>
+          {props.canAddAdmins !== false && (
+            <DropdownMenuItem
+              onSelect={() => setOpenDialog("admin")}
+              data-testid={`menu-${props.testIdPrefix}-add-admin`}
+            >
+              Add Admin
+            </DropdownMenuItem>
+          )}
           {showAmbassador && (
             <DropdownMenuItem
               onSelect={() => setOpenDialog("ambassador")}
@@ -212,6 +229,7 @@ function PersonPicker({
   onPrefilled,
   prefillOnly,
   onPrefillFields,
+  pasteSecondary,
 }: {
   value: PersonLite | null;
   onChange: (p: PersonLite | null) => void;
@@ -219,6 +237,11 @@ function PersonPicker({
   testIdPrefix: string;
   /** Adds a "Search Spotify" fallback button (only used by Invite Artist). */
   enableSpotify?: boolean;
+  /** Task #699 — when true, search is the primary (top) input and the
+      paste-a-URL affordance collapses behind a secondary "Paste a link
+      instead" toggle at the bottom, so it never reads as a second
+      primary path competing with search. Used by Invite Artist. */
+  pasteSecondary?: boolean;
   /** Fires after a paste-a-URL prefill resolves with extra scraped
       fields the parent dialog can hydrate (e.g. AttachContactDialog
       prefilling its Role input from JSON-LD `jobTitle`). */
@@ -242,6 +265,10 @@ function PersonPicker({
 }) {
   const [q, setQ] = useState("");
   const [spotifyQuery, setSpotifyQuery] = useState<string | null>(null);
+  // Task #699 — when pasteSecondary, the paste-a-URL block is collapsed
+  // behind a "Paste a link instead" toggle so search is the single
+  // primary path. Defaults open in the legacy (paste-first) layout.
+  const [showPaste, setShowPaste] = useState(false);
   const [pasteUrl, setPasteUrl] = useState("");
   const [pasteError, setPasteError] = useState<string | null>(null);
   // Staged scrape result — the operator confirms (or discards) this
@@ -470,8 +497,8 @@ function PersonPicker({
   const showSpotifyButton =
     enableSpotify && q.trim().length >= 2 && !spotifyQuery;
 
-  return (
-    <div className="space-y-2">
+  const pasteBlock = (
+    <>
       <div className="flex gap-2">
         <Input
           type="url"
@@ -575,11 +602,11 @@ function PersonPicker({
           </div>
         </div>
       )}
-      {!prefillOnly && (
-        <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 pt-1">
-          or search
-        </div>
-      )}
+    </>
+  );
+
+  const searchBlock = (
+    <>
       {!prefillOnly && (
         <Input
           type="text"
@@ -702,6 +729,43 @@ function PersonPicker({
           )}
         </div>
       )}
+    </>
+  );
+
+  return (
+    <div className="space-y-2">
+      {pasteSecondary ? (
+        // Task #699 — search-first layout: People search + Spotify import
+        // are the primary path; paste-a-URL collapses behind a secondary
+        // toggle so it never competes as a second primary affordance.
+        <>
+          {searchBlock}
+          {!prefillOnly &&
+            (showPaste ? (
+              pasteBlock
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowPaste(true)}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-700 inline-flex items-center gap-1 pt-1"
+                data-testid={`button-${testIdPrefix}-show-paste`}
+              >
+                <Plus className="w-3 h-3" />
+                Paste a link instead
+              </button>
+            ))}
+        </>
+      ) : (
+        <>
+          {pasteBlock}
+          {!prefillOnly && (
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 pt-1">
+              or search
+            </div>
+          )}
+          {searchBlock}
+        </>
+      )}
     </div>
   );
 }
@@ -743,6 +807,15 @@ function AttachContactDialog(
   const [title, setTitleField] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  // Task #699 — press teammate tier (Owner/Admin vs Staff). Only shown
+  // for a press (manufacturer) admin invite; ignored by every other
+  // partner kind. Staff get view + invite-artists only.
+  const [level, setLevel] = useState<"owner_admin" | "staff">("owner_admin");
+  // Operator-supplied/scraped photo carried through to the new Person so
+  // the press invite link can show a face. Hydrated from a paste-a-URL
+  // prefill in New Contact mode.
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const isPressAdmin = props.kind === "admin" && props.entityKind === "manufacturer";
   // Invite-Ready state — populated after submit when the email doesn't
   // resolve to an existing users row so we minted a partner-scoped
   // invite. The dialog flips to a single "Copy link / Done" surface
@@ -763,9 +836,33 @@ function AttachContactDialog(
     setTitleField("");
     setEmail("");
     setPhone("");
+    setLevel("owner_admin");
+    setPhotoUrl(null);
     setInvite(null);
     setCopied(false);
   }
+
+  // Task #699 — non-blocking warning when the invitee's email domain
+  // doesn't match the press's website domain (e.g. inviting a personal
+  // gmail to a press whose site is hellbenderrecords.com). Purely
+  // advisory: the operator can still send. Only evaluated for a press
+  // admin invite with both a website on file and a valid-looking email.
+  const domainMismatch = useMemo(() => {
+    if (!isPressAdmin) return null;
+    const site = (props.entityWebsiteUrl || "").trim();
+    const em = email.trim();
+    if (!site || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) return null;
+    const norm = (h: string) => h.toLowerCase().replace(/^www\./, "");
+    let siteHost = "";
+    try {
+      siteHost = norm(new URL(site.includes("://") ? site : `https://${site}`).hostname);
+    } catch {
+      return null;
+    }
+    const emailHost = norm(em.split("@")[1] ?? "");
+    if (!siteHost || !emailHost) return null;
+    return emailHost === siteHost ? null : { emailHost, siteHost };
+  }, [isPressAdmin, props.entityWebsiteUrl, email]);
 
   // When a picker selection resolves to an existing Person row,
   // hydrate the Email + Phone fields from the admin-only contact_email
@@ -823,6 +920,11 @@ function AttachContactDialog(
         title: title.trim() || null,
         email: email.trim(),
         phone: phone.trim() || null,
+        // Task #699 — press teammate tier + scraped photo. Server ignores
+        // `level` for non-manufacturer kinds; photoUrl only lands on a
+        // newly-minted Person (existing rows keep their photo).
+        level: isPressAdmin ? level : undefined,
+        photoUrl: mode === "new" ? photoUrl ?? undefined : undefined,
       });
       return { mode: "admin" as const, body: await r.json() };
     },
@@ -989,6 +1091,9 @@ function AttachContactDialog(
                     if (f.title && !title.trim()) setTitleField(f.title);
                     if (f.email && !email.trim()) setEmail(f.email);
                     if (f.phone && !phone.trim()) setPhone(f.phone);
+                    // Task #699 — carry the scraped photo onto the new
+                    // Person so the press invite shows a face.
+                    if (f.photoUrl && !photoUrl) setPhotoUrl(f.photoUrl);
                   }}
                 />
                 <div>
@@ -1048,6 +1153,48 @@ function AttachContactDialog(
                 <p className="text-xs text-slate-500 mt-1 leading-snug">
                   If they already have a GoodTunes admin account we'll grant the partner role; otherwise we'll mint an invite link you can copy.
                 </p>
+                {domainMismatch && (
+                  <p
+                    className="text-xs text-amber-700 mt-1.5 leading-snug"
+                    data-testid={`text-${props.testIdPrefix}-${props.kind}-domain-warning`}
+                  >
+                    Heads up — <strong>@{domainMismatch.emailHost}</strong> doesn't
+                    match this press's domain (<strong>{domainMismatch.siteHost}</strong>).
+                    You can still send if that's expected.
+                  </p>
+                )}
+              </div>
+            )}
+            {isPressAdmin && (
+              // Task #699 — Owner/Admin vs Staff. Owner/Admin get the full
+              // press scope; Staff can view the press and invite artists
+              // but can't change settings, masters, payouts, or catalog.
+              <div data-testid={`field-${props.testIdPrefix}-${props.kind}-level`}>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                  Access level
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { v: "owner_admin" as const, label: "Owner / Admin", hint: "Full access" },
+                    { v: "staff" as const, label: "Staff", hint: "View + invite artists" },
+                  ]).map((opt) => (
+                    <button
+                      key={opt.v}
+                      type="button"
+                      onClick={() => setLevel(opt.v)}
+                      className={[
+                        "rounded-lg border px-3 py-2 text-left transition-colors",
+                        level === opt.v
+                          ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5"
+                          : "border-slate-200 hover:border-slate-300",
+                      ].join(" ")}
+                      data-testid={`button-${props.testIdPrefix}-${props.kind}-level-${opt.v}`}
+                    >
+                      <div className="text-sm font-semibold text-slate-900">{opt.label}</div>
+                      <div className="text-xs text-slate-500">{opt.hint}</div>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -1106,6 +1253,11 @@ function InviteArtistDialog(
   // artist. Step 2: contact info + send.
   const [step, setStep] = useState<"pick" | "contact">("pick");
   const [picked, setPicked] = useState<PersonLite | null>(null);
+  // Task #699 — manual fallback name for the unknown-artist path. When no
+  // Person is picked, the operator types a name here and the server mints
+  // a placeholder Person from it (fixing the old 400 on artist invites
+  // with no roleScopeId).
+  const [manualName, setManualName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [lastUrl, setLastUrl] = useState<string | null>(null);
@@ -1115,6 +1267,7 @@ function InviteArtistDialog(
   function reset() {
     setStep("pick");
     setPicked(null);
+    setManualName("");
     setEmail("");
     setPhone("");
     setLastUrl(null);
@@ -1151,6 +1304,10 @@ function InviteArtistDialog(
         email: email.trim(),
         role: "artist",
         roleScopeId: picked?.id ?? null,
+        // Task #699 — on the manual fallback (no Person picked) send the
+        // typed name + phone so the server can mint a placeholder Person.
+        name: picked ? null : manualName.trim() || null,
+        phone: phone.trim() || null,
         referrerKind: referrer?.kind ?? null,
         referrerScopeId: referrer?.id ?? null,
         welcomeNote,
@@ -1214,6 +1371,9 @@ function InviteArtistDialog(
   const canSubmit =
     emailRe.test(email.trim()) &&
     (!phone.trim() || phoneRe.test(phone.trim())) &&
+    // Task #699 — manual fallback requires a name (the server 400s an
+    // unknown-artist invite with no name to mint a Person from).
+    (picked ? true : manualName.trim().length > 0) &&
     !send.isPending;
 
   return (
@@ -1301,6 +1461,7 @@ function InviteArtistDialog(
               excludeIds={new Set()}
               testIdPrefix={`${props.testIdPrefix}-invite`}
               enableSpotify
+              pasteSecondary
             />
             <DialogFooter className="flex-row justify-between sm:justify-between">
               <Button
@@ -1312,7 +1473,7 @@ function InviteArtistDialog(
                 }}
                 data-testid={`button-${props.testIdPrefix}-invite-skip-pick`}
               >
-                Skip — unknown artist
+                Add manually
               </Button>
               <div className="flex gap-2">
                 <Button
@@ -1369,17 +1530,31 @@ function InviteArtistDialog(
                 </button>
               </div>
             ) : (
-              <div className="text-xs text-slate-500">
-                No Person tied — the invitee will claim a fresh artist row on
-                sign-up.{" "}
-                <button
-                  type="button"
-                  onClick={() => setStep("pick")}
-                  className="font-semibold text-[var(--brand-blue)] hover:underline"
-                  data-testid={`button-${props.testIdPrefix}-invite-back-to-pick`}
-                >
-                  Pick a Person
-                </button>
+              <div className="space-y-3">
+                <div className="text-xs text-slate-500">
+                  Adding manually — we'll create a placeholder artist from the
+                  name below, and the invitee claims it on sign-up.{" "}
+                  <button
+                    type="button"
+                    onClick={() => setStep("pick")}
+                    className="font-semibold text-[var(--brand-blue)] hover:underline"
+                    data-testid={`button-${props.testIdPrefix}-invite-back-to-pick`}
+                  >
+                    Pick a Person instead
+                  </button>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
+                    Artist name
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="Artist or band name"
+                    value={manualName}
+                    onChange={(e) => setManualName(e.target.value)}
+                    data-testid={`input-${props.testIdPrefix}-invite-name`}
+                  />
+                </div>
               </div>
             )}
             <div>

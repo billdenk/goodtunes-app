@@ -51,6 +51,9 @@ interface PressMe {
   name: string;
   logoUrl: string | null;
   isMaker: boolean;
+  // Task #699 — false for Staff teammates. The portal hides/disables
+  // every editing control when this is false; the server still 403s.
+  canEdit?: boolean;
   websiteUrl?: string | null;
   contactEmail?: string | null;
   contactPhone?: string | null;
@@ -1026,7 +1029,7 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
 }
 
 function PressContactsPanel({ pressId, pressName }: { pressId: string; pressName: string }) {
-  const probe = useQuery<{ ok: boolean }>({
+  const probe = useQuery<{ ok: boolean; canAddAdmins?: boolean }>({
     queryKey: ["/api/admin/partner-contacts/can-invite", { entityKind: "manufacturer", entityId: pressId }],
     queryFn: async () => {
       const r = await fetch(`/api/admin/partner-contacts/can-invite?entityKind=manufacturer&entityId=${encodeURIComponent(pressId)}`, { credentials: "include" });
@@ -1034,6 +1037,9 @@ function PressContactsPanel({ pressId, pressName }: { pressId: string; pressName
       return r.json();
     },
   });
+  // Task #699 — surface the press website to the Add Admin domain-mismatch
+  // warning, same as the super-admin Manufacturer page does.
+  const { data: me } = useQuery<PressMe>({ queryKey: [`/api/press/${pressId}/me`] });
   return (
     <OrganizationPeople
       apiPath={`/api/manufacturers/${pressId}/people`}
@@ -1044,12 +1050,16 @@ function PressContactsPanel({ pressId, pressName }: { pressId: string; pressName
       title="Contacts"
       blurb="Invite teammates and partners to this press. We'll grant the role if they already have an admin account, otherwise we mint an invite link."
       canInviteSubusers={probe.data?.ok === true}
+      canAddAdmins={probe.data?.canAddAdmins === true}
+      entityWebsiteUrl={me?.websiteUrl ?? null}
     />
   );
 }
 
 function ProfileSubTab({ pressId }: { pressId: string }) {
   const { data: me, isLoading } = useQuery<PressMe>({ queryKey: [`/api/press/${pressId}/me`] });
+  // Task #699 — Staff teammates see the profile read-only.
+  const canEdit = me?.canEdit !== false;
   const [name, setName] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [contactEmail, setContactEmail] = useState("");
@@ -1105,6 +1115,11 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
     <DashboardPanel padding="md">
       <h3 className="text-base font-semibold mb-3">Press profile</h3>
       <p className="text-xs text-white/55 mb-4">Public-facing details artists and labels see when picking a press, plus the contact info platform notifications route to.</p>
+      {!canEdit && (
+        <p className="text-xs text-amber-300 mb-4" data-testid="text-profile-readonly">
+          You have Staff access — you can view this press and invite artists, but only an Owner/Admin can change these settings.
+        </p>
+      )}
       <div className="space-y-4 max-w-xl">
         {/* Logo */}
         <div className="flex items-center gap-4">
@@ -1114,16 +1129,18 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
               : <span className="text-xs text-white/45">Logo</span>}
           </div>
           <div className="flex flex-col gap-1">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => fileRef.current?.click()}
-              disabled={uploadingLogo}
-              className="h-9 bg-transparent text-white ring-1 ring-white/15 hover:bg-white/5 border-0 text-sm font-semibold"
-              data-testid="button-upload-logo"
-            >{uploadingLogo ? "Uploading…" : logoUrl ? "Replace logo" : "Upload logo"}</Button>
-            {logoUrl && (
+            {canEdit && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploadingLogo}
+                className="h-9 bg-transparent text-white ring-1 ring-white/15 hover:bg-white/5 border-0 text-sm font-semibold"
+                data-testid="button-upload-logo"
+              >{uploadingLogo ? "Uploading…" : logoUrl ? "Replace logo" : "Upload logo"}</Button>
+            )}
+            {canEdit && logoUrl && (
               <button
                 type="button"
                 onClick={() => { setLogoUrl(null); save.mutate({ logoUrl: null }); }}
@@ -1144,36 +1161,38 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
 
         <div>
           <label className="text-xs text-white/55 uppercase tracking-wide">Press name</label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-name" />
+          <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!canEdit} className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-name" />
         </div>
         <div>
           <label className="text-xs text-white/55 uppercase tracking-wide">Public bio</label>
-          <Textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={3} placeholder="What artists and labels should know about your plant…" className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-bio" />
+          <Textarea value={bio} onChange={(e) => setBio(e.target.value)} disabled={!canEdit} rows={3} placeholder="What artists and labels should know about your plant…" className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-bio" />
         </div>
         <div>
           <label className="text-xs text-white/55 uppercase tracking-wide">Shipping address</label>
-          <Textarea value={location} onChange={(e) => setLocation(e.target.value)} rows={2} placeholder="Street, city, state, ZIP — where masters & artwork get sent" className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-address" />
+          <Textarea value={location} onChange={(e) => setLocation(e.target.value)} disabled={!canEdit} rows={2} placeholder="Street, city, state, ZIP — where masters & artwork get sent" className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-address" />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-white/55 uppercase tracking-wide">Website</label>
-            <Input value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} placeholder="https://…" className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-website" />
+            <Input value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} disabled={!canEdit} placeholder="https://…" className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-website" />
           </div>
           <div>
             <label className="text-xs text-white/55 uppercase tracking-wide">Contact email</label>
-            <Input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} type="email" placeholder="orders@press.com" className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-email" />
+            <Input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} type="email" disabled={!canEdit} placeholder="orders@press.com" className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-email" />
           </div>
           <div>
             <label className="text-xs text-white/55 uppercase tracking-wide">Contact phone</label>
-            <Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="(555) 555-1234" className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-phone" />
+            <Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} disabled={!canEdit} placeholder="(555) 555-1234" className="bg-white/5 border-white/10 text-white mt-1" data-testid="input-profile-phone" />
           </div>
         </div>
-        <Button
-          onClick={() => save.mutate({ name, websiteUrl, contactEmail, contactPhone, location, bio })}
-          disabled={save.isPending}
-          className="h-9 bg-[color:var(--brand-mint)] text-[color:var(--brand-bg)] hover:brightness-95 font-semibold"
-          data-testid="button-save-profile"
-        >{save.isPending ? "Saving…" : "Save profile"}</Button>
+        {canEdit && (
+          <Button
+            onClick={() => save.mutate({ name, websiteUrl, contactEmail, contactPhone, location, bio })}
+            disabled={save.isPending}
+            className="h-9 bg-[color:var(--brand-mint)] text-[color:var(--brand-bg)] hover:brightness-95 font-semibold"
+            data-testid="button-save-profile"
+          >{save.isPending ? "Saving…" : "Save profile"}</Button>
+        )}
       </div>
     </DashboardPanel>
   );

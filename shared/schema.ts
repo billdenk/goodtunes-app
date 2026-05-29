@@ -3283,7 +3283,7 @@ export const insertAdminInviteSchema = createInsertSchema(adminInvites).omit({
   referrerKind: z.enum(["artist", "non_profit", "manufacturer", "ambassador"]).optional().nullable(),
   referrerScopeId: z.string().optional().nullable(),
   welcomeNote: z.string().max(1000).optional().nullable(),
-  inviteRole: z.enum(["identity", "manager", "team", "npo_ambassador", "npo_staff"]).optional().nullable(),
+  inviteRole: z.enum(["identity", "manager", "team", "npo_ambassador", "npo_staff", "press_staff"]).optional().nullable(),
   targetPersonId: z.string().optional().nullable(),
   preFlightedAlbumId: z.string().optional().nullable(),
 });
@@ -3301,6 +3301,15 @@ export type InviteRole = (typeof INVITE_ROLES)[number];
 // inviteRole) can invite ambassadors or staff.
 export const NPO_INVITE_ROLES = ["npo_ambassador", "npo_staff"] as const;
 export type NpoInviteRole = (typeof NPO_INVITE_ROLES)[number];
+
+// Task #699 — Press (manufacturer) invite sub-roles. Stored on the same
+// `admin_invites.invite_role` column. Owner/Admin invites carry NO
+// inviteRole (full press scope, like an NPO admin); `press_staff` is the
+// restricted tier — view everything + invite artists, but every editing
+// verb (metadata, masters, Shopify, payouts, settings) is denied via
+// per-user partner_permission_overrides written at accept time.
+export const PRESS_INVITE_ROLES = ["press_staff"] as const;
+export type PressInviteRole = (typeof PRESS_INVITE_ROLES)[number];
 export type InsertAdminInvite = z.infer<typeof insertAdminInviteSchema>;
 export type AdminInvite = typeof adminInvites.$inferSelect;
 

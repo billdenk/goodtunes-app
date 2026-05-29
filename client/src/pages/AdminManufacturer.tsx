@@ -361,6 +361,7 @@ export function AdminManufacturer() {
             entityKind="manufacturer"
             entityId={m.id}
             entityName={m.name}
+            entityWebsiteUrl={m.websiteUrl ?? null}
             blurb="People at this plant — production manager, account rep, whoever you need to reach."
           />
         )}

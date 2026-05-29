@@ -104,6 +104,16 @@ export interface OrganizationPeopleProps {
    * POST regardless of this flag.
    */
   canInviteSubusers?: boolean;
+  /**
+   * Task #699 — partner website URL, passed through to the Add Admin
+   * dialog so a press can flag an email-domain mismatch. Optional.
+   */
+  entityWebsiteUrl?: string | null;
+  /**
+   * Task #699 — gate the "Add Admin" item separately. Press Staff can
+   * invite artists (menu visible) but can't add admins. Defaults true.
+   */
+  canAddAdmins?: boolean;
 }
 
 export function OrganizationPeople({
@@ -115,6 +125,8 @@ export function OrganizationPeople({
   title = "Contacts",
   blurb = "People who represent this partner. Add as many as you need.",
   canInviteSubusers = true,
+  entityWebsiteUrl,
+  canAddAdmins = true,
 }: OrganizationPeopleProps) {
   const { toast } = useToast();
   const contactsKey = [apiPath] as const;
@@ -169,6 +181,8 @@ export function OrganizationPeople({
           testIdPrefix={testIdPrefix}
           attachedIds={attachedIds}
           canInviteSubusers={canInviteSubusers}
+          entityWebsiteUrl={entityWebsiteUrl}
+          canAddAdmins={canAddAdmins}
         />
       </div>
 

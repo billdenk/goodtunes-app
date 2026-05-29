@@ -16999,6 +16999,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!ADMIN_ROLES.includes(role as any)) {
       return res.status(400).json({ message: "Pick a role" });
     }
+    // Task #699 — unknown-artist invite. When inviting an artist with no
+    // existing Person picked, mint a placeholder Person from the typed
+    // details so the invite has a real scope id (mirrors the
+    // artist-portal fresh-artist wrapper). Without this the SCOPED_ROLES
+    // validation below 400s "Pick an artist" and the operator hits a
+    // dead-end. Downstream press/referrer stamping then works exactly as
+    // it would for a picked Person. Only the `artist` role auto-mints;
+    // every other scoped role still requires an explicit scope id.
+    if (role === "artist" && !roleScopeId) {
+      const placeholderName = String(req.body?.name || "").trim();
+      if (!placeholderName) {
+        return res.status(400).json({ message: "Enter the artist's name (or pick an existing artist)." });
+      }
+      const placeholderPhone = req.body?.phone ? String(req.body.phone).trim() || null : null;
+      const placeholder = await storage.createPerson({
+        name: placeholderName,
+        isGroup: false,
+        contactEmail: email,
+        contactPhone: placeholderPhone,
+      } as any);
+      roleScopeId = placeholder.id;
+    }
     // Roles that bind to a specific entity: validate the scope id
     // exists in the matching table. Unscoped roles ignore the field
     // entirely (we null it out so a stray client value can't get
@@ -18227,6 +18249,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
 
+    // Task #699 — press (manufacturer) teammate tier. Owner/Admin invites
+    // carry no inviteRole and get every verb granted; `press_staff`
+    // invites get invite_subusers granted + all editing verbs denied so
+    // the new account can view the press and invite artists but can't
+    // touch settings, masters, payouts, or catalog. Mirrors the
+    // direct-grant path in /api/admin/partner-contacts.
+    if (invite.role === "manufacturer" && invite.roleScopeId) {
+      const { applyPressTeammateOverrides } = await import("./auth/partnerPermissions");
+      await applyPressTeammateOverrides(
+        user.id,
+        invite.roleScopeId,
+        ir === "press_staff" ? "staff" : "owner_admin",
+        (invite as any).createdByUserId ?? null,
+      );
+    }
+
     // Task #351 — Landing path priority:
     //   1. Identity/Manager invites with a pre-flighted album → editor.
     //      Team invites IGNORE preflight (they can't drive the release).
@@ -18701,6 +18739,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         { kind: scopeKind, id: entityId },
       );
       if (verbErr) return res.status(403).json({ message: verbErr.message });
+      // Task #699 — adding an admin teammate to a press is owner/admin-only.
+      // Staff hold invite_subusers (artist invites flow through
+      // /api/admin/invites) but must never mint a manufacturer admin grant —
+      // that would be a privilege escalation back to a full press admin.
+      if (entityKind === "manufacturer") {
+        const { pressUserCanEdit } = await import("./auth/partnerPermissions");
+        const isOwnerAdmin = await pressUserCanEdit(req.session.userId!, entityId);
+        if (!isOwnerAdmin) {
+          return res.status(403).json({ message: "Only an Owner/Admin can add press admins. Staff can invite artists, not add admins." });
+        }
+      }
     }
     // Existence check on the partner row.
     const ENTITY_TABLE: Record<string, string> = {
@@ -18726,6 +18775,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const email = emailRaw ? emailRaw.toLowerCase() : null;
     const phone = b.phone ? String(b.phone).trim() || null : null;
     const personIdInput = b.personId ? String(b.personId).trim() : null;
+    const photoUrlInput = b.photoUrl ? String(b.photoUrl).trim() || null : null;
+    // Task #699 — Owner/Admin vs Staff tier. Only meaningful for a press
+    // (manufacturer) admin invite; every other partner kind ignores it
+    // and gets the full owner-equivalent grant as before. Staff get
+    // view + invite-artists; all editing verbs are denied via overrides.
+    const level: "owner_admin" | "staff" =
+      entityKind === "manufacturer" && String(b.level || "").trim() === "staff"
+        ? "staff"
+        : "owner_admin";
 
     if (!email) return res.status(400).json({ message: "Email is required" });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -18756,8 +18814,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await db.execute(sql`UPDATE people SET ${setSql} WHERE id = ${personId}`);
     } else {
       if (!name) return res.status(400).json({ message: "Name is required for a new contact" });
-      let photoUrl: string | null = null;
-      try { photoUrl = await tryGravatarRehost(email); } catch { /* ignore */ }
+      // Task #699 — honour an operator-supplied photo (scraped via the
+      // paste-a-URL prefill) before falling back to the Gravatar rehost.
+      let photoUrl: string | null = photoUrlInput;
+      if (!photoUrl) {
+        try { photoUrl = await tryGravatarRehost(email); } catch { /* ignore */ }
+      }
       const created = await storage.createPerson({
         name, photoUrl, contactEmail: email, contactPhone: phone,
       } as any);
@@ -18788,7 +18850,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (adminUserId) {
       await db.execute(sql`UPDATE users SET is_admin = true WHERE id = ${adminUserId}`);
       await setUserRole(adminUserId, targetRole as any, entityId);
-      return res.json({ mode: "granted", personId, personName, adminUserId, role: targetRole });
+      // Task #699 — for a press (manufacturer) admin, stamp the
+      // Owner/Admin vs Staff overrides immediately so the tier takes
+      // effect the moment the role is granted to an existing account.
+      if (entityKind === "manufacturer") {
+        const { applyPressTeammateOverrides } = await import("./auth/partnerPermissions");
+        await applyPressTeammateOverrides(adminUserId, entityId, level, req.session.userId!);
+      }
+      return res.json({ mode: "granted", personId, personName, adminUserId, role: targetRole, level });
     }
     // No admin row — check for an existing pending invite on the same
     // email + role + scope before minting a new one.
@@ -18822,6 +18891,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       createdByUserId: req.session.userId!,
       welcomeNote,
       targetPersonId: personId,
+      // Task #699 — carry the Staff tier on the invite so the
+      // accept-flow can write the press-scope deny-overrides. Owner/Admin
+      // invites leave inviteRole null (full press scope by default).
+      inviteRole: entityKind === "manufacturer" && level === "staff" ? "press_staff" : null,
     } as any);
     const acceptUrl = `${proto}://${host}/invite/${token}`;
     // Task #665 — email send is intentionally out-of-scope for the
@@ -18859,15 +18932,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!targetRole || !entityId) return res.status(400).json({ message: "entityKind and entityId are required" });
     const callerRole = await getUserRole(req.session.userId!);
     if (!callerRole) return res.status(401).json({ message: "Unauthorized" });
-    if (callerRole.role === "super_admin") return res.json({ ok: true });
-    if (callerRole.role !== targetRole || callerRole.roleScopeId !== entityId) return res.json({ ok: false });
-    const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
+    if (callerRole.role === "super_admin") return res.json({ ok: true, canAddAdmins: true });
+    if (callerRole.role !== targetRole || callerRole.roleScopeId !== entityId) return res.json({ ok: false, canAddAdmins: false });
+    const { checkPartnerVerbForScope, pressUserCanEdit } = await import("./auth/partnerPermissions");
     const verbErr = await checkPartnerVerbForScope(
       req.session.userId!,
       "invite_subusers",
       { kind: KIND_TO_VERB_SCOPE[entityKind], id: entityId },
     );
-    res.json({ ok: !verbErr });
+    const ok = !verbErr;
+    // Task #699 — adding an *admin* teammate is owner/admin-only. A press
+    // (manufacturer) Staff member holds invite_subusers (so they can still
+    // invite artists), but must not be able to mint admin grants. Every
+    // other partner kind keeps canAddAdmins == ok.
+    const canAddAdmins =
+      entityKind === "manufacturer"
+        ? ok && (await pressUserCanEdit(req.session.userId!, entityId))
+        : ok;
+    res.json({ ok, canAddAdmins });
   });
 
   // Task #665 — flip a contact-shape Person into the artist shape.

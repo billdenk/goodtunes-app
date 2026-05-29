@@ -151,16 +151,41 @@ export function registerPressPortalRoutes(
   requireAdmin: any,
   requirePressScope: any,
 ) {
+  // Task #699 — gate every press-portal EDITING endpoint behind the
+  // Owner/Admin tier. requirePressScope already proved the caller is a
+  // super_admin or the matching manufacturer admin; this adds the
+  // Staff-vs-Owner split: Staff (per-user deny overrides on the press
+  // scope) can view and invite artists, but get a 403 on any settings /
+  // masters / invoice / payout / customer-routing mutation. The press
+  // /me payload exposes `canEdit` so the UI disables these controls up
+  // front instead of letting Staff click into a 403.
+  const requirePressEditor = async (req: Request, res: Response, next: any) => {
+    const { pressUserCanEdit } = await import("./auth/partnerPermissions");
+    const ok = await pressUserCanEdit(req.session.userId!, String(req.params.id));
+    if (!ok) {
+      return res.status(403).json({
+        message:
+          "Staff accounts can view the press and invite artists, but only an Owner/Admin can change settings or operations.",
+      });
+    }
+    next();
+  };
+
   // GET /api/press/:id/me — header payload (name + logo + is_maker flag).
   app.get("/api/press/:id/me", requireAdmin, requirePressScope, async (req, res) => {
     const pressId = String(req.params.id);
     const press = await storage.getManufacturerById(pressId);
     if (!press) return res.status(404).json({ message: "Press not found" });
+    const { pressUserCanEdit } = await import("./auth/partnerPermissions");
+    const canEdit = await pressUserCanEdit(req.session.userId!, pressId);
     res.json({
       id: press.id,
       name: press.name,
       logoUrl: (press as any).logoUrl ?? null,
       isMaker: (press as any).isMaker ?? true,
+      // Task #699 — false for Staff teammates; the portal hides/disables
+      // every editing control when this is false.
+      canEdit,
       // Editable profile fields surfaced for the Settings tab so it can
       // round-trip without a second fetch. Notifications subtab reuses
       // contactEmail as the pipeline-alert recipient.
@@ -849,7 +874,7 @@ export function registerPressPortalRoutes(
   // edge cases (e.g. a press calls support to manually trigger from a
   // non-standard pricing model). Returns 409 with current/threshold
   // values if the gate isn't met, so the UI can show "$X / $Y to go."
-  app.post("/api/press/:id/albums/:albumId/masters/triggered", requireAdmin, requirePressScope, async (req: any, res) => {
+  app.post("/api/press/:id/albums/:albumId/masters/triggered", requireAdmin, requirePressScope, requirePressEditor, async (req: any, res) => {
     const pressId = String(req.params.id);
     const albumId = String(req.params.albumId);
     const album = await assertAlbumBelongsToPress(albumId, pressId);
@@ -889,7 +914,7 @@ export function registerPressPortalRoutes(
   // `/objects/press-invoices/<id>.pdf` → ${PRIVATE_OBJECT_DIR}/press-invoices/<id>.pdf
   // because getObjectEntityFile joins the path tail onto PRIVATE_OBJECT_DIR
   // — so the existing one ACL/serving codepath still handles delivery.
-  app.post("/api/press/:id/albums/:albumId/invoice/upload-url", requireAdmin, requirePressScope, async (req, res) => {
+  app.post("/api/press/:id/albums/:albumId/invoice/upload-url", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const albumId = String(req.params.albumId);
     const album = await assertAlbumBelongsToPress(albumId, pressId);
@@ -943,7 +968,7 @@ export function registerPressPortalRoutes(
     note: z.string().max(1000).optional(),
     outsideSystem: z.boolean().optional(),
   });
-  app.post("/api/press/:id/albums/:albumId/invoice", requireAdmin, requirePressScope, async (req, res) => {
+  app.post("/api/press/:id/albums/:albumId/invoice", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const albumId = String(req.params.albumId);
     const album = await assertAlbumBelongsToPress(albumId, pressId);
@@ -1076,7 +1101,7 @@ export function registerPressPortalRoutes(
   // and stamps the album row so the dedup gate below catches re-fires
   // that drift <5% from the previous heads-up quantity.
   const headsUpSchema = z.object({ quantity: z.number().int().min(1) });
-  app.post("/api/press/:id/albums/:albumId/fulfillment-heads-up", requireAdmin, requirePressScope, async (req, res) => {
+  app.post("/api/press/:id/albums/:albumId/fulfillment-heads-up", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const albumId = String(req.params.albumId);
     const album = await assertAlbumBelongsToPress(albumId, pressId);
@@ -1167,7 +1192,7 @@ export function registerPressPortalRoutes(
     toPressId: z.string().nullable().optional(),
     reason: z.string().max(500).optional(),
   });
-  app.post("/api/press/:id/customers/:kind/:cid/switch", requireAdmin, requirePressScope, async (req, res) => {
+  app.post("/api/press/:id/customers/:kind/:cid/switch", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const fromPressId = String(req.params.id);
     const kind = String(req.params.kind);
     const cid = String(req.params.cid);
@@ -1208,7 +1233,7 @@ export function registerPressPortalRoutes(
     location: z.string().max(500).nullable().optional(),
     bio: z.string().max(2000).nullable().optional(),
   });
-  app.patch("/api/press/:id/profile", requireAdmin, requirePressScope, async (req, res) => {
+  app.patch("/api/press/:id/profile", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const parsed = profileSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid profile" });
@@ -1229,7 +1254,7 @@ export function registerPressPortalRoutes(
   // POST /api/press/:id/profile/logo-url — sign a PUT URL the browser
   // streams a logo PNG/JPG to. Returns the canonical `/objects/uploads/<id>.<ext>`
   // URL the client then writes back via PATCH /profile { logoUrl }.
-  app.post("/api/press/:id/profile/logo-url", requireAdmin, requirePressScope, async (req, res) => {
+  app.post("/api/press/:id/profile/logo-url", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const ext = String(req.body?.ext ?? "png").replace(/[^a-z0-9]/gi, "").toLowerCase() || "png";
     const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
     const oss = new ObjectStorageService();

@@ -185,6 +185,66 @@ export async function getUserPermissionOverride(
   return null;
 }
 
+// Task #699 — write the per-user permission overrides that distinguish a
+// press Owner/Admin from Staff at invite-accept (or direct-grant) time.
+// Both tiers live on the manufacturer scope:
+//   • owner_admin → all six verbs GRANTED (full press scope, incl.
+//     invite_subusers so they can invite artists from any shell).
+//   • staff       → invite_subusers GRANTED, every editing verb DENIED
+//     (metadata / masters / shopify / payouts / credits+gear). The
+//     denials are what `pressUserCanEdit` reads to lock the press portal
+//     editing surfaces and what the partner verb checks read to 403 any
+//     edit attempt server-side.
+export async function applyPressTeammateOverrides(
+  userId: string,
+  pressId: string,
+  level: "owner_admin" | "staff",
+  byUserId: string | null,
+): Promise<void> {
+  const grants: Record<PartnerVerb, boolean> =
+    level === "staff"
+      ? {
+          invite_subusers: true,
+          edit_metadata: false,
+          upload_masters: false,
+          map_shopify: false,
+          manage_payouts: false,
+          edit_credits_and_gear: false,
+        }
+      : {
+          invite_subusers: true,
+          edit_metadata: true,
+          upload_masters: true,
+          map_shopify: true,
+          manage_payouts: true,
+          edit_credits_and_gear: true,
+        };
+  for (const [verb, granted] of Object.entries(grants)) {
+    await db.execute(sql`
+      INSERT INTO partner_permission_overrides (scope_kind, scope_id, user_id, verb, granted, updated_by_user_id, updated_at)
+      VALUES ('manufacturer', ${pressId}, ${userId}, ${verb}, ${granted}, ${byUserId}, NOW())
+      ON CONFLICT (scope_kind, scope_id, user_id, verb)
+      DO UPDATE SET granted = EXCLUDED.granted, updated_by_user_id = EXCLUDED.updated_by_user_id, updated_at = NOW()
+    `);
+  }
+}
+
+// Task #699 — can this user edit the given press (settings, masters,
+// invoices, payouts, customer routing)? Super_admin / unscoped admin
+// always can. A scoped manufacturer admin can UNLESS they're Staff —
+// detected by an explicit edit_metadata=false override on the press
+// scope (written by applyPressTeammateOverrides). Owner/Admin have it
+// granted (or no override at all), so they pass. Used both by the
+// press-portal `requirePressEditor` middleware and the /me payload so
+// the UI can disable controls before the user even tries.
+export async function pressUserCanEdit(userId: string, pressId: string): Promise<boolean> {
+  const role = await getUserRole(userId);
+  if (!role) return false;
+  if (role.role === "super_admin" || role.role === "admin") return true;
+  const ov = await getUserPermissionOverride("manufacturer", pressId, userId, "edit_metadata");
+  return ov !== false;
+}
+
 export async function getPartnerPermissions(
   scopeKind: PartnerScopeKind,
   scopeId: string,
