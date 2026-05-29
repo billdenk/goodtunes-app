@@ -1370,6 +1370,38 @@ export function registerPressPortalRoutes(
     });
   });
 
+  // GET /api/admin/manufacturers/:id/early-cut-pools — per-album pool
+  // ledger summary for every album homed to this press that has a pool
+  // building (accrued > 0). Powers the AdminManufacturer pool readout so
+  // the operator can see accrued / released / available per album without
+  // opening each album. Same press-homing source as the pipeline:
+  // pressing_order_requests.package_snapshot->>'pressId'.
+  app.get("/api/admin/manufacturers/:id/early-cut-pools", requireAdmin, async (req, res) => {
+    const pressId = String(req.params.id);
+    const rows = await db.execute<any>(sql`
+      SELECT a.id                                   AS "albumId",
+             a.title                                AS "albumTitle",
+             a.cover_url                            AS "coverUrl",
+             a.press_pool_accrued_cents::int        AS "accruedCents",
+             a.press_pool_released_cents::int       AS "releasedCents",
+             GREATEST(0, a.press_pool_accrued_cents - a.press_pool_released_cents)::int
+                                                    AS "availableCents",
+             a.early_cut_consent_at                 AS "artistConsentAt",
+             a.masters_triggered_at                 AS "mastersTriggeredAt"
+        FROM albums a
+       WHERE a.deleted_at IS NULL
+         AND a.press_pool_accrued_cents > 0
+         AND EXISTS (
+           SELECT 1 FROM pressing_order_requests por
+            WHERE por.album_id = a.id
+              AND por.status <> 'cancelled'
+              AND por.package_snapshot ->> 'pressId' = ${pressId}
+         )
+       ORDER BY (a.press_pool_accrued_cents - a.press_pool_released_cents) DESC
+    `);
+    res.json(((rows as any).rows ?? []));
+  });
+
   // POST /api/admin/albums/:albumId/early-cut-consent — Gate #2. The
   // artist opt-in. We snapshot the tier name + format the consent was
   // given against so re-picking a different tier/format silently
@@ -1471,7 +1503,9 @@ export function registerPressPortalRoutes(
     // every pool/trigger side effect run in ONE transaction so a failure
     // anywhere rolls the claim back too — the row stays `pending` and the
     // approval can simply be retried, never stranded half-applied.
+    const { createEarmarkIfAbsent } = await import("./payoutEarmarks");
     let claimed = false;
+    let earmarkId: string | null = null;
     try {
       claimed = await db.transaction(async (tx) => {
         const claim = await tx.execute<any>(sql`
@@ -1501,6 +1535,27 @@ export function registerPressPortalRoutes(
              SET press_pool_released_cents = press_pool_released_cents + ${floorCents}
            WHERE id = ${albumId}
         `);
+
+        // 3) #527 Stripe Connect plumbing: hold an earmark for the floor to
+        //    the press, released to its connected account at the next payout
+        //    cycle. Runs INSIDE the same transaction so a failure here rolls
+        //    the claim + release back — the row stays `pending` and the whole
+        //    approval is retryable, never approved-and-released with no payout
+        //    queued. Idempotent by (sourceKind, sourceRef=queueId).
+        const earmark = await createEarmarkIfAbsent(
+          {
+            sourceKind: "early_cut",
+            sourceRef: queueId,
+            albumId,
+            ownerKind: "manufacturer",
+            ownerId: pressId,
+            amountCents: floorCents,
+            currency: "usd",
+            notes: `Early cut floor — ${tier.format}/${tier.tierName}`,
+          },
+          tx,
+        );
+        earmarkId = earmark.id;
         return true;
       });
     } catch (err) {
@@ -1509,27 +1564,6 @@ export function registerPressPortalRoutes(
     }
     if (!claimed) {
       return res.status(409).json({ message: "This request was already decided." });
-    }
-
-    // 3) #527 Stripe Connect plumbing: hold an earmark for the floor to
-    //    the press, released to its connected account at the next payout
-    //    cycle. Idempotent by (sourceKind, sourceRef=queueId).
-    let earmarkId: string | null = null;
-    try {
-      const { createEarmarkIfAbsent } = await import("./payoutEarmarks");
-      const earmark = await createEarmarkIfAbsent({
-        sourceKind: "early_cut",
-        sourceRef: queueId,
-        albumId,
-        ownerKind: "manufacturer",
-        ownerId: pressId,
-        amountCents: floorCents,
-        currency: "usd",
-        notes: `Early cut floor — ${tier.format}/${tier.tierName}`,
-      });
-      earmarkId = earmark.id;
-    } catch (err) {
-      console.log(`[early-cut] approve earmark failed album=${albumId}: ${(err as Error).message}`);
     }
 
     // 4) Tell the artist their cut is starting (fire-and-forget).

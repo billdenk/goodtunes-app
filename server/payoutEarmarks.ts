@@ -82,18 +82,25 @@ export async function isBill(userId: string | null | undefined): Promise<boolean
 // Terminal earmarks (released/rejected) for the *same* sourceRef can
 // co-exist (e.g. a press invoice was rejected and re-submitted under
 // a new invoiceKey → fresh held row).
-export async function createEarmarkIfAbsent(input: {
-  sourceKind: PayoutEarmarkSourceKind;
-  sourceRef: string;
-  albumId?: string | null;
-  ownerKind: PayoutEarmarkOwnerKind;
-  ownerId: string;
-  amountCents: number;
-  currency?: string;
-  notes?: string | null;
-}): Promise<PayoutEarmark> {
+export async function createEarmarkIfAbsent(
+  input: {
+    sourceKind: PayoutEarmarkSourceKind;
+    sourceRef: string;
+    albumId?: string | null;
+    ownerKind: PayoutEarmarkOwnerKind;
+    ownerId: string;
+    amountCents: number;
+    currency?: string;
+    notes?: string | null;
+  },
+  // Optional transaction client. Pass a drizzle `tx` to make the
+  // idempotent check + insert run inside the caller's transaction, so a
+  // later failure in that transaction rolls the earmark back too. Defaults
+  // to the module-level connection for standalone callers.
+  exec: Pick<typeof db, "select" | "insert"> = db,
+): Promise<PayoutEarmark> {
   // Short-circuit: a held earmark for this exact source already exists.
-  const [existing] = await db
+  const [existing] = await exec
     .select()
     .from(payoutEarmarks)
     .where(
@@ -105,7 +112,7 @@ export async function createEarmarkIfAbsent(input: {
     )
     .limit(1);
   if (existing) return existing;
-  const [row] = await db
+  const [row] = await exec
     .insert(payoutEarmarks)
     .values({
       sourceKind: input.sourceKind,

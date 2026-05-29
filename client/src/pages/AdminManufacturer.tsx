@@ -57,9 +57,27 @@ import { ALBUM_FORMATS, ALBUM_FORMAT_LABEL, type AlbumFormat, type Manufacturer,
 // building. GoodTunes fronts no capital — the toggle only authorizes the
 // flow; the pool still has to cover each album's floor before anything
 // reaches the review queue.
+type EarlyCutPoolRow = {
+  albumId: string;
+  albumTitle: string;
+  coverUrl: string | null;
+  accruedCents: number;
+  releasedCents: number;
+  availableCents: number;
+  artistConsentAt: string | null;
+  mastersTriggeredAt: string | null;
+};
+
 function PressAutoTriggerConsentPanel({ m }: { m: Manufacturer }) {
   const { toast } = useToast();
   const consented = !!(m as any).autoTriggerConsentAt;
+  // Per-album pool ledger across this press's albums (accrued > 0 only).
+  const { data: pools = [], isLoading: poolsLoading } = useQuery<EarlyCutPoolRow[]>({
+    queryKey: ["/api/admin/manufacturers", m.id, "early-cut-pools"],
+    enabled: !!m.id,
+  });
+  const usd = (c: number) =>
+    `$${(c / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
   const toggle = useMutation({
     mutationFn: async (consent: boolean) => {
       const r = await apiRequest("PATCH", `/api/admin/manufacturers/${m.id}/auto-trigger-consent`, { consent });
@@ -112,6 +130,52 @@ function PressAutoTriggerConsentPanel({ m }: { m: Manufacturer }) {
         >
           {consented ? "Turn off" : "Turn on"}
         </Button>
+      </div>
+
+      {/* Per-album pool ledger: accrued / released / available across this
+          press's albums that have a funding pool building. */}
+      <div className="mt-4 border-t border-white/10 pt-3" data-testid="section-early-cut-pools">
+        <div className="text-xs uppercase tracking-wide text-white/40 mb-2">Funding pools</div>
+        {poolsLoading ? (
+          <div className="text-xs text-white/45" data-testid="text-pools-loading">Loading pools…</div>
+        ) : pools.length === 0 ? (
+          <div className="text-xs text-white/45" data-testid="text-pools-empty">
+            No albums are building a funding pool for this press yet.
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {pools.map((p) => (
+              <div
+                key={p.albumId}
+                className="flex items-center gap-3 rounded-lg bg-white/[0.03] ring-1 ring-white/5 px-3 py-2"
+                data-testid={`row-pool-${p.albumId}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm truncate" data-testid={`text-pool-title-${p.albumId}`}>
+                    {p.albumTitle}
+                  </div>
+                  <div className="text-xs text-white/45 flex items-center gap-2 mt-0.5">
+                    {p.mastersTriggeredAt ? (
+                      <span className="text-[color:var(--brand-mint)]">Cut staged</span>
+                    ) : p.artistConsentAt ? (
+                      <span>Artist opted in</span>
+                    ) : (
+                      <span>Awaiting artist opt-in</span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-sm font-semibold" data-testid={`text-pool-available-${p.albumId}`}>
+                    {usd(p.availableCents)}
+                  </div>
+                  <div className="text-xs text-white/40">
+                    {usd(p.accruedCents)} in · {usd(p.releasedCents)} out
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
