@@ -498,6 +498,8 @@ Next phase:
 
 Until then: vinyl rows show a live Hellbender cost + a fan-preview thumbnail next to the color/jacket pickers; non-vinyl rows keep the placeholder.
 
+**Add-on menu completeness (Task #687, admin-only).** A vinyl SKU's "Optional · Upsells" section now always surfaces the full add-on menu — signed GoodDeed, 7×7 booklet, CD — so it reads the same across every manufacturer and the operator never forgets to chase an option. GoodDeed and the booklet (on a 7" / cassette anchor row) remain live + priced; the gaps are filled by a display-only `AddonQuotePill` ("Ask the press / request a quote", amber "TBD"): the booklet placeholder shows on a vinyl release with no booklet-eligible SKU (e.g. 12"-only), and the CD placeholder shows on every vinyl release. These placeholders persist nothing and feed no totals, so the per-format math is untouched. When the `press_format_quotes` work above lands, each placeholder swaps for a real priced pill — CD becoming an actual add-on kind (currently only `signed_cert` + `booklet` exist in `ALBUM_ADDON_KINDS`).
+
 ## Masters tab — consolidate into Tracks (proposed May 16, 2026)
 
 Bill's call: a "master" is just the audio file attached to a track, not a separate entity. Today we render the same per-track info on both the Tracks tab (rich row with chips for Master / Lyrics / Sync / Credits) **and** a dedicated Masters tab (bulk listening + upload). The Masters tab is redundant.

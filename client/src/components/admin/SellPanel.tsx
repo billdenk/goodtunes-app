@@ -971,6 +971,7 @@ export function SellPanel({
                           isPrimaryVinyl={primaryVinylFormat === f}
                           bookletAddon={bookletAddon ?? null}
                           isBookletAnchor={primaryBookletFormat === f}
+                          bookletEligibleExists={primaryBookletFormat !== null}
                           onSaveBookletAddon={upsertBookletAddon.mutate}
                           albumTitle={albumTitle}
                           artistName={artistName}
@@ -1038,6 +1039,7 @@ export function SellPanel({
                         isPrimaryVinyl={primaryVinylFormat === f}
                         bookletAddon={bookletAddon ?? null}
                         isBookletAnchor={primaryBookletFormat === f}
+                        bookletEligibleExists={primaryBookletFormat !== null}
                         onSaveBookletAddon={upsertBookletAddon.mutate}
                         albumTitle={albumTitle}
                         artistName={artistName}
@@ -1748,6 +1750,7 @@ function SkuRow({
   isPrimaryVinyl,
   bookletAddon,
   isBookletAnchor,
+  bookletEligibleExists,
   onSaveBookletAddon,
   albumTitle,
   artistName,
@@ -1881,6 +1884,12 @@ function SkuRow({
   // on the same album can't race-overwrite each other's plannedQuantity.
   bookletAddon?: AlbumAddon | null;
   isBookletAnchor?: boolean;
+  // Task #687 — true when the album already has a booklet-eligible
+  // SKU (7" vinyl or cassette), so the functional BookletPill renders
+  // on its anchor row. When false on a vinyl release (e.g. 12"-only),
+  // the primary-vinyl row instead surfaces a "request a quote" booklet
+  // placeholder so the booklet option is never missing from the menu.
+  bookletEligibleExists?: boolean;
   onSaveBookletAddon?: (b: {
     priceCents: number;
     active: boolean;
@@ -5456,6 +5465,36 @@ function SkuRow({
           />
         </div>
       ) : null}
+      {/* Task #687 — Add-on menu completeness. The full upsell menu on a
+          vinyl release is: signed GoodDeed, 7×7 booklet, and CD. GoodDeed
+          (above) and the booklet (above, where a 7" / cassette SKU exists)
+          are live + priced. The two placeholders below fill the gaps so
+          the menu reads the same across every manufacturer — only pricing
+          availability varies by press:
+            · Booklet on a vinyl release with no booklet-eligible SKU
+              (e.g. 12"-only) → "request a quote".
+            · CD on any vinyl release (no press quotes the CD add-on yet)
+              → "request a quote".
+          Both are display-only — they don't persist or touch totals, so
+          the math is unaffected until a press confirms numbers. */}
+      {albumId && isPrimaryVinyl && !bookletEligibleExists ? (
+        <div className="mt-3">
+          <AddonQuotePill
+            title="7×7 Booklet"
+            description="A 7.125″ × 7.125″, 16-page full-colour booklet tucked in with the record. Priced today on 7″ / cassette releases (PMP, MRP); ask the press for a quote on this format."
+            testKey="booklet-quote"
+          />
+        </div>
+      ) : null}
+      {albumId && isPrimaryVinyl ? (
+        <div className="mt-3">
+          <AddonQuotePill
+            title="CD"
+            description="A pressed CD shipped alongside the vinyl. No manufacturer has confirmed CD add-on pricing yet — surfaced here so the team remembers to ask each press, ready to wire up once numbers come back."
+            testKey="cd-quote"
+          />
+        </div>
+      ) : null}
       </div>
       </>
       ) : (
@@ -6198,6 +6237,79 @@ async function uploadAdminImage(file: File): Promise<string> {
   }
   const { url } = await res.json();
   return url as string;
+}
+
+// Task #687 — display-only "request a quote" placeholder for add-ons
+// whose per-press pricing isn't wired yet (CD across every press today;
+// the 7×7 booklet on a vinyl format no press has quoted, e.g. 12"). It
+// keeps the add-on menu complete across manufacturers — the option
+// always shows; only the pricing availability varies — so the team
+// remembers to chase each press for numbers. Persists nothing and feeds
+// no totals, so the per-format math is untouched until the placeholder
+// is swapped for a real priced pill (see GoodDeedPill / BookletPill).
+// The amber "TBD" treatment mirrors the catalog editor's unconfirmed-
+// rung convention so "awaiting quote" reads the same everywhere.
+function AddonQuotePill({
+  title,
+  description,
+  testKey,
+}: {
+  title: string;
+  description: string;
+  testKey: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div
+      className="rounded-md border border-slate-200 bg-white"
+      data-testid={`pill-${testKey}`}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full min-h-[44px] flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-slate-50 transition-colors"
+        aria-expanded={open}
+        data-testid={`button-toggle-${testKey}-pill`}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[13.5px] font-semibold text-slate-900">
+            {title}
+          </span>
+          <span
+            className="text-xs text-slate-500 truncate"
+            data-testid={`text-${testKey}-summary`}
+          >
+            · Request a quote
+          </span>
+        </div>
+        <ChevronDown
+          className={[
+            "w-4 h-4 text-slate-400 transition-transform flex-shrink-0",
+            open ? "rotate-180" : "",
+          ].join(" ")}
+        />
+      </button>
+      {open && (
+        <div className="px-3 pb-3 pt-3 border-t border-slate-100 space-y-3">
+          <p className="text-xs text-slate-500 leading-relaxed">{description}</p>
+          <div
+            className="flex items-center justify-between gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2.5"
+            data-testid={`row-${testKey}-quote`}
+          >
+            <span className="text-xs font-medium text-amber-700">
+              Ask the press / request a quote
+            </span>
+            <span className="text-xs text-amber-600 tabular-nums">TBD</span>
+          </div>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            No manufacturer has confirmed pricing for this add-on yet, so it
+            doesn't affect any totals. Once a press quotes it, this becomes a
+            live, priced option.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function BookletPill({
