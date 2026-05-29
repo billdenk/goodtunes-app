@@ -878,12 +878,22 @@ function ReferralsPanel({ pressId }: { pressId: string }) {
 // other combos. SellPanel still reads `tier.priceLadder` (default
 // jacket's combo), so the public shape is unchanged.
 
-// Standard column quantities shown across every press's catalog. The
-// underlying ladder is arbitrary — Bill can "+ Add quantity" if a press
-// prices a non-standard run (e.g. 250) and that column then renders for
-// every other combo too. Hellbender's seed has no 750 cell; that's
-// expected — empty just means "no price set for this rung".
-const DEFAULT_QTY_COLUMNS = [50, 100, 300, 500, 750, 1000, 2000, 3000];
+// Task #686 — standard "gap" columns surfaced on every press's catalog
+// so the operator gets prompted to quote the common run sizes. The real
+// column list (see `columns` below) is this set ∪ every saved rung ∪ any
+// "+ Add quantity" extras, so each press's *offered* quantities still
+// derive from its confirmed rungs.
+//
+// Quantity hygiene rules baked in here:
+//   • 750 is offered by NOBODY → it's not a default and no seed prices
+//     it, so it never renders.
+//   • 50 is offered only by Hellbender → it's not a default either, so
+//     it only appears for Hellbender (whose seeded ladder carries
+//     confirmed 50 rungs and pulls it in via the saved-rung union). MRP,
+//     PMP, and every other press have no 50 rung, so 50 stays hidden.
+// 3000 is kept here per Bill (rarely offered, but not removed in this
+// task — flagged separately).
+const DEFAULT_QTY_COLUMNS = [100, 300, 500, 1000, 2000, 3000];
 
 async function uploadSwatchImage(
   file: File,
