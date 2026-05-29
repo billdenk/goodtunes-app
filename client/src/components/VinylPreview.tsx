@@ -92,8 +92,17 @@ export function VinylPreview({
             stock. Otherwise fall back to the name-appropriate hex/
             gradient swatch. */}
         {color.thumbnailUrl ? (
+          // Task #755 — the masked MRP per-color disc PNGs are a colored
+          // disc inscribed in a transparent frame: the disc only reaches
+          // ~96% of the frame, leaving a thin transparent margin all the
+          // way around. The old `bg-slate-900` container fill showed
+          // through that margin (and through the ring between the disc
+          // edge and the `rounded-full` clip), reading as a heavy black
+          // border. Drop the dark fallback so the margin shows nothing,
+          // and zoom the image just past the clip boundary so the
+          // colored disc edge (plus its anti-aliasing) reaches the rim.
           <div
-            className="absolute top-0 bottom-0 rounded-full shadow-md overflow-hidden bg-slate-900"
+            className="absolute top-0 bottom-0 rounded-full shadow-md overflow-hidden"
             style={{
               aspectRatio: "1 / 1",
               left: `${discCenterPctOfJacket}%`,
@@ -105,6 +114,7 @@ export function VinylPreview({
               src={color.thumbnailUrl}
               alt=""
               className="w-full h-full object-cover"
+              style={{ transform: "scale(1.07)" }}
               draggable={false}
             />
           </div>
