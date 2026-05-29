@@ -4,6 +4,7 @@ import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { subscribeChats } from "@/lib/chatStore";
 import { useDesktopShell } from "@/hooks/useDesktopShell";
 import { useFanSearch } from "@/hooks/useFanSearch";
+import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import {
   RecentSearchedList,
   CompactPreview,
@@ -110,6 +111,10 @@ export function BottomNav() {
   const inputRef = useRef<HTMLInputElement>(null);
   const search = useFanSearch({ onNavigate: () => setSearchOpen(false) });
   const { setDraft, setShowAll } = search;
+  // How much of the viewport the keyboard covers while search is open —
+  // 0 when no keyboard / API unavailable. Drives lifting the field above
+  // the keyboard and constraining the results scroll region.
+  const kbInset = useKeyboardInset(searchOpen);
 
   // The Chat tab is gone from the nav (Task #530) but the unread count
   // still lives in the chat store — surfaced as the dot on the
@@ -225,7 +230,16 @@ export function BottomNav() {
           data-testid="overlay-search"
         >
           <div className="mx-auto h-full max-w-[390px] flex flex-col">
-            <div className="flex-1 overflow-y-auto scrollbar-hide pt-14 pb-[150px]">
+            {/* Scroll region fills the space between the top of the
+                screen and the search field, which itself rests just above
+                the keyboard. Bottom padding clears the field (height +
+                its 12px offset + gap) PLUS the keyboard inset, so results
+                never render behind the keyboard. Falls back to the
+                resting ~150px dock clearance when no keyboard is up. */}
+            <div
+              className="flex-1 overflow-y-auto scrollbar-hide pt-14"
+              style={{ paddingBottom: Math.max(150, kbInset + dockHVal + 28) }}
+            >
               {!search.query && (
                 <RecentSearchedList
                   rows={search.recentSearches ?? []}
@@ -310,7 +324,7 @@ export function BottomNav() {
             height: dockHVal,
             ...glassStyle,
             transformOrigin: "right center",
-            transform: searchOpen ? "scaleX(1)" : "scaleX(0)",
+            transform: searchOpen ? `translateY(${-kbInset}px) scaleX(1)` : "scaleX(0)",
             pointerEvents: searchOpen ? "auto" : "none",
             transition: "transform 300ms cubic-bezier(0.32, 0.72, 0, 1)",
           }}
@@ -346,8 +360,16 @@ export function BottomNav() {
           type="button"
           onClick={onToggleSearch}
           aria-label={searchOpen ? "Close search" : "Search"}
-          className={`pointer-events-auto absolute bottom-3 right-3 flex items-center justify-center rounded-full active:scale-95 transition-transform ${searchOpen ? "text-[color:var(--brand-blue)]" : "text-white/80"}`}
-          style={{ width: toggleSize, height: toggleSize, ...glassStyle }}
+          className={`pointer-events-auto absolute right-3 flex items-center justify-center rounded-full active:scale-95 ${searchOpen ? "text-[color:var(--brand-blue)]" : "text-white/80"}`}
+          style={{
+            // Lift via `bottom` (not transform) so the active:scale-95
+            // press feedback still works while search is open.
+            bottom: 12 + (searchOpen ? kbInset : 0),
+            width: toggleSize,
+            height: toggleSize,
+            ...glassStyle,
+            transition: "transform 150ms ease, bottom 300ms cubic-bezier(0.32, 0.72, 0, 1)",
+          }}
           data-testid="nav-search"
         >
           {searchOpen ? closeIcon : searchIcon}
