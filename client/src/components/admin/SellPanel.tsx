@@ -3597,6 +3597,52 @@ function SkuRow({
   };
 
   const [pressSwitcherOpen, setPressSwitcherOpen] = useState(false);
+  // Task #673 — switch the quoting press straight from the "Qualified
+  // presses" popover. The switch flips people.invited_by_press_id /
+  // labels.invited_by_press_id on whichever scope owns this album's
+  // invited-press stamp (returned by the invited-press query). The
+  // backend PATCH is super-admin only, so the rows are only actionable
+  // for super_admin — everyone else keeps the read-only footer below.
+  const switchScopeKind = invitedPressRow?.scopeKind ?? null;
+  const switchScopeId = invitedPressRow?.scopeId ?? null;
+  const canSwitchPress =
+    roleInfo?.role === "super_admin" && !!switchScopeKind && !!switchScopeId;
+  const switchQuotingPress = useMutation({
+    mutationFn: async (pressId: string) => {
+      if (!switchScopeKind || !switchScopeId) {
+        throw new Error("Couldn't determine which artist or label to update.");
+      }
+      const kind = switchScopeKind === "artist" ? "people" : "labels";
+      await apiRequest(
+        "PATCH",
+        `/api/admin/${kind}/${switchScopeId}/invited-press`,
+        { pressId },
+      );
+    },
+    onSuccess: () => {
+      // Re-resolve the panel: invited-press drives the format costs,
+      // catalog, "Quoting" marker, and the trigger icon; the SKUs
+      // query re-reads the new manufacturing math; the partner detail
+      // + album list keep their invited-press stamp in sync.
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/albums", albumId, "invited-press"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/albums", albumId, "skus"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/labels"] });
+      setPressSwitcherOpen(false);
+      toast({ title: "Quoting press switched" });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't switch press",
+        description: e?.message,
+        variant: "destructive",
+      }),
+  });
   // Task #646 — two-step "Add Estimate › Another press" popover:
   // pick the press, then pick the qty from that press's ladder
   // before the row materialises. Null means we're back on the press
@@ -3826,11 +3872,17 @@ function SkuRow({
                       data-testid={`button-press-switcher-${format}`}
                     >
                       {invitedPressItself.logoUrl ? (
-                        <img
-                          src={invitedPressItself.logoUrl}
-                          alt=""
-                          className="w-5 h-5 object-contain"
-                        />
+                        // Task #673 — presses sit in a rounded-rect tile;
+                        // circles are reserved for people/bands, so a
+                        // round logo (e.g. Hellbender) no longer reads
+                        // as an avatar.
+                        <span className="w-5 h-5 rounded-[4px] overflow-hidden bg-white border border-slate-200 flex-shrink-0">
+                          <img
+                            src={invitedPressItself.logoUrl}
+                            alt=""
+                            className="w-full h-full object-cover"
+                          />
+                        </span>
                       ) : (
                         <span className="text-xs font-medium text-slate-600">
                           {invitedPressItself.name}
@@ -3846,28 +3898,67 @@ function SkuRow({
                     <ul className="space-y-1">
                       {qualifiedPresses.map((p) => {
                         const isCurrent = p.id === invitedPressItself.id;
+                        // Task #673 — every press logo in a rounded-rect
+                        // tile (people/bands keep circles). object-cover
+                        // crops a round logo to the square so Hellbender
+                        // stops reading as an avatar.
+                        const logo = p.logoUrl ? (
+                          <span className="w-5 h-5 rounded-[4px] overflow-hidden bg-white border border-slate-200 flex-shrink-0">
+                            <img
+                              src={p.logoUrl}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          </span>
+                        ) : (
+                          <span className="w-5 h-5 rounded-[4px] bg-slate-200 border border-slate-200 flex-shrink-0" />
+                        );
+                        const pending =
+                          switchQuotingPress.isPending &&
+                          switchQuotingPress.variables === p.id;
+                        // Read-only for non-super-admins (backend gates
+                        // the switch) and for the press already quoting —
+                        // no dead click.
+                        if (!canSwitchPress || isCurrent) {
+                          return (
+                            <li
+                              key={p.id}
+                              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs"
+                              data-testid={`row-qualified-press-${format}-${p.id}`}
+                            >
+                              {logo}
+                              <span className="flex-1 truncate text-slate-700">{p.name}</span>
+                              {isCurrent && (
+                                <span className="text-xs font-medium text-[color:var(--brand-blue)]">
+                                  Quoting
+                                </span>
+                              )}
+                            </li>
+                          );
+                        }
                         return (
-                          <li
-                            key={p.id}
-                            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs"
-                          >
-                            {p.logoUrl ? (
-                              <img src={p.logoUrl} alt="" className="w-5 h-5 object-contain flex-shrink-0" />
-                            ) : (
-                              <span className="w-5 h-5 rounded bg-slate-200 flex-shrink-0" />
-                            )}
-                            <span className="flex-1 truncate text-slate-700">{p.name}</span>
-                            {isCurrent && (
-                              <span className="text-xs font-medium text-[color:var(--brand-blue)]">
-                                Quoting
+                          <li key={p.id}>
+                            <button
+                              type="button"
+                              onClick={() => switchQuotingPress.mutate(p.id)}
+                              disabled={switchQuotingPress.isPending}
+                              className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-left hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              data-testid={`button-switch-press-${format}-${p.id}`}
+                            >
+                              {logo}
+                              <span className="flex-1 truncate text-slate-700">{p.name}</span>
+                              <span className="text-xs font-medium text-slate-400">
+                                {pending ? "Switching…" : "Switch"}
                               </span>
-                            )}
+                            </button>
                           </li>
                         );
                       })}
                     </ul>
                     <p className="text-xs text-slate-500 px-2 pt-2 border-t border-slate-100 mt-1">
-                      Switch the quoting press from the Vendors tab.
+                      {canSwitchPress
+                        ? "Click a press to switch who's quoting this album."
+                        : "Switch the quoting press from the Vendors tab."}
                     </p>
                   </PopoverContent>
                 </Popover>
