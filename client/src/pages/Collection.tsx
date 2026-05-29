@@ -350,7 +350,7 @@ export function Collection() {
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setShowSort(false)} />
                   <div
-                    className="absolute right-0 top-full mt-1.5 z-40 rounded-xl py-1 min-w-[180px]"
+                    className="absolute left-0 top-full mt-1.5 z-40 rounded-xl py-1 min-w-[180px]"
                     style={{
                       background: "rgba(36, 36, 40, 0.96)",
                       backdropFilter: "blur(24px) saturate(180%)",
