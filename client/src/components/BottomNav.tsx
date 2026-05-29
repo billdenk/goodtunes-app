@@ -64,7 +64,7 @@ const NavItem = ({
   const pillLeft = dir === -1 ? "-6px" : dir === 1 ? "6px" : "-2px";
   const pillRight = dir === -1 ? "6px" : dir === 1 ? "-6px" : "-2px";
   const contentShift =
-    dir === -1 ? "-translate-x-[4px]" : dir === 1 ? "translate-x-[4px]" : "";
+    dir === -1 ? "-translate-x-[6px]" : dir === 1 ? "translate-x-[6px]" : "";
   return (
     <button
       type="button"
