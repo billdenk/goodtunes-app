@@ -23,6 +23,7 @@ import {
   ShoppingBag,
   PanelRightClose,
   PanelRightOpen,
+  Receipt,
   Smartphone,
   Tablet,
   Trash2,
@@ -121,6 +122,7 @@ export type EntityKey =
   | "reports"
   | "jobs"
   | "platform-pricing"
+  | "gooddeed-pricing"
   | "trash"
   | "none";
 
@@ -649,6 +651,19 @@ export function AdminFrame({
               active={active === "reports"}
               onClick={() => navigate("/admin/reports")}
               testId="nav-reports"
+            />
+
+            {/* Task #737 — read-only GoodDeed pricing summary. Lives
+                ABOVE the super-admin-only System section so every admin
+                role can read it; the edit cards stay on Platform pricing
+                inside System. No count because it's a reference tool. */}
+            <SidebarLink
+              icon={Receipt}
+              label="GoodDeed pricing"
+              count={-1}
+              active={active === "gooddeed-pricing"}
+              onClick={() => navigate("/admin/gooddeed-pricing")}
+              testId="nav-gooddeed-pricing"
             />
 
             {isSuperAdmin && (

@@ -17919,6 +17919,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   );
 
+  // Task #737 — admin-readable Quickprinter ladder for the routing-default
+  // printer. The per-vendor /gooddeed-services endpoint is gated to
+  // super_admin or the vendor itself, so the read-only GoodDeed pricing
+  // summary (visible to every admin role) can't use it. This returns just
+  // the default print vendor's per-unit printing ladder for the requested
+  // paper size — no per-vendor scoping, requireAdmin only.
+  app.get(
+    "/api/admin/gooddeed-quickprinter-ladder",
+    requireAdmin,
+    async (req, res) => {
+      const paperSize = (String(req.query.paperSize || "letter") === "12x18"
+        ? "12x18"
+        : "letter") as "letter" | "12x18";
+      const { printVendorId } = await vgdp.getDefaultGoodDeedLegs();
+      if (!printVendorId) {
+        return res.json({ vendor: null, paperSize, ladder: [] });
+      }
+      const vendor = await storage.getVendorById(printVendorId);
+      const rows = await vgdp.listVendorGoodDeedServices(printVendorId);
+      const printing = rows.find((r) => r.service === "printing") ?? null;
+      const ladder = printing?.sizeLadders?.[paperSize] ?? printing?.tiers ?? [];
+      res.json({
+        vendor: vendor ? { id: vendor.id, name: vendor.name } : null,
+        paperSize,
+        ladder,
+      });
+    },
+  );
+
   // Per-album leg assignment. Patch any subset of the three legs;
   // null clears. The matching vendor must have an active row for the
   // matching service (we soft-warn but allow the assignment because

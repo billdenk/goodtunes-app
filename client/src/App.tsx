@@ -86,6 +86,7 @@ import { isAnalyticsDebugOverlayEnabled } from "@/lib/analytics";
 import { AdminReports } from "@/pages/AdminReports";
 import { AdminJobs } from "@/pages/AdminJobs";
 import { AdminPlatformPricing } from "@/pages/AdminPlatformPricing";
+import { AdminGoodDeedPricing } from "@/pages/AdminGoodDeedPricing";
 import AdminPayoutsRelease from "@/pages/AdminPayoutsRelease";
 import { AdminDashboard } from "@/pages/AdminDashboard";
 import { VendorPortal } from "@/pages/VendorPortal";
@@ -505,6 +506,11 @@ function Router() {
             caller's role isn't super_admin. */}
         <Route path="/admin/platform-pricing">
           <ProtectedRoute component={AdminPlatformPricing} />
+        </Route>
+        {/* Task #737 — read-only GoodDeed pricing summary, readable by
+            any admin role (Platform pricing above stays super-admin). */}
+        <Route path="/admin/gooddeed-pricing">
+          <ProtectedRoute component={AdminGoodDeedPricing} />
         </Route>
         {/* Task #543 — Bill-only payout-release queue. */}
         <Route path="/admin/payouts-release">
