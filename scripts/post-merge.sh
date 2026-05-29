@@ -2449,3 +2449,30 @@ SQL
 }
 migrate_task_734_stream_elsewhere dev  "${DATABASE_URL:-}"
 migrate_task_734_stream_elsewhere prod "${PROD_DATABASE_URL:-}"
+
+# Task #736 — Press mode (Dedicated vs All Presses) god-view toggle.
+# Added people.press_mode + labels.press_mode but shipped without a
+# post-merge migration, so both columns went missing on main-dev AND
+# prod. Admin People (artist) and Label pages do full-column selects on
+# these tables, so the missing columns 500 those admin surfaces. Nullable
+# text (NULL = resolver default "dedicated"). Idempotent ADD COLUMN IF
+# NOT EXISTS on both DBs so admin loads and the publish dev→prod diff
+# stays empty.
+migrate_task_736_press_mode() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-736 press_mode migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE people ADD COLUMN IF NOT EXISTS press_mode text;
+ALTER TABLE labels ADD COLUMN IF NOT EXISTS press_mode text;
+SQL
+  then
+    echo "post-merge: task-736 press_mode migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-736 press_mode migration failed on $label (continuing)"
+  fi
+}
+migrate_task_736_press_mode dev  "${DATABASE_URL:-}"
+migrate_task_736_press_mode prod "${PROD_DATABASE_URL:-}"
