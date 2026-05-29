@@ -5,6 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { usePlayer } from "@/context/PlayerContext";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
+import { IconButton } from "@/components/ui/IconButton";
 import { SONGS, ALBUMS, type Song, type Album } from "@/data/musicData";
 import type { Song as DbSong, Album as DbAlbum } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -382,25 +383,24 @@ export function Playlists() {
         <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1100px] lg:mx-auto h-screen text-white flex flex-col">
           <div ref={detailScrollRef} className="flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
           <header className="sticky top-0 z-20 flex items-center justify-between px-5 pt-14 pb-3 flex-shrink-0">
-            <button type="button" onClick={closeDetail} className="w-9 h-9 rounded-full flex items-center justify-center text-white/80 backdrop-blur" style={{ background: "rgba(255,255,255,0.12)" }} data-testid="button-back-playlist">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <IconButton variant="glass" label="Back" onClick={closeDetail} data-testid="button-back-playlist">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M15 18l-6-6 6-6" strokeLinecap="round" />
               </svg>
-            </button>
+            </IconButton>
             {!isFavoritesView ? (
-              <button
-                type="button"
+              <IconButton
+                variant="glass"
+                label="Edit playlist"
                 onClick={() => { setEditingPlaylist(selectedPlaylist); setEditName(selectedPlaylist.name); }}
-                className="w-9 h-9 rounded-full flex items-center justify-center text-white/70 backdrop-blur"
-                style={{ background: "rgba(255,255,255,0.12)" }}
                 data-testid="button-edit-playlist"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" />
                 </svg>
-              </button>
+              </IconButton>
             ) : (
-              <div className="w-9 h-9" />
+              <div className="w-11 h-11" />
             )}
           </header>
 

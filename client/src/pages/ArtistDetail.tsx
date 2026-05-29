@@ -822,16 +822,15 @@ function BucketGridSheet({
       data-testid={`sheet-bucket-${label.toLowerCase().replace(/\s+/g, "-")}`}
     >
       <div className="flex items-center gap-3 px-3 pt-3 pb-2 max-w-[440px] mx-auto w-full">
-        <button
+        <IconButton
           ref={closeBtnRef}
-          type="button"
+          variant="glass"
+          label="Back"
           onClick={onClose}
-          className="w-10 h-10 rounded-full bg-white/8 hover:bg-white/12 flex items-center justify-center active:scale-95 transition-transform"
           data-testid="button-bucket-close"
-          aria-label="Back"
         >
-          <ChevronLeft className="w-6 h-6 text-white" />
-        </button>
+          <ChevronLeft />
+        </IconButton>
         <h2
           id={headingId}
           className="text-white text-[17px] font-semibold tracking-tight flex-1 text-center pr-10"

@@ -13587,11 +13587,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#319ED8\" strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\" aria-hidden=\"true\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<svg viewBox=\"0 0 24 24\" fill={isBookmarked ? \"#4AFFCA\" : \"none\"} stroke={isBookmarked ? \"#4AFFCA\" : \"currentColor\"} strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\" aria-hidden=\"true\">"
   },
   {
@@ -13647,7 +13642,7 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill={currentLiked ? \"#FF5470\" : \"none\"} stroke={currentLiked ? \"#FF5470\" : \"currentColor\"} strokeWidth=\"2.2\" strokeLinecap=\"round\" strokeLinejoin=\"roun"
+    "snippet": "<svg viewBox=\"0 0 24 24\" fill={currentLiked ? \"#FF5470\" : \"none\"} stroke={currentLiked ? \"#FF5470\" : \"currentColor\"} strokeWidth=\"2.2\" strokeLinecap=\"round\" strokeLinejoin=\"round\">"
   },
   {
     "rule": "brand-hex-literal",
@@ -14212,47 +14207,7 @@
   {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"w-9 h-9 rounded-full flex items-center justify-center active:opacity-70\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70 overflow-hidden\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"w-9 h-9 ml-1 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70 flex-shrink-0\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<div className=\"w-6 h-6 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0\" style={{ background: \"rgba(255,255,255,0.92)\" }}>"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"w-10 h-10 rounded-full flex items-center justify-center text-white active:opacity-70\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white\""
   },
   {
     "rule": "brand-hex-literal",
@@ -14482,17 +14437,7 @@
   {
     "rule": "naked-icon-button",
     "file": "client/src/pages/ArtistDetail.tsx",
-    "snippet": "<button ref={closeBtnRef} type=\"button\" onClick={onClose} className=\"w-10 h-10 rounded-full bg-white/8 hover:bg-white/12 flex items-center justify-center active:scale-95 transition-transform\" data-tes"
-  },
-  {
-    "rule": "naked-icon-button",
-    "file": "client/src/pages/ArtistDetail.tsx",
     "snippet": "<button type=\"button\" aria-label=\"Close\" onClick={onClose} data-testid=\"button-how-to-play-close\" className=\"absolute flex items-center justify-center rounded-full active:scale-[0.94] transition-trans"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/ArtistDetail.tsx",
-    "snippet": "className=\"w-10 h-10 rounded-full bg-white/8 hover:bg-white/12 flex items-center justify-center active:scale-95 transition-transform\""
   },
   {
     "rule": "brand-hex-literal",
@@ -15682,7 +15627,7 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Player.tsx",
-    "snippet": "<svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"#FF5470\" stroke=\"#FF5470\" strokeWidth=\"1.5\">"
+    "snippet": "<svg viewBox=\"0 0 24 24\" fill=\"#FF5470\" stroke=\"#FF5470\" strokeWidth=\"1.5\">"
   },
   {
     "rule": "brand-hex-literal",
@@ -15782,16 +15727,6 @@
   {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/Player.tsx",
-    "snippet": "className=\"w-9 h-9 rounded-full flex items-center justify-center active:opacity-60 transition-opacity\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/Player.tsx",
-    "snippet": "className=\"w-9 h-9 rounded-full flex items-center justify-center active:opacity-60 transition-opacity text-white\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/Player.tsx",
     "snippet": "className=\"w-8 h-8 flex items-center justify-center rounded-full flex-shrink-0\""
   },
   {
@@ -15803,11 +15738,6 @@
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/Player.tsx",
     "snippet": "className=\"w-9 h-9 flex items-center justify-center rounded-full flex-shrink-0 text-white active:opacity-60\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/Player.tsx",
-    "snippet": "className=\"w-9 h-9 flex items-center justify-center rounded-full active:bg-white/10 transition-colors\""
   },
   {
     "rule": "player-touch-target-too-small",
@@ -15878,16 +15808,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Playlists.tsx",
     "snippet": "<h1 className=\"text-white text-[34px] font-bold leading-none tracking-tight\" data-testid=\"text-page-title\">Playlists</h1>"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/Playlists.tsx",
-    "snippet": "<button type=\"button\" onClick={closeDetail} className=\"w-9 h-9 rounded-full flex items-center justify-center text-white/80 backdrop-blur\" style={{ background: \"rgba(255,255,255,0.12)\" }} data-testid=\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/Playlists.tsx",
-    "snippet": "className=\"w-9 h-9 rounded-full flex items-center justify-center text-white/70 backdrop-blur\""
   },
   {
     "rule": "player-touch-target-too-small",

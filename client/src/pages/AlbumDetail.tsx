@@ -3095,18 +3095,16 @@ function InAppBrowserSheet({
         className="sticky top-0 z-20 flex items-center gap-2 px-3 py-2 border-b border-white/8"
         style={{ background: "rgba(20,24,48,0.92)", backdropFilter: "blur(20px) saturate(180%)" }}
       >
-        <button
-          type="button"
+        <IconButton
+          variant="glass"
+          label="Close"
           onClick={onClose}
-          aria-label="Close"
-          className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70 flex-shrink-0"
-          style={{ background: "rgba(255,255,255,0.10)" }}
           data-testid="button-inapp-close"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
-        </button>
+        </IconButton>
 
         <div className="flex-1 flex items-center gap-2 min-w-0">
           {logoUrl && (
@@ -3120,20 +3118,18 @@ function InAppBrowserSheet({
           </div>
         </div>
 
-        <button
-          type="button"
+        <IconButton
+          variant="glass"
+          label="Open in browser"
           onClick={openExternal}
-          aria-label="Open in browser"
-          className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70 flex-shrink-0"
-          style={{ background: "rgba(255,255,255,0.10)" }}
           data-testid="button-inapp-open-external"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M14 4h6v6" />
             <path d="M20 4l-9 9" />
             <path d="M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" />
           </svg>
-        </button>
+        </IconButton>
       </div>
 
       {/* Preview card. Virtually every vendor site (Fender, Reverb, Sweetwater,
@@ -3376,31 +3372,27 @@ function PhotoLightbox({ photos, startIndex, onClose }: { photos: AlbumPhoto[]; 
           {index + 1} of {photos.length}
         </span>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={toggleLike}
-            aria-label={currentLiked ? "Unfavorite photo" : "Favorite photo"}
+          <IconButton
+            variant="dimmed"
+            label={currentLiked ? "Unfavorite photo" : "Favorite photo"}
             aria-pressed={currentLiked}
-            className="w-10 h-10 rounded-full flex items-center justify-center text-white active:opacity-70"
-            style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)" }}
+            onClick={toggleLike}
             data-testid="button-favorite-photo"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill={currentLiked ? "#FF5470" : "none"} stroke={currentLiked ? "#FF5470" : "currentColor"} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg viewBox="0 0 24 24" fill={currentLiked ? "#FF5470" : "none"} stroke={currentLiked ? "#FF5470" : "currentColor"} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
             </svg>
-          </button>
-          <button
-            type="button"
+          </IconButton>
+          <IconButton
+            variant="dimmed"
+            label="Close"
             onClick={onClose}
-            aria-label="Close"
-            className="w-10 h-10 rounded-full flex items-center justify-center text-white active:opacity-70"
-            style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)" }}
             data-testid="button-close-photo"
           >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </IconButton>
         </div>
       </div>
 
@@ -3640,18 +3632,16 @@ export function AlbumBonusContent({ albumId }: { albumId: string }) {
         >
           <div className="flex items-center justify-between px-4 pt-12 pb-3">
             <h3 className="text-white text-[22px] font-bold tracking-tight">Videos</h3>
-            <button
-              type="button"
+            <IconButton
+              variant="glass"
+              label="Close"
               onClick={() => setShowAllVideos(false)}
-              aria-label="Close"
-              className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
-              style={{ background: "rgba(255,255,255,0.10)" }}
               data-testid="button-close-all-album-videos"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
-            </button>
+            </IconButton>
           </div>
           <div className="flex-1 overflow-y-auto px-5 pb-10">
             <div className="flex flex-col gap-5">
@@ -3695,17 +3685,16 @@ export function AlbumBonusContent({ albumId }: { albumId: string }) {
           data-testid="overlay-album-photo"
         >
           <div className="flex justify-end p-4">
-            <button
-              type="button"
+            <IconButton
+              variant="dimmed"
+              label="Close"
               onClick={() => setActivePhoto(null)}
-              className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white"
-              aria-label="Close"
               data-testid="button-close-album-photo"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
-            </button>
+            </IconButton>
           </div>
           <div className="flex-1 flex items-center justify-center px-4">
             <img

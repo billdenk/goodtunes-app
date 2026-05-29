@@ -2,6 +2,7 @@ import { useState, useRef, useMemo, useEffect } from "react";
 import { usePlayer } from "@/context/PlayerContext";
 import { formatDuration } from "@/data/musicData";
 import { LyricsIcon } from "@/components/ui/LyricsIcon";
+import { IconButton } from "@/components/ui/IconButton";
 import { LyricsGapDots } from "@/components/LyricsGapDots";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { track } from "@/lib/analytics";
@@ -373,39 +374,35 @@ export function Player() {
                 <p className="text-white/55 text-sm mt-0.5 truncate">{currentSong.album.artist}</p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => toggleFavorite(currentSong.id)}
-                  className="w-9 h-9 rounded-full flex items-center justify-center active:opacity-60 transition-opacity"
-                  style={{ background: "rgba(255,255,255,0.10)" }}
-                  aria-label={favorited ? "Unfavorite" : "Favorite"}
+                <IconButton
+                  variant="glass"
+                  label={favorited ? "Unfavorite" : "Favorite"}
                   aria-pressed={favorited}
+                  onClick={() => toggleFavorite(currentSong.id)}
                   data-testid="button-favorite-song"
                 >
                   {favorited ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#FF5470" stroke="#FF5470" strokeWidth="1.5">
+                    <svg viewBox="0 0 24 24" fill="#FF5470" stroke="#FF5470" strokeWidth="1.5">
                       <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
                     </svg>
                   ) : (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
                     </svg>
                   )}
-                </button>
-                <button
-                  type="button"
+                </IconButton>
+                <IconButton
+                  variant="glass"
+                  label="More"
                   onClick={() => setShowAddToPlaylist(true)}
-                  className="w-9 h-9 rounded-full flex items-center justify-center active:opacity-60 transition-opacity text-white"
-                  style={{ background: "rgba(255,255,255,0.10)" }}
-                  aria-label="More"
                   data-testid="button-song-more"
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <svg viewBox="0 0 24 24" fill="currentColor">
                     <circle cx="5" cy="12" r="1.7" />
                     <circle cx="12" cy="12" r="1.7" />
                     <circle cx="19" cy="12" r="1.7" />
                   </svg>
-                </button>
+                </IconButton>
               </div>
             </div>
 
@@ -928,18 +925,18 @@ export function Player() {
           <div className="relative w-full max-w-[390px] min-h-screen flex flex-col">
             {/* Top bar */}
             <div className="relative z-10 flex items-center justify-between px-5 pt-14 pb-2">
-              <button
-                type="button"
+              <IconButton
+                variant="glass"
+                label="Close queue"
                 onClick={() => setShowQueue(false)}
-                className="w-9 h-9 flex items-center justify-center rounded-full active:bg-white/10 transition-colors"
                 data-testid="button-close-queue"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
                   <path d="M19 9l-7 7-7-7" />
                 </svg>
-              </button>
+              </IconButton>
               <p className="text-white/50 text-xs font-medium uppercase tracking-widest">Up Next</p>
-              <div className="w-9 h-9" />
+              <div className="w-11 h-11" />
             </div>
 
             {/* Now playing card */}
