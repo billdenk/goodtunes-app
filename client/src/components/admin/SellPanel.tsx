@@ -1422,6 +1422,46 @@ const fieldClass =
   "h-8 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 " +
   "focus:outline-none focus:border-[color:var(--brand-blue)] focus:ring-1 focus:ring-[color:var(--brand-blue)]";
 
+// Focusable controls used to compute the Tab target when we intercept the
+// browser's native Tab on a price/SKU text field (see handlePriceFieldKeyDown).
+const SELL_FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), ' +
+  'select:not([disabled]), textarea:not([disabled]), ' +
+  '[tabindex]:not([tabindex="-1"])';
+
+// Safari treats Tab out of a text input that sits next to a custom control
+// (our Qty <Select> trigger and disclosure buttons aren't plain form fields)
+// as a cue to jump focus to the address bar and pop the URL/Suggestions sheet
+// instead of moving to the next field. To keep focus inside the panel, we
+// intercept Tab/Shift+Tab on every "$" price / SKU box: move focus to the
+// adjacent focusable control ourselves and preventDefault so Safari can't
+// escape. Blurring the field this way still fires its onBlur-commit / debounced
+// autosave, so no edit is lost. Enter mirrors the existing blur-to-commit
+// pattern used throughout this panel. Chrome and mobile are unaffected — they
+// already keep Tab inside the document, and this just makes the move explicit.
+function handlePriceFieldKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    e.currentTarget.blur();
+    return;
+  }
+  if (e.key !== "Tab") return;
+  const current = e.currentTarget;
+  const focusable = Array.from(
+    current.ownerDocument.querySelectorAll<HTMLElement>(SELL_FOCUSABLE_SELECTOR),
+  ).filter((el) => el === current || el.offsetParent !== null);
+  const idx = focusable.indexOf(current);
+  if (idx === -1) return;
+  const next = focusable[e.shiftKey ? idx - 1 : idx + 1];
+  if (!next) return;
+  e.preventDefault();
+  try {
+    next.focus({ preventScroll: false });
+  } catch {
+    next.focus();
+  }
+}
+
 // Quiet "Save" affordance. At rest: slate-500 link. When the row has
 // unsaved edits: brand-blue link + faint pill. No bouncy fill.
 function SaveLink({
@@ -4554,6 +4594,7 @@ function SkuRow({
                     type="text"
                     value={opts.blockPriceStr}
                     onChange={(e) => opts.onPriceChange(e.target.value)}
+                    onKeyDown={handlePriceFieldKeyDown}
                     placeholder="0.00"
                     inputMode="decimal"
                     className={`w-full pl-5 ${fieldClass}`}
@@ -5923,6 +5964,7 @@ function SkuRow({
               type="text"
               value={priceStr}
               onChange={(e) => setPriceStr(e.target.value)}
+              onKeyDown={handlePriceFieldKeyDown}
               placeholder="0.00"
               inputMode="decimal"
               className={`w-28 ${fieldClass}`}
@@ -7166,6 +7208,7 @@ function BookletPill({
                         setTouched(true);
                         setPriceStr(e.target.value);
                       }}
+                      onKeyDown={handlePriceFieldKeyDown}
                       inputMode="decimal"
                       className={`${fieldClass} w-32 tabular-nums`}
                       data-testid="input-booklet-price"
@@ -7846,6 +7889,7 @@ function GoodDeedPill({
                       type="text"
                       value={priceStr}
                       onChange={(e) => { setTouched(true); setPriceStr(e.target.value); }}
+                      onKeyDown={handlePriceFieldKeyDown}
                       inputMode="decimal"
                       className={`${fieldClass} w-32 tabular-nums`}
                       data-testid="input-gooddeed-price"
@@ -8486,6 +8530,7 @@ function AddonForm({
               type="text"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
+              onKeyDown={handlePriceFieldKeyDown}
               inputMode="decimal"
               className={`w-28 ${fieldClass}`}
               data-testid="input-addon-price"
