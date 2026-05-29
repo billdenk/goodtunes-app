@@ -189,6 +189,136 @@ SQL
 migrate_press_colors_import_source_url dev  "${DATABASE_URL:-}"
 migrate_press_colors_import_source_url prod "${PROD_DATABASE_URL:-}"
 
+# Task #683 — Reconcile dev press roster with prod so a publish dev->prod
+# diff is a no-op over the manufacturers + press_* tables. The founding seed
+# only mints Memphis + Hellbender (fresh ids per clone); the real Physical
+# Music Products and Hoover Printing presses live only in prod, so a stale
+# dev would DROP them (and PMP's confirmed pricing) from prod on publish and
+# ADD the empty "Precision Pressing" leftover. This copies PMP + Hoover (and
+# Spinney Media, the fulfillment partner both reference) into dev with prod's
+# EXACT ids so publish sees matching rows instead of delete-and-recreate.
+# ID-preserving + ON CONFLICT (id) DO NOTHING => idempotent and convergent
+# with the lazy seedPmpCatalog() (its ensure* helpers match by natural key,
+# so they reuse these rows rather than minting duplicates). DEV ONLY — prod
+# is the source of truth here and must never be mutated from post-merge.
+migrate_reconcile_press_roster() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press-roster reconcile on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+INSERT INTO fulfillment_partners (id,name,domain,logo_url,cover_url,bio,location,website_url,contact_email,contact_phone,shipping_address,created_at,location_address,shipping_address_struct) VALUES ('389bd449-b548-4fee-8e3a-4a5be9191a6a','Spinney Media',NULL,'/objects/uploads/451844ac-5ef5-46c6-b020-76d769b88a2c.jpg',NULL,NULL,NULL,'https://spinneymedia.com',NULL,NULL,NULL,'2026-05-23 08:02:28.889553'::timestamp,NULL,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO manufacturers (id,name,domain,logo_url,cover_url,bio,location,website_url,contact_email,contact_phone,turnaround_days,specialties,default_fulfillment_partner_id,created_at,turnaround_weeks_min,turnaround_weeks_max,location_address,broker_discount_pct,operational_note) VALUES ('97f5c812-63f0-4f51-ada2-092f06663856','Physical Music Products','physicalmusicproducts.com','/objects/uploads/6bd431e0-86a8-4b7d-841a-35ae9f0d49ac.jpg','/objects/uploads/f0e4c9f4-6630-4283-ac4d-c88eceffc9cb.webp','Your records are our business.',NULL,'https://www.physicalmusicproducts.com',NULL,NULL,NULL,'{}'::text[],'389bd449-b548-4fee-8e3a-4a5be9191a6a','2026-05-24 02:32:56.32165'::timestamp,NULL,NULL,NULL,0,'Markup model not yet confirmed — treating retail = cost on confirmed rungs until PMP states otherwise.') ON CONFLICT (id) DO NOTHING;
+INSERT INTO manufacturers (id,name,domain,logo_url,cover_url,bio,location,website_url,contact_email,contact_phone,turnaround_days,specialties,default_fulfillment_partner_id,created_at,turnaround_weeks_min,turnaround_weeks_max,location_address,broker_discount_pct,operational_note) VALUES ('01e0761e-c637-4089-aa2a-9102aeeba3b2','Hoover Printing','hooverprinting.com','/objects/uploads/0f3295ce-f6b7-47fe-90ac-5f3b3cdea8e8.png','/objects/uploads/9dafd61a-2d70-44ec-bc02-bd35c3c97397.jpg','Hoover Printing has provided Commercial Printing, Digital, Offset, Letterpress, Business Cards, Books and more services in Orange County, CA.',NULL,'https://hooverprinting.com/',NULL,NULL,NULL,'{}'::text[],'389bd449-b548-4fee-8e3a-4a5be9191a6a','2026-05-24 04:18:13.790391'::timestamp,NULL,NULL,NULL,0,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_formats (id,press_id,format,position) VALUES ('85cef1f1-7bac-4c94-b291-90bc7d3b3c77','97f5c812-63f0-4f51-ada2-092f06663856','12_lp',0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_formats (id,press_id,format,position) VALUES ('ef27b4af-b90a-4a53-ae63-bd96a8904817','97f5c812-63f0-4f51-ada2-092f06663856','12_double',1) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_jackets (id,press_id,name,position,is_default) VALUES ('7ba0fc65-f750-4d7d-8d7d-18115534f460','97f5c812-63f0-4f51-ada2-092f06663856','Standard Full-Color Jacket',0,true) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_color_tiers (id,press_id,format,name,position,price_ladder,masters_prep_cost_cents) VALUES ('adebfd66-b82f-4715-b5f5-467d7b446ac4','97f5c812-63f0-4f51-ada2-092f06663856','12_double','Black',0,'[]'::jsonb,0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_color_tiers (id,press_id,format,name,position,price_ladder,masters_prep_cost_cents) VALUES ('59a8df17-1e1f-4113-b272-16d656b79999','97f5c812-63f0-4f51-ada2-092f06663856','12_double','Color',1,'[]'::jsonb,0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_color_tiers (id,press_id,format,name,position,price_ladder,masters_prep_cost_cents) VALUES ('2ebb488e-0598-4029-9596-d6510af1b4db','97f5c812-63f0-4f51-ada2-092f06663856','12_double','Splatter',2,'[]'::jsonb,0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_color_tiers (id,press_id,format,name,position,price_ladder,masters_prep_cost_cents) VALUES ('55d13fcc-06d2-4033-b505-a512bee9bca8','97f5c812-63f0-4f51-ada2-092f06663856','12_double','Translucent',3,'[]'::jsonb,0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_color_tiers (id,press_id,format,name,position,price_ladder,masters_prep_cost_cents) VALUES ('a15639f5-d4f1-4434-b558-a567bcda5677','97f5c812-63f0-4f51-ada2-092f06663856','12_double','Opaque',4,'[]'::jsonb,0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_color_tiers (id,press_id,format,name,position,price_ladder,masters_prep_cost_cents) VALUES ('212fff10-fc7e-4dff-8be9-a6c98d7993ce','97f5c812-63f0-4f51-ada2-092f06663856','12_lp','Black',0,'[]'::jsonb,0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_color_tiers (id,press_id,format,name,position,price_ladder,masters_prep_cost_cents) VALUES ('7138145a-c0a5-4e01-ac96-a80fb1df9d6f','97f5c812-63f0-4f51-ada2-092f06663856','12_lp','Color',1,'[]'::jsonb,0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_color_tiers (id,press_id,format,name,position,price_ladder,masters_prep_cost_cents) VALUES ('d6dc1c42-4cb0-44d0-8ed7-454032160f0a','97f5c812-63f0-4f51-ada2-092f06663856','12_lp','Splatter',2,'[]'::jsonb,0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_color_tiers (id,press_id,format,name,position,price_ladder,masters_prep_cost_cents) VALUES ('65c1ea44-4eba-4c94-9027-eda7adce12e9','97f5c812-63f0-4f51-ada2-092f06663856','12_lp','Translucent',3,'[]'::jsonb,0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_color_tiers (id,press_id,format,name,position,price_ladder,masters_prep_cost_cents) VALUES ('d09d1c13-b96b-4061-8a9f-1ba89f1196d0','97f5c812-63f0-4f51-ada2-092f06663856','12_lp','Opaque',4,'[]'::jsonb,0) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('600187cc-a490-4fd4-ac47-9a63bd0963f7','55d13fcc-06d2-4033-b505-a512bee9bca8','Clear','#e8eef2',NULL,0,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('9ac0d7cd-d1dd-4c24-9a9d-2ce8740082ad','55d13fcc-06d2-4033-b505-a512bee9bca8','Ruby Red','#c0566a',NULL,1,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('be12f82f-146b-47da-bed1-9ebd7fa249af','55d13fcc-06d2-4033-b505-a512bee9bca8','Orange','#f0a866',NULL,2,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('89cf1156-f81e-4546-80c3-29184c75cccf','55d13fcc-06d2-4033-b505-a512bee9bca8','Gold','#e6c66a',NULL,3,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('d588663f-ccfc-4208-9e11-b4e1a33bd9a2','55d13fcc-06d2-4033-b505-a512bee9bca8','Yellow','#f2e79a',NULL,4,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('189bbe08-28b4-4db0-9979-8e43ca5cde67','55d13fcc-06d2-4033-b505-a512bee9bca8','Green','#5fb98a',NULL,5,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('b44f403c-ebd2-41b3-8b05-5dc6a6156af5','55d13fcc-06d2-4033-b505-a512bee9bca8','Blue','#5a86c8',NULL,6,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('01880497-ccb7-40f3-972c-801b909bf138','55d13fcc-06d2-4033-b505-a512bee9bca8','Violet','#9a6fc0',NULL,7,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('626c1760-60fd-4054-a55b-9dec518d3bd7','55d13fcc-06d2-4033-b505-a512bee9bca8','Smoke','#8a8f96',NULL,8,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('dc826944-88d2-4c54-ab82-b2bc282386c6','65c1ea44-4eba-4c94-9027-eda7adce12e9','Clear','#e8eef2',NULL,0,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('b7898ae8-9a6e-497d-ba70-fbbcd7381207','65c1ea44-4eba-4c94-9027-eda7adce12e9','Ruby Red','#c0566a',NULL,1,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('772a2193-e586-46c1-acc9-9f028329153f','65c1ea44-4eba-4c94-9027-eda7adce12e9','Orange','#f0a866',NULL,2,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('6cb9e87f-4069-4364-9110-e43c404a3b4c','65c1ea44-4eba-4c94-9027-eda7adce12e9','Gold','#e6c66a',NULL,3,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('5716ab42-28ba-40c4-8e61-9d326b161e2a','65c1ea44-4eba-4c94-9027-eda7adce12e9','Yellow','#f2e79a',NULL,4,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('07b508ed-2ed8-4934-83ab-306cef4bb131','65c1ea44-4eba-4c94-9027-eda7adce12e9','Green','#5fb98a',NULL,5,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('68b4e6ab-5e3c-47ad-846c-d7166ae761e6','65c1ea44-4eba-4c94-9027-eda7adce12e9','Blue','#5a86c8',NULL,6,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('5bfe87a5-b9fd-4feb-abd9-2081271548ed','65c1ea44-4eba-4c94-9027-eda7adce12e9','Violet','#9a6fc0',NULL,7,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('a9713b81-ac4b-403a-ab55-cbcdc784ced6','65c1ea44-4eba-4c94-9027-eda7adce12e9','Smoke','#8a8f96',NULL,8,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('c3bb5e4f-a7d0-4000-ac81-004090111638','a15639f5-d4f1-4434-b558-a567bcda5677','White','#f5f5f2',NULL,0,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('6ef61dc5-746a-4490-9328-90c18946150a','a15639f5-d4f1-4434-b558-a567bcda5677','Cream','#efe7d2',NULL,1,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('705f97e7-bdd9-461e-b79a-9a49fbe0946f','a15639f5-d4f1-4434-b558-a567bcda5677','Red','#c8242b',NULL,2,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('8be118e4-5c2a-4bbd-9aed-439056e45cf7','a15639f5-d4f1-4434-b558-a567bcda5677','Orange','#ef8b3a',NULL,3,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('df1fed7d-b1a9-4970-a493-7ae9a8003308','a15639f5-d4f1-4434-b558-a567bcda5677','Yellow','#f5e23a',NULL,4,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('1be07c1a-1adf-4a52-ad72-c68a01955835','a15639f5-d4f1-4434-b558-a567bcda5677','Green','#3f8f57',NULL,5,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('11a9c222-3943-434d-8460-b8cd65512903','a15639f5-d4f1-4434-b558-a567bcda5677','Blue','#2f63c0',NULL,6,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('a41e8ed1-4225-4329-b33e-4eaf9d6a5430','a15639f5-d4f1-4434-b558-a567bcda5677','Purple','#7a3aa8',NULL,7,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('7fb513e5-652e-4ece-baee-3ce44d3457cd','a15639f5-d4f1-4434-b558-a567bcda5677','Pink','#f0468f',NULL,8,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('1a9c8368-affc-470b-afc8-6acb595fa6dc','a15639f5-d4f1-4434-b558-a567bcda5677','Brown','#5b3a1e',NULL,9,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('334165e7-4e3d-4b4e-8beb-93eee33479cf','a15639f5-d4f1-4434-b558-a567bcda5677','Grey','#8a8a8a',NULL,10,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('b2dfcf22-1d21-433c-9c79-87662ddfcea3','a15639f5-d4f1-4434-b558-a567bcda5677','Silver','#c2c6cc',NULL,11,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('d241d9d0-ec4e-40e6-b21a-e3f0a22b1da3','a15639f5-d4f1-4434-b558-a567bcda5677','Gold','#c9a44a',NULL,12,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('15a4283e-2555-4ba1-a629-7027676adab4','d09d1c13-b96b-4061-8a9f-1ba89f1196d0','White','#f5f5f2',NULL,0,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('8eea48ec-c340-4d4d-80d9-ba1e295f4f4b','d09d1c13-b96b-4061-8a9f-1ba89f1196d0','Cream','#efe7d2',NULL,1,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('51807c5b-03f3-4d08-90bb-45c24efaf089','d09d1c13-b96b-4061-8a9f-1ba89f1196d0','Red','#c8242b',NULL,2,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('873e272e-2c51-476a-8ef4-bde81584a33f','d09d1c13-b96b-4061-8a9f-1ba89f1196d0','Orange','#ef8b3a',NULL,3,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('8b9eb12c-941d-44f9-9685-f33de0714dc6','d09d1c13-b96b-4061-8a9f-1ba89f1196d0','Yellow','#f5e23a',NULL,4,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('04e2e830-7cf4-4c9d-b2a3-6e5c117c3889','d09d1c13-b96b-4061-8a9f-1ba89f1196d0','Green','#3f8f57',NULL,5,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('6d31aadb-695b-45e9-9045-9b805bae913d','d09d1c13-b96b-4061-8a9f-1ba89f1196d0','Blue','#2f63c0',NULL,6,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('b0ef3c56-7af8-4be0-9b21-d8414b051cad','d09d1c13-b96b-4061-8a9f-1ba89f1196d0','Purple','#7a3aa8',NULL,7,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('b4af1c6c-2817-4295-a0b4-5761945379a9','d09d1c13-b96b-4061-8a9f-1ba89f1196d0','Pink','#f0468f',NULL,8,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('f7150a51-d667-4e9a-976d-9424d5034462','d09d1c13-b96b-4061-8a9f-1ba89f1196d0','Brown','#5b3a1e',NULL,9,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('c2e647be-fb30-4eaa-b027-a71a78da4834','d09d1c13-b96b-4061-8a9f-1ba89f1196d0','Grey','#8a8a8a',NULL,10,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('ff7ab21d-68a3-4bc7-a3a6-065bbd67a1b8','d09d1c13-b96b-4061-8a9f-1ba89f1196d0','Silver','#c2c6cc',NULL,11,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_colors (id,tier_id,name,swatch_hex,swatch_image_url,position,import_source_url) VALUES ('16a80091-542e-4236-a47a-75b3d19184d8','d09d1c13-b96b-4061-8a9f-1ba89f1196d0','Gold','#c9a44a',NULL,12,NULL) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_tier_jacket_ladders (id,tier_id,jacket_id,price_ladder) VALUES ('7c719776-ded2-4d60-8bfd-fbe35927926f','212fff10-fc7e-4dff-8be9-a6c98d7993ce','7ba0fc65-f750-4d7d-8d7d-18115534f460','[{"qty": 100, "confirmed": false, "unitCents": 0}, {"qty": 200, "confirmed": false, "unitCents": 0}, {"qty": 300, "confirmed": false, "unitCents": 0}, {"qty": 500, "confirmed": false, "unitCents": 0}, {"qty": 1000, "confirmed": false, "unitCents": 0}, {"qty": 2000, "confirmed": false, "unitCents": 0}]'::jsonb) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_tier_jacket_ladders (id,tier_id,jacket_id,price_ladder) VALUES ('b5e472c0-8e00-4d21-ad4c-0e57b6bb7665','2ebb488e-0598-4029-9596-d6510af1b4db','7ba0fc65-f750-4d7d-8d7d-18115534f460','[{"qty": 100, "confirmed": false, "unitCents": 0}, {"qty": 200, "confirmed": false, "unitCents": 0}, {"qty": 300, "confirmed": false, "unitCents": 0}, {"qty": 500, "confirmed": true, "unitCents": 3265}, {"qty": 1000, "confirmed": true, "unitCents": 2514}, {"qty": 2000, "confirmed": true, "unitCents": 2274}]'::jsonb) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_tier_jacket_ladders (id,tier_id,jacket_id,price_ladder) VALUES ('824f223c-ef71-475e-b9b0-80545ce8ae53','55d13fcc-06d2-4033-b505-a512bee9bca8','7ba0fc65-f750-4d7d-8d7d-18115534f460','[{"qty": 100, "confirmed": false, "unitCents": 0}, {"qty": 200, "confirmed": false, "unitCents": 0}, {"qty": 300, "confirmed": false, "unitCents": 0}, {"qty": 500, "confirmed": false, "unitCents": 0}, {"qty": 1000, "confirmed": false, "unitCents": 0}, {"qty": 2000, "confirmed": false, "unitCents": 0}]'::jsonb) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_tier_jacket_ladders (id,tier_id,jacket_id,price_ladder) VALUES ('e28378c1-d4de-4b9e-9231-4d97ee8744be','59a8df17-1e1f-4113-b272-16d656b79999','7ba0fc65-f750-4d7d-8d7d-18115534f460','[{"qty": 100, "confirmed": false, "unitCents": 0}, {"qty": 200, "confirmed": false, "unitCents": 0}, {"qty": 300, "confirmed": false, "unitCents": 0}, {"qty": 500, "confirmed": true, "unitCents": 2315}, {"qty": 1000, "confirmed": true, "unitCents": 1654}, {"qty": 2000, "confirmed": true, "unitCents": 1374}]'::jsonb) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_tier_jacket_ladders (id,tier_id,jacket_id,price_ladder) VALUES ('c3fc2625-d0ea-4202-a3b0-43892d0a64e3','65c1ea44-4eba-4c94-9027-eda7adce12e9','7ba0fc65-f750-4d7d-8d7d-18115534f460','[{"qty": 100, "confirmed": false, "unitCents": 0}, {"qty": 200, "confirmed": false, "unitCents": 0}, {"qty": 300, "confirmed": false, "unitCents": 0}, {"qty": 500, "confirmed": false, "unitCents": 0}, {"qty": 1000, "confirmed": false, "unitCents": 0}, {"qty": 2000, "confirmed": false, "unitCents": 0}]'::jsonb) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_tier_jacket_ladders (id,tier_id,jacket_id,price_ladder) VALUES ('735464c7-c8e4-4097-95ee-b1fb34f5e3d5','7138145a-c0a5-4e01-ac96-a80fb1df9d6f','7ba0fc65-f750-4d7d-8d7d-18115534f460','[{"qty": 100, "confirmed": false, "unitCents": 0}, {"qty": 200, "confirmed": false, "unitCents": 0}, {"qty": 300, "confirmed": false, "unitCents": 0}, {"qty": 500, "confirmed": false, "unitCents": 0}, {"qty": 1000, "confirmed": false, "unitCents": 0}, {"qty": 2000, "confirmed": false, "unitCents": 0}]'::jsonb) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_tier_jacket_ladders (id,tier_id,jacket_id,price_ladder) VALUES ('622d1fe9-6936-4f11-8757-c9dd1a18454f','a15639f5-d4f1-4434-b558-a567bcda5677','7ba0fc65-f750-4d7d-8d7d-18115534f460','[{"qty": 100, "confirmed": false, "unitCents": 0}, {"qty": 200, "confirmed": false, "unitCents": 0}, {"qty": 300, "confirmed": false, "unitCents": 0}, {"qty": 500, "confirmed": false, "unitCents": 0}, {"qty": 1000, "confirmed": false, "unitCents": 0}, {"qty": 2000, "confirmed": false, "unitCents": 0}]'::jsonb) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_tier_jacket_ladders (id,tier_id,jacket_id,price_ladder) VALUES ('75dd7f47-37c0-485c-bee5-680fd0ff0d49','adebfd66-b82f-4715-b5f5-467d7b446ac4','7ba0fc65-f750-4d7d-8d7d-18115534f460','[{"qty": 100, "confirmed": false, "unitCents": 0}, {"qty": 200, "confirmed": false, "unitCents": 0}, {"qty": 300, "confirmed": false, "unitCents": 0}, {"qty": 500, "confirmed": false, "unitCents": 0}, {"qty": 1000, "confirmed": false, "unitCents": 0}, {"qty": 2000, "confirmed": false, "unitCents": 0}]'::jsonb) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_tier_jacket_ladders (id,tier_id,jacket_id,price_ladder) VALUES ('4cb042f6-a9d7-44e1-90fe-cd4ca22b06c5','d09d1c13-b96b-4061-8a9f-1ba89f1196d0','7ba0fc65-f750-4d7d-8d7d-18115534f460','[{"qty": 100, "confirmed": false, "unitCents": 0}, {"qty": 200, "confirmed": false, "unitCents": 0}, {"qty": 300, "confirmed": false, "unitCents": 0}, {"qty": 500, "confirmed": false, "unitCents": 0}, {"qty": 1000, "confirmed": false, "unitCents": 0}, {"qty": 2000, "confirmed": false, "unitCents": 0}]'::jsonb) ON CONFLICT (id) DO NOTHING;
+INSERT INTO press_tier_jacket_ladders (id,tier_id,jacket_id,price_ladder) VALUES ('eea2a8b8-efb8-4b37-8fb7-5283a71c838d','d6dc1c42-4cb0-44d0-8ed7-454032160f0a','7ba0fc65-f750-4d7d-8d7d-18115534f460','[{"qty": 100, "confirmed": false, "unitCents": 0}, {"qty": 200, "confirmed": false, "unitCents": 0}, {"qty": 300, "confirmed": false, "unitCents": 0}, {"qty": 500, "confirmed": false, "unitCents": 0}, {"qty": 1000, "confirmed": false, "unitCents": 0}, {"qty": 2000, "confirmed": false, "unitCents": 0}]'::jsonb) ON CONFLICT (id) DO NOTHING;
+-- Retire the stray, empty "Precision Pressing": dropped from the founding-
+-- press seed but lingering in the canonical dev DB. Hard-delete when
+-- unreferenced; soft-delete (deleted_at) if anything points at it.
+DO $$
+DECLARE pid varchar; refs int;
+BEGIN
+  SELECT id INTO pid FROM manufacturers
+   WHERE domain='precisionpressing.com' AND deleted_at IS NULL LIMIT 1;
+  IF pid IS NULL THEN RETURN; END IF;
+  SELECT
+     (SELECT count(*) FROM admin_invites        WHERE default_press_id=pid)
+    +(SELECT count(*) FROM labels                WHERE default_press_id=pid OR invited_by_press_id=pid)
+    +(SELECT count(*) FROM people                WHERE default_press_id=pid OR invited_by_press_id=pid)
+    +(SELECT count(*) FROM press_invited_albums  WHERE press_id=pid)
+    +(SELECT count(*) FROM press_pricing_syncs   WHERE press_id=pid)
+    +(SELECT count(*) FROM press_switch_history  WHERE from_press_id=pid OR to_press_id=pid)
+    +(SELECT count(*) FROM rfq_replies           WHERE manufacturer_id=pid)
+    +(SELECT count(*) FROM press_formats         WHERE press_id=pid)
+    +(SELECT count(*) FROM press_color_tiers     WHERE press_id=pid)
+    +(SELECT count(*) FROM press_format_costs    WHERE press_id=pid)
+    +(SELECT count(*) FROM press_jackets         WHERE press_id=pid)
+   INTO refs;
+  IF refs > 0 THEN
+    UPDATE manufacturers SET deleted_at = now() WHERE id = pid;
+  ELSE
+    DELETE FROM manufacturers WHERE id = pid;
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  then
+    echo "post-merge: press-roster reconcile ok on $label"
+  else
+    echo "post-merge: WARNING — press-roster reconcile failed on $label (continuing)"
+  fi
+}
+# DEV ONLY: prod already has these rows; never mutate prod from here.
+migrate_reconcile_press_roster dev "${DATABASE_URL:-}"
+
 migrate_customer_password_reset_tokens() {
   local label="$1" url="$2"
   if [ -z "$url" ]; then
