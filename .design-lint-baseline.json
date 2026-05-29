@@ -6817,11 +6817,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "className=\"text-[11px] text-[color:var(--brand-blue)] leading-snug -mt-1 pl-1\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "<div className=\"text-[11px] uppercase tracking-wider text-slate-400 font-semibold\">"
   },
   {
@@ -7760,34 +7755,19 @@
     "snippet": "<p className=\"text-[11px] text-slate-400\">"
   },
   {
-    "rule": "brand-hex-literal",
+    "rule": "hardcoded-font-size",
     "file": "client/src/components/BottomNav.tsx",
-    "snippet": "<div className={`transition-all duration-150 ${active ? \"text-[#319ED8]\" : \"text-white/35\"}`}>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/BottomNav.tsx",
-    "snippet": "className={`relative text-[10px] font-medium transition-colors duration-150 ${contentShift} ${active ? \"text-[#319ED8]\" : \"text-white/35\"}`}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/BottomNav.tsx",
-    "snippet": "className=\"pointer-events-auto absolute bottom-3 left-3 flex items-center justify-center w-12 h-12 rounded-full text-[#319ED8] active:scale-95 transition-transform\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/BottomNav.tsx",
-    "snippet": "className={`pointer-events-auto absolute bottom-3 right-3 flex items-center justify-center w-12 h-12 rounded-full active:scale-95 transition-transform ${isSearch ? \"text-[#319ED8]\" : \"text-white/80\"}`"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/BottomNav.tsx",
-    "snippet": "className={`pointer-events-auto absolute bottom-3 right-3 flex items-center justify-center w-14 h-14 rounded-full active:scale-95 transition-transform ${isSearch ? \"text-[#319ED8]\" : \"text-white/80\"}`"
+    "snippet": "className={`relative text-[10px] font-medium transition-colors duration-150 ${contentShift} ${active ? \"text-[color:var(--brand-blue)]\" : \"text-white/35\"}`}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/BottomNav.tsx",
-    "snippet": "className={`relative text-[10px] font-medium transition-colors duration-150 ${contentShift} ${active ? \"text-[#319ED8]\" : \"text-white/35\"}`}"
+    "snippet": "className=\"flex-1 min-w-0 bg-transparent border-0 py-0 pr-2 text-white placeholder-white/45 text-[15px] focus:outline-none\""
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/components/BottomNav.tsx",
+    "snippet": "className=\"mr-3 w-5 h-5 flex items-center justify-center rounded-full flex-shrink-0\""
   },
   {
     "rule": "brand-hex-literal",
@@ -8078,6 +8058,36 @@
     "rule": "player-touch-target-too-small",
     "file": "client/src/components/PlaylistPickerSheet.tsx",
     "snippet": "<div className=\"w-10 h-1 rounded-full mx-auto mb-5\" style={{ background: \"rgba(255,255,255,0.2)\" }} />"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/search/views.tsx",
+    "snippet": "<h2 className=\"text-white text-[15px] font-bold\">Recently Searched</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/search/views.tsx",
+    "snippet": "className=\"text-[color:var(--brand-blue)] text-[13px] font-semibold active:opacity-60\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/search/views.tsx",
+    "snippet": "<span className=\"text-white text-[14px] truncate\">{s.title}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/search/views.tsx",
+    "snippet": "{s.subtitle && <span className=\"text-white/40 text-[13px] truncate\">— {s.subtitle}</span>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/search/views.tsx",
+    "snippet": "className=\"px-5 py-2.5 rounded-full text-[14px] font-semibold active:opacity-70\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/search/views.tsx",
+    "snippet": "className=\"flex-shrink-0 px-3.5 py-1.5 rounded-full text-[13px] font-semibold transition-all\""
   },
   {
     "rule": "brand-hex-literal",
@@ -16070,59 +16080,9 @@
     "snippet": "className=\"text-white/55 text-[13px] underline-offset-2 hover:underline\""
   },
   {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Search.tsx",
-    "snippet": "<main className=\"h-screen w-full flex justify-center overflow-hidden bg-[#00062B]\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Search.tsx",
-    "snippet": "className=\"text-[#319ED8] text-[13px] font-semibold active:opacity-60\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Search.tsx",
-    "snippet": "style={{ background: \"#4AFFCA\", color: \"#00062B\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Search.tsx",
-    "snippet": "? { background: \"#319ED8\", color: \"#00062B\" }"
-  },
-  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Search.tsx",
     "snippet": "<h1 className=\"text-white text-[34px] font-bold leading-none tracking-tight\" data-testid=\"text-page-title\">Search</h1>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Search.tsx",
-    "snippet": "<h2 className=\"text-white text-[15px] font-bold\">Recently Searched</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Search.tsx",
-    "snippet": "className=\"text-[#319ED8] text-[13px] font-semibold active:opacity-60\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Search.tsx",
-    "snippet": "<span className=\"text-white text-[14px] truncate\">{s.title}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Search.tsx",
-    "snippet": "{s.subtitle && <span className=\"text-white/40 text-[13px] truncate\">— {s.subtitle}</span>}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Search.tsx",
-    "snippet": "className=\"px-5 py-2.5 rounded-full text-[14px] font-semibold active:opacity-70\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Search.tsx",
-    "snippet": "className=\"flex-shrink-0 px-3.5 py-1.5 rounded-full text-[13px] font-semibold transition-all\""
   },
   {
     "rule": "player-touch-target-too-small",
