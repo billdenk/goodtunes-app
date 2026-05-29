@@ -1,3 +1,7 @@
+// Sentry must initialize before anything else loads so its auto-
+// instrumentation can hook the runtime. Keep these two lines FIRST.
+import "./instrument";
+import * as Sentry from "@sentry/node";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStaticAssets, serveStaticFallback } from "./static";
@@ -420,11 +424,27 @@ async function bootstrapAccessGuard() {
     log(`oauth status check failed: ${e?.message ?? e}`, "auth");
   }
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     console.error("Internal Server Error:", err);
+
+    // Ship server-side faults to Sentry (no-op until SENTRY_DSN is set) so we
+    // get the full stack trace, not just the email ping. We attach request
+    // context by hand rather than relying on auto-instrumentation, which is
+    // unreliable once the server is bundled for production (script/build.ts) —
+    // this way the event always carries which route/method/host threw.
+    if (status >= 500) {
+      Sentry.withScope((scope) => {
+        scope.setContext("request", {
+          method: req.method,
+          url: req.originalUrl,
+          host: req.headers.host ?? null,
+        });
+        Sentry.captureException(err);
+      });
+    }
 
     if (res.headersSent) {
       return next(err);

@@ -1,6 +1,6 @@
 ---
 name: Migration "applied to dev DB" claims are not trustworthy
-description: When a task commit message says "Applied to dev DB" or "Schema applied", verify against both DATABASE_URL and PROD_DATABASE_URL before assuming. Multiple Task #174-class incidents have left both DBs without the columns the drizzle schema declares.
+description: When a task commit message says "Applied to dev DB" or "Schema applied", verify against both DATABASE_URL and PROD_DATABASE_URL before assuming. Recurring incidents have left both DBs without the columns the drizzle schema declares.
 ---
 
 When a merged task ships a `scripts/prod-schema-fixups/<date>-*.sql` migration alongside a `shared/schema.ts` change and the commit message claims "Applied to dev DB" (or similar), **do not trust the claim**. Verify with `\d <table>` against both `DATABASE_URL` and `PROD_DATABASE_URL` before assuming the schema is live.
