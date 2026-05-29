@@ -84,7 +84,8 @@ import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import { CertSaleWindowPanel } from "@/components/admin/CertSaleWindowPanel";
 import { ChangeFormatDialog } from "@/components/admin/ChangeFormatDialog";
 import { adaptSkuToFormat, type SkuPicks } from "@/lib/skuFormatAdapt";
-import { Repeat } from "lucide-react";
+import { Package } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 // Task #393 — Intl-based currency formatter with thousands separators
 // and proper negative handling, replacing the old `$${(c/100).toFixed(2)}`
@@ -4135,8 +4136,10 @@ function SkuRow({
         >
           {/* Task #654 — PREVIEW column with a hover overlay that
               groups two IconButtons (edit-artwork pencil + change-
-              format repeat icon) on the jacket. Replaces the format
-              dropdown that previously sat in the CONTROLS column. */}
+              format package icon) on the jacket. Replaces the format
+              dropdown that previously sat in the CONTROLS column.
+              Task #671 — package icon + visible "Package Options"
+              tooltip (was a loop/recycle icon w/ aria-label only). */}
           <div className="sm:order-2">
           <div className="relative">
             <div
@@ -4160,29 +4163,39 @@ function SkuRow({
                         aria-hidden={false}
                       >
                         {onEditArtwork && (
-                          <IconButton
-                            variant="ghost"
-                            label="Edit album artwork"
-                            onClick={onEditArtwork}
-                            className="!text-slate-700 shadow-lg ring-1 ring-black/5"
-                            style={{ backgroundColor: "rgba(255,255,255,0.95)" }}
-                            data-testid={`button-edit-artwork-${format}`}
-                          >
-                            <Pencil />
-                          </IconButton>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <IconButton
+                                variant="ghost"
+                                label="Edit artwork"
+                                onClick={onEditArtwork}
+                                className="!text-slate-700 shadow-lg ring-1 ring-black/5"
+                                style={{ backgroundColor: "rgba(255,255,255,0.95)" }}
+                                data-testid={`button-edit-artwork-${format}`}
+                              >
+                                <Pencil />
+                              </IconButton>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit artwork</TooltipContent>
+                          </Tooltip>
                         )}
                         {canChangeFormat && (
-                          <IconButton
-                            variant="ghost"
-                            label="Change the physical format"
-                            onClick={() => setChangeFormatOpen(true)}
-                            disabled={swapBusy}
-                            className="!text-slate-700 shadow-lg ring-1 ring-black/5"
-                            style={{ backgroundColor: "rgba(255,255,255,0.95)" }}
-                            data-testid={`button-change-format-${format}`}
-                          >
-                            <Repeat />
-                          </IconButton>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <IconButton
+                                variant="ghost"
+                                label="Package Options"
+                                onClick={() => setChangeFormatOpen(true)}
+                                disabled={swapBusy}
+                                className="!text-slate-700 shadow-lg ring-1 ring-black/5"
+                                style={{ backgroundColor: "rgba(255,255,255,0.95)" }}
+                                data-testid={`button-change-format-${format}`}
+                              >
+                                <Package />
+                              </IconButton>
+                            </TooltipTrigger>
+                            <TooltipContent>Package Options</TooltipContent>
+                          </Tooltip>
                         )}
                       </span>
                     </>
