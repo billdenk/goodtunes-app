@@ -12,7 +12,12 @@ Richer per-track credits than Apple's writer-only list. Three layers:
    - **Played on this song** — the instrument(s) used on THIS track, each tappable.
    - **Also on {album}** — other tracks on this album where they played (light-grey track numbers, album track-list style).
    - **View artist profile** — placeholder toast today; see "Artist profile + streaming-service handoff" in roadmap.
-4. Tapping an instrument opens an InstrumentSheet with photo, artist note, tuning/setup notes, and a **"Discover more / Buy"** vendor link (affiliate — see Micro-Sponsorships in roadmap).
+4. Tapping an instrument opens an InstrumentSheet with photo, artist note, tuning/setup notes, and a **"Where to buy"** list. Each vendor row exposes **two distinct links**:
+   - **The Vendor** — tap the logo *or* the name → that vendor's profile sheet inside GoodTunes (VendorSheet).
+   - **The gear** — the trailing circular `IconButton` opens THIS instrument's own product page (`instrument_vendors.affiliate_url`), e.g. `https://prsguitars.com/electrics/model/silver_sky_rosewood_2024` — never the vendor's brand homepage.
+   On the VendorSheet, the **globe** (and the "Web" link) always points at the vendor's **brand domain** (`vendors.home_url` / `vendors.domain`, e.g. `prsguitars.com`), so "anything featuring a specific instrument deep-links to that gear's URL; the globe is the brand."
+
+   Both the InstrumentSheet and VendorSheet chrome (back / share / bookmark / globe / direct-gear) use the 44px `IconButton` primitive with circular glass backgrounds — no ad-hoc sub-44px buttons.
 
 ### Data shape (currently being built out by the admin CMS)
 
@@ -38,7 +43,9 @@ Same slot can later host partner-brand lockups ("Gear by Gretsch", "Strings by D
 
 ## Chat / vendor messaging (demo)
 
-A **Chat** tab in the bottom nav. Currently powers a single demo flow: **fan ↔ vendor about an instrument**.
+> **Hidden on the gear surfaces (current state).** The Chat tab is off the bottom nav, and the vendor chat-bubbles have been removed from the InstrumentSheet "Where to buy" rows and the VendorSheet (top bar + instruments tab). Those were the only entry points to start a thread, so the chat demo below is effectively dark for fans. The chat store + route still exist (existing threads/unread count survive); restore the bubbles to bring it back. The notes below describe the design if/when it returns.
+
+A **Chat** tab in the bottom nav. Powers a single demo flow: **fan ↔ vendor about an instrument**.
 
 - Each vendor row inside an instrument sheet has a chat-bubble button. Tapping it opens (or creates) a thread with that vendor and seeds it with an Open-Graph-style preview card (instrument photo, category, name, vendor link). Fan can then ask a question without leaving GoodTunes.
 - Threads + messages are client-only via `localStorage` (`gt:chats`, `gt:chats-changed` event). One thread per vendor; additional instrument links append more cards into the same thread.

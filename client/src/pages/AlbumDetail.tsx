@@ -17,8 +17,7 @@ import { toast } from "@/hooks/use-toast";
 import { IconButton } from "@/components/ui/IconButton";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { ChevronLeft, Share, MoreHorizontal, X as XIcon } from "lucide-react";
-import { startVendorChatAboutInstrument } from "@/lib/chatStore";
-import { buyEnabled, chatEnabled, nativeDownloadsEnabled } from "@/lib/platform";
+import { buyEnabled, nativeDownloadsEnabled } from "@/lib/platform";
 import { downloadSong, removeDownload, listDownloadedSongs } from "@/lib/nativeDownloads";
 import { track } from "@/lib/analytics";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
@@ -808,28 +807,6 @@ function AlbumDetailMobile() {
             isBookmarked={!!vendorSheet.vendor.vendorId && bookmarkedVendors.has(vendorSheet.vendor.vendorId)}
             onToggleBookmark={() => vendorSheet.vendor.vendorId && toggleBookmarkVendor(vendorSheet.vendor.vendorId)}
             onOpenInAppBrowser={openVendorInAppBrowser}
-            onMessageVendor={(vendor) => {
-              const inst = vendorSheet.instrument;
-              try {
-                const domain = new URL(vendor.affiliateUrl).hostname.replace(/^www\./, "");
-                track("gear_vendor_chat_opened", { instrumentId: inst.id, vendorName: vendor.name });
-                const tid = startVendorChatAboutInstrument({
-                  kind: "instrument",
-                  instrumentId: inst.id,
-                  instrumentName: inst.name,
-                  instrumentCategory: inst.shortCategory ?? inst.category,
-                  instrumentPhotoUrl: inst.photoUrl,
-                  vendorName: vendor.name,
-                  vendorLogoUrl: vendor.logoUrl,
-                  vendorDomain: domain,
-                  url: vendor.affiliateUrl,
-                });
-                setVendorSheet(null);
-                navigate(`/chat/${encodeURIComponent(tid)}`);
-              } catch {
-                toast({ title: "Couldn't start chat", description: "Invalid vendor link." });
-              }
-            }}
             onOpenInstrument={(inst) => {
               // Close the vendor sheet and swap in the InstrumentSheet for
               // the tapped gear row. The vendor stays in scope (no
@@ -849,28 +826,6 @@ function AlbumDetailMobile() {
             onToggleBookmark={() => toggleBookmarkInstrument(instrumentSheet.instrument.id)}
             onOpenInAppBrowser={openVendorInAppBrowser}
             onOpenVendor={(vendor) => setVendorSheet({ vendor, instrument: instrumentSheet.instrument })}
-            onMessageVendor={(vendor) => {
-              const inst = instrumentSheet.instrument;
-              try {
-                const domain = new URL(vendor.affiliateUrl).hostname.replace(/^www\./, "");
-                track("gear_vendor_chat_opened", { instrumentId: inst.id, vendorName: vendor.name });
-                const tid = startVendorChatAboutInstrument({
-                  kind: "instrument",
-                  instrumentId: inst.id,
-                  instrumentName: inst.name,
-                  instrumentCategory: inst.shortCategory ?? inst.category,
-                  instrumentPhotoUrl: inst.photoUrl,
-                  vendorName: vendor.name,
-                  vendorLogoUrl: vendor.logoUrl,
-                  vendorDomain: domain,
-                  url: vendor.affiliateUrl,
-                });
-                setInstrumentSheet(null);
-                navigate(`/chat/${encodeURIComponent(tid)}`);
-              } catch {
-                toast({ title: "Couldn't start chat", description: "Invalid vendor link." });
-              }
-            }}
             onClose={() => setInstrumentSheet(null)}
           />
         ) : performerSheet ? (
@@ -2297,7 +2252,6 @@ function InstrumentSheet({
   onToggleBookmark,
   onOpenInAppBrowser,
   onOpenVendor,
-  onMessageVendor,
   onClose,
 }: {
   instrument: Instrument;
@@ -2307,7 +2261,6 @@ function InstrumentSheet({
   onToggleBookmark: () => void;
   onOpenInAppBrowser: (b: { url: string; title: string; logoUrl?: string }) => void;
   onOpenVendor: (vendor: InstrumentVendor) => void;
-  onMessageVendor: (vendor: { name: string; logoUrl?: string; affiliateUrl: string }) => void;
   onClose: () => void;
 }) {
   // SuperCredits-derived list of artists who've played this instrument on
@@ -2393,57 +2346,48 @@ function InstrumentSheet({
         className="flex-shrink-0 flex items-center justify-between px-3 pb-2"
         style={{ background: "rgba(20,24,48,0.85)", backdropFilter: "blur(20px) saturate(180%)", paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
       >
-        <button
-          type="button"
+        <IconButton
+          variant="glass"
+          label="Back"
           onClick={onClose}
-          aria-label="Back"
-          className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
-          style={{ background: "rgba(255,255,255,0.10)" }}
           data-testid="button-instrument-close"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M15 6l-6 6 6 6" />
           </svg>
-        </button>
+        </IconButton>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
+          <IconButton
+            variant="glass"
+            label="Share"
             onClick={handleShare}
-            aria-label="Share"
-            className="w-9 h-9 rounded-full flex items-center justify-center text-white active:opacity-70"
-            style={{ background: "rgba(255,255,255,0.10)" }}
             data-testid="button-instrument-share"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M12 3v12" />
               <path d="M7 8l5-5 5 5" />
               <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
             </svg>
-          </button>
-          <button
-            type="button"
-            onClick={onToggleBookmark}
-            aria-label={isBookmarked ? "Remove bookmark" : "Bookmark"}
+          </IconButton>
+          <IconButton
+            variant="glass"
+            label={isBookmarked ? "Remove bookmark" : "Bookmark"}
             aria-pressed={isBookmarked}
-            className="w-9 h-9 rounded-full flex items-center justify-center active:opacity-70"
-            style={{ background: "rgba(255,255,255,0.10)" }}
+            onClick={onToggleBookmark}
             data-testid="button-instrument-bookmark"
           >
             <svg
-              width="16"
-              height="16"
               viewBox="0 0 24 24"
               fill={isBookmarked ? "#4AFFCA" : "none"}
               stroke={isBookmarked ? "#4AFFCA" : "currentColor"}
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="text-white"
               aria-hidden="true"
             >
               <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
             </svg>
-          </button>
+          </IconButton>
         </div>
       </div>
 
@@ -2579,12 +2523,13 @@ function InstrumentSheet({
                 className="flex items-center px-5 py-2.5 active:bg-white/5"
                 data-testid={`row-vendor-${i}`}
               >
-                {/* Tap the logo → vendor profile sheet (Apple Music artist-style page) */}
+                {/* The Vendor link — tap the logo or the name to open the
+                    vendor's profile page inside GoodTunes. */}
                 <button
                   type="button"
                   onClick={() => onOpenVendor(v)}
                   aria-label={`About ${v.name}`}
-                  className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70 overflow-hidden"
+                  className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 active:scale-[0.94] overflow-hidden"
                   style={{ background: "rgba(255,255,255,0.92)" }}
                   data-testid={`button-vendor-about-${i}`}
                 >
@@ -2594,7 +2539,6 @@ function InstrumentSheet({
                     <span className="text-[#00062B] text-[13px] font-bold">{v.name.charAt(0)}</span>
                   )}
                 </button>
-                {/* Tap the row → direct product / buy link (opens in in-app browser sheet) */}
                 <button
                   type="button"
                   onClick={() => onOpenVendor(v)}
@@ -2605,37 +2549,23 @@ function InstrumentSheet({
                     <p className="text-white text-[15px] font-medium truncate">{v.name}</p>
                   </div>
                 </button>
-                {/* Chat bubble — opens a chat with this vendor seeded with the current instrument as an OG-style preview card.
-                    Web-only for v1 (see `client/src/lib/platform.ts`). */}
-                {chatEnabled && (
-                  <button
-                    type="button"
-                    onClick={() => onMessageVendor({ name: v.name, logoUrl: v.logoUrl, affiliateUrl: v.affiliateUrl })}
-                    aria-label={`Message ${v.name}`}
-                    className="w-9 h-9 ml-1 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70"
-                    style={{ background: "rgba(49,158,216,0.16)" }}
-                    data-testid={`button-vendor-message-${i}`}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                    </svg>
-                  </button>
-                )}
-                {/* "Opens in browser" indicator — circle with external-link arrow, matches the chat-bubble button style on the left */}
-                <button
-                  type="button"
+                {/* The direct-to-gear link — opens THIS instrument's own
+                    product page (instrument_vendors.affiliate_url), not the
+                    vendor's brand homepage. The brand domain lives behind the
+                    globe on the vendor profile sheet. */}
+                <IconButton
+                  variant="glass"
+                  label={`Open ${instrument.name} at ${v.name}`}
                   onClick={() => onOpenInAppBrowser({ url: v.affiliateUrl, title: v.name, logoUrl: v.logoUrl })}
-                  aria-label={`Open ${v.name} in browser`}
-                  className="w-9 h-9 ml-1 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70"
-                  style={{ background: "rgba(255,255,255,0.10)" }}
+                  className="flex-shrink-0 ml-2"
                   data-testid={`button-vendor-open-${i}`}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/85" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M14 4h6v6" />
                     <path d="M20 4L10 14" />
                     <path d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
                   </svg>
-                </button>
+                </IconButton>
               </div>
             ))}
           </div>
@@ -2682,7 +2612,6 @@ function VendorSheet({
   isBookmarked,
   onToggleBookmark,
   onOpenInAppBrowser,
-  onMessageVendor,
   onOpenInstrument,
   onClose,
 }: {
@@ -2691,7 +2620,6 @@ function VendorSheet({
   isBookmarked: boolean;
   onToggleBookmark: () => void;
   onOpenInAppBrowser: (b: { url: string; title: string; logoUrl?: string }) => void;
-  onMessageVendor: (vendor: { name: string; logoUrl?: string; affiliateUrl: string }) => void;
   onOpenInstrument: (instrument: Instrument) => void;
   onClose: () => void;
 }) {
@@ -2734,10 +2662,15 @@ function VendorSheet({
     enabled: !!vendor.vendorId,
   });
 
-  const domain = (() => {
-    try { return new URL(vendor.aboutUrl ?? vendor.affiliateUrl).hostname.replace(/^www\./, ""); }
-    catch { return ""; }
-  })();
+  // The globe / "Web" link always points at the vendor's BRAND domain
+  // (e.g. prsguitars.com), never a gear-specific product page — anything
+  // featuring a specific instrument deep-links to that gear's own URL via
+  // the InstrumentSheet "Available at" row instead.
+  const domain = vendor.domain
+    ?? (() => {
+      try { return new URL(vendor.homeUrl ?? vendor.aboutUrl ?? vendor.affiliateUrl).hostname.replace(/^www\./, ""); }
+      catch { return ""; }
+    })();
   // Prefer real SuperCredits-derived artists from the profile endpoint;
   // fall back to the static stub `usedByPersonIds` so this still looks
   // populated on demo vendors with no track_performers wired up yet.
@@ -2752,9 +2685,9 @@ function VendorSheet({
         .filter(Boolean) as Person[]);
 
   const bio = vendor.bio
-    ?? `${vendor.name} is one of the trusted shops we link out to from GoodTunes Credits. Tap the globe icon to visit their full catalog, or start a chat to ask about availability, condition, and shipping.`;
+    ?? `${vendor.name} is one of the trusted shops we link out to from GoodTunes Credits. Tap the globe icon to visit their full catalog.`;
   const tagline = vendor.tagline ?? domain;
-  const websiteUrl = vendor.aboutUrl ?? vendor.homeUrl ?? vendor.affiliateUrl;
+  const websiteUrl = vendor.homeUrl ?? vendor.aboutUrl ?? vendor.affiliateUrl;
 
   const handleShare = async () => {
     const shareUrl = vendor.aboutUrl ?? vendor.affiliateUrl;
@@ -2848,18 +2781,6 @@ function VendorSheet({
                 <path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z" />
               </svg>
             </IconButton>
-            {chatEnabled && (
-              <IconButton
-                variant="dimmed"
-                label={`Message ${vendor.name}`}
-                onClick={() => onMessageVendor({ name: vendor.name, logoUrl: vendor.logoUrl, affiliateUrl: vendor.affiliateUrl })}
-                data-testid="button-vendor-chat"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-              </IconButton>
-            )}
           </div>
         </div>
 
@@ -3090,24 +3011,6 @@ function VendorSheet({
                         <p className="text-[13px] mt-0.5 truncate" style={{ color: "rgba(235,235,245,0.55)" }}>{inst.shortCategory ?? inst.category}</p>
                       </div>
                     </button>
-                    {/* Chat bubble — start a chat with THIS vendor about
-                        this specific instrument. Mirrors the chat button in
-                        the InstrumentSheet vendor list so fans get the same
-                        affordance from either entry point. */}
-                    {chatEnabled && (
-                      <button
-                        type="button"
-                        onClick={() => onMessageVendor({ name: vendor.name, logoUrl: vendor.logoUrl, affiliateUrl: vendor.affiliateUrl })}
-                        aria-label={`Message ${vendor.name} about ${inst.name}`}
-                        className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 active:opacity-70"
-                        style={{ background: "rgba(49,158,216,0.16)" }}
-                        data-testid={`button-vendor-instrument-chat-${inst.id}`}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#319ED8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                        </svg>
-                      </button>
-                    )}
                     {/* Chevron — Apple-style "this row is tappable" indicator. */}
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/35 flex-shrink-0" aria-hidden="true">
                       <path d="M9 6l6 6-6 6" />
