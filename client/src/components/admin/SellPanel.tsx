@@ -3525,6 +3525,16 @@ function SkuRow({
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pricingBlocksKey]);
+  // Task #758 — the live GoodDeed signal, lifted up from GoodDeedPill so
+  // each pricing option column can render a read-only revenue card. Null
+  // until the pill mounts (primary vinyl row only); `active` gates whether
+  // the cards render at all.
+  const [goodDeedSignal, setGoodDeedSignal] = useState<{
+    active: boolean;
+    ratio: number;
+    pct: number;
+    priceCents: number | null;
+  } | null>(null);
   const addPricingBlock = () => {
     const newId = `pb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const sourceOpen = openProfitKeys.has("primary");
@@ -4980,6 +4990,25 @@ function SkuRow({
                   </span>
                 </div>
               </div>
+              {/* Task #758 — GoodDeed revenue readout for this option.
+                  Renders only when the GoodDeed cert is active; the cert
+                  count, revenue, and net follow this option's own quantity
+                  at the attach ratio chosen in the GoodDeed panel below.
+                  Cost is resolved per option cert-run so the net is
+                  accurate at each volume. */}
+              {goodDeedSignal?.active &&
+                goodDeedSignal.priceCents !== null &&
+                opts.blockQty > 0 && (
+                  <GoodDeedOptionCard
+                    albumId={albumId!}
+                    optionQty={opts.blockQty}
+                    ratio={goodDeedSignal.ratio}
+                    priceCents={goodDeedSignal.priceCents}
+                    existing={signedAddon ?? null}
+                    livePlatformCostCents={livePlatformCostCents ?? null}
+                    idSuffix={idSuffix}
+                  />
+                )}
             </div>
           );
         };
@@ -6065,7 +6094,6 @@ function SkuRow({
             artistName={artistName ?? ""}
             artistPhotoUrl={artistPhotoUrl ?? null}
             vinylQty={parsedQty}
-            vinylQuantityRungs={estimateRungs.map((r) => r.qty)}
             existing={signedAddon ?? null}
             livePlatformCostCents={livePlatformCostCents ?? null}
             onSave={onSaveAddon}
@@ -6075,6 +6103,7 @@ function SkuRow({
               setOpenUpsell((k) => (k === "gooddeed" ? null : "gooddeed"))
             }
             bodyContainer={upsellBodyEl}
+            onSignalChange={setGoodDeedSignal}
           />
         ) : null}
         {/* Task #579 — Booklet pill. Anchors to the first booklet-eligible
@@ -7584,6 +7613,124 @@ function BookletPill({
   );
 }
 
+// Task #758 — per-option GoodDeed revenue card. Rendered under each
+// pricing option column in SkuRow (primary + every duplicated option)
+// when the GoodDeed cert is active. It is a read-only consumer of the
+// signal lifted from GoodDeedPill: it applies the chosen attach ratio
+// to THIS option's quantity, resolves the per-cert wholesale for that
+// option's cert-run via the same gooddeed-pricing-preview endpoint the
+// pill uses, and shows cert count, GoodDeed revenue, and net for the
+// run. The cost-resolution chain (preview ladder → snapshot → flat
+// platform default) mirrors GoodDeedPill so the numbers never contradict
+// the panel below. Loss renders in brand pink.
+function GoodDeedOptionCard({
+  albumId,
+  optionQty,
+  ratio,
+  priceCents,
+  existing,
+  livePlatformCostCents,
+  idSuffix,
+}: {
+  albumId: string;
+  optionQty: number;
+  ratio: number;
+  priceCents: number;
+  existing: AlbumAddon | null;
+  livePlatformCostCents: number | null;
+  idSuffix: string;
+}) {
+  const certCount = Math.max(0, Math.round(optionQty * ratio));
+  const pct = Math.round(ratio * 100);
+  // Per-option cost preview, keyed to THIS option's cert-run size so a
+  // 100-cert run and a 200-cert run resolve their own tier rung.
+  const { data: preview } = useQuery<any>({
+    queryKey: [
+      "/api/admin/albums",
+      albumId,
+      "gooddeed-pricing-preview",
+      certCount || 1,
+    ],
+    queryFn: async () => {
+      const r = await apiRequest(
+        "GET",
+        `/api/admin/albums/${albumId}/gooddeed-pricing-preview?runQty=${Math.max(1, certCount)}`,
+      );
+      return r.json();
+    },
+    enabled: certCount > 0,
+  });
+  const previewCost = preview?.totalPerUnitCents ?? null;
+  const hasPreviewLadder = previewCost != null && previewCost > 0;
+  let costCents: number | null;
+  if (hasPreviewLadder) {
+    costCents = previewCost;
+  } else if (existing?.costCentsSnapshot != null) {
+    costCents = existing.costCentsSnapshot;
+  } else if (livePlatformCostCents != null) {
+    costCents = livePlatformCostCents;
+  } else {
+    costCents = null;
+  }
+  // CC fee matches GoodDeedPill: Stripe's flat US rate (2.9% + 30¢) on
+  // the cert retail.
+  const ccFeeCents = Math.round(priceCents * 0.029) + 30;
+  const canComputeNet = costCents !== null;
+  const revenueCents = priceCents * certCount;
+  const netTotalCents = canComputeNet
+    ? (priceCents - costCents! - ccFeeCents) * certCount
+    : null;
+  const netIsLoss = netTotalCents !== null && netTotalCents < 0;
+  const netLabel =
+    netTotalCents === null
+      ? "—"
+      : netIsLoss
+        ? `-${dollars(Math.abs(netTotalCents))}`
+        : dollars(netTotalCents);
+  return (
+    <div
+      className="rounded-md border border-slate-200 bg-slate-50/60 p-2.5 space-y-1.5"
+      data-testid={`gooddeed-option-card-${idSuffix}`}
+    >
+      <div className="flex items-center gap-1.5">
+        <Award className="w-3.5 h-3.5 text-[color:var(--brand-purple)]" />
+        <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+          GoodDeed
+        </span>
+      </div>
+      <div
+        className="text-xs text-slate-500 tabular-nums"
+        data-testid={`text-gooddeed-option-certs-${idSuffix}`}
+      >
+        {pct}% · {certCount.toLocaleString()} of {optionQty.toLocaleString()}
+      </div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="text-slate-600">Revenue</span>
+        <span
+          className="tabular-nums font-medium text-slate-900"
+          data-testid={`text-gooddeed-option-revenue-${idSuffix}`}
+        >
+          {dollars(revenueCents)}
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="text-slate-600">Net</span>
+        <span
+          className={[
+            "tabular-nums font-semibold",
+            netIsLoss
+              ? "text-[color:var(--brand-pink)]"
+              : "text-slate-900",
+          ].join(" ")}
+          data-testid={`text-gooddeed-option-net-${idSuffix}`}
+        >
+          {netLabel}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // Task #393 — GoodDeed certificate upsell, rendered as the full-width
 // OPTIONAL pill underneath the vinyl REQUIRED body. Collapsed shows a
 // one-line summary; expanded reveals the cert preview, % qty picker,
@@ -7598,7 +7745,6 @@ function GoodDeedPill({
   artistName,
   artistPhotoUrl,
   vinylQty,
-  vinylQuantityRungs,
   existing,
   livePlatformCostCents,
   onSave,
@@ -7606,6 +7752,7 @@ function GoodDeedPill({
   open,
   onToggle,
   bodyContainer,
+  onSignalChange,
 }: {
   albumId: string;
   artworkUrl: string | null | undefined;
@@ -7616,11 +7763,6 @@ function GoodDeedPill({
   artistName: string;
   artistPhotoUrl: string | null;
   vinylQty: number;
-  // Task #635 — when the picked tier exposes multiple confirmed
-  // pressing volumes, render a per-rung uplift table inside the
-  // pill aligned with the SkuRow's Estimates columns. Optional;
-  // single-rung rows skip the extra table.
-  vinylQuantityRungs?: number[];
   existing: AlbumAddon | null;
   livePlatformCostCents: number | null;
   onSave: (b: {
@@ -7637,6 +7779,16 @@ function GoodDeedPill({
   open: boolean;
   onToggle: () => void;
   bodyContainer: HTMLElement | null;
+  // Task #758 — lift the live GoodDeed signal up to SkuRow so each
+  // pricing option column can render its own revenue card. The pill
+  // stays the editor; the option cards are read-only consumers of
+  // {active, ratio, pct, priceCents}.
+  onSignalChange?: (signal: {
+    active: boolean;
+    ratio: number;
+    pct: number;
+    priceCents: number | null;
+  }) => void;
 }) {
   const [active, setActive] = useState(existing?.active ?? false);
   // Task #727 — new-cert defaults: $25 retail, 20% qty. Bill wants the
@@ -7728,6 +7880,19 @@ function GoodDeedPill({
   });
 
   const priceCents = useMemo(() => parseDollars(priceStr), [priceStr]);
+  // Task #758 — report the live GoodDeed signal up to SkuRow so the
+  // per-option revenue cards stay in lock-step with this pill. We send
+  // the attach ratio (resolvedQty ÷ vinylQty) rather than a snapped
+  // percentage so an "Other…" raw count scales each option exactly.
+  useEffect(() => {
+    if (!onSignalChange) return;
+    onSignalChange({
+      active,
+      ratio: vinylQty > 0 ? resolvedQty / vinylQty : 0,
+      pct: resolvedPct,
+      priceCents,
+    });
+  }, [onSignalChange, active, resolvedQty, vinylQty, resolvedPct, priceCents]);
   // Task #511 / #612 — Prefer the qty-driven tier preview so the
   // operator sees wholesale move as they scrub Select Qty. Previously
   // the chain was `preview ?? snapshot ?? livePlatform`, but `??`
@@ -8306,94 +8471,11 @@ function GoodDeedPill({
             </div>
           </div>
 
-          {/* Task #635 — per-quantity GoodDeed uplift. When the vinyl
-              picked tier exposes multiple confirmed pressing volumes,
-              show one column per rung so the operator can read what
-              the cert run nets at every volume in the Estimates row
-              above. Cert count per rung follows the current attach
-              ratio (resolvedQty ÷ vinylQty) so the numbers track the
-              % picker without a second source of truth. */}
-          {canComputeNet &&
-            vinylQuantityRungs &&
-            vinylQuantityRungs.length > 1 &&
-            vinylQty > 0 && (
-              <div
-                className="rounded-md border border-slate-200 bg-slate-50/60 p-2 mt-3"
-                data-testid="table-gooddeed-uplift"
-              >
-                <div className="text-xs font-medium uppercase tracking-wider text-slate-400 mb-1.5">
-                  Uplift by vinyl quantity
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs tabular-nums">
-                    <thead>
-                      <tr className="text-slate-500">
-                        <th className="text-left font-medium pb-1 pr-2">Vinyl qty</th>
-                        {vinylQuantityRungs.map((q) => (
-                          <th
-                            key={q}
-                            className={[
-                              "text-right font-medium pb-1 px-2",
-                              q === vinylQty ? "text-[color:var(--brand-blue)]" : "",
-                            ].join(" ")}
-                          >
-                            {q.toLocaleString()}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="text-slate-700">
-                        <td className="text-left text-slate-500 py-1 pr-2">Certs</td>
-                        {vinylQuantityRungs.map((q) => {
-                          const ratio = resolvedQty / vinylQty;
-                          const certs = Math.max(0, Math.floor(q * ratio));
-                          return (
-                            <td
-                              key={q}
-                              className={[
-                                "text-right py-1 px-2",
-                                q === vinylQty ? "font-medium text-slate-900" : "",
-                              ].join(" ")}
-                              data-testid={`text-gooddeed-uplift-certs-${q}`}
-                            >
-                              {certs.toLocaleString()}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                      <tr className="text-slate-700">
-                        <td className="text-left text-slate-500 py-1 pr-2">Net uplift</td>
-                        {vinylQuantityRungs.map((q) => {
-                          const ratio = resolvedQty / vinylQty;
-                          const certs = Math.max(0, Math.floor(q * ratio));
-                          const netPer = netPerUnitCents ?? 0;
-                          const total = netPer * certs;
-                          const label =
-                            total < 0
-                              ? `-${dollars(Math.abs(total))}`
-                              : dollars(total);
-                          return (
-                            <td
-                              key={q}
-                              className={[
-                                "text-right py-1 px-2",
-                                q === vinylQty ? "font-semibold text-slate-900" : "",
-                                total < 0 ? "text-[color:var(--brand-pink)]" : "",
-                              ].join(" ")}
-                              data-testid={`text-gooddeed-uplift-${q}`}
-                            >
-                              {label}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
+          {/* Task #758 — the per-quantity uplift table that used to live
+              here was retired. The GoodDeed upside now reads off a
+              revenue card under each pricing option column in SkuRow
+              (single source of truth), so two competing uplift views no
+              longer drift apart. */}
           </UpsellPanelCard>,
           bodyContainer,
         )
