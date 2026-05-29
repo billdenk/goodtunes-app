@@ -336,8 +336,28 @@ export function AdminAlbum() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Task #674 — Persist the active tab in the URL (`?tab=`) so a refresh
+  // reopens the same tab instead of snapping back to Overview. Read once
+  // on mount, AFTER the `track`/`onboarding` deep-link precedence above,
+  // then fall back to Overview. Invalid/unknown values are ignored here;
+  // a tab that isn't valid for the album's sell mode is corrected by the
+  // re-pin effect + `safeTab` guard further down.
+  const initialTab = useMemo(() => {
+    try {
+      const t = new URLSearchParams(search).get("tab");
+      const valid: Tab[] = ["overview", "tracks", "sell", "press", "shopify"];
+      return valid.includes(t as Tab) ? (t as Tab) : null;
+    } catch {
+      return null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [tab, setTab] = useState<Tab>(
-    initialTrackId ? "tracks" : initialOnboarding ? "sell" : "overview",
+    initialTrackId
+      ? "tracks"
+      : initialOnboarding
+        ? "sell"
+        : initialTab ?? "overview",
   );
   // Mode-picker modal state. Opens automatically when `sellMode` is
   // null (a fresh row), or when the operator clicks "Change mode" in
@@ -681,6 +701,25 @@ export function AdminAlbum() {
     const allowed = visibleTabsFor(album).map((t) => t.key);
     if (!allowed.includes(tab)) setTab(tab === ("bonus" as Tab) ? "tracks" : "sell");
   }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, tab, album]);
+
+  // Task #674 — Mirror the active tab into the URL (`?tab=`) so a refresh
+  // reopens the same tab. Uses `replace` so repeated tab clicks don't
+  // stack history entries, and the early-return when the param already
+  // matches keeps identical re-selections from looping the navigate.
+  // Existing query params (e.g. the `track`/`onboarding` deep links) are
+  // preserved so their first-mount precedence still works.
+  useEffect(() => {
+    let params: URLSearchParams;
+    try {
+      params = new URLSearchParams(search);
+    } catch {
+      params = new URLSearchParams();
+    }
+    if (params.get("tab") === tab) return;
+    params.set("tab", tab);
+    const qs = params.toString();
+    navigate(`/admin/albums/${albumId}${qs ? `?${qs}` : ""}`, { replace: true });
+  }, [tab, albumId, search, navigate]);
 
   // Auto-open the mode picker once the row arrives without a sellMode.
   // Backfill ran on existing rows, so the modal really only fires for
