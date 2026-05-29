@@ -3716,14 +3716,17 @@ function SkuRow({
            the operator's eye lands in the same place whether the row
            is open or closed. Body below picks up at REQUIRED · Vinyl. */}
         <div className={["flex items-start gap-3", expanded ? "mb-3" : "mb-2"].join(" ")}>
-          {/* Task #635/#642 — small cover-art thumbnail anchors the
+          {/* Task #635/#642/#702 — cover-art thumbnail anchors the
               header in both states. Clicking it toggles expansion so
-              the thumb is itself the row's primary affordance. */}
+              the thumb is itself the row's primary affordance. Task
+              #702 enlarged it (w-9 → w-24, ~96px) so the artwork reads
+              at a glance per Bill's "Preferred" mockup; the title /
+              artist / spec stack sits top-aligned beside it. */}
           <button
             type="button"
             onClick={(e) => anchorScrollToElement(e.currentTarget, () => onSetExpanded(!expanded))}
             aria-label={expanded ? "Collapse format" : "Expand format"}
-            className="flex-shrink-0 w-9 h-9 mt-0.5 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]/40"
+            className="flex-shrink-0 w-24 h-24 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]/40"
             data-testid={`button-row-thumb-${format}`}
           >
             {artworkUrl ? (
