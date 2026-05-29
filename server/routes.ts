@@ -2163,18 +2163,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const isPublic = acl.visibility === "public";
       const cacheTtlSec = 31536000;
       const cacheControl = `${isPublic ? "public" : "private"}, max-age=${cacheTtlSec}, immutable`;
-      // Range header looks like "bytes=START-END" (END may be empty).
-      const rangeMatch = range ? /^bytes=(\d+)-(\d*)$/.exec(range) : null;
-      if (rangeMatch && totalSize > 0) {
-        const start = Number(rangeMatch[1]);
-        const end = rangeMatch[2] ? Number(rangeMatch[2]) : totalSize - 1;
-        if (Number.isNaN(start) || Number.isNaN(end) || start > end || end >= totalSize) {
+      // Parse the Range header. Browsers issue three forms against media:
+      //   bytes=START-END  — a bounded window
+      //   bytes=START-     — open-ended ("from START to EOF")
+      //   bytes=-SUFFIX    — the LAST SUFFIX bytes. This is the one that
+      //     matters most here: a non-faststart MP4 (moov index atom at the
+      //     end of the file) tail-seeks for its index before playback.
+      //     Without handling it ourselves the request fell through to a
+      //     full 200 stream that Replit's edge proxy then 500'd while
+      //     trying to slice — which is exactly what broke bonus-video
+      //     playback. We resolve every form to an absolute [start, end]
+      //     window and answer 206 directly.
+      let start: number | null = null;
+      let end: number | null = null;
+      if (range && totalSize > 0) {
+        const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+        if (m && !(m[1] === "" && m[2] === "")) {
+          if (m[1] === "") {
+            // Suffix form: last N bytes. N larger than the file = whole file.
+            const suffixLen = Number(m[2]);
+            if (!Number.isNaN(suffixLen) && suffixLen > 0) {
+              start = Math.max(0, totalSize - suffixLen);
+              end = totalSize - 1;
+            } else {
+              start = -1; // unsatisfiable → 416 below
+            }
+          } else {
+            start = Number(m[1]);
+            end = m[2] === "" ? totalSize - 1 : Number(m[2]);
+          }
+        }
+      }
+      if (start !== null) {
+        // Validate the resolved window. Out-of-bounds → 416 per RFC 7233.
+        if (
+          start < 0 ||
+          end === null ||
+          Number.isNaN(start) ||
+          Number.isNaN(end) ||
+          start > end ||
+          start >= totalSize
+        ) {
+          console.log(`${reqTag} 416 range=${range} total=${totalSize}`);
           res.status(416).set({
             "Content-Range": `bytes */${totalSize}`,
             "Accept-Ranges": "bytes",
           });
           return res.end();
         }
+        // A client may request past EOF on a bounded range — clamp it.
+        if (end >= totalSize) end = totalSize - 1;
         res.status(206).set({
           "Content-Type": contentType,
           "Content-Length": String(end - start + 1),
@@ -6564,11 +6602,54 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     outputPath: string;
     mime: string;
     ext: string;
-    action: "passthrough" | "remux" | "transcode";
+    action: "passthrough" | "faststart" | "remux" | "transcode";
   }> {
     const lowerExt = inputExt.toLowerCase();
-    if (lowerExt === ".mp4" || lowerExt === ".webm") {
+    // .webm is a Matroska container with no `moov` atom, so faststart is
+    // meaningless — pass it through untouched.
+    if (lowerExt === ".webm") {
       return { outputPath: inputPath, mime: VIDEO_MIME_BY_EXT[lowerExt], ext: lowerExt, action: "passthrough" };
+    }
+    // .mp4 may carry its `moov` index atom at the END of the file
+    // (non-faststart). That forces the browser to issue a tail-seek range
+    // request before it can begin playback — which is exactly the request
+    // that used to 500. A cheap `-c copy -movflags +faststart` remux just
+    // relocates `moov` to the front (no re-encode, near-instant), so future
+    // imports stream without needing a tail-seek at all. We deliberately
+    // FALL BACK to passthrough on remux failure: range support already lets
+    // a non-faststart file play via the tail-seek, so a quirky-but-valid
+    // .mp4 must never block its own import.
+    if (lowerExt === ".mp4") {
+      const fsp = await import("node:fs/promises");
+      const os = await import("node:os");
+      const path = await import("node:path");
+      const { spawn } = await import("node:child_process");
+      const fastPath = path.join(os.tmpdir(), `${randomUUID()}.mp4`);
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const p = spawn(
+            "ffmpeg",
+            ["-y", "-i", inputPath, "-c", "copy", "-movflags", "+faststart", fastPath],
+            { stdio: ["ignore", "ignore", "pipe"] },
+          );
+          let stderr = "";
+          p.stderr.on("data", (c) => (stderr += c.toString()));
+          p.on("error", reject);
+          p.on("close", (code) => {
+            if (code === 0) return resolve();
+            const tail = stderr.split("\n").slice(-6).join("\n").trim();
+            reject(new Error(`ffmpeg faststart failed (exit ${code}): ${tail || "no stderr"}`));
+          });
+        });
+        // Drop the original now that the faststart copy has landed.
+        try { await fsp.unlink(inputPath); } catch {}
+        return { outputPath: fastPath, mime: VIDEO_MIME_BY_EXT[".mp4"], ext: ".mp4", action: "faststart" };
+      } catch (err) {
+        // Clean up any partial output, then serve the original untouched.
+        try { await fsp.unlink(fastPath); } catch {}
+        console.warn(`[video-faststart] passthrough fallback:`, (err as any)?.message || err);
+        return { outputPath: inputPath, mime: VIDEO_MIME_BY_EXT[".mp4"], ext: ".mp4", action: "passthrough" };
+      }
     }
 
     const { spawn } = await import("node:child_process");
@@ -8314,7 +8395,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 uploadPath = conv.outputPath;
                 mime = conv.mime;
                 if (conv.action !== "passthrough") {
+                  // The transcoder wrote a NEW tmp file (faststart remux,
+                  // container remux, or full transcode) — track it so the
+                  // `finally` unlinks it after upload.
                   transcodedTmp = conv.outputPath;
+                }
+                // Only surface an actual format conversion to the operator.
+                // A faststart remux keeps the file as .mp4, so it's not a
+                // "converted to MP4 for playback" event worth reporting.
+                if (conv.action === "remux" || conv.action === "transcode") {
                   transcoded.push({ filename, action: conv.action });
                 }
               }
