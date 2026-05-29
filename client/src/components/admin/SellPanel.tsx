@@ -38,6 +38,7 @@ import {
   type PathToPressNavigateDetail,
 } from "@/lib/pathToPressNav";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import { ShareQuoteWithArtist } from "@/components/admin/ShareQuoteWithArtist";
 import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -1085,6 +1086,33 @@ export function SellPanel({
             Press!" banner removed. The Path-to-press strip's `submit`
             chip is the single Go-to-Press affordance now (it fires the
             same POST directly on click). */}
+
+        {/* Task #706 — turn the built quotes into a shareable artist
+            invite. Quotes already persist as album_skus; this mints an
+            identity invite pre-flighted to this album so the recipient
+            lands on the album editor with the saved quotes waiting. */}
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-slate-800">
+              Share these quotes with the artist
+            </div>
+            <div className="text-xs text-slate-500">
+              {primaryArtistId
+                ? configuredFormats.length > 0
+                  ? `Send ${artistName || "the artist"} a link — they sign in and land here with your saved quotes waiting.`
+                  : "Save at least one format to share it."
+                : "Link this album to a primary artist to share quotes."}
+            </div>
+          </div>
+          <ShareQuoteWithArtist
+            albumId={albumId}
+            albumTitle={albumTitle}
+            primaryArtistId={primaryArtistId}
+            artistName={artistName}
+            savedQuoteCount={configuredFormats.length}
+            unsavedDraftCount={liveDrafts.length}
+          />
+        </div>
         </>
         )}
       </div>
