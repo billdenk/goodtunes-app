@@ -821,8 +821,11 @@ export function AdminAlbum() {
           </span>
         </div>
 
-        {/* HEADER */}
-        <div className="flex items-start gap-5 justify-between">
+        {/* HEADER — pulled tight under the breadcrumb so the album
+            content starts closer to the tab bar, matching the top
+            rhythm of the other admin pages (the default space-y-6 left
+            too much air between the thin breadcrumb and the title). */}
+        <div className="flex items-start gap-5 justify-between -mt-3">
           <div className="flex items-start gap-5 min-w-0 flex-1">
           {/* Cover thumbnail doubles as the artwork editor trigger. The
               pencil chip reveals on hover (always on for keyboard focus

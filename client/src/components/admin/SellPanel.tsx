@@ -1316,25 +1316,29 @@ function PrinterAndPressPanel({
     return out;
   })();
 
+  // No fabricated fallback: when no press is resolved (no live directory
+  // chips, not locked to an inviting press), the chip list is empty and
+  // the panel renders nothing rather than a fake "PMP" coming-soon chip.
   const chips: Chip[] =
     allMode && liveDirectoryChips.length > 0
       ? liveDirectoryChips
       : locked
         ? [{ id: "invited", label: invitedPress!.name, status: "live", press: invitedPress }]
-        : [
-            { id: "pmp", label: "PMP", status: "coming-soon", press: null },
-          ];
+        : [];
 
-  const defaultId = chips[0].id;
+  const defaultId = chips[0]?.id ?? "";
   const [selectedId, setSelectedId] = useState<string>(defaultId);
   const selectedChip = chips.find((c) => c.id === selectedId) ?? chips[0];
-  const selectedPress = selectedChip.press;
+  const selectedPress = selectedChip?.press ?? null;
 
   // Only one printer truly selectable → no chip row at all (just the
   // selected label + Info). "Selectable" means live; coming-soon chips
   // don't count for this decision (otherwise the disabled MRP/PMP would
   // force chips to render in the free flow even though the operator can
   // only pick Hellbender today).
+  // No press resolved → render nothing rather than a fabricated default.
+  if (!selectedChip) return null;
+
   const otherLiveChips = chips.filter((c) => c.id !== selectedChip.id && c.status === "live");
   const otherComingSoonChips = chips.filter((c) => c.id !== selectedChip.id && c.status !== "live");
   const showChips = otherLiveChips.length > 0;
