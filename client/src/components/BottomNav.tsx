@@ -113,6 +113,10 @@ export function BottomNav() {
   const [dockH, setDockH] = useState<number>();
   const pillowRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Randomized, non-credential field name so Safari/password managers
+  // don't surface a saved-value / typed-history chip (e.g. the
+  // "my.goodtunes.music" autofill bar) above the keyboard.
+  const searchFieldName = useRef("gt-omnisearch-" + Math.random().toString(36).slice(2)).current;
   const search = useFanSearch({ onNavigate: () => setSearchOpen(false) });
   const { setDraft, setShowAll } = search;
   // How much of the viewport the keyboard covers while search is open —
@@ -236,7 +240,7 @@ export function BottomNav() {
       {searchOpen && (
         <div
           className="fixed inset-0 z-20"
-          style={{ background: "rgba(0,6,43,0.97)" }}
+          style={{ background: "var(--brand-bg)" }}
           data-testid="overlay-search"
         >
           <div className="mx-auto h-full max-w-[390px] flex flex-col">
@@ -342,13 +346,18 @@ export function BottomNav() {
           <span className="pl-4 pr-2 text-white/55 flex-shrink-0">{searchIcon}</span>
           <input
             ref={inputRef}
-            type="text"
+            type="search"
+            name={searchFieldName}
             inputMode="search"
             enterKeyHint="search"
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="none"
             spellCheck={false}
+            aria-autocomplete="none"
+            data-1p-ignore
+            data-lpignore="true"
+            data-form-type="other"
             value={search.draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Albums, songs, gear, vendors…"

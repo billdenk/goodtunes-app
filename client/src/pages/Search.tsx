@@ -26,6 +26,9 @@ export function SearchPage() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
+  // Randomized, non-credential field name so Safari/password managers
+  // don't surface a saved-value / typed-history autofill chip.
+  const searchFieldName = useRef("gt-omnisearch-" + Math.random().toString(36).slice(2)).current;
   const search = useFanSearch();
   const {
     draft, setDraft, query, category, setCategory, showAll, setShowAll,
@@ -125,13 +128,18 @@ export function SearchPage() {
             </svg>
             <input
               ref={inputRef}
-              type="text"
+              type="search"
+              name={searchFieldName}
               inputMode="search"
               enterKeyHint="search"
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="none"
               spellCheck={false}
+              aria-autocomplete="none"
+              data-1p-ignore
+              data-lpignore="true"
+              data-form-type="other"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Albums, songs, gear, vendors…"
