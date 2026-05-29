@@ -121,11 +121,12 @@ export function Collection() {
     navigate(`/album/${album.id}`);
   };
   const openArtist = (name: string, photo?: string | null) => {
+    // No subtitle — the Recents row already prefixes the kind label
+    // ("Artist"), so passing "Artist" here renders "Artist · Artist".
     recordRecent({
       entityKind: "artist",
       entityId: name,
       title: name,
-      subtitle: "Artist",
       thumbUrl: photo ?? null,
       href: `/artist/${encodeURIComponent(name)}`,
     });

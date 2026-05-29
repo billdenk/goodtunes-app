@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { Star } from "lucide-react";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { useFanRecents, useRemoveRecent, useClearRecents } from "@/hooks/useRecents";
@@ -230,6 +231,11 @@ function RecentRow({
           >
             {row.thumbUrl ? (
               <img src={row.thumbUrl} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+            ) : isRound ? (
+              // Brand fallback for round kinds (artist/person/vendor/label)
+              // with no photo: the artist star, not a blank circle.
+              // Songs use the heart; the star is the person/artist mark.
+              <Star size={18} className="text-white/35" fill="currentColor" data-testid={`icon-recent-fallback-${row.id}`} />
             ) : null}
           </div>
           <div className="flex-1 min-w-0">

@@ -30,20 +30,11 @@ export function ArtistDetail() {
     if (artistName) track("artist_viewed", { artistName });
   }, [artistName]);
 
-  // Task #530 — stamp the artist into fan recents on mount so any deep
-  // link (search, share, push) lands on a row that lights up Recents.
+  // Task #530 — stamp the artist into fan recents so any deep link
+  // (search, share, push) lands on a row that lights up Recents. The
+  // actual record happens below, once `artistPhoto` has resolved from
+  // the DB person row, so DB-backed artists get a real thumbnail.
   const recordRecent = useRecordRecent();
-  useEffect(() => {
-    if (!artistName) return;
-    recordRecent({
-      entityKind: "artist",
-      entityId: artistName,
-      title: artistName,
-      subtitle: "Artist",
-      thumbUrl: ARTIST_PHOTOS[artistName] ?? null,
-      href: `/artist/${encodeURIComponent(artistName)}`,
-    });
-  }, [artistName, recordRecent]);
 
   // DB-backed albums. The fan ArtistDetail used to read only the
   // hardcoded `ALBUMS` from `@/data/musicData`, so anything Bill added
@@ -304,6 +295,23 @@ export function ArtistDetail() {
   const hasCoverBanner = Boolean(coverBannerSrc);
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
+
+  // Stamp the artist into fan recents once the photo has resolved. We
+  // don't pass a subtitle — the Recents row already prefixes the kind
+  // label ("Artist"), so a "Artist" subtitle would render "Artist ·
+  // Artist". `artistPhoto` starts undefined and fills in once
+  // `/api/people` resolves the DB person, so this re-records with a
+  // real thumbUrl for DB-backed artists like Screaming Trees.
+  useEffect(() => {
+    if (!artistName) return;
+    recordRecent({
+      entityKind: "artist",
+      entityId: artistName,
+      title: artistName,
+      thumbUrl: artistPhoto ?? null,
+      href: `/artist/${encodeURIComponent(artistName)}`,
+    });
+  }, [artistName, artistPhoto, recordRecent]);
 
   // "Artist not found" only when there's literally no data — no static
   // GoodTunes albums AND no streaming discography pulled for this name.
