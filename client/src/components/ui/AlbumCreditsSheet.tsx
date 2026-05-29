@@ -94,7 +94,7 @@ export function AlbumCreditsSheet({
                     <span
                       aria-hidden
                       style={{ width: 32, height: 32 }}
-                      className="rounded-full bg-white/[0.08] flex-shrink-0 inline-flex items-center justify-center text-xs font-medium text-white/55"
+                      className="rounded-full bg-white/[0.14] ring-1 ring-inset ring-white/20 flex-shrink-0 inline-flex items-center justify-center text-xs font-medium text-white/80"
                     >
                       {initialsOf(e.name)}
                     </span>

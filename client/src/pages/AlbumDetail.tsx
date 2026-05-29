@@ -1531,13 +1531,17 @@ export function SheetHeader({ eyebrow, title, subtitle, onClose }: { eyebrow?: s
         type="button"
         onClick={onClose}
         aria-label="Close"
-        className="w-8 h-8 rounded-full flex items-center justify-center text-white/70 active:opacity-70 flex-shrink-0"
-        style={{ background: "rgba(255,255,255,0.08)" }}
+        className="w-11 h-11 -m-1.5 rounded-full flex items-center justify-center text-white/70 active:opacity-70 flex-shrink-0"
         data-testid="button-sheet-close-x"
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
+        <span
+          className="flex items-center justify-center"
+          style={{ width: 32, height: 32, borderRadius: 9999, background: "rgba(255,255,255,0.08)" }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </span>
       </button>
     </div>
   );
