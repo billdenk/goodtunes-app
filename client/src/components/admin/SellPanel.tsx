@@ -4205,6 +4205,10 @@ function SkuRow({
               name: catalogPicked.name,
               tier: "black",
               swatch: catalogPicked.swatchHex ?? "#ccc",
+              // Task #672 — real per-color photo (when imported) drives
+              // the preview disc; otherwise VinylPreview falls back to
+              // the name-appropriate hex swatch above.
+              thumbnailUrl: catalogPicked.swatchImageUrl ?? null,
             }
           : vinylColor;
         const formatOptions = Array.from(new Set<AlbumFormat>([format, ...offeredFormats]));
@@ -4368,12 +4372,16 @@ function SkuRow({
                         title={c.name}
                         onClick={() => setPressColorId(c.id)}
                         className={[
-                          "w-7 h-7 rounded-full border-2 transition-transform",
+                          "w-7 h-7 rounded-full border-2 transition-transform overflow-hidden bg-cover bg-center",
                           selected
                             ? "border-[color:var(--brand-blue)] scale-110 shadow"
                             : "border-slate-200 hover:border-slate-400",
                         ].join(" ")}
-                        style={{ background: c.swatchHex ?? "#ccc" }}
+                        style={
+                          c.swatchImageUrl
+                            ? { backgroundImage: `url(${c.swatchImageUrl})` }
+                            : { background: c.swatchHex ?? "#ccc" }
+                        }
                         data-testid={`swatch-vinyl-color-${format}-${c.id}`}
                       >
                         <span className="sr-only">{c.name}</span>

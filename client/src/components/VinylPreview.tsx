@@ -84,30 +84,55 @@ export function VinylPreview({
         className="absolute top-0 bottom-0 left-0"
         style={{ aspectRatio: `${jacketAspect} / 1` }}
       >
-        {/* Vinyl record — sized to jacket height, sits behind jacket */}
-        <div
-          className="absolute top-0 bottom-0 rounded-full shadow-md"
-          style={{
-            aspectRatio: "1 / 1",
-            left: `${discCenterPctOfJacket}%`,
-            transform: "translateX(-50%)",
-            background: vinylBackground(color.swatch),
-          }}
-          aria-hidden="true"
-        >
-          {/* Inner concentric rings for groove texture */}
+        {/* Vinyl record — sized to jacket height, sits behind jacket.
+            Task #672 — when the picked color carries a real swatch
+            photo (`thumbnailUrl`, e.g. MRP's masked per-color disc),
+            render that image as the disc and skip the synthetic grooves
+            + generic label, since the photo already shows the real
+            stock. Otherwise fall back to the name-appropriate hex/
+            gradient swatch. */}
+        {color.thumbnailUrl ? (
           <div
-            className="absolute inset-[12%] rounded-full opacity-40"
+            className="absolute top-0 bottom-0 rounded-full shadow-md overflow-hidden bg-slate-900"
             style={{
-              background:
-                "repeating-radial-gradient(circle, rgba(0,0,0,0.18) 0 1px, transparent 1px 3px)",
+              aspectRatio: "1 / 1",
+              left: `${discCenterPctOfJacket}%`,
+              transform: "translateX(-50%)",
             }}
-          />
-          {/* Spindle hole + tiny dark "label" disc — kept generic so
-              we don't try to fake the artist's actual label artwork */}
-          <div className="absolute inset-[34%] rounded-full bg-slate-900/70" />
-          <div className="absolute left-1/2 top-1/2 w-[3px] h-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-100" />
-        </div>
+            aria-hidden="true"
+          >
+            <img
+              src={color.thumbnailUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              draggable={false}
+            />
+          </div>
+        ) : (
+          <div
+            className="absolute top-0 bottom-0 rounded-full shadow-md"
+            style={{
+              aspectRatio: "1 / 1",
+              left: `${discCenterPctOfJacket}%`,
+              transform: "translateX(-50%)",
+              background: vinylBackground(color.swatch),
+            }}
+            aria-hidden="true"
+          >
+            {/* Inner concentric rings for groove texture */}
+            <div
+              className="absolute inset-[12%] rounded-full opacity-40"
+              style={{
+                background:
+                  "repeating-radial-gradient(circle, rgba(0,0,0,0.18) 0 1px, transparent 1px 3px)",
+              }}
+            />
+            {/* Spindle hole + tiny dark "label" disc — kept generic so
+                we don't try to fake the artist's actual label artwork */}
+            <div className="absolute inset-[34%] rounded-full bg-slate-900/70" />
+            <div className="absolute left-1/2 top-1/2 w-[3px] h-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-100" />
+          </div>
+        )}
 
         {/* Album jacket — fills the inner stage, no rounded corners
             (per spec). Rendered AFTER the disc so the disc is tucked

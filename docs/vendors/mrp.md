@@ -80,6 +80,12 @@ MRP's PDF estimate quotes five quantities — **300 / 500 / 1,000 / 2,000 / 3,00
 
 7" Black and Splatter tiers are loaded but unconfirmed (yellow placeholders).
 
+### Color swatches & photos
+
+The full published color library (EcoMix / Translucent / Opaque / Neon-Glow / Smoke Blends / Cream Blends, ~76 named colors) seeds with a best-guess solid hex per color so the Sell-panel COLOR picker chip + right-side VinylPreview disc render distinct, name-appropriate swatches out of the box (Translucent / Smoke / Clear / Glow read light/semi-transparent; Opaque reads solid). Hexes are blank-only backfilled — `backfillColorHexes` matches existing rows on tier+name and only fills rows where both `swatchHex` and `swatchImageUrl` are NULL — so real `swatchImageUrl` photos always win and any operator-edited swatch is never clobbered.
+
+Real product photos are backfilled by `scripts/backfill-press-photos.ts`: it scrapes MRP's published [all-vinyl-colors](https://memphisrecordpressing.com/all-vinyl-colors/) page (via the shared parser in `server/vendorColorScrape.ts`), masks each tile to the brand vinyl-disc shape, uploads to Object Storage, and stamps `swatchImageUrl` + `importSourceUrl` on every matching color across all three vinyl formats. **Matching is by MRP color code, not name** — GoodTunes seeds each color as `"<CODE> <short name>"` (e.g. `T01 Ruby`, `O01 Brown`, `ECO2 Greens`) while the page tiles carry family-prefixed names (`Translucent Ruby`, `Opaque Brown`), so only the embedded code (`T01`, `O01`) reliably joins the two. It only touches rows where both `swatchImageUrl` and `importSourceUrl` are NULL, so it's idempotent and never clobbers a one-click import or operator edit. ~168 of 228 rows (56 of 76 named colors) get real photos; the rest — EcoMix recycled blends (random by design), the codeless `CB` cream blends, and a few neon/smoke codes MRP doesn't publish per-color — keep their name-appropriate hex tint. Run with `--dry` to preview matches; pass `DATABASE_URL=$PROD_DATABASE_URL` to backfill prod (the Object Storage bucket is shared dev/prod, but `press_colors` rows are per-env). When a color carries a real photo the VinylPreview disc shows it; otherwise it tints to the seeded hex; grey only ever appears for a genuinely unknown color.
+
 ## 7" booklet add-on
 
 Standalone add-on — **not** auto-bundled into 7" vinyl. Spec: 16pp, CMYK 4/4, 150gsm art paper, open-top poly bag + assembly.

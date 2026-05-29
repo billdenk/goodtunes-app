@@ -66,7 +66,8 @@ Not stated — request from CSR.
 ## Color / vinyl options
 
 - Specialty mixes, splatters, marble, half-and-half, and custom requests welcomed.
-- **Full catalog not currently published online.** Color page indicates the library is being updated. Catalog names / codes: **not stated — request from CSR.**
+- **Full catalog not currently published online.** Color page indicates the library is being updated. The page ships only ~5 combined category JPGs, **not** per-color names/images. Catalog names / codes: **not stated — request from CSR.**
+- **Seeded color picker (Task #672).** Because PMP publishes no per-color names or photos, the catalog seeds a best-guess standard palette so the Sell-panel COLOR picker + VinylPreview disc render distinct, name-appropriate swatches instead of grey. Two color-library tiers (12_lp / 12_double): **Translucent** (Clear, Ruby Red, Orange, Gold, Yellow, Green, Blue, Violet, Smoke — light/semi-transparent hexes) and **Opaque** (White, Cream, Red, Orange, Yellow, Green, Blue, Purple, Pink, Brown, Grey, Silver, Gold — solid hexes). Each carries a placeholder ladder only (pricing out of scope). Hexes are best-guess and blank-only backfilled (`backfillColorHexes` matches on tier+name), so an operator who later edits a swatch or imports a real CSR photo is never clobbered. Replace with real catalog names/images when the CSR supplies them.
 
 ## Templates
 

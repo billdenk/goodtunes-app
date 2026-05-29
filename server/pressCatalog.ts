@@ -435,6 +435,88 @@ async function ensureColor(
   });
 }
 
+/**
+ * Task #672 — idempotently backfill `swatchHex` on color rows that were
+ * seeded before they carried a value (e.g. MRP's name-only import).
+ * Matches existing rows by tier name + color name across every format
+ * the press presses, and only fills a row whose swatch is still blank —
+ * `swatchHex IS NULL AND swatchImageUrl IS NULL` — so an operator's
+ * hand-picked hex or an imported per-color photo is never clobbered.
+ * `hexByTier` keys are tier names (case-insensitive); inner keys are the
+ * exact stored color names.
+ */
+async function backfillColorHexes(
+  pressId: string,
+  hexByTier: Record<string, Record<string, string>>,
+): Promise<void> {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const wantByTier = new Map<string, Map<string, string>>();
+  for (const [tierName, colors] of Object.entries(hexByTier)) {
+    const inner = new Map<string, string>();
+    for (const [colorName, hex] of Object.entries(colors)) inner.set(norm(colorName), hex);
+    wantByTier.set(norm(tierName), inner);
+  }
+  const tiers = await db
+    .select()
+    .from(pressColorTiers)
+    .where(eq(pressColorTiers.pressId, pressId));
+  for (const tier of tiers) {
+    const want = wantByTier.get(norm(tier.name));
+    if (!want) continue;
+    const colors = await db.select().from(pressColors).where(eq(pressColors.tierId, tier.id));
+    for (const c of colors) {
+      if (c.swatchHex != null || c.swatchImageUrl != null) continue;
+      const hex = want.get(norm(c.name));
+      if (!hex) continue;
+      await db.update(pressColors).set({ swatchHex: hex }).where(eq(pressColors.id, c.id));
+    }
+  }
+}
+
+/**
+ * Task #672 — flat (tier-agnostic) variant of {@link backfillColorHexes}
+ * for presses whose same color name appears under more than one tier
+ * (e.g. Hellbender's "Gold" lives under both its 7" Metallic tier and
+ * the 12" Color tier). Same blank-only guard so operator edits and
+ * imported photos are never clobbered.
+ */
+async function backfillColorHexesByName(
+  pressId: string,
+  hexByName: Record<string, string>,
+): Promise<void> {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const want = new Map<string, string>();
+  for (const [name, hex] of Object.entries(hexByName)) want.set(norm(name), hex);
+  const tiers = await db
+    .select()
+    .from(pressColorTiers)
+    .where(eq(pressColorTiers.pressId, pressId));
+  for (const tier of tiers) {
+    const colors = await db.select().from(pressColors).where(eq(pressColors.tierId, tier.id));
+    for (const c of colors) {
+      if (c.swatchHex != null || c.swatchImageUrl != null) continue;
+      const hex = want.get(norm(c.name));
+      if (!hex) continue;
+      await db.update(pressColors).set({ swatchHex: hex }).where(eq(pressColors.id, c.id));
+    }
+  }
+}
+
+/**
+ * Task #672 — collapse a swatch CSS value to a single representative
+ * solid hex for DB storage. Plain hex passes through; gradient swatches
+ * (smokey / metallic / house-mix stocks defined as `linear-gradient`)
+ * return their middle color stop so the picker chip + VinylPreview disc
+ * read as a distinct, name-appropriate solid instead of falling back to
+ * grey. Returns null when no hex stop is present (genuinely unknown).
+ */
+function representativeHex(swatch: string): string | null {
+  if (swatch.startsWith("#")) return swatch;
+  const stops = swatch.match(/#[0-9a-fA-F]{6}/g);
+  if (!stops || stops.length === 0) return null;
+  return stops[Math.floor(stops.length / 2)] ?? stops[0];
+}
+
 /** Insert a (tier, jacket) combo with the given initial ladder if it
  *  doesn't already exist. Returns whether a row was created. */
 async function ensureCombo(
@@ -755,7 +837,7 @@ export async function seedHellbenderCatalog() {
             : [];
           const colors = VINYL_COLORS.filter((c) => c.tier === tierKey).map((c) => ({
             name: c.name,
-            hex: c.swatch.startsWith("#") ? c.swatch : null,
+            hex: representativeHex(c.swatch),
           }));
           tierBuilds.push({ name, ladder, colors });
         }
@@ -767,7 +849,7 @@ export async function seedHellbenderCatalog() {
         // Hellbender hasn't published splatter colors.
         const color12Swatches = VINYL_COLORS.filter((c) => c.tier !== "black").map((c) => ({
           name: c.name,
-          hex: c.swatch.startsWith("#") ? c.swatch : null,
+          hex: representativeHex(c.swatch),
         }));
         for (const name of HELLBENDER_NEW_12_TIER_NAMES) {
           const ladder = HELLBENDER_NEW_12_LADDERS[key]?.[name] ?? [];
@@ -811,6 +893,20 @@ export async function seedHellbenderCatalog() {
         }
       }
     }
+
+    // Task #672 — repair existing dev/prod rows that an earlier seed
+    // inserted with a NULL swatchHex for gradient stocks (smokey /
+    // metallic / house-mix). Derive a representative solid from each
+    // VINYL_COLORS swatch and fill only blank, never-imported rows so
+    // the picker chip + VinylPreview disc stop reading grey for colors
+    // we actually know. Tier-agnostic because the same color name
+    // appears under both the 7" tier and the 12" Color tier.
+    const hellbenderHexByName: Record<string, string> = {};
+    for (const c of VINYL_COLORS) {
+      const hex = representativeHex(c.swatch);
+      if (hex) hellbenderHexByName[c.name] = hex;
+    }
+    await backfillColorHexesByName(press.id, hellbenderHexByName);
   } catch (e) {
     console.warn("[pressCatalog] Hellbender seed failed:", (e as Error).message);
     hellbenderSeedRan = false;
@@ -1027,15 +1123,103 @@ const MRP_LADDERS: Record<"7_inch" | "12_lp" | "12_double", Record<string, MrpRu
 };
 
 // Task #631 — MRP's full published color library, keyed by tier with
-// the MRP code-prefixed swatch names from `docs/vendors/mrp.md`. Hex
-// is unknown for these — every chip seeds with `swatchHex = null`.
-const MRP_COLOR_TIERS: ReadonlyArray<{ name: string; swatches: string[] }> = [
-  { name: "EcoMix", swatches: ["ECO1 Blues", "ECO2 Greens", "ECO3 Magentas", "ECO4 Yellows", "ECO5 Reds", "ECO6 Grays", "ECO7 Metallic"] },
-  { name: "Translucent", swatches: ["T01 Ruby", "T02 Ultra Clear", "T03 Cobalt", "T04 Emerald", "T05 Grape", "T06 Light Blue", "T07 Lemonade", "T08 Orange Crush", "T09 Coke Bottle Clear", "T10 Highlighter Yellow", "T11 Milky Clear", "T12 Forest Green", "T13 Sea Blue", "T14 Tan", "T15 Black Ice"] },
-  { name: "Opaque", swatches: ["O01 Brown", "O02 White", "O03 Apple Red", "O04 Orchid", "O05 Sky Blue", "O06 Baby Blue", "O07 Tangerine", "O08 Baby Pink", "O09 Canary Yellow", "O10 Magenta", "O11 Silver", "O12 Spring Green", "O13 Gray", "O14 Bone", "O15 Hot Pink", "O16 Gold", "O17 Fruit Punch", "O18 Olive Green", "O19 Aqua", "O20 Custard", "O21 Lemon", "O22 Bluejay", "O23 Evergreen", "O24 Violet"] },
-  { name: "Neon/Glow", swatches: ["G01 Glow Green", "N01 Neon Violet", "N02 Neon Green", "N03 Neon Yellow", "N04 Neon Orange", "N05 Neon Coral", "N06 Neon Pink"] },
-  { name: "Smoke Blends", swatches: ["SB01 Clear", "SB02 Red", "SB03 Green", "SB04 Purple", "SB05 Silver", "SB06 Electric", "SB07 Blue", "SB08 Yellow", "SB09 Orange", "SB10 Coke Bottle Clear", "SB11 Highlighter", "SB12 Sea Blue", "SB13 Tan"] },
-  { name: "Cream Blends", swatches: ["CB Cocoa", "CB Blueberry", "CB Sea Salt", "CB Fig", "CB Mushroom", "CB Honey Dew Melon", "CB Earl Gray", "CB Watermelon", "CB Caramel", "CB Guava"] },
+// the MRP code-prefixed swatch names from `docs/vendors/mrp.md`.
+// Task #672 — each swatch now carries a best-guess `hex` so the Sell
+// panel picker + VinylPreview disc render a distinct, name-appropriate
+// color even before a real per-color photo is imported (the MRP
+// importer overwrites `swatchImageUrl` with the masked photo when run).
+// Translucent / Smoke / Glow families are biased light/desaturated so
+// they read as semi-transparent next to the solid Opaque tier.
+type MrpSwatch = { name: string; hex: string };
+const MRP_COLOR_TIERS: ReadonlyArray<{ name: string; swatches: MrpSwatch[] }> = [
+  { name: "EcoMix", swatches: [
+    { name: "ECO1 Blues", hex: "#3a6ea5" },
+    { name: "ECO2 Greens", hex: "#3f8f57" },
+    { name: "ECO3 Magentas", hex: "#b13a86" },
+    { name: "ECO4 Yellows", hex: "#d9b13a" },
+    { name: "ECO5 Reds", hex: "#b13a3a" },
+    { name: "ECO6 Grays", hex: "#6f6f6f" },
+    { name: "ECO7 Metallic", hex: "#9a9aa2" },
+  ] },
+  { name: "Translucent", swatches: [
+    { name: "T01 Ruby", hex: "#c0566a" },
+    { name: "T02 Ultra Clear", hex: "#e8eef2" },
+    { name: "T03 Cobalt", hex: "#5a86c8" },
+    { name: "T04 Emerald", hex: "#5fb98a" },
+    { name: "T05 Grape", hex: "#9a6fc0" },
+    { name: "T06 Light Blue", hex: "#a9d2ef" },
+    { name: "T07 Lemonade", hex: "#f2e79a" },
+    { name: "T08 Orange Crush", hex: "#f0a866" },
+    { name: "T09 Coke Bottle Clear", hex: "#8fae93" },
+    { name: "T10 Highlighter Yellow", hex: "#e6ee7a" },
+    { name: "T11 Milky Clear", hex: "#eae6dd" },
+    { name: "T12 Forest Green", hex: "#4f8f63" },
+    { name: "T13 Sea Blue", hex: "#79b6c2" },
+    { name: "T14 Tan", hex: "#d8c49a" },
+    { name: "T15 Black Ice", hex: "#6b7078" },
+  ] },
+  { name: "Opaque", swatches: [
+    { name: "O01 Brown", hex: "#5b3a1e" },
+    { name: "O02 White", hex: "#f5f5f2" },
+    { name: "O03 Apple Red", hex: "#c8242b" },
+    { name: "O04 Orchid", hex: "#c97fc0" },
+    { name: "O05 Sky Blue", hex: "#5fb0e6" },
+    { name: "O06 Baby Blue", hex: "#a9d2ef" },
+    { name: "O07 Tangerine", hex: "#ef8b3a" },
+    { name: "O08 Baby Pink", hex: "#f4b8cc" },
+    { name: "O09 Canary Yellow", hex: "#f5e23a" },
+    { name: "O10 Magenta", hex: "#c01f76" },
+    { name: "O11 Silver", hex: "#c2c6cc" },
+    { name: "O12 Spring Green", hex: "#7ec850" },
+    { name: "O13 Gray", hex: "#8a8a8a" },
+    { name: "O14 Bone", hex: "#e8e0cf" },
+    { name: "O15 Hot Pink", hex: "#f0468f" },
+    { name: "O16 Gold", hex: "#c9a44a" },
+    { name: "O17 Fruit Punch", hex: "#e23a5e" },
+    { name: "O18 Olive Green", hex: "#6f7a33" },
+    { name: "O19 Aqua", hex: "#4fc3c0" },
+    { name: "O20 Custard", hex: "#f3df9a" },
+    { name: "O21 Lemon", hex: "#eee44a" },
+    { name: "O22 Bluejay", hex: "#2f63c0" },
+    { name: "O23 Evergreen", hex: "#1f5c39" },
+    { name: "O24 Violet", hex: "#7a3aa8" },
+  ] },
+  { name: "Neon/Glow", swatches: [
+    { name: "G01 Glow Green", hex: "#b6f5c0" },
+    { name: "N01 Neon Violet", hex: "#9a4dff" },
+    { name: "N02 Neon Green", hex: "#5cff6a" },
+    { name: "N03 Neon Yellow", hex: "#eaff3a" },
+    { name: "N04 Neon Orange", hex: "#ff7a1a" },
+    { name: "N05 Neon Coral", hex: "#ff5a6a" },
+    { name: "N06 Neon Pink", hex: "#ff4da6" },
+  ] },
+  { name: "Smoke Blends", swatches: [
+    { name: "SB01 Clear", hex: "#d8dde0" },
+    { name: "SB02 Red", hex: "#a8606a" },
+    { name: "SB03 Green", hex: "#6f9a78" },
+    { name: "SB04 Purple", hex: "#8a6f9a" },
+    { name: "SB05 Silver", hex: "#b7bcc2" },
+    { name: "SB06 Electric", hex: "#6f8fb0" },
+    { name: "SB07 Blue", hex: "#6f8fc0" },
+    { name: "SB08 Yellow", hex: "#cfc98a" },
+    { name: "SB09 Orange", hex: "#cf9a6a" },
+    { name: "SB10 Coke Bottle Clear", hex: "#8fae93" },
+    { name: "SB11 Highlighter", hex: "#c8d27a" },
+    { name: "SB12 Sea Blue", hex: "#7fa8b6" },
+    { name: "SB13 Tan", hex: "#c4b394" },
+  ] },
+  { name: "Cream Blends", swatches: [
+    { name: "CB Cocoa", hex: "#6b4a32" },
+    { name: "CB Blueberry", hex: "#6a7ab0" },
+    { name: "CB Sea Salt", hex: "#e6e7e2" },
+    { name: "CB Fig", hex: "#7a5a6a" },
+    { name: "CB Mushroom", hex: "#c2b29a" },
+    { name: "CB Honey Dew Melon", hex: "#c5e0a0" },
+    { name: "CB Earl Gray", hex: "#9a9a96" },
+    { name: "CB Watermelon", hex: "#e88a96" },
+    { name: "CB Caramel", hex: "#c79a5a" },
+    { name: "CB Guava", hex: "#e8a48a" },
+  ] },
 ];
 
 // Task #631 — MRP jacket SKUs from the templates page. The default
@@ -1133,7 +1317,7 @@ export async function seedMrpCatalog() {
         const colorTier = MRP_COLOR_TIERS[ci];
         const tier = await ensureTier(press.id, fmt, colorTier.name, MRP_TIER_NAMES.length + ci);
         for (let sx = 0; sx < colorTier.swatches.length; sx++) {
-          await ensureColor(tier.id, colorTier.swatches[sx], null, sx);
+          await ensureColor(tier.id, colorTier.swatches[sx].name, colorTier.swatches[sx].hex, sx);
         }
         await ensureCombo(tier.id, defaultJacket.id, placeholderLadder());
         await addMissingRungs(tier.id, defaultJacket.id, STANDARD_COMPARISON_QUANTITIES);
@@ -1166,10 +1350,24 @@ export async function seedMrpCatalog() {
       await upgradeRung(blackLp.id, defaultJacket.id, 200, 875);
       await upgradeRung(blackLp.id, defaultJacket.id, 300, 695);
     }
+
+    // Task #672 — backfill best-guess hex onto rows seeded name-only by
+    // earlier runs (every format's copy of each color-library tier).
+    await backfillColorHexes(press.id, mrpColorHexByTier());
   } catch (e) {
     console.warn("[pressCatalog] MRP seed failed:", (e as Error).message);
     mrpSeedRan = false;
   }
+}
+
+/** Tier name → { color name → hex } derived from MRP_COLOR_TIERS, used
+ *  to backfill existing rows. */
+function mrpColorHexByTier(): Record<string, Record<string, string>> {
+  const out: Record<string, Record<string, string>> = {};
+  for (const t of MRP_COLOR_TIERS) {
+    out[t.name] = Object.fromEntries(t.swatches.map((s) => [s.name, s.hex]));
+  }
+  return out;
 }
 
 // ─── PMP seed (Task #631) ────────────────────────────────────────────
@@ -1210,6 +1408,54 @@ const PMP_CONFIRMED: Record<"12_double", Record<string, LadderRungSpec[]>> = {
     ],
   },
 };
+
+// Task #672 — PMP publishes its color library only as five combined
+// JPGs (PMP_Vinyl-colors_1..5.jpg) with no machine-readable per-color
+// names or per-color images, so a per-color photo scrape isn't feasible
+// and the upstream names can't be parsed. We seed PMP a standard vinyl
+// palette — the common Translucent + Opaque families PMP confirms it
+// presses ("specialty mixes, splatters, marble, half and half") — with
+// best-guess hex so the Sell-panel picker has distinct, name-appropriate
+// swatches instead of an empty list. Operators can refine names/colors
+// per the published images; the backfill never clobbers their edits.
+type PmpSwatch = { name: string; hex: string };
+const PMP_COLOR_TIERS: ReadonlyArray<{ name: string; swatches: PmpSwatch[] }> = [
+  { name: "Translucent", swatches: [
+    { name: "Clear", hex: "#e8eef2" },
+    { name: "Ruby Red", hex: "#c0566a" },
+    { name: "Orange", hex: "#f0a866" },
+    { name: "Gold", hex: "#e6c66a" },
+    { name: "Yellow", hex: "#f2e79a" },
+    { name: "Green", hex: "#5fb98a" },
+    { name: "Blue", hex: "#5a86c8" },
+    { name: "Violet", hex: "#9a6fc0" },
+    { name: "Smoke", hex: "#8a8f96" },
+  ] },
+  { name: "Opaque", swatches: [
+    { name: "White", hex: "#f5f5f2" },
+    { name: "Cream", hex: "#efe7d2" },
+    { name: "Red", hex: "#c8242b" },
+    { name: "Orange", hex: "#ef8b3a" },
+    { name: "Yellow", hex: "#f5e23a" },
+    { name: "Green", hex: "#3f8f57" },
+    { name: "Blue", hex: "#2f63c0" },
+    { name: "Purple", hex: "#7a3aa8" },
+    { name: "Pink", hex: "#f0468f" },
+    { name: "Brown", hex: "#5b3a1e" },
+    { name: "Grey", hex: "#8a8a8a" },
+    { name: "Silver", hex: "#c2c6cc" },
+    { name: "Gold", hex: "#c9a44a" },
+  ] },
+];
+
+/** Tier name → { color name → hex } derived from PMP_COLOR_TIERS. */
+function pmpColorHexByTier(): Record<string, Record<string, string>> {
+  const out: Record<string, Record<string, string>> = {};
+  for (const t of PMP_COLOR_TIERS) {
+    out[t.name] = Object.fromEntries(t.swatches.map((s) => [s.name, s.hex]));
+  }
+  return out;
+}
 
 export async function seedPmpCatalog() {
   if (pmpSeedRan) return;
@@ -1263,7 +1509,24 @@ export async function seedPmpCatalog() {
           }
         }
       }
+
+      // Task #672 — color-library tiers (separate from the Black/Color/
+      // Splatter pricing tiers, mirroring MRP's layout). Ladders seed as
+      // all-placeholder; pricing is out of scope for this task.
+      for (let ci = 0; ci < PMP_COLOR_TIERS.length; ci++) {
+        const colorTier = PMP_COLOR_TIERS[ci];
+        const tier = await ensureTier(press.id, fmt, colorTier.name, PMP_TIER_NAMES.length + ci);
+        for (let sx = 0; sx < colorTier.swatches.length; sx++) {
+          await ensureColor(tier.id, colorTier.swatches[sx].name, colorTier.swatches[sx].hex, sx);
+        }
+        await ensureCombo(tier.id, defaultJacket.id, placeholderLadder());
+        await addMissingRungs(tier.id, defaultJacket.id, STANDARD_COMPARISON_QUANTITIES);
+      }
     }
+
+    // Task #672 — backfill best-guess hex onto any blank rows from an
+    // earlier seed run (never clobbers operator edits / imported photos).
+    await backfillColorHexes(press.id, pmpColorHexByTier());
   } catch (e) {
     console.warn("[pressCatalog] PMP seed failed:", (e as Error).message);
     pmpSeedRan = false;
