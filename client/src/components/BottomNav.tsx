@@ -57,8 +57,12 @@ const NavItem = ({
   align?: "left" | "right" | "center";
 }) => {
   const dir = align === "right" ? 1 : align === "left" ? -1 : 0;
-  const pillLeft = dir === -1 ? "-4px" : dir === 1 ? "4px" : "-2px";
-  const pillRight = dir === -1 ? "4px" : dir === 1 ? "-4px" : "-2px";
+  // End tabs nudge the highlight 2px toward the dock's outer curve so the
+  // gap to the end curve matches the inner gap (Collection left, Recents
+  // right). Both edges shift by the same 2px, so the pill's width/radius
+  // stay identical to before — this is a pure horizontal offset.
+  const pillLeft = dir === -1 ? "-6px" : dir === 1 ? "6px" : "-2px";
+  const pillRight = dir === -1 ? "6px" : dir === 1 ? "-6px" : "-2px";
   const contentShift =
     dir === -1 ? "-translate-x-[4px]" : dir === 1 ? "translate-x-[4px]" : "";
   return (
@@ -80,7 +84,7 @@ const NavItem = ({
         }}
       />
       <div className={`relative w-14 h-7 flex items-center justify-center ${contentShift}`}>
-        <div className={`transition-all duration-150 ${active ? "text-[color:var(--brand-blue)]" : "text-white/35"}`}>
+        <div className={`transition-colors duration-150 ${active ? "text-[color:var(--brand-blue)]" : "text-white/35"}`}>
           {icon(active)}
         </div>
       </div>
@@ -121,12 +125,18 @@ export function BottomNav() {
   // Collection avatar in Collection.tsx.
   useEffect(() => void subscribeChats(() => {}), []);
 
-  // Measure the resting pillow once it's on screen. Guarded so it only
-  // sets state when the value actually changes (no render loop).
+  // Measure the resting pillow once it's on screen. We lock onto the
+  // first real measurement, then only react to *meaningful* changes
+  // (orientation, font swap). Sub-pixel/±1px flips — which an active-tab
+  // stroke-weight change can introduce on re-measure — are ignored so
+  // the reserved right-side space (and thus the justify-around tab
+  // spacing) never oscillates as you switch tabs. Functional updater
+  // keeps this dependency-free without a render loop.
   useLayoutEffect(() => {
     if (!searchOpen && !hidden && pillowRef.current) {
       const h = pillowRef.current.offsetHeight;
-      if (h && h !== dockH) setDockH(h);
+      if (!h) return;
+      setDockH((prev) => (prev == null || Math.abs(h - prev) > 1 ? h : prev));
     }
   });
 
