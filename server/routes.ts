@@ -14921,7 +14921,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // not hidden, not trashed).
     const albumRows = wantKinds.has("album") || wantKinds.has("song") || wantKinds.has("artist") || wantKinds.has("video") || wantKinds.has("photo")
       ? await db
-          .select({ id: albums.id, title: albums.title, artist: albums.artist, coverUrl: albums.coverUrl })
+          .select({ id: albums.id, title: albums.title, artist: albums.artist, coverUrl: albums.artwork })
           .from(albums)
           .where(and(
             eq(albums.isGoodTunesRelease, true),
@@ -14937,7 +14937,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // ids (not just those that matched on text). Cheap separate query.
     const fanAlbumIds = wantKinds.has("song") || wantKinds.has("video") || wantKinds.has("photo")
       ? await db
-          .select({ id: albums.id, title: albums.title, artist: albums.artist, coverUrl: albums.coverUrl })
+          .select({ id: albums.id, title: albums.title, artist: albums.artist, coverUrl: albums.artwork })
           .from(albums)
           .where(and(
             eq(albums.isGoodTunesRelease, true),

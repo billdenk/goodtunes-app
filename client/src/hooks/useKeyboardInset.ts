@@ -19,6 +19,16 @@ import { useEffect, useState } from "react";
 // keyboard. Returns 0 when the API is unavailable (older browsers,
 // desktop) so callers fall back to their normal bottom-dock layout.
 //
+// Task #753 — anchor `innerHeight` to the value captured the moment
+// search opens (i.e. BEFORE the keyboard rises). On iOS Safari focusing
+// an input collapses the bottom address bar into its pill, which inflates
+// `window.innerHeight` by ~the toolbar's height. Measuring `covered`
+// against that inflated value over-counted the keyboard region and lifted
+// the field too high, exposing Safari's address pill + the form accessory
+// bar in the gap between the field and the keyboard. Keeping the SMALLEST
+// innerHeight we observe while active neutralizes that inflation, and is a
+// no-op on browsers whose innerHeight doesn't move on focus.
+//
 // Per the iOS-WebKit memo we touch nothing GPU-heavy here — this is a
 // pure measurement listener, no new backdrop-blur surfaces.
 
@@ -35,17 +45,28 @@ export function useKeyboardInset(active: boolean): number {
       return;
     }
 
+    // Smallest layout-viewport height seen since search opened — the
+    // address-bar-expanded (pre-pill) baseline. See the file header note.
+    let baseInner = window.innerHeight;
+
     const measure = () => {
-      const covered = window.innerHeight - (vv.height + vv.offsetTop);
+      baseInner = Math.min(baseInner, window.innerHeight);
+      const covered = baseInner - (vv.height + vv.offsetTop);
       setInset(covered > KEYBOARD_THRESHOLD ? Math.round(covered) : 0);
     };
+
+    // Orientation flips the layout viewport entirely — reset the baseline
+    // so a taller orientation isn't clamped to the old shorter value.
+    const onOrient = () => { baseInner = window.innerHeight; measure(); };
 
     measure();
     vv.addEventListener("resize", measure);
     vv.addEventListener("scroll", measure);
+    window.addEventListener("orientationchange", onOrient);
     return () => {
       vv.removeEventListener("resize", measure);
       vv.removeEventListener("scroll", measure);
+      window.removeEventListener("orientationchange", onOrient);
     };
   }, [active]);
 

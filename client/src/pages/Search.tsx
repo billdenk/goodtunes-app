@@ -126,6 +126,12 @@ export function SearchPage() {
             <input
               ref={inputRef}
               type="text"
+              inputMode="search"
+              enterKeyHint="search"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Albums, songs, gear, vendors…"

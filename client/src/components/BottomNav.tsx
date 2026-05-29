@@ -343,6 +343,12 @@ export function BottomNav() {
           <input
             ref={inputRef}
             type="text"
+            inputMode="search"
+            enterKeyHint="search"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
             value={search.draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Albums, songs, gear, vendors…"
