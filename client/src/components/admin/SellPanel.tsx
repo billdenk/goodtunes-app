@@ -25,7 +25,7 @@ import { createPortal } from "react-dom";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen, Award, BookOpen, Disc3, FileDown, Loader2 } from "lucide-react";
+import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen, Award, BookOpen, Disc3, Loader2, Copy, Share } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
@@ -5393,6 +5393,10 @@ function SkuRow({
             an artist can compare, e.g., $35 @ 500 vs. $45 @ 1,000 side by
             side. Artist-facing — NOT gated behind an invited press (the
             operator-only "Quotes" comparison section still lives below). */}
+        {/* Task #735 — hairline divider above Pricing, mirroring the
+            rule rendered below the vinyl/format section so Pricing reads
+            as its own bracketed block. */}
+        <hr className="border-t border-slate-200 my-4" aria-hidden />
         <div className="mt-5" data-testid={`pricing-section-${format}`}>
           <div className="flex items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-1.5">
@@ -5405,39 +5409,34 @@ function SkuRow({
                 text="Set your retail price and run size. Duplicate this to compare two scenarios side by side — each has its own price, quantity, profit and total."
               />
             </div>
-            <div className="flex items-center gap-1">
+            {/* Task #735 — boxed, labeled buttons matching the "+ Person"
+                AddEntityButton family (white bg, slate outline, quiet).
+                Duplicate clones the current pricing into a new Option
+                card; Export quote fires the quote-PDF export. */}
+            <div className="flex items-center gap-1.5">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <IconButton
-                    variant="ghost"
-                    label="Export quote PDF"
-                    onClick={handleExportPdf}
-                    disabled={exportingPdf}
-                    className="!w-8 !h-8 text-slate-400 hover:text-[color:var(--brand-blue)]"
-                    data-testid={`button-export-quote-pdf-${format}`}
-                  >
-                    {exportingPdf ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      <FileDown />
-                    )}
-                  </IconButton>
+                  <AddEntityButton
+                    label="Duplicate"
+                    icon={Copy}
+                    onClick={addPricingBlock}
+                    testId={`button-add-pricing-block-${format}`}
+                  />
                 </TooltipTrigger>
-                <TooltipContent>Export quote as PDF</TooltipContent>
+                <TooltipContent>Duplicate pricing</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <IconButton
-                    variant="ghost"
-                    label="Add pricing option"
-                    onClick={addPricingBlock}
-                    className="!w-8 !h-8 text-slate-400 hover:text-[color:var(--brand-blue)]"
-                    data-testid={`button-add-pricing-block-${format}`}
-                  >
-                    <Plus />
-                  </IconButton>
+                  <AddEntityButton
+                    label="Export quote"
+                    icon={exportingPdf ? Loader2 : Share}
+                    iconClassName={exportingPdf ? "w-3 h-3 animate-spin" : "w-3 h-3"}
+                    onClick={handleExportPdf}
+                    disabled={exportingPdf}
+                    testId={`button-export-quote-pdf-${format}`}
+                  />
                 </TooltipTrigger>
-                <TooltipContent>Duplicate pricing</TooltipContent>
+                <TooltipContent>Export quote as PDF</TooltipContent>
               </Tooltip>
             </div>
           </div>
