@@ -1712,30 +1712,105 @@ const PMP_DEFAULT_JACKET = "Standard Full-Color Jacket";
 const PMP_TIER_NAMES = ["Black", "Color", "Splatter"] as const;
 let pmpSeedRan = false;
 
-// Per-tier, per-format confirmed PMP rungs. Per-unit cents = quoted
-// total ÷ qty rounded to nearest cent (per scratchpad — see task
-// spec). retail = cost on every rung (markup model not yet confirmed;
-// captured as an operational note on the press record).
+// Task #685 — PMP's confirmed quotes price the *records* separately
+// from jackets / inserts / booklets, so every per-unit cent below is
+// the bare record line only (the add-ons live in their own code paths).
+// Stored UNDISCOUNTED — a 10% GoodTunes broker discount applies at
+// lookup (broker_discount_pct=10), mirroring Hellbender's pattern.
 //
-// Task #638 — PMP's 2LP Color/Splatter run ~40-65% higher per record
-// than MRP or Hellbender at the same qty. Bill thinks PMP may have
-// quoted each LP separately (i.e. doubled the per-unit), but cross-
-// vendor pricing differences are plausible for a premium boutique
-// press. Numbers stand until PMP re-confirms.
-const PMP_CONFIRMED: Record<"12_double", Record<string, LadderRungSpec[]>> = {
-  "12_double": {
-    Color: [
-      { qty: 500, unitCents: 2315, confirmed: true },   // $11,575 / 500
-      { qty: 1000, unitCents: 1654, confirmed: true },  // $16,542 / 1000
-      { qty: 2000, unitCents: 1374, confirmed: true },  // $27,477 / 2000
-    ],
-    Splatter: [
-      { qty: 500, unitCents: 3265, confirmed: true },   // $16,325 / 500
-      { qty: 1000, unitCents: 2514, confirmed: true },  // $25,142 / 1000
-      { qty: 2000, unitCents: 2274, confirmed: true },  // $45,477 / 2000
-    ],
-  },
+// Real PMP anchors (record line, 500 + 1000): 7" and 12" single,
+// Black + Color. Everything else is a Bill-approved estimate so demos
+// show a complete PMP range, and every estimated cell is logged in
+// docs/vendors/pmp.md:
+//   • 100/200/300/2000 — interpolated by borrowing a single-LP per-unit
+//     curve shape (blended MRP + Hellbender single-LP ladders), scaled
+//     so the 500 & 1000 rungs land exactly on PMP's real anchors.
+//   • Splatter — same-format Color × PMP's own Color→Splatter premium
+//     (~1.41, read off the 2LP quote).
+//   • 12" Double — ~2× the same-qty 12" single record price. This
+//     re-bases the prior whole-quote÷qty 2LP rungs (Color
+//     $23.15/$16.54/$13.74, Splatter $32.65/$25.14/$22.74 at
+//     500/1000/2000) down to the record line only.
+// No 50 and no 750 rungs — standard qtys are 100/200/300/500/1000/2000.
+const PMP_ANCHOR_SYNCED_AT = "2026-05-29T00:00:00.000Z";
+const PMP_QUOTE_SOURCE = "pmp-quote-2026";
+const PMP_ESTIMATE_SOURCE = "pmp-record-interp-2026";
+
+// The original Task #631 note we restate; only this exact default (or
+// an empty note) is overwritten so a later operator edit survives.
+const PMP_OPERATIONAL_NOTE_LEGACY =
+  "Markup model not yet confirmed — treating retail = cost on confirmed rungs until PMP states otherwise.";
+const PMP_OPERATIONAL_NOTE =
+  "Record-line pricing only — jackets, inserts and booklets are quoted as separate add-ons. Stored undiscounted; a 10% GoodTunes broker discount applies at lookup. Real anchors are 7\"/12\" single Black+Color at 500/1000; every other cell is a Bill-approved estimate (see docs/vendors/pmp.md).";
+
+// Real record-line anchors (undiscounted per-unit cents) at 500 / 1000.
+const PMP_RECORD_ANCHORS: Record<
+  "7_inch" | "12_lp",
+  Record<"Black" | "Color", { c500: number; c1000: number }>
+> = {
+  "7_inch": { Black: { c500: 250, c1000: 200 }, Color: { c500: 350, c1000: 300 } },
+  "12_lp": { Black: { c500: 275, c1000: 250 }, Color: { c500: 425, c1000: 350 } },
 };
+
+// Single-LP per-unit curve shape (ratio vs the 500 rung) for the
+// sub-500 rungs, blended from MRP + Hellbender single-LP ladders; plus
+// the 2000-vs-1000 ratio for the top rung. Applied so 500 & 1000 stay
+// exactly on PMP's real anchors.
+const PMP_CURVE_VS_500: Record<number, number> = { 100: 2.65, 200: 1.78, 300: 1.4 };
+const PMP_2000_VS_1000 = 0.84;
+const PMP_SPLATTER_PREMIUM = 1.41; // Color → Splatter (~3265/2315 on the 2LP quote)
+const PMP_DOUBLE_MULTIPLIER = 2; // 2LP record-only ≈ 2× the same-qty 1LP record
+
+type PmpRung = { qty: number; unitCents: number; estimated: boolean };
+
+function pmpLadderFromAnchors(c500: number, c1000: number): PmpRung[] {
+  return [
+    { qty: 100, unitCents: Math.round(c500 * PMP_CURVE_VS_500[100]), estimated: true },
+    { qty: 200, unitCents: Math.round(c500 * PMP_CURVE_VS_500[200]), estimated: true },
+    { qty: 300, unitCents: Math.round(c500 * PMP_CURVE_VS_500[300]), estimated: true },
+    { qty: 500, unitCents: c500, estimated: false },
+    { qty: 1000, unitCents: c1000, estimated: false },
+    { qty: 2000, unitCents: Math.round(c1000 * PMP_2000_VS_1000), estimated: true },
+  ];
+}
+function pmpSplatterFromColor(color: PmpRung[]): PmpRung[] {
+  return color.map((r) => ({
+    qty: r.qty,
+    unitCents: Math.round(r.unitCents * PMP_SPLATTER_PREMIUM),
+    estimated: true,
+  }));
+}
+function pmpDoubleFromSingle(single: PmpRung[]): PmpRung[] {
+  return single.map((r) => ({
+    qty: r.qty,
+    unitCents: r.unitCents * PMP_DOUBLE_MULTIPLIER,
+    estimated: true,
+  }));
+}
+
+// Full record-line ladder set keyed by format → tier.
+type PmpFormat = "7_inch" | "12_lp" | "12_double";
+type PmpTier = "Black" | "Color" | "Splatter";
+function pmpLadders(): Record<PmpFormat, Record<PmpTier, PmpRung[]>> {
+  const out = {} as Record<PmpFormat, Record<PmpTier, PmpRung[]>>;
+  for (const fmt of ["7_inch", "12_lp"] as const) {
+    const black = pmpLadderFromAnchors(
+      PMP_RECORD_ANCHORS[fmt].Black.c500,
+      PMP_RECORD_ANCHORS[fmt].Black.c1000,
+    );
+    const color = pmpLadderFromAnchors(
+      PMP_RECORD_ANCHORS[fmt].Color.c500,
+      PMP_RECORD_ANCHORS[fmt].Color.c1000,
+    );
+    out[fmt] = { Black: black, Color: color, Splatter: pmpSplatterFromColor(color) };
+  }
+  out["12_double"] = {
+    Black: pmpDoubleFromSingle(out["12_lp"].Black),
+    Color: pmpDoubleFromSingle(out["12_lp"].Color),
+    Splatter: pmpDoubleFromSingle(out["12_lp"].Splatter),
+  };
+  return out;
+}
 
 // Task #672 — PMP publishes its color library only as five combined
 // JPGs (PMP_Vinyl-colors_1..5.jpg) with no machine-readable per-color
@@ -1795,17 +1870,40 @@ export async function seedPmpCatalog() {
       return;
     }
 
+    // Task #685 — PMP's broker arrangement is a 10% GoodTunes discount
+    // off the catalog price (same as Hellbender). Seed once, only when
+    // the column is still at the schema default of 0, so a later admin
+    // edit isn't clobbered.
+    if (Number((press as any).brokerDiscountPct ?? 0) === 0) {
+      await db.execute(sql`
+        UPDATE manufacturers SET broker_discount_pct = 10
+        WHERE id = ${press.id} AND broker_discount_pct = 0
+      `);
+    }
+
     await ensureManufacturerSummary(press.id, {
       bio: "Premium handcrafted / custom-effect specialist.",
-      operationalNote: "Markup model not yet confirmed — treating retail = cost on confirmed rungs until PMP states otherwise.",
       // Turnaround intentionally left null — surfaces as "Not stated"
       // until Bill confirms PMP's window.
     });
 
+    // Task #685 — restate the operational note for the record-line +
+    // broker-discount model. Only the original Task #631 default (or an
+    // empty note) is overwritten so a later operator edit survives.
+    await db.execute(sql`
+      UPDATE manufacturers SET operational_note = ${PMP_OPERATIONAL_NOTE}
+      WHERE id = ${press.id}
+        AND (operational_note IS NULL OR operational_note = ''
+             OR operational_note = ${PMP_OPERATIONAL_NOTE_LEGACY})
+    `);
+
     const defaultJacket = await ensureJacket(press.id, PMP_DEFAULT_JACKET, 0, { isDefault: true });
 
-    // Today's PMP catalog: 12" LP + 12" Double LP only.
-    const formats: AlbumFormat[] = ["12_lp", "12_double"];
+    const ladders = pmpLadders();
+
+    // Task #685 — PMP now carries 7" single alongside 12" LP + 12"
+    // Double LP.
+    const formats: PmpFormat[] = ["7_inch", "12_lp", "12_double"];
     for (let fi = 0; fi < formats.length; fi++) {
       const fmt = formats[fi];
       await ensureFormat(press.id, fmt, fi);
@@ -1814,27 +1912,20 @@ export async function seedPmpCatalog() {
         const name = PMP_TIER_NAMES[ti];
         const tier = await ensureTier(press.id, fmt, name, ti);
 
-        // Build the initial ladder: placeholder rungs at the standard
-        // comparison qtys, then merge in any confirmed rungs we have
-        // for this format/tier (currently 12_double × Color/Splatter
-        // at 500/1000/2000).
-        const initial = placeholderLadder();
-        const confirmed = fmt === "12_double" ? PMP_CONFIRMED["12_double"]?.[name] : undefined;
-        if (confirmed) {
-          for (const c of confirmed) {
-            const idx = initial.findIndex((r) => r.qty === c.qty);
-            if (idx >= 0) initial[idx] = c;
-            else initial.push(c);
-          }
-          initial.sort((a, b) => a.qty - b.qty);
-        }
-
-        await ensureCombo(tier.id, defaultJacket.id, initial);
+        // Materialise the six standard rungs, then write the record-line
+        // ladder. Anchors carry the quote source; interpolated /
+        // re-based cells carry the estimate source + `estimated:true`
+        // (renders like any other price; logged in docs/vendors/pmp.md).
+        await ensureCombo(tier.id, defaultJacket.id, placeholderLadder());
         await addMissingRungs(tier.id, defaultJacket.id, STANDARD_COMPARISON_QUANTITIES);
-        if (confirmed) {
-          for (const c of confirmed) {
-            await upgradeRung(tier.id, defaultJacket.id, c.qty, c.unitCents);
-          }
+        for (const rung of ladders[fmt][name]) {
+          await setSiteRung(
+            tier.id,
+            defaultJacket.id,
+            { qty: rung.qty, unitCents: rung.unitCents, estimated: rung.estimated },
+            rung.estimated ? PMP_ESTIMATE_SOURCE : PMP_QUOTE_SOURCE,
+            PMP_ANCHOR_SYNCED_AT,
+          );
         }
       }
 

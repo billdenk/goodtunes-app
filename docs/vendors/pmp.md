@@ -2,20 +2,61 @@
 
 > **Summary:** Premium handcrafted / custom-effect specialist.
 > **Turnaround:** Not stated — request from CSR.
-> **Markup model:** Not yet confirmed — treating retail = cost on confirmed rungs until PMP states otherwise.
+> **Markup model:** Record-line pricing only. Ladders are stored **undiscounted**; a **10% GoodTunes broker discount** (`broker_discount_pct = 10`) applies at lookup, never on disk — same pattern as Hellbender.
 
 PMP publishes far less than MRP. The color library is being updated, numeric specs are not posted, and templates are CSR-assigned per project. Capture what is published; flag the rest as **"not stated — request from CSR."**
 
-## 2026 quoted ladders (loaded into the catalog)
+## 2026 record-line ladders (loaded into the catalog)
 
-The press catalog matrix (1LP / 2LP × Color / Splatter / Black, columns 100 / 200 / 300 / 500 / 1000 / 2000) carries the following confirmed rungs from PMP's May-2026 quote on **12" Double LP × Standard Full-Color Jacket**:
+PMP's quotes price the **records separately** from jackets / inserts / booklets, so every per-unit figure below is the **bare record line only** — the jacket/insert/booklet add-ons live in their own code paths and are not bundled into these numbers. All values are **undiscounted** (the 10% broker discount is applied at lookup).
+
+The catalog now carries the full 6-column comparison matrix (100 / 200 / 300 / 500 / 1000 / 2000) for **7" single, 12" LP, and 12" Double LP** across **Black / Color / Splatter** on the Standard Full-Color Jacket. `7_inch` was created for PMP as part of this load.
+
+### Real anchors (confirmed PMP record-line quotes)
+
+Only these four ladders' **500 + 1000** rungs are real PMP numbers (`source: pmp-quote-2026`, `estimated: false`):
+
+| Format    | Tier  | 500     | 1,000   |
+| --------- | ----- | ------- | ------- |
+| 7" single | Black | $2.50   | $2.00   |
+| 7" single | Color | $3.50   | $3.00   |
+| 12" LP    | Black | $2.75   | $2.50   |
+| 12" LP    | Color | $4.25   | $3.50   |
+
+### Estimated cells (Bill-approved interpolation — every cell logged)
+
+Every non-anchor cell is an **estimate** (`source: pmp-record-interp-2026`, `estimated: true`). They render like any other price so demos show a complete PMP range, but they are not confirmed PMP quotes. Method:
+
+- **100 / 200 / 300 / 2000 on the anchored ladders (7" + 12" single, Black + Color):** borrow a blended single-LP per-unit *curve shape* (MRP + Hellbender single-LP ladders), scaled so the **500 & 1000 rungs land exactly on PMP's real anchors**. Sub-500 rungs use the curve's ratio-to-500 (100 ≈ 2.65×, 200 ≈ 1.78×, 300 ≈ 1.40× the 500 cell); the 2000 rung uses the curve's 2000-vs-1000 ratio (≈ 0.84× the 1000 cell).
+- **Splatter (all three formats):** same-format **Color × 1.41**, PMP's own Color→Splatter premium read off the original 2LP quote (≈ 3265/2315 at 500).
+- **12" Double (all tiers, every rung):** **≈ 2× the same-qty 12" single record price.** This **re-bases** the prior whole-quote÷qty 2LP rungs (which mixed jacket + add-ons into the per-unit) down to the record line only.
+
+Per-unit cents, `*` = estimated:
+
+| Format     | Tier     | 100   | 200   | 300   | 500   | 1000  | 2000  |
+| ---------- | -------- | ----- | ----- | ----- | ----- | ----- | ----- |
+| 7" single  | Black    | 663*  | 445*  | 350*  | 250   | 200   | 168*  |
+| 7" single  | Color    | 928*  | 623*  | 490*  | 350   | 300   | 252*  |
+| 7" single  | Splatter | 1308* | 878*  | 691*  | 494*  | 423*  | 355*  |
+| 12" LP     | Black    | 729*  | 490*  | 385*  | 275   | 250   | 210*  |
+| 12" LP     | Color    | 1126* | 757*  | 595*  | 425   | 350   | 294*  |
+| 12" LP     | Splatter | 1588* | 1067* | 839*  | 599*  | 494*  | 415*  |
+| 12" Double | Black    | 1458* | 980*  | 770*  | 550*  | 500*  | 420*  |
+| 12" Double | Color    | 2252* | 1514* | 1190* | 850*  | 700*  | 588*  |
+| 12" Double | Splatter | 3176* | 2134* | 1678* | 1198* | 988*  | 830*  |
+
+**Standard quantities are 100 / 200 / 300 / 500 / 1000 / 2000 — no 50 and no 750 rung.**
+
+### Prior whole-quote 2LP rungs (re-based away from)
+
+For the record, the earlier (Task #631/#638) 2LP rungs were the whole-quote÷qty values — jacket + add-ons folded into the per-unit — and ran ~40-65% above MRP/Hellbender. They are superseded by the record-only re-base above:
 
 | Tier     | 500     | 1,000   | 2,000   |
 | -------- | ------- | ------- | ------- |
 | Color    | $11,575 ($23.15/ea) | $16,542 ($16.54/ea) | $27,477 ($13.74/ea) |
 | Splatter | $16,325 ($32.65/ea) | $25,142 ($25.14/ea) | $45,477 ($22.74/ea) |
 
-Every other rung — all 100 / 200 / 300 columns, every 12" LP (1×LP) rung, and the entire Black tier on both formats — seeds as unconfirmed yellow placeholders until PMP quotes them. 7" formats are listed on PMP's site as "coming soon" and are not seeded.
+The color-library tiers (Translucent / Opaque) keep their all-placeholder ladders — per-color pricing is out of scope. 7" formats were previously listed as "coming soon" on PMP's site; the record-line load seeds them now so the comparison matrix is complete.
 
 ## Contact
 
