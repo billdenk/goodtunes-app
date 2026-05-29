@@ -1722,6 +1722,31 @@ function CostTooltip({
   );
 }
 
+// Task #700 — Keep package collapse from jumping the page. Collapsing a
+// SKU row unmounts its tall expanded body; the exclusive-disclosure
+// behaviour also unmounts a sibling's body. Either way the page reflows
+// upward and, because the cursor stays put, the trashcan can slide under
+// the pointer (one stray click from deleting the format). We anchor on
+// the element the user actually clicked: capture its viewport offset
+// before the state change, then after the DOM has re-laid-out restore the
+// window scroll so that element sits at exactly the same screen position.
+function anchorScrollToElement(
+  el: HTMLElement | null | undefined,
+  apply: () => void,
+) {
+  if (!el) {
+    apply();
+    return;
+  }
+  const before = el.getBoundingClientRect().top;
+  apply();
+  requestAnimationFrame(() => {
+    const after = el.getBoundingClientRect().top;
+    const delta = after - before;
+    if (delta) window.scrollBy(0, delta);
+  });
+}
+
 function SkuRow({
   format,
   existing,
@@ -3696,7 +3721,7 @@ function SkuRow({
               the thumb is itself the row's primary affordance. */}
           <button
             type="button"
-            onClick={() => onSetExpanded(!expanded)}
+            onClick={(e) => anchorScrollToElement(e.currentTarget, () => onSetExpanded(!expanded))}
             aria-label={expanded ? "Collapse format" : "Expand format"}
             className="flex-shrink-0 w-9 h-9 mt-0.5 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]/40"
             data-testid={`button-row-thumb-${format}`}
@@ -3831,7 +3856,7 @@ function SkuRow({
             </button>
             <button
               type="button"
-              onClick={() => onSetExpanded(!expanded)}
+              onClick={(e) => anchorScrollToElement(e.currentTarget, () => onSetExpanded(!expanded))}
               className="w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
               aria-label={expanded ? "Collapse format" : "Expand format"}
               aria-expanded={expanded}
@@ -4036,7 +4061,7 @@ function SkuRow({
             <SaveLink dirty={dirty} onClick={submit} testId={`button-save-sku-${format}`} />
             <button
               type="button"
-              onClick={() => onSetExpanded(!expanded)}
+              onClick={(e) => anchorScrollToElement(e.currentTarget, () => onSetExpanded(!expanded))}
               className="h-8 w-8 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center transition-colors"
               aria-label={expanded ? "Collapse format" : "Expand format"}
               aria-expanded={expanded}
