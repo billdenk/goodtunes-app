@@ -23,17 +23,43 @@ export function InvitedByPressPanel({
   kind,
   id,
   currentPressId,
+  currentPressMode,
   onChanged,
 }: {
   kind: "people" | "labels";
   id: string;
   currentPressId: string | null;
+  // Task #736 — stored press mode for this entity. null = inherit (the
+  // resolver falls to the label, then "dedicated"); the toggle below
+  // surfaces the effective default ("dedicated") when null.
+  currentPressMode?: string | null;
   onChanged?: () => void;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data: role } = useQuery<RoleInfo>({ queryKey: ["/api/me/role"] });
   const isSuperAdmin = role?.role === "super_admin";
+
+  // Task #736 — press mode (Dedicated vs All Presses). Hidden from
+  // partners; only super-admins flip it. Writing always persists a
+  // non-null value, so an artist's choice wins over its label.
+  const effectiveMode: "dedicated" | "all" =
+    currentPressMode === "all" ? "all" : "dedicated";
+  const setMode = useMutation({
+    mutationFn: async (mode: "dedicated" | "all") => {
+      await apiRequest("PATCH", `/api/admin/${kind}/${id}/press-mode`, { mode });
+    },
+    onSuccess: () => {
+      const partnerKey = kind === "people" ? "/api/people" : "/api/labels";
+      qc.invalidateQueries({ queryKey: [partnerKey, id] });
+      qc.invalidateQueries({ queryKey: [partnerKey] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/albums"] });
+      onChanged?.();
+      toast({ title: "Press mode updated" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't update press mode", description: e?.message, variant: "destructive" }),
+  });
 
   const { data: presses = [] } = useQuery<Manufacturer[]>({
     queryKey: ["/api/manufacturers"],
@@ -112,6 +138,38 @@ export function InvitedByPressPanel({
         <p className="text-[12.5px] text-slate-500" data-testid="text-no-invited-press">
           Not press-invited. Their Sell-panel Presses surface shows the full directory.
         </p>
+      )}
+      {isSuperAdmin && (
+        <div className="mt-4 pt-3 border-t border-slate-100" data-testid="row-press-mode">
+          <div className="text-xs font-medium text-slate-700 mb-1.5">Press mode</div>
+          <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50">
+            {(["dedicated", "all"] as const).map((m) => {
+              const active = effectiveMode === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => !active && setMode.mutate(m)}
+                  disabled={setMode.isPending}
+                  className={
+                    "px-3 py-1.5 text-xs font-medium rounded-md transition-colors " +
+                    (active
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700")
+                  }
+                  data-testid={`button-press-mode-${m}`}
+                >
+                  {m === "dedicated" ? "Dedicated" : "All Presses"}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-slate-400 mt-1.5">
+            {effectiveMode === "all"
+              ? "Sell panel unlocks the press picker and side-by-side bid comparison."
+              : "Sell panel locks to the single resolved plant — no comparison."}
+          </p>
+        </div>
       )}
       {isSuperAdmin && (
         <div className="mt-3">

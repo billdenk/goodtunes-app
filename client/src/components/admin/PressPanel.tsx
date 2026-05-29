@@ -205,10 +205,24 @@ export function PressPanel({
     [],
   );
   const defaultVendor: VendorId = useMemo(() => {
+    // Task #736 — the governing stamp wins. If the album's resolved
+    // press matches a known vendor (e.g. Hellbender), honor it for the
+    // package designer EVEN IF that vendor is in HIDDEN_PREFLIGHT_VENDORS.
+    // The hide list only governs which vendors appear as *generic*
+    // pre-meeting defaults; a deliberate per-album stamp must not silently
+    // fall back to MRP. The matched-but-hidden vendor is also injected
+    // into the select options below so the operator can see/keep it.
     const matched = matchInvitedPressToVendor(invitedPress?.press?.name);
-    if (matched && !HIDDEN_PREFLIGHT_VENDORS.has(matched)) return matched;
+    if (matched) return matched;
     return (visibleVendors[0] ?? Object.values(VENDOR_SPECS)[0]).id;
   }, [invitedPress, visibleVendors]);
+  // Task #736 — the vendor matched from the album's resolved press, even
+  // when hidden from generic preflight, so it can be merged into the
+  // select options (otherwise the default vendor wouldn't be selectable).
+  const matchedHiddenVendor: VendorId | null = useMemo(() => {
+    const matched = matchInvitedPressToVendor(invitedPress?.press?.name);
+    return matched && HIDDEN_PREFLIGHT_VENDORS.has(matched) ? matched : null;
+  }, [invitedPress]);
   // Track the operator's manual pick separately so the invited-press
   // default doesn't yank their selection out from under them once
   // the query resolves.
@@ -488,6 +502,11 @@ export function PressPanel({
                 className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
                 data-testid="select-press-vendor"
               >
+                {matchedHiddenVendor && !visibleVendors.some((s) => s.id === matchedHiddenVendor) && (
+                  <option key={matchedHiddenVendor} value={matchedHiddenVendor}>
+                    {VENDOR_SPECS[matchedHiddenVendor].label}
+                  </option>
+                )}
                 {visibleVendors.map((s) => (
                   <option key={s.id} value={s.id}>{s.label}</option>
                 ))}

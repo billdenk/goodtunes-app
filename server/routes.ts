@@ -17894,8 +17894,86 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } else {
       await db.execute(sql`UPDATE labels SET invited_by_press_id = ${pressId} WHERE id = ${id}`);
     }
+    // Task #736 — a corrected governing stamp must flow through to every
+    // album it governs, including re-resolving previously-saved catalog
+    // SKU snapshots so a stale press stops showing without a manual
+    // re-save. Re-resolve every (unlocked) album under this scope; the
+    // helper recomputes each album's press fresh, so artist-wins
+    // precedence is preserved even when only the label changed.
+    try {
+      // Parameterized — the column is selected by the static `kind`
+      // discriminator (never interpolated), and the id rides as a bound
+      // value so a malicious id can't break out of the query.
+      const affected: any =
+        kind === "people"
+          ? await db.execute(
+              sql`SELECT id FROM albums WHERE primary_artist_id = ${id} AND deleted_at IS NULL`,
+            )
+          : await db.execute(
+              sql`SELECT id FROM albums WHERE label_id = ${id} AND deleted_at IS NULL`,
+            );
+      const albumIds = ((affected.rows ?? affected) as Array<{ id: string }>).map((r) => r.id);
+      if (albumIds.length > 0) {
+        const { reresolveAlbumSkuSnapshots } = await import("./commerce");
+        for (const albumId of albumIds) {
+          await reresolveAlbumSkuSnapshots(albumId);
+        }
+      }
+    } catch (e) {
+      console.error("setInvitedByPress: snapshot re-resolve failed", e);
+    }
     return { ok: true };
   }
+  // ─── Task #736 — Press mode (Dedicated vs All Presses) god-view ─────
+  // Super-admin-only switch on artist (people) / label detail pages.
+  // null = inherit (artist → label → "dedicated"); "dedicated" locks
+  // the album Sell panel to the single resolved plant; "all" unlocks the
+  // press picker + cross-press comparison. body = `{ mode: "dedicated" |
+  // "all" }`. Layered on top of invitedByPressId — never touches it.
+  async function setPressMode(
+    kind: "people" | "labels",
+    id: string,
+    mode: "dedicated" | "all",
+  ): Promise<{ ok: true } | { error: string }> {
+    const exists = kind === "people"
+      ? await storage.getPersonById(id)
+      : await storage.getLabelById(id);
+    if (!exists) return { error: "Partner not found" };
+    if (kind === "people") {
+      await db.execute(sql`UPDATE people SET press_mode = ${mode} WHERE id = ${id}`);
+    } else {
+      await db.execute(sql`UPDATE labels SET press_mode = ${mode} WHERE id = ${id}`);
+    }
+    return { ok: true };
+  }
+  app.patch(
+    "/api/admin/people/:id/press-mode",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const mode = String(req.body?.mode);
+      if (mode !== "dedicated" && mode !== "all") {
+        return res.status(400).json({ message: "mode must be 'dedicated' or 'all'" });
+      }
+      const r = await setPressMode("people", String(req.params.id), mode);
+      if ("error" in r) return res.status(400).json({ message: r.error });
+      res.json({ ok: true });
+    },
+  );
+  app.patch(
+    "/api/admin/labels/:id/press-mode",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const mode = String(req.body?.mode);
+      if (mode !== "dedicated" && mode !== "all") {
+        return res.status(400).json({ message: "mode must be 'dedicated' or 'all'" });
+      }
+      const r = await setPressMode("labels", String(req.params.id), mode);
+      if ("error" in r) return res.status(400).json({ message: r.error });
+      res.json({ ok: true });
+    },
+  );
   app.patch(
     "/api/admin/people/:id/invited-press",
     requireAdmin,

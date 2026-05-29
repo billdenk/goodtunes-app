@@ -485,6 +485,14 @@ The storefront IS the product on day one. Streaming-without-purchase comes later
 Cart UX, Stripe checkout, fulfillment dashboard, post-purchase delivery email, refund flow, sales reporting per artist/label, public sold-out leaderboards. All of that is post-admin-restructure work.
 
 
+## Press network — beyond the per-album god-view toggle (deferred — May 29, 2026)
+
+The **Press mode** switch (Dedicated vs All Presses) now ships as a super-admin-only god-view control on the artist/label detail pages (Task #736): Dedicated locks an album's Sell panel to its single resolved plant, All Presses unlocks the picker + side-by-side bid comparison, and an artist's mode wins over its label's. That covers the *operator's* manual decision per artist/label today. It deliberately does **not** build out the broader press-network vision:
+
+- **Partner-facing exposure.** Today the toggle is invisible to presses, labels, and artists — only super-admins see or set it. A future phase could let a label self-select "shop all presses," surface the comparison to the artist, or expose a press's standing in the network.
+- **Automatic / rule-driven mode.** Mode is a manual stamp resolved artist → label → "dedicated". A network phase could resolve it from the press relationship itself (e.g. a non-exclusive press deal auto-opens comparison) rather than a hand-set flag.
+- **`invitedByPressId` semantics unchanged.** Press mode layers *on top of* the existing provenance stamp; it never changes what `invitedByPressId` means or how referral/attribution is wired. A network phase would be where exclusivity, broker splits, and multi-press routing get first-class data.
+
 ## Per-press RFQ pricing on the Sell panel (deferred — May 23, 2026)
 
 The Sell panel's vinyl rows now price off a hard-coded Hellbender Vinyl reference matrix keyed by (size, color tier, qty tier, jacket upgrade) — picks are snapshotted onto each SKU at save (Task #200). Non-vinyl formats (double-LP, cassette, CD) still fall back to the platform default in `payout_format_costs` because we don't have published rate sheets in the codebase yet, and **no** format has true per-plant comparison: there is no "Memphis vs. Precision vs. Hellbender" pick, no RFQ button, and the chosen-plant column on `album_skus` is still null.

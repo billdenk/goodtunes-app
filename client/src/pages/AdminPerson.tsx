@@ -828,7 +828,7 @@ function OverviewPanel({
   return (
     <div className="space-y-5">
       <ReferralSummaryPanel kind="artist" id={person.id} />
-      <InvitedByPressPanel kind="people" id={person.id} currentPressId={person.invitedByPressId} />
+      <InvitedByPressPanel kind="people" id={person.id} currentPressId={person.invitedByPressId} currentPressMode={(person as any).pressMode} />
       <EditablePanel
         title="Identity"
         testId="panel-overview-identity"

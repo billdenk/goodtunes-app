@@ -509,6 +509,119 @@ async function resolveAlbumPressDomain(album: {
   return (press as any)?.domain ?? null;
 }
 
+// Task #736 — resolve an album's press mode (god-view). Independent of
+// the invitedByPressId stamp so an unaffiliated artist can still be put
+// in "all" mode. Artist's explicit mode wins over the label's, mirroring
+// press resolution: a non-null artist value short-circuits; otherwise we
+// fall to the label; otherwise the platform default of "dedicated".
+export async function resolveAlbumPressMode(album: {
+  primaryArtistId: string | null;
+  labelId: string | null;
+}): Promise<"dedicated" | "all"> {
+  if (album.primaryArtistId) {
+    const p = await storage.getPersonById(album.primaryArtistId);
+    const m = (p as any)?.pressMode;
+    if (m === "dedicated" || m === "all") return m;
+  }
+  if (album.labelId) {
+    const l = await storage.getLabelById(album.labelId);
+    const m = (l as any)?.pressMode;
+    if (m === "dedicated" || m === "all") return m;
+  }
+  return "dedicated";
+}
+
+// Task #736 — re-resolve a single album's saved catalog SKU snapshots
+// against the album's *currently* resolved press. Used when a governing
+// stamp is corrected (PATCH invited-press) so a previously-saved SKU
+// stops serving the old press's pricing without a manual re-save. Only
+// touches catalog-sourced, unlocked, live rows — at-press (locked) runs
+// keep their committed numbers. Rows whose saved tier/color no longer
+// resolves on the new press are zeroed so the SellPanel re-prompts for a
+// quote rather than silently showing stale math.
+export async function reresolveAlbumSkuSnapshots(albumId: string): Promise<{
+  scanned: number;
+  healed: number;
+}> {
+  const album = await storage.getAlbumById(albumId, { includeHidden: true });
+  if (!album) return { scanned: 0, healed: 0 };
+  // Resolve the album's press the same way the SKU save + invited-press
+  // endpoint do (artist → label).
+  let pressId: string | null = null;
+  if (album.primaryArtistId) {
+    const p = await storage.getPersonById(album.primaryArtistId);
+    if (p && (p as any).invitedByPressId) pressId = String((p as any).invitedByPressId);
+  }
+  if (!pressId && album.labelId) {
+    const l = await storage.getLabelById(album.labelId);
+    if (l && (l as any).invitedByPressId) pressId = String((l as any).invitedByPressId);
+  }
+  const pct = pressId
+    ? (await storage.getManufacturerById(pressId).then((m) => (m as any)?.brokerDiscountPct))
+    : null;
+  const brokerDiscountPct =
+    typeof pct === "number" && pct >= 0 && pct <= 100 ? pct : null;
+
+  const rowsRes: any = await db.execute(sql`
+    SELECT id, format, planned_quantity, vinyl_color, vinyl_color_tier, quantity_tier
+      FROM album_skus
+     WHERE album_id = ${albumId}
+       AND cost_source = 'catalog'
+       AND deleted_at IS NULL
+       AND locked_at IS NULL
+  `);
+  const rows = (rowsRes.rows ?? rowsRes) as Array<{
+    id: string;
+    format: AlbumFormat;
+    planned_quantity: number | null;
+    vinyl_color: string | null;
+    vinyl_color_tier: string | null;
+    quantity_tier: number | null;
+  }>;
+  let healed = 0;
+  for (const row of rows) {
+    let unitCents = 0;
+    if (pressId && row.vinyl_color_tier) {
+      const tierRes: any = await db.execute(sql`
+        SELECT id FROM press_color_tiers
+         WHERE press_id = ${pressId} AND format = ${row.format} AND name = ${row.vinyl_color_tier}
+         LIMIT 1
+      `);
+      const tier = (tierRes.rows ?? tierRes)[0] as { id: string } | undefined;
+      if (tier) {
+        let colorId: string | null = null;
+        if (row.vinyl_color) {
+          const colorRes: any = await db.execute(sql`
+            SELECT id FROM press_colors WHERE tier_id = ${tier.id} AND name = ${row.vinyl_color} LIMIT 1
+          `);
+          colorId = ((colorRes.rows ?? colorRes)[0] as { id: string } | undefined)?.id ?? null;
+        }
+        const looked = await lookupCatalogUnitCents({
+          pressId,
+          format: row.format,
+          tierId: tier.id,
+          colorId,
+          quantity: row.quantity_tier ?? row.planned_quantity ?? null,
+        });
+        if (looked && looked.unitCents > 0) unitCents = looked.unitCents;
+      }
+    }
+    const discounted =
+      brokerDiscountPct != null && brokerDiscountPct > 0 && unitCents > 0
+        ? Math.floor((unitCents * (100 - brokerDiscountPct)) / 100)
+        : null;
+    await db.execute(sql`
+      UPDATE album_skus
+         SET cost_snapshot_manufacturing_cents = ${unitCents},
+             cost_snapshot_manufacturing_discounted_cents = ${discounted},
+             cost_snapshot_broker_discount_pct = ${brokerDiscountPct}
+       WHERE id = ${row.id}
+    `);
+    healed++;
+  }
+  return { scanned: rows.length, healed };
+}
+
 export function registerCommerceRoutes(app: Express) {
   // ─── Public catalog reads ────────────────────────────────────────
   // GET /api/albums/:id/buy-options — what the fan-side Buy sheet renders.
@@ -1025,6 +1138,11 @@ export function registerCommerceRoutes(app: Express) {
     const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
 
+    // Task #736 — resolved press mode drives whether the SellPanel locks
+    // to the single plant (dedicated) or unlocks the picker + cross-press
+    // comparison (all). Independent of the invitedByPressId stamp below.
+    const pressMode = await resolveAlbumPressMode(album);
+
     let pressId: string | null = null;
     let scopeKind: "artist" | "label" | null = null;
     let scopeId: string | null = null;
@@ -1070,6 +1188,7 @@ export function registerCommerceRoutes(app: Express) {
         formatCosts: await listFormatCosts(),
         catalog: { formats: [] },
         mrpDefaults,
+        pressMode,
       });
     }
 
@@ -1078,7 +1197,7 @@ export function registerCommerceRoutes(app: Express) {
     // isn't on the column — we left it untyped to keep the migration
     // simple). Treat a dangling reference as "no lock".
     if (!press) {
-      return res.json({ press: null, hasShippedFirst: false, formatCosts: await listFormatCosts(), catalog: { formats: [] } });
+      return res.json({ press: null, hasShippedFirst: false, formatCosts: await listFormatCosts(), catalog: { formats: [] }, pressMode });
     }
     // Task #218 — make sure Hellbender's catalog rows exist on first
     // read so an existing dev/prod DB with the Hellbender press but
@@ -1150,6 +1269,7 @@ export function registerCommerceRoutes(app: Express) {
       // picker. Empty `formats` array means the press hasn't built
       // their catalog yet; SellPanel falls back to a no-physical menu.
       catalog: await getPressCatalog(pressId),
+      pressMode,
     });
   });
   app.delete("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {

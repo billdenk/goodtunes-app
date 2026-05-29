@@ -587,7 +587,7 @@ function OverviewPanel({ label }: { label: Label }) {
   const endpoint = `/api/admin/labels/${label.id}`;
   return (
     <div className="space-y-5">
-      <InvitedByPressPanel kind="labels" id={label.id} currentPressId={label.invitedByPressId} />
+      <InvitedByPressPanel kind="labels" id={label.id} currentPressId={label.invitedByPressId} currentPressMode={(label as any).pressMode} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
       <EditablePanel
         title="Identity"

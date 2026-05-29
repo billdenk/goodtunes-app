@@ -97,6 +97,13 @@ export const labels = pgTable("labels", {
   // immutable provenance stamp) so the label can re-home their pipeline
   // without losing the original referral attribution.
   defaultPressId: varchar("default_press_id"),
+  // Task #736 — press mode (super-admin god-view). null = inherit
+  // (resolve artist → label → "dedicated" default); "dedicated" locks
+  // the album Sell panel to the single resolved plant (press-demo);
+  // "all" unlocks the press picker + side-by-side multi-bid comparison
+  // (investor / unaffiliated-artist demo). Layered on top of the
+  // immutable invitedByPressId provenance stamp — a separate concept.
+  pressMode: text("press_mode"),
   createdAt: timestamp("created_at").defaultNow(),
   ...softDeleteCols,
 });
@@ -826,6 +833,13 @@ export const people = pgTable("people", {
   // album setup ("Choose a different press"). Separate from
   // invitedByPressId so the original referral never resets.
   defaultPressId: varchar("default_press_id"),
+  // Task #736 — press mode (super-admin god-view). null = inherit
+  // (resolve artist → label → "dedicated" default); "dedicated" locks
+  // the album Sell panel to the single resolved plant; "all" unlocks
+  // the press picker + side-by-side multi-bid comparison. Artist mode
+  // wins over the label's mode, mirroring press resolution. Layered on
+  // top of the immutable invitedByPressId provenance stamp.
+  pressMode: text("press_mode"),
   // Task #350 — per-person ambassador inviter flag. NPO partner shells
   // gate the "Invite an ambassador" action on `inviteSubusers` (org-wide
   // permission) AND this column on the specific ambassador-Person who

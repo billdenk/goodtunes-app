@@ -181,6 +181,10 @@ type InvitedPressResponse = {
   // UI (tier/color dropdowns, format scope) — it's purely a cost
   // fallback consumed by the breakdown branch in SkuRow.
   mrpDefaults?: Catalog | null;
+  // Task #736 — resolved press mode (artist → label → "dedicated").
+  // "all" unlocks the press picker + cross-press bid comparison;
+  // "dedicated" (or absent) locks the panel to the single resolved plant.
+  pressMode?: "dedicated" | "all";
 };
 
 // Mirrors `snapToCatalogQuantityTier` server-side. Walks an ordered
@@ -1006,7 +1010,11 @@ export function SellPanel({
             press directory carousel: chips do the choosing, one calm
             card explains the press. MRP + PMP stay "Soon" until we
             wire their catalogs. */}
-        <PrinterAndPressPanel invited={invitedPress ?? null} />
+        <PrinterAndPressPanel
+          invited={invitedPress ?? null}
+          allPresses={allPresses ?? null}
+          pressFormatsByPress={pressFormatsByPress}
+        />
 
         {/* Task #533 — Gate #2 artist opt-in for pool-funded early cut. */}
         <EarlyCutOptIn albumId={albumId} />
@@ -1254,9 +1262,21 @@ export function SellPanel({
  * invited press, or only Hellbender live) the row is read-only with no
  * chips. The invited-press hard lock from task #199 still surfaces, as
  * a muted caption under the row.                                      */
-function PrinterAndPressPanel({ invited }: { invited: InvitedPressResponse | null }) {
+function PrinterAndPressPanel({
+  invited,
+  allPresses,
+  pressFormatsByPress,
+}: {
+  invited: InvitedPressResponse | null;
+  allPresses?: Manufacturer[] | null;
+  pressFormatsByPress?: Map<string, Set<string>>;
+}) {
   const invitedPress = invited?.press ?? null;
-  const locked = !!invitedPress && !invited?.hasShippedFirst;
+  // Task #736 — in "all" mode the super-admin wants to shop every press,
+  // so the invited-press hard lock is lifted even though the provenance
+  // stamp is still present. "dedicated" (or inherit) keeps the lock.
+  const allMode = (invited?.pressMode ?? "dedicated") === "all";
+  const locked = !!invitedPress && !invited?.hasShippedFirst && !allMode;
 
   // Hellbender is intentionally hidden from the Printer picker for
   // now — MRP demo / pitch is in flight and we don't want partners
@@ -1272,11 +1292,38 @@ function PrinterAndPressPanel({ invited }: { invited: InvitedPressResponse | nul
   // coming-soon chip and the invited press as the live one, the
   // default-selected label is never "MRP". Restore by re-adding the
   // MRP entry above PMP.
-  const chips: Chip[] = locked
-    ? [{ id: "invited", label: invitedPress!.name, status: "live", press: invitedPress }]
-    : [
-        { id: "pmp", label: "PMP", status: "coming-soon", press: null },
-      ];
+  // Task #736 — in all-mode the super-admin shops the live press
+  // directory: every press that publishes at least one format becomes a
+  // selectable chip (invited press first when present). This is the only
+  // path that surfaces real plants here; dedicated/locked modes keep the
+  // pre-meeting single-press behavior. Works with no invited stamp.
+  const liveDirectoryChips: Chip[] = (() => {
+    if (!allMode) return [];
+    const seen = new Set<string>();
+    const out: Chip[] = [];
+    if (invitedPress) {
+      seen.add(invitedPress.id);
+      out.push({ id: invitedPress.id, label: invitedPress.name, status: "live", press: invitedPress });
+    }
+    for (const p of allPresses ?? []) {
+      if (seen.has(p.id)) continue;
+      const formats = pressFormatsByPress?.get(p.id);
+      if (formats && formats.size > 0) {
+        seen.add(p.id);
+        out.push({ id: p.id, label: p.name, status: "live", press: p });
+      }
+    }
+    return out;
+  })();
+
+  const chips: Chip[] =
+    allMode && liveDirectoryChips.length > 0
+      ? liveDirectoryChips
+      : locked
+        ? [{ id: "invited", label: invitedPress!.name, status: "live", press: invitedPress }]
+        : [
+            { id: "pmp", label: "PMP", status: "coming-soon", press: null },
+          ];
 
   const defaultId = chips[0].id;
   const [selectedId, setSelectedId] = useState<string>(defaultId);
@@ -3314,6 +3361,16 @@ function SkuRow({
     return out;
   }, [allPresses, invitedPressItself, pressFormatsByPress, format]);
 
+  // Task #736 — in "All Presses" mode the comparison anchors on the
+  // invited press when there is one, else the first qualified press, so
+  // an unaffiliated album (no invited stamp) still gets a side-by-side
+  // multi-bid comparison. In "dedicated" mode the comparison never
+  // renders, so this is only consulted in all-mode.
+  const comparisonAnchorPress = useMemo<Manufacturer | null>(
+    () => invitedPressItself ?? qualifiedPresses[0] ?? null,
+    [invitedPressItself, qualifiedPresses],
+  );
+
   // ====================================================================
   // Task #646 — multi-quote scratchpad. Each card represents one
   // format × one press quote (the SKU we'd save); beneath it we let
@@ -3509,8 +3566,13 @@ function SkuRow({
       if (!invitedPressItself || r.pressId !== invitedPressItself.id)
         s.add(r.pressId);
     }
+    // Task #736 — with no invited stamp the comparison anchors on the
+    // first qualified press; load its catalog so the pinned primary row
+    // can resolve a real per-unit cost instead of the MRP-default cost.
+    if (!invitedPressItself && comparisonAnchorPress)
+      s.add(comparisonAnchorPress.id);
     return [...s];
-  }, [quoteRows, invitedPressItself]);
+  }, [quoteRows, invitedPressItself, comparisonAnchorPress]);
   const quoteCatalogQueries = useQueries({
     queries: quoteForeignPressIds.map((pid) => ({
       queryKey: ["/api/admin/manufacturers", pid, "catalog"] as const,
@@ -3680,7 +3742,10 @@ function SkuRow({
   };
 
   const addQuoteSamePress = () => {
-    if (!pickedTier || !invitedPressItself) return;
+    // Task #736 — anchor on the invited press when present, else the
+    // first qualified press, so the "add another qty" shortcut works on
+    // unaffiliated albums in all-mode too.
+    if (!pickedTier || !comparisonAnchorPress) return;
     const sorted = [...pickedTier.priceLadder]
       .filter((r) => r.confirmed !== false)
       .sort((a, b) => a.qty - b.qty);
@@ -3692,7 +3757,7 @@ function SkuRow({
       ...prev,
       {
         id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-        pressId: invitedPressItself.id,
+        pressId: comparisonAnchorPress.id,
         tierName: pickedTier.name,
         colorName,
         qty: next?.qty ?? parsedQty,
@@ -3826,11 +3891,11 @@ function SkuRow({
   // already have a quote on this card. Closest color = same tier
   // name + nearest hex; nearest qty rung with ties rounding up.
   const matchAcrossPresses = async () => {
-    if (!pickedTier || !invitedPressItself) return;
+    if (!pickedTier || !comparisonAnchorPress) return;
     const srcColor =
       pickedTier.colors.find((c) => c.id === pressColorId) ?? null;
     const existing = new Set<string>([
-      invitedPressItself.id,
+      comparisonAnchorPress.id,
       ...quoteRows.map((r) => r.pressId),
     ]);
     const targets = qualifiedPresses.filter((p) => !existing.has(p.id));
@@ -5480,13 +5545,34 @@ function SkuRow({
           wrapper. */}
       </div>
       {(() => {
-        if (!isVinyl || !pickedTier || !invitedPressItself) return null;
+        // Task #736 — the cross-press bid comparison only appears in
+        // "all" mode. In "dedicated" (or inherit) mode the panel stays
+        // locked to the single resolved plant with no comparison.
+        const allMode = (invitedPressRow?.pressMode ?? "dedicated") === "all";
+        // Task #736 — comparison renders in all-mode even with no invited
+        // stamp (unaffiliated / investor demo). It anchors on the invited
+        // press when present, else the first qualified press. Only bail if
+        // there is no press at all to compare against.
+        if (!isVinyl || !pickedTier || !allMode || !comparisonAnchorPress)
+          return null;
         const catalogPicked = usingCatalog
           ? pickedTier.colors.find((c) => c.id === pressColorId) ?? null
           : null;
         const primaryColorName = catalogPicked?.name ?? null;
+        // Pinned primary row cost: the invited press uses the album's saved
+        // breakdown; the no-stamp anchor resolves its own catalog cost so the
+        // headline bid reflects that plant, not the MRP-default fallback.
+        const primaryMfgCents = invitedPressItself
+          ? breakdown?.manufacturingCents ?? 0
+          : resolveQuoteRow({
+              id: "anchor-primary",
+              pressId: comparisonAnchorPress.id,
+              tierName: pickedTier.name,
+              colorName: primaryColorName,
+              qty: parsedQty,
+            }).mfgCents;
         const otherQualified = qualifiedPresses.filter(
-          (p) => p.id !== invitedPressItself.id,
+          (p) => p.id !== comparisonAnchorPress.id,
         );
         const renderQuote = (params: {
           key: string;
@@ -5901,11 +5987,11 @@ function SkuRow({
             <div className="space-y-2">
               {renderQuote({
                 key: "primary",
-                press: invitedPressItself,
+                press: comparisonAnchorPress,
                 tierName: pickedTier.name,
                 colorName: primaryColorName,
                 qty: parsedQty,
-                mfgCents: breakdown?.manufacturingCents ?? 0,
+                mfgCents: primaryMfgCents,
                 isPinned: true,
               })}
               {quoteRows.map((row) => {
