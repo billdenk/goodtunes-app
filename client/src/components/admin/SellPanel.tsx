@@ -4709,11 +4709,6 @@ function SkuRow({
           const idSuffix = opts.isPrimary
             ? format
             : `${format}-${opts.blockKey}`;
-          const blockCatalogSnap =
-            usingCatalog && pickedTier
-              ? snapCatalogLadder(pickedTier.priceLadder, opts.blockQty)
-              : null;
-          const blockQtySnap = snapToQuantityTier(opts.blockQty);
           const blockProfitPending = econ.profit === null;
           const blockLoss = econ.profit !== null && econ.profit < 0;
           const blockProfitLabel =
@@ -4846,22 +4841,6 @@ function SkuRow({
                     className={`w-full ${fieldClass}`}
                     data-testid={`input-sku-quantity-${idSuffix}`}
                   />
-                )}
-                {!usingCatalog && blockQtySnap.requiresQuote && (
-                  <div
-                    className="text-xs text-slate-500 mt-1"
-                    data-testid={`text-qty-tier-${idSuffix}`}
-                  >
-                    {blockQtySnap.tier}+ — request a custom quote
-                  </div>
-                )}
-                {usingCatalog && blockCatalogSnap?.requiresQuote && (
-                  <div
-                    className="text-xs text-slate-500 mt-1"
-                    data-testid={`text-qty-tier-${idSuffix}`}
-                  >
-                    {blockCatalogSnap.qty}+ — request a custom quote
-                  </div>
                 )}
               </div>
               {/* Profit — collapsible inline breakdown */}
@@ -6472,22 +6451,6 @@ function SkuRow({
               data-testid={`text-total-caveat-${format}`}
             >
               If {estPct === "custom" ? estimatedSold : `${estPct}%`} ({estimatedSold.toLocaleString()} {estimatedSold === 1 ? "unit" : "units"}) sell.
-            </div>
-          )}
-          {!usingCatalog && qtySnap.requiresQuote && (
-            <div
-              className="text-[11.5px] text-slate-500 text-right"
-              data-testid={`text-qty-tier-${format}`}
-            >
-              {qtySnap.tier}+ — request a custom quote
-            </div>
-          )}
-          {usingCatalog && catalogSnap?.requiresQuote && (
-            <div
-              className="text-[11.5px] text-slate-500 text-right"
-              data-testid={`text-qty-tier-${format}`}
-            >
-              {catalogSnap.qty}+ — request a custom quote
             </div>
           )}
         </div>
