@@ -25,7 +25,7 @@ import { createPortal } from "react-dom";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen, Award, BookOpen, Disc3 } from "lucide-react";
+import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen, Award, BookOpen, Disc3, FileDown, Loader2 } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
@@ -2070,6 +2070,9 @@ function SkuRow({
     null,
   );
   const { toast } = useToast();
+  // Task #707 — Quote PDF export in-flight flag (per row). Disables the
+  // export affordance + swaps in a spinner while the server renders.
+  const [exportingPdf, setExportingPdf] = useState(false);
   // Task #200 — vinyl picks. Initialised from the SKU snapshot (when
   // present) so a saved row re-opens with the picks the artist locked
   // in. New / non-vinyl rows fall back to platform defaults.
@@ -4758,6 +4761,111 @@ function SkuRow({
             </div>
           );
         };
+        // Task #707 — Quote PDF export. Build the same package + option
+        // figures the on-screen blocks show (single-sourced via
+        // `blockEconomics`) and POST them to the server's pdfkit renderer.
+        // The primary block plus every duplicated pricing block becomes a
+        // comparison column in the PDF.
+        const exportColorName = isVinyl
+          ? usingCatalog
+            ? pickedTier?.colors.find((c) => c.id === pressColorId)?.name ?? null
+            : vinylColor.name
+          : null;
+        const exportJacketLabel =
+          isVinyl && jacketUpgrade && jacketUpgrade !== "none"
+            ? JACKET_UPGRADE_LABEL[jacketUpgrade]
+            : null;
+        const buildQuoteOptions = () => {
+          const out: {
+            label: string;
+            priceCents: number | null;
+            qty: number;
+            manufacturingCents: number;
+            publishingCents: number;
+            publishingTrackCount: number | null;
+            paymentProcessingCents: number;
+            goodtunesCents: number;
+            costPerUnitCents: number | null;
+            profitCents: number | null;
+            totalCents: number | null;
+            needsQuote: boolean;
+          }[] = [];
+          const trk = breakdown?.publishingTrackCount ?? null;
+          const primary = blockEconomics(priceStr, parsedQty, true);
+          out.push({
+            label: pricingBlocks.length > 0 ? "Option 1" : "Quote",
+            priceCents: primary.priceCents,
+            qty: parsedQty,
+            manufacturingCents: primary.mfg,
+            publishingCents: primary.pub,
+            publishingTrackCount: trk,
+            paymentProcessingCents: primary.pp,
+            goodtunesCents: primary.gt,
+            costPerUnitCents: primary.costPerUnit,
+            profitCents: primary.profit,
+            totalCents: primary.total,
+            needsQuote: !!breakdown?.needsQuote,
+          });
+          pricingBlocks.forEach((block, idx) => {
+            const e = blockEconomics(block.priceStr, block.qty, false);
+            out.push({
+              label: `Option ${idx + 2}`,
+              priceCents: e.priceCents,
+              qty: block.qty,
+              manufacturingCents: e.mfg,
+              publishingCents: e.pub,
+              publishingTrackCount: trk,
+              paymentProcessingCents: e.pp,
+              goodtunesCents: e.gt,
+              costPerUnitCents: e.costPerUnit,
+              profitCents: e.profit,
+              totalCents: e.total,
+              needsQuote: e.mfg <= 0,
+            });
+          });
+          return out;
+        };
+        const handleExportPdf = async () => {
+          if (exportingPdf) return;
+          setExportingPdf(true);
+          try {
+            const payload = {
+              format: {
+                label: displayNameStr.trim() || ALBUM_FORMAT_LABEL[format],
+              },
+              pkg: {
+                colorName: exportColorName,
+                trackCount: breakdown?.publishingTrackCount ?? null,
+                jacketLabel: exportJacketLabel,
+                pressName: invitedPressItself?.name ?? null,
+              },
+              options: buildQuoteOptions(),
+            };
+            const res = await apiRequest(
+              "POST",
+              `/api/admin/albums/${albumId}/quote-pdf`,
+              payload,
+            );
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `GoodTunes-Quote-${format}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            toast({ title: "Quote PDF downloaded" });
+          } catch (e: any) {
+            toast({
+              title: "Couldn't export PDF",
+              description: e?.message,
+              variant: "destructive",
+            });
+          } finally {
+            setExportingPdf(false);
+          }
+        };
         return (
       <>
       <div
@@ -5123,20 +5231,41 @@ function SkuRow({
                 text="Set your retail price and run size. Duplicate this to compare two scenarios side by side — each has its own price, quantity, profit and total."
               />
             </div>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <IconButton
-                  variant="ghost"
-                  label="Add pricing option"
-                  onClick={addPricingBlock}
-                  className="!w-8 !h-8 text-slate-400 hover:text-[color:var(--brand-blue)]"
-                  data-testid={`button-add-pricing-block-${format}`}
-                >
-                  <Plus />
-                </IconButton>
-              </TooltipTrigger>
-              <TooltipContent>Duplicate pricing</TooltipContent>
-            </Tooltip>
+            <div className="flex items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <IconButton
+                    variant="ghost"
+                    label="Export quote PDF"
+                    onClick={handleExportPdf}
+                    disabled={exportingPdf}
+                    className="!w-8 !h-8 text-slate-400 hover:text-[color:var(--brand-blue)]"
+                    data-testid={`button-export-quote-pdf-${format}`}
+                  >
+                    {exportingPdf ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <FileDown />
+                    )}
+                  </IconButton>
+                </TooltipTrigger>
+                <TooltipContent>Export quote as PDF</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <IconButton
+                    variant="ghost"
+                    label="Add pricing option"
+                    onClick={addPricingBlock}
+                    className="!w-8 !h-8 text-slate-400 hover:text-[color:var(--brand-blue)]"
+                    data-testid={`button-add-pricing-block-${format}`}
+                  >
+                    <Plus />
+                  </IconButton>
+                </TooltipTrigger>
+                <TooltipContent>Duplicate pricing</TooltipContent>
+              </Tooltip>
+            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
             {renderPricingBlock({

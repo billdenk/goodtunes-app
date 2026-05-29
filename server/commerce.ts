@@ -626,6 +626,66 @@ export function registerCommerceRoutes(app: Express) {
     res.json({ skus: skusWithInternal, addons });
   });
 
+  // Task #707 — Quote PDF export. The client (SellPanel) computes every
+  // figure (it owns the breakdown / blockEconomics math) and POSTs the
+  // already-resolved numbers here; this route is pure layout so the PDF
+  // can never drift from the on-screen quote. Album title/artist come
+  // from the DB (source of truth + access already gated by requireAdmin)
+  // rather than trusting the client for the brand line.
+  const quoteOptionSchema = z.object({
+    label: z.string().max(60),
+    priceCents: z.number().int().nullable(),
+    qty: z.number().int().min(0),
+    manufacturingCents: z.number().int(),
+    publishingCents: z.number().int(),
+    publishingTrackCount: z.number().int().nullable(),
+    paymentProcessingCents: z.number().int(),
+    goodtunesCents: z.number().int(),
+    costPerUnitCents: z.number().int().nullable(),
+    profitCents: z.number().int().nullable(),
+    totalCents: z.number().int().nullable(),
+    needsQuote: z.boolean(),
+  });
+  const quotePdfSchema = z.object({
+    format: z.object({ label: z.string().max(80) }),
+    pkg: z.object({
+      colorName: z.string().max(120).nullable().optional(),
+      trackCount: z.number().int().nullable().optional(),
+      jacketLabel: z.string().max(120).nullable().optional(),
+      pressName: z.string().max(120).nullable().optional(),
+    }),
+    options: z.array(quoteOptionSchema).min(1).max(8),
+  });
+  app.post("/api/admin/albums/:id/quote-pdf", requireAdmin, async (req, res) => {
+    const album = await storage.getAlbumById(String(req.params.id), {
+      includeHidden: true,
+    });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    const parsed = quotePdfSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ message: parsed.error.issues[0]?.message ?? "Invalid quote" });
+    }
+    const { renderQuotePdf } = await import("./quotePdf");
+    const pdf = await renderQuotePdf({
+      album: { title: album.title ?? "", artist: album.artist ?? "" },
+      format: parsed.data.format,
+      pkg: parsed.data.pkg,
+      options: parsed.data.options,
+    });
+    const slug = (album.title ?? "quote")
+      .replace(/[^A-Za-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || "quote";
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="GoodTunes-Quote-${slug}.pdf"`,
+    );
+    res.send(pdf);
+  });
+
   const skuBodySchema = z.object({
     format: z.enum(ALBUM_FORMATS),
     priceCents: z.number().int().min(0),
