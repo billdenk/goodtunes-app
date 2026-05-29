@@ -22,6 +22,7 @@
 // pricing plumbing is tracked separately on the roadmap.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
+import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
@@ -1726,26 +1727,10 @@ function CostTooltip({
 // SKU row unmounts its tall expanded body; the exclusive-disclosure
 // behaviour also unmounts a sibling's body. Either way the page reflows
 // upward and, because the cursor stays put, the trashcan can slide under
-// the pointer (one stray click from deleting the format). We anchor on
-// the element the user actually clicked: capture its viewport offset
-// before the state change, then after the DOM has re-laid-out restore the
-// window scroll so that element sits at exactly the same screen position.
-function anchorScrollToElement(
-  el: HTMLElement | null | undefined,
-  apply: () => void,
-) {
-  if (!el) {
-    apply();
-    return;
-  }
-  const before = el.getBoundingClientRect().top;
-  apply();
-  requestAnimationFrame(() => {
-    const after = el.getBoundingClientRect().top;
-    const delta = after - before;
-    if (delta) window.scrollBy(0, delta);
-  });
-}
+// the pointer (one stray click from deleting the format). We anchor on the
+// element the user actually clicked via the shared `anchorScrollToElement`
+// helper in `@/lib/anchorScroll` (lifted there in Task #709 so the album
+// tab bar can reuse the exact same behaviour).
 
 function SkuRow({
   format,

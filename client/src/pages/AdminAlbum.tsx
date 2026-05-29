@@ -88,6 +88,7 @@ import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
 import { SplitsImportSheet, TrackSplitsEditor } from "@/components/admin/SplitsPanels";
 import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
+import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
@@ -991,7 +992,9 @@ export function AdminAlbum() {
             {visibleTabsFor(album).map((t) => (
               <button
                 key={t.key}
-                onClick={() => setTab(t.key)}
+                onClick={(e) =>
+                  anchorScrollToElement(e.currentTarget, () => setTab(t.key))
+                }
                 className={[
                   "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
                   tab === t.key
