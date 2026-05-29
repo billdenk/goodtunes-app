@@ -183,12 +183,18 @@ export function VinylPreview({
 }
 
 // Render the swatch CSS as a vinyl-ish radial. If the swatch is a
-// plain hex, layer a subtle dark vignette so the disc reads as vinyl,
-// not paint. Gradient swatches (smokey/regrind/etc.) come through
-// as-is.
+// plain hex, hold the true color almost all the way to the rim so a
+// COLORED disc reads as that color when it peeks past the jacket —
+// the old version darkened the outer 45% toward black, and since the
+// disc sits ~78% behind the jacket, that dark band was the only part
+// that peeked out, reading as a heavy black border. Now only the final
+// few percent get a whisper of darkening (a thin edge for definition
+// against light backgrounds), plus a soft off-center sheen so it still
+// reads as vinyl rather than flat paint. Gradient swatches
+// (smokey/regrind/etc.) come through as-is.
 function vinylBackground(swatch: string): string {
   if (swatch.startsWith("linear-gradient") || swatch.startsWith("radial-gradient")) {
     return swatch;
   }
-  return `radial-gradient(circle at 30% 30%, ${swatch} 0%, ${swatch} 55%, color-mix(in srgb, ${swatch} 70%, #000) 100%)`;
+  return `radial-gradient(circle at 32% 28%, color-mix(in srgb, ${swatch} 86%, #fff) 0%, ${swatch} 42%, ${swatch} 94%, color-mix(in srgb, ${swatch} 94%, #000) 100%)`;
 }
