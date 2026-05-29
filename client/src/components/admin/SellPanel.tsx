@@ -21,10 +21,11 @@
 // directory (MRP, PMP, Hellbender …) as info cards — per-press RFQ
 // pricing plumbing is tracked separately on the roadmap.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen } from "lucide-react";
+import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen, Award, BookOpen, Disc3 } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
@@ -2018,6 +2019,14 @@ function SkuRow({
   // launched from the album-jacket overlay icon. Modal renders + adapts
   // picks at confirm time; the parent owns the actual PUT/DELETE swap.
   const [changeFormatOpen, setChangeFormatOpen] = useState(false);
+  // Task #708 — the Optional · Upsells block lays its tiles side-by-side
+  // in a responsive row; only one editor body is open at a time, rendered
+  // BELOW the row via a portal into `upsellBodyEl`. `openUpsell` holds the
+  // key of the active tile (or null when all are collapsed).
+  const [openUpsell, setOpenUpsell] = useState<string | null>(null);
+  const [upsellBodyEl, setUpsellBodyEl] = useState<HTMLDivElement | null>(
+    null,
+  );
   const { toast } = useToast();
   // Task #200 — vinyl picks. Initialised from the SKU snapshot (when
   // present) so a saved row re-opens with the picks the artist locked
@@ -5451,63 +5460,97 @@ function SkuRow({
         </span>
         <span className="flex-1 h-px bg-slate-200" aria-hidden />
       </div>
-      {albumId && onSaveAddon && isPrimaryVinyl ? (
-        <GoodDeedPill
-          albumId={albumId}
-          artworkUrl={artworkUrl}
-          albumTitle={(displayNameStr.trim() || albumTitle) ?? ""}
-          artistName={artistName ?? ""}
-          artistPhotoUrl={artistPhotoUrl ?? null}
-          vinylQty={parsedQty}
-          vinylQuantityRungs={estimateRungs.map((r) => r.qty)}
-          existing={signedAddon ?? null}
-          livePlatformCostCents={livePlatformCostCents ?? null}
-          onSave={onSaveAddon}
-          onEditArtwork={onEditArtwork}
-        />
-      ) : null}
-      {/* Task #579 — Booklet pill. Anchors to the first booklet-eligible
-          SKU row (7" vinyl or cassette) so only one is rendered per
-          album, mirroring the isPrimaryVinyl gate on GoodDeedPill. */}
-      {albumId && onSaveBookletAddon && isBookletAnchor ? (
-        <div className="mt-3">
+      {/* Task #708 — the upsell tiles lay side-by-side in a responsive
+          row (1-up on narrow widths, up to 3-across on sm+). Only the
+          eligible tiles render, so a row can show fewer than 3. Each tile
+          owns its compact summary; clicking it ring-highlights the tile
+          and portals its full editor into `upsellBodyEl` below the row,
+          enforcing one-open-at-a-time via `openUpsell`. No pricing/save/
+          eligibility math changed — the pills are unchanged internally,
+          only their chrome + placement moved. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {albumId && onSaveAddon && isPrimaryVinyl ? (
+          <GoodDeedPill
+            albumId={albumId}
+            artworkUrl={artworkUrl}
+            albumTitle={(displayNameStr.trim() || albumTitle) ?? ""}
+            artistName={artistName ?? ""}
+            artistPhotoUrl={artistPhotoUrl ?? null}
+            vinylQty={parsedQty}
+            vinylQuantityRungs={estimateRungs.map((r) => r.qty)}
+            existing={signedAddon ?? null}
+            livePlatformCostCents={livePlatformCostCents ?? null}
+            onSave={onSaveAddon}
+            onEditArtwork={onEditArtwork}
+            open={openUpsell === "gooddeed"}
+            onToggle={() =>
+              setOpenUpsell((k) => (k === "gooddeed" ? null : "gooddeed"))
+            }
+            bodyContainer={upsellBodyEl}
+          />
+        ) : null}
+        {/* Task #579 — Booklet pill. Anchors to the first booklet-eligible
+            SKU row (7" vinyl or cassette) so only one is rendered per
+            album, mirroring the isPrimaryVinyl gate on GoodDeedPill. */}
+        {albumId && onSaveBookletAddon && isBookletAnchor ? (
           <BookletPill
             albumId={albumId}
             existing={bookletAddon ?? null}
             onSave={onSaveBookletAddon}
+            open={openUpsell === "booklet"}
+            onToggle={() =>
+              setOpenUpsell((k) => (k === "booklet" ? null : "booklet"))
+            }
+            bodyContainer={upsellBodyEl}
           />
-        </div>
-      ) : null}
-      {/* Task #687 — Add-on menu completeness. The full upsell menu on a
-          vinyl release is: signed GoodDeed, 7×7 booklet, and CD. GoodDeed
-          (above) and the booklet (above, where a 7" / cassette SKU exists)
-          are live + priced. The two placeholders below fill the gaps so
-          the menu reads the same across every manufacturer — only pricing
-          availability varies by press:
-            · Booklet on a vinyl release with no booklet-eligible SKU
-              (e.g. 12"-only) → "request a quote".
-            · CD on any vinyl release (no press quotes the CD add-on yet)
-              → "request a quote".
-          Both are display-only — they don't persist or touch totals, so
-          the math is unaffected until a press confirms numbers. */}
-      {albumId && isPrimaryVinyl && !bookletEligibleExists ? (
-        <div className="mt-3">
+        ) : null}
+        {/* Task #687 — Add-on menu completeness. The full upsell menu on a
+            vinyl release is: signed GoodDeed, 7×7 booklet, and CD. GoodDeed
+            and the booklet (where a 7" / cassette SKU exists) are live +
+            priced. The two placeholders below fill the gaps so the menu
+            reads the same across every manufacturer — only pricing
+            availability varies by press:
+              · Booklet on a vinyl release with no booklet-eligible SKU
+                (e.g. 12"-only) → "request a quote".
+              · CD on any vinyl release (no press quotes the CD add-on yet)
+                → "request a quote".
+            Both are display-only — they don't persist or touch totals, so
+            the math is unaffected until a press confirms numbers. */}
+        {albumId && isPrimaryVinyl && !bookletEligibleExists ? (
           <AddonQuotePill
+            icon={BookOpen}
             title="7×7 Booklet"
             description="A 7.125″ × 7.125″, 16-page full-colour booklet tucked in with the record. Priced today on 7″ / cassette releases (PMP, MRP); ask the press for a quote on this format."
             testKey="booklet-quote"
+            open={openUpsell === "booklet-quote"}
+            onToggle={() =>
+              setOpenUpsell((k) =>
+                k === "booklet-quote" ? null : "booklet-quote",
+              )
+            }
+            bodyContainer={upsellBodyEl}
           />
-        </div>
-      ) : null}
-      {albumId && isPrimaryVinyl ? (
-        <div className="mt-3">
+        ) : null}
+        {albumId && isPrimaryVinyl ? (
           <AddonQuotePill
+            icon={Disc3}
             title="CD"
             description="A pressed CD shipped alongside the vinyl. No manufacturer has confirmed CD add-on pricing yet — surfaced here so the team remembers to ask each press, ready to wire up once numbers come back."
             testKey="cd-quote"
+            open={openUpsell === "cd-quote"}
+            onToggle={() =>
+              setOpenUpsell((k) => (k === "cd-quote" ? null : "cd-quote"))
+            }
+            bodyContainer={upsellBodyEl}
           />
-        </div>
-      ) : null}
+        ) : null}
+      </div>
+      {/* Task #708 — open tile's editor portals here, below the row. */}
+      <div
+        ref={setUpsellBodyEl}
+        className="empty:hidden mt-3"
+        data-testid="container-upsell-body"
+      />
       </div>
       </>
       ) : (
@@ -6262,66 +6305,147 @@ async function uploadAdminImage(file: File): Promise<string> {
 // is swapped for a real priced pill (see GoodDeedPill / BookletPill).
 // The amber "TBD" treatment mirrors the catalog editor's unconfirmed-
 // rung convention so "awaiting quote" reads the same everywhere.
+/* Task #708 — Upsell tile header. Compact icon + title + status
+   subtitle, styled to match the album Tracks tab's optional StatusBadge
+   tiles (icon chip, brand-blue active ring, trailing chevron). The
+   SkuRow upsell block lays these side-by-side in a responsive row;
+   the open tile's editor body is portaled into a full-width panel
+   below the row (UpsellPanelCard) so only one editor shows at a time
+   while the whole row of tiles stays visible. */
+function UpsellTile({
+  icon: Icon,
+  title,
+  subtitle,
+  active,
+  onClick,
+  testId,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  subtitle?: React.ReactNode;
+  active: boolean;
+  onClick: () => void;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      aria-pressed={active}
+      className={[
+        "group/card flex items-center gap-2.5 px-3 py-3 rounded-lg bg-white border text-left w-full min-h-[44px] transition-all relative focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]/40",
+        active
+          ? "border-[color:var(--brand-blue)] bg-[color:var(--brand-blue)]/5 ring-2 ring-[color:var(--brand-blue)]/30 hover:bg-[color:var(--brand-blue)]/5 hover:border-[color:var(--brand-blue)]"
+          : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+      ].join(" ")}
+    >
+      <span className="w-8 h-8 rounded-md inline-flex items-center justify-center flex-shrink-0 bg-[color:var(--brand-blue)]/10 text-[color:var(--brand-blue)]">
+        <Icon className="w-4 h-4" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-xs font-semibold text-slate-900 truncate">
+          {title}
+        </div>
+        {subtitle && (
+          <div className="text-xs text-slate-500 leading-tight mt-0.5 truncate min-w-0">
+            {subtitle}
+          </div>
+        )}
+      </div>
+      <ChevronDown
+        className={[
+          "w-4 h-4 text-slate-400 flex-shrink-0 transition-transform",
+          active ? "rotate-180" : "",
+        ].join(" ")}
+      />
+    </button>
+  );
+}
+
+/* Task #708 — the expanded body for an open upsell tile. Brand-blue
+   bordered card (mirrors the Tracks-tab ExpandedPanel "open" treatment)
+   rendered below the tile row via a portal into the SkuRow's body
+   container. */
+function UpsellPanelCard({
+  className,
+  testId,
+  children,
+}: {
+  className?: string;
+  testId?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={[
+        "rounded-xl border border-[color:var(--brand-blue)]/50 bg-white shadow-sm p-4",
+        className ?? "",
+      ].join(" ")}
+      data-testid={testId}
+    >
+      {children}
+    </div>
+  );
+}
+
 function AddonQuotePill({
+  icon,
   title,
   description,
   testKey,
+  open,
+  onToggle,
+  bodyContainer,
 }: {
+  icon: React.ComponentType<{ className?: string }>;
   title: string;
   description: string;
   testKey: string;
+  open: boolean;
+  onToggle: () => void;
+  bodyContainer: HTMLElement | null;
 }) {
-  const [open, setOpen] = useState(false);
   return (
-    <div
-      className="rounded-md border border-slate-200 bg-white"
-      data-testid={`pill-${testKey}`}
-    >
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full min-h-[44px] flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-slate-50 transition-colors"
-        aria-expanded={open}
-        data-testid={`button-toggle-${testKey}-pill`}
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[13.5px] font-semibold text-slate-900">
-            {title}
-          </span>
-          <span
-            className="text-xs text-slate-500 truncate"
-            data-testid={`text-${testKey}-summary`}
-          >
-            · Request a quote
-          </span>
-        </div>
-        <ChevronDown
-          className={[
-            "w-4 h-4 text-slate-400 transition-transform flex-shrink-0",
-            open ? "rotate-180" : "",
-          ].join(" ")}
-        />
-      </button>
-      {open && (
-        <div className="px-3 pb-3 pt-3 border-t border-slate-100 space-y-3">
-          <p className="text-xs text-slate-500 leading-relaxed">{description}</p>
-          <div
-            className="flex items-center justify-between gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2.5"
-            data-testid={`row-${testKey}-quote`}
-          >
-            <span className="text-xs font-medium text-amber-700">
-              Ask the press / request a quote
-            </span>
-            <span className="text-xs text-amber-600 tabular-nums">TBD</span>
-          </div>
-          <p className="text-xs text-slate-400 leading-relaxed">
-            No manufacturer has confirmed pricing for this add-on yet, so it
-            doesn't affect any totals. Once a press quotes it, this becomes a
-            live, priced option.
-          </p>
-        </div>
-      )}
-    </div>
+    <>
+      <UpsellTile
+        icon={icon}
+        title={title}
+        subtitle={
+          <span data-testid={`text-${testKey}-summary`}>Request a quote</span>
+        }
+        active={open}
+        onClick={onToggle}
+        testId={`button-toggle-${testKey}-pill`}
+      />
+      {open && bodyContainer
+        ? createPortal(
+            <UpsellPanelCard
+              className="space-y-3"
+              testId={`pill-${testKey}`}
+            >
+              <p className="text-xs text-slate-500 leading-relaxed">
+                {description}
+              </p>
+              <div
+                className="flex items-center justify-between gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2.5"
+                data-testid={`row-${testKey}-quote`}
+              >
+                <span className="text-xs font-medium text-amber-700">
+                  Ask the press / request a quote
+                </span>
+                <span className="text-xs text-amber-600 tabular-nums">TBD</span>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                No manufacturer has confirmed pricing for this add-on yet, so it
+                doesn't affect any totals. Once a press quotes it, this becomes a
+                live, priced option.
+              </p>
+            </UpsellPanelCard>,
+            bodyContainer,
+          )
+        : null}
+    </>
   );
 }
 
@@ -6329,6 +6453,9 @@ function BookletPill({
   albumId,
   existing,
   onSave,
+  open,
+  onToggle,
+  bodyContainer,
 }: {
   albumId: string;
   existing: AlbumAddon | null;
@@ -6339,9 +6466,11 @@ function BookletPill({
     plannedQuantity: number | null;
     artworkUrl?: string | null;
   }) => void;
+  open: boolean;
+  onToggle: () => void;
+  bodyContainer: HTMLElement | null;
 }) {
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
   const [active, setActive] = useState(existing?.active ?? false);
   const [priceStr, setPriceStr] = useState(
     existing ? (existing.priceCents / 100).toFixed(2) : "9.99",
@@ -6527,37 +6656,20 @@ function BookletPill({
   };
 
   return (
-    <div
-      className="rounded-md border border-slate-200 bg-white"
-      data-testid="pill-booklet"
-    >
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full min-h-[44px] flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-slate-50 transition-colors"
-        aria-expanded={open}
-        data-testid="button-toggle-booklet-pill"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[13.5px] font-semibold text-slate-900">
-            16-Page Booklet
-          </span>
-          <span
-            className="text-xs text-slate-500 truncate"
-            data-testid="text-booklet-summary"
-          >
-            · {summary}
-          </span>
-        </div>
-        <ChevronDown
-          className={[
-            "w-4 h-4 text-slate-400 transition-transform flex-shrink-0",
-            open ? "rotate-180" : "",
-          ].join(" ")}
-        />
-      </button>
-      {open && (
-        <div className="px-3 pb-3 pt-3 border-t border-slate-100 space-y-4">
+    <>
+      <UpsellTile
+        icon={BookOpen}
+        title="16-Page Booklet"
+        subtitle={
+          <span data-testid="text-booklet-summary">{summary}</span>
+        }
+        active={open}
+        onClick={onToggle}
+        testId="button-toggle-booklet-pill"
+      />
+      {open && bodyContainer ? (
+        createPortal(
+          <UpsellPanelCard className="space-y-4" testId="pill-booklet">
           <div
             className="flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2.5"
             data-testid="row-booklet-enable"
@@ -6890,9 +7002,11 @@ function BookletPill({
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+          </UpsellPanelCard>,
+          bodyContainer,
+        )
+      ) : null}
+    </>
   );
 }
 
@@ -6915,6 +7029,9 @@ function GoodDeedPill({
   livePlatformCostCents,
   onSave,
   onEditArtwork,
+  open,
+  onToggle,
+  bodyContainer,
 }: {
   albumId: string;
   artworkUrl: string | null | undefined;
@@ -6943,8 +7060,10 @@ function GoodDeedPill({
   // clicking it must open the same cover-art editor (no second source
   // of truth). When absent the tile renders non-interactive.
   onEditArtwork?: () => void;
+  open: boolean;
+  onToggle: () => void;
+  bodyContainer: HTMLElement | null;
 }) {
-  const [open, setOpen] = useState(false);
   const [active, setActive] = useState(existing?.active ?? false);
   // Task #612 — new-cert defaults: $35 retail, 20% qty. Bill wants the
   // top-bar starting point to match how GoodDeeds are actually priced.
@@ -7170,42 +7289,25 @@ function GoodDeedPill({
         : dollars(netPerUnitCents);
 
   return (
-    <div
-      className="rounded-md border border-slate-200 bg-white"
-      data-testid="pill-gooddeed"
-    >
+    <>
       {/* Task #441 — Apple HIG: master on/off lives INSIDE the panel
-          it controls; the collapsed header is a single tappable row
-          with the disclosure chevron at the far trailing edge (down
-          collapsed / up expanded). 44pt min-height keeps the hit
-          target HIG-compliant even though admin chrome is denser. */}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full min-h-[44px] flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-slate-50 transition-colors"
-        aria-expanded={open}
-        data-testid="button-toggle-gooddeed-pill"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[13.5px] font-semibold text-slate-900">
-            GoodDeed® Certificate
-          </span>
-          <span
-            className="text-xs text-slate-500 truncate"
-            data-testid="text-gooddeed-summary"
-          >
-            · {summary}
-          </span>
-        </div>
-        <ChevronDown
-          className={[
-            "w-4 h-4 text-slate-400 transition-transform flex-shrink-0",
-            open ? "rotate-180" : "",
-          ].join(" ")}
-        />
-      </button>
-      {open && (
-        <div className="px-3 pb-3 pt-3 border-t border-slate-100 space-y-4">
+          it controls. Task #708 — the collapsed header is now a compact
+          side-by-side tile (UpsellTile); the disclosure chevron rotates
+          and the open editor body is portaled into the full-width panel
+          below the tile row. */}
+      <UpsellTile
+        icon={Award}
+        title="GoodDeed® Certificate"
+        subtitle={
+          <span data-testid="text-gooddeed-summary">{summary}</span>
+        }
+        active={open}
+        onClick={onToggle}
+        testId="button-toggle-gooddeed-pill"
+      />
+      {open && bodyContainer ? (
+        createPortal(
+          <UpsellPanelCard className="space-y-4" testId="pill-gooddeed">
           {/* Task #441 — Master enable switch lives as the FIRST row
               inside the panel it gates, directly above the % / cap /
               price fields it controls. Flipping this updates the
@@ -7717,9 +7819,11 @@ function GoodDeedPill({
               </div>
             )}
 
-        </div>
-      )}
-    </div>
+          </UpsellPanelCard>,
+          bodyContainer,
+        )
+      ) : null}
+    </>
   );
 }
 
