@@ -47,7 +47,12 @@ export async function invalidateAdminEntity(
           ["/api/instruments"],
         ];
       case "person":
+        // The Person admin shell reads the *admin* projection
+        // (`["/api/admin/people", id]`) so it sees admin-only fields; the
+        // public key feeds the player/list cards. Bust both or the
+        // on-screen avatar never refetches after an upload.
         return [
+          ["/api/admin/people", id],
           ["/api/people", id],
           ["/api/people"],
         ];
