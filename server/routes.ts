@@ -15209,7 +15209,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Fan recents (server-backed history for the new Recents tab).
   app.get("/api/me/recents", requireCustomer, async (req, res) => {
     const rows = await storage.listFanRecents(req.session.userId!);
-    return res.json(rows);
+    // Task #780: the standalone Recents tab is a sibling history table to
+    // "Recently Searched" and can hold the same now-stale People / Vendors /
+    // Labels tapped before live search was scoped to the collection. Re-apply
+    // the same collection-scope rule at read time so they silently drop out;
+    // albums, songs, artists, playlists, and bonus content are untouched.
+    return res.json(await pruneStaleFanRecentSearchEntities(rows));
   });
   app.post("/api/me/recents", requireCustomer, async (req, res) => {
     const kind = String(req.body?.entityKind ?? "");
