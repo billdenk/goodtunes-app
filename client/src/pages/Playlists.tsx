@@ -102,9 +102,11 @@ function PlaylistArtwork({
         className={`${rounded} flex-shrink-0 overflow-hidden grid grid-cols-2 grid-rows-1 relative`}
         style={wrapperStyle}
       >
+        {/* Each album fills its half edge-to-edge, top to bottom — square art
+            is cropped to fill the tall half-width slot rather than letterboxed. */}
         {unique.map((src, i) => (
-          <div key={i} className="w-full h-full flex items-center justify-center bg-[#00062B]">
-            <img src={src} alt="" className="w-full h-full object-contain" />
+          <div key={i} className="w-full h-full overflow-hidden bg-[color:var(--brand-bg)]">
+            <img src={src} alt="" className="w-full h-full object-cover object-center" />
           </div>
         ))}
         {tint}
