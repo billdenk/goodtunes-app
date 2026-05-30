@@ -25,6 +25,12 @@ interface PlayerState {
   showQueue: boolean;
   autoplay: boolean;
   favorites: Set<string>;
+  /** True only when iOS WebKit reports at least one AirPlay target (Apple TV
+   *  / HomePod) is reachable for the hidden audio element. Stays false on
+   *  every non-Safari platform (Android, desktop, in-app browsers) because
+   *  the availability event never fires there — no platform sniffing needed.
+   *  Drives whether the player's AirPlay button is shown at all. */
+  airPlayAvailable: boolean;
   /** When true, playback auto-advances to the next queued song after 30
    *  seconds — used by the desktop Preview & Purchase route to audition
    *  the album without playing through full songs. Independent of the
@@ -53,6 +59,9 @@ interface PlayerContextValue extends PlayerState {
   playNext: (song: PlayerSong) => void;
   playLast: (song: PlayerSong) => void;
   setPreviewMode: (on: boolean) => void;
+  /** Opens the native iOS AirPlay device picker for the hidden audio
+   *  element. No-op when no target is available or the API is absent. */
+  showAirPlayPicker: () => void;
 }
 
 /** Hard cap on a single preview clip, in seconds. Apple/Spotify/etc all
@@ -76,6 +85,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [showQueue, setShowQueue] = useState(false);
   const [autoplay, setAutoplay] = useState(true);
   const [previewMode, setPreviewModeState] = useState(false);
+  const [airPlayAvailable, setAirPlayAvailable] = useState(false);
   const favSongs = useFavoriteSongs();
   const favorites = favSongs.set;
   const queryClient = useQueryClient();
@@ -524,6 +534,38 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // AirPlay availability — iOS Safari (and only iOS Safari) fires
+  // `webkitplaybacktargetavailabilitychanged` on a media element whenever the
+  // set of reachable AirPlay targets changes. event.availability is
+  // "available" when at least one Apple TV / HomePod is nearby, "not-available"
+  // otherwise. Feature-detect the picker method before subscribing so every
+  // other platform (Android, desktop Chrome/Firefox, in-app webviews) simply
+  // never flips `airPlayAvailable` true — the player button stays hidden with
+  // no platform sniffing. The hidden <audio> already streams the signed Mux
+  // HLS source, which iOS plays via native HLS and can route over AirPlay.
+  useEffect(() => {
+    const a = audioRef.current as any;
+    if (!a) return;
+    if (typeof a.webkitShowPlaybackTargetPicker !== "function") return;
+    const onAvail = (e: any) => {
+      setAirPlayAvailable(e?.availability === "available");
+    };
+    a.addEventListener("webkitplaybacktargetavailabilitychanged", onAvail);
+    return () => {
+      a.removeEventListener("webkitplaybacktargetavailabilitychanged", onAvail);
+    };
+  }, []);
+
+  const showAirPlayPicker = useCallback(() => {
+    const a = audioRef.current as any;
+    if (!a || typeof a.webkitShowPlaybackTargetPicker !== "function") return;
+    try {
+      a.webkitShowPlaybackTargetPicker();
+    } catch {
+      /* picker can throw if invoked without a user gesture — ignore */
+    }
+  }, []);
+
   // Wire audio element events once
   useEffect(() => {
     const a = audioRef.current;
@@ -799,6 +841,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         playLast,
         previewMode,
         setPreviewMode,
+        airPlayAvailable,
+        showAirPlayPicker,
       }}
     >
       {children}

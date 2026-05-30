@@ -52,6 +52,9 @@ export interface AnalyticsEventMap {
   play_seek: EntityRefs & { from: number; to: number; duration: number };
   play_pause: EntityRefs & { at: number };
   play_resume: EntityRefs & { at: number };
+  // Fires when a fan taps the player's AirPlay control and the native iOS
+  // device picker opens (only reachable on iOS Safari with a target nearby).
+  airplay_picker_opened: EntityRefs;
 
   // ─── Library ─────────────────────────────────────────────────
   favorite_song: EntityRefs;

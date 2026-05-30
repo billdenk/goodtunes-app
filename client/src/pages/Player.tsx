@@ -191,6 +191,8 @@ export function Player() {
     setShowPlayer,
     toggleFavorite,
     isFavorite,
+    airPlayAvailable,
+    showAirPlayPicker,
   } = usePlayer();
 
   const [volume, setVolume] = useState(80);
@@ -551,21 +553,25 @@ export function Player() {
               >
                 <LyricsIcon size={22} />
               </button>
-              <button
-                type="button"
-                aria-label="AirPlay (coming soon)"
-                title="AirPlay & Cast — coming soon"
-                className="w-11 h-11 flex items-center justify-center text-white/30 cursor-not-allowed"
-                data-testid="button-airplay"
-              >
-                {/* Apple's AirPlay: concentric arcs over a triangle */}
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 12a9 9 0 0118 0" />
-                  <path d="M6 12a6 6 0 0112 0" />
-                  <path d="M9 12a3 3 0 016 0" />
-                  <polygon points="12 15 17 21 7 21 12 15" fill="currentColor" stroke="none" />
-                </svg>
-              </button>
+              {airPlayAvailable && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    showAirPlayPicker();
+                    track("airplay_picker_opened", { songId: currentSong.id, albumId: currentSong.album?.id });
+                  }}
+                  className="w-11 h-11 flex items-center justify-center text-white/55 active:text-white transition-colors"
+                  aria-label="AirPlay"
+                  data-testid="button-airplay"
+                >
+                  {/* Apple's AirPlay glyph: a rounded display rectangle with a
+                      small upward-pointing triangle centered at its base. */}
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 17H4a2 2 0 01-2-2V6a2 2 0 012-2h16a2 2 0 012 2v9a2 2 0 01-2 2h-1" />
+                    <polygon points="12 15 17 21 7 21 12 15" fill="currentColor" stroke="none" />
+                  </svg>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setShowQueue(true)}
