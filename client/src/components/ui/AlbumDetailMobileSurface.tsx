@@ -6,9 +6,11 @@ import {
   type RefObject,
 } from "react";
 import { ChevronLeft, Share, MoreHorizontal, Info } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import { IconButton } from "@/components/ui/IconButton";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
+import { popBounce } from "@/lib/motion";
 
 export interface AlbumDetailMobileSurfaceAlbum {
   id: string;
@@ -149,6 +151,7 @@ export function AlbumDetailMobileSurface({
   onAddAlbumToPlaylist,
 }: AlbumDetailMobileSurfaceProps) {
   const [showMenu, setShowMenu] = useState(false);
+  const reduceMotion = useReducedMotion();
 
   const isMulti = ownedNums.length > 1;
   const totalDuration = songs.reduce((acc, s) => acc + s.duration, 0);
@@ -203,13 +206,18 @@ export function AlbumDetailMobileSurface({
             <MoreHorizontal className="w-[19px] h-[19px]" strokeWidth={2} />
           </button>
         </div>
+        <AnimatePresence>
         {showMenu && onOpenAlbumMenu && (
           <>
-            <div
+            <motion.div
               className="fixed inset-0 z-30"
               onClick={() => setShowMenu(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
             />
-            <div
+            <motion.div
               role="menu"
               className="absolute right-0 top-full mt-2 z-40 rounded-2xl py-1 min-w-[230px] overflow-hidden"
               style={{
@@ -218,7 +226,11 @@ export function AlbumDetailMobileSurface({
                 WebkitBackdropFilter: "blur(28px) saturate(180%)",
                 boxShadow: "0 16px 40px rgba(0,0,0,0.6)",
                 border: "1px solid rgba(255,255,255,0.08)",
+                transformOrigin: "top right",
               }}
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.8, y: -6 }}
+              animate={{ opacity: 1, scale: 1, y: 0, transition: popBounce(!!reduceMotion) }}
+              exit={reduceMotion ? { opacity: 0, transition: { duration: 0.12 } } : { opacity: 0, scale: 0.92, y: -4, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }}
             >
               {onViewCertificate && (
                 <>
@@ -228,7 +240,7 @@ export function AlbumDetailMobileSurface({
                       setShowMenu(false);
                       onViewCertificate();
                     }}
-                    className="w-full flex items-center justify-between px-4 py-3 text-sm text-white active:bg-white/10"
+                    className="w-full flex items-center justify-between px-4 py-3 text-sm text-white transition-colors active:bg-white/10"
                     data-testid="menu-view-certificate"
                   >
                     <span>View GoodDeed®</span>
@@ -254,7 +266,7 @@ export function AlbumDetailMobileSurface({
                       setShowMenu(false);
                       onViewProvenance();
                     }}
-                    className="w-full flex items-center justify-between px-4 py-3 text-sm text-white active:bg-white/10"
+                    className="w-full flex items-center justify-between px-4 py-3 text-sm text-white transition-colors active:bg-white/10"
                     data-testid="menu-view-provenance"
                   >
                     <span>{isMulti ? "Ownership" : "View Provenance"}</span>
@@ -281,7 +293,7 @@ export function AlbumDetailMobileSurface({
                     setShowMenu(false);
                     onAddAlbumToPlaylist();
                   }}
-                  className="w-full flex items-center justify-between px-4 py-3 text-sm text-white active:bg-white/10"
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm text-white transition-colors active:bg-white/10"
                   data-testid="menu-add-album-to-playlist"
                 >
                   <span>Add to Playlist</span>
@@ -303,9 +315,10 @@ export function AlbumDetailMobileSurface({
                   </svg>
                 </button>
               )}
-            </div>
+            </motion.div>
           </>
         )}
+        </AnimatePresence>
       </div>
 
       <div
@@ -711,12 +724,15 @@ export function AlbumDetailMobileSurface({
                 )}
                 <button
                   type="button"
-                  onClick={(e) =>
+                  onClick={(e) => {
+                    // Opening a row menu must dismiss the album header menu so
+                    // the two never overlap (they live in separate layers).
+                    setShowMenu(false);
                     onOpenSongMenu?.(
                       song,
                       e.currentTarget.getBoundingClientRect(),
-                    )
-                  }
+                    );
+                  }}
                   aria-label="Song options"
                   aria-haspopup="menu"
                   className="w-7 h-9 flex items-center justify-center text-white/40 flex-shrink-0"

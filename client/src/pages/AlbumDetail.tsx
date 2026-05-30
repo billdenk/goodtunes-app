@@ -771,7 +771,7 @@ function AlbumDetailMobile() {
           lineupSlot={<AlbumLineupRail albumId={album.id} onPickMember={(name) => navigate(`/artist/${encodeURIComponent(name)}`)} />}
           onBack={() => navigate("/collection")}
           onShare={handleShare}
-          onOpenAlbumMenu={() => {}}
+          onOpenAlbumMenu={() => setSongMenuFor(null)}
           onPlayAll={handlePlayAll}
           onShuffle={handleShuffle}
           onPlaySong={(s) => {
