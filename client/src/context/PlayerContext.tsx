@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo, ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Hls from "hls.js";
 import { Song, Album, getSongById } from "@/data/musicData";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
@@ -25,7 +25,6 @@ interface PlayerState {
   showQueue: boolean;
   autoplay: boolean;
   favorites: Set<string>;
-  recentAlbums: Album[];
   /** When true, playback auto-advances to the next queued song after 30
    *  seconds — used by the desktop Preview & Purchase route to audition
    *  the album without playing through full songs. Independent of the
@@ -79,7 +78,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [previewMode, setPreviewModeState] = useState(false);
   const favSongs = useFavoriteSongs();
   const favorites = favSongs.set;
-  const [recentAlbums, setRecentAlbums] = useState<Album[]>([]);
+  const queryClient = useQueryClient();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Catalog-wide DB song fetch. Every entry point that builds a queue
@@ -628,17 +627,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     // The full Now Playing sheet opens only when the user taps the mini-player.
     setShowLyrics(false);
     setShowAddToPlaylist(false);
-    setRecentAlbums((prev) => {
-      const album = hydratedSong.album;
-      const filtered = prev.filter((a) => a.id !== album.id);
-      return [album, ...filtered].slice(0, 8);
-    });
     // Task #530 — stamp every play into fan_recents so the Recents
     // tab reflects "anything opened or played", not just navigations
     // into AlbumDetail / ArtistDetail / InstrumentDetail. We POST
     // directly (the hook can't be used here — PlayerContext sits above
     // any auth provider that uses it). Session cookie carries the
     // identity; anonymous calls 401 and we silently ignore.
+    // Task #782 — this fan_recents row is also the source of truth for
+    // the Collection "Recently Played" rail (no more in-memory list), so
+    // we invalidate the recents query on success to surface the played
+    // album at the front of the rail immediately, without a reload.
     const album = hydratedSong.album;
     fetch("/api/me/recents", {
       method: "POST",
@@ -652,8 +650,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         thumbUrl: album?.artwork ?? null,
         href: album?.id ? `/album/${album.id}` : "/collection",
       }),
-    }).catch(() => { /* fire-and-forget */ });
-  }, [hydrate, beginPlayInstance]);
+    })
+      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/me/recents"] }))
+      .catch(() => { /* fire-and-forget */ });
+  }, [hydrate, beginPlayInstance, queryClient]);
 
   const togglePlay = useCallback(() => {
     setIsPlaying((p) => {
@@ -778,7 +778,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         showQueue,
         autoplay,
         favorites,
-        recentAlbums,
         playSong,
         togglePlay,
         next: handleNext,
