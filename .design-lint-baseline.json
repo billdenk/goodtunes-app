@@ -14475,11 +14475,6 @@
     "snippet": "className=\"text-[12px] font-normal leading-tight mt-0.5\""
   },
   {
-    "rule": "naked-icon-button",
-    "file": "client/src/pages/ArtistDetail.tsx",
-    "snippet": "<button type=\"button\" aria-label=\"Close\" onClick={onClose} data-testid=\"button-how-to-play-close\" className=\"absolute flex items-center justify-center rounded-full active:scale-[0.94] transition-trans"
-  },
-  {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/authChrome.ts",
     "snippet": "\"w-full h-9 border border-slate-300 rounded-md px-3 text-slate-900 placeholder-slate-400 text-sm bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8] transition-colors\""
@@ -15777,7 +15772,7 @@
   {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/Player.tsx",
-    "snippet": "className=\"w-9 h-9 flex items-center justify-center rounded-full flex-shrink-0 text-white active:opacity-60\""
+    "snippet": "className=\"w-9 h-9 flex items-center justify-center rounded-full text-white active:opacity-60\""
   },
   {
     "rule": "player-touch-target-too-small",
@@ -15792,17 +15787,17 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Playlists.tsx",
-    "snippet": "<div key={i} className=\"w-full h-full flex items-center justify-center bg-[#00062B]\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Playlists.tsx",
     "snippet": "<div className=\"w-full h-full row-span-2 overflow-hidden bg-[#00062B]\">"
   },
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Playlists.tsx",
     "snippet": "<div className=\"w-full h-full flex items-center justify-center bg-[#00062B]\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/Playlists.tsx",
+    "snippet": "<div key={i} className=\"w-full h-full flex items-center justify-center bg-[#00062B]\">"
   },
   {
     "rule": "brand-hex-literal",

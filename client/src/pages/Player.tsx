@@ -198,6 +198,7 @@ export function Player() {
 
   const [volume, setVolume] = useState(80);
   const [showGoToMenu, setShowGoToMenu] = useState(false);
+  const [showLyricsMenu, setShowLyricsMenu] = useState(false);
   const [, navigate] = useLocation();
   const reduceMotion = useReducedMotion();
 
@@ -251,6 +252,7 @@ export function Player() {
     if (!showLyrics) {
       if (controlsHideTimerRef.current) clearTimeout(controlsHideTimerRef.current);
       setControlsVisible(true);
+      setShowLyricsMenu(false);
       return;
     }
     showControlsAndArmHide.current();
@@ -293,6 +295,13 @@ export function Player() {
     : { type: "spring", stiffness: 520, damping: 22, mass: 0.8 };
   const goToFromMenu = (path: string) => {
     setShowGoToMenu(false);
+    setShowPlayer(false);
+    navigate(path);
+  };
+  // Same nav, but from the lyrics-overlay ⋯ menu — also dismiss the overlay.
+  const goToFromLyricsMenu = (path: string) => {
+    setShowLyricsMenu(false);
+    setShowLyrics(false);
     setShowPlayer(false);
     navigate(path);
   };
@@ -741,17 +750,100 @@ export function Player() {
                   </svg>
                 )}
               </button>
-              <button
-                type="button"
-                className="w-9 h-9 flex items-center justify-center rounded-full flex-shrink-0 text-white active:opacity-60"
-                style={{ background: "rgba(0,0,0,0.3)" }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <circle cx="5" cy="12" r="1.8" />
-                  <circle cx="12" cy="12" r="1.8" />
-                  <circle cx="19" cy="12" r="1.8" />
-                </svg>
-              </button>
+              {/* ⋯ menu — Apple-Music-style, but only the actions GoodTunes
+                  actually supports: Add to Playlist, Go to Album, Go to Artist.
+                  Anchored top-right; same bouncy spring + tap-catcher as the
+                  title menu. (Favorite lives in the heart button beside it.) */}
+              <div className="relative flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowLyricsMenu((v) => !v)}
+                  aria-label="More actions"
+                  aria-haspopup="menu"
+                  aria-expanded={showLyricsMenu}
+                  className="w-9 h-9 flex items-center justify-center rounded-full text-white active:opacity-60"
+                  style={{ background: "rgba(0,0,0,0.3)" }}
+                  data-testid="button-lyrics-more"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="5" cy="12" r="1.8" />
+                    <circle cx="12" cy="12" r="1.8" />
+                    <circle cx="19" cy="12" r="1.8" />
+                  </svg>
+                </button>
+
+                <AnimatePresence>
+                  {showLyricsMenu && (
+                    <>
+                      <button
+                        type="button"
+                        aria-label="Close menu"
+                        onClick={() => setShowLyricsMenu(false)}
+                        className="fixed inset-0 z-40"
+                        data-testid="backdrop-lyrics-menu"
+                      />
+                      <motion.div
+                        role="menu"
+                        className="absolute right-0 top-full mt-2 z-50 min-w-[230px] max-w-[280px] rounded-2xl overflow-hidden"
+                        style={{
+                          background: "rgba(28,30,38,0.97)",
+                          boxShadow: "0 18px 50px rgba(0,0,0,0.55)",
+                          transformOrigin: "top right",
+                        }}
+                        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.8, y: -6 }}
+                        animate={{ opacity: 1, scale: 1, y: 0, transition: goToMenuAnimate }}
+                        exit={reduceMotion ? { opacity: 0, transition: { duration: 0.12 } } : { opacity: 0, scale: 0.92, y: -4, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }}
+                      >
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => { setShowLyricsMenu(false); setShowAddToPlaylist(true); }}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-white/10 transition-colors"
+                          data-testid="button-lyrics-add-to-playlist"
+                        >
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+                            <path d="M3 6h13M3 12h9M3 18h9M16 15v6M13 18h6" />
+                          </svg>
+                          <span className="block text-white text-sm font-semibold leading-tight">Add to Playlist</span>
+                        </button>
+                        <div className="h-px bg-white/10 mx-4" />
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => goToFromLyricsMenu(`/album/${currentSong.album.id}`)}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-white/10 transition-colors"
+                          data-testid="button-lyrics-goto-album"
+                        >
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.7" className="flex-shrink-0">
+                            <circle cx="12" cy="12" r="9" />
+                            <circle cx="12" cy="12" r="2.5" />
+                          </svg>
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-white text-sm font-semibold leading-tight">Go to Album</span>
+                            <span className="block text-white/50 text-xs truncate mt-0.5">{currentSong.album.title}</span>
+                          </span>
+                        </button>
+                        <div className="h-px bg-white/10 mx-4" />
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => goToFromLyricsMenu(`/artist/${encodeURIComponent(currentSong.album.artist)}`)}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-white/10 transition-colors"
+                          data-testid="button-lyrics-goto-artist"
+                        >
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.7" strokeLinejoin="round" className="flex-shrink-0">
+                            <path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.2l1-5.8L3.5 9.2l5.9-.9L12 3z" />
+                          </svg>
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-white text-sm font-semibold leading-tight">Go to Artist</span>
+                            <span className="block text-white/50 text-xs truncate mt-0.5">{currentSong.album.artist}</span>
+                          </span>
+                        </button>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
 
             {/* Lyrics text — scrollable, line-level synced.
