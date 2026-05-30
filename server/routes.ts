@@ -14933,9 +14933,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           .limit(limit * 2)
       : [];
 
-    // For songs + bonus content we need the universe of fan-visible album
-    // ids (not just those that matched on text). Cheap separate query.
-    const fanAlbumIds = wantKinds.has("song") || wantKinds.has("video") || wantKinds.has("photo")
+    // For songs + bonus content + the people/vendor/label collection scope
+    // we need the universe of fan-visible album ids (not just those that
+    // matched on text). Cheap separate query.
+    const needFanAlbums =
+      wantKinds.has("song") || wantKinds.has("video") || wantKinds.has("photo") ||
+      wantKinds.has("person") || wantKinds.has("vendor") || wantKinds.has("label");
+    const fanAlbumIds = needFanAlbums
       ? await db
           .select({ id: albums.id, title: albums.title, artist: albums.artist, coverUrl: albums.artwork })
           .from(albums)
@@ -14947,6 +14951,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           ))
       : [];
     const albumById = new Map(fanAlbumIds.map((a) => [a.id, a]));
+
+    // Parameterized IN-list of the fan-visible album ids, reused by the
+    // people / vendor / label collection-scope queries below. Null when
+    // there are no fan-visible albums (every scoped query short-circuits
+    // to an empty result in that case).
+    const fanAlbumIdSql = fanAlbumIds.length
+      ? sql.join(fanAlbumIds.map((a) => sql`${a.id}`), sql`, `)
+      : null;
 
     const songRows = wantKinds.has("song") && fanAlbumIds.length
       ? await db
@@ -14965,13 +14977,54 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       ? Array.from(new Set(albumRows.map((a) => a.artist).filter((n) => n.toLowerCase().includes(q.toLowerCase())))).slice(0, limit)
       : [];
 
-    const peopleRows = wantKinds.has("person")
-      ? await db
-          .select({ id: peopleTable.id, name: peopleTable.name, photoUrl: peopleTable.photoUrl })
-          .from(peopleTable)
-          .where(and(ilike(peopleTable.name, pat), isNull(peopleTable.deletedAt)))
-          .limit(limit)
-      : [];
+    // People are scoped to the collection: a person only appears if they're
+    // connected to at least one fan-visible album as the primary artist, an
+    // album credit, a lineup member, or a track writer/performer.
+    let peopleRows: any[] = [];
+    if (wantKinds.has("person") && fanAlbumIdSql) {
+      const ppl = await db.execute(sql`
+        SELECT p.id, p.name, p.photo_url
+          FROM people p
+         WHERE p.deleted_at IS NULL
+           AND p.name ILIKE ${pat}
+           AND (
+             EXISTS (
+               SELECT 1 FROM albums a
+                WHERE a.primary_artist_id = p.id
+                  AND a.id IN (${fanAlbumIdSql})
+             )
+             OR EXISTS (
+               SELECT 1 FROM album_credits ac
+                WHERE ac.person_id = p.id
+                  AND ac.deleted_at IS NULL
+                  AND ac.album_id IN (${fanAlbumIdSql})
+             )
+             OR EXISTS (
+               SELECT 1 FROM album_lineup al
+                WHERE al.member_id = p.id
+                  AND al.album_id IN (${fanAlbumIdSql})
+             )
+             OR EXISTS (
+               SELECT 1 FROM track_writers tw
+                 JOIN songs s ON s.id = tw.song_id
+                WHERE tw.person_id = p.id
+                  AND tw.deleted_at IS NULL
+                  AND s.deleted_at IS NULL
+                  AND s.album_id IN (${fanAlbumIdSql})
+             )
+             OR EXISTS (
+               SELECT 1 FROM track_performers tp
+                 JOIN songs s ON s.id = tp.song_id
+                WHERE tp.person_id = p.id
+                  AND tp.deleted_at IS NULL
+                  AND s.deleted_at IS NULL
+                  AND s.album_id IN (${fanAlbumIdSql})
+             )
+           )
+         LIMIT ${limit}
+      `);
+      peopleRows = (ppl.rows as any[]).map((r) => ({ id: r.id, name: r.name, photoUrl: r.photo_url }));
+    }
 
     const instrumentRows = wantKinds.has("instrument")
       ? await db
@@ -14981,21 +15034,70 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           .limit(limit)
       : [];
 
-    const vendorRows = wantKinds.has("vendor")
-      ? await db
-          .select({ id: vendorsTable.id, name: vendorsTable.name, logoUrl: vendorsTable.logoUrl })
-          .from(vendorsTable)
-          .where(and(ilike(vendorsTable.name, pat), isNull(vendorsTable.deletedAt)))
-          .limit(limit)
-      : [];
+    // Vendors are scoped to the collection: a vendor only appears if it's
+    // connected to a fan-visible album through gear on a track (as the
+    // gear's maker or a listed reseller) or via an album add-on service leg
+    // (printing / hologram / insertion).
+    let vendorRows: any[] = [];
+    if (wantKinds.has("vendor") && fanAlbumIdSql) {
+      const vnd = await db.execute(sql`
+        SELECT v.id, v.name, v.logo_url
+          FROM vendors v
+         WHERE v.deleted_at IS NULL
+           AND v.name ILIKE ${pat}
+           AND (
+             EXISTS (
+               SELECT 1 FROM track_performers tp
+                 JOIN songs s ON s.id = tp.song_id
+                 JOIN instruments i ON i.id = tp.instrument_id
+                WHERE i.maker_vendor_id = v.id
+                  AND i.deleted_at IS NULL
+                  AND tp.deleted_at IS NULL
+                  AND s.deleted_at IS NULL
+                  AND s.album_id IN (${fanAlbumIdSql})
+             )
+             OR EXISTS (
+               SELECT 1 FROM track_performers tp
+                 JOIN songs s ON s.id = tp.song_id
+                 JOIN instrument_vendors iv ON iv.instrument_id = tp.instrument_id
+                WHERE iv.vendor_id = v.id
+                  AND tp.deleted_at IS NULL
+                  AND s.deleted_at IS NULL
+                  AND s.album_id IN (${fanAlbumIdSql})
+             )
+             OR EXISTS (
+               SELECT 1 FROM album_addons aa
+                WHERE aa.album_id IN (${fanAlbumIdSql})
+                  AND (
+                    aa.print_vendor_id = v.id
+                    OR aa.hologram_vendor_id = v.id
+                    OR aa.insertion_vendor_id = v.id
+                  )
+             )
+           )
+         LIMIT ${limit}
+      `);
+      vendorRows = (vnd.rows as any[]).map((r) => ({ id: r.id, name: r.name, logoUrl: r.logo_url }));
+    }
 
-    const labelRows = wantKinds.has("label")
-      ? await db
-          .select({ id: labelsTable.id, name: labelsTable.name, logoUrl: labelsTable.logoUrl })
-          .from(labelsTable)
-          .where(and(ilike(labelsTable.name, pat), isNull(labelsTable.deletedAt)))
-          .limit(limit)
-      : [];
+    // Labels are scoped to the collection: a label only appears if it's the
+    // releasing label of at least one fan-visible album.
+    let labelRows: any[] = [];
+    if (wantKinds.has("label") && fanAlbumIdSql) {
+      const lbl = await db.execute(sql`
+        SELECT l.id, l.name, l.logo_url
+          FROM labels l
+         WHERE l.deleted_at IS NULL
+           AND l.name ILIKE ${pat}
+           AND EXISTS (
+             SELECT 1 FROM albums a
+              WHERE a.label_id = l.id
+                AND a.id IN (${fanAlbumIdSql})
+           )
+         LIMIT ${limit}
+      `);
+      labelRows = (lbl.rows as any[]).map((r) => ({ id: r.id, name: r.name, logoUrl: r.logo_url }));
+    }
 
     // Playlists: only the fan's own. Anonymous callers get an empty list.
     let playlistRows: any[] = [];
