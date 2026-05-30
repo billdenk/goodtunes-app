@@ -515,12 +515,18 @@ export function Collection() {
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.12 }}
                   />
+                  {/* Task #802 — NO backdrop-filter here. The pinned scope
+                      bar above already runs one always-on blur layer over the
+                      scrolling album grid; stacking a second backdrop-filter
+                      popover on top is the iOS WebKit "A problem repeatedly
+                      occurred" renderer-kill (see
+                      .agents/memory/ios-webkit-stacked-backdrop-blur.md). The
+                      ~0.97-opaque solid scrim reads as the same frosted
+                      Apple-Music popover without a second GPU blur surface. */}
                   <motion.div
                     className="absolute left-0 top-full mt-1.5 z-40 rounded-xl py-1 min-w-[180px]"
                     style={{
-                      background: "rgba(36, 36, 40, 0.96)",
-                      backdropFilter: "blur(24px) saturate(180%)",
-                      WebkitBackdropFilter: "blur(24px) saturate(180%)",
+                      background: "rgba(32, 32, 36, 0.97)",
                       boxShadow: "0 12px 32px rgba(0,0,0,0.55)",
                       border: "1px solid rgba(255,255,255,0.08)",
                       transformOrigin: "top left",
