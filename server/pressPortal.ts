@@ -14,7 +14,7 @@
 // of the funnel reads pending admin_invites with defaultPressId=:id.
 
 import type { Express, Request, Response } from "express";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "./db";
 import { storage } from "./storage";
@@ -66,11 +66,17 @@ function deriveStage(a: any): PressStage {
   return "design";
 }
 
-// Earmarked revenue from paid orders against an album, for the
-// masters-trigger threshold check. Sum of (unit_price_cents * quantity)
-// across order_items.kind='format' on paid+un-refunded orders.
-async function earmarkedCentsForAlbum(albumId: string): Promise<number> {
-  const r = await db.execute<{ s: string | null }>(sql`
+// --- Raw-SQL builders (shared with the db-query smoke test) ----------------
+// These hand-written queries reference columns tsc can't validate, so a
+// renamed/mistyped column ships silently (see Task #772's `orders.paid_at`
+// outage). Each query touching orders/order_items or feeding the press
+// pipeline is exposed as a builder so `scripts/db-query-smoke.ts` can EXPLAIN
+// the *exact* SQL production runs and let Postgres validate every column
+// reference at test time, not in a customer-facing 500.
+
+// Earmarked revenue (Σ unit_price_cents × quantity) on paid format rows.
+export function sqlEarmarkedCentsForAlbum(albumId: string): SQL {
+  return sql`
     SELECT COALESCE(SUM(oi.unit_price_cents * oi.quantity), 0)::text AS s
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
@@ -78,7 +84,293 @@ async function earmarkedCentsForAlbum(albumId: string): Promise<number> {
       AND o.album_id = ${albumId}
       AND o.status IN ('paid','shipped')
       AND o.refunded_at IS NULL
-  `);
+  `;
+}
+
+// Per-album masters-prep threshold from the picked tier (and per-press MAX
+// fallback when the tier no longer exists).
+export function sqlMastersThresholdForAlbum(albumId: string, pressId: string): SQL {
+  return sql`
+    SELECT pct.masters_prep_cost_cents::int AS m
+    FROM pressing_order_requests por
+    JOIN press_color_tiers pct
+      ON pct.press_id = ${pressId}
+     AND pct.format = (por.package_snapshot ->> 'format')
+     AND pct.name   = (por.package_snapshot ->> 'vinylColorTier')
+    WHERE por.album_id = ${albumId}
+      AND por.status <> 'cancelled'
+      AND por.package_snapshot ->> 'pressId' = ${pressId}
+    ORDER BY (por.status = 'approved') DESC, por.submitted_at DESC
+    LIMIT 1
+  `;
+}
+export function sqlMastersThresholdFallback(pressId: string): SQL {
+  return sql`
+    SELECT MAX(masters_prep_cost_cents)::int AS m
+    FROM press_color_tiers WHERE press_id = ${pressId}
+  `;
+}
+
+// Locked quote total + quantity for an album under a press.
+export function sqlLockedQuoteForAlbum(albumId: string, pressId: string): SQL {
+  return sql`
+    SELECT por.total_cents AS total_cents, por.quantity AS quantity
+    FROM pressing_order_requests por
+    WHERE por.album_id = ${albumId}
+      AND por.status <> 'cancelled'
+      AND por.package_snapshot ->> 'pressId' = ${pressId}
+    ORDER BY (por.status = 'approved') DESC, por.submitted_at DESC
+    LIMIT 1
+  `;
+}
+
+// /customers — artists + labels homed to this press (paid_units CTE inside).
+export function sqlPressCustomers(pressId: string): SQL {
+  return sql`
+      WITH press_albums AS (
+        SELECT DISTINCT por.album_id, a.primary_artist_id, a.label_id,
+               a.sell_quote_locked_at, a.signed_cert_window_opens_at,
+               a.signed_cert_window_closes_at, a.signed_cert_window_closed_at,
+               a.masters_triggered_at, a.masters_approved_by_artist_at,
+               a.press_invoice_uploaded_at, a.press_invoice_outside_system,
+               a.cert_batch_shipped_to_fulfillment_at
+        FROM pressing_order_requests por
+        JOIN albums a ON a.id = por.album_id AND a.deleted_at IS NULL
+        WHERE por.status <> 'cancelled'
+          AND por.package_snapshot ->> 'pressId' = ${pressId}
+      ),
+      paid_units AS (
+        SELECT o.album_id, COALESCE(SUM(oi.quantity), 0)::int AS units
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        WHERE oi.kind = 'format' AND o.status IN ('paid','shipped') AND o.refunded_at IS NULL
+        GROUP BY o.album_id
+      ),
+      person_rollup AS (
+        SELECT pa.primary_artist_id AS pid,
+               COUNT(*)::int AS album_count,
+               COALESCE(SUM(pu.units), 0)::int AS lifetime_units,
+               (ARRAY_AGG(pa.album_id ORDER BY pa.sell_quote_locked_at DESC NULLS LAST))[1] AS latest_album_id
+        FROM press_albums pa
+        LEFT JOIN paid_units pu ON pu.album_id = pa.album_id
+        WHERE pa.primary_artist_id IS NOT NULL
+        GROUP BY pa.primary_artist_id
+      ),
+      label_rollup AS (
+        SELECT pa.label_id AS lid,
+               COUNT(*)::int AS album_count,
+               COALESCE(SUM(pu.units), 0)::int AS lifetime_units,
+               (ARRAY_AGG(pa.album_id ORDER BY pa.sell_quote_locked_at DESC NULLS LAST))[1] AS latest_album_id
+        FROM press_albums pa
+        LEFT JOIN paid_units pu ON pu.album_id = pa.album_id
+        WHERE pa.label_id IS NOT NULL
+        GROUP BY pa.label_id
+      )
+      SELECT * FROM (
+        SELECT 'artist'::text AS kind, p.id, p.name, p.photo_url AS photo, p.contact_email AS email,
+               NULL::timestamp AS joined_at,
+               COALESCE(pr.album_count, 0)::int AS album_count,
+               COALESCE(pr.lifetime_units, 0)::int AS lifetime_units,
+               pr.latest_album_id,
+               a.sell_quote_locked_at, a.signed_cert_window_opens_at,
+               a.signed_cert_window_closes_at, a.signed_cert_window_closed_at,
+               a.masters_triggered_at, a.masters_approved_by_artist_at,
+               a.press_invoice_uploaded_at, a.press_invoice_outside_system,
+               a.cert_batch_shipped_to_fulfillment_at
+        FROM people p
+        LEFT JOIN person_rollup pr ON pr.pid = p.id
+        LEFT JOIN albums a ON a.id = pr.latest_album_id
+        WHERE p.deleted_at IS NULL
+          AND (p.default_press_id = ${pressId} OR pr.pid IS NOT NULL)
+          AND (
+            COALESCE(pr.album_count, 0) > 0
+            OR NOT EXISTS (
+              SELECT 1 FROM admin_invites ai
+              WHERE ai.default_press_id = ${pressId}
+                AND ai.used_at IS NULL AND ai.revoked_at IS NULL
+                AND ai.expires_at > NOW()
+                AND (ai.role_scope_id = p.id OR lower(ai.email) = lower(p.contact_email))
+            )
+          )
+        UNION ALL
+        SELECT 'label'::text AS kind, l.id, l.name, l.logo_url AS photo,
+               NULL::text AS email, l.created_at AS joined_at,
+               COALESCE(lr.album_count, 0)::int AS album_count,
+               COALESCE(lr.lifetime_units, 0)::int AS lifetime_units,
+               lr.latest_album_id,
+               a.sell_quote_locked_at, a.signed_cert_window_opens_at,
+               a.signed_cert_window_closes_at, a.signed_cert_window_closed_at,
+               a.masters_triggered_at, a.masters_approved_by_artist_at,
+               a.press_invoice_uploaded_at, a.press_invoice_outside_system,
+               a.cert_batch_shipped_to_fulfillment_at
+        FROM labels l
+        LEFT JOIN label_rollup lr ON lr.lid = l.id
+        LEFT JOIN albums a ON a.id = lr.latest_album_id
+        WHERE l.deleted_at IS NULL
+          AND (l.default_press_id = ${pressId} OR lr.lid IS NOT NULL)
+          AND (
+            COALESCE(lr.album_count, 0) > 0
+            OR NOT EXISTS (
+              SELECT 1 FROM admin_invites ai
+              WHERE ai.default_press_id = ${pressId}
+                AND ai.used_at IS NULL AND ai.revoked_at IS NULL
+                AND ai.expires_at > NOW()
+                AND ai.role_scope_id = l.id
+            )
+          )
+      ) c
+      ORDER BY c.album_count DESC, c.name ASC
+  `;
+}
+
+// /summary — Dashboard counts (30-day units + next-90-day backlog aggregates).
+export function sqlPressSummaryCounts(pressId: string): SQL {
+  return sql`
+      WITH press_albums AS (
+        SELECT DISTINCT a.id, a.sell_quote_locked_at, a.signed_cert_window_opens_at,
+               a.signed_cert_window_closes_at, a.signed_cert_window_closed_at,
+               a.masters_triggered_at, a.masters_approved_by_artist_at,
+               a.press_invoice_uploaded_at, a.press_invoice_outside_system,
+               a.cert_batch_shipped_to_fulfillment_at, a.primary_artist_id, a.label_id
+        FROM pressing_order_requests por
+        JOIN albums a ON a.id = por.album_id AND a.deleted_at IS NULL
+        WHERE por.status <> 'cancelled'
+          AND por.package_snapshot ->> 'pressId' = ${pressId}
+      )
+      SELECT
+        (SELECT COUNT(DISTINCT primary_artist_id) FROM press_albums WHERE primary_artist_id IS NOT NULL)::int
+          + (SELECT COUNT(DISTINCT label_id) FROM press_albums WHERE label_id IS NOT NULL)::int AS customer_count,
+        (SELECT COUNT(*) FROM admin_invites
+           WHERE default_press_id = ${pressId}
+             AND used_at IS NULL AND revoked_at IS NULL AND expires_at > NOW())::int AS pending_invites,
+        (SELECT COUNT(*) FROM press_albums)::int AS total_albums,
+        COALESCE((
+          SELECT SUM(oi.quantity)
+          FROM order_items oi
+          JOIN orders o ON o.id = oi.order_id
+          JOIN press_albums pa ON pa.id = o.album_id
+          WHERE oi.kind = 'format' AND o.status IN ('paid','shipped')
+            AND o.refunded_at IS NULL
+            AND o.created_at > NOW() - INTERVAL '30 days'
+        ), 0)::int AS units_30d,
+        COALESCE((
+          SELECT SUM(por2.quantity)
+          FROM press_albums pa
+          JOIN pressing_order_requests por2
+            ON por2.album_id = pa.id
+           AND por2.status IN ('pending','approved')
+           AND por2.package_snapshot ->> 'pressId' = ${pressId}
+          WHERE pa.signed_cert_window_closed_at IS NOT NULL
+            AND pa.cert_batch_shipped_to_fulfillment_at IS NULL
+            AND pa.signed_cert_window_opens_at < NOW() + INTERVAL '90 days'
+        ), 0)::int AS units_next_90d
+  `;
+}
+
+// /summary — albums for per-stage counts.
+export function sqlPressSummaryStages(pressId: string): SQL {
+  return sql`
+      SELECT a.id, a.sell_quote_locked_at, a.signed_cert_window_opens_at,
+             a.signed_cert_window_closes_at, a.signed_cert_window_closed_at,
+             a.masters_triggered_at, a.masters_approved_by_artist_at,
+             a.press_invoice_uploaded_at, a.press_invoice_outside_system,
+             a.cert_batch_shipped_to_fulfillment_at
+      FROM albums a
+      JOIN pressing_order_requests por
+        ON por.album_id = a.id AND por.status <> 'cancelled'
+       AND por.package_snapshot ->> 'pressId' = ${pressId}
+      WHERE a.deleted_at IS NULL
+  `;
+}
+
+// /customers/:kind/:cid — albums for one customer's detail drawer.
+export function sqlPressCustomerAlbums(pressId: string, kind: string, cid: string): SQL {
+  return sql`
+      SELECT a.id, a.title, a.artwork AS "coverUrl",
+             a.sell_quote_locked_at, a.signed_cert_window_opens_at,
+             a.signed_cert_window_closes_at, a.signed_cert_window_closed_at,
+             a.masters_triggered_at, a.masters_approved_by_artist_at,
+             a.press_invoice_uploaded_at, a.press_invoice_outside_system,
+             a.cert_batch_shipped_to_fulfillment_at
+      FROM albums a
+      JOIN pressing_order_requests por
+        ON por.album_id = a.id AND por.status <> 'cancelled'
+       AND por.package_snapshot ->> 'pressId' = ${pressId}
+      WHERE a.deleted_at IS NULL
+        AND (${kind} = 'artist' AND a.primary_artist_id = ${cid}
+             OR ${kind} = 'label' AND a.label_id = ${cid})
+      ORDER BY a.sell_quote_locked_at DESC NULLS LAST
+  `;
+}
+
+// /pipeline — every album awarded to this press (units_sold lateral inside).
+export function sqlPressPipeline(pressId: string): SQL {
+  return sql`
+      SELECT a.id, a.title, a.artwork AS "coverUrl", a.physical_format AS format,
+             a.sell_quote_locked_at, a.signed_cert_window_opens_at,
+             a.signed_cert_window_closes_at, a.signed_cert_window_closed_at,
+             a.masters_triggered_at, a.masters_approved_by_artist_at,
+             a.press_invoice_url, a.press_invoice_total_cents,
+             a.press_invoice_uploaded_at, a.press_invoice_outside_system,
+             a.press_invoice_transfer_id, a.press_invoice_transferred_at,
+             a.press_invoice_transfer_amount_cents, a.press_invoice_transfer_error,
+             a.cert_batch_shipped_to_fulfillment_at,
+             a.fulfillment_heads_up_sent_at, a.fulfillment_heads_up_qty,
+             a.primary_artist_id, a.label_id,
+             por.quantity AS locked_quantity,
+             por.total_cents AS locked_total_cents,
+             COALESCE(p.name, l.name) AS owner_name,
+             COALESCE(a.primary_artist_id, a.label_id) AS owner_id,
+             CASE WHEN a.primary_artist_id IS NOT NULL THEN 'artist' ELSE 'label' END AS owner_kind,
+             sold.units_sold AS units_sold,
+             notif.last_notified_at AS last_notified_at
+      FROM albums a
+      JOIN LATERAL (
+        SELECT por.quantity, por.total_cents
+        FROM pressing_order_requests por
+        WHERE por.album_id = a.id
+          AND por.status <> 'cancelled'
+          AND por.package_snapshot ->> 'pressId' = ${pressId}
+        ORDER BY (por.status = 'approved') DESC, por.submitted_at DESC
+        LIMIT 1
+      ) por ON true
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(SUM(oi.quantity), 0)::int AS units_sold
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        WHERE oi.kind = 'format' AND o.album_id = a.id
+          AND o.status IN ('paid','shipped') AND o.refunded_at IS NULL
+      ) sold ON true
+      LEFT JOIN LATERAL (
+        SELECT MAX(pnl.sent_at) AS last_notified_at
+        FROM partner_notification_log pnl
+        WHERE pnl.status = 'sent'
+          AND pnl.payload_snapshot ->> 'albumId' = a.id
+      ) notif ON true
+      LEFT JOIN people p ON p.id = a.primary_artist_id
+      LEFT JOIN labels l ON l.id = a.label_id
+      WHERE a.deleted_at IS NULL
+      ORDER BY a.sell_quote_locked_at DESC NULLS LAST
+  `;
+}
+
+// Paid Stripe PaymentIntent ids for an album (earmark tagging).
+export function sqlPaidPaymentIntentsForAlbum(albumId: string): SQL {
+  return sql`
+      SELECT stripe_payment_intent_id AS pi
+      FROM orders
+      WHERE album_id = ${albumId}
+        AND stripe_payment_intent_id IS NOT NULL
+        AND status IN ('paid','shipped')
+        AND refunded_at IS NULL
+  `;
+}
+
+// Earmarked revenue from paid orders against an album, for the
+// masters-trigger threshold check. Sum of (unit_price_cents * quantity)
+// across order_items.kind='format' on paid+un-refunded orders.
+async function earmarkedCentsForAlbum(albumId: string): Promise<number> {
+  const r = await db.execute<{ s: string | null }>(sqlEarmarkedCentsForAlbum(albumId));
   const s = ((r as any).rows ?? [])[0]?.s ?? "0";
   return parseInt(s, 10) || 0;
 }
@@ -92,25 +384,10 @@ async function earmarkedCentsForAlbum(albumId: string): Promise<number> {
 // the threshold never silently drops to 0 mid-flight. Returns 0 if
 // the press has no masters-prep configured for the picked tier.
 async function mastersThresholdForAlbum(albumId: string, pressId: string): Promise<number> {
-  const r = await db.execute<{ m: number | null }>(sql`
-    SELECT pct.masters_prep_cost_cents::int AS m
-    FROM pressing_order_requests por
-    JOIN press_color_tiers pct
-      ON pct.press_id = ${pressId}
-     AND pct.format = (por.package_snapshot ->> 'format')
-     AND pct.name   = (por.package_snapshot ->> 'vinylColorTier')
-    WHERE por.album_id = ${albumId}
-      AND por.status <> 'cancelled'
-      AND por.package_snapshot ->> 'pressId' = ${pressId}
-    ORDER BY (por.status = 'approved') DESC, por.submitted_at DESC
-    LIMIT 1
-  `);
+  const r = await db.execute<{ m: number | null }>(sqlMastersThresholdForAlbum(albumId, pressId));
   const tierVal = ((r as any).rows ?? [])[0]?.m;
   if (tierVal != null) return tierVal;
-  const fallback = await db.execute<{ m: number | null }>(sql`
-    SELECT MAX(masters_prep_cost_cents)::int AS m
-    FROM press_color_tiers WHERE press_id = ${pressId}
-  `);
+  const fallback = await db.execute<{ m: number | null }>(sqlMastersThresholdFallback(pressId));
   return ((fallback as any).rows ?? [])[0]?.m ?? 0;
 }
 
@@ -120,15 +397,7 @@ async function mastersThresholdForAlbum(albumId: string, pressId: string): Promi
 // need this to compute >10% variance for admin alerts, since
 // assertAlbumBelongsToPress only returns the album row itself.
 async function lockedQuoteForAlbum(albumId: string, pressId: string): Promise<{ totalCents: number; quantity: number } | null> {
-  const r = await db.execute<any>(sql`
-    SELECT por.total_cents AS total_cents, por.quantity AS quantity
-    FROM pressing_order_requests por
-    WHERE por.album_id = ${albumId}
-      AND por.status <> 'cancelled'
-      AND por.package_snapshot ->> 'pressId' = ${pressId}
-    ORDER BY (por.status = 'approved') DESC, por.submitted_at DESC
-    LIMIT 1
-  `);
+  const r = await db.execute<any>(sqlLockedQuoteForAlbum(albumId, pressId));
   const row = ((r as any).rows ?? [])[0];
   if (!row) return null;
   return { totalCents: Number(row.total_cents) || 0, quantity: Number(row.quantity) || 0 };
@@ -214,101 +483,7 @@ export function registerPressPortalRoutes(
   // their default press away from us; older switches drop off entirely.
   app.get("/api/press/:id/customers", requireAdmin, requirePressScope, async (req, res) => {
     const pressId = String(req.params.id);
-    const rows = await db.execute<any>(sql`
-      WITH press_albums AS (
-        SELECT DISTINCT por.album_id, a.primary_artist_id, a.label_id, a.created_at,
-               a.sell_quote_locked_at, a.signed_cert_window_opens_at,
-               a.signed_cert_window_closes_at, a.signed_cert_window_closed_at,
-               a.masters_triggered_at, a.masters_approved_by_artist_at,
-               a.press_invoice_uploaded_at, a.press_invoice_outside_system,
-               a.cert_batch_shipped_to_fulfillment_at
-        FROM pressing_order_requests por
-        JOIN albums a ON a.id = por.album_id AND a.deleted_at IS NULL
-        WHERE por.status <> 'cancelled'
-          AND por.package_snapshot ->> 'pressId' = ${pressId}
-      ),
-      paid_units AS (
-        SELECT o.album_id, COALESCE(SUM(oi.quantity), 0)::int AS units
-        FROM order_items oi
-        JOIN orders o ON o.id = oi.order_id
-        WHERE oi.kind = 'format' AND o.status IN ('paid','shipped') AND o.refunded_at IS NULL
-        GROUP BY o.album_id
-      ),
-      person_rollup AS (
-        SELECT pa.primary_artist_id AS pid,
-               COUNT(*)::int AS album_count,
-               COALESCE(SUM(pu.units), 0)::int AS lifetime_units,
-               (ARRAY_AGG(pa.album_id ORDER BY pa.created_at DESC NULLS LAST))[1] AS latest_album_id
-        FROM press_albums pa
-        LEFT JOIN paid_units pu ON pu.album_id = pa.album_id
-        WHERE pa.primary_artist_id IS NOT NULL
-        GROUP BY pa.primary_artist_id
-      ),
-      label_rollup AS (
-        SELECT pa.label_id AS lid,
-               COUNT(*)::int AS album_count,
-               COALESCE(SUM(pu.units), 0)::int AS lifetime_units,
-               (ARRAY_AGG(pa.album_id ORDER BY pa.created_at DESC NULLS LAST))[1] AS latest_album_id
-        FROM press_albums pa
-        LEFT JOIN paid_units pu ON pu.album_id = pa.album_id
-        WHERE pa.label_id IS NOT NULL
-        GROUP BY pa.label_id
-      )
-      SELECT * FROM (
-        SELECT 'artist'::text AS kind, p.id, p.name, p.photo_url AS photo, p.email,
-               p.created_at AS joined_at,
-               COALESCE(pr.album_count, 0)::int AS album_count,
-               COALESCE(pr.lifetime_units, 0)::int AS lifetime_units,
-               pr.latest_album_id,
-               a.sell_quote_locked_at, a.signed_cert_window_opens_at,
-               a.signed_cert_window_closes_at, a.signed_cert_window_closed_at,
-               a.masters_triggered_at, a.masters_approved_by_artist_at,
-               a.press_invoice_uploaded_at, a.press_invoice_outside_system,
-               a.cert_batch_shipped_to_fulfillment_at
-        FROM people p
-        LEFT JOIN person_rollup pr ON pr.pid = p.id
-        LEFT JOIN albums a ON a.id = pr.latest_album_id
-        WHERE p.deleted_at IS NULL
-          AND (p.default_press_id = ${pressId} OR pr.pid IS NOT NULL)
-          AND (
-            COALESCE(pr.album_count, 0) > 0
-            OR NOT EXISTS (
-              SELECT 1 FROM admin_invites ai
-              WHERE ai.default_press_id = ${pressId}
-                AND ai.used_at IS NULL AND ai.revoked_at IS NULL
-                AND ai.expires_at > NOW()
-                AND (ai.role_scope_id = p.id OR lower(ai.email) = lower(p.email))
-            )
-          )
-        UNION ALL
-        SELECT 'label'::text AS kind, l.id, l.name, l.logo_url AS photo,
-               NULL::text AS email, l.created_at AS joined_at,
-               COALESCE(lr.album_count, 0)::int AS album_count,
-               COALESCE(lr.lifetime_units, 0)::int AS lifetime_units,
-               lr.latest_album_id,
-               a.sell_quote_locked_at, a.signed_cert_window_opens_at,
-               a.signed_cert_window_closes_at, a.signed_cert_window_closed_at,
-               a.masters_triggered_at, a.masters_approved_by_artist_at,
-               a.press_invoice_uploaded_at, a.press_invoice_outside_system,
-               a.cert_batch_shipped_to_fulfillment_at
-        FROM labels l
-        LEFT JOIN label_rollup lr ON lr.lid = l.id
-        LEFT JOIN albums a ON a.id = lr.latest_album_id
-        WHERE l.deleted_at IS NULL
-          AND (l.default_press_id = ${pressId} OR lr.lid IS NOT NULL)
-          AND (
-            COALESCE(lr.album_count, 0) > 0
-            OR NOT EXISTS (
-              SELECT 1 FROM admin_invites ai
-              WHERE ai.default_press_id = ${pressId}
-                AND ai.used_at IS NULL AND ai.revoked_at IS NULL
-                AND ai.expires_at > NOW()
-                AND ai.role_scope_id = l.id
-            )
-          )
-      ) c
-      ORDER BY c.album_count DESC, c.name ASC
-    `);
+    const rows = await db.execute<any>(sqlPressCustomers(pressId));
     const active = ((rows as any).rows ?? []).map((r: any) => ({
       kind: r.kind,
       id: r.id,
@@ -385,22 +560,7 @@ export function registerPressPortalRoutes(
     if (kind !== "artist" && kind !== "label") {
       return res.status(400).json({ message: "kind must be artist|label" });
     }
-    const albumsRows = await db.execute<any>(sql`
-      SELECT a.id, a.title, a.cover_url AS "coverUrl", a.created_at,
-             a.sell_quote_locked_at, a.signed_cert_window_opens_at,
-             a.signed_cert_window_closes_at, a.signed_cert_window_closed_at,
-             a.masters_triggered_at, a.masters_approved_by_artist_at,
-             a.press_invoice_uploaded_at, a.press_invoice_outside_system,
-             a.cert_batch_shipped_to_fulfillment_at
-      FROM albums a
-      JOIN pressing_order_requests por
-        ON por.album_id = a.id AND por.status <> 'cancelled'
-       AND por.package_snapshot ->> 'pressId' = ${pressId}
-      WHERE a.deleted_at IS NULL
-        AND (${kind} = 'artist' AND a.primary_artist_id = ${cid}
-             OR ${kind} = 'label' AND a.label_id = ${cid})
-      ORDER BY a.created_at DESC
-    `);
+    const albumsRows = await db.execute<any>(sqlPressCustomerAlbums(pressId, kind, cid));
     const history = await db.execute<any>(sql`
       SELECT switched_at, from_press_id, to_press_id, reason
       FROM press_switch_history
@@ -422,59 +582,9 @@ export function registerPressPortalRoutes(
   // GET /api/press/:id/summary — Dashboard metrics card.
   app.get("/api/press/:id/summary", requireAdmin, requirePressScope, async (req, res) => {
     const pressId = String(req.params.id);
-    const counts = await db.execute<any>(sql`
-      WITH press_albums AS (
-        SELECT DISTINCT a.id, a.sell_quote_locked_at, a.signed_cert_window_opens_at,
-               a.signed_cert_window_closes_at, a.signed_cert_window_closed_at,
-               a.masters_triggered_at, a.masters_approved_by_artist_at,
-               a.press_invoice_uploaded_at, a.press_invoice_outside_system,
-               a.cert_batch_shipped_to_fulfillment_at, a.primary_artist_id, a.label_id
-        FROM pressing_order_requests por
-        JOIN albums a ON a.id = por.album_id AND a.deleted_at IS NULL
-        WHERE por.status <> 'cancelled'
-          AND por.package_snapshot ->> 'pressId' = ${pressId}
-      )
-      SELECT
-        (SELECT COUNT(DISTINCT primary_artist_id) FROM press_albums WHERE primary_artist_id IS NOT NULL)::int
-          + (SELECT COUNT(DISTINCT label_id) FROM press_albums WHERE label_id IS NOT NULL)::int AS customer_count,
-        (SELECT COUNT(*) FROM admin_invites
-           WHERE default_press_id = ${pressId}
-             AND used_at IS NULL AND revoked_at IS NULL AND expires_at > NOW())::int AS pending_invites,
-        (SELECT COUNT(*) FROM press_albums)::int AS total_albums,
-        COALESCE((
-          SELECT SUM(oi.quantity)
-          FROM order_items oi
-          JOIN orders o ON o.id = oi.order_id
-          JOIN press_albums pa ON pa.id = o.album_id
-          WHERE oi.kind = 'format' AND o.status IN ('paid','shipped')
-            AND o.refunded_at IS NULL
-            AND o.created_at > NOW() - INTERVAL '30 days'
-        ), 0)::int AS units_30d,
-        COALESCE((
-          SELECT SUM(por2.quantity)
-          FROM press_albums pa
-          JOIN pressing_order_requests por2
-            ON por2.album_id = pa.id
-           AND por2.status IN ('pending','approved')
-           AND por2.package_snapshot ->> 'pressId' = ${pressId}
-          WHERE pa.signed_cert_window_closed_at IS NOT NULL
-            AND pa.cert_batch_shipped_to_fulfillment_at IS NULL
-            AND pa.signed_cert_window_opens_at < NOW() + INTERVAL '90 days'
-        ), 0)::int AS units_next_90d
-    `);
+    const counts = await db.execute<any>(sqlPressSummaryCounts(pressId));
     const row = ((counts as any).rows ?? [])[0] ?? {};
-    const stages = await db.execute<any>(sql`
-      SELECT a.id, a.sell_quote_locked_at, a.signed_cert_window_opens_at,
-             a.signed_cert_window_closes_at, a.signed_cert_window_closed_at,
-             a.masters_triggered_at, a.masters_approved_by_artist_at,
-             a.press_invoice_uploaded_at, a.press_invoice_outside_system,
-             a.cert_batch_shipped_to_fulfillment_at
-      FROM albums a
-      JOIN pressing_order_requests por
-        ON por.album_id = a.id AND por.status <> 'cancelled'
-       AND por.package_snapshot ->> 'pressId' = ${pressId}
-      WHERE a.deleted_at IS NULL
-    `);
+    const stages = await db.execute<any>(sqlPressSummaryStages(pressId));
     const byStage: Record<string, number> = {};
     for (const a of ((stages as any).rows ?? [])) {
       const s = deriveStage(a);
@@ -505,53 +615,7 @@ export function registerPressPortalRoutes(
   // Both writes are idempotent — repeated reads cost a single SELECT.
   app.get("/api/press/:id/pipeline", requireAdmin, requirePressScope, async (req, res) => {
     const pressId = String(req.params.id);
-    const rows = await db.execute<any>(sql`
-      SELECT a.id, a.title, a.cover_url AS "coverUrl", a.format,
-             a.sell_quote_locked_at, a.signed_cert_window_opens_at,
-             a.signed_cert_window_closes_at, a.signed_cert_window_closed_at,
-             a.masters_triggered_at, a.masters_approved_by_artist_at,
-             a.press_invoice_url, a.press_invoice_total_cents,
-             a.press_invoice_uploaded_at, a.press_invoice_outside_system,
-             a.press_invoice_transfer_id, a.press_invoice_transferred_at,
-             a.press_invoice_transfer_amount_cents, a.press_invoice_transfer_error,
-             a.cert_batch_shipped_to_fulfillment_at,
-             a.fulfillment_heads_up_sent_at, a.fulfillment_heads_up_qty,
-             a.primary_artist_id, a.label_id,
-             por.quantity AS locked_quantity,
-             por.total_cents AS locked_total_cents,
-             COALESCE(p.name, l.name) AS owner_name,
-             COALESCE(a.primary_artist_id, a.label_id) AS owner_id,
-             CASE WHEN a.primary_artist_id IS NOT NULL THEN 'artist' ELSE 'label' END AS owner_kind,
-             sold.units_sold AS units_sold,
-             notif.last_notified_at AS last_notified_at
-      FROM albums a
-      JOIN LATERAL (
-        SELECT por.quantity, por.total_cents
-        FROM pressing_order_requests por
-        WHERE por.album_id = a.id
-          AND por.status <> 'cancelled'
-          AND por.package_snapshot ->> 'pressId' = ${pressId}
-        ORDER BY (por.status = 'approved') DESC, por.submitted_at DESC
-        LIMIT 1
-      ) por ON true
-      LEFT JOIN LATERAL (
-        SELECT COALESCE(SUM(oi.quantity), 0)::int AS units_sold
-        FROM order_items oi
-        JOIN orders o ON o.id = oi.order_id
-        WHERE oi.kind = 'format' AND o.album_id = a.id
-          AND o.status IN ('paid','shipped') AND o.refunded_at IS NULL
-      ) sold ON true
-      LEFT JOIN LATERAL (
-        SELECT MAX(pnl.sent_at) AS last_notified_at
-        FROM partner_notification_log pnl
-        WHERE pnl.status = 'sent'
-          AND pnl.payload_snapshot ->> 'albumId' = a.id
-      ) notif ON true
-      LEFT JOIN people p ON p.id = a.primary_artist_id
-      LEFT JOIN labels l ON l.id = a.label_id
-      WHERE a.deleted_at IS NULL
-      ORDER BY a.created_at DESC NULLS LAST
-    `);
+    const rows = await db.execute<any>(sqlPressPipeline(pressId));
     const albumsList: any[] = [];
     for (const a of ((rows as any).rows ?? [])) {
       // (1) Auto-trigger masters early-start when earmarked revenue
@@ -621,7 +685,7 @@ export function registerPressPortalRoutes(
         stage === "masters_triggered" ? a.masters_approved_by_artist_at :
         stage === "selling" ? a.signed_cert_window_opens_at :
         stage === "sunrise_set" ? a.sell_quote_locked_at :
-        a.created_at ?? null;
+        null;
       // Invoice variance — computed on-read so the UI chip stays
       // honest if the locked quote changes after an invoice landed.
       // tier: ok (<5%), warn (5–10%), flag (>10%) — flag mirrors the
@@ -1947,14 +2011,7 @@ async function recordPressEarmark(albumId: string, pressId: string, totalCents: 
   if (earmarkedInProcess.has(key)) return;
   earmarkedInProcess.add(key);
   try {
-    const piRows = await db.execute<any>(sql`
-      SELECT stripe_payment_intent_id AS pi
-      FROM orders
-      WHERE album_id = ${albumId}
-        AND stripe_payment_intent_id IS NOT NULL
-        AND status IN ('paid','shipped')
-        AND refunded_at IS NULL
-    `);
+    const piRows = await db.execute<any>(sqlPaidPaymentIntentsForAlbum(albumId));
     const pis: string[] = ((piRows as any).rows ?? []).map((r: any) => r.pi).filter(Boolean);
     if (pis.length === 0) {
       console.log(`[earmark] album=${albumId} press=${pressId} totalCents=${totalCents} pis=0 (no paid orders yet)`);

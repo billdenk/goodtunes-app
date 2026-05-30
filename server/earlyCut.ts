@@ -14,8 +14,81 @@
 // GoodTunes fronts NO capital: an early cut can only be staged once the
 // per-album pool (`albums.press_pool_accrued_cents` minus
 // `press_pool_released_cents`) covers `press_floor_total`.
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "./db";
+
+// --- Raw-SQL builders (shared with the db-query smoke test) ----------------
+// These hand-written queries can't be type-checked by tsc, so a renamed or
+// mistyped column silently ships (see Task #772's `orders.paid_at` outage).
+// Exposing each query as a builder lets `scripts/db-query-smoke.ts` EXPLAIN
+// the *exact* SQL production runs, so Postgres validates every column
+// reference at test time instead of in a customer-facing 500.
+
+// Resolve the album's currently-picked press tier from its live POR snapshot.
+export function sqlResolveAlbumPressTier(albumId: string): SQL {
+  return sql`
+    SELECT pct.id            AS tier_id,
+           pct.press_id      AS press_id,
+           pct.format        AS format,
+           pct.name          AS tier_name,
+           pct.price_ladder  AS price_ladder,
+           pct.masters_prep_cost_cents::int AS masters_prep_cents
+    FROM pressing_order_requests por
+    JOIN press_color_tiers pct
+      ON pct.press_id = (por.package_snapshot ->> 'pressId')
+     AND pct.format   = (por.package_snapshot ->> 'format')
+     AND pct.name     = (por.package_snapshot ->> 'vinylColorTier')
+    WHERE por.album_id = ${albumId}
+      AND por.status <> 'cancelled'
+    ORDER BY (por.status = 'approved') DESC, por.submitted_at DESC
+    LIMIT 1
+  `;
+}
+
+// Count paid, un-refunded format units sold for an album.
+export function sqlUnitsSoldForAlbum(albumId: string): SQL {
+  return sql`
+    SELECT COALESCE(SUM(oi.quantity), 0)::text AS s
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    WHERE oi.kind = 'format'
+      AND o.album_id = ${albumId}
+      AND o.status IN ('paid','shipped')
+      AND o.refunded_at IS NULL
+  `;
+}
+
+// Read an album's pool totals + the three early-cut consent gates.
+export function sqlEarlyCutAlbumGates(albumId: string): SQL {
+  return sql`
+    SELECT a.press_pool_accrued_cents::int   AS accrued,
+           a.press_pool_released_cents::int  AS released,
+           a.masters_triggered_at            AS masters_triggered_at,
+           a.early_cut_consent_at            AS consent_at,
+           a.early_cut_consent_for_tier_name AS consent_tier,
+           a.early_cut_consent_for_format    AS consent_format
+    FROM albums a
+    WHERE a.id = ${albumId}
+    LIMIT 1
+  `;
+}
+
+// Read a press's one-time auto-trigger consent timestamp.
+export function sqlPressAutoTriggerConsent(pressId: string): SQL {
+  return sql`
+    SELECT auto_trigger_consent_at AS at
+    FROM manufacturers WHERE id = ${pressId} LIMIT 1
+  `;
+}
+
+// Sum the cents already accrued into the pool for one order (refund reversal).
+export function sqlAccruedCentsForOrder(albumId: string, orderId: string): SQL {
+  return sql`
+    SELECT COALESCE(SUM(cents), 0)::int AS cents
+    FROM album_press_pool_ledger
+    WHERE album_id = ${albumId} AND source_order_id = ${orderId} AND kind = 'accrue'
+  `;
+}
 
 export type AlbumPressTier = {
   pressId: string;
@@ -47,23 +120,7 @@ export type AlbumPressTier = {
 export async function resolveAlbumPressTier(
   albumId: string,
 ): Promise<AlbumPressTier | null> {
-  const r = await db.execute<any>(sql`
-    SELECT pct.id            AS tier_id,
-           pct.press_id      AS press_id,
-           pct.format        AS format,
-           pct.name          AS tier_name,
-           pct.price_ladder  AS price_ladder,
-           pct.masters_prep_cost_cents::int AS masters_prep_cents
-    FROM pressing_order_requests por
-    JOIN press_color_tiers pct
-      ON pct.press_id = (por.package_snapshot ->> 'pressId')
-     AND pct.format   = (por.package_snapshot ->> 'format')
-     AND pct.name     = (por.package_snapshot ->> 'vinylColorTier')
-    WHERE por.album_id = ${albumId}
-      AND por.status <> 'cancelled'
-    ORDER BY (por.status = 'approved') DESC, por.submitted_at DESC
-    LIMIT 1
-  `);
+  const r = await db.execute<any>(sqlResolveAlbumPressTier(albumId));
   const row = ((r as any).rows ?? [])[0];
   if (!row) return null;
 
@@ -163,11 +220,7 @@ export async function reversePressPoolForOrder(
   orderId: string,
 ): Promise<{ reversedCents: number } | null> {
   try {
-    const acc = await db.execute<any>(sql`
-      SELECT COALESCE(SUM(cents), 0)::int AS cents
-      FROM album_press_pool_ledger
-      WHERE album_id = ${albumId} AND source_order_id = ${orderId} AND kind = 'accrue'
-    `);
+    const acc = await db.execute<any>(sqlAccruedCentsForOrder(albumId, orderId));
     const cents = Number(((acc as any).rows ?? [])[0]?.cents) || 0;
     if (cents <= 0) return { reversedCents: 0 };
 
@@ -213,15 +266,7 @@ export type EarlyCutEligibility = {
 // Count paid, un-refunded format units sold for an album (the
 // denominator for "units_sold vs min_run").
 async function unitsSoldForAlbum(albumId: string): Promise<number> {
-  const r = await db.execute<{ s: string | null }>(sql`
-    SELECT COALESCE(SUM(oi.quantity), 0)::text AS s
-    FROM order_items oi
-    JOIN orders o ON o.id = oi.order_id
-    WHERE oi.kind = 'format'
-      AND o.album_id = ${albumId}
-      AND o.status IN ('paid','shipped')
-      AND o.refunded_at IS NULL
-  `);
+  const r = await db.execute<{ s: string | null }>(sqlUnitsSoldForAlbum(albumId));
   const s = ((r as any).rows ?? [])[0]?.s ?? "0";
   return parseInt(s, 10) || 0;
 }
@@ -231,17 +276,7 @@ async function unitsSoldForAlbum(albumId: string): Promise<number> {
 // mutates; the caller (pipeline sweep) decides whether to enqueue.
 export async function evaluateEarlyCut(albumId: string): Promise<EarlyCutEligibility> {
   const tier = await resolveAlbumPressTier(albumId);
-  const albumRows = await db.execute<any>(sql`
-    SELECT a.press_pool_accrued_cents::int   AS accrued,
-           a.press_pool_released_cents::int  AS released,
-           a.masters_triggered_at            AS masters_triggered_at,
-           a.early_cut_consent_at            AS consent_at,
-           a.early_cut_consent_for_tier_name AS consent_tier,
-           a.early_cut_consent_for_format    AS consent_format
-    FROM albums a
-    WHERE a.id = ${albumId}
-    LIMIT 1
-  `);
+  const albumRows = await db.execute<any>(sqlEarlyCutAlbumGates(albumId));
   const a = ((albumRows as any).rows ?? [])[0] ?? {};
   const accrued = Number(a.accrued) || 0;
   const released = Number(a.released) || 0;
@@ -253,10 +288,7 @@ export async function evaluateEarlyCut(albumId: string): Promise<EarlyCutEligibi
   // Gate #1 — press auto-trigger consent.
   let pressConsented = false;
   if (tier) {
-    const pr = await db.execute<any>(sql`
-      SELECT auto_trigger_consent_at AS at
-      FROM manufacturers WHERE id = ${tier.pressId} LIMIT 1
-    `);
+    const pr = await db.execute<any>(sqlPressAutoTriggerConsent(tier.pressId));
     pressConsented = !!((pr as any).rows ?? [])[0]?.at;
   }
   if (!pressConsented) missingConsents.push("press");

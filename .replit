@@ -37,6 +37,10 @@ args = "Start application"
 task = "workflow.run"
 args = "design-lint"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "db-query-smoke"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -53,6 +57,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npm run design:lint"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "db-query-smoke"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "tsx scripts/db-query-smoke.ts"
 
 [workflows.workflow.metadata]
 isValidation = true
