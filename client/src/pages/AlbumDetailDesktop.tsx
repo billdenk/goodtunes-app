@@ -29,7 +29,8 @@ import {
   type DesktopAlbumTab,
 } from "@/components/ui/DesktopAlbumView";
 import type { PlayerSong } from "@/context/PlayerContext";
-import type { Album as PlayerAlbum } from "@/data/musicData";
+import type { Album as PlayerAlbum, Person } from "@/data/musicData";
+import { PersonDetailSheet } from "@/pages/AlbumDetail";
 
 type ApiSong = {
   id: string;
@@ -113,6 +114,10 @@ export function AlbumDetailDesktop() {
   const isOwned = useAlbumOwnership(id);
   const favSongs = useFavoriteSongs();
   const [showAlbumCredits, setShowAlbumCredits] = useState(false);
+  // Person opened from the album-credits sheet. The desktop view has no
+  // SuperCredits sheet stack of its own, so PersonDetailSheet brings its own
+  // self-contained About/Music/Gear sheet (+ instrument/vendor sub-stack).
+  const [creditPerson, setCreditPerson] = useState<{ person: Person; role: string } | null>(null);
 
   const { data: album, isLoading } = useQuery<ApiAlbum>({
     queryKey: ["/api/albums", id],
@@ -478,14 +483,31 @@ export function AlbumDetailDesktop() {
         />
       )}
 
-      {showAlbumCredits && productionCredits.length > 0 && album && (
+      {creditPerson && album ? (
+        <PersonDetailSheet
+          person={creditPerson.person}
+          album={album as unknown as PlayerAlbum}
+          contextLabel={creditPerson.role}
+          onClose={() => setCreditPerson(null)}
+        />
+      ) : showAlbumCredits && productionCredits.length > 0 && album ? (
         <AlbumCreditsSheet
           albumTitle={album.title}
           artist={album.artist}
           rows={productionCredits}
+          onOpenPerson={(personId, role) => {
+            const row = productionCredits.find((r) => (r.person?.id ?? r.personId) === personId);
+            const p = row?.person;
+            if (!p) return;
+            setShowAlbumCredits(false);
+            setCreditPerson({
+              person: { id: p.id, name: p.name, photoUrl: p.photoUrl ?? undefined },
+              role,
+            });
+          }}
           onClose={() => setShowAlbumCredits(false)}
         />
-      )}
+      ) : null}
     </div>
   );
 }

@@ -7437,7 +7437,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/TrackCreditsPanel.tsx",
-    "snippet": "className=\"mt-2 text-[12.5px] font-semibold leading-tight text-slate-900 hover:underline\""
+    "snippet": "className=\"mt-2 text-[12.5px] font-semibold leading-tight text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -13752,17 +13752,7 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<svg viewBox=\"0 0 24 24\" fill={currentLiked ? \"#FF5470\" : \"none\"} stroke={currentLiked ? \"#FF5470\" : \"currentColor\"} strokeWidth=\"2.2\" strokeLinecap=\"round\" strokeLinejoin=\"round\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "className=\"fixed inset-0 z-[120] bg-[#00062B] flex flex-col\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<span className=\"text-[10px] font-semibold text-white px-1.5 py-0.5 rounded-md flex-shrink-0\" style={{ background: \"rgba(0,0,0,0.55)\" }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -13882,7 +13872,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-white/55 text-[13px] mt-1.5 truncate max-w-full\" data-testid=\"text-performer-context\">On &ldquo;{song.title}&rdquo;</p>"
+    "snippet": "<p className=\"text-white/55 text-[13px] mt-1.5 truncate max-w-full\" data-testid=\"text-performer-context\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14243,11 +14233,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<p className=\"text-white/55 text-[13px] break-all\">{url}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-white text-center text-[15px] mb-4\" data-testid=\"text-photo-caption\">{current.caption}</p>"
   },
   {
     "rule": "hardcoded-font-size",

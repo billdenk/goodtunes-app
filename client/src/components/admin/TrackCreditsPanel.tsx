@@ -229,7 +229,7 @@ function PersonColumn({
       {linkHref && !editing ? (
         <Link
           href={linkHref}
-          className="mt-2 text-[12.5px] font-semibold leading-tight text-slate-900 hover:underline"
+          className="mt-2 text-[12.5px] font-semibold leading-tight text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
           data-testid={`link-person-name-${p.key}`}
         >
           {p.name}

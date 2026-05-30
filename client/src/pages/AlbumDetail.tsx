@@ -152,7 +152,7 @@ function AlbumDetailMobile() {
   const [songMenuFor, setSongMenuFor] = useState<{ song: Song; rect: DOMRect } | null>(null);
   const [creditsForSong, setCreditsForSong] = useState<Song | null>(null);
   const [showAlbumCredits, setShowAlbumCredits] = useState(false);
-  const [performerSheet, setPerformerSheet] = useState<{ person: Person; song: Song; creditId?: string } | null>(null);
+  const [performerSheet, setPerformerSheet] = useState<{ person: Person; song?: Song; creditId?: string; contextLabel?: string } | null>(null);
   const [instrumentSheet, setInstrumentSheet] = useState<{ instrument: Instrument; tuningNotes?: string; attribution?: { personId: string; songId: string } } | null>(null);
   const [inAppBrowser, setInAppBrowser] = useState<{ url: string; title: string; logoUrl?: string } | null>(null);
   // Wrap setInAppBrowser so every in-app browser open from a vendor row
@@ -907,12 +907,15 @@ function AlbumDetailMobile() {
             person={performerSheet.person}
             song={performerSheet.song}
             album={album}
+            contextLabel={performerSheet.contextLabel}
             selectedCreditId={performerSheet.creditId}
-            currentSongCredits={getCredits(performerSheet.song.id)}
-            otherTracks={getTracksForPerformer({
-              personId: performerSheet.person.id.startsWith("unlinked-") ? undefined : performerSheet.person.id,
-              creditId: performerSheet.creditId,
-            }).filter(({ song: s }) => s.id !== performerSheet.song.id)}
+            currentSongCredits={performerSheet.song ? getCredits(performerSheet.song.id) : undefined}
+            otherTracks={performerSheet.song
+              ? getTracksForPerformer({
+                  personId: performerSheet.person.id.startsWith("unlinked-") ? undefined : performerSheet.person.id,
+                  creditId: performerSheet.creditId,
+                }).filter(({ song: s }) => s.id !== performerSheet.song!.id)
+              : []}
             resolveInstrument={(iid) => (iid ? instrumentsById.get(iid) : undefined)}
             onOpenInstrument={(instrument, tuningNotes, attribution) => setInstrumentSheet({ instrument, tuningNotes, attribution })}
             onClose={() => setPerformerSheet(null)}
@@ -938,20 +941,24 @@ function AlbumDetailMobile() {
             albumTitle={album.title}
             artist={album.artist}
             rows={productionCredits}
-            onOpenPerson={(personId) => {
+            onOpenPerson={(personId, role) => {
               const person = peopleById.get(personId);
               if (!person) return;
-              const ctxSong =
-                songs.find((s) => {
-                  const c = getCredits(s.id);
-                  return (
-                    c?.performers.some((p) => p.personId === personId) ||
-                    c?.writers.some((w) => w.personId === personId)
-                  );
-                }) ?? songs[0];
-              if (!ctxSong) return;
+              // Lead with the song this person actually performs/writes on so
+              // the Music tab opens with context. Production-only credits
+              // (Mastered by, A&R, …) won't match any track — those open from
+              // album + person alone, leading with About and the role as the
+              // subtitle, instead of dead-ending.
+              const ctxSong = songs.find((s) => {
+                const c = getCredits(s.id);
+                return (
+                  c?.performers.some((p) => p.personId === personId) ||
+                  c?.writers.some((w) => w.personId === personId)
+                );
+              });
               setShowAlbumCredits(false);
-              setPerformerSheet({ person, song: ctxSong });
+              setPerformerSheet({ person, song: ctxSong, contextLabel: role });
+              track("credits_person_clicked", { personId, albumId: album.id });
             }}
             onClose={() => setShowAlbumCredits(false)}
           />
@@ -1718,6 +1725,7 @@ function PerformerSheet({
   person,
   song,
   album,
+  contextLabel,
   selectedCreditId,
   currentSongCredits,
   otherTracks,
@@ -1726,8 +1734,15 @@ function PerformerSheet({
   onClose,
 }: {
   person: Person;
-  song: Song;                  // The song we're focused on — drives "instruments on this song"
+  // The song we're focused on — drives "instruments on this song". Optional:
+  // production-only credits (Mastered by / A&R) and the desktop credits sheet
+  // open this from album + person alone, with no track context.
+  song?: Song;
   album: Album;
+  // Subtitle shown under the name when there's no song context — e.g. the
+  // credited role ("Mastered by"). Ignored when a song is present (the song
+  // title leads instead).
+  contextLabel?: string;
   // Stable credit-row id of the originally-clicked row. Required to match
   // unlinked (personId === null) snapshot performers; ignored when the
   // resolved person has a real id.
@@ -1739,10 +1754,11 @@ function PerformerSheet({
   onOpenInstrument: (instrument: Instrument, tuningNotes?: string, attribution?: { personId: string; songId: string }) => void;
   onClose: () => void;
 }) {
-  // Default to Music: the sheet is reached from a song row, so the
-  // song-context view ("Played on this song" + "Also on this album") has
-  // to lead. About/Gear are explicit opt-ins.
-  const [tab, setTab] = useState<"about" | "music" | "gear">("music");
+  // Default to Music when reached from a song row, so the song-context view
+  // ("Played on this song" + "Also on this album") leads. With no song
+  // context (production-only credits, desktop credits sheet) there's nothing
+  // song-scoped to show, so lead with About instead.
+  const [tab, setTab] = useState<"about" | "music" | "gear">(song ? "music" : "about");
 
   // What this performer played on the CURRENT song. Match by personId when
   // we have a real one; otherwise fall back to the credit row id so unlinked
@@ -1839,7 +1855,7 @@ function PerformerSheet({
         entry.tracks.add(songId);
         byInstrument.set(instrumentId, entry);
       };
-      for (const p of onThisSong) add(p.instrumentId, song.id);
+      for (const p of onThisSong) add(p.instrumentId, song?.id ?? "");
       for (const { song: s, performer } of otherTracks) add(performer.instrumentId, s.id);
     }
     return Array.from(byInstrument.values())
@@ -1879,7 +1895,7 @@ function PerformerSheet({
   };
 
   return (
-    <SheetShell ariaLabel={`${person.name} on ${song.title}`} testId="sheet-performer" variant="fixed" onClose={onClose}>
+    <SheetShell ariaLabel={song ? `${person.name} on ${song.title}` : person.name} testId="sheet-performer" variant="fixed" onClose={onClose}>
       {/* HERO — non-scrolling. Apple-Music-style centered avatar + name +
           contextual subtitle. The close button sits in the safe top-right
           corner clear of the avatar. */}
@@ -1896,7 +1912,11 @@ function PerformerSheet({
         <div className="flex flex-col items-center text-center px-5 pt-3 pb-5">
           <PersonAvatar person={person} size={120} />
           <h2 className="text-white text-[26px] font-bold leading-tight tracking-tight mt-4" data-testid="text-performer-name">{person.name}</h2>
-          <p className="text-white/55 text-[13px] mt-1.5 truncate max-w-full" data-testid="text-performer-context">On &ldquo;{song.title}&rdquo;</p>
+          {(song || contextLabel) && (
+            <p className="text-white/55 text-[13px] mt-1.5 truncate max-w-full" data-testid="text-performer-context">
+              {song ? <>On &ldquo;{song.title}&rdquo;</> : contextLabel}
+            </p>
+          )}
         </div>
       </div>
 
@@ -1951,9 +1971,9 @@ function PerformerSheet({
       {/* ABOUT */}
       {tab === "about" && (
         <div>
-          {person.bio ? (
+          {(profile?.person.bio ?? person.bio) ? (
             <p className="px-5 pt-4 text-white/80 text-[15px] leading-[1.55] whitespace-pre-line" data-testid="text-performer-bio">
-              {person.bio}
+              {profile?.person.bio ?? person.bio}
             </p>
           ) : (
             <p className="px-5 pt-4 text-white/45 text-[14px]">No bio yet for {person.name}.</p>
@@ -1998,7 +2018,7 @@ function PerformerSheet({
                     <button
                       key={`inst-${i}`}
                       type="button"
-                      onClick={() => onOpenInstrument(inst, perf.tuningNotes, { personId: person.id, songId: song.id })}
+                      onClick={() => onOpenInstrument(inst, perf.tuningNotes, { personId: person.id, songId: song?.id ?? "" })}
                       className="w-full flex items-center gap-3 px-5 py-2.5 text-left active:bg-white/5"
                       data-testid={`button-performer-song-instrument-${perf.instrumentId}`}
                     >
@@ -2131,7 +2151,7 @@ function PerformerSheet({
                   g.id,
                   { name: g.name, category: g.category, shortCategory: g.shortCategory, photoUrl: g.photoUrl },
                   null,
-                  song.id,
+                  song?.id ?? "",
                 )}
                 className="w-full flex items-center gap-3 px-5 py-2.5 text-left active:bg-white/5"
                 data-testid={`button-performer-gear-${g.id}`}
@@ -2160,6 +2180,118 @@ function PerformerSheet({
       )}
       </div>
     </SheetShell>
+  );
+}
+
+// Self-contained person sheet for surfaces that have no SuperCredits sheet
+// stack of their own (today: the desktop album view's credits sheet). Opens
+// straight to a person — no song context — leading with About and the
+// credited role as the subtitle. Manages its own instrument/vendor/in-app
+// browser sub-stack + bookmark persistence so the Gear/Music tabs stay fully
+// interactive without the caller wiring any of it.
+export function PersonDetailSheet({
+  person,
+  album,
+  contextLabel,
+  onClose,
+}: {
+  person: Person;
+  album: Album;
+  contextLabel?: string;
+  onClose: () => void;
+}) {
+  const [instrumentSheet, setInstrumentSheet] = useState<{ instrument: Instrument; tuningNotes?: string; attribution?: { personId: string; songId: string } } | null>(null);
+  const [vendorSheet, setVendorSheet] = useState<{ vendor: InstrumentVendor; instrument: Instrument } | null>(null);
+  const [inAppBrowser, setInAppBrowser] = useState<{ url: string; title: string; logoUrl?: string } | null>(null);
+  const openVendorInAppBrowser = (b: { url: string; title: string; logoUrl?: string }) => {
+    try {
+      const domain = new URL(b.url).hostname.replace(/^www\./, "");
+      track("gear_vendor_clicked", { vendorName: b.title, vendorDomain: domain, url: b.url });
+    } catch {}
+    setInAppBrowser(b);
+  };
+  const [bookmarkedInstruments, setBookmarkedInstruments] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = window.localStorage.getItem("gt:bookmarked-instruments");
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch { return new Set(); }
+  });
+  const toggleBookmarkInstrument = (instrumentId: string) => {
+    setBookmarkedInstruments((prev) => {
+      const next = new Set(prev);
+      if (next.has(instrumentId)) next.delete(instrumentId); else next.add(instrumentId);
+      try { window.localStorage.setItem("gt:bookmarked-instruments", JSON.stringify(Array.from(next))); } catch {}
+      return next;
+    });
+  };
+  const [bookmarkedVendors, setBookmarkedVendors] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = window.localStorage.getItem("gt:bookmarked-vendors");
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+    } catch { return new Set(); }
+  });
+  const toggleBookmarkVendor = (vendorId: string) => {
+    setBookmarkedVendors((prev) => {
+      const next = new Set(prev);
+      if (next.has(vendorId)) next.delete(vendorId); else next.add(vendorId);
+      try { window.localStorage.setItem("gt:bookmarked-vendors", JSON.stringify(Array.from(next))); } catch {}
+      return next;
+    });
+  };
+
+  if (inAppBrowser) {
+    return (
+      <InAppBrowserSheet
+        url={inAppBrowser.url}
+        title={inAppBrowser.title}
+        logoUrl={inAppBrowser.logoUrl}
+        onClose={() => setInAppBrowser(null)}
+      />
+    );
+  }
+  if (vendorSheet) {
+    return (
+      <VendorSheet
+        vendor={vendorSheet.vendor}
+        instrument={vendorSheet.instrument}
+        isBookmarked={!!vendorSheet.vendor.vendorId && bookmarkedVendors.has(vendorSheet.vendor.vendorId)}
+        onToggleBookmark={() => vendorSheet.vendor.vendorId && toggleBookmarkVendor(vendorSheet.vendor.vendorId)}
+        onOpenInAppBrowser={openVendorInAppBrowser}
+        onOpenInstrument={(inst) => {
+          setVendorSheet(null);
+          setInstrumentSheet({ instrument: inst });
+        }}
+        onClose={() => setVendorSheet(null)}
+      />
+    );
+  }
+  if (instrumentSheet) {
+    return (
+      <InstrumentSheet
+        instrument={instrumentSheet.instrument}
+        tuningNotes={instrumentSheet.tuningNotes}
+        attribution={instrumentSheet.attribution}
+        isBookmarked={bookmarkedInstruments.has(instrumentSheet.instrument.id)}
+        onToggleBookmark={() => toggleBookmarkInstrument(instrumentSheet.instrument.id)}
+        onOpenInAppBrowser={openVendorInAppBrowser}
+        onOpenVendor={(vendor) => setVendorSheet({ vendor, instrument: instrumentSheet.instrument })}
+        onClose={() => setInstrumentSheet(null)}
+      />
+    );
+  }
+  return (
+    <PerformerSheet
+      person={person}
+      album={album}
+      contextLabel={contextLabel}
+      currentSongCredits={undefined}
+      otherTracks={[]}
+      resolveInstrument={(iid) => (iid ? INSTRUMENTS[iid] : undefined)}
+      onOpenInstrument={(instrument, tuningNotes, attribution) => setInstrumentSheet({ instrument, tuningNotes, attribution })}
+      onClose={onClose}
+    />
   );
 }
 

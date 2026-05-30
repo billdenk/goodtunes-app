@@ -35,7 +35,7 @@ export function AlbumCreditsSheet({
   albumTitle: string;
   artist: string;
   rows: AlbumCreditsRow[];
-  onOpenPerson?: (personId: string) => void;
+  onOpenPerson?: (personId: string, role: string) => void;
   onClose: () => void;
 }) {
   const byRole = useMemo(() => {
@@ -99,24 +99,33 @@ export function AlbumCreditsSheet({
                       {initialsOf(e.name)}
                     </span>
                   );
-                  const inner = (
-                    <span className="inline-flex items-center gap-3 py-1.5">
-                      {avatar}
-                      <span className="text-white text-base font-normal leading-snug tracking-[-0.01em]">
-                        {e.name}
-                      </span>
-                    </span>
-                  );
                   if (e.personId && onOpenPerson) {
                     return (
                       <li key={e.key}>
                         <button
                           type="button"
-                          onClick={() => onOpenPerson(e.personId!)}
-                          className="self-start text-left active:opacity-70 hover:opacity-90 transition-opacity"
+                          onClick={() => onOpenPerson(e.personId!, role)}
+                          className="group -mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.06] active:bg-white/10"
                           data-testid={`link-album-credit-person-${e.personId}`}
                         >
-                          {inner}
+                          {avatar}
+                          <span className="flex-1 min-w-0 truncate text-white text-base font-normal leading-snug tracking-[-0.01em]">
+                            {e.name}
+                          </span>
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="flex-shrink-0 text-white/25 transition-colors group-hover:text-white/45"
+                            aria-hidden="true"
+                          >
+                            <path d="M9 6l6 6-6 6" />
+                          </svg>
                         </button>
                       </li>
                     );
@@ -124,10 +133,13 @@ export function AlbumCreditsSheet({
                   return (
                     <li
                       key={e.key}
-                      className="self-start"
+                      className="flex items-center gap-3 py-1.5"
                       data-testid={`text-album-credit-${e.key}`}
                     >
-                      {inner}
+                      {avatar}
+                      <span className="text-white text-base font-normal leading-snug tracking-[-0.01em]">
+                        {e.name}
+                      </span>
                     </li>
                   );
                 })}
