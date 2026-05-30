@@ -561,22 +561,26 @@ export function Collection() {
               )}
               </AnimatePresence>
             </div>
-            <div className="relative flex flex-1 p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.07)" }}>
-              <div
-                className="absolute top-1 bottom-1 rounded-lg transition-all duration-200"
-                style={{
-                  width: "calc(33.333% - 3px)",
-                  left: tab === "albums" ? "4px" : tab === "songs" ? "calc(33.333% + 1px)" : "calc(66.666% - 2px)",
-                  background: "rgba(49,158,216,0.22)",
-                  boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
-                }}
-              />
+            {/* Apple-Music category pills: each scope is its own rounded
+                pill (selected = solid accent fill, the rest ghosted) in a
+                horizontally-scrollable row, instead of a boxed segmented
+                control with a sliding indicator. min-w-0 lets the row shrink
+                + scroll within the flex parent so the Filter button stays put.
+                `transition` (not `all`) covers both the color + press-scale
+                without a framer transform conflict. */}
+            <div className="flex flex-1 min-w-0 items-center gap-2 overflow-x-auto scrollbar-hide">
               {(["albums", "songs", "artists"] as LibraryTab[]).map((t) => (
                 <button
                   key={t}
                   type="button"
                   onClick={() => setTab(t)}
-                  className={`relative flex-1 py-2 rounded-lg text-xs font-semibold capitalize transition-colors duration-150 ${tab === t ? "text-[#319ED8]" : "text-white/45"}`}
+                  className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold capitalize transition active:scale-[0.96] ${tab === t ? "" : "text-white/55"}`}
+                  style={{
+                    background: tab === t ? "var(--brand-blue)" : "rgba(255,255,255,0.08)",
+                    // Navy-on-blue for the selected pill: ~6.8:1 contrast (AA)
+                    // vs. white-on-blue's ~3:1, which fails at this 14px size.
+                    color: tab === t ? "var(--brand-bg)" : undefined,
+                  }}
                   data-testid={`tab-${t}`}
                 >
                   {t}
