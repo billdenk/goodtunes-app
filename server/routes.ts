@@ -15241,9 +15241,161 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ ok: true });
   });
 
+  // Task #778: a fan's "Recently Searched" history can hold entity rows
+  // (People / Vendors / Labels) they tapped *before* Task #776 scoped live
+  // search results to the collection. Those rows were stamped at the time
+  // and aren't re-validated on render, so a person/vendor/label no longer
+  // connected to any fan-visible release would still surface here and deep
+  // link into the /account/bookmarks fallback. Re-apply the same
+  // collection-scope rule the live GET /api/search handler uses, at read
+  // time, so stale entries silently drop out. Albums, songs, artists,
+  // playlists, and bonus content are left untouched.
+  async function pruneStaleFanRecentSearchEntities<T extends { entityKind: string | null; entityId: string | null }>(
+    rows: T[],
+  ): Promise<T[]> {
+    const SCOPED = new Set(["person", "vendor", "label"]);
+    const needsCheck = rows.filter((r) => r.entityKind && SCOPED.has(r.entityKind) && r.entityId);
+    if (needsCheck.length === 0) return rows;
+
+    const personIds = Array.from(new Set(needsCheck.filter((r) => r.entityKind === "person").map((r) => r.entityId!)));
+    const vendorIds = Array.from(new Set(needsCheck.filter((r) => r.entityKind === "vendor").map((r) => r.entityId!)));
+    const labelIds = Array.from(new Set(needsCheck.filter((r) => r.entityKind === "label").map((r) => r.entityId!)));
+
+    // Universe of fan-visible album ids (curated GoodTunes releases, not
+    // prepping, not hidden, not trashed) — the same gate the search
+    // handler builds. No fan-visible albums ⇒ nothing can be connected,
+    // so every scoped recent entry is stale.
+    const fanAlbums = await db
+      .select({ id: albums.id })
+      .from(albums)
+      .where(and(
+        eq(albums.isGoodTunesRelease, true),
+        eq(albums.isPrepping, false),
+        eq(albums.isHidden, false),
+        isNull(albums.deletedAt),
+      ));
+    const fanAlbumIdSql = fanAlbums.length ? sql.join(fanAlbums.map((a) => sql`${a.id}`), sql`, `) : null;
+
+    const validPeople = new Set<string>();
+    const validVendors = new Set<string>();
+    const validLabels = new Set<string>();
+
+    if (fanAlbumIdSql) {
+      if (personIds.length) {
+        const idSql = sql.join(personIds.map((id) => sql`${id}`), sql`, `);
+        const r = await db.execute(sql`
+          SELECT p.id
+            FROM people p
+           WHERE p.deleted_at IS NULL
+             AND p.id IN (${idSql})
+             AND (
+               EXISTS (
+                 SELECT 1 FROM albums a
+                  WHERE a.primary_artist_id = p.id
+                    AND a.id IN (${fanAlbumIdSql})
+               )
+               OR EXISTS (
+                 SELECT 1 FROM album_credits ac
+                  WHERE ac.person_id = p.id
+                    AND ac.deleted_at IS NULL
+                    AND ac.album_id IN (${fanAlbumIdSql})
+               )
+               OR EXISTS (
+                 SELECT 1 FROM album_lineup al
+                  WHERE al.member_id = p.id
+                    AND al.album_id IN (${fanAlbumIdSql})
+               )
+               OR EXISTS (
+                 SELECT 1 FROM track_writers tw
+                   JOIN songs s ON s.id = tw.song_id
+                  WHERE tw.person_id = p.id
+                    AND tw.deleted_at IS NULL
+                    AND s.deleted_at IS NULL
+                    AND s.album_id IN (${fanAlbumIdSql})
+               )
+               OR EXISTS (
+                 SELECT 1 FROM track_performers tp
+                   JOIN songs s ON s.id = tp.song_id
+                  WHERE tp.person_id = p.id
+                    AND tp.deleted_at IS NULL
+                    AND s.deleted_at IS NULL
+                    AND s.album_id IN (${fanAlbumIdSql})
+               )
+             )
+        `);
+        (r.rows as any[]).forEach((row) => validPeople.add(String(row.id)));
+      }
+
+      if (vendorIds.length) {
+        const idSql = sql.join(vendorIds.map((id) => sql`${id}`), sql`, `);
+        const r = await db.execute(sql`
+          SELECT v.id
+            FROM vendors v
+           WHERE v.deleted_at IS NULL
+             AND v.id IN (${idSql})
+             AND (
+               EXISTS (
+                 SELECT 1 FROM track_performers tp
+                   JOIN songs s ON s.id = tp.song_id
+                   JOIN instruments i ON i.id = tp.instrument_id
+                  WHERE i.maker_vendor_id = v.id
+                    AND i.deleted_at IS NULL
+                    AND tp.deleted_at IS NULL
+                    AND s.deleted_at IS NULL
+                    AND s.album_id IN (${fanAlbumIdSql})
+               )
+               OR EXISTS (
+                 SELECT 1 FROM track_performers tp
+                   JOIN songs s ON s.id = tp.song_id
+                   JOIN instrument_vendors iv ON iv.instrument_id = tp.instrument_id
+                  WHERE iv.vendor_id = v.id
+                    AND tp.deleted_at IS NULL
+                    AND s.deleted_at IS NULL
+                    AND s.album_id IN (${fanAlbumIdSql})
+               )
+               OR EXISTS (
+                 SELECT 1 FROM album_addons aa
+                  WHERE aa.album_id IN (${fanAlbumIdSql})
+                    AND (
+                      aa.print_vendor_id = v.id
+                      OR aa.hologram_vendor_id = v.id
+                      OR aa.insertion_vendor_id = v.id
+                    )
+               )
+             )
+        `);
+        (r.rows as any[]).forEach((row) => validVendors.add(String(row.id)));
+      }
+
+      if (labelIds.length) {
+        const idSql = sql.join(labelIds.map((id) => sql`${id}`), sql`, `);
+        const r = await db.execute(sql`
+          SELECT l.id
+            FROM labels l
+           WHERE l.deleted_at IS NULL
+             AND l.id IN (${idSql})
+             AND EXISTS (
+               SELECT 1 FROM albums a
+                WHERE a.label_id = l.id
+                  AND a.id IN (${fanAlbumIdSql})
+             )
+        `);
+        (r.rows as any[]).forEach((row) => validLabels.add(String(row.id)));
+      }
+    }
+
+    return rows.filter((r) => {
+      if (!r.entityKind || !SCOPED.has(r.entityKind)) return true;
+      if (r.entityKind === "person") return validPeople.has(r.entityId!);
+      if (r.entityKind === "vendor") return validVendors.has(r.entityId!);
+      if (r.entityKind === "label") return validLabels.has(r.entityId!);
+      return true;
+    });
+  }
+
   app.get("/api/me/recent-searches", requireCustomer, async (req, res) => {
     const rows = await storage.listFanRecentSearches(req.session.userId!);
-    return res.json(rows);
+    return res.json(await pruneStaleFanRecentSearchEntities(rows));
   });
   app.post("/api/me/recent-searches", requireCustomer, async (req, res) => {
     const body = req.body ?? {};
