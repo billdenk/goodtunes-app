@@ -378,25 +378,46 @@ export function BottomNav() {
         </AnimatePresence>
 
         {/* RIGHT — the search/close toggle. Diameter == pillow height so
-            it reads as the same rhythm; tapping toggles the field. */}
-        <button
+            it reads as the same rhythm; tapping toggles the field.
+            Bounce: the size morph between the 48px scrolled puck and the
+            full-height dock circle now springs with a small overshoot
+            (matching the left pillow/puck) instead of snapping, and the
+            glyph pops when it swaps search↔close. framer owns the
+            transform, so whileTap replaces the old CSS active:scale-95. */}
+        <motion.button
           type="button"
           onClick={onToggleSearch}
           aria-label={searchOpen ? "Close search" : "Search"}
-          className={`pointer-events-auto absolute right-3 flex items-center justify-center rounded-full active:scale-95 ${searchOpen ? "text-[color:var(--brand-blue)]" : "text-white/80"}`}
+          className={`pointer-events-auto absolute right-3 flex items-center justify-center rounded-full ${searchOpen ? "text-[color:var(--brand-blue)]" : "text-white/80"}`}
           style={{
             // Top-anchored field (Task #770) — the toggle no longer needs
             // to dodge the keyboard, so it rests at the bottom dock.
             bottom: 12,
-            width: toggleSize,
-            height: toggleSize,
             ...glassStyle,
-            transition: "transform 150ms ease",
           }}
+          animate={{ width: toggleSize, height: toggleSize }}
+          transition={
+            reduceMotion
+              ? { duration: 0 }
+              : { type: "spring", stiffness: 500, damping: 18, mass: 0.9 }
+          }
+          whileTap={reduceMotion ? undefined : { scale: 0.92 }}
           data-testid="nav-search"
         >
-          {searchOpen ? closeIcon : searchIcon}
-        </button>
+          <motion.span
+            key={searchOpen ? "close" : "search"}
+            className="flex items-center justify-center"
+            initial={reduceMotion ? false : { scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : { type: "spring", stiffness: 520, damping: 20, mass: 0.7 }
+            }
+          >
+            {searchOpen ? closeIcon : searchIcon}
+          </motion.span>
+        </motion.button>
       </div>
 
       {/* Top-anchored search field (Task #770) — sits under the
