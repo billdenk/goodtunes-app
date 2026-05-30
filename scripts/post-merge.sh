@@ -2557,3 +2557,34 @@ SQL
 }
 migrate_latent_drift_sweep dev  "${DATABASE_URL:-}"
 migrate_latent_drift_sweep prod "${PROD_DATABASE_URL:-}"
+
+# Task #793 — 7" booklet becomes an either/or VARIANT (7" alone vs
+# 7" + booklet at a flat set price), not a stacked add-on. Two new
+# columns ship in shared/schema.ts:
+#   - album_addons.bundle_price_cents — the flat "with booklet" set
+#     price for the 7" anchor (nullable; NULL falls back to sku price
+#     + addon price so legacy standalone booklet add-ons map to "with
+#     booklet" without double-charging).
+#   - order_copies.booklet — per-copy record of whether the booklet was
+#     included in that physical copy (default false).
+# buy-options/checkout/materialize all read these, so the columns must
+# exist on both DBs. Idempotent ADD COLUMN IF NOT EXISTS so the publish
+# dev→prod diff stays empty.
+migrate_task_793_booklet_bundle() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-793 booklet-bundle migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE album_addons ADD COLUMN IF NOT EXISTS bundle_price_cents integer;
+ALTER TABLE order_copies  ADD COLUMN IF NOT EXISTS booklet boolean NOT NULL DEFAULT false;
+SQL
+  then
+    echo "post-merge: task-793 booklet-bundle migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-793 booklet-bundle migration failed on $label (continuing)"
+  fi
+}
+migrate_task_793_booklet_bundle dev  "${DATABASE_URL:-}"
+migrate_task_793_booklet_bundle prod "${PROD_DATABASE_URL:-}"

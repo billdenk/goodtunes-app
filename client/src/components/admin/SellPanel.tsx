@@ -606,6 +606,7 @@ export function SellPanel({
       minPriceCents: number;
       plannedQuantity: number | null;
       artworkUrl?: string | null;
+      bundlePriceCents?: number | null;
     }) => {
       const r = await apiRequest("PUT", `/api/admin/albums/${albumId}/addons/booklet`, body);
       return r.json();
@@ -2154,6 +2155,7 @@ function SkuRow({
     minPriceCents: number;
     plannedQuantity: number | null;
     artworkUrl?: string | null;
+    bundlePriceCents?: number | null;
   }) => void;
   // Task #397 — forwarded into the GoodDeed cert preview tile.
   albumTitle?: string;
@@ -6153,6 +6155,19 @@ function SkuRow({
               setOpenUpsell((k) => (k === "booklet" ? null : "booklet"))
             }
             bodyContainer={upsellBodyEl}
+            // Task #793 — the booklet is an either/or VARIANT only on the
+            // 7" single. The bundle cost is the 7" vinyl unit cost (mfg +
+            // publishing + GoodTunes, NO standalone CC fee — one charge
+            // carries one CC fee) so the pill can show an honest profit.
+            bundleEligible={format === "7_inch"}
+            anchorVinylCostCents={
+              format === "7_inch" && breakdown && effectiveManufacturingCents !== null
+                ? effectiveManufacturingCents +
+                  breakdown.publishingCents +
+                  breakdown.goodtunesCents
+                : null
+            }
+            anchorVinylPriceCents={format === "7_inch" ? priceCents : null}
           />
         ) : null}
         {/* Task #687 — Add-on menu completeness. The full upsell menu on a
@@ -7098,6 +7113,9 @@ function BookletPill({
   open,
   onToggle,
   bodyContainer,
+  bundleEligible,
+  anchorVinylCostCents,
+  anchorVinylPriceCents,
 }: {
   albumId: string;
   existing: AlbumAddon | null;
@@ -7107,10 +7125,21 @@ function BookletPill({
     minPriceCents: number;
     plannedQuantity: number | null;
     artworkUrl?: string | null;
+    bundlePriceCents?: number | null;
   }) => void;
   open: boolean;
   onToggle: () => void;
   bodyContainer: HTMLElement | null;
+  // Task #793 — when the booklet anchor is the 7" single, the booklet is
+  // sold as an either/or VARIANT ("7\" + booklet") at a flat set price.
+  // `anchorVinylCostCents` is the 7" per-unit cost (mfg + publishing +
+  // GoodTunes, EXCLUDING the standalone CC fee — the bundle is one
+  // charge so it carries a single CC fee); `anchorVinylPriceCents` is
+  // the 7"-alone retail used for the legacy summed-price hint. Both
+  // null on a cassette anchor, where the booklet stays a stacked add-on.
+  bundleEligible?: boolean;
+  anchorVinylCostCents?: number | null;
+  anchorVinylPriceCents?: number | null;
 }) {
   const { toast } = useToast();
   const [active, setActive] = useState(existing?.active ?? false);
@@ -7120,6 +7149,41 @@ function BookletPill({
   const [floorStr, setFloorStr] = useState(
     existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99",
   );
+  // Task #793 — flat "7\" + booklet" set price (booklet anchor on a 7"
+  // only). A FRESH addon defaults to $25 (the spec'd bundle price); an
+  // EXISTING addon shows its stored bundle price; a LEGACY existing addon
+  // (no stored bundle price) shows the 7"-alone + booklet sum so the
+  // operator sees today's fan-facing price. We must NOT persist that
+  // synthetic value unless the operator actually edits the field — else
+  // unrelated saves (artwork / active / qty) would silently re-price a
+  // legacy album to $25. `bundleTouched` gates persistence.
+  const isLegacyBundle = !!existing && existing.bundlePriceCents == null;
+  const [bundleStr, setBundleStr] = useState(
+    existing?.bundlePriceCents != null
+      ? (existing.bundlePriceCents / 100).toFixed(2)
+      : "25.00",
+  );
+  const [bundleTouched, setBundleTouched] = useState(false);
+  // Legacy display: once the 7" anchor price is known, show the real
+  // fan-facing with-booklet sum for a legacy row (until the operator
+  // edits it). Programmatic — never flips `bundleTouched`.
+  useEffect(() => {
+    if (bundleTouched || !isLegacyBundle) return;
+    if (anchorVinylPriceCents == null || !existing) return;
+    setBundleStr(((anchorVinylPriceCents + existing.priceCents) / 100).toFixed(2));
+  }, [bundleTouched, isLegacyBundle, anchorVinylPriceCents, existing]);
+  // What to send for bundlePriceCents on ANY save path:
+  //  · not a 7" anchor    → undefined (column irrelevant)
+  //  · operator edited it → the typed value (explicit null clears it)
+  //  · legacy, untouched  → undefined (leave NULL → fan keeps sku+addon)
+  //  · fresh / explicit   → current value ($25 default or stored price)
+  const bundlePriceForSave: number | null | undefined = !bundleEligible
+    ? undefined
+    : bundleTouched
+      ? parseDollars(bundleStr) ?? null
+      : isLegacyBundle
+        ? undefined
+        : parseDollars(bundleStr) ?? null;
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   // Quantity snaps to a per-vendor rung. "other" lets the operator
   // type a custom planned-run, which the server snaps UP to the next
@@ -7195,6 +7259,7 @@ function BookletPill({
         minPriceCents: parseDollars(floorStr) ?? 0,
         plannedQuantity: resolvedQty > 0 ? resolvedQty : null,
         artworkUrl: url,
+        bundlePriceCents: bundlePriceForSave,
       });
       toast({ title: "Booklet artwork uploaded" });
     },
@@ -7215,6 +7280,7 @@ function BookletPill({
       minPriceCents: parseDollars(floorStr) ?? 0,
       plannedQuantity: resolvedQty > 0 ? resolvedQty : null,
       artworkUrl: null,
+      bundlePriceCents: bundlePriceForSave,
     });
   };
 
@@ -7248,6 +7314,30 @@ function BookletPill({
         ? `-${dollars(Math.abs(netPerUnitCents))}`
         : dollars(netPerUnitCents);
 
+  // Task #793 — "7\" + booklet" bundle profit (anchor on a 7" only). The
+  // set price is one charge, so it carries a single CC fee; the cost is
+  // the 7" vinyl unit cost (mfg + publishing + GoodTunes, no standalone
+  // CC fee) plus the booklet wholesale unit cost.
+  const bundleCents = useMemo(() => parseDollars(bundleStr), [bundleStr]);
+  const bundleCcFeeCents =
+    bundleCents !== null ? Math.round(bundleCents * 0.029) + 30 : null;
+  const bundleVinylCostCents = anchorVinylCostCents ?? null;
+  const bundleCostCents =
+    bundleVinylCostCents !== null && costCents !== null
+      ? bundleVinylCostCents + costCents
+      : null;
+  const bundleNetCents =
+    bundleCents !== null && bundleCostCents !== null && bundleCcFeeCents !== null
+      ? bundleCents - bundleCostCents - bundleCcFeeCents
+      : null;
+  const bundleLoss = bundleNetCents !== null && bundleNetCents < 0;
+  const bundleProfitLabel =
+    bundleNetCents === null
+      ? "—"
+      : bundleLoss
+        ? `-${dollars(Math.abs(bundleNetCents))}`
+        : dollars(bundleNetCents);
+
   const storedActive = existing?.active ?? false;
   const storedPrice = existing ? (existing.priceCents / 100).toFixed(2) : "9.99";
   const storedFloor = existing ? (existing.minPriceCents / 100).toFixed(2) : "4.99";
@@ -7265,6 +7355,7 @@ function BookletPill({
     (active !== storedActive ||
       priceStr !== storedPrice ||
       floorStr !== storedFloor ||
+      (bundleEligible && bundleTouched) ||
       (resolvedQty || null) !== storedQty);
   useEffect(() => {
     if (!dirty) return;
@@ -7276,6 +7367,8 @@ function BookletPill({
         active,
         minPriceCents: parseDollars(floorStr) ?? 0,
         plannedQuantity: resolvedQty > 0 ? resolvedQty : null,
+        // Task #793 — persist the set bundle price on a 7" anchor.
+        bundlePriceCents: bundlePriceForSave,
         // Don't re-send artworkUrl here — upload/remove mutations own
         // that field. Sending null on every debounce would clobber an
         // in-flight upload.
@@ -7283,7 +7376,7 @@ function BookletPill({
     }, 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dirty, priceStr, floorStr, active, resolvedQty]);
+  }, [dirty, priceStr, floorStr, bundleStr, active, resolvedQty]);
 
   const snappedQty = preview?.snappedQty ?? resolvedQty;
   const qtyDisplay =
@@ -7465,6 +7558,67 @@ function BookletPill({
                   </div>
                 </div>
               </div>
+
+              {/* Task #793 — On a 7" single the booklet is an either/or
+                  VARIANT, not a stacked add-on. The fan picks "7\" alone"
+                  (the SKU price) or "7\" + booklet" at this flat set price.
+                  Persisted as bundlePriceCents; profit nets the single
+                  CC fee against the 7" vinyl cost + booklet cost. */}
+              {bundleEligible && (
+                <div data-testid="row-booklet-bundle">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                      With-Booklet Price
+                    </span>
+                    <InfoTip
+                      label="About the with-booklet price"
+                      testId="info-booklet-bundle"
+                      text='The flat set price for the "7" + booklet" variant. Fans choose 7" alone or this — it replaces the SKU price, it does not stack on top.'
+                    />
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-slate-400 text-sm leading-9">$</span>
+                    <div className="flex flex-col">
+                      <input
+                        type="text"
+                        value={bundleStr}
+                        onChange={(e) => {
+                          setTouched(true);
+                          setBundleTouched(true);
+                          setBundleStr(e.target.value);
+                        }}
+                        onKeyDown={handlePriceFieldKeyDown}
+                        inputMode="decimal"
+                        className={`${fieldClass} w-32 tabular-nums`}
+                        data-testid="input-booklet-bundle-price"
+                        aria-label="Set price for 7-inch plus booklet"
+                      />
+                      <div className="text-xs text-slate-400 mt-1">
+                        {anchorVinylPriceCents != null
+                          ? `Set price for 7" + booklet (7" alone is ${dollars(anchorVinylPriceCents)}).`
+                          : 'Set price for the "7" + booklet" variant.'}
+                      </div>
+                      <div
+                        className="flex items-center gap-1.5 text-xs mt-1.5 tabular-nums"
+                        data-testid="row-booklet-bundle-profit"
+                      >
+                        <span className="text-slate-500">Bundle profit / unit</span>
+                        <span
+                          className={[
+                            "font-semibold",
+                            bundleLoss
+                              ? "text-[color:var(--brand-pink)]"
+                              : "text-slate-900",
+                          ].join(" ")}
+                          data-testid="text-booklet-bundle-profit"
+                        >
+                          {bundleProfitLabel}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <div className="flex items-center gap-1.5 mb-1">

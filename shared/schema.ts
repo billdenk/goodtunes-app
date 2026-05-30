@@ -1870,6 +1870,14 @@ export const albumAddons = pgTable(
     kind: text("kind").notNull(),
     priceCents: integer("price_cents").notNull(),
     minPriceCents: integer("min_price_cents").notNull().default(0),
+    // Task #793 — booklet-only. The single "7\" + booklet" set bundle
+    // price the fan pays for the with-booklet variant of the 7" single
+    // (NOT priceCents + sku price — a flat set price, default $25).
+    // NULL on legacy booklet rows (and all signed_cert rows); the fan
+    // + admin paths fall back to `sku.priceCents + addon.priceCents`
+    // so an existing standalone booklet add-on maps cleanly into the
+    // "with booklet" option without double-charging or disappearing.
+    bundlePriceCents: integer("bundle_price_cents"),
     // Task #119 — platform-cost price lock. When the artist saves the
     // signed_cert add-on we snapshot the live `payout_settings.cert_cost_cents`
     // onto this row, so admin's "You earn $X.XX per unit" readout stays
@@ -2395,6 +2403,12 @@ export const orderCopies = pgTable(
     position: integer("position").notNull().default(0),
     format: text("format").notNull(),
     signedCert: boolean("signed_cert").notNull().default(false),
+    // Task #793 — true when this copy is the "7\" + booklet" bundle
+    // variant (each with-booklet copy consumes one booklet from the
+    // run). `formatPriceCents` already holds the set bundle price the
+    // fan paid for this copy ($25 with booklet vs $15 alone), so the
+    // boolean is the fulfillment/run-consumption signal, not pricing.
+    booklet: boolean("booklet").notNull().default(false),
     formatPriceCents: integer("format_price_cents").notNull(),
     addonPriceCents: integer("addon_price_cents").notNull().default(0),
     goodDeedNumber: integer("good_deed_number"),
@@ -2870,6 +2884,8 @@ export const insertAlbumAddonSchema = createInsertSchema(albumAddons)
     // Task #121 — null = "as many as will sell"; positive int = fixed
     // planned quantity for the signed_cert print run.
     plannedQuantity: z.number().int().min(1).nullable().optional(),
+    // Task #793 — flat "7\" + booklet" set price (booklet add-on only).
+    bundlePriceCents: z.number().int().min(0).nullable().optional(),
   });
 export type InsertAlbumAddon = z.infer<typeof insertAlbumAddonSchema>;
 export type AlbumAddon = typeof albumAddons.$inferSelect;

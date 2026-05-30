@@ -270,6 +270,16 @@ async function listFormatCosts() {
   await Promise.all(ALBUM_FORMATS.map((f) => getFormatCost(f)));
   return db.select().from(payoutFormatCosts);
 }
+// Task #793 — resolve the flat "7\" + booklet" set price for the
+// with-booklet variant. New saves stamp `bundlePriceCents`; legacy
+// booklet add-ons (no bundle price) fall back to the old summed total
+// (7" alone price + standalone booklet add-on price) so an existing
+// add-on maps cleanly into the "with booklet" option — no double-charge,
+// nothing disappears. Callers pass the resolved 7" SKU alone price.
+function resolveBookletBundleCents(skuAlonePriceCents: number, addon: AlbumAddon): number {
+  return addon.bundlePriceCents ?? skuAlonePriceCents + addon.priceCents;
+}
+
 async function upsertAddon(input: {
   albumId: string;
   kind: AlbumAddonKind;
@@ -282,6 +292,9 @@ async function upsertAddon(input: {
   // `undefined` = leave the existing value alone; explicit `null`
   // clears the previously-uploaded art.
   artworkUrl?: string | null;
+  // Task #793 — flat "7\" + booklet" set price. `undefined` leaves the
+  // existing value; explicit null clears it (falls back to summed total).
+  bundlePriceCents?: number | null;
 }): Promise<AlbumAddon> {
   const setOnConflict: Record<string, unknown> = {
     priceCents: input.priceCents,
@@ -291,6 +304,7 @@ async function upsertAddon(input: {
     plannedQuantity: input.plannedQuantity,
   };
   if (input.artworkUrl !== undefined) setOnConflict.artworkUrl = input.artworkUrl;
+  if (input.bundlePriceCents !== undefined) setOnConflict.bundlePriceCents = input.bundlePriceCents;
   const [row] = await db
     .insert(albumAddons)
     .values(input)
@@ -655,6 +669,18 @@ export function registerCommerceRoutes(app: Express) {
     const visibleAddons = addons.filter(
       (a) => !(a.kind === "booklet" && !bookletEligible),
     );
+    // Task #793 — the 7" single sells the booklet as an either/or variant
+    // ("7\" alone" vs "7\" + booklet"), not a stacked add-on. Surface the
+    // resolved flat set price for the with-booklet option so the BuySheet
+    // can render two mutually-exclusive 7" prices. Null unless a 7" SKU
+    // AND an active booklet add-on both exist. Cassette keeps the legacy
+    // stacked toggle, so this only resolves against the 7" SKU.
+    const sevenSku = skus.find((s) => s.format === "7_inch") ?? null;
+    const bookletAddonRow = addons.find((a) => a.kind === "booklet") ?? null;
+    const bookletBundlePriceCents =
+      sevenSku && bookletAddonRow
+        ? resolveBookletBundleCents(sevenSku.priceCents, bookletAddonRow)
+        : null;
     res.json({
       albumId: album.id,
       title: album.title,
@@ -688,6 +714,9 @@ export function registerCommerceRoutes(app: Express) {
       })),
       signedCertSoldOut,
       bookletEligible,
+      // Task #793 — flat "7\" + booklet" set price for the either/or
+      // variant on the 7" single. Null when not applicable.
+      bookletBundlePriceCents,
     });
   });
 
@@ -1297,6 +1326,10 @@ export function registerCommerceRoutes(app: Express) {
     // Task #579 — booklet add-on carries its own print-ready cover.
     // Optional/null for signed_cert (which inherits the album jacket).
     artworkUrl: z.string().url().nullable().optional(),
+    // Task #793 — flat "7\" + booklet" set price (booklet add-on only).
+    // Omitted = leave the existing value; null clears it (falls back to
+    // the summed total). Ignored on signed_cert saves.
+    bundlePriceCents: z.number().int().min(0).nullable().optional(),
   });
   app.put("/api/admin/albums/:id/addons/:kind", requireAdmin, async (req, res) => {
     const album = await storage.getAlbumById(String(req.params.id), { includeHidden: true });
@@ -1355,6 +1388,9 @@ export function registerCommerceRoutes(app: Express) {
       costCentsSnapshot: costSnapshot,
       plannedQuantity: parsed.data.plannedQuantity ?? null,
       artworkUrl: parsed.data.artworkUrl,
+      // Task #793 — only the booklet add-on carries a bundle price.
+      bundlePriceCents:
+        parsed.data.kind === "booklet" ? parsed.data.bundlePriceCents : undefined,
     });
     res.json(row);
   });
@@ -1715,6 +1751,39 @@ export function registerCommerceRoutes(app: Express) {
       }
     }
 
+    // Task #793 — Resolve the booklet selection BEFORE building line items
+    // so the 7" either/or variant can fold into the format line at the
+    // flat set price (rather than stacking a separate booklet line). The
+    // 7" single uses the bundle; cassette keeps the legacy stacked add-on
+    // line (its booklet behaviour is intentionally left unchanged).
+    let isBookletBundle = false; // 7" "+ booklet" variant
+    let bookletBundleCents = 0;
+    if (parsed.data.booklet) {
+      if (!(BOOKLET_ELIGIBLE_FORMATS as readonly string[]).includes(sku.format)) {
+        return res.status(400).json({
+          message: "Booklet is only available with a 7\" vinyl or cassette.",
+        });
+      }
+      const addons = await listActiveAddons(album.id);
+      bookletAddon = addons.find((x) => x.kind === "booklet") ?? null;
+      if (!bookletAddon) {
+        return res.status(400).json({ message: "Booklet isn't offered on this album" });
+      }
+      if (sku.format === "7_inch") {
+        isBookletBundle = true;
+        bookletBundleCents = resolveBookletBundleCents(sku.priceCents, bookletAddon);
+      } else {
+        // Cassette — legacy stacked add-on (unchanged). Server-resolved
+        // price; client-sent override must respect the per-album floor.
+        bookletPriceCents = parsed.data.bookletPriceCents ?? bookletAddon.priceCents;
+        if (bookletPriceCents < bookletAddon.minPriceCents) {
+          return res.status(400).json({
+            message: `Booklet must be at least $${(bookletAddon.minPriceCents / 100).toFixed(2)}`,
+          });
+        }
+      }
+    }
+
     const stripe = await getStripe();
     // Make sure the customer has a Stripe Customer attached (reuse on
     // repeat purchases so address / saved cards persist).
@@ -1732,12 +1801,22 @@ export function registerCommerceRoutes(app: Express) {
       {
         price_data: {
           currency: "usd",
-          unit_amount: sku.priceCents,
+          // Task #793 — the 7" "+ booklet" variant folds into the format
+          // line at the flat set price (no separate booklet line); the
+          // "alone" variant and every other format use the SKU price.
+          unit_amount: isBookletBundle ? bookletBundleCents : sku.priceCents,
           product_data: {
-            name: `${album.title} — ${ALBUM_FORMAT_LABEL[sku.format as AlbumFormat] ?? sku.format}`,
+            name: isBookletBundle
+              ? `${album.title} — ${ALBUM_FORMAT_LABEL[sku.format as AlbumFormat] ?? sku.format} + Booklet`
+              : `${album.title} — ${ALBUM_FORMAT_LABEL[sku.format as AlbumFormat] ?? sku.format}`,
             description: album.artist,
             images: album.artwork ? [absoluteUrl(req, album.artwork)] : [],
-            metadata: { gt_kind: "format", gt_sku: sku.format, gt_album_id: album.id },
+            metadata: {
+              gt_kind: "format",
+              gt_sku: sku.format,
+              gt_album_id: album.id,
+              gt_booklet_bundle: isBookletBundle ? "1" : "0",
+            },
           },
         },
         quantity: quantity,
@@ -1758,28 +1837,11 @@ export function registerCommerceRoutes(app: Express) {
       });
     }
 
-    // Task #579 — Booklet add-on. Eligibility gated by the active SKU
-    // belonging to BOOKLET_ELIGIBLE_FORMATS (7" vinyl or cassette);
-    // otherwise the client shouldn't have offered the toggle, and we
-    // reject defensively here so a hand-crafted POST can't slip a
-    // booklet onto a 12" or CD order.
-    if (parsed.data.booklet) {
-      if (!(BOOKLET_ELIGIBLE_FORMATS as readonly string[]).includes(sku.format)) {
-        return res.status(400).json({
-          message: "Booklet is only available with a 7\" vinyl or cassette.",
-        });
-      }
-      const addons = await listActiveAddons(album.id);
-      bookletAddon = addons.find((x) => x.kind === "booklet") ?? null;
-      if (!bookletAddon) {
-        return res.status(400).json({ message: "Booklet isn't offered on this album" });
-      }
-      bookletPriceCents = parsed.data.bookletPriceCents ?? bookletAddon.priceCents;
-      if (bookletPriceCents < bookletAddon.minPriceCents) {
-        return res.status(400).json({
-          message: `Booklet must be at least $${(bookletAddon.minPriceCents / 100).toFixed(2)}`,
-        });
-      }
+    // Task #793 — Cassette keeps the legacy stacked booklet line (one
+    // booklet per order, separate line item). The 7" variant is already
+    // folded into the format line above, so it never reaches this block.
+    // `bookletAddon` / `bookletPriceCents` were resolved earlier.
+    if (parsed.data.booklet && !isBookletBundle && bookletAddon) {
       lineItems.push({
         price_data: {
           currency: "usd",
@@ -1825,6 +1887,10 @@ export function registerCommerceRoutes(app: Express) {
       gt_bundle_contents: bundleContents,
       gt_signed_cert: signedCertCount > 0 ? "1" : "0",
       gt_booklet: bookletAddon ? "1" : "0",
+      // Task #793 — set when the 7" "+ booklet" variant was chosen, so
+      // materialize can stamp every order_copies row's `booklet` flag
+      // (each with-booklet copy consumes one booklet from the run).
+      gt_booklet_bundle: isBookletBundle ? "1" : "0",
       gt_quantity: String(quantity),
       gt_signed_cert_count: String(signedCertCount),
       gt_copies: copiesMask,
@@ -2314,6 +2380,12 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
     copiesMask[i] === "1",
   );
   const signedCertPriceCents = parseInt(session.metadata?.gt_signed_cert_price ?? "0", 10) || 0;
+  // Task #793 — the 7" "+ booklet" variant stamps every copy as a
+  // with-booklet bundle so fulfillment + booklet-run consumption is
+  // tracked per copy. Uniform across the order (the variant is the
+  // format choice); the per-copy formatPriceCents already carries the
+  // set bundle price the fan paid.
+  const bookletBundle = session.metadata?.gt_booklet_bundle === "1";
 
   // Task #73 — snapshot artist/label/skuKind so reporting joins survive
   // album reassignment, and so the Stripe→OD handoff has the routing
@@ -2456,6 +2528,7 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
             position: i + 1,
             format: skuFormat,
             signedCert: hasCert,
+            booklet: bookletBundle,
             formatPriceCents: formatUnitCents,
             addonPriceCents: hasCert ? signedCertPriceCents : 0,
             goodDeedNumber: copyNumbers[i],
@@ -2512,6 +2585,7 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
               position: i + 1,
               format: skuFormat,
               signedCert: hasCert,
+              booklet: bookletBundle,
               formatPriceCents: formatUnitCents,
               addonPriceCents: hasCert ? signedCertPriceCents : 0,
               goodDeedNumber: copyNumbers[i],
