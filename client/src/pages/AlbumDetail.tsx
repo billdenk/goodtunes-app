@@ -33,7 +33,7 @@ import { downloadSong, removeDownload, listDownloadedSongs } from "@/lib/nativeD
 import { track } from "@/lib/analytics";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { useRecordRecent } from "@/hooks/useRecents";
-import { ALBUMS, getSongsByAlbum, getCreditsForSong, PEOPLE, INSTRUMENTS, type Song, type Album, type AlbumVideo, type AlbumPhoto, type Person, type Instrument, type InstrumentVendor, type TrackPerformer, type TrackCredits } from "@/data/musicData";
+import { ALBUMS, getSongsByAlbum, getCreditsForSong, PEOPLE, INSTRUMENTS, type Song, type Album, type Person, type Instrument, type InstrumentVendor, type TrackPerformer, type TrackCredits } from "@/data/musicData";
 
 // Enriched credits as returned by GET /api/songs/:id/credits and
 // GET /api/albums/:id/credits. Person/instrument joins are already done
@@ -149,8 +149,6 @@ function AlbumDetailMobile() {
     links: StreamLinks;
     subtitle?: string;
   } | null>(null);
-  const [activeVideo, setActiveVideo] = useState<AlbumVideo | null>(null);
-  const [photoIndex, setPhotoIndex] = useState<number | null>(null);
   const [songMenuFor, setSongMenuFor] = useState<{ song: Song; rect: DOMRect } | null>(null);
   const [creditsForSong, setCreditsForSong] = useState<Song | null>(null);
   const [showAlbumCredits, setShowAlbumCredits] = useState(false);
@@ -513,8 +511,6 @@ function AlbumDetailMobile() {
     if (album?.id) {
       track("album_viewed", { albumId: album.id, albumTitle: album.title, artistId: undefined });
     }
-    setActiveVideo(null);
-    setPhotoIndex(null);
     setShowOwnership(false);
     setProvenanceCertNum(null);
     setSongMenuFor(null);
@@ -588,8 +584,6 @@ function AlbumDetailMobile() {
   const totalMin = Math.floor(totalDuration / 60);
   const totalSec = totalDuration % 60;
   const runtime = `${totalMin} min${totalSec > 0 ? ` ${totalSec} sec` : ""}`;
-  const hasVideos = !!album.videos?.length;
-  const hasPhotos = !!album.photos?.length;
   const hasMoreBy = moreByArtist.length > 0;
 
   const handleShare = async () => {
@@ -626,7 +620,7 @@ function AlbumDetailMobile() {
     if (isMulti) setShowOwnership(true);
     else setProvenanceCertNum(ownedNums[0] ?? album.certificateNumber ?? 1);
   };
-  const editorialPanel = (hasVideos || hasPhotos || hasMoreBy) ? (
+  const editorialPanel = hasMoreBy ? (
     <div
       className="mt-8 pt-7 pb-4"
       style={{
@@ -634,62 +628,8 @@ function AlbumDetailMobile() {
         borderTop: "1px solid rgba(255,255,255,0.07)",
       }}
     >
-      {hasVideos && (
-        <div>
-          <h2 className="text-white text-xl font-bold tracking-tight mb-3 px-5">Videos</h2>
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide px-5 pb-2" data-testid="section-videos">
-            {album.videos!.map((v) => (
-              <button
-                key={v.id}
-                type="button"
-                onClick={() => setActiveVideo(v)}
-                className="relative flex-shrink-0 rounded-2xl overflow-hidden text-left active:opacity-90"
-                style={{ width: 280, aspectRatio: "16 / 9" }}
-                data-testid={`video-${v.id}`}
-              >
-                <img src={v.thumbnail} alt={v.title} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
-                <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,6,43,0.85) 0%, rgba(0,6,43,0.05) 60%)" }} />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-13 h-13 w-[52px] h-[52px] rounded-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.3)" }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff">
-                      <path d="M8 5.14v14l11-7-11-7z" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="absolute bottom-2.5 left-3 right-3 flex items-end justify-between gap-2">
-                  <p className="text-white text-xs font-semibold leading-tight line-clamp-2">{v.title}</p>
-                  {v.duration && (
-                    <span className="text-[10px] font-semibold text-white px-1.5 py-0.5 rounded-md flex-shrink-0" style={{ background: "rgba(0,0,0,0.55)" }}>
-                      {v.duration}
-                    </span>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      {hasPhotos && (
-        <div className={hasVideos ? "mt-9" : ""}>
-          <h2 className="text-white text-xl font-bold tracking-tight mb-3 px-5">Photos</h2>
-          <div className="px-5 grid grid-cols-3 gap-1.5" data-testid="section-photos">
-            {album.photos!.map((p, idx) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setPhotoIndex(idx)}
-                className="relative rounded-xl overflow-hidden active:opacity-80"
-                style={{ aspectRatio: "1 / 1" }}
-                data-testid={`photo-${p.id}`}
-              >
-                <img src={p.url} alt={p.caption ?? ""} className="absolute inset-0 w-full h-full object-cover" />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
       {hasMoreBy && (
-        <div className={hasVideos || hasPhotos ? "mt-9" : ""}>
+        <div>
           <button
             type="button"
             onClick={() => navigate(`/artist/${encodeURIComponent(album.artist)}`)}
@@ -1014,48 +954,6 @@ function AlbumDetailMobile() {
               setPerformerSheet({ person, song: ctxSong });
             }}
             onClose={() => setShowAlbumCredits(false)}
-          />
-        )}
-
-        {activeVideo && (
-          <div
-            className="fixed inset-0 z-[70] flex items-center justify-center"
-            role="dialog"
-            aria-modal="true"
-            aria-label={activeVideo.title}
-            data-testid="modal-video"
-          >
-            <div className="absolute inset-0 bg-black/85" style={{ backdropFilter: "blur(8px)" }} onClick={() => setActiveVideo(null)} />
-            <div className="relative w-full max-w-[390px] z-10 px-4">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-white text-sm font-semibold truncate pr-3">{activeVideo.title}</p>
-                <IconButton
-                  variant="dimmed"
-                  label="Close video"
-                  onClick={() => setActiveVideo(null)}
-                  data-testid="button-close-video"
-                >
-                  <XIcon strokeWidth={2.5} />
-                </IconButton>
-              </div>
-              <video
-                src={activeVideo.url}
-                poster={activeVideo.thumbnail}
-                controls
-                autoPlay
-                playsInline
-                className="w-full rounded-2xl bg-black"
-                style={{ aspectRatio: "16 / 9" }}
-              />
-            </div>
-          </div>
-        )}
-
-        {photoIndex !== null && album.photos && (
-          <PhotoLightbox
-            photos={album.photos}
-            startIndex={photoIndex}
-            onClose={() => setPhotoIndex(null)}
           />
         )}
 
@@ -3335,225 +3233,6 @@ function InAppBrowserSheet({
       </div>
 
     </SheetShell>
-  );
-}
-
-const FAV_PHOTOS_KEY = "gt:fav:photos";
-function readFavPhotos(): Set<string> {
-  try {
-    const raw = localStorage.getItem(FAV_PHOTOS_KEY);
-    if (!raw) return new Set();
-    const arr = JSON.parse(raw);
-    return new Set(Array.isArray(arr) ? arr : []);
-  } catch { return new Set(); }
-}
-function writeFavPhotos(s: Set<string>) {
-  try { localStorage.setItem(FAV_PHOTOS_KEY, JSON.stringify(Array.from(s))); } catch {}
-  try { window.dispatchEvent(new Event("gt:fav-photos-changed")); } catch {}
-}
-
-function PhotoLightbox({ photos, startIndex, onClose }: { photos: AlbumPhoto[]; startIndex: number; onClose: () => void }) {
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const [index, setIndex] = useState(startIndex);
-  const [chromeVisible, setChromeVisible] = useState(true);
-  const [zoom, setZoom] = useState(false);
-  const lastTapRef = useRef(0);
-  const [favPhotos, setFavPhotos] = useState<Set<string>>(() => readFavPhotos());
-  const currentLiked = !!photos[index] && favPhotos.has(photos[index].id);
-  const toggleLike = () => {
-    const p = photos[index];
-    if (!p) return;
-    setFavPhotos((prev) => {
-      const next = new Set(prev);
-      if (next.has(p.id)) next.delete(p.id); else next.add(p.id);
-      writeFavPhotos(next);
-      return next;
-    });
-  };
-
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    el.scrollTo({ left: startIndex * el.clientWidth, behavior: "auto" });
-  }, [startIndex]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowRight" && scrollerRef.current) {
-        scrollerRef.current.scrollBy({ left: scrollerRef.current.clientWidth, behavior: "smooth" });
-      }
-      if (e.key === "ArrowLeft" && scrollerRef.current) {
-        scrollerRef.current.scrollBy({ left: -scrollerRef.current.clientWidth, behavior: "smooth" });
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const handleScroll = () => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const i = Math.round(el.scrollLeft / el.clientWidth);
-    if (i !== index) {
-      setIndex(i);
-      setZoom(false);
-    }
-  };
-
-  const handleTap = () => {
-    const now = Date.now();
-    if (now - lastTapRef.current < 280) {
-      setZoom((z) => !z);
-      lastTapRef.current = 0;
-    } else {
-      lastTapRef.current = now;
-      setTimeout(() => {
-        if (lastTapRef.current && Date.now() - lastTapRef.current >= 280) {
-          setChromeVisible((v) => !v);
-          lastTapRef.current = 0;
-        }
-      }, 290);
-    }
-  };
-
-  const current = photos[index];
-
-  return (
-    <div
-      className="fixed inset-0 z-[70] bg-black select-none"
-      role="dialog"
-      aria-modal="true"
-      aria-label={current?.caption ?? "Photo viewer"}
-      data-testid="modal-photo"
-    >
-      <div
-        ref={scrollerRef}
-        onScroll={handleScroll}
-        className="absolute inset-0 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hide"
-        style={{ scrollSnapType: zoom ? "none" : "x mandatory", overflowX: zoom ? "hidden" : "auto" }}
-      >
-        {photos.map((p, i) => (
-          <div
-            key={p.id}
-            className="relative w-full h-full flex-shrink-0 snap-center flex items-center justify-center"
-            style={{ minWidth: "100%" }}
-          >
-            <button
-              type="button"
-              onClick={i === index ? handleTap : undefined}
-              onDoubleClick={i === index ? () => setZoom((z) => !z) : undefined}
-              aria-label={zoom ? "Zoom out" : "Zoom in"}
-              className="w-full h-full flex items-center justify-center bg-transparent border-0 p-0 focus:outline-none"
-              style={{ cursor: i === index ? (zoom ? "zoom-out" : "zoom-in") : "default" }}
-              tabIndex={i === index ? 0 : -1}
-            >
-              <img
-                src={p.url}
-                alt={p.caption ?? `Photo ${i + 1} of ${photos.length}`}
-                className="max-w-full max-h-full object-contain transition-transform duration-200 ease-out pointer-events-none"
-                style={{
-                  transform: i === index && zoom ? "scale(2)" : "scale(1)",
-                  transformOrigin: "center center",
-                  touchAction: "pinch-zoom",
-                }}
-                draggable={false}
-                data-testid={`lightbox-photo-${p.id}`}
-              />
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {photos.length > 1 && (
-        <>
-          <button
-            type="button"
-            onClick={() => {
-              const el = scrollerRef.current;
-              if (el) el.scrollBy({ left: -el.clientWidth, behavior: "smooth" });
-            }}
-            disabled={index === 0}
-            aria-label="Previous photo"
-            className={`hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full items-center justify-center text-white transition-opacity ${chromeVisible && index > 0 ? "opacity-100" : "opacity-0 pointer-events-none"}`}
-            style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)" }}
-            data-testid="button-prev-photo"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const el = scrollerRef.current;
-              if (el) el.scrollBy({ left: el.clientWidth, behavior: "smooth" });
-            }}
-            disabled={index === photos.length - 1}
-            aria-label="Next photo"
-            className={`hidden md:flex absolute right-3 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full items-center justify-center text-white transition-opacity ${chromeVisible && index < photos.length - 1 ? "opacity-100" : "opacity-0 pointer-events-none"}`}
-            style={{ background: "rgba(255,255,255,0.18)", backdropFilter: "blur(20px)" }}
-            data-testid="button-next-photo"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
-          </button>
-        </>
-      )}
-
-      <div
-        className={`absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 pt-12 pb-4 transition-opacity duration-200 ${chromeVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`}
-        style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.55), transparent)" }}
-      >
-        <span className="text-white/80 text-sm font-medium tabular-nums" data-testid="text-photo-counter">
-          {index + 1} of {photos.length}
-        </span>
-        <div className="flex items-center gap-2">
-          <IconButton
-            variant="dimmed"
-            label={currentLiked ? "Unfavorite photo" : "Favorite photo"}
-            aria-pressed={currentLiked}
-            onClick={toggleLike}
-            data-testid="button-favorite-photo"
-          >
-            <svg viewBox="0 0 24 24" fill={currentLiked ? "#FF5470" : "none"} stroke={currentLiked ? "#FF5470" : "currentColor"} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-            </svg>
-          </IconButton>
-          <IconButton
-            variant="dimmed"
-            label="Close"
-            onClick={onClose}
-            data-testid="button-close-photo"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </IconButton>
-        </div>
-      </div>
-
-      <div
-        className={`absolute bottom-0 left-0 right-0 z-20 px-6 pb-10 pt-6 transition-opacity duration-200 ${chromeVisible ? "opacity-100" : "opacity-0 pointer-events-none"}`}
-        style={{ background: "linear-gradient(to top, rgba(0,0,0,0.55), transparent)" }}
-      >
-        {current?.caption && (
-          <p className="text-white text-center text-[15px] mb-4" data-testid="text-photo-caption">{current.caption}</p>
-        )}
-        {photos.length > 1 && (
-          <div className="flex justify-center gap-1.5">
-            {photos.map((_, i) => (
-              <span
-                key={i}
-                className="rounded-full transition-all"
-                style={{
-                  width: i === index ? 18 : 6,
-                  height: 6,
-                  background: i === index ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.35)",
-                }}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
   );
 }
 

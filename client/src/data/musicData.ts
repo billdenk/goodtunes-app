@@ -1,11 +1,3 @@
-import tgPhoto1 from "@assets/640072642_25613245751711176_6571016117939262912_n_1778621365643.jpg";
-import tgPhoto2 from "@assets/634243288_25554499034252515_5558112962991228661_n_1778621377317.jpg";
-import tgPhoto3 from "@assets/659040451_18574314340025503_4062507424707663101_n_1778621388019.jpg";
-import tgPhoto4 from "@assets/653387510_18568733956025503_1400116026168525714_n_1778621392486.jpg";
-import tgPhoto5 from "@assets/496254517_9447895035339505_2309388181313327884_n_1778621409155.jpg";
-import tgVideo1Thumb from "@assets/612548086_1270168371604759_7665130374696370589_n_1778621383526.jpg";
-import tgVideo2Thumb from "@assets/629024765_18558574207025503_6255887094720167360_n_1778621397950.jpg";
-import tgVideo3Thumb from "@assets/590183285_1595547188528175_2217542122704006465_n_1778621402722.jpg";
 import martinD28Photo from "@assets/instruments/martin-d28.jpg";
 import gretsch6071Photo from "@assets/instruments/gretsch-6071.jpg";
 import violinPhoto from "@assets/instruments/violin.jpg";
@@ -33,20 +25,6 @@ export const ARTIST_PHOTOS: Record<string, string> = {
   "Nick Carter": nickCarterPhoto,
 };
 
-export interface AlbumVideo {
-  id: string;
-  title: string;
-  thumbnail: string;
-  url: string;
-  duration?: string;
-}
-
-export interface AlbumPhoto {
-  id: string;
-  url: string;
-  caption?: string;
-}
-
 export interface CertPurchase {
   num: number;
   price: number;
@@ -70,8 +48,6 @@ export interface Album {
   certificateNumber?: number;
   ownedCertificates?: number[];
   purchases?: CertPurchase[];
-  videos?: AlbumVideo[];
-  photos?: AlbumPhoto[];
   // Album-level streaming handoff links (Task #734). Used for the
   // album-level "open whole album on Spotify" control on stream-only
   // albums that carry no SuperCredits.
@@ -538,36 +514,6 @@ export const ALBUMS: Album[] = [
       { num: 21, price: 12.0, date: "Aug 30, 2024" },
       { num: 47, price: 12.0, date: "Sep 14, 2024" },
       { num: 88, price: 14.0, date: "Nov 02, 2024" },
-    ],
-    videos: [
-      {
-        id: "vid-4-1",
-        title: "Pacific Drive — Venice Beach",
-        thumbnail: tgVideo1Thumb,
-        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-        duration: "3:28",
-      },
-      {
-        id: "vid-4-2",
-        title: "Live at The Corktown",
-        thumbnail: tgVideo2Thumb,
-        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-        duration: "5:12",
-      },
-      {
-        id: "vid-4-3",
-        title: "Stage Lights — Full Set",
-        thumbnail: tgVideo3Thumb,
-        url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-        duration: "5:11",
-      },
-    ],
-    photos: [
-      { id: "p-4-1", url: tgPhoto1, caption: "In the studio" },
-      { id: "p-4-2", url: tgPhoto2, caption: "Backstage" },
-      { id: "p-4-3", url: tgPhoto3, caption: "On the road" },
-      { id: "p-4-4", url: tgPhoto4, caption: "Alleyway portrait" },
-      { id: "p-4-5", url: tgPhoto5, caption: "Up close" },
     ],
   },
   {
