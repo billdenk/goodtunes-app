@@ -19,6 +19,8 @@ import { subscribeChats, totalUnread } from "@/lib/chatStore";
 import { ARTIST_PHOTOS, type Album, type Song } from "@/data/musicData";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { Disc3, Music2, Mic2 } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { popBounce } from "@/lib/motion";
 import certBgUrl from "@assets/Digital_GoodDeed_-_Nick_Carter_1778545442175.svg";
 
 interface UserPlaylist {
@@ -48,6 +50,7 @@ export function Collection() {
   // every memo at once.
   const search = "";
   const [showSort, setShowSort] = useState(false);
+  const reduceMotion = useReducedMotion();
   const recordRecent = useRecordRecent();
   // Chat tab is gone from the bottom nav (Task #530); the unread count
   // now lives as a red dot on the account avatar in the header. Force
@@ -462,10 +465,18 @@ export function Collection() {
                   <path d="M3 6h18M6 12h12M10 18h4" />
                 </svg>
               </IconButton>
+              <AnimatePresence>
               {showSort && (
                 <>
-                  <div className="fixed inset-0 z-30" onClick={() => setShowSort(false)} />
-                  <div
+                  <motion.div
+                    className="fixed inset-0 z-30"
+                    onClick={() => setShowSort(false)}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.12 }}
+                  />
+                  <motion.div
                     className="absolute left-0 top-full mt-1.5 z-40 rounded-xl py-1 min-w-[180px]"
                     style={{
                       background: "rgba(36, 36, 40, 0.96)",
@@ -473,7 +484,11 @@ export function Collection() {
                       WebkitBackdropFilter: "blur(24px) saturate(180%)",
                       boxShadow: "0 12px 32px rgba(0,0,0,0.55)",
                       border: "1px solid rgba(255,255,255,0.08)",
+                      transformOrigin: "top left",
                     }}
+                    initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.8, y: -6 }}
+                    animate={{ opacity: 1, scale: 1, y: 0, transition: popBounce(!!reduceMotion) }}
+                    exit={reduceMotion ? { opacity: 0, transition: { duration: 0.12 } } : { opacity: 0, scale: 0.92, y: -4, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }}
                   >
                     <div className="px-3.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/40">
                       Sort by
@@ -483,7 +498,7 @@ export function Collection() {
                         key={opt.value}
                         type="button"
                         onClick={() => { setSortBy(opt.value); setShowSort(false); }}
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm font-medium text-white active:bg-white/10"
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm font-medium text-white transition-colors active:bg-white/10"
                         data-testid={`sort-${opt.value}`}
                       >
                         <span className="w-4 flex-shrink-0 flex items-center justify-center">
@@ -496,9 +511,10 @@ export function Collection() {
                         <span>{opt.label}</span>
                       </button>
                     ))}
-                  </div>
+                  </motion.div>
                 </>
               )}
+              </AnimatePresence>
             </div>
             <div className="relative flex flex-1 p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.07)" }}>
               <div
