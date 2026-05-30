@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { usePlayer } from "@/context/PlayerContext";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
-import { ALBUMS, SONGS, ARTIST_PHOTOS, type Album } from "@/data/musicData";
+import { ALBUMS, SONGS, ARTIST_PHOTOS, type Album, type Song } from "@/data/musicData";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import type { PersonDiscography, Album as DbAlbum } from "@shared/schema";
@@ -91,14 +91,39 @@ export function ArtistDetail() {
     return [...staticMatches, ...dbMatches];
   }, [artistName, dbAlbums]);
 
-  const allArtistSongs = useMemo(
-    () =>
-      SONGS.filter((s) => artistAlbums.some((a) => a.id === s.albumId)).map((s) => ({
-        ...s,
-        album: artistAlbums.find((a) => a.id === s.albumId)!,
-      })),
-    [artistAlbums],
-  );
+  // Catalog-wide song list. The artist page's release tiles already union
+  // static + DB albums (above), but the play queue was still gathered from
+  // the hardcoded `SONGS` seed only — so a DB-only release (added via admin)
+  // showed its cover but reported "0 songs" and a dead Play All button. We
+  // fetch the same slim `/api/songs` catalog PlayerContext uses and union
+  // its rows for this artist's albums with the static seed, deduped by song
+  // id. The endpoint already excludes soft-deleted songs and (for fans)
+  // hidden-album songs, so trash never leaks back into the queue.
+  const { data: dbSongs = [] } = useQuery<Song[]>({
+    queryKey: ["/api/songs"],
+  });
+  const allArtistSongs = useMemo(() => {
+    const albumById = new Map(artistAlbums.map((a) => [a.id, a]));
+    const staticMatches = SONGS.filter((s) => albumById.has(s.albumId));
+    const seenIds = new Set(staticMatches.map((s) => s.id));
+    const dbMatches = dbSongs.filter(
+      (s) => albumById.has(s.albumId) && !seenIds.has(s.id),
+    );
+    return [...staticMatches, ...dbMatches]
+      .map((s) => ({ ...s, album: albumById.get(s.albumId)! }))
+      .sort((a, b) => {
+        // Group by album (preserving the artistAlbums order), then by
+        // track number within each album so Play All walks the catalog
+        // release-by-release, track-by-track.
+        if (a.albumId !== b.albumId) {
+          return (
+            artistAlbums.findIndex((al) => al.id === a.albumId) -
+            artistAlbums.findIndex((al) => al.id === b.albumId)
+          );
+        }
+        return a.trackNumber - b.trackNumber;
+      });
+  }, [artistAlbums, dbSongs]);
 
   // Streaming discography — the rest of the artist's catalog from Apple
   // Music that isn't in GoodTunes. Admin pulls this via iTunes Lookup
