@@ -13,6 +13,7 @@ import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { BuySheet } from "@/components/checkout/BuySheet";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { StreamServicePickerSheet } from "@/components/StreamServicePickerSheet";
+import { AnimatePresence } from "framer-motion";
 import {
   getFavoriteStreamingService,
   setFavoriteStreamingService,
@@ -830,31 +831,37 @@ function AlbumDetailMobile() {
           />
         )}
 
-        {showPlaylistPicker && (
-          <PlaylistPickerSheet
-            songId={showPlaylistPicker.id}
-            songTitle={showPlaylistPicker.title}
-            onClose={() => setShowPlaylistPicker(null)}
-          />
-        )}
+        <AnimatePresence>
+          {showPlaylistPicker && (
+            <PlaylistPickerSheet
+              songId={showPlaylistPicker.id}
+              songTitle={showPlaylistPicker.title}
+              onClose={() => setShowPlaylistPicker(null)}
+            />
+          )}
+        </AnimatePresence>
 
-        {showAlbumPlaylistPicker && (
-          <PlaylistPickerSheet
-            songIds={songs.map((s) => s.id)}
-            songTitle={`${album.title} · ${songs.length} song${songs.length === 1 ? "" : "s"}`}
-            heading="Add Album to Playlist"
-            onClose={() => setShowAlbumPlaylistPicker(false)}
-          />
-        )}
+        <AnimatePresence>
+          {showAlbumPlaylistPicker && (
+            <PlaylistPickerSheet
+              songIds={songs.map((s) => s.id)}
+              songTitle={`${album.title} · ${songs.length} song${songs.length === 1 ? "" : "s"}`}
+              heading="Add Album to Playlist"
+              onClose={() => setShowAlbumPlaylistPicker(false)}
+            />
+          )}
+        </AnimatePresence>
 
-        {streamPicker && (
-          <StreamServicePickerSheet
-            available={availableServices(streamPicker.links)}
-            subtitle={streamPicker.subtitle}
-            onPick={handlePickStreamService}
-            onClose={() => setStreamPicker(null)}
-          />
-        )}
+        <AnimatePresence>
+          {streamPicker && (
+            <StreamServicePickerSheet
+              available={availableServices(streamPicker.links)}
+              subtitle={streamPicker.subtitle}
+              onPick={handlePickStreamService}
+              onClose={() => setStreamPicker(null)}
+            />
+          )}
+        </AnimatePresence>
 
         {showDescription && album.description && (
           <AlbumDescriptionSheet

@@ -6,6 +6,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { track } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
+import { motion, useReducedMotion } from "framer-motion";
+import { sheetOpen, sheetClose, scrimFade } from "@/lib/motion";
 
 interface PlaylistPickerSheetProps {
   songId?: string;
@@ -20,6 +22,7 @@ export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClo
   const [, navigate] = useLocation();
   const { setShowPlayer, isFavorite, toggleFavorite } = usePlayer();
   const { toast } = useToast();
+  const reduceMotion = useReducedMotion();
 
   const goToPlaylist = (playlistId: string) => {
     setShowPlayer(false);
@@ -104,19 +107,27 @@ export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClo
 
   return (
     <div className="fixed inset-0 flex items-end justify-center" style={{ zIndex: 80 }}>
-      <div
+      <motion.div
         className="absolute inset-0 bg-black/60"
         style={{ backdropFilter: "blur(6px)" }}
         onClick={onClose}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={scrimFade(!!reduceMotion)}
       />
       {/* Bottom sheet — edge-to-edge with the Apple "View on Apple Music /
           Spotify" pop-up curves (rounded-t-3xl = 24px). No max-width cap
           so the sheet hugs the viewport / mobile-player frame and there
-          are no side gutters under the curve. */}
-      <div
+          are no side gutters under the curve. Slides up/down on the shared
+          sheet spring so every fan sheet opens & closes the same way. */}
+      <motion.div
         className="relative w-full rounded-t-3xl p-5 pb-10"
         style={{ background: "#0D1B4B", zIndex: 81, boxShadow: "0 -8px 40px rgba(0,0,0,0.5)" }}
         onClick={(e) => e.stopPropagation()}
+        initial={{ y: "100%" }}
+        animate={{ y: 0, transition: sheetOpen(!!reduceMotion) }}
+        exit={{ y: "100%", transition: sheetClose(!!reduceMotion) }}
       >
         <div className="w-10 h-1 rounded-full mx-auto mb-5" style={{ background: "rgba(255,255,255,0.2)" }} />
         <h3 className="text-white font-semibold text-base mb-0.5">{heading ?? "Add to Playlist"}</h3>
@@ -227,7 +238,7 @@ export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClo
             })}
           </div>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 }

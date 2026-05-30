@@ -3,6 +3,8 @@ import {
   STREAMING_SERVICES,
   type StreamingServiceId,
 } from "@/lib/streamingService";
+import { motion, useReducedMotion } from "framer-motion";
+import { sheetOpen, sheetClose, scrimFade } from "@/lib/motion";
 
 interface StreamServicePickerSheetProps {
   // Only services with a usable link are tappable; the rest are dimmed so
@@ -33,19 +35,24 @@ export function StreamServicePickerSheet({
   onPick,
   onClose,
 }: StreamServicePickerSheetProps) {
+  const reduceMotion = useReducedMotion();
   return (
     <div
       className="fixed inset-0 flex items-end justify-center"
       style={{ zIndex: 80 }}
       data-testid="sheet-stream-service-picker"
     >
-      <div
+      <motion.div
         className="absolute inset-0 bg-black/60"
         style={{ backdropFilter: "blur(6px)" }}
         onClick={onClose}
         data-testid="overlay-stream-service-picker"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={scrimFade(!!reduceMotion)}
       />
-      <div
+      <motion.div
         className="relative w-full rounded-t-3xl p-5 pb-10"
         style={{
           background: "#0D1B4B",
@@ -53,6 +60,9 @@ export function StreamServicePickerSheet({
           boxShadow: "0 -8px 40px rgba(0,0,0,0.5)",
         }}
         onClick={(e) => e.stopPropagation()}
+        initial={{ y: "100%" }}
+        animate={{ y: 0, transition: sheetOpen(!!reduceMotion) }}
+        exit={{ y: "100%", transition: sheetClose(!!reduceMotion) }}
       >
         <div
           className="w-10 h-1 rounded-full mx-auto mb-5"
@@ -101,7 +111,7 @@ export function StreamServicePickerSheet({
             );
           })}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

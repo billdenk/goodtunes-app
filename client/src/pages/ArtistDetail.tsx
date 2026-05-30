@@ -14,6 +14,8 @@ import { X, ChevronRight, ChevronLeft } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { track } from "@/lib/analytics";
 import { useRecordRecent } from "@/hooks/useRecents";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { sheetOpen, sheetClose, scrimFade } from "@/lib/motion";
 
 export function ArtistDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -782,13 +784,15 @@ export function ArtistDetail() {
         <BottomNav />
       </section>
 
-      {howToPlay && (
-        <HowToPlaySheet
-          release={howToPlay}
-          artistName={artistName}
-          onClose={() => setHowToPlay(null)}
-        />
-      )}
+      <AnimatePresence>
+        {howToPlay && (
+          <HowToPlaySheet
+            release={howToPlay}
+            artistName={artistName}
+            onClose={() => setHowToPlay(null)}
+          />
+        )}
+      </AnimatePresence>
 
       {openBucket && (
         <BucketGridSheet
@@ -928,6 +932,7 @@ function HowToPlaySheet({
   artistName: string;
   onClose: () => void;
 }) {
+  const reduceMotion = useReducedMotion();
   const spotifyHref =
     release.spotifyUrl ??
     `https://open.spotify.com/search/${encodeURIComponent(`${artistName} ${release.name}`)}`;
@@ -957,42 +962,62 @@ function HowToPlaySheet({
   ];
 
   return (
-    <div
-      className="fixed inset-0 z-[120] flex items-end justify-center bg-black/65 backdrop-blur-md"
+    <motion.div
+      className="fixed inset-0 z-[120] flex items-end justify-center"
+      style={{ background: "rgba(0,0,0,0.5)" }}
       onClick={onClose}
       data-testid="sheet-how-to-play"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={scrimFade(!!reduceMotion)}
     >
-      <div
-        className="relative w-full max-w-[440px] bg-[#F4F5F8] text-[#0B0F2A] pb-9 overflow-hidden"
+      <motion.div
+        className="relative w-full max-w-[440px] text-[#0B0F2A] pb-9 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         style={{
           borderTopLeftRadius: 38,
           borderTopRightRadius: 38,
           boxShadow: "0 -20px 60px rgba(0,0,0,0.6)",
+          // Frosted, slightly translucent panel (Apple sheet material).
+          // Kept at 0.78 opacity so the dark text stays fully readable.
+          // The scrim above is dim-only (no blur) so this is the single
+          // backdrop-blur layer — respects the iOS-WebKit glass memo.
+          background: "rgba(244,245,248,0.78)",
+          backdropFilter: "blur(40px) saturate(180%)",
+          WebkitBackdropFilter: "blur(40px) saturate(180%)",
         }}
+        initial={{ y: "100%" }}
+        animate={{ y: 0, transition: sheetOpen(!!reduceMotion) }}
+        exit={{ y: "100%", transition: sheetClose(!!reduceMotion) }}
       >
-        {/* Apple's sheet dismiss — circular glass chip inset from the
-            corner (not hugging it). On a light sheet the scrim is a
-            soft black/8% with a near-black X. */}
+        {/* Apple's sheet dismiss — a ~30px circular chip centered inside a
+            44×44 tap target (HIG minimum touch size) and inset from the
+            rounded corner. Light-sheet chip is black/8% with a near-black
+            X; no backdrop-blur on the chip so it doesn't stack a second
+            glass layer over the already-frosted sheet. */}
         <button
           type="button"
           aria-label="Close"
           onClick={onClose}
           data-testid="button-how-to-play-close"
-          className="absolute flex items-center justify-center rounded-full active:scale-[0.94] transition-transform"
+          className="absolute flex items-center justify-center active:scale-[0.92] transition-transform"
           style={{
-            right: 22,
-            top: 26,
-            width: 30,
-            height: 30,
-            background: "rgba(11,15,42,0.06)",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
+            right: 12,
+            top: 12,
+            width: 44,
+            height: 44,
+            background: "transparent",
             border: "none",
             cursor: "pointer",
           }}
         >
-          <X size={14} strokeWidth={2.4} style={{ color: "rgba(11,15,42,0.7)" }} />
+          <span
+            className="flex items-center justify-center rounded-full"
+            style={{ width: 30, height: 30, background: "rgba(11,15,42,0.08)" }}
+          >
+            <X size={15} strokeWidth={2.6} style={{ color: "rgba(11,15,42,0.6)" }} />
+          </span>
         </button>
 
         {/* Centered hero: large rounded album art + title + meta */}
@@ -1098,7 +1123,7 @@ function HowToPlaySheet({
             })}
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

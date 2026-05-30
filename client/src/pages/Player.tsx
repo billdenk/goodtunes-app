@@ -192,7 +192,7 @@ export function Player() {
     setShowPlayer,
     toggleFavorite,
     isFavorite,
-    airPlayAvailable,
+    airPlaySupported,
     showAirPlayPicker,
   } = usePlayer();
 
@@ -638,7 +638,7 @@ export function Player() {
               >
                 <LyricsIcon size={22} />
               </button>
-              {airPlayAvailable && (
+              {airPlaySupported && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1292,13 +1292,15 @@ export function Player() {
       )}
 
       {/* Add to Playlist sheet */}
-      {showAddToPlaylist && currentSong && (
-        <PlaylistPickerSheet
-          songId={currentSong.id}
-          songTitle={currentSong.title}
-          onClose={() => setShowAddToPlaylist(false)}
-        />
-      )}
+      <AnimatePresence>
+        {showAddToPlaylist && currentSong && (
+          <PlaylistPickerSheet
+            songId={currentSong.id}
+            songTitle={currentSong.title}
+            onClose={() => setShowAddToPlaylist(false)}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }

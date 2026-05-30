@@ -29,8 +29,16 @@ interface PlayerState {
    *  / HomePod) is reachable for the hidden audio element. Stays false on
    *  every non-Safari platform (Android, desktop, in-app browsers) because
    *  the availability event never fires there — no platform sniffing needed.
-   *  Drives whether the player's AirPlay button is shown at all. */
+   *  Drives whether a reachable wireless target currently exists. */
   airPlayAvailable: boolean;
+  /** True on any platform that exposes `webkitShowPlaybackTargetPicker`
+   *  (i.e. iOS Safari), regardless of whether a target is reachable yet.
+   *  Apple Music keeps its output button permanently visible on iPhone —
+   *  tapping it always opens the route picker (even when only "iPhone
+   *  Speaker" is listed) — so the player gates its AirPlay button on this,
+   *  not on `airPlayAvailable`. Stays false everywhere else (Android,
+   *  desktop, in-app webviews) so the button never appears off-platform. */
+  airPlaySupported: boolean;
   /** When true, playback auto-advances to the next queued song after 30
    *  seconds — used by the desktop Preview & Purchase route to audition
    *  the album without playing through full songs. Independent of the
@@ -86,6 +94,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [autoplay, setAutoplay] = useState(true);
   const [previewMode, setPreviewModeState] = useState(false);
   const [airPlayAvailable, setAirPlayAvailable] = useState(false);
+  const [airPlaySupported, setAirPlaySupported] = useState(false);
   const favSongs = useFavoriteSongs();
   const favorites = favSongs.set;
   const queryClient = useQueryClient();
@@ -547,6 +556,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const a = audioRef.current as any;
     if (!a) return;
     if (typeof a.webkitShowPlaybackTargetPicker !== "function") return;
+    // On iOS Safari the picker method exists — mark AirPlay supported so the
+    // player shows the output button permanently (Apple-Music behavior),
+    // even before any wireless target becomes reachable.
+    setAirPlaySupported(true);
     const onAvail = (e: any) => {
       setAirPlayAvailable(e?.availability === "available");
     };
@@ -842,6 +855,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         previewMode,
         setPreviewMode,
         airPlayAvailable,
+        airPlaySupported,
         showAirPlayPicker,
       }}
     >

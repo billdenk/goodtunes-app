@@ -68,6 +68,16 @@ Any trash / delete / "remove forever" button must pop a confirmation sheet namin
 
 **Reuse for the consumer player**: this same primitive should drive the fan-facing player surface (Now Playing / mini-player) once we wire lyrics, queue, and shuffle/repeat state for fans. Plan to extend rather than fork: keep the dock as-is for admin (lyrics-disabled placeholder), and pass `onLyrics`, real shuffle/repeat handlers, and a queue when consumer mounts it. Any polish landing here should automatically benefit the consumer dock.
 
+## Motion — shared sheet & press animations
+
+`client/src/lib/motion.ts` is the single source of truth for the player's motion language so every overlay opens and closes the same way:
+
+- `sheetOpen(reduce)` / `sheetClose(reduce)` — bottom-sheet slide. Springy overshoot on open, quick eased settle on close. Every fan bottom sheet animates `translateY(100% → 0)` on its panel and pairs a `scrimFade(reduce)` opacity fade on the dim backdrop. Wrap the sheet's **call site** in framer-motion `<AnimatePresence>` (single conditional child) so the close animation actually plays on unmount. Reference: `HowToPlaySheet` in `ArtistDetail.tsx`, `PlaylistPickerSheet`, `StreamServicePickerSheet`.
+- `popBounce(reduce)` — small anchored popovers/menus (e.g. the Player title "Go to Album / Artist" menu).
+- `PRESS_SCALE` (0.96) — the shared tap "give" for fan tappable surfaces; admin stays press-flat (see below).
+- All helpers take a `reduce` arg from `useReducedMotion()` and fall back to a short non-overshoot tween — always pass it so call sites honor the OS setting for free.
+- **Never animate a new `backdrop-filter` layer.** Animate transform/opacity only; keep one blur surface per overlay (dim-only scrim + one frosted panel) per the iOS-WebKit stacked-blur memo.
+
 ## Admin tokens — reach brand colors through CSS vars, not hex
 
 The admin (`body.gt-admin`) is a Stripe-leaning light surface and lives off a tokenized palette, not one-off hex codes.
