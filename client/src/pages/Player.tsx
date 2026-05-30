@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from "react";
+import { motion, useReducedMotion, type Transition } from "framer-motion";
 import { usePlayer } from "@/context/PlayerContext";
 import { formatDuration } from "@/data/musicData";
 import { LyricsIcon } from "@/components/ui/LyricsIcon";
@@ -193,6 +194,7 @@ export function Player() {
   } = usePlayer();
 
   const [volume, setVolume] = useState(80);
+  const reduceMotion = useReducedMotion();
 
   // ── Synced lyrics (line-level, auto-distributed) ──
   // All hooks must run before any early return to keep React's hook order
@@ -262,6 +264,21 @@ export function Player() {
 
   if (!currentSong) return null;
 
+  // Apple-style mini→full open/close spring. Opening slides the surface up
+  // from the bottom with a small overshoot/settle (the same motion language
+  // Task #767 gave the mini-player capsule + bottom-nav dock); closing eases
+  // back down to the mini-player. Honors prefers-reduced-motion via framer's
+  // useReducedMotion() — falling back to a short non-overshoot tween, the
+  // same gating used in MiniPlayer.tsx / BottomNav.tsx. Transform/opacity
+  // only (translateY + fade) so it composites on the GPU at 60fps and adds
+  // no new backdrop-blur layers (respects the iOS-WebKit glass memo).
+  const openTransition: Transition = reduceMotion
+    ? { duration: 0.2, ease: [0.32, 0.72, 0, 1] }
+    : { type: "spring", stiffness: 420, damping: 34, mass: 0.9 };
+  const closeTransition: Transition = reduceMotion
+    ? { duration: 0.16, ease: [0.32, 0.72, 0, 1] }
+    : { duration: 0.3, ease: [0.32, 0.72, 0, 1] };
+
   const progress = duration > 0 ? currentTime / duration : 0;
   const isRepeatActive = repeat !== "none";
   const favorited = isFavorite(currentSong.id);
@@ -298,8 +315,11 @@ export function Player() {
 
   return (
     <>
-      <div
+      <motion.div
         className="fixed inset-0 flex justify-center bg-[#00062B]"
+        initial={{ y: "100%", opacity: 0 }}
+        animate={{ y: 0, opacity: 1, transition: openTransition }}
+        exit={{ y: "100%", opacity: 0, transition: closeTransition }}
         style={{
           zIndex: 50,
           // Block iOS Safari's pull-to-refresh. Without this, swiping down
@@ -570,7 +590,7 @@ export function Player() {
             <div className="w-28 h-[5px] bg-white/25 rounded-full" />
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* ─── Lyrics Overlay ─── */}
       {showLyrics && currentSong.lyrics && (

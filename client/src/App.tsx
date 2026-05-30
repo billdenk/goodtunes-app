@@ -1,4 +1,5 @@
 import { Switch, Route, useLocation, Redirect } from "wouter";
+import { AnimatePresence } from "framer-motion";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -137,8 +138,14 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
 function PlayerOverlay() {
   const { showPlayer } = usePlayer();
-  if (!showPlayer) return null;
-  return <Player />;
+  // AnimatePresence keeps <Player> mounted while its exit (slide-down)
+  // animation plays so closing eases back to the mini-player instead of
+  // vanishing. The open animation rides the motion.div's initial/animate.
+  return (
+    <AnimatePresence>
+      {showPlayer && <Player key="now-playing" />}
+    </AnimatePresence>
+  );
 }
 
 function Router() {
