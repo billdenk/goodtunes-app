@@ -729,6 +729,13 @@ export function VinylOrderPanel({
                           {i + 1}
                         </div>
                         <div className="flex-1 min-w-0 text-[13px] text-slate-900 truncate">
+                          <span
+                            className="mr-1.5 tabular-nums text-[11.5px] text-slate-400 font-medium"
+                            title="Digital album track number"
+                            data-testid={`vinyl-row-digital-track-${id}`}
+                          >
+                            #{song.trackNumber}
+                          </span>
                           {song.title}
                         </div>
                         <div className="text-[11.5px] tabular-nums text-slate-500">

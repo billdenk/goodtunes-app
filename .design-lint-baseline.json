@@ -6862,11 +6862,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "className=\"text-[11.5px] text-slate-500 text-right\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/SellPanel.tsx",
     "snippet": "className=\"w-28 text-right tabular-nums text-[15px] font-semibold text-slate-400\""
   },
   {
@@ -7743,6 +7738,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/VinylOrderPanel.tsx",
     "snippet": "<div className=\"flex-1 min-w-0 text-[13px] text-slate-900 truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/VinylOrderPanel.tsx",
+    "snippet": "className=\"mr-1.5 tabular-nums text-[11.5px] text-slate-400 font-medium\""
   },
   {
     "rule": "hardcoded-font-size",
