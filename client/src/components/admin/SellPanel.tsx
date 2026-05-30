@@ -1762,12 +1762,16 @@ function AnticipatedTracksInput({
     <div>
       <div className="flex items-center gap-1.5 mb-1">
         <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
-          Anticipated tracks
+          {hasLive ? "Tracks" : "Anticipated tracks"}
         </span>
         <InfoTip
-          label="About anticipated tracks"
+          label={hasLive ? "About tracks" : "About anticipated tracks"}
           testId={`info-anticipated-tracks-${format}`}
-          text="Type the number of tracks you expect this album to have so the Publishing estimate is realistic before you upload masters. Publishing = N × $0.254 (mechanicals × 2 for vinyl + digital). Used until you upload masters — once songs are uploaded this switches to the live tracklist count."
+          text={
+            hasLive
+              ? "The total number of tracks on this release, taken from your uploaded tracklist. This drives Publishing = N × $0.254 (mechanicals × 2 for vinyl + digital)."
+              : "Type the number of tracks you expect this album to have so the Publishing estimate is realistic before you upload masters. Publishing = N × $0.254 (mechanicals × 2 for vinyl + digital). Used until you upload masters — once songs are uploaded this switches to the live tracklist count."
+          }
         />
       </div>
       <input
@@ -5257,9 +5261,9 @@ function SkuRow({
                 duplicated quote owns its own price + qty).
                 Anticipated tracks drives the Publishing line before any
                 masters are uploaded; once real audio exists the live count
-                wins and the input disappears entirely (no point showing a
-                disabled mirror of the tracklist). */}
-          {!songsUploaded && (
+                wins and the field switches to a read-only "Tracks" mirror
+                of the tracklist count (it stays visible — see Task: don't
+                let it disappear once everything is uploaded). */}
             <AnticipatedTracksInput
               format={format}
               liveTrackCount={liveTrackCount ?? 0}
@@ -5269,7 +5273,6 @@ function SkuRow({
               onLocalChange={onAnticipatedTrackLocalChange}
               onChange={onAnticipatedTrackCountChange}
             />
-          )}
 
             {/* Jacket — Select for 7"/10"; de-emphasized tag for 7" only.
                 Task #655: 12" LP no longer renders a labeled Jacket row
