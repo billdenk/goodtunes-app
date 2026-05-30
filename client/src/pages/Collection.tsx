@@ -225,6 +225,12 @@ export function Collection() {
   // per frame.
   const titleRef = useRef<HTMLHeadingElement>(null);
   const avatarRef = useRef<HTMLButtonElement>(null);
+  // Task #792 — the pinned filter/tabs scope bar + its glass layer. We
+  // measure the sticky bar's offset to decide when it has stuck to the
+  // top (content scrolling behind it) and only then fade in the scrim,
+  // hairline divider, and soft elevation on the glass layer.
+  const barRef = useRef<HTMLDivElement>(null);
+  const glassRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -244,6 +250,18 @@ export function Collection() {
         avatarRef.current.style.opacity = String(1 - ap);
         avatarRef.current.style.transform = `scale(${1 - 0.12 * ap})`;
         avatarRef.current.style.pointerEvents = ap > 0.9 ? "none" : "auto";
+      }
+      // Task #792 — the pinned scope bar wears its Apple-Music glass
+      // chrome (scrim + hairline divider + soft elevation) only once it
+      // has actually stuck to the top with content scrolling behind it.
+      // At rest it sits flush below the Collection title with no chrome.
+      if (barRef.current && glassRef.current) {
+        const stuck =
+          barRef.current.getBoundingClientRect().top - el.getBoundingClientRect().top <= 65;
+        const g = glassRef.current.style;
+        g.background = stuck ? "rgba(0,6,43,0.72)" : "rgba(0,6,43,0)";
+        g.borderBottomColor = stuck ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0)";
+        g.boxShadow = stuck ? "0 1px 16px rgba(0,0,0,0.28)" : "0 1px 16px rgba(0,0,0,0)";
       }
       ticking = false;
     };
@@ -451,11 +469,32 @@ export function Collection() {
               ("filter") IconButton on the right. The standalone library
               search row is gone — fans tap the search circle in the
               bottom nav to land on /search instead. */}
-          <div className="px-5 mb-4 flex items-center gap-2">
-            {/* Task #530 — Filter sits to the LEFT of the segmented
-                control, matching Apple Music's "filter then category"
-                reading order on the library screen. */}
-            <div className="relative flex-shrink-0">
+          {/* Task #792 — pinned scope bar (Filter + Albums/Songs/Artists
+              tabs). Sticky just under the status bar so it stays reachable
+              while the grid scrolls beneath its Apple-Music glass. The
+              single backdrop-filter lives on an absolute sibling layer (not
+              the padded content) so the sort menu's `fixed` scrim still
+              escapes to the viewport instead of being trapped by a filter
+              containing-block. */}
+          <div ref={barRef} className="sticky top-[64px] z-30">
+            <div
+              ref={glassRef}
+              aria-hidden
+              className="absolute inset-0"
+              style={{
+                backdropFilter: "blur(20px) saturate(180%)",
+                WebkitBackdropFilter: "blur(20px) saturate(180%)",
+                background: "rgba(0,6,43,0)",
+                borderBottom: "1px solid rgba(255,255,255,0)",
+                boxShadow: "0 1px 16px rgba(0,0,0,0)",
+                transition: "background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease",
+              }}
+            />
+            <div className="relative px-5 py-3 flex items-center gap-2">
+              {/* Task #530 — Filter sits to the LEFT of the segmented
+                  control, matching Apple Music's "filter then category"
+                  reading order on the library screen. */}
+              <div className="relative flex-shrink-0">
               <IconButton
                 onClick={() => setShowSort((s) => !s)}
                 label="Filter"
@@ -537,6 +576,7 @@ export function Collection() {
                   {t}
                 </button>
               ))}
+              </div>
             </div>
           </div>
 
