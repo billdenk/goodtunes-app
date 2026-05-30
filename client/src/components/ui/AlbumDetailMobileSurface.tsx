@@ -591,12 +591,12 @@ export function AlbumDetailMobileSurface({
                 >
                   <div className="flex-shrink-0 flex items-center gap-1.5">
                     <div className="w-3 flex items-center justify-center">
-                      {!isActive && isFavorite && (
+                      {isFavorite && (
                         <svg
                           width="12"
                           height="12"
                           viewBox="0 0 24 24"
-                          fill="var(--brand-heart)"
+                          fill="rgba(255,255,255,0.7)"
                           aria-hidden
                           data-testid={`icon-favorite-${song.id}`}
                         >
