@@ -261,15 +261,19 @@ export function BottomNav() {
           data-testid="overlay-search"
         >
           <div className="mx-auto h-full max-w-[390px] flex flex-col">
-            {/* Scroll region fills the space between the top of the
-                screen and the search field, which itself rests just above
-                the keyboard. Bottom padding clears the field (height +
-                its 12px offset + gap) PLUS the keyboard inset, so results
-                never render behind the keyboard. Falls back to the
-                resting ~150px dock clearance when no keyboard is up. */}
+            {/* Scroll region flows DOWN from beneath the top-anchored
+                search field (Task #770). Top padding clears the safe-area
+                inset + the field (its 12px top offset + height + a 12px
+                gap) so the first row sits just under the pill. Bottom
+                padding clears the keyboard inset so the last rows aren't
+                hidden behind the keyboard; falls back to a small gutter
+                when no keyboard is up. */}
             <div
-              className="flex-1 overflow-y-auto scrollbar-hide pt-14"
-              style={{ paddingBottom: Math.max(150, kbInset + dockHVal + 28) }}
+              className="flex-1 overflow-y-auto scrollbar-hide"
+              style={{
+                paddingTop: `calc(env(safe-area-inset-top, 0px) + ${dockHVal + 24}px)`,
+                paddingBottom: Math.max(24, kbInset + 24),
+              }}
             >
               {!search.query && (
                 <RecentSearchedList
@@ -373,21 +377,51 @@ export function BottomNav() {
           )}
         </AnimatePresence>
 
-        {/* Expanding search field — always mounted so the toggle can focus
-            it synchronously (iOS keyboard). Scaled to 0 from the right at
-            rest, grows leftward into the freed pillow space when open. */}
-        <div
-          className="pointer-events-auto absolute flex items-center rounded-full overflow-hidden"
+        {/* RIGHT — the search/close toggle. Diameter == pillow height so
+            it reads as the same rhythm; tapping toggles the field. */}
+        <button
+          type="button"
+          onClick={onToggleSearch}
+          aria-label={searchOpen ? "Close search" : "Search"}
+          className={`pointer-events-auto absolute right-3 flex items-center justify-center rounded-full active:scale-95 ${searchOpen ? "text-[color:var(--brand-blue)]" : "text-white/80"}`}
           style={{
+            // Top-anchored field (Task #770) — the toggle no longer needs
+            // to dodge the keyboard, so it rests at the bottom dock.
             bottom: 12,
-            left: 12,
-            right: dockHVal + 20,
+            width: toggleSize,
+            height: toggleSize,
+            ...glassStyle,
+            transition: "transform 150ms ease",
+          }}
+          data-testid="nav-search"
+        >
+          {searchOpen ? closeIcon : searchIcon}
+        </button>
+      </div>
+
+      {/* Top-anchored search field (Task #770) — sits under the
+          status-bar / safe-area inset so the keyboard (which covers the
+          bottom of the screen) never hides it. Always mounted so the
+          dock toggle can focus it synchronously inside the tap gesture
+          (iOS keyboard); hidden + non-interactive at rest, slides down +
+          fades in when search opens. Keeps the same glass pill, search
+          icon, placeholder, and clear (×) button as before — only its
+          position changed from above-the-keyboard to the top. z-40 keeps
+          it above the results overlay (z-20). */}
+      <div
+        className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-40 px-3 pointer-events-none"
+        style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+      >
+        <div
+          className="flex items-center rounded-full overflow-hidden"
+          style={{
             height: dockHVal,
             ...glassStyle,
-            transformOrigin: "right center",
-            transform: searchOpen ? `translateY(${-kbInset}px) scaleX(1)` : "scaleX(0)",
+            transformOrigin: "top center",
+            opacity: searchOpen ? 1 : 0,
+            transform: searchOpen ? "translateY(0)" : "translateY(-16px)",
             pointerEvents: searchOpen ? "auto" : "none",
-            transition: "transform 300ms cubic-bezier(0.32, 0.72, 0, 1)",
+            transition: "transform 300ms cubic-bezier(0.32, 0.72, 0, 1), opacity 220ms ease",
           }}
         >
           <span className="pl-4 pr-2 text-white/55 flex-shrink-0">{searchIcon}</span>
@@ -425,27 +459,6 @@ export function BottomNav() {
             </button>
           )}
         </div>
-
-        {/* RIGHT — the search/close toggle. Diameter == pillow height so
-            it reads as the same rhythm; tapping toggles the field. */}
-        <button
-          type="button"
-          onClick={onToggleSearch}
-          aria-label={searchOpen ? "Close search" : "Search"}
-          className={`pointer-events-auto absolute right-3 flex items-center justify-center rounded-full active:scale-95 ${searchOpen ? "text-[color:var(--brand-blue)]" : "text-white/80"}`}
-          style={{
-            // Lift via `bottom` (not transform) so the active:scale-95
-            // press feedback still works while search is open.
-            bottom: 12 + (searchOpen ? kbInset : 0),
-            width: toggleSize,
-            height: toggleSize,
-            ...glassStyle,
-            transition: "transform 150ms ease, bottom 300ms cubic-bezier(0.32, 0.72, 0, 1)",
-          }}
-          data-testid="nav-search"
-        >
-          {searchOpen ? closeIcon : searchIcon}
-        </button>
       </div>
     </>
   );
