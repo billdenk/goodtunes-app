@@ -8,6 +8,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Tag,
   Trash2,
   UserPlus,
   X,
@@ -26,6 +27,7 @@ import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog"
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
 import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
+import { SaveLink, CardHeader } from "@/components/admin/EditCardChrome";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -2037,31 +2039,20 @@ function PressCatalogPanel({ pressId, pressDomain }: { pressId: string; pressDom
             return (
               <div
                 key={fmt}
-                className="rounded-md border border-slate-200 p-3 space-y-3"
+                className="rounded-md border border-slate-200 p-3"
                 data-testid={`catalog-format-${fmt}`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[13.5px] font-semibold text-slate-900">
-                    {ALBUM_FORMAT_LABEL[fmt]}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => toggleFormat.mutate({ format: fmt, enabled: false })}
-                    disabled={toggleFormat.isPending}
-                    className="text-xs text-rose-600 hover:underline underline-offset-2 disabled:opacity-50"
-                    data-testid={`toggle-format-${fmt}`}
-                  >
-                    Remove format
-                  </button>
-                </div>
                 {fmtRow && (
                   <CatalogFormatBody
                     pressId={pressId}
                     fmt={fmt}
+                    formatLabel={ALBUM_FORMAT_LABEL[fmt]}
                     tiers={fmtRow.tiers}
                     jackets={data.jackets}
                     defaultJacketId={data.defaultJacketId}
                     onChanged={invalidate}
+                    onRemoveFormat={() => toggleFormat.mutate({ format: fmt, enabled: false })}
+                    removeBusy={toggleFormat.isPending}
                   />
                 )}
               </div>
@@ -2129,19 +2120,29 @@ function AddFormatPicker({
 function CatalogFormatBody({
   pressId,
   fmt,
+  formatLabel,
   tiers,
   jackets,
   defaultJacketId,
   onChanged,
+  onRemoveFormat,
+  removeBusy,
 }: {
   pressId: string;
   fmt: AlbumFormat;
+  formatLabel: string;
   tiers: CatalogTier[];
   jackets: CatalogJacket[];
   defaultJacketId: string | null;
   onChanged: () => void;
+  onRemoveFormat: () => void;
+  removeBusy: boolean;
 }) {
   const { toast } = useToast();
+  // Read-only by default; the pencil in the format header flips the
+  // whole card (tier · jacket · swatches · ladder) into edit mode,
+  // mirroring the pencil-to-edit cards on AdminPlatformPricing.
+  const [editing, setEditing] = useState(false);
   const [selectedTierId, setSelectedTierId] = useState<string | null>(tiers[0]?.id ?? null);
   // A tier id we just created via "+ Add tier" but haven't seen in the
   // refetched `tiers` prop yet. While set, the validation effect
@@ -2275,23 +2276,48 @@ function CatalogFormatBody({
     setDrafts((prev) => ({ ...prev, [comboKey]: { ...(prev[comboKey] ?? {}), [qty]: "" } }));
   };
 
-  const dirty = (() => {
-    if (!comboKey) return false;
-    const d = drafts[comboKey];
+  // Compares one combo's local drafts (typed prices + explicit
+  // awaiting-quote toggles) against its saved ladder.
+  const isComboDirty = (
+    cKey: string,
+    ladder: { qty: number; unitCents: number; confirmed?: boolean }[],
+  ) => {
+    const d = drafts[cKey];
     if (d) {
       for (const q of Object.keys(d)) {
         const qty = Number(q);
-        const saved = savedLadder.find((r) => r.qty === qty);
+        const saved = ladder.find((r) => r.qty === qty);
         const savedStr = saved && saved.confirmed !== false ? formatDollars(saved.unitCents) : "";
         if ((d[qty] ?? "") !== savedStr) return true;
       }
     }
-    // Explicit TBD toggle is also "dirty" when it diverges from saved.
-    const tbdNow = unconfirmedDrafts[comboKey] ?? new Set<number>();
-    const tbdSaved = new Set<number>(savedLadder.filter((r) => r.confirmed === false).map((r) => r.qty));
+    const tbdNow = unconfirmedDrafts[cKey] ?? new Set<number>();
+    const tbdSaved = new Set<number>(ladder.filter((r) => r.confirmed === false).map((r) => r.qty));
     if (tbdNow.size !== tbdSaved.size) return true;
-    for (const q of tbdNow) if (!tbdSaved.has(q)) return true;
+    for (const q of Array.from(tbdNow)) if (!tbdSaved.has(q)) return true;
     return false;
+  };
+
+  // Save acts on the visible combo, so SaveLink reflects only this combo.
+  const dirty = comboKey ? isComboDirty(comboKey, savedLadder) : false;
+
+  // Discard-confirm must cover edits made in OTHER tier/jacket combos
+  // before the operator switched away — otherwise exiting edit (which
+  // wipes every draft) could silently drop them. We only inspect combos
+  // the operator actually touched (those carry a drafts/unconfirmed
+  // entry); the current combo's seed always matches saved, so an
+  // untouched session reads clean.
+  const anyDirty = (() => {
+    const keys = Array.from(
+      new Set<string>([...Object.keys(drafts), ...Object.keys(unconfirmedDrafts)]),
+    );
+    return keys.some((k) => {
+      const [tierId, jacketId] = k.split(":");
+      const tier = tiers.find((t) => t.id === tierId);
+      if (!tier) return false;
+      const ladder = tier.laddersByJacket[jacketId] ?? [];
+      return isComboDirty(k, ladder);
+    });
   })();
 
   // ─ Mutations
@@ -2387,103 +2413,184 @@ function CatalogFormatBody({
     onError: (e: any) => toast({ title: "Couldn't save pricing", description: e?.message, variant: "destructive" }),
   });
 
+  // Discard ALL local drafts (typed prices + explicit awaiting-quote
+  // toggles across every combo, not just the visible one) and any
+  // in-flight add-tier / add-jacket inputs, then drop back to read-only.
+  // The current combo is re-seeded so its quote chips still reflect saved.
+  const exitEdit = () => {
+    setDrafts({});
+    const seed = new Set<number>();
+    for (const r of savedLadder) if (r.confirmed === false) seed.add(r.qty);
+    setUnconfirmedDrafts(comboKey ? { [comboKey]: seed } : {});
+    setAddingTier(false);
+    setNewTierName("");
+    setAddingJacket(false);
+    setNewJacketName("");
+    setEditing(false);
+  };
+
+  const header = (
+    <CardHeader
+      title={formatLabel}
+      editing={editing}
+      dirty={anyDirty}
+      onEnterEdit={() => setEditing(true)}
+      onCancelEdit={exitEdit}
+      testId={`catalog-format-${fmt}`}
+      titleClassName="text-sm font-semibold text-slate-900"
+      rightSlot={
+        editing ? (
+          <button
+            type="button"
+            onClick={onRemoveFormat}
+            disabled={removeBusy}
+            className="text-xs text-rose-600 hover:underline underline-offset-2 disabled:opacity-50 px-1"
+            data-testid={`toggle-format-${fmt}`}
+          >
+            Remove format
+          </button>
+        ) : null
+      }
+    />
+  );
+
   if (tiers.length === 0 && !addingTier) {
     return (
-      <div className="pl-6 space-y-2">
+      <div className="space-y-3">
+        {header}
         <div className="text-xs text-slate-500">No tiers yet for this format.</div>
-        <Button
-          type="button"
-          variant="ghost"
-          className="h-8 px-2 text-xs"
-          onClick={() => setAddingTier(true)}
-          data-testid={`button-add-first-tier-${fmt}`}
-        >
-          <Plus className="w-3.5 h-3.5 mr-1" />
-          Add tier
-        </Button>
+        {editing && (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-8 px-2 text-xs"
+            onClick={() => setAddingTier(true)}
+            data-testid={`button-add-first-tier-${fmt}`}
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" />
+            Add tier
+          </Button>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="pl-6 space-y-4">
+    <div className="space-y-4">
+      {header}
       {/* Tier dropdown row */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Tier</span>
-        <select
-          value={selectedTierId ?? ""}
-          onChange={(e) => setSelectedTierId(e.target.value || null)}
-          className={INPUT + " w-auto min-w-[14rem]"}
-          data-testid={`select-tier-${fmt}`}
-        >
-          {tiers.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-        {selectedTier && (
+        {editing ? (
+          <select
+            value={selectedTierId ?? ""}
+            onChange={(e) => setSelectedTierId(e.target.value || null)}
+            className={INPUT + " w-auto min-w-[14rem]"}
+            data-testid={`select-tier-${fmt}`}
+          >
+            {tiers.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {tiers.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setSelectedTierId(t.id)}
+                aria-pressed={t.id === selectedTierId}
+                className={[
+                  "px-2.5 h-7 rounded-full text-xs font-medium transition-colors",
+                  t.id === selectedTierId
+                    ? "bg-[color:var(--brand-blue-soft)] text-[color:var(--brand-blue)]"
+                    : "text-slate-600 hover:bg-slate-100",
+                ].join(" ")}
+                data-testid={`pill-tier-${t.id}`}
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+        )}
+        {editing && selectedTier && (
           <DeleteTierButton
             tier={selectedTier}
             onConfirm={() => deleteTier.mutate(selectedTier.id)}
             disabled={deleteTier.isPending}
           />
         )}
-        {!addingTier ? (
-          <button
-            type="button"
-            onClick={() => setAddingTier(true)}
-            className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2"
-            data-testid={`button-add-tier-${fmt}`}
-          >
-            + Add tier
-          </button>
-        ) : (
-          <div className="flex items-center gap-1.5">
-            <input
-              value={newTierName}
-              onChange={(e) => setNewTierName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newTierName.trim()) addTier.mutate();
-                if (e.key === "Escape") {
+        {editing &&
+          (!addingTier ? (
+            <button
+              type="button"
+              onClick={() => setAddingTier(true)}
+              className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+              data-testid={`button-add-tier-${fmt}`}
+            >
+              + Add tier
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <input
+                value={newTierName}
+                onChange={(e) => setNewTierName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newTierName.trim()) addTier.mutate();
+                  if (e.key === "Escape") {
+                    setAddingTier(false);
+                    setNewTierName("");
+                  }
+                }}
+                autoFocus
+                placeholder="Tier name"
+                className={INPUT + " h-8 w-44"}
+                data-testid={`input-new-tier-${fmt}`}
+              />
+              <button
+                type="button"
+                onClick={() => newTierName.trim() && addTier.mutate()}
+                disabled={!newTierName.trim() || addTier.isPending}
+                className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 disabled:opacity-50"
+                data-testid={`button-confirm-add-tier-${fmt}`}
+              >
+                {addTier.isPending ? "Adding…" : "Add"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
                   setAddingTier(false);
                   setNewTierName("");
-                }
-              }}
-              autoFocus
-              placeholder="Tier name"
-              className={INPUT + " h-8 w-44"}
-              data-testid={`input-new-tier-${fmt}`}
-            />
-            <button
-              type="button"
-              onClick={() => newTierName.trim() && addTier.mutate()}
-              disabled={!newTierName.trim() || addTier.isPending}
-              className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 disabled:opacity-50"
-              data-testid={`button-confirm-add-tier-${fmt}`}
-            >
-              {addTier.isPending ? "Adding…" : "Add"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAddingTier(false);
-                setNewTierName("");
-              }}
-              className="text-xs text-slate-500 hover:underline underline-offset-2"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
+                }}
+                className="text-xs text-slate-500 hover:underline underline-offset-2"
+              >
+                Cancel
+              </button>
+            </div>
+          ))}
       </div>
 
       {/* Swatch chips for the selected tier */}
-      {selectedTier && (
+      {selectedTier && selectedTier.colors.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {selectedTier.colors.map((c) => (
-            <SwatchChip key={c.id} pressId={pressId} color={c} onChanged={onChanged} />
+            <SwatchChip
+              key={c.id}
+              pressId={pressId}
+              color={c}
+              onChanged={onChanged}
+              editable={editing}
+            />
           ))}
+          {editing && (
+            <AddSwatchChip pressId={pressId} tierId={selectedTier.id} onChanged={onChanged} />
+          )}
+        </div>
+      )}
+      {selectedTier && selectedTier.colors.length === 0 && editing && (
+        <div className="flex flex-wrap items-center gap-1.5">
           <AddSwatchChip pressId={pressId} tierId={selectedTier.id} onChanged={onChanged} />
         </div>
       )}
@@ -2491,22 +2598,47 @@ function CatalogFormatBody({
       {/* Jacket dropdown row */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Jacket</span>
-        <select
-          value={selectedJacketId ?? ""}
-          onChange={(e) => setSelectedJacketId(e.target.value || null)}
-          className={INPUT + " w-auto min-w-[16rem]"}
-          disabled={jackets.length === 0}
-          data-testid={`select-jacket-${fmt}`}
-        >
-          {jackets.length === 0 && <option value="">— No jackets —</option>}
-          {jackets.map((j) => (
-            <option key={j.id} value={j.id}>
-              {j.name}
-              {j.isDefault ? " (default)" : ""}
-            </option>
-          ))}
-        </select>
-        {selectedJacket && !selectedJacket.isDefault && (
+        {editing ? (
+          <select
+            value={selectedJacketId ?? ""}
+            onChange={(e) => setSelectedJacketId(e.target.value || null)}
+            className={INPUT + " w-auto min-w-[16rem]"}
+            disabled={jackets.length === 0}
+            data-testid={`select-jacket-${fmt}`}
+          >
+            {jackets.length === 0 && <option value="">— No jackets —</option>}
+            {jackets.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.name}
+                {j.isDefault ? " (default)" : ""}
+              </option>
+            ))}
+          </select>
+        ) : jackets.length === 0 ? (
+          <span className="text-xs text-slate-400">— No jackets —</span>
+        ) : (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {jackets.map((j) => (
+              <button
+                key={j.id}
+                type="button"
+                onClick={() => setSelectedJacketId(j.id)}
+                aria-pressed={j.id === selectedJacketId}
+                className={[
+                  "px-2.5 h-7 rounded-full text-xs font-medium transition-colors",
+                  j.id === selectedJacketId
+                    ? "bg-[color:var(--brand-blue-soft)] text-[color:var(--brand-blue)]"
+                    : "text-slate-600 hover:bg-slate-100",
+                ].join(" ")}
+                data-testid={`pill-jacket-${j.id}`}
+              >
+                {j.name}
+                {j.isDefault ? " (default)" : ""}
+              </button>
+            ))}
+          </div>
+        )}
+        {editing && selectedJacket && !selectedJacket.isDefault && (
           <button
             type="button"
             onClick={() => updateJacket.mutate({ id: selectedJacket.id, patch: { isDefault: true } })}
@@ -2516,60 +2648,61 @@ function CatalogFormatBody({
             Set as default
           </button>
         )}
-        {selectedJacket && jackets.length > 1 && (
+        {editing && selectedJacket && jackets.length > 1 && (
           <DeleteJacketButton
             jacket={selectedJacket}
             onConfirm={() => deleteJacket.mutate(selectedJacket.id)}
             disabled={deleteJacket.isPending}
           />
         )}
-        {!addingJacket ? (
-          <button
-            type="button"
-            onClick={() => setAddingJacket(true)}
-            className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2"
-            data-testid={`button-add-jacket-${fmt}`}
-          >
-            + Add jacket
-          </button>
-        ) : (
-          <div className="flex items-center gap-1.5">
-            <input
-              value={newJacketName}
-              onChange={(e) => setNewJacketName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newJacketName.trim()) addJacket.mutate();
-                if (e.key === "Escape") {
+        {editing &&
+          (!addingJacket ? (
+            <button
+              type="button"
+              onClick={() => setAddingJacket(true)}
+              className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+              data-testid={`button-add-jacket-${fmt}`}
+            >
+              + Add jacket
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <input
+                value={newJacketName}
+                onChange={(e) => setNewJacketName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newJacketName.trim()) addJacket.mutate();
+                  if (e.key === "Escape") {
+                    setAddingJacket(false);
+                    setNewJacketName("");
+                  }
+                }}
+                autoFocus
+                placeholder="Jacket name (e.g. Gatefold)"
+                className={INPUT + " h-8 w-56"}
+                data-testid={`input-new-jacket-${fmt}`}
+              />
+              <button
+                type="button"
+                onClick={() => newJacketName.trim() && addJacket.mutate()}
+                disabled={!newJacketName.trim() || addJacket.isPending}
+                className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 disabled:opacity-50"
+                data-testid={`button-confirm-add-jacket-${fmt}`}
+              >
+                {addJacket.isPending ? "Adding…" : "Add"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
                   setAddingJacket(false);
                   setNewJacketName("");
-                }
-              }}
-              autoFocus
-              placeholder="Jacket name (e.g. Gatefold)"
-              className={INPUT + " h-8 w-56"}
-              data-testid={`input-new-jacket-${fmt}`}
-            />
-            <button
-              type="button"
-              onClick={() => newJacketName.trim() && addJacket.mutate()}
-              disabled={!newJacketName.trim() || addJacket.isPending}
-              className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 disabled:opacity-50"
-              data-testid={`button-confirm-add-jacket-${fmt}`}
-            >
-              {addJacket.isPending ? "Adding…" : "Add"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAddingJacket(false);
-                setNewJacketName("");
-              }}
-              className="text-xs text-slate-500 hover:underline underline-offset-2"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
+                }}
+                className="text-xs text-slate-500 hover:underline underline-offset-2"
+              >
+                Cancel
+              </button>
+            </div>
+          ))}
       </div>
 
       {/* Quantity ladder table */}
@@ -2579,15 +2712,14 @@ function CatalogFormatBody({
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               Price per unit (USD) — {selectedTier.name} · {selectedJacket.name}
             </span>
-            <button
-              type="button"
-              onClick={() => saveLadder.mutate()}
-              disabled={!dirty || saveLadder.isPending}
-              className="text-xs text-[color:var(--brand-blue)] hover:underline underline-offset-2 disabled:opacity-40 disabled:no-underline"
-              data-testid={`button-save-ladder-${selectedTier.id}-${selectedJacket.id}`}
-            >
-              {saveLadder.isPending ? "Saving…" : dirty ? "Save" : "Saved"}
-            </button>
+            {editing && (
+              <SaveLink
+                dirty={dirty}
+                busy={saveLadder.isPending}
+                onClick={() => saveLadder.mutate()}
+                testId={`button-save-ladder-${selectedTier.id}-${selectedJacket.id}`}
+              />
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-xs border-separate border-spacing-0">
@@ -2601,20 +2733,23 @@ function CatalogFormatBody({
                       {q}
                     </th>
                   ))}
-                  <th className="px-2 py-1 border-b border-slate-200 text-left">
-                    <AddQuantityButton
-                      existing={columns}
-                      onAdd={(q) => setExtraQuantities((prev) => [...prev, q])}
-                      fmt={fmt}
-                    />
-                  </th>
+                  {editing && (
+                    <th className="px-2 py-1 border-b border-slate-200 text-left">
+                      <AddQuantityButton
+                        existing={columns}
+                        onAdd={(q) => setExtraQuantities((prev) => [...prev, q])}
+                        fmt={fmt}
+                      />
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
                 <tr>
                   {columns.map((q) => {
-                    // Task #624 — a cell is "unconfirmed / TBD" when:
-                    //   1) admin explicitly toggled TBD on it (draft), OR
+                    // Task #624 — a cell is "unconfirmed / awaiting-quote"
+                    // when:
+                    //   1) admin explicitly toggled it (draft), OR
                     //   2) the saved rung has `confirmed:false`
                     //      (e.g. a seeded Black placeholder), OR
                     //   3) it's a default-qty column the press hasn't
@@ -2634,84 +2769,112 @@ function CatalogFormatBody({
                       !hasAnyValueOrDraft &&
                       tierHasAnyConfirmed;
                     const isUnconfirmed = explicitTbd || (savedTbd && !draftedValue) || gapInDefaults;
-                    return (
-                    <td key={q} className="px-1 py-1.5 align-middle" title={isUnconfirmed ? "TBD — awaiting quote" : undefined}>
-                      {/* Task #662 follow-up — the relative wrapper
-                          must scope to ONLY the input or `top-1/2`
-                          centers `$` against the whole input+button
-                          stack (lands between them). */}
-                      <div className="relative">
-                        <span
-                          className={[
-                            "pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs",
-                            isUnconfirmed ? "text-amber-500" : "text-slate-400",
-                          ].join(" ")}
-                        >
-                          $
-                        </span>
-                        <input
-                          value={cellValue(q)}
-                          onChange={(e) => setCellValue(q, e.target.value)}
-                          placeholder={isUnconfirmed ? "TBD" : ""}
-                          inputMode="decimal"
-                          className={[
-                            "w-20 h-8 pl-6 pr-2 rounded-md border text-xs tabular-nums text-right focus:outline-none focus:border-[color:var(--brand-blue)]",
-                            isUnconfirmed
-                              ? "border-amber-400 bg-amber-50 text-amber-900 placeholder:text-amber-400"
-                              : "border-slate-200 bg-white",
-                          ].join(" ")}
-                          data-testid={`input-ladder-cell-${selectedTier.id}-${selectedJacket.id}-${q}`}
-                          aria-label={
-                            isUnconfirmed
-                              ? `Quantity ${q} — TBD, awaiting quote`
-                              : `Quantity ${q}`
-                          }
-                        />
-                        </div>
-                        {(() => {
-                          // Task #624 — TBD button reflects what Save
-                          // will actually persist: explicit-TBD flag
-                          // wins; otherwise a saved-TBD rung whose
-                          // value hasn't been typed yet stays TBD;
-                          // typing into the cell promotes to confirmed
-                          // and the button flips back to "Mark TBD".
-                          const willPersistTbd =
-                            explicitTbd ||
-                            (savedTbd && (draftedValue ?? "").trim() === "");
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => toggleUnconfirmed(q)}
-                              className={[
-                                "mt-1 block w-20 text-xs rounded-md border px-1.5 py-0.5",
-                                willPersistTbd
-                                  ? "border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200"
-                                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50",
-                              ].join(" ")}
-                              title={
-                                willPersistTbd
-                                  ? "Clear TBD flag"
-                                  : "Mark this rung as TBD — awaiting quote"
-                              }
-                              data-testid={`button-toggle-tbd-${selectedTier.id}-${selectedJacket.id}-${q}`}
+                    const hasPrice = saved !== undefined && saved.confirmed !== false;
+
+                    // ── Read-only: plain price, a quiet "Quote" pill for
+                    // awaiting-quote rungs, and a muted dash for unpriced
+                    // runs this combo simply doesn't sell.
+                    if (!editing) {
+                      return (
+                        <td key={q} className="px-2 py-1.5 text-center align-middle">
+                          {isUnconfirmed ? (
+                            <span
+                              className="inline-flex items-center justify-center h-6 px-2 rounded-full bg-slate-100 text-slate-500 text-xs font-medium"
+                              title="Awaiting quote"
+                              data-testid={`cell-ladder-quote-${selectedTier.id}-${selectedJacket.id}-${q}`}
                             >
-                              {willPersistTbd ? "✓ TBD" : "Mark TBD"}
-                            </button>
-                          );
-                        })()}
+                              Quote
+                            </span>
+                          ) : hasPrice ? (
+                            <span
+                              className="text-xs font-medium text-slate-900 tabular-nums"
+                              data-testid={`cell-ladder-price-${selectedTier.id}-${selectedJacket.id}-${q}`}
+                            >
+                              ${formatDollars(saved!.unitCents)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300" aria-label={`Quantity ${q} — not priced`}>
+                              —
+                            </span>
+                          )}
+                        </td>
+                      );
+                    }
+
+                    // ── Edit: the input stays visible so a seeded-TBD
+                    // rung can be promoted by simply typing; the quote
+                    // state is a single inline tag toggle sitting beside
+                    // the field, not the old amber block stacked under it.
+                    const willPersistTbd =
+                      explicitTbd || (savedTbd && (draftedValue ?? "").trim() === "");
+                    return (
+                    <td key={q} className="px-1 py-1.5 align-middle">
+                      <div className="flex items-center gap-1">
+                        {/* relative wrapper scopes to ONLY the input so
+                            `top-1/2` centers `$` against the field. */}
+                        <div className="relative">
+                          {!willPersistTbd && (
+                            <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                              $
+                            </span>
+                          )}
+                          <input
+                            value={cellValue(q)}
+                            onChange={(e) => setCellValue(q, e.target.value)}
+                            placeholder={willPersistTbd ? "Quote" : ""}
+                            inputMode="decimal"
+                            className={[
+                              "w-20 h-8 pr-2 rounded-md border text-xs tabular-nums text-right focus:outline-none focus:border-[color:var(--brand-blue)]",
+                              willPersistTbd
+                                ? "pl-2 border-slate-200 bg-slate-50 placeholder:text-slate-400"
+                                : "pl-6 border-slate-200 bg-white",
+                            ].join(" ")}
+                            data-testid={`input-ladder-cell-${selectedTier.id}-${selectedJacket.id}-${q}`}
+                            aria-label={
+                              willPersistTbd
+                                ? `Quantity ${q} — awaiting quote`
+                                : `Quantity ${q}`
+                            }
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleUnconfirmed(q)}
+                          aria-pressed={willPersistTbd}
+                          className={[
+                            "h-8 w-8 inline-flex items-center justify-center rounded-md border transition-colors shrink-0",
+                            willPersistTbd
+                              ? "border-[color:var(--brand-blue)] text-[color:var(--brand-blue)] bg-[color:var(--brand-blue-soft)]"
+                              : "border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300",
+                          ].join(" ")}
+                          title={
+                            willPersistTbd
+                              ? "Awaiting quote — click to enter a price instead"
+                              : "Mark this rung as awaiting quote"
+                          }
+                          data-testid={`button-toggle-tbd-${selectedTier.id}-${selectedJacket.id}-${q}`}
+                        >
+                          <Tag className="w-3.5 h-3.5" />
+                          <span className="sr-only">
+                            {willPersistTbd ? "Clear awaiting-quote" : "Mark as awaiting quote"}
+                          </span>
+                        </button>
+                      </div>
                     </td>
                     );
                   })}
-                  <td className="px-2 py-1.5" />
+                  {editing && <td className="px-2 py-1.5" />}
                 </tr>
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-slate-400">
-            Leave a cell blank if this combo doesn't price that run. On the album's Sell panel an
-            artist's typed quantity snaps up to the next non-blank rung; above the top rung the
-            picker prompts for a custom quote.
-          </p>
+          {editing && (
+            <p className="text-xs text-slate-400">
+              Leave a cell blank if this combo doesn't price that run. On the album's Sell panel an
+              artist's typed quantity snaps up to the next non-blank rung; above the top rung the
+              picker prompts for a custom quote.
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -2877,10 +3040,12 @@ function SwatchChip({
   pressId,
   color,
   onChanged,
+  editable = true,
 }: {
   pressId: string;
   color: CatalogColor;
   onChanged: () => void;
+  editable?: boolean;
 }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
@@ -2937,6 +3102,27 @@ function SwatchChip({
     },
     onError: (e: any) => toast({ title: "Upload failed", description: e?.message, variant: "destructive" }),
   });
+
+  // Read-only chip — a static badge with no Dialog, so the catalog reads
+  // calmly until the operator clicks the card's pencil to edit.
+  if (!editable) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 h-7 pl-1 pr-2.5 rounded-full border border-slate-200 bg-white text-xs text-slate-700"
+        data-testid={`chip-color-${color.id}`}
+      >
+        <span
+          className="w-4 h-4 rounded-full border border-slate-200 shrink-0 overflow-hidden"
+          style={
+            color.swatchImageUrl
+              ? { backgroundImage: `url(${color.swatchImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+              : { background: color.swatchHex ?? "#cccccc" }
+          }
+        />
+        <span className="truncate max-w-[10rem]">{color.name}</span>
+      </span>
+    );
+  }
 
   return (
     <>

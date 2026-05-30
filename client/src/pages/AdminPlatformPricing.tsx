@@ -30,6 +30,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
+import { SaveLink, EditPencil, CardHeader } from "@/components/admin/EditCardChrome";
 import type { PayoutSettings, PayoutFormatCost, AlbumFormat } from "@shared/schema";
 import { ALBUM_FORMATS, ALBUM_FORMAT_LABEL } from "@shared/schema";
 import {
@@ -80,124 +81,6 @@ function timeAgo(iso: string | null): string {
   const months = Math.floor(days / 30);
   if (months < 12) return `${months}mo ago`;
   return `${Math.floor(months / 12)}y ago`;
-}
-
-// Quiet ghost Save — at rest dimmed slate; brand-blue + soft pill once
-// the card is dirty. Mirrors the `SaveLink` primitive on SellPanel.
-function SaveLink({
-  dirty,
-  onClick,
-  testId,
-  busy,
-}: {
-  dirty: boolean;
-  onClick: () => void;
-  testId: string;
-  busy?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={!dirty || !!busy}
-      className={
-        "h-8 px-3 rounded-md text-xs font-semibold transition-colors " +
-        (dirty
-          ? "bg-[color:var(--brand-blue)] text-white hover:opacity-90"
-          : "bg-slate-100 text-slate-300 cursor-default")
-      }
-      data-testid={testId}
-    >
-      {busy ? "Saving…" : "Save"}
-    </button>
-  );
-}
-
-// Plain pencil affordance — admin chrome ghost button, IconButton-style
-// dimensions (h-8 w-8) without the fan-dark IconButton primitive (which
-// is glass-scrim only and would vanish on white admin cards).
-function EditPencil({
-  active,
-  onClick,
-  testId,
-  label = "Edit",
-}: {
-  active: boolean;
-  onClick: () => void;
-  testId: string;
-  label?: string;
-}) {
-  // IconButton-equivalent ghost variant for admin chrome.
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      aria-pressed={active}
-      className={
-        "h-8 w-8 inline-flex items-center justify-center rounded-md transition-colors " +
-        (active
-          ? "text-[color:var(--brand-blue)] bg-[color:var(--brand-blue-soft)]"
-          : "text-slate-400 hover:text-slate-700 hover:bg-slate-50")
-      }
-      data-testid={testId}
-    >
-      <Pencil className="w-4 h-4" />
-    </button>
-  );
-}
-
-function CardHeader({
-  title,
-  subtitle,
-  icon,
-  editing,
-  dirty,
-  onEnterEdit,
-  onCancelEdit,
-  testId,
-  rightSlot,
-}: {
-  title: string;
-  subtitle?: string;
-  icon?: React.ReactNode;
-  editing: boolean;
-  // When `editing && dirty`, clicking the pencil prompts to discard
-  // local draft state before flipping back to read-only.
-  dirty?: boolean;
-  onEnterEdit: () => void;
-  onCancelEdit: () => void;
-  testId: string;
-  rightSlot?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          {icon}
-          <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-        </div>
-        {subtitle && (
-          <p className="text-sm text-slate-500 mt-1">{subtitle}</p>
-        )}
-      </div>
-      <div className="flex items-center gap-1 shrink-0">
-        {rightSlot}
-        <EditPencil
-          active={editing}
-          onClick={() => {
-            if (editing) {
-              if (dirty && !window.confirm("Discard unsaved changes?")) return;
-              onCancelEdit();
-            } else {
-              onEnterEdit();
-            }
-          }}
-          testId={`button-edit-${testId}`}
-        />
-      </div>
-    </div>
-  );
 }
 
 export function AdminPlatformPricing() {
