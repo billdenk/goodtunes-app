@@ -6,7 +6,7 @@ import { usePlayer } from "@/context/PlayerContext";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { IconButton } from "@/components/ui/IconButton";
-import { SONGS, ALBUMS, type Song, type Album } from "@/data/musicData";
+import { type Song, type Album } from "@/data/musicData";
 import type { Song as DbSong, Album as DbAlbum } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { track } from "@/lib/analytics";
@@ -207,9 +207,47 @@ export function Playlists() {
       .filter((x): x is { id: string; title: string; artist: string; artwork: string } => x !== null);
   })();
 
-  const allSongsWithAlbumAll = SONGS
-    .map((s) => ({ ...s, album: ALBUMS.find((a) => a.id === s.albumId)! }))
-    .filter((s) => s.album);
+  // Favorites virtual playlist is built from the LIVE database catalog
+  // (songs + albums) — favorited ids come from real DB songs, so matching
+  // them against the hardcoded SONGS/ALBUMS demo data never resolved and the
+  // pinned "Favorites" playlist silently stayed empty. Mirror AlbumDetail's
+  // DB→Song mapping so playSong gets fully-shaped entries.
+  const allSongsWithAlbumAll: Array<Song & { album: Album }> = (() => {
+    if (!dbSongs || !dbAlbums) return [];
+    const albumById = new Map(dbAlbums.map((a) => [a.id, a] as const));
+    const out: Array<Song & { album: Album }> = [];
+    for (const s of dbSongs) {
+      const a = albumById.get(s.albumId);
+      if (!a) continue;
+      out.push({
+        id: s.id,
+        albumId: s.albumId,
+        title: s.title,
+        trackNumber: s.trackNumber,
+        duration: s.duration,
+        lyrics: s.lyrics ?? undefined,
+        audioUrl: s.audioUrl ?? undefined,
+        syncedLyrics: s.syncedLyrics ?? null,
+        isExplicit: !!s.isExplicit,
+        streamOnly: !!s.streamOnly,
+        spotifyTrackUrl: s.spotifyTrackUrl ?? null,
+        appleMusicTrackUrl: s.appleMusicTrackUrl ?? null,
+        album: {
+          id: a.id,
+          title: a.title,
+          artist: a.artist,
+          artwork: a.artwork,
+          year: a.year ?? 0,
+          type: a.type as Album["type"],
+          description: a.description ?? "",
+          isExplicit: !!a.isExplicit,
+          spotifyUrl: a.spotifyUrl ?? null,
+          appleMusicUrl: a.appleMusicUrl ?? null,
+        },
+      });
+    }
+    return out;
+  })();
 
   const { toast } = useToast();
 

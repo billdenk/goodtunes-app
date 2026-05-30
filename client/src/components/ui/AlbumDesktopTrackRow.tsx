@@ -79,15 +79,17 @@ export function AlbumDesktopTrackRow({
       data-row-current={isCurrent ? "true" : "false"}
     >
       {/* Leading favorite heart — sits to the left of the number, reserves
-          its slot even when empty so titles stay aligned across rows.
-          Hidden on the currently-playing row (equalizer takes over). */}
+          its slot even when empty so titles stay aligned across rows. Reads
+          as a quiet status marker (neutral white ~70%, like Apple's row
+          dots), not the loud brand rose. Stays visible while the row plays —
+          it lives in its own cell, separate from the equalizer. */}
       <div className="w-3 flex items-center justify-center" aria-hidden>
-        {isFavorite && !isCurrent && (
+        {isFavorite && (
           <svg
             width="11"
             height="11"
             viewBox="0 0 24 24"
-            fill={ROSE}
+            fill="rgba(255,255,255,0.7)"
             data-testid={`icon-favorite-row-${trackNumber}`}
           >
             <path d="M12 21s-7-4.5-9.5-9C1 9 2.5 5 6.5 5c2 0 3.5 1 5.5 3 2-2 3.5-3 5.5-3 4 0 5.5 4 4 7-2.5 4.5-9.5 9-9.5 9z" />

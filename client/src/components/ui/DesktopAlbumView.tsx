@@ -95,8 +95,9 @@ export type DesktopAlbumViewProps = {
   onAddTrack?: (song: DesktopAlbumSong) => void;
 
   /** Songs the current viewer has favorited. The track row renders a
-   *  small brand-pink heart in its leading number cell when the id is
-   *  in this set (display only — toggling lives in the ⋯ menu). */
+   *  small neutral-white heart (quiet status marker) to the left of the
+   *  number cell when the id is in this set — it stays visible while the
+   *  row plays (display only — toggling lives in the ⋯ menu). */
   favoriteSongIds?: Set<string>;
 
   /** When true, an album-level Credits IconButton renders in the action

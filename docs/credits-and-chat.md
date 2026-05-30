@@ -118,9 +118,10 @@ See `docs/admin-conventions.md` → **Press Catalog** for the editor + cost-spli
 
 ## Favorites
 
-- "Favorites" is a virtual playlist combining favorited songs + songs by favorited artists (deduped).
+- "Favorites" is a virtual playlist combining favorited songs + songs by favorited artists (deduped). It is built (count, artwork mosaic, and detail list) by resolving favorited song ids against the **live DB catalog** (`/api/songs` + `/api/albums`), not the hardcoded `SONGS`/`ALBUMS` demo data — matching against the demo data left it permanently empty. It pins to the top of the Playlists tab whenever there's at least one favorite and disappears when the last one is removed.
 - Order: most-recently favorited first.
-- Client-only via localStorage (`gt:fav:songs`, `gt:fav:artists`) with `gt:favorites-changed` event.
+- Persistence: server-backed for signed-in fans; anonymous/admin sessions fall back to localStorage (`gt:fav:songs`, `gt:fav:artists`) with the `gt:favorites-changed` event (see `useFavorites`).
+- The leading favorite marker on a desktop track row is a quiet neutral-white heart (~70% opacity), not brand rose, and stays visible while the track plays (it sits in its own cell, left of the equalizer). The explicit favorite/unfavorite action buttons (⋯ sheet, Favorites detail) stay rose.
 
 ## Downloads & song row
 
