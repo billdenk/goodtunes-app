@@ -413,8 +413,8 @@ const CertCard = forwardRef(function CertCard(
       ref={ref}
       className="flex-shrink-0 snap-start rounded-3xl overflow-hidden mx-auto flex flex-col"
       style={{
-        width: "min(92vw, calc((100dvh - 220px) / 1.22))",
-        aspectRatio: "1 / 1.22",
+        width: "min(92vw, calc((100dvh - 220px) / 1.5))",
+        aspectRatio: "1 / 1.5",
         boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
         backgroundColor: "var(--brand-bg)",
       }}
@@ -424,72 +424,68 @@ const CertCard = forwardRef(function CertCard(
         <img src={album.artwork} alt={album.title} className="w-full h-full object-cover block" />
       </div>
 
-      {/* Bottom: compact archival cert strip — art dominates ~82% of
-          the card; this strip is dense, premium, printed-feeling
-          (owner/serial bars + signature + QR only, no body copy). */}
+      {/* Bottom: simple, legible, share-friendly panel — album title +
+          artist, a centred certifying line that names the owner in real
+          readable text, a prominent serial, and the GoodTunes mark. This
+          is the SOCIAL card; the dense archival/print look lives only on
+          the admin Sell-panel preview and the downloadable PDF. */}
       <div
-        className="relative w-full flex-1 px-4 py-3 flex flex-col justify-between gap-2"
+        className="relative w-full flex-1 px-5 py-4 flex flex-col"
         style={{ backgroundColor: "var(--brand-bg)" }}
       >
-        {/* Top row */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            {ownerPhotoUrl ? (
-              <img
-                src={ownerPhotoUrl}
-                alt=""
-                className="w-[32px] h-[32px] rounded-full object-cover flex-shrink-0"
-                data-testid="img-cert-owner-photo"
-              />
-            ) : (
-              <div
-                className="w-[32px] h-[32px] rounded-full flex-shrink-0"
-                style={{ background: "rgba(255,255,255,0.32)" }}
-                aria-hidden
-                data-testid="placeholder-cert-owner-avatar"
-              />
-            )}
+        {/* Album title + artist */}
+        <div className="min-w-0">
+          <p className="text-white text-lg font-bold leading-tight truncate" data-testid="text-cert-album">
+            {album.title}
+          </p>
+          <p className="text-white/60 text-sm leading-tight truncate mt-0.5" data-testid="text-cert-artist">
+            {album.artist}
+          </p>
+        </div>
+
+        {/* Centred ownership statement — owner shown as real, readable text */}
+        <div
+          className="flex-1 flex flex-col items-center justify-center text-center gap-2 px-1"
+          data-testid="text-cert-owner"
+          aria-label={`${ownerName} owns no. ${certNumStr} of ${album.title}`}
+        >
+          {ownerPhotoUrl ? (
+            <img
+              src={ownerPhotoUrl}
+              alt=""
+              className="w-12 h-12 rounded-full object-cover border border-white/20"
+              data-testid="img-cert-owner-photo"
+            />
+          ) : (
             <div
-              className="min-w-0 flex-1 flex flex-col gap-1.5"
-              data-testid="text-cert-owner"
-              aria-label={`${ownerName} owns no. ${certNumStr} of ${album.title}`}
+              className="w-12 h-12 rounded-full flex items-center justify-center text-white text-base font-semibold border border-white/20"
+              style={{ background: "rgba(255,255,255,0.14)" }}
+              aria-hidden
+              data-testid="placeholder-cert-owner-avatar"
             >
-              <div
-                className="h-2 rounded-full w-[55%]"
-                style={{ background: "rgba(255,255,255,0.32)" }}
-                aria-hidden
-              />
-              <div
-                className="h-2 rounded-full w-[32%]"
-                style={{ background: "rgba(255,255,255,0.32)" }}
-                aria-hidden
-              />
+              {initial}
             </div>
-          </div>
+          )}
+          <p className="text-white/70 text-sm leading-snug">This GoodDeed® certifies that</p>
+          <p className="text-white text-xl font-bold leading-tight" data-testid="text-cert-owner-name">
+            {ownerName}
+          </p>
+          <p className="text-white/70 text-sm leading-snug">owns No. {certNumStr} of this series.</p>
+        </div>
+
+        {/* Serial + GoodTunes mark */}
+        <div className="flex items-end justify-between gap-3">
+          <p
+            className="text-white text-3xl font-bold leading-none"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+            data-testid="text-cert-serial"
+          >
+            No. {certNumStr}
+          </p>
           <img
             src="/goodtunes-logo-white.png"
             alt="GoodTunes"
-            className="h-8 w-auto object-contain flex-shrink-0"
-          />
-        </div>
-
-        {/* Bottom row — signature overlaid on a bar (left), small square QR placeholder (right) */}
-        <div className="flex items-end justify-between gap-3">
-          <div className="flex-1 min-w-0 relative">
-            <div className="h-2 w-[60%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} aria-hidden />
-            <img
-              src="/will-signature.png"
-              alt="Will Bowen, Founder"
-              className="absolute left-0 bottom-0 h-8 w-auto max-w-[55%] object-contain object-left-bottom select-none"
-              draggable={false}
-            />
-          </div>
-          <div
-            className="w-8 h-8 rounded-sm flex-shrink-0"
-            style={{ background: "rgba(255,255,255,0.32)" }}
-            aria-hidden
-            title="Per-fan QR — verifies this certificate"
-            data-testid="placeholder-cert-qr"
+            className="h-7 w-auto object-contain flex-shrink-0"
           />
         </div>
       </div>
