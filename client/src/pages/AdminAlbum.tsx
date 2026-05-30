@@ -992,7 +992,7 @@ export function AdminAlbum() {
           className="flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-album"
         >
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+          <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
             {visibleTabsFor(album).map((t) => (
               <button
                 key={t.key}

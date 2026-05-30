@@ -410,7 +410,7 @@ export function AdminManufacturer() {
           className="flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-press"
         >
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+          <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
             {([
               { key: "dashboard", label: "Dashboard" },
               { key: "overview", label: "Overview" },
@@ -433,7 +433,7 @@ export function AdminManufacturer() {
               >
                 {t.label}
                 {tab === t.key && (
-                  <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
+                  <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
                 )}
               </button>
             ))}
