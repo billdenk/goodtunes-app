@@ -214,6 +214,49 @@ export function Collection() {
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
 
+  // Apple-Music-style collapsing header: as the fan scrolls the collection,
+  // the large "Collection" title fades + lifts away first, then the account
+  // avatar fades out a beat later, so content can scroll right up under the
+  // status bar. Reverses on scroll-up. Driven imperatively off the scroll
+  // container (DOM style mutation inside rAF) so it never re-renders the page
+  // per frame.
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const avatarRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let ticking = false;
+    let raf = 0;
+    const apply = () => {
+      const y = el.scrollTop;
+      // Title leaves first (0 → 28px of scroll).
+      const tp = Math.min(1, Math.max(0, y / 28));
+      if (titleRef.current) {
+        titleRef.current.style.opacity = String(1 - tp);
+        titleRef.current.style.transform = `translateY(${-10 * tp}px)`;
+      }
+      // Avatar follows, starting once the title is mostly gone (20 → 70px).
+      const ap = Math.min(1, Math.max(0, (y - 20) / 50));
+      if (avatarRef.current) {
+        avatarRef.current.style.opacity = String(1 - ap);
+        avatarRef.current.style.transform = `scale(${1 - 0.12 * ap})`;
+        avatarRef.current.style.pointerEvents = ap > 0.9 ? "none" : "auto";
+      }
+      ticking = false;
+    };
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      raf = requestAnimationFrame(apply);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    apply();
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
   const [sortByMap, setSortByMap] = useState<Record<LibraryTab, string>>({
     albums: "title",
     songs: "title",
@@ -309,17 +352,18 @@ export function Collection() {
     <main className="h-screen w-full flex justify-center overflow-hidden lg:justify-start lg:pl-[260px]">
       <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1200px] lg:mx-auto h-screen text-white flex flex-col">
 
-        <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
-          <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Collection</h1>
+        <header className="absolute top-0 inset-x-0 z-20 flex items-end justify-between px-5 pt-14 pb-3 pointer-events-none">
+          <h1 ref={titleRef} className="text-white text-[34px] font-bold leading-none tracking-tight will-change-[opacity,transform]" data-testid="text-page-title">Collection</h1>
           {/* Task #530 — account avatar lives top-right. Unread chat
               count (Chat tab was retired from the bottom nav) shows as
               a small red dot on the avatar so the inbox stays
               discoverable without a dedicated tab. */}
           <button
+            ref={avatarRef}
             type="button"
             onClick={() => navigate("/account")}
             aria-label="Account"
-            className="relative w-9 h-9 rounded-full overflow-hidden flex items-center justify-center active:opacity-70"
+            className="relative w-9 h-9 rounded-full overflow-hidden flex items-center justify-center active:opacity-70 pointer-events-auto will-change-[opacity,transform]"
             style={{ background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.12)" }}
             data-testid="button-open-account"
           >
@@ -339,7 +383,14 @@ export function Collection() {
           </button>
         </header>
 
-        <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
+        <div
+          ref={scrollRef}
+          className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pt-[104px] pb-[170px]"
+          style={{
+            WebkitMaskImage: "linear-gradient(to bottom, transparent 0px, #000 64px)",
+            maskImage: "linear-gradient(to bottom, transparent 0px, #000 64px)",
+          }}
+        >
           {recentsLoading ? (
             <div className="mb-5" data-testid="rail-recent-loading">
               <div className="flex items-center justify-between px-5 mb-3">

@@ -14862,7 +14862,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Collection.tsx",
-    "snippet": "<h1 className=\"text-white text-[34px] font-bold leading-none tracking-tight\" data-testid=\"text-page-title\">Collection</h1>"
+    "snippet": "<h1 ref={titleRef} className=\"text-white text-[34px] font-bold leading-none tracking-tight will-change-[opacity,transform]\" data-testid=\"text-page-title\">Collection</h1>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14897,7 +14897,7 @@
   {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/Collection.tsx",
-    "snippet": "className=\"relative w-9 h-9 rounded-full overflow-hidden flex items-center justify-center active:opacity-70\""
+    "snippet": "className=\"relative w-9 h-9 rounded-full overflow-hidden flex items-center justify-center active:opacity-70 pointer-events-auto will-change-[opacity,transform]\""
   },
   {
     "rule": "player-touch-target-too-small",
