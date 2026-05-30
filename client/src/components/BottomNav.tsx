@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { subscribeChats } from "@/lib/chatStore";
 import { useDesktopShell } from "@/hooks/useDesktopShell";
@@ -56,6 +57,7 @@ const NavItem = ({
   testId?: string;
   align?: "left" | "right" | "center";
 }) => {
+  const reduceMotion = useReducedMotion();
   const dir = align === "right" ? 1 : align === "left" ? -1 : 0;
   // End tabs nudge the highlight 2px toward the dock's outer curve so the
   // gap to the end curve matches the inner gap (Collection left, Recents
@@ -84,9 +86,23 @@ const NavItem = ({
         }}
       />
       <div className={`relative w-14 h-7 flex items-center justify-center ${contentShift}`}>
-        <div className={`transition-colors duration-150 ${active ? "text-[color:var(--brand-blue)]" : "text-white/35"}`}>
+        {/* Tab-to-tab bounce — the glyph gives a quick Apple-Music pop when
+            its tab becomes active (the keyframe only re-fires when `active`
+            flips false→true). Transform-only (GPU-cheap) and gated behind
+            prefers-reduced-motion so reduced users get an instant color
+            change with no scale. Lives on the no-translate inner div so it
+            never clobbers the contentShift transform on the parent. */}
+        <motion.div
+          className={`transition-colors duration-150 ${active ? "text-[color:var(--brand-blue)]" : "text-white/35"}`}
+          animate={reduceMotion ? { scale: 1 } : { scale: active ? [1, 1.22, 0.97, 1] : 1 }}
+          transition={
+            reduceMotion
+              ? { duration: 0 }
+              : { duration: 0.4, times: [0, 0.4, 0.7, 1], ease: "easeOut" }
+          }
+        >
           {icon(active)}
-        </div>
+        </motion.div>
       </div>
       <span
         className={`relative text-[10px] font-medium transition-colors duration-150 ${contentShift} ${active ? "text-[color:var(--brand-blue)]" : "text-white/35"}`}
@@ -100,6 +116,7 @@ const NavItem = ({
 export function BottomNav() {
   const [location, navigate] = useLocation();
   const { hidden, setHidden } = useNavVisibility();
+  const reduceMotion = useReducedMotion();
   // Task #547 — at lg+ on web the StorefrontSidebar takes over. Native
   // shell (Capacitor) always renders the bottom-nav pill regardless of
   // viewport.
@@ -294,37 +311,67 @@ export function BottomNav() {
 
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-40 pointer-events-none">
         {/* LEFT — collapsed active-tab puck (scrolled), shown only when
-            the dock is hidden and search is closed. */}
-        {hidden && !searchOpen && (
-          <button
-            type="button"
-            onClick={() => setHidden(false)}
-            aria-label={`${activeLabel} (expand navigation)`}
-            className="pointer-events-auto absolute bottom-3 left-3 flex items-center justify-center w-12 h-12 rounded-full text-[color:var(--brand-blue)] active:scale-95 transition-transform"
-            style={glassStyle}
-            data-testid="nav-collapsed"
-          >
-            {activeIcon(true)}
-          </button>
-        )}
+            the dock is hidden and search is closed. Springs in from the
+            pillow's left edge so it reads as the pillow collapsing into the
+            puck; whileTap replaces the old active:scale-95 (framer owns the
+            transform now, so a CSS active: scale would be clobbered). */}
+        <AnimatePresence>
+          {hidden && !searchOpen && (
+            <motion.button
+              key="nav-puck"
+              type="button"
+              onClick={() => setHidden(false)}
+              aria-label={`${activeLabel} (expand navigation)`}
+              className="pointer-events-auto absolute bottom-3 left-3 flex items-center justify-center w-12 h-12 rounded-full text-[color:var(--brand-blue)]"
+              style={{ ...glassStyle, transformOrigin: "left center" }}
+              initial={reduceMotion ? false : { scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={reduceMotion ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
+              transition={
+                reduceMotion
+                  ? { duration: 0.12 }
+                  : { scale: { type: "spring", stiffness: 520, damping: 26, mass: 0.8 }, opacity: { duration: 0.14 } }
+              }
+              whileTap={reduceMotion ? undefined : { scale: 0.92 }}
+              data-testid="nav-collapsed"
+            >
+              {activeIcon(true)}
+            </motion.button>
+          )}
+        </AnimatePresence>
 
         {/* LEFT — labeled three-tab pillow (resting). Drives the measured
-            dock height. Hidden while scrolled or while search is open. */}
-        {!hidden && !searchOpen && (
-          <nav
-            ref={pillowRef}
-            className="pointer-events-auto absolute bottom-3 left-3 flex items-center justify-around px-2 py-2 rounded-full"
-            style={{
-              right: dockHVal + 20, // reserve the right circle + 8px gap
-              ...glassStyle,
-              transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)",
-            }}
-          >
-            <NavItem label="Collection" active={isLibrary} onClick={() => navigate("/collection")} icon={collectionIcon} testId="nav-collection" />
-            <NavItem label="Playlists" active={isPlaylists} onClick={() => navigate("/playlists")} icon={playlistsIcon} testId="nav-playlists" align="center" />
-            <NavItem label="Recents" active={isRecents} onClick={() => navigate("/recents")} icon={recentsIcon} testId="nav-recents" align="right" />
-          </nav>
-        )}
+            dock height. Hidden while scrolled or while search is open.
+            Springs/settles in (small overshoot) when re-expanding; framer
+            owns scale/opacity, so the only CSS transition left is `right`
+            (which moves just on dockH re-measure, never per frame). */}
+        <AnimatePresence>
+          {!hidden && !searchOpen && (
+            <motion.nav
+              key="nav-pillow"
+              ref={pillowRef}
+              className="pointer-events-auto absolute bottom-3 left-3 flex items-center justify-around px-2 py-2 rounded-full"
+              style={{
+                right: dockHVal + 20, // reserve the right circle + 8px gap
+                ...glassStyle,
+                transformOrigin: "left center",
+                transition: "right 260ms cubic-bezier(0.32, 0.72, 0, 1)",
+              }}
+              initial={reduceMotion ? false : { scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={reduceMotion ? { opacity: 0 } : { scale: 0.9, opacity: 0 }}
+              transition={
+                reduceMotion
+                  ? { duration: 0.12 }
+                  : { scale: { type: "spring", stiffness: 460, damping: 28, mass: 0.9 }, opacity: { duration: 0.14 } }
+              }
+            >
+              <NavItem label="Collection" active={isLibrary} onClick={() => navigate("/collection")} icon={collectionIcon} testId="nav-collection" />
+              <NavItem label="Playlists" active={isPlaylists} onClick={() => navigate("/playlists")} icon={playlistsIcon} testId="nav-playlists" align="center" />
+              <NavItem label="Recents" active={isRecents} onClick={() => navigate("/recents")} icon={recentsIcon} testId="nav-recents" align="right" />
+            </motion.nav>
+          )}
+        </AnimatePresence>
 
         {/* Expanding search field — always mounted so the toggle can focus
             it synchronously (iOS keyboard). Scaled to 0 from the right at

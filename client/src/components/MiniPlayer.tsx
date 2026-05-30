@@ -1,11 +1,13 @@
 import { usePlayer } from "@/context/PlayerContext";
 import { useLocation } from "wouter";
+import { useReducedMotion } from "framer-motion";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
 
 export function MiniPlayer() {
   const { currentSong, isPlaying, togglePlay, next, setShowPlayer } = usePlayer();
   const [location] = useLocation();
   const { hidden } = useNavVisibility();
+  const reduceMotion = useReducedMotion();
 
   if (!currentSong || location === "/player") return null;
 
@@ -23,9 +25,18 @@ export function MiniPlayer() {
   const containerClass = hidden
     ? "absolute z-30 flex"
     : "absolute left-0 right-0 z-30 px-3 pb-1";
+  // Apple-style spring on the grow/shrink morph: a tuned overshoot bezier
+  // (y > 1 = the capsule squishes past its target, then settles) instead
+  // of the flat ease-out. Honors prefers-reduced-motion by falling back to
+  // the original non-overshoot curve. CSS transition (not framer) keeps the
+  // fixed-position left/right/bottom geometry exact — only the easing
+  // changes, never the layout.
+  const morphTransition = reduceMotion
+    ? "all 260ms cubic-bezier(0.32, 0.72, 0, 1)"
+    : "all 340ms cubic-bezier(0.34, 1.3, 0.5, 1)";
   const containerStyle: React.CSSProperties = hidden
-    ? { bottom: 12, left: 70, right: 70, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" }
-    : { bottom: 79, transition: "all 260ms cubic-bezier(0.32, 0.72, 0, 1)" };
+    ? { bottom: 12, left: 70, right: 70, transition: morphTransition }
+    : { bottom: 79, transition: morphTransition };
 
   // Task #547 — on lg+ web (storefront sidebar mounted) the MiniPlayer
   // anchors to the bottom-right of the content area instead of the
