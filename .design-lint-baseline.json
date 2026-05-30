@@ -9607,6 +9607,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] font-semibold normal-case tracking-normal text-[color:var(--brand-purple)] bg-[color:var(--brand-purple)]/10\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "className=\"text-slate-900 text-[26px] font-bold tracking-tight mt-0.5 truncate\""
   },
   {
@@ -10887,6 +10892,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbums.tsx",
+    "snippet": "className=\"absolute top-2 right-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[color:var(--brand-purple)]/85 text-white text-[10px] font-bold uppercase tracking-wide backdrop-blur-sm\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbums.tsx",
     "snippet": "className=\"text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors\""
   },
   {
@@ -10903,6 +10913,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbums.tsx",
     "snippet": "className=\"text-slate-900 text-[13.5px] font-semibold group-hover:text-[var(--brand-blue)] transition-colors flex items-center gap-2.5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbums.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide text-[color:var(--brand-purple)] bg-[color:var(--brand-purple)]/10\""
   },
   {
     "rule": "hardcoded-font-size",

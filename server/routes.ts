@@ -5825,6 +5825,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (req.body?.isPrepping !== undefined)
       updates.isPrepping = !!req.body.isPrepping;
     if (req.body?.isExplicit !== undefined) updates.isExplicit = !!req.body.isExplicit;
+    // Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only legacy)"
+    // marker. Coerced like every other album boolean and rides the same
+    // edit_metadata gate (super-admins bypass the post-sale lock as
+    // usual). No fan-facing behavior — purely a CMS tag.
+    if (req.body?.isSpinPromo !== undefined)
+      updates.isSpinPromo = !!req.body.isSpinPromo;
     if (req.body?.appleMusicUrl !== undefined) updates.appleMusicUrl = req.body.appleMusicUrl ? String(req.body.appleMusicUrl) : null;
     if (req.body?.spotifyUrl !== undefined) updates.spotifyUrl = req.body.spotifyUrl ? String(req.body.spotifyUrl) : null;
     if (req.body?.genre !== undefined)

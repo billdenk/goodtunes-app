@@ -171,6 +171,13 @@ export const albums = pgTable("albums", {
   // catalog rows are clean and we don't want to force a per-album decision
   // on every import.
   isExplicit: boolean("is_explicit").notNull().default(false),
+  // Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only legacy)"
+  // marker. Bill flags older digital-only releases one-by-one while he
+  // works through retiring their printing/pressing tabs. Pure CMS tag:
+  // ZERO fan-facing behavior (no Library/lifecycle/playback effect). Meant
+  // to be removed once tagging is done — drop this column + the one UI
+  // block in AdminAlbum/AdminAlbums together.
+  isSpinPromo: boolean("is_spin_promo").notNull().default(false),
   // Streaming-service handoff. We host the album in-app for the first ~2 weeks
   // then surface "Listen on Apple Music / Spotify" buttons on the album page
   // that point fans at the canonical album URL on each service — same

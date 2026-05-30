@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, Filter, EyeOff, X, Plus } from "lucide-react";
+import { Search, Filter, EyeOff, X, Plus, Disc3 } from "lucide-react";
 import {
   Popover,
   PopoverArrow,
@@ -60,6 +60,9 @@ interface AlbumLite {
   // Released tab stays clean; admin promotes via the album page.
   isPrepping: boolean;
   isExplicit: boolean;
+  // Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only legacy)"
+  // marker. Drives the small tile/row badge below. No fan-facing effect.
+  isSpinPromo?: boolean;
   genre: string | null;
   createdAt: string | null;
 }
@@ -692,6 +695,18 @@ function AlbumTile({ album }: { album: AlbumLite }) {
             Sunset
           </div>
         )}
+        {/* Task #799 — TEMPORARY admin-only "SPIN Promo" tile badge. No
+            fan-facing effect; remove with the rest of the flag. */}
+        {album.isSpinPromo && (
+          <div
+            className="absolute top-2 right-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[color:var(--brand-purple)]/85 text-white text-[10px] font-bold uppercase tracking-wide backdrop-blur-sm"
+            title="SPIN Promo — digital-only legacy release (admin-only tag)"
+            data-testid={`badge-spin-promo-tile-${album.id}`}
+          >
+            <Disc3 className="w-2.5 h-2.5" />
+            SPIN
+          </div>
+        )}
       </div>
       <div className="mt-2 px-0.5">
         <div
@@ -743,6 +758,18 @@ function AlbumRow({ album }: { album: AlbumLite }) {
         </div>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Task #799 — TEMPORARY admin-only "SPIN Promo" row badge. No
+            fan-facing effect; remove with the rest of the flag. */}
+        {album.isSpinPromo && (
+          <span
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide text-[color:var(--brand-purple)] bg-[color:var(--brand-purple)]/10"
+            title="SPIN Promo — digital-only legacy release (admin-only tag)"
+            data-testid={`badge-spin-promo-row-${album.id}`}
+          >
+            <Disc3 className="w-2.5 h-2.5" />
+            SPIN
+          </span>
+        )}
         {album.isHidden && (
           <span
             className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wide"

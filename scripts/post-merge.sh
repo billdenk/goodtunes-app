@@ -189,6 +189,30 @@ SQL
 migrate_press_colors_import_source_url dev  "${DATABASE_URL:-}"
 migrate_press_colors_import_source_url prod "${PROD_DATABASE_URL:-}"
 
+# Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only legacy)"
+# marker on albums. Pre-create on both DBs to keep the publish dev→prod
+# diff empty (so publish never tries to DROP it off prod with data) and so
+# a freshly-cloned dev DB never 500s the album routes that select-all this
+# column. Additive + idempotent; safe on every merge. Drop this block when
+# the flag itself is retired.
+migrate_albums_is_spin_promo() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping albums.is_spin_promo migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS is_spin_promo boolean NOT NULL DEFAULT false;
+SQL
+  then
+    echo "post-merge: albums.is_spin_promo migration ok on $label"
+  else
+    echo "post-merge: WARNING — albums.is_spin_promo migration failed on $label (continuing)"
+  fi
+}
+migrate_albums_is_spin_promo dev  "${DATABASE_URL:-}"
+migrate_albums_is_spin_promo prod "${PROD_DATABASE_URL:-}"
+
 # Task #683 — Reconcile dev press roster with prod so a publish dev->prod
 # diff is a no-op over the manufacturers + press_* tables. The founding seed
 # only mints Memphis + Hellbender (fresh ids per clone); the real Physical

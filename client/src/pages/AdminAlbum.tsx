@@ -162,6 +162,9 @@ interface AlbumFull {
   // flips it off via "Mark as released" once the album is ready.
   isPrepping?: boolean;
   isExplicit?: boolean;
+  // Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only legacy)"
+  // marker. No fan-facing effect.
+  isSpinPromo?: boolean;
   genre?: string | null;
   labelId?: string | null;
   // Server-joined label row from AlbumWithLabel (storage.getAlbumById).
@@ -941,6 +944,19 @@ export function AdminAlbum() {
                   Hidden from store
                 </span>
               )}
+              {/* Task #799 — TEMPORARY admin-only "SPIN Promo" indicator.
+                  Lit when the operator flags a digital-only legacy release
+                  (toggle lives in the Overview tab). No fan-facing effect. */}
+              {album.isSpinPromo && (
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] font-semibold normal-case tracking-normal text-[color:var(--brand-purple)] bg-[color:var(--brand-purple)]/10"
+                  title="SPIN Promo — digital-only legacy release (admin-only tag, no fan-facing effect)"
+                  data-testid="badge-spin-promo-sheet"
+                >
+                  <Disc3 className="w-3 h-3" />
+                  SPIN Promo
+                </span>
+              )}
               {/* Album-level Explicit toggle removed — now derived
                   server-side from per-song flags (any explicit song →
                   album reads explicit). The per-track toggle in the
@@ -1687,6 +1703,84 @@ function AlbumEditAccessChip({ albumId }: { albumId: string }) {
 
 /* ─── Overview tab ─────────────────────────────────────────────────── */
 
+/**
+ * Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only legacy)"
+ * toggle. Self-contained: flips `albums.isSpinPromo` via the shared album
+ * PUT (same Save semantics + edit_metadata gate as every other album
+ * boolean). Auto-saves on toggle, no separate Save button. ZERO fan-facing
+ * behavior — purely a CMS tag the operator uses to mark older digital-only
+ * releases while retiring their printing/pressing tabs. When the flag is
+ * retired, delete this component, its render in OverviewPanel, the header
+ * badge, the AdminAlbums tile/row badges, and the schema column together.
+ */
+function SpinPromoPanel({
+  album,
+  disabled,
+  disabledReason,
+}: {
+  album: AlbumFull;
+  disabled: boolean;
+  disabledReason?: string;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const setSpinPromo = useMutation({
+    mutationFn: async (next: boolean) => {
+      const r = await apiRequest("PUT", `/api/admin/albums/${album.id}`, {
+        isSpinPromo: next,
+      });
+      return r.json();
+    },
+    onSuccess: (_data, next) => {
+      qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
+      qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/albums"] });
+      toast({
+        title: next ? "Flagged as SPIN Promo." : "SPIN Promo flag cleared.",
+      });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't update SPIN Promo",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+  return (
+    <div
+      className="rounded-xl border border-slate-200 bg-white p-4"
+      data-testid="panel-spin-promo"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <Disc3 className="w-4 h-4 text-[color:var(--brand-purple)]" />
+            <span className="text-sm font-semibold text-slate-900">
+              SPIN Promo (digital-only legacy)
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 mt-1 leading-snug">
+            Admin-only marker for older digital-only releases. Saves
+            immediately. No fan-facing effect — Library, lifecycle, and
+            playback are unchanged.
+          </p>
+          {disabled && disabledReason && (
+            <p className="text-xs text-amber-700 mt-1">{disabledReason}</p>
+          )}
+        </div>
+        <Switch
+          checked={!!album.isSpinPromo}
+          disabled={disabled || setSpinPromo.isPending}
+          onCheckedChange={(v) => setSpinPromo.mutate(v)}
+          data-testid="switch-spin-promo"
+          aria-label="SPIN Promo (digital-only legacy)"
+        />
+      </div>
+    </div>
+  );
+}
+
 type ArtistLabelConflict = {
   personId: string;
   personName: string;
@@ -1904,6 +1998,15 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           const c = resp?.artistLabelConflict as ArtistLabelConflict | undefined;
           if (c) setReassign(c);
         }}
+      />
+      {/* Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only
+          legacy)" toggle. Self-contained block: when this flag is retired,
+          delete this single component + its render here and the schema
+          column. No fan-facing effect whatsoever. */}
+      <SpinPromoPanel
+        album={album}
+        disabled={disabled}
+        disabledReason={disabledReason}
       />
       {/* Task #190 — per-album Lineup snapshot. Only meaningful when the
           album's primary artist is a group (band/duo/orchestra). Renders
