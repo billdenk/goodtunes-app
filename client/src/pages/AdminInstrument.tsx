@@ -663,6 +663,7 @@ function MakerPickerPanel({ instrument }: { instrument: InstrumentFull }) {
   const qc = useQueryClient();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [addMode, setAddMode] = useState(false);
 
   const { data: makers = [] } = useQuery<
     Array<{ id: string; name: string; domain: string; logoUrl: string | null }>
@@ -688,6 +689,7 @@ function MakerPickerPanel({ instrument }: { instrument: InstrumentFull }) {
       });
       setOpen(false);
       setQuery("");
+      setAddMode(false);
       toast({ title: "Maker updated" });
     },
     onError: (e: any) =>
@@ -770,77 +772,787 @@ function MakerPickerPanel({ instrument }: { instrument: InstrumentFull }) {
           {open ? "Pick a maker…" : "No maker set — pick one"}
         </button>
       )}
-      {open && (
-        <div className="mt-3 space-y-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search makers (Gibson, Steinway, Neumann…)"
-              className="w-full h-9 pl-9 pr-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
-              data-testid="input-search-makers"
+      {open &&
+        (addMode ? (
+          <div className="mt-3">
+            <AddMakerComposer
+              seedName={query.trim()}
+              onCreated={(vendorId) => setMaker.mutate(vendorId)}
+              onCancel={() => setAddMode(false)}
             />
           </div>
-          <div
-            className="max-h-64 overflow-y-auto rounded-md border border-slate-200 divide-y divide-slate-100 bg-white"
-            data-testid="list-maker-results"
-          >
-            {filtered.length === 0 ? (
-              <div className="px-3 py-4 text-[12.5px] text-slate-400 text-center">
-                {makers.length === 0
-                  ? "No makers yet — add one from the Makers sidebar."
-                  : "No makers match that search."}
-              </div>
-            ) : (
-              filtered.slice(0, 30).map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setMaker.mutate(m.id)}
-                  disabled={setMaker.isPending}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 text-left disabled:opacity-50"
-                  data-testid={`option-maker-${m.id}`}
-                >
-                  <div className="w-7 h-7 rounded bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
-                    {m.logoUrl ? (
-                      <img
-                        src={m.logoUrl}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <Guitar className="w-3.5 h-3.5 text-slate-300" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-slate-900 text-[13px] font-medium truncate">
-                      {m.name}
+        ) : (
+          <div className="mt-3 space-y-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search makers (Gibson, Steinway, Neumann…)"
+                className="w-full h-9 pl-9 pr-3 rounded-md border border-slate-200 text-[13px] focus:outline-none focus:border-[var(--brand-blue)]"
+                data-testid="input-search-makers"
+              />
+            </div>
+            <div
+              className="max-h-64 overflow-y-auto rounded-md border border-slate-200 divide-y divide-slate-100 bg-white"
+              data-testid="list-maker-results"
+            >
+              {filtered.length === 0 ? (
+                <div className="px-3 py-4 text-[12.5px] text-slate-400 text-center">
+                  {makers.length === 0
+                    ? "No makers yet — add the first one below."
+                    : "No makers match that search — add it below."}
+                </div>
+              ) : (
+                filtered.slice(0, 30).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMaker.mutate(m.id)}
+                    disabled={setMaker.isPending}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 text-left disabled:opacity-50"
+                    data-testid={`option-maker-${m.id}`}
+                  >
+                    <div className="w-7 h-7 rounded bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
+                      {m.logoUrl ? (
+                        <img
+                          src={m.logoUrl}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Guitar className="w-3.5 h-3.5 text-slate-300" />
+                      )}
                     </div>
-                    <div className="text-slate-400 text-[11px] truncate">
-                      {m.domain}
+                    <div className="min-w-0 flex-1">
+                      <div className="text-slate-900 text-[13px] font-medium truncate">
+                        {m.name}
+                      </div>
+                      <div className="text-slate-400 text-[11px] truncate">
+                        {m.domain}
+                      </div>
                     </div>
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-          <div className="flex justify-end">
+                  </button>
+                ))
+              )}
+            </div>
             <button
               type="button"
-              onClick={() => {
-                setOpen(false);
-                setQuery("");
-              }}
-              className="text-[12px] text-slate-500 hover:text-slate-900 px-2 py-1"
-              data-testid="button-cancel-maker"
+              onClick={() => setAddMode(true)}
+              className="w-full flex items-center gap-2 rounded-md border border-dashed border-slate-300 px-3 py-2.5 text-left text-[13px] text-slate-600 hover:bg-slate-50 hover:border-[var(--brand-blue)] transition-colors"
+              data-testid="button-add-maker-inline"
             >
-              Cancel
+              <Plus className="w-3.5 h-3.5 text-[var(--brand-blue)] flex-shrink-0" />
+              <span className="font-medium truncate">
+                {query.trim()
+                  ? `Add "${query.trim()}" as a new maker`
+                  : "Add a maker"}
+              </span>
             </button>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setQuery("");
+                }}
+                className="text-[12px] text-slate-500 hover:text-slate-900 px-2 py-1"
+                data-testid="button-cancel-maker"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ))}
+    </div>
+  );
+}
+
+/* ─── Inline "Add a maker" composer ────────────────────────────────── */
+
+// apiRequest throws errors shaped like `"502: {\"message\":\"…\"}"` — strip
+// the status prefix and unwrap the JSON `message` so inline errors read like
+// English instead of like a stack trace. Mirrors AdminVendors.humanizeApiError.
+function humanizeMakerApiError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  if (!raw) {
+    return "Couldn't read that page. Try the URL again, or enter the maker by hand.";
+  }
+  const m = raw.match(/^\d{3}:\s*(.*)$/);
+  const body = m ? m[1] : raw;
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed && typeof parsed.message === "string" && parsed.message.trim()) {
+      return parsed.message;
+    }
+  } catch {
+    /* not JSON — fall through */
+  }
+  return body.trim() || raw;
+}
+
+// Derive a sensible sub-brand name from the pasted URL's path. Pastes like
+// `https://www.gibson.com/pages/epiphone` collide on the apex domain and the
+// scraper returns the parent's name ("Gibson"); the path ("epiphone") is the
+// real signal. Returns null when there's no meaningful path segment. Mirrors
+// AdminVendors.deriveNameFromUrl.
+function deriveMakerNameFromUrl(rawUrl: string): string | null {
+  const trimmed = (rawUrl ?? "").trim();
+  if (!trimmed) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return null;
+  }
+  const skip = new Set([
+    "pages", "page", "brand", "brands", "collections", "collection",
+    "shop", "store", "category", "categories",
+  ]);
+  const segments = parsed.pathname
+    .split("/")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => s.replace(/\.[a-z0-9]{1,5}$/i, ""))
+    .filter((s) => s.length > 0 && !skip.has(s.toLowerCase()));
+  if (segments.length === 0) return null;
+  const last = segments[segments.length - 1];
+  const words = last
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+  if (words.length === 0) return null;
+  return words
+    .map((w) =>
+      /^[A-Z0-9]+$/.test(w)
+        ? w
+        : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
+    )
+    .join(" ");
+}
+
+interface VendorCandidate {
+  id: string;
+  name: string;
+  domain: string;
+  logoUrl: string | null;
+}
+
+/**
+ * Inline maker creator that lives inside the Gear page's Maker picker.
+ *
+ * Reuses the same vendor scrape + create endpoints the Makers sidebar uses
+ * (`POST /api/admin/vendors/scrape` + `POST /api/admin/vendors` with
+ * `isMaker: true`). Handles the three branches the sidebar add handles:
+ *   - paste a URL → scrape name/domain/logo → create
+ *   - enter by hand (name + optional website + optional logo)
+ *   - domain-collision 409 → "add as a sub-brand of {Parent}" prompt with a
+ *     swappable parent picker (Epiphone under Gibson)
+ *
+ * On a successful create (or promotion of an existing reseller domain to also
+ * carry the Maker flag) it hands the new vendor id back to the picker, which
+ * assigns it to the current gear.
+ */
+function AddMakerComposer({
+  seedName,
+  onCreated,
+  onCancel,
+}: {
+  seedName?: string;
+  onCreated: (vendorId: string) => void;
+  onCancel: () => void;
+}) {
+  const { toast } = useToast();
+  const seeded = (seedName ?? "").trim();
+  const [step, setStep] = useState<"url" | "manual">(seeded ? "manual" : "url");
+  const [pasteUrl, setPasteUrl] = useState("");
+  const [manualName, setManualName] = useState(seeded);
+  const [manualWebsite, setManualWebsite] = useState("");
+  const [manualLogo, setManualLogo] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  // Domain-collision sub-brand prompt (Epiphone under Gibson).
+  const [subBrand, setSubBrand] = useState<{
+    parent: VendorCandidate;
+    payload: Record<string, unknown>;
+  } | null>(null);
+  const [subBrandName, setSubBrandName] = useState("");
+  const [subBrandParent, setSubBrandParent] = useState<VendorCandidate | null>(
+    null,
+  );
+  const [parentPickerOpen, setParentPickerOpen] = useState(false);
+  const [parentQuery, setParentQuery] = useState("");
+
+  const urlRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      if (step === "manual") nameRef.current?.focus();
+      else urlRef.current?.focus();
+    });
+    // Only on mount — switching steps focuses inside the step handlers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Top-level vendors offered as parents in the sub-brand prompt. Only
+  // fetched once the collision actually fires so the common path stays light.
+  const { data: parentCandidatesAll = [] } = useQuery<
+    Array<VendorCandidate & { parentVendorId?: string | null }>
+  >({
+    queryKey: ["/api/vendors"],
+    enabled: !!subBrand,
+  });
+  const parentCandidates = (() => {
+    const qq = parentQuery.trim().toLowerCase();
+    const rows = parentCandidatesAll.filter((v) => !v.parentVendorId);
+    const filtered = qq
+      ? rows.filter(
+          (v) =>
+            v.name.toLowerCase().includes(qq) ||
+            v.domain.toLowerCase().includes(qq),
+        )
+      : rows;
+    return filtered
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 50);
+  })();
+
+  const createMut = useMutation({
+    mutationFn: async (opts: {
+      payload?: Record<string, unknown>;
+      scrapedName?: string | null;
+    }): Promise<{ vendor: VendorCandidate; scrapedName: string | null }> => {
+      // Sub-brand confirm path — re-POST the captured payload + parent id,
+      // which bypasses the server's domain-collision branch.
+      if (opts.payload) {
+        const res = await apiRequest("POST", "/api/admin/vendors", opts.payload);
+        return {
+          vendor: (await res.json()) as VendorCandidate,
+          scrapedName: opts.scrapedName ?? null,
+        };
+      }
+      // The Maker surface defaults isReseller=false (most builders don't sell
+      // direct). The server OR's the requested flag onto an existing row, so
+      // adding a Maker for an existing reseller domain lights up both flags.
+      let payload: Record<string, unknown> = {
+        name: "New maker",
+        domain: `new-maker-${Date.now()}.example`,
+        isMaker: true,
+        isReseller: false,
+      };
+      let scrapedName: string | null = null;
+      if (step === "url") {
+        const sr = await apiRequest("POST", "/api/admin/vendors/scrape", {
+          url: pasteUrl.trim(),
+        });
+        const scraped = (await sr.json()) as {
+          name: string | null;
+          domain: string | null;
+          homeUrl: string | null;
+          aboutUrl: string | null;
+          logoUrl: string | null;
+          coverUrl: string | null;
+          bio: string | null;
+          tagline: string | null;
+        };
+        scrapedName = scraped.name;
+        payload = {
+          ...payload,
+          name: scraped.name || "New maker",
+          domain: scraped.domain || (payload.domain as string),
+          ...(scraped.homeUrl ? { homeUrl: scraped.homeUrl } : {}),
+          ...(scraped.aboutUrl ? { aboutUrl: scraped.aboutUrl } : {}),
+          ...(scraped.logoUrl ? { logoUrl: scraped.logoUrl } : {}),
+          ...(scraped.coverUrl ? { coverUrl: scraped.coverUrl } : {}),
+          ...(scraped.bio ? { bio: scraped.bio } : {}),
+          ...(scraped.tagline ? { tagline: scraped.tagline } : {}),
+        };
+      } else {
+        const website = manualWebsite.trim();
+        const domain = website ? domainFromUrl(website) : null;
+        payload = {
+          ...payload,
+          name: manualName.trim(),
+          domain: domain || (payload.domain as string),
+          ...(website ? { homeUrl: website } : {}),
+          ...(manualLogo.trim() ? { logoUrl: manualLogo.trim() } : {}),
+        };
+      }
+      try {
+        const res = await apiRequest("POST", "/api/admin/vendors", payload);
+        return {
+          vendor: (await res.json()) as VendorCandidate,
+          scrapedName,
+        };
+      } catch (e) {
+        // Stash the built payload so onError can open the sub-brand prompt
+        // on the FIRST attempt (the payload is built inside mutationFn, so
+        // the caller's vars carry nothing on the URL / manual paths).
+        (e as any).__payload = payload;
+        (e as any).__scrapedName = scrapedName;
+        throw e;
+      }
+    },
+    onSuccess: ({ vendor, scrapedName }) => {
+      if (scrapedName) {
+        toast({ title: `Pulled "${scrapedName}"` });
+      }
+      onCreated(vendor.id);
+    },
+    onError: (err: any, vars) => {
+      const payloadForPrompt =
+        vars?.payload ?? (err && err.__payload) ?? null;
+      const scrapedNameForPrompt =
+        vars?.scrapedName ?? (err && err.__scrapedName) ?? null;
+      const raw = err instanceof Error ? err.message : String(err ?? "");
+      const m = raw.match(/^(\d{3}):\s*(.*)$/);
+      if (m && m[1] === "409") {
+        try {
+          const body = JSON.parse(m[2]);
+          if (body?.parentCandidate?.id && payloadForPrompt) {
+            setSubBrand({
+              parent: body.parentCandidate,
+              payload: payloadForPrompt,
+            });
+            setSubBrandParent(body.parentCandidate);
+            setSubBrandName(
+              deriveMakerNameFromUrl(pasteUrl) ||
+                scrapedNameForPrompt ||
+                manualName.trim() ||
+                "",
+            );
+            setError(null);
+            return;
+          }
+        } catch {
+          /* fall through to humanized message */
+        }
+      }
+      setError(humanizeMakerApiError(err));
+    },
+  });
+
+  const busy = createMut.isPending;
+
+  const submitUrl = () => {
+    if (busy) return;
+    const u = pasteUrl.trim();
+    if (!u) {
+      setError("Paste a maker URL, or switch to entering it by hand.");
+      return;
+    }
+    if (!/^https?:\/\//i.test(u)) {
+      setError("URL must start with http:// or https://");
+      return;
+    }
+    setError(null);
+    createMut.mutate({});
+  };
+
+  const submitManual = () => {
+    if (busy) return;
+    if (!manualName.trim()) {
+      setError("Add a display name for this maker.");
+      nameRef.current?.focus();
+      return;
+    }
+    const website = manualWebsite.trim();
+    if (website && !domainFromUrl(website)) {
+      setError("That website doesn't look like a valid URL. Include https://.");
+      return;
+    }
+    setError(null);
+    createMut.mutate({});
+  };
+
+  const confirmSubBrand = () => {
+    if (busy || !subBrand || !subBrandParent) return;
+    const trimmedName = subBrandName.trim();
+    if (!trimmedName) return;
+    createMut.mutate({
+      payload: {
+        ...subBrand.payload,
+        name: trimmedName,
+        parentVendorId: subBrandParent.id,
+      },
+    });
+  };
+
+  // ── Sub-brand collision prompt ──────────────────────────────────────
+  if (subBrand) {
+    const shownParent = subBrandParent ?? subBrand.parent;
+    return (
+      <div
+        className="rounded-xl border border-slate-200 bg-[var(--brand-blue)]/5 p-4 space-y-3"
+        data-testid="prompt-maker-sub-brand"
+      >
+        <div>
+          <div className="text-slate-900 text-[13px] font-semibold">
+            Add as a sub-brand?
+          </div>
+          <p className="text-slate-500 text-[12px] mt-0.5 leading-snug">
+            A maker with that domain already exists. Add this as a sub-brand of{" "}
+            <span className="font-semibold text-slate-700">
+              {shownParent.name}
+            </span>{" "}
+            — like Epiphone under Gibson — instead of a duplicate row.
+          </p>
+        </div>
+        <div>
+          <label
+            htmlFor="input-maker-sub-brand-name"
+            className="block text-[10.5px] font-semibold uppercase tracking-wider text-slate-500 mb-1"
+          >
+            Name
+          </label>
+          <input
+            id="input-maker-sub-brand-name"
+            type="text"
+            value={subBrandName}
+            onChange={(e) => setSubBrandName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && subBrandName.trim() && !busy) {
+                e.preventDefault();
+                confirmSubBrand();
+              }
+            }}
+            placeholder="e.g. Epiphone"
+            disabled={busy}
+            autoFocus
+            className="w-full h-9 px-3 rounded-md border border-slate-300 bg-white text-[13px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+            data-testid="input-maker-sub-brand-name"
+          />
+        </div>
+        <div
+          className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2.5"
+          data-testid="maker-sub-brand-current-parent"
+        >
+          <div className="w-9 h-9 rounded-md bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
+            {shownParent.logoUrl ? (
+              <img
+                src={shownParent.logoUrl}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <Guitar className="w-4 h-4 text-slate-300" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-slate-900 text-[13px] font-semibold truncate">
+              {shownParent.name}
+            </div>
+            <div className="text-slate-400 text-[11px] truncate">
+              {shownParent.domain}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setParentPickerOpen((o) => !o)}
+            disabled={busy}
+            className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            data-testid="button-maker-sub-brand-change-parent"
+          >
+            {parentPickerOpen ? "Cancel" : "Change"}
+          </button>
+        </div>
+        {parentPickerOpen && (
+          <div
+            className="rounded-xl border border-slate-200 bg-white p-2 space-y-2"
+            data-testid="maker-sub-brand-parent-picker"
+          >
+            <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-8">
+              <Search className="w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={parentQuery}
+                onChange={(e) => setParentQuery(e.target.value)}
+                placeholder="Search top-level makers…"
+                autoFocus
+                className="flex-1 text-[12px] bg-transparent outline-none placeholder:text-slate-400"
+                data-testid="input-maker-sub-brand-parent-search"
+              />
+            </div>
+            <div className="max-h-44 overflow-y-auto divide-y divide-slate-100">
+              {parentCandidates.length === 0 ? (
+                <p className="text-[12px] text-slate-400 py-3 text-center">
+                  No matches.
+                </p>
+              ) : (
+                parentCandidates.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      setSubBrandParent({
+                        id: c.id,
+                        name: c.name,
+                        domain: c.domain,
+                        logoUrl: c.logoUrl,
+                      });
+                      setParentPickerOpen(false);
+                      setParentQuery("");
+                    }}
+                    className="w-full text-left flex items-center gap-2.5 px-1.5 py-1.5 hover:bg-slate-50 rounded-md"
+                    data-testid={`button-maker-sub-brand-pick-${c.id}`}
+                  >
+                    <div className="w-7 h-7 rounded-md bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
+                      {c.logoUrl ? (
+                        <img
+                          src={c.logoUrl}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Guitar className="w-3.5 h-3.5 text-slate-300" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-slate-800 text-[12px] font-semibold truncate">
+                        {c.name}
+                      </div>
+                      <div className="text-slate-400 text-[11px] truncate">
+                        {c.domain}
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+        {error && (
+          <p className="text-[12px] text-rose-600" data-testid="text-add-maker-error">
+            {error}
+          </p>
+        )}
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setSubBrand(null);
+              setParentPickerOpen(false);
+              setParentQuery("");
+            }}
+            disabled={busy}
+            className="px-3 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50"
+            data-testid="button-maker-sub-brand-back"
+          >
+            Back
+          </button>
+          <Button
+            type="button"
+            onClick={confirmSubBrand}
+            disabled={busy || !subBrandName.trim()}
+            size="sm"
+            className="h-8 text-[11.5px] font-semibold"
+            data-testid="button-maker-sub-brand-confirm"
+          >
+            {busy ? (
+              <Spinner className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              "Add as sub-brand"
+            )}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main composer (URL paste · manual entry) ───────────────────────
+  return (
+    <div
+      className="rounded-xl border border-slate-200 bg-[var(--brand-blue)]/5 p-4 space-y-3"
+      data-testid="form-add-maker"
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !busy) {
+          e.preventDefault();
+          onCancel();
+        }
+      }}
+    >
+      <div className="flex items-center justify-between">
+        <div className="text-slate-900 text-[13px] font-semibold">
+          Add a maker
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setStep((s) => (s === "url" ? "manual" : "url"));
+            queueMicrotask(() =>
+              step === "url"
+                ? nameRef.current?.focus()
+                : urlRef.current?.focus(),
+            );
+          }}
+          disabled={busy}
+          className="text-[11.5px] font-semibold text-[var(--brand-blue)] hover:underline underline-offset-2 disabled:opacity-50"
+          data-testid="button-toggle-maker-entry"
+        >
+          {step === "url" ? "Enter by hand" : "Paste a URL"}
+        </button>
+      </div>
+
+      {step === "url" ? (
+        <div className="space-y-2">
+          <input
+            ref={urlRef}
+            type="url"
+            value={pasteUrl}
+            onChange={(e) => {
+              setPasteUrl(e.target.value);
+              if (error) setError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submitUrl();
+              }
+            }}
+            placeholder="https://www.gibson.com"
+            disabled={busy}
+            className="w-full h-9 px-3 rounded-md border border-slate-300 bg-white text-[13px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+            data-testid="input-add-maker-url"
+          />
+          <p className="text-[11px] text-slate-400 leading-snug">
+            Paste the maker's site — the About page works best, the home page is
+            fine too. We'll prefill name, domain, and logo.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div>
+            <label
+              htmlFor="input-add-maker-name"
+              className="block text-[10.5px] font-semibold uppercase tracking-wider text-slate-500 mb-1"
+            >
+              Maker name
+            </label>
+            <input
+              ref={nameRef}
+              id="input-add-maker-name"
+              type="text"
+              value={manualName}
+              onChange={(e) => {
+                setManualName(e.target.value);
+                if (error) setError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  submitManual();
+                }
+              }}
+              placeholder="Gibson"
+              disabled={busy}
+              className="w-full h-9 px-3 rounded-md border border-slate-300 bg-white text-[13px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+              data-testid="input-add-maker-name"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label
+                htmlFor="input-add-maker-website"
+                className="block text-[10.5px] font-semibold uppercase tracking-wider text-slate-500 mb-1"
+              >
+                Website{" "}
+                <span className="text-slate-400 font-normal normal-case tracking-normal">
+                  (optional)
+                </span>
+              </label>
+              <input
+                id="input-add-maker-website"
+                type="url"
+                value={manualWebsite}
+                onChange={(e) => {
+                  setManualWebsite(e.target.value);
+                  if (error) setError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    submitManual();
+                  }
+                }}
+                placeholder="https://gibson.com"
+                disabled={busy}
+                className="w-full h-9 px-3 rounded-md border border-slate-300 bg-white text-[13px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+                data-testid="input-add-maker-website"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="input-add-maker-logo"
+                className="block text-[10.5px] font-semibold uppercase tracking-wider text-slate-500 mb-1"
+              >
+                Logo URL{" "}
+                <span className="text-slate-400 font-normal normal-case tracking-normal">
+                  (optional)
+                </span>
+              </label>
+              <input
+                id="input-add-maker-logo"
+                type="url"
+                value={manualLogo}
+                onChange={(e) => setManualLogo(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    submitManual();
+                  }
+                }}
+                placeholder="https://…/logo.svg"
+                disabled={busy}
+                className="w-full h-9 px-3 rounded-md border border-slate-300 bg-white text-[13px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+                data-testid="input-add-maker-logo"
+              />
+            </div>
           </div>
         </div>
       )}
+
+      {error && (
+        <p className="text-[12px] text-rose-600" data-testid="text-add-maker-error">
+          {error}
+        </p>
+      )}
+
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          className="px-3 h-8 rounded-md bg-white border border-slate-200 text-slate-600 text-[11.5px] font-semibold hover:bg-slate-50 disabled:opacity-50"
+          data-testid="button-cancel-add-maker"
+        >
+          Cancel
+        </button>
+        <Button
+          type="button"
+          onClick={step === "url" ? submitUrl : submitManual}
+          disabled={
+            busy ||
+            (step === "url" ? !pasteUrl.trim() : !manualName.trim())
+          }
+          size="sm"
+          className="h-8 text-[11.5px] font-semibold"
+          data-testid="button-save-add-maker"
+        >
+          {busy ? (
+            <Spinner className="w-3.5 h-3.5 animate-spin" />
+          ) : step === "url" ? (
+            "Scrape & add"
+          ) : (
+            "Add maker"
+          )}
+        </Button>
+      </div>
     </div>
   );
 }
