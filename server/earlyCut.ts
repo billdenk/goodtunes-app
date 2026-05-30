@@ -219,7 +219,7 @@ async function unitsSoldForAlbum(albumId: string): Promise<number> {
     JOIN orders o ON o.id = oi.order_id
     WHERE oi.kind = 'format'
       AND o.album_id = ${albumId}
-      AND o.paid_at IS NOT NULL
+      AND o.status IN ('paid','shipped')
       AND o.refunded_at IS NULL
   `);
   const s = ((r as any).rows ?? [])[0]?.s ?? "0";

@@ -76,7 +76,7 @@ async function earmarkedCentsForAlbum(albumId: string): Promise<number> {
     JOIN orders o ON o.id = oi.order_id
     WHERE oi.kind = 'format'
       AND o.album_id = ${albumId}
-      AND o.paid_at IS NOT NULL
+      AND o.status IN ('paid','shipped')
       AND o.refunded_at IS NULL
   `);
   const s = ((r as any).rows ?? [])[0]?.s ?? "0";
@@ -231,7 +231,7 @@ export function registerPressPortalRoutes(
         SELECT o.album_id, COALESCE(SUM(oi.quantity), 0)::int AS units
         FROM order_items oi
         JOIN orders o ON o.id = oi.order_id
-        WHERE oi.kind = 'format' AND o.paid_at IS NOT NULL AND o.refunded_at IS NULL
+        WHERE oi.kind = 'format' AND o.status IN ('paid','shipped') AND o.refunded_at IS NULL
         GROUP BY o.album_id
       ),
       person_rollup AS (
@@ -446,9 +446,9 @@ export function registerPressPortalRoutes(
           FROM order_items oi
           JOIN orders o ON o.id = oi.order_id
           JOIN press_albums pa ON pa.id = o.album_id
-          WHERE oi.kind = 'format' AND o.paid_at IS NOT NULL
+          WHERE oi.kind = 'format' AND o.status IN ('paid','shipped')
             AND o.refunded_at IS NULL
-            AND o.paid_at > NOW() - INTERVAL '30 days'
+            AND o.created_at > NOW() - INTERVAL '30 days'
         ), 0)::int AS units_30d,
         COALESCE((
           SELECT SUM(por2.quantity)
@@ -539,7 +539,7 @@ export function registerPressPortalRoutes(
         FROM order_items oi
         JOIN orders o ON o.id = oi.order_id
         WHERE oi.kind = 'format' AND o.album_id = a.id
-          AND o.paid_at IS NOT NULL AND o.refunded_at IS NULL
+          AND o.status IN ('paid','shipped') AND o.refunded_at IS NULL
       ) sold ON true
       LEFT JOIN LATERAL (
         SELECT MAX(pnl.sent_at) AS last_notified_at
@@ -1952,7 +1952,7 @@ async function recordPressEarmark(albumId: string, pressId: string, totalCents: 
       FROM orders
       WHERE album_id = ${albumId}
         AND stripe_payment_intent_id IS NOT NULL
-        AND paid_at IS NOT NULL
+        AND status IN ('paid','shipped')
         AND refunded_at IS NULL
     `);
     const pis: string[] = ((piRows as any).rows ?? []).map((r: any) => r.pi).filter(Boolean);
