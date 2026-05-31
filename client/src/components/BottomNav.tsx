@@ -14,25 +14,25 @@ import {
 
 /**
  * Bottom offset shared by all three floating dock elements (collapsed
- * puck, three-tab pillow, search/close toggle). Adds the device
- * safe-area inset (iOS home indicator / in-app-browser chrome) plus
- * 24px of breathing room so the dock visibly clears the bottom edge.
- * Degrades to a flat 24px gap where the inset is 0 (desktop / non-notched).
+ * puck, three-tab pillow, search/close toggle). Rests at a flat 12px from
+ * the screen bottom so the dock sits tightly stacked under the mini-player
+ * (which floats at bottom: 79). Raising the dock with a safe-area inset
+ * (the old "+24px" attempt) pushed the tab bar up out of that stack and
+ * left it looking detached/crooked, so we keep it at the original 12px.
  * Keeping all three on this single value keeps them on one baseline.
  */
-export const DOCK_BOTTOM = "calc(env(safe-area-inset-bottom, 0px) + 24px)";
+export const DOCK_BOTTOM = "12px";
 
 /**
  * Bottom padding every customer-shell scroll container must reserve so
  * content never slides under the floating nav + mini-player stack.
  *
- * The nav sits at `DOCK_BOTTOM` (safe-area inset + 24px), is ~64px tall
- * (py-2 + pill), and the mini-player floats ~79px above the bar.
- * Together they occupy ~167px above the dock baseline — we reserve 182px
- * for a safe gutter and grow it by the same safe-area inset the dock uses
- * so content always scrolls fully clear of the raised dock.
+ * The nav sits at `DOCK_BOTTOM` (12px), is ~64px tall (py-2 + pill), and
+ * the mini-player floats ~79px above the bar. Together they occupy ~155px
+ * of the viewport bottom — we round to 170px for a safe gutter plus haptic
+ * breathing room on devices with a chunky home indicator.
  */
-export const NAV_CLEARANCE = "calc(env(safe-area-inset-bottom, 0px) + 182px)";
+export const NAV_CLEARANCE = 170;
 
 // Task #530 — Apple-style split nav: a labeled three-tab pillow on the
 // left (Collection · Playlists · Recents) + a standalone search circle
