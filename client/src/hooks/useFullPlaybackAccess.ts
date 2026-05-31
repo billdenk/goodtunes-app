@@ -15,8 +15,22 @@ import { useAuth } from "./useAuth";
  *   - any admin/operator session (`kind: "admin"` or `isAdmin: true`), and
  *   - any fan account whose email is in FULL_ACCESS_EMAILS below.
  *
- * To grant a new account: add its lowercase email to FULL_ACCESS_EMAILS.
- * When the real ownership pipeline lands, delete this hook and its callers.
+ * Policy (confirmed by Bill): for now, *every admin can hear full tracks* —
+ * not just super_admins, but every partner role too (label, artist,
+ * non_profit, manufacturer, fulfillment, vendor). They all sign in through
+ * the admin shell, which stamps `kind: "admin"` on the session regardless of
+ * the `users.is_admin` column, so the `kind === "admin"` check below covers
+ * all of them. Do NOT re-gate this on `isAdmin` alone — partner accounts can
+ * have `is_admin = false` and would wrongly lose full playback.
+ *
+ * Non-profits technically get full access too, but they have no master
+ * audio yet, so that carve-out is moot until they do. The deliberate 30s
+ * preview stays in force for real (non-admin) fans — that's by design, not
+ * something this hook should remove.
+ *
+ * To grant a new (non-admin) account: add its lowercase email to
+ * FULL_ACCESS_EMAILS. When the real ownership pipeline lands, delete this
+ * hook and its callers.
  */
 const FULL_ACCESS_EMAILS: string[] = [
   // Add Bill's fan-side account email(s) here, lowercase, e.g.:
