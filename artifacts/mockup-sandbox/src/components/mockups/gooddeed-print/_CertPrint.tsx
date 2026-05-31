@@ -4,7 +4,7 @@
 // #FF7C06 edge-to-edge border that now ships on the digital share-card family).
 //
 // Geometry mirrors the PDF exactly: page 8.5x11" (Letter) / A4, inner mat
-// 2250x2850 figpx ratio, square album art filling the mat width, navy #00062B
+// 2250x2850 figpx ratio, square album art filling the mat width, navy brand-bg
 // band underneath. The two paper sizes use the template's two DIFFERENT layout
 // branches: Letter demotes the provenance to a bottom footnote with a fixed
 // signature slot; A4 centres one roomy stack. All pt values are scaled by `s`.
@@ -15,7 +15,7 @@ const AVATAR = "/__mockup/images/sample-owner-photo.png";
 const LOGO = "/__mockup/images/goodtunes-logo-white.png";
 const SIG = "/__mockup/images/will-signature.png";
 
-const NAVY = "#00062B";
+const NAVY = "var(--brand-bg)";
 const ORANGE = "var(--brand-orange)";
 
 type Paper = "letter" | "a4";
@@ -209,9 +209,25 @@ export function CertPrint({ paper, frame }: { paper: Paper; frame: Frame }) {
     </div>
   );
 
+  // ── Letter geometry: headline + signature + footnote all indent to `bodyX`
+  //    (the column under the artist name), and the signature sits at a FIXED
+  //    slot ~1.6 line-heights below the headline top — matching the server's
+  //    `sigY = headlineY + headLineH * 1.6` permanent slot (Bill-approved),
+  //    not flowing with content. Mirrors server/goodDeedPrintTemplate.ts.
+  const bodyXRel = leftColLeftRel + avatarSize + 10;
+  const bodyW = leftColRightRel - bodyXRel;
+  const headlineYRel = safeTopRel + avatarSize + 5;
+  const headLineH = 9.5 * 1.15; // ≈ Helvetica-Bold 9.5pt currentLineHeight (1 line)
+  const sigYRel = headlineYRel + headLineH * 1.6;
+  // QR/footnote shared baseline: server pins the caption 11pt above the band
+  // bottom and lands the footnote's last line on that same baseline.
+  const captionBottomRel = 11;
+
   // ── Left content block — the ONE place the two paper layouts diverge.
   const leftBlock = isA4 ? (
-    // A4: one vertically-centred stack across the taller band.
+    // A4: one vertically-centred stack across the taller band. Server centres
+    // the measured stack and uses non-uniform gaps (title→headline 11,
+    // headline→prov 3, prov→sig 6), so mirror those exact gaps here.
     <div
       style={{
         position: "absolute",
@@ -222,19 +238,19 @@ export function CertPrint({ paper, frame }: { paper: Paper; frame: Frame }) {
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
-        gap: px(8),
       }}
     >
       {titleRow}
-      {headlineEl("#FFFFFF")}
-      <div style={{ color: "#C7CFE8", fontSize: px(7.5), fontFamily: "Helvetica, Arial, sans-serif", lineHeight: 1.3 }}>
+      <div style={{ marginTop: px(11) }}>{headlineEl("#FFFFFF")}</div>
+      <div style={{ marginTop: px(3), color: "#C7CFE8", fontSize: px(7.5), fontFamily: "Helvetica, Arial, sans-serif", lineHeight: 1.3 }}>
         {provenance}
       </div>
-      {signatureBlock}
+      <div style={{ marginTop: px(6) }}>{signatureBlock}</div>
     </div>
   ) : (
-    // Letter: top-anchored title + headline + fixed signature slot; provenance
-    // demoted to a small bottom footnote that shares the QR caption's baseline.
+    // Letter: title row top-left; headline + fixed signature slot indented to
+    // bodyX under the artist name; provenance demoted to a bottom footnote
+    // sharing the QR caption baseline.
     <>
       <div
         style={{
@@ -242,21 +258,34 @@ export function CertPrint({ paper, frame }: { paper: Paper; frame: Frame }) {
           left: px(leftColLeftRel),
           top: px(safeTopRel),
           width: px(leftColW),
-          display: "flex",
-          flexDirection: "column",
-          gap: px(5),
         }}
       >
         {titleRow}
-        {headlineEl("#FFFFFF")}
-        <div style={{ marginTop: px(3) }}>{signatureBlock}</div>
       </div>
       <div
         style={{
           position: "absolute",
-          left: px(leftColLeftRel + avatarSize + 10),
-          bottom: px(pad),
-          width: px(leftColW - avatarSize - 10),
+          left: px(bodyXRel),
+          top: px(headlineYRel),
+          width: px(bodyW),
+          color: "#FFFFFF",
+          fontSize: px(9.5),
+          fontWeight: 700,
+          fontFamily: "Helvetica, Arial, sans-serif",
+          lineHeight: 1.15,
+        }}
+      >
+        {headline}
+      </div>
+      <div style={{ position: "absolute", left: px(bodyXRel), top: px(sigYRel), width: px(bodyW) }}>
+        {signatureBlock}
+      </div>
+      <div
+        style={{
+          position: "absolute",
+          left: px(bodyXRel),
+          bottom: px(captionBottomRel),
+          width: px(bodyW),
           color: "#9AA6CC",
           fontSize: px(6),
           fontFamily: "Helvetica, Arial, sans-serif",
