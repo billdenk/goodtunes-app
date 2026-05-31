@@ -41,7 +41,7 @@ function nameFontSize(name: string): number {
   return 15;
 }
 
-export function BorderedStoryCard({ overlay, radius = 0 }: { overlay?: ReactNode; radius?: number }) {
+export function BorderedStoryCard({ overlay, radius = 22 }: { overlay?: ReactNode; radius?: number }) {
   const { art, ownerPhoto, album, ownerName, certNumStr } = data;
 
   // Bottom caption: one line by default ("Album by Artist #NN"). If that runs too
@@ -142,9 +142,10 @@ export function BorderedStoryCard({ overlay, radius = 0 }: { overlay?: ReactNode
 }
 
 export function StoriesBordered() {
-  // Optional ?r=NN drives the card corner radius so we can A/B rounded variants
-  // on the canvas without extra files. Defaults to 0 (true rectangle).
-  const r = Number(new URLSearchParams(window.location.search).get("r") ?? "0") || 0;
+  // Approved/locked card radius is 22 (≈ Instagram photo curve). Optional ?r=NN
+  // overrides it so we can A/B alternate radii on the canvas without extra files.
+  const raw = Number(new URLSearchParams(window.location.search).get("r") ?? "22");
+  const r = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 22;
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "#05030f" }}>
       <BorderedStoryCard radius={r} />
