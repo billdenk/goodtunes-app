@@ -27,6 +27,7 @@ import {
 import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
 import { geoFromRequest, forwardToPostHog, isPostHogEnabled } from "./analytics";
 import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, fetchSpotifyTrackByUrl, searchTrackCandidates, type SpotifyArtistCandidate } from "./lib/spotify";
+import { resolveStreamingLinksFromAppleCollectionId, resolveStreamingLinksForCollections, hasAnyResolvedLink } from "./lib/streamingLinks";
 
 const scryptAsync = promisify(scrypt);
 
@@ -5691,6 +5692,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
 
+    // Task #843 — resolve real per-release Tidal / Deezer / Pandora links
+    // from the Apple release so the fan "How to Play" sheet deep-links
+    // straight to the album instead of a service search. Best-effort:
+    // Qobuz has no free mapping and any failure leaves the search
+    // fallback in place.
+    const extraLinks = await resolveStreamingLinksFromAppleCollectionId(collectionId, country);
+
     const album = await storage.createAlbum({
       title: String(collection.collectionName || "Untitled album"),
       artist: artistName || "Unknown artist",
@@ -5702,6 +5710,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       isHidden: false,
       appleMusicUrl: String(collection.collectionViewUrl || url),
       spotifyUrl: null,
+      tidalUrl: extraLinks.tidalUrl,
+      qobuzUrl: extraLinks.qobuzUrl,
+      deezerUrl: extraLinks.deezerUrl,
+      pandoraUrl: extraLinks.pandoraUrl,
       goodTunesReleaseDate: null,
       streamingReleaseDate: releaseDate ? releaseDate.slice(0, 10) : null,
       primaryArtistId,
@@ -11711,14 +11723,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         trackCount: typeof r.trackCount === "number" ? r.trackCount : null,
         appleMusicUrl: r.appleMusicUrl ? String(r.appleMusicUrl) : null,
         spotifyUrl: r.spotifyUrl ? String(r.spotifyUrl) : null,
-        // Task #816 — parity columns. The Apple discography pull doesn't
-        // source these today, so they normally stay null.
+        // Task #816 — parity columns. Task #843 fills Tidal/Deezer/Pandora
+        // from the Apple release below when the client didn't already
+        // carry them; Qobuz has no free mapping so it stays on search.
         tidalUrl: r.tidalUrl ? String(r.tidalUrl) : null,
         qobuzUrl: r.qobuzUrl ? String(r.qobuzUrl) : null,
         deezerUrl: r.deezerUrl ? String(r.deezerUrl) : null,
         pandoraUrl: r.pandoraUrl ? String(r.pandoraUrl) : null,
         position: typeof r.position === "number" ? r.position : idx,
       }));
+
+    // Task #843 — resolve real per-release Tidal/Deezer/Pandora deep
+    // links for any imported Apple release that doesn't already carry
+    // them. Best-effort + bounded (concurrency + wall-clock budget) so a
+    // large discography can't hang the save or hammer Odesli; unresolved
+    // releases keep the fan-side search fallback. An Apple collection id
+    // is numeric — those are the only rows song.link can map.
+    const needResolve = norm.filter(
+      (r: typeof norm[number]) =>
+        /^\d+$/.test(r.collectionId) &&
+        !r.tidalUrl &&
+        !r.deezerUrl &&
+        !r.pandoraUrl,
+    );
+    if (needResolve.length > 0) {
+      try {
+        const resolved = await resolveStreamingLinksForCollections(
+          needResolve.map((r: typeof norm[number]) => ({ collectionId: r.collectionId })),
+        );
+        for (const r of norm) {
+          const links = resolved.get(r.collectionId);
+          if (!links || !hasAnyResolvedLink(links)) continue;
+          r.tidalUrl = r.tidalUrl ?? links.tidalUrl;
+          r.deezerUrl = r.deezerUrl ?? links.deezerUrl;
+          r.pandoraUrl = r.pandoraUrl ?? links.pandoraUrl;
+        }
+      } catch (e: any) {
+        // Never fail the save over an enrichment miss.
+        console.warn("[streamingLinks] discography resolve failed", e?.message);
+      }
+    }
+
     const rows = await storage.replaceDiscographyForPerson(id, norm);
     return res.json(rows);
   });
