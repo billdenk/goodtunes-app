@@ -97,7 +97,8 @@ function QrFaux({ size }: { size: number }) {
   );
 }
 
-export function CertPrint({ paper, frame }: { paper: Paper; frame: Frame }) {
+export function CertPrint({ paper, frame, art }: { paper: Paper; frame: Frame; art?: string }) {
+  const artSrc = art ?? ART;
   const s = 0.72; // pt -> px display scale (same for both papers, so A4 reads taller/narrower)
   const d = dims(paper);
   const px = (pt: number) => pt * s;
@@ -321,7 +322,7 @@ export function CertPrint({ paper, frame }: { paper: Paper; frame: Frame }) {
       />
       {/* Square album artwork filling the mat width. */}
       <div style={{ position: "absolute", left: px(d.matX), top: px(d.matY), width: px(d.matW), height: px(d.artH), overflow: "hidden" }}>
-        <img src={ART} alt={SAMPLE.title} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+        <img src={artSrc} alt={SAMPLE.title} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
       </div>
       {/* Navy band under the art. */}
       <div style={{ position: "absolute", left: px(d.matX), top: px(d.bandTop), width: px(d.matW), height: px(d.bandH), background: NAVY }}>
@@ -332,13 +333,13 @@ export function CertPrint({ paper, frame }: { paper: Paper; frame: Frame }) {
   );
 }
 
-export function CertStage({ paper, frame }: { paper: Paper; frame: Frame }) {
+export function CertStage({ paper, frame, art }: { paper: Paper; frame: Frame; art?: string }) {
   return (
     <div
       className="min-h-screen flex items-center justify-center"
       style={{ background: "#E9EBF0", padding: 28 }}
     >
-      <CertPrint paper={paper} frame={frame} />
+      <CertPrint paper={paper} frame={frame} art={art} />
     </div>
   );
 }
