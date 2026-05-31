@@ -33,8 +33,8 @@ import { useAuth } from "./useAuth";
  * hook and its callers.
  */
 const FULL_ACCESS_EMAILS: string[] = [
-  // Add Bill's fan-side account email(s) here, lowercase, e.g.:
-  // "bill@example.com",
+  // Bill's fan-side account (@billy). Add more emails (lowercase) below as needed.
+  "billdenk@mac.com",
 ];
 
 export function useFullPlaybackAccess(): boolean {
