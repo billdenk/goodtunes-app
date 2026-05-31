@@ -18,7 +18,7 @@ interface GoodDeedCertificateProps {
 }
 
 type IdentityKind = "display" | "username" | "real";
-type CardShape = "square" | "story";
+type CardShape = "square" | "portrait" | "story";
 
 export function GoodDeedCertificate({
   album,
@@ -124,12 +124,13 @@ export function GoodDeedCertificate({
 
   const padded = (n: number) => n.toString().padStart(2, "0");
 
-  // On-screen preview width: square fills the stage; story is capped so the
-  // 9:16 card fits the viewport height.
+  // On-screen preview width: square fills the stage; the taller portrait (4:5)
+  // and story (9:16) cards are capped so they fit the viewport height.
+  const previewRatio = shape === "story" ? 16 / 9 : shape === "portrait" ? 5 / 4 : 1;
   const previewW =
     shape === "square"
       ? stageW
-      : Math.max(180, Math.min(stageW, Math.round(((vh - 300) * 9) / 16)));
+      : Math.max(180, Math.min(stageW, Math.round((vh - 300) / previewRatio)));
 
   const handleShare = async () => {
     const n = padded(certs[safeIdx]);
@@ -172,7 +173,7 @@ export function GoodDeedCertificate({
         ),
       );
       // Node is already authored at full 1080-scale, so pixelRatio 1 yields an
-      // exactly-sized PNG (1080×1080 square / 1080×1920 story).
+      // exactly-sized PNG (1080×1080 square / 1080×1350 portrait / 1080×1920 story).
       const dataUrl = await toPng(node, {
         pixelRatio: 1,
         cacheBust: true,
@@ -433,6 +434,7 @@ export function GoodDeedCertificate({
           >
             {([
               { key: "square", label: "Square" },
+              { key: "portrait", label: "Portrait" },
               { key: "story", label: "Story" },
             ] as const).map((opt) => {
               const active = shape === opt.key;
@@ -503,7 +505,8 @@ export function GoodDeedCertificate({
 
         {/* Hidden full-resolution capture stage. handleSaveImage snapshots this
             off-screen node so the exported PNG is always exactly 1080×1080
-            (square) or 1080×1920 (story), independent of the preview size. */}
+            (square) / 1080×1350 (portrait) / 1080×1920 (story), independent of
+            the preview size. */}
         <div
           aria-hidden
           style={{ position: "fixed", left: -99999, top: 0, opacity: 0, pointerEvents: "none" }}
@@ -573,6 +576,86 @@ interface CertCardProps {
   w: number;
 }
 
+// Export height = w × ratio: square 1080×1080, portrait 1080×1350, story 1080×1920.
+const SHAPE_RATIO: Record<CardShape, number> = {
+  square: 1,
+  portrait: 1350 / 1080,
+  story: 1920 / 1080,
+};
+
+/** Per-format spec for the approved GoodDeed "bordered" card family. All three
+    share one signature — orange (#FF7C06) edge-to-edge frame, album-art band
+    fading into navy, owner avatar straddling the seam, then
+    certifies → name → [GoodTunes | #NN] pill → caption. Square + portrait use
+    SQUARE corners (radius 0); the story keeps the approved rounded curve. Every
+    value is in 1080-base units and multiplied by `u = w / 1080`. */
+type CertShapeSpec = {
+  radiusU: number;
+  artBandU: number | "square";
+  grad: string;
+  avatarU: number;
+  avatarMtU: number;
+  certFsU: number;
+  certMtU: number;
+  nameBases: [number, number, number, number, number, number];
+  nameMtU: number;
+  pillMtU: number;
+  pillPadVU: number;
+  pillPadHU: number;
+  pillGapU: number;
+  logoHU: number;
+  divHU: number;
+  numFsU: number;
+  captionFsU: number;
+  captionPinBottom: boolean;
+  captionMtU: number;
+  padXU: number;
+  padBU: number;
+};
+
+const CERT_SHAPE_SPECS: Record<CardShape, CertShapeSpec> = {
+  square: {
+    radiusU: 0,
+    artBandU: 470,
+    grad: "linear-gradient(180deg, rgba(0,6,43,0) 40%, rgba(0,6,43,0.6) 72%, rgba(0,6,43,0.95) 92%, var(--brand-bg) 100%)",
+    avatarU: 200, avatarMtU: -148,
+    certFsU: 33, certMtU: 28,
+    nameBases: [84, 72, 63, 54, 48, 42], nameMtU: 8,
+    pillMtU: 22, pillPadVU: 22, pillPadHU: 42, pillGapU: 22, logoHU: 60, divHU: 46, numFsU: 40,
+    captionFsU: 30, captionPinBottom: true, captionMtU: 0,
+    padXU: 56, padBU: 56,
+  },
+  portrait: {
+    radiusU: 0,
+    artBandU: 760,
+    grad: "linear-gradient(180deg, rgba(0,6,43,0) 48%, rgba(0,6,43,0.6) 76%, rgba(0,6,43,0.95) 93%, var(--brand-bg) 100%)",
+    avatarU: 210, avatarMtU: -170,
+    certFsU: 33, certMtU: 34,
+    nameBases: [88, 76, 66, 57, 50, 44], nameMtU: 10,
+    pillMtU: 26, pillPadVU: 24, pillPadHU: 44, pillGapU: 22, logoHU: 64, divHU: 50, numFsU: 42,
+    captionFsU: 30, captionPinBottom: false, captionMtU: 48,
+    padXU: 56, padBU: 56,
+  },
+  story: {
+    radiusU: 66,
+    artBandU: "square",
+    grad: "linear-gradient(180deg, rgba(0,6,43,0) 55%, rgba(0,6,43,0.6) 80%, rgba(0,6,43,0.95) 94%, var(--brand-bg) 100%)",
+    avatarU: 248, avatarMtU: -178,
+    certFsU: 38, certMtU: 51,
+    nameBases: [95, 83, 73, 64, 54, 48], nameMtU: 19,
+    pillMtU: 38, pillPadVU: 29, pillPadHU: 51, pillGapU: 25, logoHU: 76, divHU: 60, numFsU: 48,
+    captionFsU: 38, captionPinBottom: true, captionMtU: 0,
+    padXU: 76, padBU: 35,
+  },
+};
+
+// Auto-shrink the owner name so it stays on ONE line across name lengths.
+function certNameFontU(name: string, bases: CertShapeSpec["nameBases"], u: number): number {
+  const n = name.trim().length;
+  const i = n <= 12 ? 0 : n <= 15 ? 1 : n <= 18 ? 2 : n <= 22 ? 3 : n <= 26 ? 4 : 5;
+  return bases[i] * u;
+}
+
 const CertCard = forwardRef(function CertCard(
   { album, ownerName, num, ownerPhotoUrl, shape, w }: CertCardProps,
   ref: Ref<HTMLDivElement>,
@@ -580,236 +663,124 @@ const CertCard = forwardRef(function CertCard(
   const certNumStr = num.toString().padStart(2, "0");
   const initial = (ownerName.replace(/^@/, "").trim()[0] || "?").toUpperCase();
   const u = w / 1080;
-  const bw = (px: number) => `${Math.max(1, px * u)}px`;
+  const spec = CERT_SHAPE_SPECS[shape];
+  const height = Math.round(w * SHAPE_RATIO[shape]);
+  const border = Math.max(1, 45 * u);
+  const avatarBorder = `${Math.max(1, 6 * u)}px solid rgba(255,255,255,0.18)`;
 
-  if (shape === "story") {
-    const height = Math.round((w * 16) / 9);
-    return (
-      <div
-        ref={ref}
-        className="flex-shrink-0 snap-start overflow-hidden mx-auto relative flex flex-col"
-        style={{
-          width: w,
-          height,
-          borderRadius: 84 * u,
-          boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
-          backgroundColor: "var(--brand-bg)",
-        }}
-      >
-        {/* Immersive blurred album-art backdrop */}
-        <img
-          src={album.artwork}
-          alt=""
-          aria-hidden
-          className="absolute inset-0 w-full h-full object-cover"
-          style={{ filter: `blur(${84 * u}px) saturate(120%)`, transform: "scale(1.25)", opacity: 0.5 }}
-        />
-        {/* Navy gradient scrim for legibility */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(180deg, rgba(0,6,43,0.55) 0%, rgba(0,6,43,0.35) 38%, rgba(0,6,43,0.85) 72%, var(--brand-bg) 100%)",
-          }}
-        />
+  const captionOneLine = `${album.title} by ${album.artist} #${certNumStr}`;
+  const captionWraps = captionOneLine.length > 34;
+  const captionMt = spec.captionPinBottom ? undefined : spec.captionMtU * u;
+  const pinClass = spec.captionPinBottom ? "mt-auto" : "";
 
-        <div
-          className="relative flex flex-col h-full"
-          style={{ paddingLeft: 84 * u, paddingRight: 84 * u, paddingTop: 96 * u, paddingBottom: 84 * u }}
-        >
-          {/* Verified pill */}
-          <div className="flex justify-center">
-            <div
-              className="flex items-center rounded-full"
-              style={{
-                gap: 18 * u,
-                paddingLeft: 36 * u,
-                paddingRight: 36 * u,
-                paddingTop: 18 * u,
-                paddingBottom: 18 * u,
-                background: "rgba(74,255,202,0.14)",
-                border: `${bw(2)} solid rgba(74,255,202,0.35)`,
-              }}
-            >
-              <svg width={39 * u} height={39 * u} viewBox="0 0 24 24" fill="none" stroke="var(--brand-mint)" strokeWidth="3" strokeLinecap="round">
-                <path d="M20 6L9 17l-5-5" />
-              </svg>
-              <span style={{ color: "var(--brand-mint)", fontSize: 33 * u, fontWeight: 700, letterSpacing: 1.5 * u }}>
-                VERIFIED OWNERSHIP
-              </span>
-            </div>
-          </div>
-
-          {/* Hero album art */}
-          <div className="flex-1 flex flex-col items-center justify-center" style={{ gap: 54 * u }}>
-            <div
-              className="overflow-hidden"
-              style={{ width: "62%", aspectRatio: "1 / 1", borderRadius: 60 * u, boxShadow: "0 18px 50px rgba(0,0,0,0.6)" }}
-            >
-              <img src={album.artwork} alt={album.title} className="w-full h-full object-cover block" />
-            </div>
-            <div className="text-center" style={{ maxWidth: "100%" }}>
-              <p className="text-white font-bold leading-tight" style={{ fontSize: 66 * u }} data-testid="text-cert-album">
-                {album.title}
-              </p>
-              <p className="text-white/65 leading-tight" style={{ fontSize: 42 * u, marginTop: 12 * u }} data-testid="text-cert-artist">
-                {album.artist}
-              </p>
-            </div>
-          </div>
-
-          {/* Ownership statement */}
-          <div
-            className="flex flex-col items-center text-center"
-            style={{ gap: 24 * u }}
-            data-testid="text-cert-owner"
-            aria-label={`${ownerName} owns no. ${certNumStr} of ${album.title}`}
-          >
-            {ownerPhotoUrl ? (
-              <img
-                src={ownerPhotoUrl}
-                alt=""
-                className="rounded-full object-cover"
-                style={{ width: 168 * u, height: 168 * u, border: `${bw(6)} solid rgba(255,255,255,0.25)` }}
-                data-testid="img-cert-owner-photo"
-              />
-            ) : (
-              <div
-                className="rounded-full flex items-center justify-center text-white font-semibold"
-                style={{
-                  width: 168 * u,
-                  height: 168 * u,
-                  fontSize: 64 * u,
-                  background: "rgba(255,255,255,0.14)",
-                  border: `${bw(6)} solid rgba(255,255,255,0.25)`,
-                }}
-                aria-hidden
-                data-testid="placeholder-cert-owner-avatar"
-              >
-                {initial}
-              </div>
-            )}
-            <p className="text-white/70 leading-snug" style={{ fontSize: 39 * u }}>This GoodDeed® certifies that</p>
-            <p className="text-white font-bold leading-tight" style={{ fontSize: 60 * u }} data-testid="text-cert-owner-name">
-              {ownerName}
-            </p>
-            <p className="text-white/70 leading-snug" style={{ fontSize: 39 * u }}>owns No. {certNumStr} of this series.</p>
-            <p
-              className="font-bold leading-none"
-              style={{ fontVariantNumeric: "tabular-nums", fontSize: 156 * u, color: "var(--brand-mint)", marginTop: 24 * u }}
-              data-testid="text-cert-serial"
-            >
-              No. {certNumStr}
-            </p>
-          </div>
-
-          {/* Footer mark */}
-          <div
-            className="flex items-center justify-center"
-            style={{ marginTop: 48 * u, paddingTop: 36 * u, borderTop: `${bw(1)} solid rgba(255,255,255,0.12)` }}
-          >
-            <img src="/goodtunes-logo-white.png" alt="GoodTunes" className="w-auto object-contain" style={{ height: 60 * u }} />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Square (1:1) social card.
   return (
     <div
       ref={ref}
-      className="flex-shrink-0 snap-start overflow-hidden mx-auto flex flex-col"
+      className="flex-shrink-0 snap-start overflow-hidden mx-auto relative flex flex-col"
       style={{
         width: w,
-        height: w,
-        borderRadius: 72 * u,
-        boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
+        height,
+        boxSizing: "border-box",
+        border: `${border}px solid var(--brand-orange)`,
+        borderRadius: spec.radiusU * u,
         backgroundColor: "var(--brand-bg)",
+        boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
       }}
     >
-      {/* Top: album-art band, full-bleed */}
-      <div className="relative w-full flex-shrink-0" style={{ height: w * 0.5 }}>
-        <img src={album.artwork} alt={album.title} className="w-full h-full object-cover block" />
+      {/* Album-art band with a long, soft fade into navy so the seam is seamless */}
+      <div
+        className="relative w-full shrink-0"
+        style={spec.artBandU === "square" ? { aspectRatio: "1 / 1" } : { height: spec.artBandU * u }}
+      >
+        <img src={album.artwork} alt={album.title} className="w-full h-full object-cover object-top block" data-testid="img-cert-art" />
+        <div className="absolute inset-0" style={{ background: spec.grad }} />
       </div>
 
-      {/* Bottom: legible, share-friendly panel. This is the SOCIAL card; the
-          dense archival/print look lives only on the admin Sell-panel preview
-          and the downloadable PDF. */}
+      {/* Ownership block — relative+z so the avatar paints ON TOP of the art seam */}
       <div
-        className="relative w-full flex-1 flex flex-col"
-        style={{
-          paddingLeft: 56 * u,
-          paddingRight: 56 * u,
-          paddingTop: 40 * u,
-          paddingBottom: 40 * u,
-          backgroundColor: "var(--brand-bg)",
-        }}
+        className="relative z-10 flex-1 flex flex-col items-center text-center"
+        style={{ paddingLeft: spec.padXU * u, paddingRight: spec.padXU * u, paddingBottom: spec.padBU * u }}
+        data-testid="text-cert-owner"
+        aria-label={`${ownerName} owns no. ${certNumStr} of ${album.title}`}
       >
-        {/* Album title + artist */}
-        <div className="min-w-0">
-          <p className="text-white font-bold leading-tight truncate" style={{ fontSize: 48 * u }} data-testid="text-cert-album">
-            {album.title}
-          </p>
-          <p className="text-white/60 leading-tight truncate" style={{ fontSize: 30 * u, marginTop: 4 * u }} data-testid="text-cert-artist">
-            {album.artist}
-          </p>
-        </div>
-
-        {/* Centred ownership statement */}
-        <div
-          className="flex-1 flex flex-col items-center justify-center text-center"
-          style={{ gap: 16 * u, paddingLeft: 8 * u, paddingRight: 8 * u }}
-          data-testid="text-cert-owner"
-          aria-label={`${ownerName} owns no. ${certNumStr} of ${album.title}`}
-        >
-          {ownerPhotoUrl ? (
-            <img
-              src={ownerPhotoUrl}
-              alt=""
-              className="rounded-full object-cover"
-              style={{ width: 120 * u, height: 120 * u, border: `${bw(3)} solid rgba(255,255,255,0.2)` }}
-              data-testid="img-cert-owner-photo"
-            />
-          ) : (
-            <div
-              className="rounded-full flex items-center justify-center text-white font-semibold"
-              style={{
-                width: 120 * u,
-                height: 120 * u,
-                fontSize: 48 * u,
-                background: "rgba(255,255,255,0.14)",
-                border: `${bw(3)} solid rgba(255,255,255,0.2)`,
-              }}
-              aria-hidden
-              data-testid="placeholder-cert-owner-avatar"
-            >
-              {initial}
-            </div>
-          )}
-          <p className="text-white/70 leading-snug" style={{ fontSize: 30 * u }}>This GoodDeed® certifies that</p>
-          <p className="text-white font-bold leading-tight" style={{ fontSize: 48 * u }} data-testid="text-cert-owner-name">
-            {ownerName}
-          </p>
-          <p className="text-white/70 leading-snug" style={{ fontSize: 30 * u }}>owns No. {certNumStr} of this series.</p>
-        </div>
-
-        {/* Serial + GoodTunes mark */}
-        <div className="flex items-end justify-between" style={{ gap: 24 * u }}>
-          <p
-            className="text-white font-bold leading-none"
-            style={{ fontSize: 80 * u, fontVariantNumeric: "tabular-nums" }}
-            data-testid="text-cert-serial"
-          >
-            No. {certNumStr}
-          </p>
+        {ownerPhotoUrl ? (
           <img
-            src="/goodtunes-logo-white.png"
-            alt="GoodTunes"
-            className="w-auto object-contain flex-shrink-0"
-            style={{ height: 56 * u }}
+            src={ownerPhotoUrl}
+            alt=""
+            className="rounded-full object-cover shrink-0"
+            style={{
+              width: spec.avatarU * u,
+              height: spec.avatarU * u,
+              marginTop: spec.avatarMtU * u,
+              border: avatarBorder,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+            }}
+            data-testid="img-cert-owner-photo"
           />
+        ) : (
+          <div
+            className="rounded-full overflow-hidden shrink-0 flex items-center justify-center text-white font-semibold"
+            style={{
+              width: spec.avatarU * u,
+              height: spec.avatarU * u,
+              marginTop: spec.avatarMtU * u,
+              fontSize: spec.avatarU * 0.42 * u,
+              background: "rgba(255,255,255,0.14)",
+              border: avatarBorder,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+            }}
+            aria-hidden
+            data-testid="placeholder-cert-owner-avatar"
+          >
+            {initial}
+          </div>
+        )}
+
+        <p className="text-white/55 leading-snug" style={{ fontSize: spec.certFsU * u, marginTop: spec.certMtU * u }}>
+          This GoodDeed® certifies
+        </p>
+        <p
+          className="text-white font-bold leading-tight max-w-full whitespace-nowrap"
+          style={{ fontSize: certNameFontU(ownerName, spec.nameBases, u), marginTop: spec.nameMtU * u }}
+          data-testid="text-cert-owner-name"
+        >
+          {ownerName}
+        </p>
+
+        {/* [GoodTunes | #NN] number pill — directly under the name */}
+        <div
+          className="flex items-center"
+          style={{
+            marginTop: spec.pillMtU * u,
+            gap: spec.pillGapU * u,
+            padding: `${spec.pillPadVU * u}px ${spec.pillPadHU * u}px`,
+            borderRadius: 999,
+            background: "rgba(0,6,43,0.62)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            border: "1px solid rgba(255,255,255,0.18)",
+            boxShadow: "0 4px 14px rgba(0,0,0,0.45)",
+          }}
+        >
+          <img src="/goodtunes-logo-white.png" alt="GoodTunes" style={{ height: spec.logoHU * u, width: "auto", display: "block" }} />
+          <span style={{ width: 1, height: spec.divHU * u, background: "rgba(255,255,255,0.3)" }} />
+          <span className="font-bold text-white" style={{ fontSize: spec.numFsU * u, letterSpacing: 0.2 }} data-testid="text-cert-serial">
+            #{certNumStr}
+          </span>
         </div>
+
+        {/* Secondary album caption — pinned to the bottom (square/story) or set
+            directly under the pill as part of the block (portrait) */}
+        {captionWraps ? (
+          <div className={`text-white/60 leading-snug ${pinClass}`} style={{ fontSize: spec.captionFsU * u, marginTop: captionMt }} data-testid="text-cert-album">
+            <p className="whitespace-nowrap">{album.title} #{certNumStr}</p>
+            <p className="whitespace-nowrap">by {album.artist}</p>
+          </div>
+        ) : (
+          <p className={`text-white/60 leading-snug whitespace-nowrap ${pinClass}`} style={{ fontSize: spec.captionFsU * u, marginTop: captionMt }} data-testid="text-cert-album">
+            {captionOneLine}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -85,7 +85,7 @@ export function BorderedPortraitCard({ overlay, radius = 22 }: { overlay?: React
           style={{
             width: 210 * u,
             height: 210 * u,
-            marginTop: -160 * u, // straddle the seam between art and navy
+            marginTop: -170 * u, // straddle the seam between art and navy
             border: `${Math.max(1, 6 * u)}px solid rgba(255,255,255,0.18)`,
             boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
           }}
@@ -127,12 +127,12 @@ export function BorderedPortraitCard({ overlay, radius = 22 }: { overlay?: React
 
         {/* secondary caption sits directly under the pill as part of the block */}
         {captionWraps ? (
-          <div className="text-white/60 leading-snug" style={{ fontSize: 30 * u, marginTop: 32 * u }}>
+          <div className="text-white/60 leading-snug" style={{ fontSize: 30 * u, marginTop: 48 * u }}>
             <p className="whitespace-nowrap">{album.title} #{certNumStr}</p>
             <p className="whitespace-nowrap">by {album.artist}</p>
           </div>
         ) : (
-          <p className="text-white/60 leading-snug whitespace-nowrap" style={{ fontSize: 30 * u, marginTop: 32 * u }}>
+          <p className="text-white/60 leading-snug whitespace-nowrap" style={{ fontSize: 30 * u, marginTop: 48 * u }}>
             {captionOneLine}
           </p>
         )}
