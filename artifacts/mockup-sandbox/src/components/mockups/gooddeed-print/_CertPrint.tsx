@@ -289,11 +289,13 @@ export function CertPrint({
       }}
     >
       {titleRow}
-      <div style={{ marginTop: px(11) }}>{headlineEl("#FFFFFF")}</div>
-      <div style={{ marginTop: px(3), color: "#C7CFE8", fontSize: px(7.5), fontFamily: "Helvetica, Arial, sans-serif", lineHeight: 1.3 }}>
+      {/* Indent body to align with the text column (under "Fernando Perdomo"),
+          i.e. past the avatar + its 10pt gap — not under the avatar itself. */}
+      <div style={{ marginLeft: px(avatarSize + 10), marginTop: px(11) }}>{headlineEl("#FFFFFF")}</div>
+      <div style={{ marginLeft: px(avatarSize + 10), marginTop: px(3), color: "#C7CFE8", fontSize: px(7.5), fontFamily: "Helvetica, Arial, sans-serif", lineHeight: 1.3 }}>
         {provenance}
       </div>
-      <div style={{ marginTop: px(6) }}>{signatureBlock}</div>
+      <div style={{ marginLeft: px(avatarSize + 10), marginTop: px(6) }}>{signatureBlock}</div>
     </div>
   ) : (
     // Letter: title row top-left; headline + fixed signature slot indented to
