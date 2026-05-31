@@ -5,7 +5,9 @@
 // GoodDeed signature as the approved Story. The orange only wraps the art (the
 // pixels we bake); the dark caption strip simulates the native preview.
 //
-// ?pill=0 hides the baked [GoodTunes | #NN] chip; default (?pill=1) shows it.
+// ?pill controls the baked chip: "0" = none, "logo" = GoodTunes logo only
+// (drops the redundant #NN, since the native caption already states the number),
+// default ("1") = full [GoodTunes | #NN] chip.
 import "./_group.css";
 
 const ART = "/__mockup/images/album-guitar-as-a-voice.png";
@@ -13,8 +15,9 @@ const LOGO = "/__mockup/images/goodtunes-logo-white.png";
 const ORANGE = "var(--brand-orange)";
 
 export function OgBordered() {
-  const showPill =
-    (new URLSearchParams(window.location.search).get("pill") ?? "1") !== "0";
+  const pill = new URLSearchParams(window.location.search).get("pill") ?? "1";
+  const showPill = pill !== "0";
+  const showNum = pill !== "logo" && pill !== "0";
   const w = 560;
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "#05030f" }}>
@@ -42,10 +45,14 @@ export function OgBordered() {
                 }}
               >
                 <img src={LOGO} alt="GoodTunes" style={{ height: 34, width: "auto", display: "block" }} />
-                <span style={{ width: 1, height: 28, background: "rgba(255,255,255,0.3)" }} />
-                <span className="font-bold text-white" style={{ fontSize: 22, letterSpacing: 0.2 }}>
-                  #07
-                </span>
+                {showNum && (
+                  <>
+                    <span style={{ width: 1, height: 28, background: "rgba(255,255,255,0.3)" }} />
+                    <span className="font-bold text-white" style={{ fontSize: 22, letterSpacing: 0.2 }}>
+                      #07
+                    </span>
+                  </>
+                )}
               </div>
             )}
           </div>
