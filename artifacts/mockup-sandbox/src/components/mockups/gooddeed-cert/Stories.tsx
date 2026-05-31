@@ -5,10 +5,10 @@
 import "./_group.css";
 
 const LOGO = "/__mockup/images/goodtunes-logo-white.png";
-const ART = "/__mockup/images/sample-album-art.png";
+const ART = "/__mockup/images/album-guitar-as-a-voice.png";
 const OWNER_PHOTO = "/__mockup/images/sample-owner-photo.png";
 
-const album = { title: "Wildflower", artist: "Marlowe Vance" };
+const album = { title: "Guitar as a Voice", artist: "Fernando Perdomo" };
 const ownerName = "Jordan Ellis";
 const certNumStr = "07";
 
