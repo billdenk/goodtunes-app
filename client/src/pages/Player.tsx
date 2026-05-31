@@ -349,6 +349,15 @@ export function Player() {
         exit={{ y: "100%", opacity: 0, transition: closeTransition }}
         style={{
           zIndex: 50,
+          // iOS Safari's toolbar shrinks/grows as you scroll, and a plain
+          // `fixed inset-0` element tracks the *layout* viewport — so its
+          // solid background leaves a sliver above the toolbar where the
+          // page behind peeks through. Anchor to the top and size to the
+          // *dynamic* visual viewport (`100dvh`) so the navy fill always
+          // reaches the real bottom edge, in any toolbar state.
+          top: 0,
+          bottom: "auto",
+          height: "100dvh",
           // Block iOS Safari's pull-to-refresh. Without this, swiping down
           // anywhere on the player reloads the page and kills the audio —
           // the opposite of what an Apple-Music user expects (they expect
@@ -368,7 +377,7 @@ export function Player() {
           />
           <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0.3) 0%, rgba(0,6,43,0.5) 100%)" }} />
         </div>
-        <div className="relative w-full max-w-[390px] min-h-screen flex flex-col">
+        <div className="relative w-full max-w-[390px] h-[100dvh] flex flex-col">
 
           {/* Grabber + drag zone — Apple-style pull-down dismiss.
               The drag listener (`dismissOnSwipeDown`) is attached to BOTH
@@ -686,7 +695,10 @@ export function Player() {
             </div>
           </div>
 
-          <div className="relative z-10 h-8 flex items-end justify-center pb-2">
+          <div
+            className="relative z-10 flex items-end justify-center pt-2"
+            style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.5rem)" }}
+          >
             <div className="w-28 h-[5px] bg-white/25 rounded-full" />
           </div>
         </div>
@@ -696,7 +708,7 @@ export function Player() {
       {showLyrics && currentSong.lyrics && (
         <div
           className="fixed inset-0 flex justify-center bg-[#00062B]"
-          style={{ zIndex: 70 }}
+          style={{ zIndex: 70, top: 0, bottom: "auto", height: "100dvh" }}
           onPointerDown={() => showControlsAndArmHide.current()}
         >
           {/* Full-bleed blurred artwork background — Apple Music style */}
@@ -709,7 +721,7 @@ export function Player() {
             />
             <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.28)" }} />
           </div>
-          <div className="relative w-full max-w-[390px] min-h-screen flex flex-col">
+          <div className="relative w-full max-w-[390px] h-[100dvh] flex flex-col">
 
             {/* Header: small art + song info + star + ... */}
             <div className="relative z-10 flex items-center gap-3 px-5 pt-14 pb-4">
@@ -1011,8 +1023,9 @@ export function Player() {
 
             {/* Bottom controls */}
             <div
-              className="relative z-10 px-6 pt-3 pb-8"
+              className="relative z-10 px-6 pt-3"
               style={{
+                paddingBottom: "calc(env(safe-area-inset-bottom) + 2rem)",
                 opacity: controlsVisible ? 1 : 0,
                 transform: controlsVisible ? "translateY(0)" : "translateY(12px)",
                 pointerEvents: controlsVisible ? "auto" : "none",
