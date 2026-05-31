@@ -124,7 +124,9 @@ export function StoryCard({
           {ownerName}
         </p>
         <p className="text-white/60 text-sm leading-snug mt-2" style={{ maxWidth: "15rem" }}>
-          Owns #{certNumStr} of {album.title} by {album.artist}
+          Owns #{certNumStr} of {album.title}
+          <br />
+          by {album.artist}
         </p>
       </div>
 
