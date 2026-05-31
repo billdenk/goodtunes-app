@@ -10,6 +10,14 @@ import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import type { PersonDiscography, Album as DbAlbum } from "@shared/schema";
 import appleMusicLogo from "@/assets/brand/apple-music.svg";
 import spotifyLogo from "@/assets/brand/spotify.svg";
+import {
+  STREAMING_SERVICES,
+  handoffUrlForService,
+  SERVICE_GLYPH,
+  SERVICE_TILE,
+  type StreamLinks,
+  type StreamingServiceId,
+} from "@/lib/streamingService";
 import { X, ChevronRight, ChevronLeft } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { track } from "@/lib/analytics";
@@ -918,11 +926,49 @@ function BucketGridSheet({
   );
 }
 
+// 44px brand mark for a "How to Play" row. Apple Music + Spotify keep their
+// official app icons (used as-supplied — never recolored or re-wrapped, per
+// each service's identity guidelines). The other four services render an
+// app-icon-style filled tile reusing the shared SERVICE_GLYPH shapes +
+// SERVICE_TILE colors, so they match the album picker sheet and never drift.
+function ServiceMark({ id }: { id: StreamingServiceId }) {
+  if (id === "apple_music" || id === "spotify") {
+    return (
+      <img
+        src={id === "apple_music" ? appleMusicLogo : spotifyLogo}
+        alt=""
+        width={44}
+        height={44}
+        className="flex-shrink-0 block"
+      />
+    );
+  }
+  const glyph = SERVICE_GLYPH[id];
+  const tile = SERVICE_TILE[id];
+  return (
+    <div
+      className="flex-shrink-0 flex items-center justify-center"
+      style={{ width: 44, height: 44, borderRadius: 10, background: tile.bg }}
+    >
+      {glyph.kind === "icon" ? (
+        <glyph.Icon style={{ width: 24, height: 24, color: tile.fg }} />
+      ) : (
+        <span
+          className="font-bold leading-none"
+          style={{ color: tile.fg, fontSize: 22 }}
+        >
+          {glyph.letter}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // Apple-TV-style "How to Watch" sheet, adapted to streaming-only (no
-// Buy / Rent — every option is a subscription handoff). Two big rounded
-// rows: Apple Music (deep-link to the exact album via the iTunes Lookup
-// URL we cached) + Spotify (search fallback today, since we don't yet
-// store per-release Spotify URLs).
+// Buy / Rent — every option is a subscription handoff). Rounded rows for all
+// six services in the app's standard order: each uses the release's stored
+// deep link when present (today only Apple Music is populated) and otherwise
+// falls back to a per-service search built from artist + title.
 function HowToPlaySheet({
   release,
   artistName,
@@ -933,33 +979,29 @@ function HowToPlaySheet({
   onClose: () => void;
 }) {
   const reduceMotion = useReducedMotion();
-  const spotifyHref =
-    release.spotifyUrl ??
-    `https://open.spotify.com/search/${encodeURIComponent(`${artistName} ${release.name}`)}`;
-  // Apple Music + Spotify identity-compliant: official app icons used
-  // as-supplied, never recolored, never re-wrapped in a brand-colored
-  // container. Rendered as plain <img> from the SVGs we host locally.
-  // - Apple Music identity: marketing.services.apple/apple-music-identity-guidelines
-  // - Spotify design guidelines: developer.spotify.com/documentation/design
+  // All six services in the app's standard order. Each row uses the release's
+  // stored deep link when present, otherwise a service search built from the
+  // artist + release title (the fallback Spotify has always used). The data
+  // pull only fills appleMusicUrl today, so the other five usually hand off
+  // via search.
+  const links: StreamLinks = {
+    spotify: release.spotifyUrl,
+    apple: release.appleMusicUrl,
+    tidal: release.tidalUrl,
+    qobuz: release.qobuzUrl,
+    deezer: release.deezerUrl,
+    pandora: release.pandoraUrl,
+  };
+  const searchQuery = `${artistName} ${release.name}`;
   const services: Array<{
-    key: string;
+    key: StreamingServiceId;
     label: string;
     href: string | null;
-    logoSrc: string;
-  }> = [
-    {
-      key: "apple",
-      label: "Apple Music",
-      href: release.appleMusicUrl,
-      logoSrc: appleMusicLogo,
-    },
-    {
-      key: "spotify",
-      label: "Spotify",
-      href: spotifyHref,
-      logoSrc: spotifyLogo,
-    },
-  ];
+  }> = STREAMING_SERVICES.map((svc) => ({
+    key: svc.id,
+    label: svc.label,
+    href: handoffUrlForService(svc.id, links, searchQuery),
+  }));
 
   return (
     <motion.div
@@ -1060,13 +1102,7 @@ function HowToPlaySheet({
               const isDisabled = !s.href;
               const rowInner = (
                 <>
-                  <img
-                    src={s.logoSrc}
-                    alt=""
-                    width={44}
-                    height={44}
-                    className="flex-shrink-0 block"
-                  />
+                  <ServiceMark id={s.key} />
                   <div className="flex-1 min-w-0 text-left">
                     <div className="text-[16px] font-semibold leading-tight">
                       {s.label}

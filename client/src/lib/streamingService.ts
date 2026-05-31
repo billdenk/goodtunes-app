@@ -104,6 +104,41 @@ export function availableServices(links: StreamLinks): StreamingServiceId[] {
   );
 }
 
+// Per-service search URL — the handoff fallback when a release has no stored
+// deep link for that service (mirrors the Spotify search fallback the artist
+// "How to Play" sheet has always used). `query` is typically
+// "<artist name> <release title>".
+export function searchUrlForService(
+  id: StreamingServiceId,
+  query: string,
+): string {
+  const q = encodeURIComponent(query);
+  switch (id) {
+    case "spotify":
+      return `https://open.spotify.com/search/${q}`;
+    case "apple_music":
+      return `https://music.apple.com/us/search?term=${q}`;
+    case "tidal":
+      return `https://tidal.com/search?q=${q}`;
+    case "qobuz":
+      return `https://www.qobuz.com/search?q=${q}`;
+    case "deezer":
+      return `https://www.deezer.com/search/${q}`;
+    case "pandora":
+      return `https://www.pandora.com/search/${q}/all`;
+  }
+}
+
+// Resolve a service's handoff URL for a release: the stored deep link if we
+// have one, otherwise a service search built from artist + title.
+export function handoffUrlForService(
+  id: StreamingServiceId,
+  links: StreamLinks,
+  searchQuery: string,
+): string {
+  return linkForService(id, links) ?? searchUrlForService(id, searchQuery);
+}
+
 // Open a streaming link in a new tab/window. Handoffs always leave the app.
 export function openStreamLink(url: string): void {
   try {
@@ -130,4 +165,20 @@ export const SERVICE_GLYPH: Record<StreamingServiceId, ServiceGlyph> = {
   qobuz: { kind: "letter", letter: "Q", color: "#41B4E6" },
   deezer: { kind: "letter", letter: "D", color: "#A238FF" },
   pandora: { kind: "icon", Icon: SiPandora, color: "#3668FF" },
+};
+
+// App-icon-style filled tile (brand-color square + white glyph) for use on
+// *light* surfaces — e.g. the artist-page "How to Play" sheet — where the
+// translucent ServiceGlyphBadge wouldn't read and where a recognizable mark
+// must sit next to Apple Music's / Spotify's official 44px app icons. Reuses
+// the SERVICE_GLYPH icon/letter shapes so the glyphs never drift; only the
+// surface treatment differs.
+export const SERVICE_TILE: Record<StreamingServiceId, { bg: string; fg: string }> = {
+  spotify: { bg: "#1DB954", fg: "#FFFFFF" },
+  apple_music: { bg: "#FA243C", fg: "#FFFFFF" },
+  // Tidal's app icon is a black square with a white wave mark.
+  tidal: { bg: "#000000", fg: "#FFFFFF" },
+  qobuz: { bg: "#41B4E6", fg: "#FFFFFF" },
+  deezer: { bg: "#A238FF", fg: "#FFFFFF" },
+  pandora: { bg: "#3668FF", fg: "#FFFFFF" },
 };
