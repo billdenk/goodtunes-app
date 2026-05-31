@@ -8,13 +8,10 @@ import { ALBUMS, SONGS, ARTIST_PHOTOS, type Album, type Song } from "@/data/musi
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import type { PersonDiscography, Album as DbAlbum } from "@shared/schema";
-import appleMusicLogo from "@/assets/brand/apple-music.svg";
-import spotifyLogo from "@/assets/brand/spotify.svg";
 import {
   STREAMING_SERVICES,
   handoffUrlForService,
-  SERVICE_GLYPH,
-  SERVICE_TILE,
+  SERVICE_LOGO,
   type StreamLinks,
   type StreamingServiceId,
 } from "@/lib/streamingService";
@@ -926,41 +923,20 @@ function BucketGridSheet({
   );
 }
 
-// 44px brand mark for a "How to Play" row. Apple Music + Spotify keep their
-// official app icons (used as-supplied — never recolored or re-wrapped, per
-// each service's identity guidelines). The other four services render an
-// app-icon-style filled tile reusing the shared SERVICE_GLYPH shapes +
-// SERVICE_TILE colors, so they match the album picker sheet and never drift.
+// 44px brand mark for a "How to Play" row. Every service renders its official
+// app-icon SVG from the shared SERVICE_LOGO registry (used as-supplied — never
+// recolored or re-wrapped, per each service's identity guidelines), so all six
+// sit at the same visual weight and never drift from the album picker / Account
+// sheets, which read from the same source.
 function ServiceMark({ id }: { id: StreamingServiceId }) {
-  if (id === "apple_music" || id === "spotify") {
-    return (
-      <img
-        src={id === "apple_music" ? appleMusicLogo : spotifyLogo}
-        alt=""
-        width={44}
-        height={44}
-        className="flex-shrink-0 block"
-      />
-    );
-  }
-  const glyph = SERVICE_GLYPH[id];
-  const tile = SERVICE_TILE[id];
   return (
-    <div
-      className="flex-shrink-0 flex items-center justify-center"
-      style={{ width: 44, height: 44, borderRadius: 10, background: tile.bg }}
-    >
-      {glyph.kind === "icon" ? (
-        <glyph.Icon style={{ width: 24, height: 24, color: tile.fg }} />
-      ) : (
-        <span
-          className="font-bold leading-none"
-          style={{ color: tile.fg, fontSize: 22 }}
-        >
-          {glyph.letter}
-        </span>
-      )}
-    </div>
+    <img
+      src={SERVICE_LOGO[id]}
+      alt=""
+      width={44}
+      height={44}
+      className="flex-shrink-0 block"
+    />
   );
 }
 

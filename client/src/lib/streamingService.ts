@@ -9,8 +9,12 @@
 // mirrored to the customer profile (`PUT /api/me`) for signed-in fans so it
 // follows them across devices.
 
-import type { IconType } from "react-icons";
-import { SiSpotify, SiApplemusic, SiTidal, SiPandora } from "react-icons/si";
+import spotifyLogo from "@/assets/brand/spotify.svg";
+import appleMusicLogo from "@/assets/brand/apple-music.svg";
+import tidalLogo from "@/assets/brand/tidal.svg";
+import qobuzLogo from "@/assets/brand/qobuz.svg";
+import deezerLogo from "@/assets/brand/deezer.svg";
+import pandoraLogo from "@/assets/brand/pandora.svg";
 
 export type StreamingServiceId =
   | "spotify"
@@ -148,37 +152,20 @@ export function openStreamLink(url: string): void {
   }
 }
 
-// Brand glyph + color for each service, shared by every fan surface that
-// renders the service menu (the in-album picker sheet + the Account settings
-// sheet) so the icons can never drift between them. `react-icons/si` covers
-// Spotify / Apple Music / Tidal / Pandora; Qobuz and Deezer have no Simple
-// Icon in the installed version, so they fall back to a brand-colored letter.
-export type ServiceGlyph =
-  | { kind: "icon"; Icon: IconType; color: string }
-  | { kind: "letter"; letter: string; color: string };
-
-export const SERVICE_GLYPH: Record<StreamingServiceId, ServiceGlyph> = {
-  spotify: { kind: "icon", Icon: SiSpotify, color: "#1DB954" },
-  apple_music: { kind: "icon", Icon: SiApplemusic, color: "#FA243C" },
-  // Tidal's wordmark is black; render it white so it reads on the dark sheet.
-  tidal: { kind: "icon", Icon: SiTidal, color: "#FFFFFF" },
-  qobuz: { kind: "letter", letter: "Q", color: "#41B4E6" },
-  deezer: { kind: "letter", letter: "D", color: "#A238FF" },
-  pandora: { kind: "icon", Icon: SiPandora, color: "#3668FF" },
-};
-
-// App-icon-style filled tile (brand-color square + white glyph) for use on
-// *light* surfaces — e.g. the artist-page "How to Play" sheet — where the
-// translucent ServiceGlyphBadge wouldn't read and where a recognizable mark
-// must sit next to Apple Music's / Spotify's official 44px app icons. Reuses
-// the SERVICE_GLYPH icon/letter shapes so the glyphs never drift; only the
-// surface treatment differs.
-export const SERVICE_TILE: Record<StreamingServiceId, { bg: string; fg: string }> = {
-  spotify: { bg: "#1DB954", fg: "#FFFFFF" },
-  apple_music: { bg: "#FA243C", fg: "#FFFFFF" },
-  // Tidal's app icon is a black square with a white wave mark.
-  tidal: { bg: "#000000", fg: "#FFFFFF" },
-  qobuz: { bg: "#41B4E6", fg: "#FFFFFF" },
-  deezer: { bg: "#A238FF", fg: "#FFFFFF" },
-  pandora: { bg: "#3668FF", fg: "#FFFFFF" },
+// Official-style app-icon SVG for each service, shared by every fan surface
+// that renders the service menu (the artist "How to Play" sheet, the in-album
+// picker sheet, and the Account settings sheet) so the icons can never drift
+// between them. Each asset is a self-contained 44px-ready brand tile — a
+// rounded square (or, for Spotify, a circle) carrying the service's own brand
+// color + mark, used as-supplied (never recolored). Spotify / Apple Music use
+// their published app icons; Tidal / Qobuz / Deezer / Pandora use their
+// official brand marks (Qobuz is its published favicon icon) on the brand
+// color, replacing the old react-icons glyph + single-letter fallbacks.
+export const SERVICE_LOGO: Record<StreamingServiceId, string> = {
+  spotify: spotifyLogo,
+  apple_music: appleMusicLogo,
+  tidal: tidalLogo,
+  qobuz: qobuzLogo,
+  deezer: deezerLogo,
+  pandora: pandoraLogo,
 };
