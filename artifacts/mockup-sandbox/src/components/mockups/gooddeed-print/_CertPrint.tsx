@@ -11,7 +11,6 @@
 import "./_group.css";
 
 const ART = "/__mockup/images/album-california-way.png";
-const AVATAR = "/__mockup/images/sample-owner-photo.png";
 const LOGO = "/__mockup/images/goodtunes-logo-white.png";
 const SIG = "/__mockup/images/will-signature.png";
 
@@ -22,10 +21,10 @@ type Paper = "letter" | "a4";
 type Frame = "navy" | "orange" | "bordered";
 
 const SAMPLE = {
-  artist: "TOMMYGUNN",
-  title: "California Way",
-  genre: "NEW AGE PUNK",
-  year: 2025,
+  artist: "Fernando Perdomo",
+  title: "Guitar as a Voice",
+  genre: "", // canonical release has no genre set; subline drops the bullet
+  year: 2024,
   recipient: "Jordan Ellis",
   num: "12",
 };
@@ -36,7 +35,9 @@ const provenance =
   `In the event ownership was transferred after this certificate was issued, ` +
   `this GoodDeed\u00AE serves as the moment in time in which ${SAMPLE.recipient} possessed ` +
   `ownership of this good.`;
-const subline = `${SAMPLE.genre} \u2022 GOODTUNES RELEASE ${SAMPLE.year}`;
+const subline = SAMPLE.genre
+  ? `${SAMPLE.genre} \u2022 GOODTUNES RELEASE ${SAMPLE.year}`
+  : `GOODTUNES RELEASE ${SAMPLE.year}`;
 
 function dims(paper: Paper, matBoxIn?: [number, number]) {
   const W = paper === "a4" ? 595.28 : 612;
@@ -226,7 +227,7 @@ export function CertPrint({
           background: "#1A2052",
         }}
       >
-        <img src={AVATAR} alt={SAMPLE.artist} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+        <img src={artSrc} alt={SAMPLE.artist} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ color: "#FFFFFF", fontSize: px(10), fontFamily: "Helvetica, Arial, sans-serif", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
