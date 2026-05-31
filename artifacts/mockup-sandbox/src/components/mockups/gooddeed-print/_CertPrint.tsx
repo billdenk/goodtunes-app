@@ -38,11 +38,15 @@ const provenance =
   `ownership of this good.`;
 const subline = `${SAMPLE.genre} \u2022 GOODTUNES RELEASE ${SAMPLE.year}`;
 
-function dims(paper: Paper) {
+function dims(paper: Paper, matBoxIn?: [number, number]) {
   const W = paper === "a4" ? 595.28 : 612;
   const H = paper === "a4" ? 841.89 : 792;
-  const matW = W * (2250 / 2550);
-  const matH = H * (2850 / 3300);
+  // matBoxIn (inches) lets the caller pin the cert content box (art + band) to a
+  // FIXED real-world size centered on the sheet — used so the A4 cert keeps the
+  // original US 7.5:9.5 proportion (e.g. a 180x228mm mat opening) instead of
+  // stretching to A4's taller native mat.
+  const matW = matBoxIn ? matBoxIn[0] * 72 : W * (2250 / 2550);
+  const matH = matBoxIn ? matBoxIn[1] * 72 : H * (2850 / 3300);
   const matX = (W - matW) / 2;
   const matY = (H - matH) / 2;
   const artH = matW;
@@ -104,6 +108,8 @@ export function CertPrint({
   insetIn,
   bleedIn,
   frameRevealWin,
+  layout,
+  matBoxIn,
 }: {
   paper: Paper;
   frame: Frame;
@@ -113,10 +119,17 @@ export function CertPrint({
   // [widthIn, heightIn] of a real mat/frame window, drawn centered on the sheet
   // (NOT a uniform inset). e.g. [7.5, 9.5] = the 7.5"x9.5" mat opening.
   frameRevealWin?: [number, number];
+  // Which layout BRANCH to use (Letter footnote stack vs A4 centered stack),
+  // decoupled from the sheet size so an A4 sheet can carry the approved Letter
+  // 7.5:9.5 cert. Defaults to `paper`.
+  layout?: Paper;
+  // Pin the cert content box (art + band) to a fixed real-world size, centered
+  // on the sheet. See dims().
+  matBoxIn?: [number, number];
 }) {
   const artSrc = art ?? ART;
   const s = 0.72; // pt -> px display scale (same for both papers, so A4 reads taller/narrower)
-  const d = dims(paper);
+  const d = dims(paper, matBoxIn);
   const px = (pt: number) => pt * s;
 
   // Border treatments:
@@ -153,7 +166,7 @@ export function CertPrint({
   const leftColRightRel = qrColLeftRel - 14;
   const leftColW = leftColRightRel - leftColLeftRel;
 
-  const isA4 = paper === "a4";
+  const isA4 = (layout ?? paper) === "a4";
 
   // ── Right column (logo top, QR + caption bottom) — anchored to band edges on
   //    BOTH paper sizes, per the template.
@@ -389,6 +402,8 @@ export function CertStage({
   insetIn,
   bleedIn,
   frameRevealWin,
+  layout,
+  matBoxIn,
 }: {
   paper: Paper;
   frame: Frame;
@@ -396,13 +411,15 @@ export function CertStage({
   insetIn?: number;
   bleedIn?: number;
   frameRevealWin?: [number, number];
+  layout?: Paper;
+  matBoxIn?: [number, number];
 }) {
   return (
     <div
       className="min-h-screen flex items-center justify-center"
       style={{ background: "#E9EBF0", padding: 28 }}
     >
-      <CertPrint paper={paper} frame={frame} art={art} insetIn={insetIn} bleedIn={bleedIn} frameRevealWin={frameRevealWin} />
+      <CertPrint paper={paper} frame={frame} art={art} insetIn={insetIn} bleedIn={bleedIn} frameRevealWin={frameRevealWin} layout={layout} matBoxIn={matBoxIn} />
     </div>
   );
 }
