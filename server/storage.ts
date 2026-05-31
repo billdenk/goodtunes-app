@@ -226,6 +226,13 @@ export interface IStorage {
   getDiscographyByPerson(personId: string): Promise<PersonDiscography[]>;
   getDiscographyByArtistName(name: string): Promise<PersonDiscography[]>;
   replaceDiscographyForPerson(personId: string, items: Omit<InsertPersonDiscography, "personId">[]): Promise<PersonDiscography[]>;
+  // One-time Spotify-link backfill helpers (Task #847). `…NeedingSpotify`
+  // returns every discography row that has an Apple identity but no
+  // `spotifyUrl` yet, paired with its Person's display name so the
+  // resolver can search by artist + title; the per-row setter only ever
+  // writes the link (operator-entered links stay untouched).
+  getDiscographyNeedingSpotify(): Promise<Array<{ id: string; collectionId: string; name: string; artistName: string }>>;
+  setDiscographySpotifyUrl(id: string, spotifyUrl: string): Promise<void>;
 
   // `includeHiddenVendors` is honored only by admin call sites — public
   // reads always pass false so hidden vendor buttons don't render in the
@@ -1444,6 +1451,37 @@ export class DbStorage implements IStorage {
         .returning();
       return rows;
     });
+  }
+
+  async getDiscographyNeedingSpotify(): Promise<
+    Array<{ id: string; collectionId: string; name: string; artistName: string }>
+  > {
+    // Only rows that already have an Apple identity (a numeric iTunes
+    // collection id) but no Spotify link yet — operator-entered links
+    // (spotifyUrl already set) are skipped so they always win.
+    const rows = await db
+      .select({
+        id: personDiscography.id,
+        collectionId: personDiscography.collectionId,
+        name: personDiscography.name,
+        artistName: people.name,
+      })
+      .from(personDiscography)
+      .innerJoin(people, eq(personDiscography.personId, people.id))
+      .where(
+        and(
+          isNull(personDiscography.spotifyUrl),
+          sql`${personDiscography.collectionId} ~ '^[0-9]+$'`,
+        ),
+      );
+    return rows;
+  }
+
+  async setDiscographySpotifyUrl(id: string, spotifyUrl: string): Promise<void> {
+    await db
+      .update(personDiscography)
+      .set({ spotifyUrl })
+      .where(and(eq(personDiscography.id, id), isNull(personDiscography.spotifyUrl)));
   }
 
   // Internal helper: load enriched attachments for a set of instrument ids,

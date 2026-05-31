@@ -5557,6 +5557,81 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ updated, count: updated.length });
   });
 
+  // Task #847 — one-time/admin-triggered Spotify deep-link backfill.
+  // Task #845 resolves the exact Spotify album URL during Apple Music
+  // import going forward, but albums + person_discography rows imported
+  // before that change still have a null `spotifyUrl` and fall back to a
+  // per-release search on the fan-side "How to Play" sheet. This walks
+  // every row that has an Apple identity but no Spotify link yet,
+  // resolves the album URL by artist + title via the Spotify Web API,
+  // and stores it. Idempotent: only NULL `spotifyUrl` rows are touched,
+  // so operator-entered links always win, and a re-run only retries the
+  // ones still missing. Best-effort + bounded (the resolver enforces
+  // concurrency + a wall-clock budget) so it can't hammer Spotify or
+  // hang. Safe to call repeatedly until the catalog is fully linked.
+  app.post("/api/admin/albums/backfill-spotify", requireAdmin, async (_req, res) => {
+    if (!spotifyConfigured()) {
+      return res
+        .status(400)
+        .json({ message: "Spotify isn't configured (SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET)." });
+    }
+
+    // ----- Albums -----
+    // Only rows with an Apple identity (appleMusicUrl) but no Spotify
+    // link yet — same "operator links win" rule as the importer.
+    const allAlbums = await storage.getAlbums({ includeHidden: true });
+    const albumTargets = allAlbums.filter((a) => !!a.appleMusicUrl && !a.spotifyUrl);
+    let albumsUpdated = 0;
+    if (albumTargets.length > 0) {
+      try {
+        const resolved = await resolveSpotifyAlbumUrlsForReleases(
+          albumTargets.map((a) => ({ key: a.id, artist: a.artist, title: a.title })),
+          { concurrency: 3, totalBudgetMs: 60_000 },
+        );
+        for (const a of albumTargets) {
+          const url = resolved.get(a.id);
+          if (!url) continue;
+          await storage.updateAlbum(a.id, { spotifyUrl: url } as any);
+          albumsUpdated++;
+        }
+      } catch (e: any) {
+        console.warn("[spotify] album backfill failed", e?.message);
+      }
+    }
+
+    // ----- Person discography -----
+    const discoTargets = await storage.getDiscographyNeedingSpotify();
+    let discographyUpdated = 0;
+    if (discoTargets.length > 0) {
+      try {
+        const resolved = await resolveSpotifyAlbumUrlsForReleases(
+          discoTargets.map((r) => ({ key: r.id, artist: r.artistName, title: r.name })),
+          { concurrency: 3, totalBudgetMs: 60_000 },
+        );
+        for (const r of discoTargets) {
+          const url = resolved.get(r.id);
+          if (!url) continue;
+          await storage.setDiscographySpotifyUrl(r.id, url);
+          discographyUpdated++;
+        }
+      } catch (e: any) {
+        console.warn("[spotify] discography backfill failed", e?.message);
+      }
+    }
+
+    return res.json({
+      albums: { scanned: albumTargets.length, updated: albumsUpdated },
+      discography: { scanned: discoTargets.length, updated: discographyUpdated },
+      // Non-zero `remaining` means Spotify missed some (no confident
+      // match) or the wall-clock budget cut the run short — re-run to
+      // pick up the rest.
+      remaining: {
+        albums: albumTargets.length - albumsUpdated,
+        discography: discoTargets.length - discographyUpdated,
+      },
+    });
+  });
+
   // Distinct list of genres currently in use across albums. Powers the
   // searchable Genre combobox in the album editor so the admin sees
   // what's already in the catalogue before typing a new one (keeps
