@@ -22,3 +22,17 @@ const at `/__mockup/images/<file>`. This is preview-only; the real renderer
 
 **Gotcha:** the `screenshot` external_url tool caches by URL — after changing an
 asset, append a cache-buster (`?v=2`) or you'll keep seeing the stale capture.
+
+## Canvas iframe shapes need an explicit live URL or they skeleton forever
+A canvas `iframe` shape created with only `componentPath`/`componentName` (no
+`url`, no `state`) renders the canvas's **"building" skeleton placeholder**
+indefinitely — gray rounded bars/panels, NOT the component, NOT a red error. The
+direct `/__mockup/preview/...` URL renders fine the whole time, so it looks like a
+phantom bug. Fix: the shape needs `url` = `https://<domain>/__mockup/preview/
+{folder}/{Component}` (no `.tsx`) AND `state: "live"`.
+
+**How to apply:** when creating mockup iframes, set `state: "building"` first for
+instant feedback, then once the component renders set `url` + `state: "live"`.
+Update actions must also include `shapeType: "iframe"` in the `updates` payload or
+the call is rejected. `process.env` is NOT available in the code_execution sandbox
+— hardcode the domain (or read it elsewhere) when building the URL.
