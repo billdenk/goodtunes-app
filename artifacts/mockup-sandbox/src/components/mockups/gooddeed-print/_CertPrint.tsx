@@ -134,12 +134,24 @@ export function CertPrint({
 }) {
   const artSrc = art ?? ART;
   const S: CertSample = { ...SAMPLE, ...sample };
-  const headline = `This GoodDeed\u00AE certifies that ${S.recipient} owns no. ${S.num} of ${S.title}.`;
+  const headline = `This GoodDeed\u00AE certifies that ${S.recipient} owns no.\u00A0${S.num} of ${S.title}.`;
+  // A4 reads this as one naturally-wrapping block (its provenance never sits
+  // beside the QR caption, so it needs no manual break).
   const provenance =
     `Digital provenance can be confirmed by accessing the QR code on this GoodDeed\u00AE. ` +
     `In the event ownership was transferred, ` +
     `this GoodDeed\u00AE serves as the moment in time in which ${S.recipient} possessed ` +
     `ownership of this good.`;
+  // Letter (US) footnote ONLY: break after "…ownership was transferred," so the
+  // next line begins "this GoodDeed® serves…" — keeps "this GoodDeed®" together
+  // as a phrase and leaves the line beside the QR caption ending on "…of this
+  // good." (never a "GoodDeed®" right next to the caption's own). A4 uses the
+  // full natural string above.
+  const provenanceFootnote = [
+    `Digital provenance can be confirmed by accessing the QR code on this GoodDeed\u00AE. ` +
+      `In the event ownership was transferred,`,
+    `this GoodDeed\u00AE serves as the moment in time in which ${S.recipient} possessed ownership of this good.`,
+  ].map((line, i) => <div key={i}>{line}</div>);
   const subline = S.genre
     ? `${S.genre} \u2022 GOODTUNES RELEASE ${S.year}`
     : `GOODTUNES RELEASE ${S.year}`;
@@ -181,6 +193,12 @@ export function CertPrint({
   const leftColRightRel = qrColLeftRel - 14;
   const leftColW = leftColRightRel - leftColLeftRel;
 
+  // Letter footnote breathing room + QR lock-up alignment (consumed below in
+  // rightColumn and the Letter leftBlock):
+  const footBottomGap = 9;     // pt the provenance footnote rises off the band bottom (off the orange border)
+  const letterCreditMt = -4;   // pt the signature credit tucks up under the squiggle (a slight overlap is intentional)
+  const qrCaptionBottomRel = pad + footBottomGap - 5; // drop the QR+caption lock-up so the caption baseline lands on the footnote's last line
+
   const isA4 = (layout ?? paper) === "a4";
 
   // ── Right column (logo top, QR + caption bottom) — anchored to band edges on
@@ -202,7 +220,7 @@ export function CertPrint({
         style={{
           position: "absolute",
           left: px(qrColLeftRel),
-          bottom: px(pad),
+          bottom: px(qrCaptionBottomRel),
           width: px(qrColW),
           display: "flex",
           flexDirection: "column",
@@ -261,32 +279,30 @@ export function CertPrint({
       {headline}
     </div>
   );
-  const signatureBlock = (
+  // creditMt = top margin (pt) under the signature squiggle. A4 keeps a small
+  // positive gap; Letter passes a negative value so the credit tucks up under the
+  // squiggle (a slight overlap is intentional) to free room for the footnote.
+  const makeSignatureBlock = (creditMt: number) => (
     <div>
       <img src={SIG} alt="William E. Denk signature" style={{ width: px(110), display: "block" }} />
-      <div style={{ color: "#FFFFFF", fontSize: px(6.5), fontFamily: "Helvetica, Arial, sans-serif", marginTop: px(2) }}>
+      <div style={{ color: "#FFFFFF", fontSize: px(6.5), fontFamily: "Helvetica, Arial, sans-serif", marginTop: px(creditMt) }}>
         William E. Denk, CEO/Founder GoodTunes&reg;
       </div>
     </div>
   );
 
   // ── Letter geometry: headline + signature + footnote all indent to `bodyX`
-  //    (the column under the artist name), and the signature sits at a FIXED
-  //    slot just below the headline top. The signature PNG carries transparent
-  //    top padding, so a sub-1.0 multiplier tucks it tighter under a 1-line
-  //    headline (more breathing room above the footnote below) without the
-  //    visible squiggle touching the headline. NOTE: a fixed slot can only be
-  //    tuned for ONE headline length — see LetterBorderThinLong, where a 2-line
-  //    headline reclaims this space; the durable fix is to flow the signature
-  //    under the measured headline. Mirrors server/goodDeedPrintTemplate.ts.
+  //    (the column under the artist name). The headline and signature share ONE
+  //    flowing container anchored at headlineYRel, so the signature always sits
+  //    directly under the headline — one line or two — and can never collide
+  //    with a wrapped headline or the bottom footnote, regardless of recipient
+  //    or title length (see LetterBorderThinLong). The signature PNG carries
+  //    transparent top padding, so sigGap tucks the visible squiggle close
+  //    under the headline. Footnote stays bottom-anchored.
   const bodyXRel = leftColLeftRel + avatarSize + 10;
   const bodyW = leftColRightRel - bodyXRel;
   const headlineYRel = safeTopRel + avatarSize + 5;
-  const headLineH = 9.5 * 1.15; // ≈ Helvetica-Bold 9.5pt currentLineHeight (1 line)
-  const sigYRel = headlineYRel + headLineH * 0.7;
-  // QR/footnote shared baseline: server pins the caption 11pt above the band
-  // bottom and lands the footnote's last line on that same baseline.
-  const captionBottomRel = 11;
+  const sigGap = -2; // pt; the PNG's top padding means a slight negative tucks it under
 
   // ── Left content block — the ONE place the two paper layouts diverge.
   const leftBlock = isA4 ? (
@@ -312,7 +328,7 @@ export function CertPrint({
       <div style={{ marginLeft: px(avatarSize + 10), marginTop: px(3), color: "#C7CFE8", fontSize: px(7.5), fontFamily: "Helvetica, Arial, sans-serif", lineHeight: 1.3 }}>
         {provenance}
       </div>
-      <div style={{ marginLeft: px(avatarSize + 10), marginTop: px(6) }}>{signatureBlock}</div>
+      <div style={{ marginLeft: px(avatarSize + 10), marginTop: px(6) }}>{makeSignatureBlock(2)}</div>
     </div>
   ) : (
     // Letter: title row top-left; headline + fixed signature slot indented to
@@ -335,31 +351,37 @@ export function CertPrint({
           left: px(bodyXRel),
           top: px(headlineYRel),
           width: px(bodyW),
-          color: "#FFFFFF",
-          fontSize: px(9.5),
-          fontWeight: 700,
-          fontFamily: "Helvetica, Arial, sans-serif",
-          lineHeight: 1.15,
+          height: px(safeBottomRel - headlineYRel - footBottomGap),
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        {headline}
-      </div>
-      <div style={{ position: "absolute", left: px(bodyXRel), top: px(sigYRel), width: px(bodyW) }}>
-        {signatureBlock}
-      </div>
-      <div
-        style={{
-          position: "absolute",
-          left: px(bodyXRel),
-          bottom: px(captionBottomRel),
-          width: px(bodyW),
-          color: "#9AA6CC",
-          fontSize: px(6),
-          fontFamily: "Helvetica, Arial, sans-serif",
-          lineHeight: 1.25,
-        }}
-      >
-        {provenance}
+        <div
+          style={{
+            color: "#FFFFFF",
+            fontSize: px(9.5),
+            fontWeight: 700,
+            fontFamily: "Helvetica, Arial, sans-serif",
+            lineHeight: 1.15,
+          }}
+        >
+          {headline}
+        </div>
+        <div style={{ marginTop: px(sigGap) }}>{makeSignatureBlock(letterCreditMt)}</div>
+        {/* marginTop:auto bottom-anchors the footnote on the QR caption baseline
+            when there's room, and lets it flow up under the signature (never
+            overlapping) when a 2-line headline eats the slack. */}
+        <div
+          style={{
+            marginTop: "auto",
+            color: "#9AA6CC",
+            fontSize: px(6),
+            fontFamily: "Helvetica, Arial, sans-serif",
+            lineHeight: 1.25,
+          }}
+        >
+          {provenanceFootnote}
+        </div>
       </div>
     </>
   );
