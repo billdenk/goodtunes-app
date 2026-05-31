@@ -74,16 +74,16 @@ export function StoryCard({
               "linear-gradient(180deg, rgba(0,6,43,0) 55%, rgba(0,6,43,0.6) 80%, rgba(0,6,43,0.95) 94%, var(--brand-bg) 100%)",
           }}
         />
-        {/* Baked [GoodTunes | #NN] chip — pinned to the RIGHT EDGE, vertically
-            centered on the art. Matches the locked link-preview chip. */}
+        {/* Baked [GoodTunes | #NN] chip — pinned BOTTOM-RIGHT of the art, matching
+            the locked link-preview chip (OgNativeChip): same bottom-right anchor
+            and the same logo:number proportion (~1.6×). */}
         <div
           className="absolute flex items-center"
           style={{
-            right: 8,
-            top: "50%",
-            transform: "translateY(-50%)",
-            gap: 9,
-            padding: "7px 14px",
+            right: 16,
+            bottom: 16,
+            gap: 8,
+            padding: "9px 16px",
             borderRadius: 999,
             background: chip.background,
             backdropFilter: "blur(8px)",
@@ -92,8 +92,8 @@ export function StoryCard({
             boxShadow: "0 4px 14px rgba(0,0,0,0.45)",
           }}
         >
-          <img src={LOGO} alt="GoodTunes" style={{ height: 20, width: "auto", display: "block" }} />
-          <span style={{ width: 1, height: 16, background: chip.divider }} />
+          <img src={LOGO} alt="GoodTunes" style={{ height: 24, width: "auto", display: "block" }} />
+          <span style={{ width: 1, height: 19, background: chip.divider }} />
           <span className="font-bold text-white" style={{ fontSize: 15, letterSpacing: 0.2 }}>
             #{certNumStr}
           </span>
