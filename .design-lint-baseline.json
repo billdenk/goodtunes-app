@@ -7882,7 +7882,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"rounded-2xl bg-white/[0.04] border border-white/10 p-4 mb-4 text-[13px]\" data-testid=\"block-breakdown\">"
+    "snippet": "<div className=\"rounded-2xl bg-white/[0.05] p-4 mb-4 text-[13px]\" data-testid=\"block-breakdown\">"
   },
   {
     "rule": "hardcoded-font-size",

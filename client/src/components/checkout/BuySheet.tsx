@@ -24,7 +24,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { IconButton } from "@/components/ui/IconButton";
 import { SheetClose } from "@/components/ui/SheetChrome";
-import { Minus, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Check, Minus, Plus } from "lucide-react";
 import { VinylPreview } from "@/components/VinylPreview";
 import {
   DEFAULT_VINYL_COLOR_ID,
@@ -103,6 +104,34 @@ async function getStripePromise() {
     return loadStripe(j.publishableKey);
   })();
   return stripePromise;
+}
+
+// Apple-Music grouped fill: a borderless, soft white-alpha surface that
+// houses one or more rows. Rows inside are separated by hairline insets
+// (a left-inset top divider on every child after the first) rather than
+// each row carrying its own 1px outline. No outer border — the fill alone
+// defines the group, the way Apple Music's purchase / now-playing sheets do.
+function Group({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "overflow-hidden rounded-2xl bg-white/[0.05]",
+        "[&>*:not(:first-child)]:relative",
+        "[&>*:not(:first-child)]:before:pointer-events-none [&>*:not(:first-child)]:before:absolute",
+        "[&>*:not(:first-child)]:before:left-4 [&>*:not(:first-child)]:before:right-0 [&>*:not(:first-child)]:before:top-0",
+        "[&>*:not(:first-child)]:before:h-px [&>*:not(:first-child)]:before:bg-white/[0.07]",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function BuySheet({
@@ -312,7 +341,7 @@ export function BuySheet({
               <div className="py-10 text-center text-white/55 text-sm">Loading…</div>
             )}
             {error && (
-              <div className="my-3 rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-red-300 text-sm" data-testid="text-buy-error">
+              <div className="my-3 rounded-xl bg-red-500/10 px-4 py-3 text-red-300 text-sm" data-testid="text-buy-error">
                 {error}
               </div>
             )}
@@ -335,7 +364,7 @@ export function BuySheet({
                 {selectedSku && isVinylFormat(selectedSku.format as AlbumFormat) && (
                   <div className="mb-5" data-testid="youll-get-vinyl">
                     <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">You'll get</div>
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <div className="rounded-2xl bg-white/[0.05] p-4">
                       <VinylPreview
                         artworkUrl={options.artwork}
                         color={
@@ -360,7 +389,7 @@ export function BuySheet({
                     Not available for sale yet.
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-2 mb-5">
+                  <Group className="mb-5">
                     {options.skus.map((s) => {
                       const selected = format === s.format;
                       return (
@@ -369,25 +398,33 @@ export function BuySheet({
                           type="button"
                           disabled={s.soldOut}
                           onClick={() => setFormat(s.format)}
-                          className={[
-                            "w-full flex items-center justify-between gap-3 rounded-2xl px-4 py-3 border transition-colors text-left",
+                          className={cn(
+                            "w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors",
                             s.soldOut
-                              ? "border-white/10 opacity-40 cursor-not-allowed"
+                              ? "opacity-40 cursor-not-allowed"
                               : selected
-                                ? "border-[#319ED8] bg-[#319ED8]/10"
-                                : "border-white/10 hover:border-white/30",
-                          ].join(" ")}
+                                ? "bg-[color:var(--brand-blue)]/15"
+                                : "hover:bg-white/[0.03]",
+                          )}
                           data-testid={`button-format-${s.format}`}
                         >
                           <div className="flex flex-col">
                             <span className="text-[14px] font-medium">{s.label}</span>
                             {s.soldOut && <span className="text-[11px] text-rose-300">Sold out</span>}
                           </div>
-                          <span className="text-[14px] font-semibold">{dollars(s.priceCents)}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[14px] font-semibold">{dollars(s.priceCents)}</span>
+                            {selected && (
+                              <Check
+                                className="w-[18px] h-[18px] text-[color:var(--brand-blue)]"
+                                strokeWidth={2.75}
+                              />
+                            )}
+                          </div>
                         </button>
                       );
                     })}
-                  </div>
+                  </Group>
                 )}
 
                 {/* Task #549 — Quantity stepper. Capped at the lesser of
@@ -395,7 +432,7 @@ export function BuySheet({
                 {selectedSku && (
                   <div className="mb-5">
                     <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">Quantity</div>
-                    <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <div className="flex items-center justify-between rounded-2xl bg-white/[0.05] px-4 py-3">
                       <span className="text-[14px] text-white/85">How many copies?</span>
                       <div className="flex items-center gap-3">
                         <IconButton
@@ -446,7 +483,7 @@ export function BuySheet({
                         </div>
                       )}
                     </div>
-                    <div className="flex flex-col gap-2">
+                    <Group>
                       {copyCerts.map((on, i) => {
                         const disabled = signedCertSoldOut || (!on && !canToggleMoreCerts(i));
                         return (
@@ -455,14 +492,14 @@ export function BuySheet({
                             type="button"
                             onClick={() => toggleCopyCert(i)}
                             disabled={disabled}
-                            className={[
-                              "w-full flex items-start justify-between gap-3 rounded-2xl px-4 py-3 border transition-colors text-left",
+                            className={cn(
+                              "w-full flex items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors",
                               disabled
-                                ? "border-white/10 opacity-50 cursor-not-allowed"
+                                ? "opacity-50 cursor-not-allowed"
                                 : on
-                                  ? "border-[#FF5470] bg-[#FF5470]/10"
-                                  : "border-white/10 hover:border-white/30",
-                            ].join(" ")}
+                                  ? "bg-[color:var(--brand-pink)]/15"
+                                  : "hover:bg-white/[0.03]",
+                            )}
                             data-testid={`button-toggle-signed-cert-${i}`}
                           >
                             <div className="flex flex-col flex-1 min-w-0 pr-2">
@@ -477,13 +514,23 @@ export function BuySheet({
                                     : "Tap to add a signed certificate for this copy."}
                               </span>
                             </div>
-                            <span className="text-[14px] font-semibold whitespace-nowrap">
-                              {on ? `+ ${dollars(addon.priceCents)}` : ""}
-                            </span>
+                            <div className="flex items-center gap-2 whitespace-nowrap">
+                              {on && (
+                                <span className="text-[14px] font-semibold whitespace-nowrap">
+                                  + {dollars(addon.priceCents)}
+                                </span>
+                              )}
+                              {on && (
+                                <Check
+                                  className="w-[18px] h-[18px] text-[color:var(--brand-pink)]"
+                                  strokeWidth={2.75}
+                                />
+                              )}
+                            </div>
                           </button>
                         );
                       })}
-                    </div>
+                    </Group>
                   </div>
                 )}
 
@@ -498,7 +545,7 @@ export function BuySheet({
                     <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">
                       Booklet
                     </div>
-                    <div className="flex flex-col gap-2">
+                    <Group>
                       {[false, true].map((withBooklet) => {
                         const selected = booklet === withBooklet;
                         const priceCents = withBooklet
@@ -509,17 +556,17 @@ export function BuySheet({
                             key={withBooklet ? "with-booklet" : "alone"}
                             type="button"
                             onClick={() => setBooklet(withBooklet)}
-                            className={[
-                              "w-full flex items-start justify-between gap-3 rounded-2xl px-4 py-3 border transition-colors text-left",
+                            className={cn(
+                              "w-full flex items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors",
                               selected
-                                ? "border-[color:var(--brand-mint)] bg-[color:var(--brand-mint)]/10"
-                                : "border-white/10 hover:border-white/30",
-                            ].join(" ")}
+                                ? "bg-[color:var(--brand-mint)]/15"
+                                : "hover:bg-white/[0.03]",
+                            )}
                             data-testid={`button-booklet-variant-${withBooklet ? "with" : "alone"}`}
                           >
                             <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
                               <div
-                                className="w-12 h-12 rounded-md border border-white/10 bg-white/[0.04] flex-shrink-0 overflow-hidden flex items-center justify-center"
+                                className="w-12 h-12 rounded-md bg-white/[0.06] flex-shrink-0 overflow-hidden flex items-center justify-center"
                                 data-testid={`img-booklet-variant-${withBooklet ? "with" : "alone"}`}
                               >
                                 {withBooklet && bookletAddon.artworkUrl ? (
@@ -551,13 +598,21 @@ export function BuySheet({
                                 </span>
                               </div>
                             </div>
-                            <span className="text-[14px] font-semibold whitespace-nowrap">
-                              {dollars(priceCents)}
-                            </span>
+                            <div className="flex items-center gap-2 whitespace-nowrap">
+                              <span className="text-[14px] font-semibold whitespace-nowrap">
+                                {dollars(priceCents)}
+                              </span>
+                              {selected && (
+                                <Check
+                                  className="w-[18px] h-[18px] text-[color:var(--brand-mint)]"
+                                  strokeWidth={2.75}
+                                />
+                              )}
+                            </div>
                           </button>
                         );
                       })}
-                    </div>
+                    </Group>
                   </div>
                 )}
 
@@ -569,17 +624,17 @@ export function BuySheet({
                   <button
                     type="button"
                     onClick={() => setBooklet((v) => !v)}
-                    className={[
-                      "w-full flex items-start justify-between gap-3 rounded-2xl px-4 py-3 border transition-colors text-left mb-5",
+                    className={cn(
+                      "w-full flex items-start justify-between gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors mb-5",
                       booklet
-                        ? "border-[color:var(--brand-mint)] bg-[color:var(--brand-mint)]/10"
-                        : "border-white/10 hover:border-white/30",
-                    ].join(" ")}
+                        ? "bg-[color:var(--brand-mint)]/15"
+                        : "bg-white/[0.05] hover:bg-white/[0.07]",
+                    )}
                     data-testid="button-toggle-booklet"
                   >
                     <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
                       <div
-                        className="w-12 h-12 rounded-md border border-white/10 bg-white/[0.04] flex-shrink-0 overflow-hidden flex items-center justify-center"
+                        className="w-12 h-12 rounded-md bg-white/[0.06] flex-shrink-0 overflow-hidden flex items-center justify-center"
                         data-testid="img-booklet-thumb"
                       >
                         {bookletAddon.artworkUrl ? (
@@ -602,15 +657,23 @@ export function BuySheet({
                         </span>
                       </div>
                     </div>
-                    <span className="text-[14px] font-semibold whitespace-nowrap">
-                      + {dollars(bookletAddon.priceCents)}
-                    </span>
+                    <div className="flex items-center gap-2 whitespace-nowrap">
+                      <span className="text-[14px] font-semibold whitespace-nowrap">
+                        + {dollars(bookletAddon.priceCents)}
+                      </span>
+                      {booklet && (
+                        <Check
+                          className="w-[18px] h-[18px] text-[color:var(--brand-mint)]"
+                          strokeWidth={2.75}
+                        />
+                      )}
+                    </div>
                   </button>
                 )}
 
                 {/* Live breakdown — separate lines so the fan can verify
                     the math before tapping checkout. */}
-                <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-4 mb-4 text-[13px]" data-testid="block-breakdown">
+                <div className="rounded-2xl bg-white/[0.05] p-4 mb-4 text-[13px]" data-testid="block-breakdown">
                   <div className="flex items-center justify-between">
                     <span className="text-white/65">
                       {selectedSku?.label ?? "Format"}
@@ -632,7 +695,7 @@ export function BuySheet({
                       <span className="text-white/85" data-testid="text-line-booklet">{dollars(bookletLineCents)}</span>
                     </div>
                   )}
-                  <div className="border-t border-white/10 mt-3 pt-3 flex items-center justify-between">
+                  <div className="border-t border-white/[0.08] mt-3 pt-3 flex items-center justify-between">
                     <span className="text-white/55">Total</span>
                     <span className="text-[18px] font-bold" data-testid="text-buy-total">
                       {dollars(totalCents)}
