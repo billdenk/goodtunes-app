@@ -44,6 +44,13 @@ function nameFontSize(name: string): number {
 export function BorderedStoryCard({ overlay }: { overlay?: ReactNode }) {
   const { art, ownerPhoto, album, ownerName, certNumStr } = data;
 
+  // Bottom caption: one line by default ("Album by Artist #NN"). If that runs too
+  // long for the card width, break it — album title (with #NN) on top, "by Artist"
+  // on the line where the single version sits. (Char threshold is the mockup's
+  // stand-in for the real renderer measuring text width.)
+  const captionOneLine = `${album.title} by ${album.artist} #${certNumStr}`;
+  const captionWraps = captionOneLine.length > 34;
+
   return (
     <div
       className="relative flex flex-col overflow-hidden"
@@ -115,10 +122,18 @@ export function BorderedStoryCard({ overlay }: { overlay?: ReactNode }) {
           </span>
         </div>
 
-        {/* secondary caption — one small, legible line pinned near the bottom */}
-        <p className="text-white/60 text-xs leading-snug mt-auto whitespace-nowrap">
-          {album.title} by {album.artist} #{certNumStr}
-        </p>
+        {/* secondary caption — one small, legible line pinned near the bottom;
+            breaks to two lines (album+#NN over "by Artist") when too long */}
+        {captionWraps ? (
+          <div className="mt-auto text-white/60 text-xs leading-snug">
+            <p className="whitespace-nowrap">{album.title} #{certNumStr}</p>
+            <p className="whitespace-nowrap">by {album.artist}</p>
+          </div>
+        ) : (
+          <p className="text-white/60 text-xs leading-snug mt-auto whitespace-nowrap">
+            {captionOneLine}
+          </p>
+        )}
       </div>
 
       {overlay}
