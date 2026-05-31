@@ -19,7 +19,7 @@ export function OgNative() {
         style={{ width: w, borderRadius: 22, boxShadow: "0 30px 80px rgba(0,0,0,0.7)" }}
       >
         {/* Image portion = album art ONLY (no chip, no logo, no baked text) */}
-        <img src={ART} alt="" className="w-full block object-cover" style={{ height: 372 }} />
+        <img src={ART} alt="" className="w-full block object-cover object-top" style={{ height: 372 }} />
 
         {/* Native caption bar drawn by the messaging app — plain text only */}
         <div style={{ background: "#2b2b2d", padding: "16px 18px 18px" }}>

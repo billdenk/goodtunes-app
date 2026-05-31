@@ -34,7 +34,7 @@ export function OgRedesign() {
       >
         {/* Top: full-width album-art band (cover-fit), with a small Verified chip */}
         <div className="relative w-full flex-shrink-0" style={{ height: 432 * u }}>
-          <img src={ART} alt={album.title} className="w-full h-full object-cover block" />
+          <img src={ART} alt={album.title} className="w-full h-full object-cover object-top block" />
           <div
             className="absolute flex items-center"
             style={{
