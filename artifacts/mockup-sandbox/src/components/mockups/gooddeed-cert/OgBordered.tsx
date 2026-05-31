@@ -37,6 +37,7 @@ export function OgBordered() {
   const showBrand = pill !== "0";
   const showNum = pill !== "logo" && pill !== "0";
   const brand = params.get("brand") ?? "pill"; // "pill" chip | "gradient" bottom scrim
+  const pos = params.get("pos") ?? "left"; // gradient logo corner: "left" | "right"
   const logoH = Number(params.get("logo") ?? (brand === "gradient" ? 54 : 40));
   const album = ALBUMS[(params.get("album") as keyof typeof ALBUMS) ?? "fernando"] ?? ALBUMS.fernando;
   const w = 560;
@@ -67,7 +68,7 @@ export function OgBordered() {
                   src={LOGO}
                   alt="GoodTunes"
                   className="absolute"
-                  style={{ left: 22, bottom: 18, height: logoH, width: "auto", filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.6))" }}
+                  style={{ [pos === "right" ? "right" : "left"]: 22, bottom: 18, height: logoH, width: "auto", filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.6))" }}
                 />
               </>
             )}
