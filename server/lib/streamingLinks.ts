@@ -120,6 +120,42 @@ export function hasAnyResolvedLink(links: ResolvedStreamingLinks): boolean {
   return !!(links.tidalUrl || links.qobuzUrl || links.deezerUrl || links.pandoraUrl);
 }
 
+// Pull the numeric iTunes collection id out of a stored Apple Music
+// album URL (`https://music.apple.com/<country>/album/<slug>/<id>`).
+// Returns null when the URL is missing/malformed or carries no id, so
+// the refresh sweep can skip albums that song.link can't map. Mirrors
+// the parse used by the from-apple-url import endpoint.
+export function appleCollectionIdFromUrl(
+  appleMusicUrl: string | null | undefined,
+): string | null {
+  const raw = String(appleMusicUrl || "").trim();
+  if (!raw) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return null;
+  }
+  const m = parsed.pathname.match(/\/album\/[^/]+\/(\d+)/);
+  return m?.[1] ?? null;
+}
+
+// The storefront country segment of an Apple Music URL (the first path
+// part), so a refresh resolves links in the region the album was
+// imported from. Defaults to "us".
+export function appleCountryFromUrl(
+  appleMusicUrl: string | null | undefined,
+): string {
+  const raw = String(appleMusicUrl || "").trim();
+  if (!raw) return "us";
+  try {
+    const parsed = new URL(raw);
+    return (parsed.pathname.split("/").filter(Boolean)[0] || "us").toLowerCase();
+  } catch {
+    return "us";
+  }
+}
+
 // Resolve links for many Apple releases with bounded concurrency and a
 // total wall-clock budget. Used by the discography import where an
 // artist can have dozens of releases — we cap concurrency so we don't

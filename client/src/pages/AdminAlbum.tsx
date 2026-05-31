@@ -1794,6 +1794,67 @@ type ArtistLabelConflict = {
   toLabelName: string;
 };
 
+// Task #846 — re-run the Tidal/Deezer/Pandora resolver for an album that
+// was imported before the resolver shipped (or where Odesli was
+// rate-limited at import time). Only fills NULL link columns server-side;
+// an operator's manual link is never overwritten. Shown only when the
+// album carries an Apple Music URL (the resolver's only input).
+function RefreshStreamingLinksButton({ album }: { album: AlbumFull }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const hasApple = !!(album.appleMusicUrl && /\/album\/[^/]+\/\d+/.test(album.appleMusicUrl));
+  const mut = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest(
+        "POST",
+        `/api/admin/albums/${album.id}/refresh-streaming-links`,
+      );
+      return (await r.json()) as { filledCount: number };
+    },
+    onSuccess: async (data) => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["/api/albums", album.id] }),
+        qc.invalidateQueries({ queryKey: ["/api/albums"] }),
+      ]);
+      toast({
+        title:
+          data.filledCount > 0
+            ? `Filled ${data.filledCount} streaming link${data.filledCount === 1 ? "" : "s"}`
+            : "No new links found",
+        description:
+          data.filledCount > 0
+            ? "Existing links were left untouched."
+            : "Tidal/Deezer/Pandora either resolved already or have no match.",
+      });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't refresh streaming links",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+  if (!hasApple) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => mut.mutate()}
+      disabled={mut.isPending}
+      data-testid="button-refresh-streaming-links"
+      title="Re-resolve Tidal/Deezer/Pandora links from Apple Music (fills blanks only)"
+      className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 px-3 h-7 text-xs font-semibold transition-colors disabled:opacity-50"
+    >
+      {mut.isPending ? (
+        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+      ) : (
+        <RotateCcw className="w-3.5 h-3.5" />
+      )}
+      Refresh links
+    </button>
+  );
+}
+
 function OverviewPanel({ album }: { album: AlbumFull }) {
   const invalidate: (readonly unknown[])[] = [
     ["/api/albums", album.id],
@@ -1877,6 +1938,7 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
         columns={4}
         disabled={disabled}
         disabledReason={disabledReason}
+        headerAction={<RefreshStreamingLinksButton album={album} />}
         values={{
           goodTunesReleaseDate: album.goodTunesReleaseDate,
           streamingReleaseDate: album.streamingReleaseDate,

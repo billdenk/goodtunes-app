@@ -118,6 +118,10 @@ export interface EditablePanelProps {
   // only. Use for read-only metadata that doesn't belong in the form
   // (e.g. a label name that needs a dropdown to actually change).
   readExtras?: React.ReactNode;
+  // Optional always-visible action rendered in the read-mode header,
+  // left of the edit pencil. Use for a panel-scoped action that isn't a
+  // field edit (e.g. "Refresh streaming links").
+  headerAction?: React.ReactNode;
   // Field grid width. Default 2 (legacy two-column layout). Use 4 for
   // wide horizontal panels (e.g. album Overview Release strip).
   columns?: 2 | 4;
@@ -142,6 +146,7 @@ export function EditablePanel({
   fields,
   invalidate,
   readExtras,
+  headerAction,
   columns = 2,
   disabled = false,
   disabledReason,
@@ -404,27 +409,30 @@ export function EditablePanel({
     >
       <div className="flex items-center justify-between">
         <h2 className="text-slate-900 text-[14px] font-bold">{title}</h2>
-        {disabled ? (
-          <span
-            className="text-[11px] font-medium text-slate-400 italic"
-            title={disabledReason || "Read-only"}
-            data-testid={`badge-readonly-${slug}`}
-          >
-            {disabledReason || "Read-only"}
-          </span>
-        ) : (
-          <button
-            ref={editButtonRef}
-            type="button"
-            onClick={() => setEditing(true)}
-            aria-label={`Edit ${title}`}
-            title={`Edit ${title}`}
-            data-testid={`button-edit-${slug}`}
-            className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {headerAction}
+          {disabled ? (
+            <span
+              className="text-[11px] font-medium text-slate-400 italic"
+              title={disabledReason || "Read-only"}
+              data-testid={`badge-readonly-${slug}`}
+            >
+              {disabledReason || "Read-only"}
+            </span>
+          ) : (
+            <button
+              ref={editButtonRef}
+              type="button"
+              onClick={() => setEditing(true)}
+              aria-label={`Edit ${title}`}
+              title={`Edit ${title}`}
+              data-testid={`button-edit-${slug}`}
+              className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
       {shortFields.length > 0 && (
         <dl

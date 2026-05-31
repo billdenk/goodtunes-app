@@ -14,7 +14,7 @@ import {
   SiBluesky,
   SiFacebook,
 } from "react-icons/si";
-import { Globe, Check, Search, X as XIcon, Plus, Disc3, UserRound, Guitar, Store, Tag, Trash2, ImagePlus, Play, Pencil, Upload } from "lucide-react";
+import { Globe, Check, Search, X as XIcon, Plus, Disc3, UserRound, Guitar, Store, Tag, Trash2, ImagePlus, Play, Pencil, Upload, RotateCcw, Loader2 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import {
   AlertDialog,
@@ -8942,6 +8942,71 @@ function AdminAlbumFromUrlPanel({ onCreated }: { onCreated: (albumId: string) =>
   );
 }
 
+// ---------- AdminRefreshStreamingLinksSweep ----------
+// Task #846 — one-shot catalog sweep that re-runs the Tidal/Deezer/
+// Pandora resolver for every already-imported album that has an Apple
+// Music URL but is still missing one of those links. Fills blanks only
+// (operator edits are never overwritten); bounded server-side so a big
+// catalog can't hang the request. Run it again to pick up anything left
+// behind when the wall-clock budget is spent.
+function AdminRefreshStreamingLinksSweep() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const sweep = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/albums/refresh-streaming-links");
+      return (await res.json()) as {
+        scanned: number;
+        candidates: number;
+        updated: number;
+        remaining: number;
+      };
+    },
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+      const tail =
+        data.remaining > 0
+          ? ` ${data.remaining} left — run again to continue.`
+          : "";
+      toast({
+        title:
+          data.updated > 0
+            ? `Filled links on ${data.updated} album${data.updated === 1 ? "" : "s"}`
+            : "No new links found",
+        description:
+          (data.candidates === 0
+            ? "Every album with an Apple Music URL already has its links."
+            : `Checked ${data.candidates} album${data.candidates === 1 ? "" : "s"} missing links.`) +
+          tail,
+      });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't refresh streaming links",
+        description: e?.message ?? "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+  return (
+    <button
+      type="button"
+      onClick={() => sweep.mutate()}
+      disabled={sweep.isPending}
+      className="w-full px-4 py-2 flex items-center gap-2 text-left text-xs text-[var(--brand-blue)] hover:bg-slate-50 disabled:opacity-50"
+      data-testid="button-refresh-all-streaming-links"
+      title="Re-resolve Tidal/Deezer/Pandora for every imported album missing them (fills blanks only)"
+    >
+      {sweep.isPending ? (
+        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+      ) : (
+        <RotateCcw className="w-3.5 h-3.5" />
+      )}
+      {sweep.isPending ? "Refreshing streaming links…" : "Refresh missing streaming links (catalog-wide)"}
+    </button>
+  );
+}
+
 // ---------- AlbumArtistPicker ----------
 // Search-or-create picker for the album's primary artist. Backed by the
 // People table (the same roster that powers SuperCredits). Falls back to a
@@ -10186,6 +10251,11 @@ export function Admin() {
                 setSelectedByEntity((p) => ({ ...p, albums: albumId }))
               }
             />
+          )}
+          {entity === "albums" && (
+            <div className="border-b border-slate-100">
+              <AdminRefreshStreamingLinksSweep />
+            </div>
           )}
           <ul className="flex-1 overflow-y-auto py-2">
             {entity === "albums" &&

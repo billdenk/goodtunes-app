@@ -27,7 +27,7 @@ import {
 import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
 import { geoFromRequest, forwardToPostHog, isPostHogEnabled } from "./analytics";
 import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, fetchSpotifyTrackByUrl, searchTrackCandidates, resolveSpotifyAlbumUrl, resolveSpotifyAlbumUrlsForReleases, type SpotifyArtistCandidate } from "./lib/spotify";
-import { resolveStreamingLinksFromAppleCollectionId, resolveStreamingLinksForCollections, hasAnyResolvedLink } from "./lib/streamingLinks";
+import { resolveStreamingLinksFromAppleCollectionId, resolveStreamingLinksForCollections, hasAnyResolvedLink, appleCollectionIdFromUrl, appleCountryFromUrl } from "./lib/streamingLinks";
 
 const scryptAsync = promisify(scrypt);
 
@@ -5839,6 +5839,113 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     return res.status(201).json({ album, trackCount: created });
+  });
+
+  // Task #846 — re-run the Tidal/Deezer/Pandora resolver for ALREADY
+  // imported albums. Task #843 only fills these links at import time, so
+  // releases imported earlier (or where Odesli was rate-limited / had no
+  // mapping yet) still fall back to a service search. This sweep refills
+  // the gaps from each album's stored Apple Music URL.
+  //
+  // Hard rule: only NULL link columns are filled — an operator's manual
+  // edit (or a previously-resolved link) is never clobbered. Qobuz is
+  // never touched (Odesli carries no Qobuz mapping; search fallback
+  // stands). Best-effort throughout: any resolver miss leaves that
+  // album's missing links on the search fallback.
+  //
+  // Helper: resolve + fill-nulls for one album. Returns the fields that
+  // actually changed (so the caller can skip a no-op write) or null when
+  // there was nothing to do.
+  async function refillAlbumStreamingLinks(album: {
+    id: string;
+    appleMusicUrl: string | null;
+    tidalUrl: string | null;
+    deezerUrl: string | null;
+    pandoraUrl: string | null;
+  }): Promise<{ tidalUrl?: string; deezerUrl?: string; pandoraUrl?: string } | null> {
+    const collectionId = appleCollectionIdFromUrl(album.appleMusicUrl);
+    if (!collectionId) return null;
+    // Nothing missing → don't even call Odesli.
+    if (album.tidalUrl && album.deezerUrl && album.pandoraUrl) return null;
+    const country = appleCountryFromUrl(album.appleMusicUrl);
+    const links = await resolveStreamingLinksFromAppleCollectionId(collectionId, country);
+    const updates: { tidalUrl?: string; deezerUrl?: string; pandoraUrl?: string } = {};
+    if (!album.tidalUrl && links.tidalUrl) updates.tidalUrl = links.tidalUrl;
+    if (!album.deezerUrl && links.deezerUrl) updates.deezerUrl = links.deezerUrl;
+    if (!album.pandoraUrl && links.pandoraUrl) updates.pandoraUrl = links.pandoraUrl;
+    if (Object.keys(updates).length === 0) return null;
+    await storage.updateAlbum(album.id, updates as Partial<typeof album>);
+    return updates;
+  }
+
+  // Per-album refresh — button on the album editor.
+  app.post("/api/admin/albums/:id/refresh-streaming-links", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const album = await storage.getAlbumById(id, { includeHidden: true });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    if (!appleCollectionIdFromUrl(album.appleMusicUrl)) {
+      return res.status(400).json({
+        message:
+          "This album has no Apple Music URL with an album id, so per-release links can't be resolved.",
+      });
+    }
+    let filled: { tidalUrl?: string; deezerUrl?: string; pandoraUrl?: string } | null = null;
+    try {
+      filled = await refillAlbumStreamingLinks(album);
+    } catch (e: any) {
+      // Best-effort: a resolver miss is not a server error.
+      console.warn("[streamingLinks] per-album refresh failed", id, e?.message);
+    }
+    const updated = await storage.getAlbumById(id, { includeHidden: true });
+    return res.json({
+      filled: filled ?? {},
+      filledCount: filled ? Object.keys(filled).length : 0,
+      tidalUrl: updated?.tidalUrl ?? null,
+      qobuzUrl: updated?.qobuzUrl ?? null,
+      deezerUrl: updated?.deezerUrl ?? null,
+      pandoraUrl: updated?.pandoraUrl ?? null,
+    });
+  });
+
+  // Catalog sweep — fills every album that has an Apple album id but is
+  // missing at least one of Tidal/Deezer/Pandora. Bounded-concurrency +
+  // best-effort (mirrors the discography import). Returns a summary.
+  app.post("/api/admin/albums/refresh-streaming-links", requireAdmin, async (_req, res) => {
+    const all = await storage.getAlbums({ includeHidden: true });
+    const candidates = all.filter(
+      (a) =>
+        !!appleCollectionIdFromUrl(a.appleMusicUrl) &&
+        !(a.tidalUrl && a.deezerUrl && a.pandoraUrl),
+    );
+
+    let updatedCount = 0;
+    const concurrency = 4;
+    let cursor = 0;
+    // Wall-clock budget so a large catalog can't tie up the request
+    // indefinitely; remaining albums keep their search fallback and the
+    // operator can run the sweep again to pick up where it left off.
+    const deadline = Date.now() + 120_000;
+    async function worker(): Promise<void> {
+      while (cursor < candidates.length && Date.now() < deadline) {
+        const a = candidates[cursor++];
+        try {
+          const filled = await refillAlbumStreamingLinks(a);
+          if (filled) updatedCount += 1;
+        } catch (e: any) {
+          console.warn("[streamingLinks] sweep refresh failed", a.id, e?.message);
+        }
+      }
+    }
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, candidates.length) }, () => worker()),
+    );
+    const remaining = cursor < candidates.length ? candidates.length - cursor : 0;
+    return res.json({
+      scanned: all.length,
+      candidates: candidates.length,
+      updated: updatedCount,
+      remaining,
+    });
   });
 
   app.put("/api/admin/albums/:id", requireAdmin, async (req, res, next) => {
