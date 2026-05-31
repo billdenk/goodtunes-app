@@ -64,7 +64,7 @@ export function BorderedStoryCard({ overlay }: { overlay?: ReactNode }) {
           style={{
             width: 78,
             height: 78,
-            marginTop: -39, // half the avatar overlaps up onto the art
+            marginTop: -80, // lifted fully up into the faded lower art; name+pill follow
             border: "2px solid rgba(255,255,255,0.18)", // subtle hairline (locked Story treatment)
             boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
           }}
