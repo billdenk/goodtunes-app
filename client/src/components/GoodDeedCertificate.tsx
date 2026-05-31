@@ -32,6 +32,8 @@ export function GoodDeedCertificate({
       ? certificateNumbers
       : [certificateNumber ?? 1];
   const [shared, setShared] = useState(false);
+  const [savingImage, setSavingImage] = useState(false);
+  const [imageSaved, setImageSaved] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const [identity, setIdentity] = useState<IdentityKind>("display");
   const [showIdentityMenu, setShowIdentityMenu] = useState(false);
@@ -124,6 +126,53 @@ export function GoodDeedCertificate({
       setShared(true);
       setTimeout(() => setShared(false), 1800);
     } catch {}
+  };
+
+  const handleSaveImage = async () => {
+    if (savingImage) return;
+    const node = cardRefs.current[safeIdx];
+    if (!node) return;
+    setSavingImage(true);
+    try {
+      const { toPng } = await import("html-to-image");
+      // Make sure every image on the card is fully decoded before we snapshot,
+      // otherwise the first capture can come back with blanks.
+      const imgs = Array.from(node.querySelectorAll("img"));
+      await Promise.all(
+        imgs.map((img) =>
+          img.complete && img.naturalWidth > 0
+            ? Promise.resolve()
+            : img.decode().catch(() => undefined),
+        ),
+      );
+      const dataUrl = await toPng(node, {
+        pixelRatio: 3,
+        cacheBust: true,
+      });
+      const blob = await (await fetch(dataUrl)).blob();
+      const safeTitle = album.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "") || "album";
+      const fileName = `GoodDeed-${safeTitle}-No-${padded(certs[safeIdx])}.png`;
+      const file = new File([blob], fileName, { type: "image/png" });
+
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: "My GoodDeed® Certificate" });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+      setImageSaved(true);
+      setTimeout(() => setImageSaved(false), 1800);
+    } catch {
+      // User cancelled the share sheet, or capture failed — leave the card as-is.
+    } finally {
+      setSavingImage(false);
+    }
   };
 
   const pickIdentity = (kind: IdentityKind) => {
@@ -282,6 +331,35 @@ export function GoodDeedCertificate({
                 </>
               )}
             </div>
+
+            <button
+              type="button"
+              onClick={handleSaveImage}
+              disabled={savingImage}
+              aria-label="Save card as image"
+              className="w-10 h-10 rounded-full flex items-center justify-center active:opacity-70 transition-opacity shadow-lg flex-shrink-0 disabled:opacity-60"
+              style={{
+                background: imageSaved ? "#4AFFCA" : "rgba(255,255,255,0.18)",
+                color: imageSaved ? "#00062B" : "#fff",
+                backdropFilter: "blur(20px)",
+                border: "1px solid rgba(255,255,255,0.22)",
+              }}
+              data-testid="button-save-certificate-image"
+            >
+              {savingImage ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="animate-spin">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              ) : imageSaved ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                </svg>
+              )}
+            </button>
 
             <button
               type="button"

@@ -7917,6 +7917,16 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "background: imageSaved ? \"#4AFFCA\" : \"rgba(255,255,255,0.18)\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "color: imageSaved ? \"#00062B\" : \"#fff\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
     "snippet": "background: shared ? \"#4AFFCA\" : \"#ffffff\","
   },
   {
@@ -7953,6 +7963,11 @@
     "rule": "player-touch-target-too-small",
     "file": "client/src/components/GoodDeedCertificate.tsx",
     "snippet": "className=\"w-10 h-10 rounded-full flex items-center justify-center active:opacity-70 shadow-lg flex-shrink-0\""
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "className=\"w-10 h-10 rounded-full flex items-center justify-center active:opacity-70 transition-opacity shadow-lg flex-shrink-0 disabled:opacity-60\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -14868,11 +14883,6 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Collection.tsx",
     "snippet": "<svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#319ED8\" strokeWidth=\"3\" strokeLinecap=\"round\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Collection.tsx",
-    "snippet": "className={`relative flex-1 py-2 rounded-lg text-xs font-semibold capitalize transition-colors duration-150 ${tab === t ? \"text-[#319ED8]\" : \"text-white/45\"}`}"
   },
   {
     "rule": "brand-hex-literal",
