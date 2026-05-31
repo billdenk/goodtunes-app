@@ -5841,11 +5841,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.status(201).json({ album, trackCount: created });
   });
 
-  // Task #846 — re-run the Tidal/Deezer/Pandora resolver for ALREADY
-  // imported albums. Task #843 only fills these links at import time, so
-  // releases imported earlier (or where Odesli was rate-limited / had no
-  // mapping yet) still fall back to a service search. This sweep refills
-  // the gaps from each album's stored Apple Music URL.
+  // Task #846 — re-run the per-release link resolvers for ALREADY
+  // imported albums. The import path only fills these links at import
+  // time, so releases imported earlier (or where an upstream was
+  // rate-limited / had no mapping yet) still fall back to a service
+  // search. This sweep refills the gaps from each album's stored Apple
+  // Music URL (Tidal/Deezer/Pandora via Odesli) and — Task #849 — its
+  // artist + title (Spotify via the Spotify Web API, since Odesli doesn't
+  // drive Spotify here).
   //
   // Hard rule: only NULL link columns are filled — an operator's manual
   // edit (or a previously-resolved link) is never clobbered. Qobuz is
@@ -5858,21 +5861,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // there was nothing to do.
   async function refillAlbumStreamingLinks(album: {
     id: string;
+    artist: string;
+    title: string;
     appleMusicUrl: string | null;
     tidalUrl: string | null;
     deezerUrl: string | null;
     pandoraUrl: string | null;
-  }): Promise<{ tidalUrl?: string; deezerUrl?: string; pandoraUrl?: string } | null> {
+    spotifyUrl: string | null;
+  }): Promise<{ tidalUrl?: string; deezerUrl?: string; pandoraUrl?: string; spotifyUrl?: string } | null> {
     const collectionId = appleCollectionIdFromUrl(album.appleMusicUrl);
     if (!collectionId) return null;
-    // Nothing missing → don't even call Odesli.
-    if (album.tidalUrl && album.deezerUrl && album.pandoraUrl) return null;
-    const country = appleCountryFromUrl(album.appleMusicUrl);
-    const links = await resolveStreamingLinksFromAppleCollectionId(collectionId, country);
-    const updates: { tidalUrl?: string; deezerUrl?: string; pandoraUrl?: string } = {};
-    if (!album.tidalUrl && links.tidalUrl) updates.tidalUrl = links.tidalUrl;
-    if (!album.deezerUrl && links.deezerUrl) updates.deezerUrl = links.deezerUrl;
-    if (!album.pandoraUrl && links.pandoraUrl) updates.pandoraUrl = links.pandoraUrl;
+    const needsOdesli = !album.tidalUrl || !album.deezerUrl || !album.pandoraUrl;
+    // Spotify is resolved off artist + title (not the Apple collection
+    // id), but we only attempt it when Spotify is actually configured.
+    const needsSpotify = !album.spotifyUrl && spotifyConfigured();
+    // Nothing missing → don't even call upstream.
+    if (!needsOdesli && !needsSpotify) return null;
+
+    const updates: { tidalUrl?: string; deezerUrl?: string; pandoraUrl?: string; spotifyUrl?: string } = {};
+
+    if (needsOdesli) {
+      const country = appleCountryFromUrl(album.appleMusicUrl);
+      const links = await resolveStreamingLinksFromAppleCollectionId(collectionId, country);
+      if (!album.tidalUrl && links.tidalUrl) updates.tidalUrl = links.tidalUrl;
+      if (!album.deezerUrl && links.deezerUrl) updates.deezerUrl = links.deezerUrl;
+      if (!album.pandoraUrl && links.pandoraUrl) updates.pandoraUrl = links.pandoraUrl;
+    }
+
+    // Task #849 — resolve the exact Spotify album URL via the Spotify Web
+    // API (Odesli doesn't drive Spotify here). Fill-nulls-only so an
+    // operator's manual link always wins. Best-effort: a miss leaves the
+    // per-release search fallback in place and never fails the refresh.
+    if (needsSpotify) {
+      try {
+        const url = await resolveSpotifyAlbumUrl(album.artist, album.title);
+        if (url) updates.spotifyUrl = url;
+      } catch (e: any) {
+        console.warn("[spotify] refresh resolve failed", album.id, e?.message);
+      }
+    }
+
     if (Object.keys(updates).length === 0) return null;
     await storage.updateAlbum(album.id, updates as Partial<typeof album>);
     return updates;
@@ -5889,7 +5917,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           "This album has no Apple Music URL with an album id, so per-release links can't be resolved.",
       });
     }
-    let filled: { tidalUrl?: string; deezerUrl?: string; pandoraUrl?: string } | null = null;
+    let filled: { tidalUrl?: string; deezerUrl?: string; pandoraUrl?: string; spotifyUrl?: string } | null = null;
     try {
       filled = await refillAlbumStreamingLinks(album);
     } catch (e: any) {
@@ -5900,6 +5928,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({
       filled: filled ?? {},
       filledCount: filled ? Object.keys(filled).length : 0,
+      spotifyUrl: updated?.spotifyUrl ?? null,
       tidalUrl: updated?.tidalUrl ?? null,
       qobuzUrl: updated?.qobuzUrl ?? null,
       deezerUrl: updated?.deezerUrl ?? null,
@@ -5908,14 +5937,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Catalog sweep — fills every album that has an Apple album id but is
-  // missing at least one of Tidal/Deezer/Pandora. Bounded-concurrency +
-  // best-effort (mirrors the discography import). Returns a summary.
+  // missing at least one of Tidal/Deezer/Pandora (and, when Spotify is
+  // configured, a missing Spotify link too — Task #849). Bounded-
+  // concurrency + best-effort (mirrors the discography import). Returns a
+  // summary.
   app.post("/api/admin/albums/refresh-streaming-links", requireAdmin, async (_req, res) => {
     const all = await storage.getAlbums({ includeHidden: true });
+    const spotifyOn = spotifyConfigured();
     const candidates = all.filter(
       (a) =>
         !!appleCollectionIdFromUrl(a.appleMusicUrl) &&
-        !(a.tidalUrl && a.deezerUrl && a.pandoraUrl),
+        !(a.tidalUrl && a.deezerUrl && a.pandoraUrl && (!spotifyOn || a.spotifyUrl)),
     );
 
     let updatedCount = 0;
