@@ -103,12 +103,14 @@ export function CertPrint({
   art,
   insetIn,
   bleedIn,
+  frameRevealIn,
 }: {
   paper: Paper;
   frame: Frame;
   art?: string;
   insetIn?: number;
   bleedIn?: number;
+  frameRevealIn?: number;
 }) {
   const artSrc = art ?? ART;
   const s = 0.72; // pt -> px display scale (same for both papers, so A4 reads taller/narrower)
@@ -357,6 +359,22 @@ export function CertPrint({
         {leftBlock}
         {rightColumn}
       </div>
+      {/* TEMPORARY: dashed line showing where a standard frame/mat lip would fall.
+          Everything OUTSIDE this line gets covered when the sheet is framed/matted. */}
+      {frameRevealIn != null && (
+        <div
+          style={{
+            position: "absolute",
+            left: px(frameRevealIn * 72),
+            top: px(frameRevealIn * 72),
+            width: px(d.W - frameRevealIn * 72 * 2),
+            height: px(d.H - frameRevealIn * 72 * 2),
+            border: "1px dashed #FF2D9B",
+            boxSizing: "border-box",
+            pointerEvents: "none",
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -367,19 +385,21 @@ export function CertStage({
   art,
   insetIn,
   bleedIn,
+  frameRevealIn,
 }: {
   paper: Paper;
   frame: Frame;
   art?: string;
   insetIn?: number;
   bleedIn?: number;
+  frameRevealIn?: number;
 }) {
   return (
     <div
       className="min-h-screen flex items-center justify-center"
       style={{ background: "#E9EBF0", padding: 28 }}
     >
-      <CertPrint paper={paper} frame={frame} art={art} insetIn={insetIn} bleedIn={bleedIn} />
+      <CertPrint paper={paper} frame={frame} art={art} insetIn={insetIn} bleedIn={bleedIn} frameRevealIn={frameRevealIn} />
     </div>
   );
 }
