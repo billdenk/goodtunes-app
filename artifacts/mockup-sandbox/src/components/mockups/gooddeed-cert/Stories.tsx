@@ -58,7 +58,11 @@ export function StoryCard({
       style={{
         width: "min(92vw, 340px)",
         aspectRatio: "9 / 16",
-        borderRadius: 28,
+        // SQUARE corners — the exported 1080×1920 asset is full-bleed/full-
+        // rectangle (matches how IG renders original story media edge-to-edge).
+        // The device + IG chrome round the screen at display time; we never bake
+        // rounding into the PNG.
+        borderRadius: 0,
         boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
         backgroundColor: "var(--brand-bg)",
       }}
