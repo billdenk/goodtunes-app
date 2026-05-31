@@ -30,7 +30,7 @@ export function OgNative() {
             Jordan Ellis owns No. 07 · GoodDeed®
           </p>
           <p style={{ fontSize: 16, color: "rgba(255,255,255,0.45)", marginTop: 6 }}>
-            goodtunes.replit.app
+            my.goodtunes.music
           </p>
         </div>
       </div>
