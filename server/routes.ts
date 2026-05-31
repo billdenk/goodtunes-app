@@ -5525,6 +5525,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (album.labelId) {
       artistLabelConflict = await syncPrimaryArtistLabel(album);
     }
+    // Task #857 — best-effort Spotify deep-link resolution for a new
+    // release created without an Apple URL. Fire-and-forget so the create
+    // response isn't blocked on a Spotify lookup.
+    maybeAutoResolveSpotifyLink(album);
     return res.status(201).json(artistLabelConflict ? { ...album, artistLabelConflict } : album);
   });
 
@@ -5909,6 +5913,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return updates;
   }
 
+  // Task #857 — best-effort, fire-and-forget Spotify auto-resolution for a
+  // brand-new (or just-saved) release that has an artist + title but no
+  // Apple Music URL. The Apple import path already resolves Spotify at
+  // import time (Task #845), but a manually-created GoodTunes release
+  // otherwise ships with a null spotifyUrl until an operator clicks
+  // "Refresh links" (Task #856). We only fire when there's genuinely
+  // something to do (Spotify configured, no Apple URL, no Spotify link
+  // yet, and an artist + title to search on) and lean on
+  // refillAlbumStreamingLinks' fill-nulls-only contract so an operator's
+  // manual link is never clobbered. Never throws; never blocks the save —
+  // the response is sent before this resolves, so the freshly-linked URL
+  // shows up on the next fetch/cache invalidation.
+  function maybeAutoResolveSpotifyLink(album: {
+    id: string;
+    artist: string;
+    title: string;
+    appleMusicUrl: string | null;
+    tidalUrl: string | null;
+    deezerUrl: string | null;
+    pandoraUrl: string | null;
+    spotifyUrl: string | null;
+  }): void {
+    // Scope: only releases with no Apple Music URL. Albums with an Apple
+    // URL resolve Spotify through the import / refresh paths instead.
+    if (album.appleMusicUrl) return;
+    if (album.spotifyUrl) return;
+    if (!album.title?.trim() || !album.artist?.trim()) return;
+    if (!spotifyConfigured()) return;
+    void (async () => {
+      try {
+        await refillAlbumStreamingLinks(album);
+      } catch (e: any) {
+        console.warn("[spotify] auto-resolve on save failed", album.id, e?.message);
+      }
+    })();
+  }
+
   // Per-album refresh — button on the album editor.
   app.post("/api/admin/albums/:id/refresh-streaming-links", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
@@ -6188,6 +6229,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const updated = await storage.updateAlbum(id, updates);
     if (!updated) return res.status(404).json({ message: "Album not found" });
+    // Task #857 — best-effort Spotify deep-link resolution after a save
+    // that leaves the album with an artist + title but no Apple URL.
+    // Fire-and-forget + fill-nulls-only, so an operator clearing/editing
+    // a Spotify URL is never clobbered and the save isn't blocked.
+    maybeAutoResolveSpotifyLink(updated);
     // Task #644 — auto-sign the album's primary artist to the album's
     // label. If the artist has no label, silently set it. If the artist
     // is already signed to a *different* label, surface a structured
