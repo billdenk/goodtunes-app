@@ -18,8 +18,8 @@ const SIG = "/__mockup/images/will-signature.png";
 const NAVY = "var(--brand-bg)";
 const ORANGE = "var(--brand-orange)";
 
-type Paper = "letter" | "a4";
-type Frame = "navy" | "orange";
+type Paper = "letter" | "a4" | "a5";
+type Frame = "navy" | "orange" | "bordered";
 
 const SAMPLE = {
   artist: "TOMMYGUNN",
@@ -39,8 +39,8 @@ const provenance =
 const subline = `${SAMPLE.genre} \u2022 GOODTUNES RELEASE ${SAMPLE.year}`;
 
 function dims(paper: Paper) {
-  const W = paper === "a4" ? 595.28 : 612;
-  const H = paper === "a4" ? 841.89 : 792;
+  const W = paper === "a4" ? 595.28 : paper === "a5" ? 419.53 : 612;
+  const H = paper === "a4" ? 841.89 : paper === "a5" ? 595.28 : 792;
   const matW = W * (2250 / 2550);
   const matH = H * (2850 / 3300);
   const matX = (W - matW) / 2;
@@ -97,23 +97,51 @@ function QrFaux({ size }: { size: number }) {
   );
 }
 
-export function CertPrint({ paper, frame, art }: { paper: Paper; frame: Frame; art?: string }) {
+export function CertPrint({
+  paper,
+  frame,
+  art,
+  insetIn,
+  bleedIn,
+}: {
+  paper: Paper;
+  frame: Frame;
+  art?: string;
+  insetIn?: number;
+  bleedIn?: number;
+}) {
   const artSrc = art ?? ART;
   const s = 0.72; // pt -> px display scale (same for both papers, so A4 reads taller/narrower)
   const d = dims(paper);
   const px = (pt: number) => pt * s;
 
-  // Current = ~9pt navy bleed border (the Bill-approved default). Proposed =
-  // a prominent GoodTunes-orange frame that echoes the digital share-card set.
-  const borderPt = frame === "orange" ? 16 : 9;
-  const frameColor = frame === "orange" ? ORANGE : NAVY;
+  // Border treatments:
+  //  - navy     = ~9pt navy bleed border (the Bill-approved default)
+  //  - orange   = prominent GoodTunes-orange bleed frame sitting AT the mat edge
+  //  - bordered = inch-spec orange frame that comes `insetIn` INSIDE the mat and
+  //    `bleedIn` OUTSIDE it. The art + band content shrink inward to kiss the
+  //    inside of that frame, preserving today's padding off the new inner edge.
+  const bordered = frame === "bordered";
+  const insetPt = (insetIn ?? 0) * 72; // inches -> pt, how far content pulls in
+  const borderPt = bordered ? (bleedIn ?? 0) * 72 : frame === "orange" ? 16 : 9;
+  const frameColor = frame === "navy" ? NAVY : ORANGE;
 
-  // Band-relative safe geometry (origin = band top-left at matX, bandTop).
+  // Inset content box = origin for the art + band. insetPt = 0 leaves today's
+  // layout byte-for-byte; band height stays invariant (matH - matW) so the text
+  // never reflows — content just shifts in from the new inner frame edge.
+  const cX = d.matX + insetPt;
+  const cY = d.matY + insetPt;
+  const cW = d.matW - insetPt * 2;
+  const cArtH = cW;
+  const cBandTop = cY + cArtH;
+  const cBandH = d.matH - insetPt * 2 - cArtH;
+
+  // Band-relative safe geometry (origin = band top-left at cX, cBandTop).
   const pad = d.bandPad;
   const safeTopRel = pad;
   const safeLeftRel = pad;
-  const safeRightRel = d.matW - pad;
-  const safeBottomRel = d.bandH - pad;
+  const safeRightRel = cW - pad;
+  const safeBottomRel = cBandH - pad;
   const qrColW = Math.max(d.qrSize, d.logoW);
   const qrColRightRel = safeRightRel;
   const qrColLeftRel = qrColRightRel - qrColW;
@@ -320,12 +348,12 @@ export function CertPrint({ paper, frame, art }: { paper: Paper; frame: Frame; a
           background: frameColor,
         }}
       />
-      {/* Square album artwork filling the mat width. */}
-      <div style={{ position: "absolute", left: px(d.matX), top: px(d.matY), width: px(d.matW), height: px(d.artH), overflow: "hidden" }}>
+      {/* Square album artwork filling the (inset) content width. */}
+      <div style={{ position: "absolute", left: px(cX), top: px(cY), width: px(cW), height: px(cArtH), overflow: "hidden" }}>
         <img src={artSrc} alt={SAMPLE.title} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
       </div>
       {/* Navy band under the art. */}
-      <div style={{ position: "absolute", left: px(d.matX), top: px(d.bandTop), width: px(d.matW), height: px(d.bandH), background: NAVY }}>
+      <div style={{ position: "absolute", left: px(cX), top: px(cBandTop), width: px(cW), height: px(cBandH), background: NAVY }}>
         {leftBlock}
         {rightColumn}
       </div>
@@ -333,13 +361,25 @@ export function CertPrint({ paper, frame, art }: { paper: Paper; frame: Frame; a
   );
 }
 
-export function CertStage({ paper, frame, art }: { paper: Paper; frame: Frame; art?: string }) {
+export function CertStage({
+  paper,
+  frame,
+  art,
+  insetIn,
+  bleedIn,
+}: {
+  paper: Paper;
+  frame: Frame;
+  art?: string;
+  insetIn?: number;
+  bleedIn?: number;
+}) {
   return (
     <div
       className="min-h-screen flex items-center justify-center"
       style={{ background: "#E9EBF0", padding: 28 }}
     >
-      <CertPrint paper={paper} frame={frame} art={art} />
+      <CertPrint paper={paper} frame={frame} art={art} insetIn={insetIn} bleedIn={bleedIn} />
     </div>
   );
 }
