@@ -81,7 +81,7 @@ export function OgRedesign() {
             src={LOGO}
             alt="GoodTunes"
             className="w-auto object-contain flex-shrink-0"
-            style={{ height: 46 * u }}
+            style={{ height: 96 * u }}
           />
         </div>
       </div>
