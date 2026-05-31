@@ -4,7 +4,8 @@
 
 ## Brand
 
-- Colors: `#00062B` (bg), `#319ED8` (blue), `#7F10A7` (purple), `#4AFFCA` (mint), `#FF5470` (heart pink)
+- Colors: `#00062B` (bg), `#319ED8` (blue), `#7F10A7` (purple), `#4AFFCA` (mint), `#FF5470` (heart pink), `#FF7C06` (GoodTunes logo orange)
+  - **Orange (`#FF7C06`)** is the official GoodTunes logo orange (from the 2025 logo SVG — `rgb(255,124,6)`, H28° S97% B100%). It is **not** a general-purpose accent — reserve it for GoodDeed® share-card framing (the orange-bordered Story variant). Reach it via `--brand-orange`, never inline the hex.
 - Mobile-first single column, max width ~440px
 - Apple-Music-style large headers, 44×44 minimum touch targets
 - Songs use **heart** icon (`#FF5470`); artists use **star** icon
@@ -94,7 +95,7 @@ Every fan-facing mobile sheet dismisses the same way (Apple HIG / Apple-Card pat
 
 The admin (`body.gt-admin`) is a Stripe-leaning light surface and lives off a tokenized palette, not one-off hex codes.
 
-- The four brand hexes (`#319ED8`, `#7F10A7`, `#4AFFCA`, `#FF5470`) are exposed as `--brand-blue`, `--brand-purple`, `--brand-mint`, `--brand-pink` in `client/src/index.css`. Reach them from Tailwind as `bg-[color:var(--brand-blue)]`, `text-[color:var(--brand-pink)]`, `border-[color:var(--brand-blue)]`, etc. — **never inline `bg-[#319ED8]` again**.
+- The brand hexes (`#319ED8`, `#7F10A7`, `#4AFFCA`, `#FF5470`, `#FF7C06`) are exposed as `--brand-blue`, `--brand-purple`, `--brand-mint`, `--brand-pink`, `--brand-orange` in `client/src/index.css`. Reach them from Tailwind as `bg-[color:var(--brand-blue)]`, `text-[color:var(--brand-pink)]`, `border-[color:var(--brand-orange)]`, etc. — **never inline `bg-[#319ED8]` again**.
 - `body.gt-admin` retunes `--brand-blue` to a slightly darker, less candy-bright shade (`#1f7fb8`) so a single Save button reads "Stripe action" rather than "alert pill". The fan-facing player keeps the original `#319ED8`.
 - `body.gt-admin` also overrides the shadcn semantic tokens (`--background`, `--foreground`, `--card`, `--primary`, `--secondary`, `--muted`, `--border`, `--input`, `--ring`, `--destructive`, `--radius` → ~6px). That means every `<Button>`, `<Input>`, `<Select>`, `<Checkbox>`, `<Card>`, dialog, popover, and toast auto-picks up the light admin palette without per-page styling. Pages should prefer the shadcn primitives over hand-rolled `bg-white border-slate-200` cards.
 - **Accent restraint**: at most one filled primary action per row/section. Repeated row-level Save affordances (Formats list, Printed & Signed GoodDeed, per-row edit panels) use a quiet ghost-link Save that activates (brand blue text + faint soft pill) only when the row is dirty. The canonical reference is `client/src/components/admin/SellPanel.tsx`'s `SaveLink`.
@@ -105,7 +106,7 @@ The admin (`body.gt-admin`) is a Stripe-leaning light surface and lives off a to
 Every new page (or material edit to an existing one) gets vetted against this checklist **and** the mechanical linter (`npm run design:lint`). The linter catches the boring drift; this checklist catches the judgment calls it can't.
 
 **Mechanical (the linter enforces these — fix or baseline)**:
-- No raw brand hex literals (`#319ED8 / #7F10A7 / #4AFFCA / #FF5470 / #00062B`) outside `index.css` and the IconButton/shadcn primitives. Reach them through `var(--brand-*)`.
+- No raw brand hex literals (`#319ED8 / #7F10A7 / #4AFFCA / #FF5470 / #FF7C06 / #00062B`) outside `index.css` and the IconButton/shadcn primitives. Reach them through `var(--brand-*)`.
 - No `h-10 / h-11 / h-12` on `<Button>` / `<button>` in admin pages — admin density is `h-8`/`h-9`.
 - No `text-[Npx]` literals — use the shadcn type scale or the Apple HIG sizes already in this doc.
 - Icons come from `lucide-react` (UI chrome) or `react-icons/si` (company logos) only. Any other icon library import is flagged.

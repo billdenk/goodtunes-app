@@ -14,7 +14,7 @@ Mobile-first, Apple-Music-inspired web player.
 - Replit Object Storage for image uploads (album art, person photos, vendor logos/covers, scraped instrument images). Files live in `${PRIVATE_OBJECT_DIR}/uploads/<uuid>.<ext>` and are served via `GET /objects/uploads/<id>` (public ACL). Survives redeploys.
 
 ## Brand at a glance
-- Colors: `#00062B` (bg), `#319ED8` (blue), `#7F10A7` (purple), `#4AFFCA` (mint), `#FF5470` (heart pink)
+- Colors: `#00062B` (bg), `#319ED8` (blue), `#7F10A7` (purple), `#4AFFCA` (mint), `#FF5470` (heart pink), `#FF7C06` (GoodTunes logo orange — share-card framing)
 - Mobile-first single column, max width ~440px
 - Apple-Music-style large headers, 44×44 minimum touch targets
 - Songs use **heart** icon (`#FF5470`); artists use **star** icon

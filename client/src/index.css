@@ -165,7 +165,7 @@
   --white: rgba(255, 255, 255, 1);
   --radius: 0.5rem;
 
-  /* Brand colors as variables. Reach the four brand hexes through
+  /* Brand colors as variables. Reach the brand hexes through
      these vars (or the admin-scoped overrides below) instead of
      hardcoding `#319ED8` etc. everywhere. */
   --brand-blue: #319ED8;
@@ -174,6 +174,9 @@
   --brand-purple: #7F10A7;
   --brand-mint: #4AFFCA;
   --brand-pink: #FF5470;
+  /* Official GoodTunes logo orange (from the 2025 GoodTunes logo SVG,
+     rgb(255,124,6) / H28 S97 B100). Used for GoodDeed share-card framing. */
+  --brand-orange: #FF7C06;
   /* Aliases — `--brand-heart` reads as the song-favorite pink at call
      sites that talk about hearts; `--brand-bg` is the navy fan-page
      background. Both already appear in code, surface them as tokens
