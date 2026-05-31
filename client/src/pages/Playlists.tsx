@@ -6,6 +6,7 @@ import { usePlayer } from "@/context/PlayerContext";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { IconButton } from "@/components/ui/IconButton";
+import { SheetClose } from "@/components/ui/SheetChrome";
 import { type Song, type Album } from "@/data/musicData";
 import type { Song as DbSong, Album as DbAlbum } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -588,14 +589,10 @@ export function Playlists() {
                 <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-3 flex-shrink-0" />
                 <div className="flex items-center justify-between px-5 mb-3 flex-shrink-0">
                   <h3 className="text-white font-semibold text-base">Add Songs</h3>
-                  <button
-                    type="button"
+                  <SheetClose
                     onClick={() => setShowAddSongs(false)}
-                    className="text-[#319ED8] text-sm font-semibold"
                     data-testid="button-close-add-songs"
-                  >
-                    Done
-                  </button>
+                  />
                 </div>
 
                 <div className="px-5 mb-3 flex-shrink-0">

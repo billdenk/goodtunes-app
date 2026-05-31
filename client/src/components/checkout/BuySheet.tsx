@@ -23,7 +23,8 @@ import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { IconButton } from "@/components/ui/IconButton";
-import { Minus, Plus, X } from "lucide-react";
+import { SheetClose } from "@/components/ui/SheetChrome";
+import { Minus, Plus } from "lucide-react";
 import { VinylPreview } from "@/components/VinylPreview";
 import {
   DEFAULT_VINYL_COLOR_ID,
@@ -302,9 +303,7 @@ export function BuySheet({
           <div className="text-[15px] font-semibold">
             {inCheckout ? "Checkout" : "Buy this album"}
           </div>
-          <IconButton label="Close" onClick={onClose} variant="glass" data-testid="button-close-buy">
-            <X />
-          </IconButton>
+          <SheetClose onClick={onClose} data-testid="button-close-buy" />
         </div>
 
         {!inCheckout && (

@@ -25,9 +25,9 @@ import {
   ListMusic,
   Sparkles,
   Heart,
-  X,
   ArrowRight,
 } from "lucide-react";
+import { SheetClose } from "@/components/ui/SheetChrome";
 
 const ICONS = {
   Mic2,
@@ -180,15 +180,10 @@ export function WhatsNewSheet() {
       >
         {/* Close (X) — top-right */}
         <div className="flex justify-end px-3 pt-3">
-          <button
-            type="button"
+          <SheetClose
             onClick={() => void close("close")}
-            className="w-11 h-11 rounded-full flex items-center justify-center text-white/70 hover:text-white active:scale-[0.94] transition bg-white/[0.06]"
-            aria-label="Close"
             data-testid="button-whatsnew-close"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          />
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 pb-6">

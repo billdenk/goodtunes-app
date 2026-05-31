@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { BottomNav } from "@/components/BottomNav";
 import { IconButton } from "@/components/ui/IconButton";
+import { SheetClose } from "@/components/ui/SheetChrome";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { track } from "@/lib/analytics";
@@ -808,14 +809,10 @@ export function Collection() {
               <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-3 flex-shrink-0" />
               <div className="flex items-center justify-between px-5 mb-3 flex-shrink-0">
                 <h3 className="text-white font-semibold text-base">Add to Playlist</h3>
-                <button
-                  type="button"
+                <SheetClose
                   onClick={() => setAddToPlaylistSong(null)}
-                  className="text-[#319ED8] text-sm font-semibold"
                   data-testid="button-close-add-to-playlist"
-                >
-                  Cancel
-                </button>
+                />
               </div>
               <div className="flex items-center gap-3 px-5 pb-3 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 <img src={addToPlaylistSong.album.artwork} alt={addToPlaylistSong.album.title} loading="lazy" decoding="async" className="w-10 h-10 rounded-md object-cover flex-shrink-0" />

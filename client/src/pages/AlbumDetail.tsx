@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlbumDetailMobileSurface } from "@/components/ui/AlbumDetailMobileSurface";
 import { AlbumDetailMobileSkeleton, AlbumNotFound } from "@/components/ui/AlbumDetailSkeleton";
 import { AlbumCreditsSheet } from "@/components/ui/AlbumCreditsSheet";
@@ -13,7 +13,15 @@ import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { BuySheet } from "@/components/checkout/BuySheet";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { StreamServicePickerSheet } from "@/components/StreamServicePickerSheet";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { sheetOpen, sheetClose, scrimFade } from "@/lib/motion";
+import {
+  SheetClose,
+  SheetBack,
+  SheetDismissProvider,
+  useSheetDismiss,
+  SHEET_SAFE_TOP,
+} from "@/components/ui/SheetChrome";
 import {
   getFavoriteStreamingService,
   setFavoriteStreamingService,
@@ -27,7 +35,7 @@ import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { toast } from "@/hooks/use-toast";
 import { IconButton } from "@/components/ui/IconButton";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
-import { ChevronLeft, Share, MoreHorizontal, X as XIcon } from "lucide-react";
+import { ChevronLeft, Share, MoreHorizontal } from "lucide-react";
 import { buyEnabled, nativeDownloadsEnabled } from "@/lib/platform";
 import { downloadSong, removeDownload, listDownloadedSongs } from "@/lib/nativeDownloads";
 import { track } from "@/lib/analytics";
@@ -523,6 +531,18 @@ function AlbumDetailMobile() {
     }
   }, [id, album]);
 
+  // Tear down the whole SuperCredits sheet stack at once. The X on a
+  // drill-down sheet (instrument / vendor / in-app browser) routes here so
+  // it dismisses all the way back to the album, while the back chevron only
+  // pops one level via each sheet's own onClose.
+  const closeAllSheets = useCallback(() => {
+    setInAppBrowser(null);
+    setVendorSheet(null);
+    setInstrumentSheet(null);
+    setPerformerSheet(null);
+    setCreditsForSong(null);
+  }, []);
+
   const toggleSongDownload = async (songId: string) => {
     if (!album) return;
     const wasDownloaded = downloadedSongs.has(songId);
@@ -873,6 +893,7 @@ function AlbumDetailMobile() {
             title={inAppBrowser.title}
             logoUrl={inAppBrowser.logoUrl}
             onClose={() => setInAppBrowser(null)}
+            onCloseAll={closeAllSheets}
           />
         ) : vendorSheet ? (
           <VendorSheet
@@ -890,6 +911,7 @@ function AlbumDetailMobile() {
               setInstrumentSheet({ instrument: inst });
             }}
             onClose={() => setVendorSheet(null)}
+            onCloseAll={closeAllSheets}
           />
         ) : instrumentSheet ? (
           <InstrumentSheet
@@ -901,6 +923,7 @@ function AlbumDetailMobile() {
             onOpenInAppBrowser={openVendorInAppBrowser}
             onOpenVendor={(vendor) => setVendorSheet({ vendor, instrument: instrumentSheet.instrument })}
             onClose={() => setInstrumentSheet(null)}
+            onCloseAll={closeAllSheets}
           />
         ) : performerSheet ? (
           <PerformerSheet
@@ -981,19 +1004,13 @@ function ProvenanceSheet({ album, ownerName, certNum, onClose, onViewGoodDeed }:
     { date: "2024-03-12", actor: "GoodTunes® Created", action: "Certificate #" + certNum + " created", color: "#7F10A7" },
   ];
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label={`Provenance for ${album.title} certificate ${certNum}`}>
-      <div className="absolute inset-0 bg-black/65" style={{ backdropFilter: "blur(6px)" }} onClick={onClose} />
-      {/* Edge-to-edge bottom sheet with the Apple "View on Apple Music /
-          Spotify" pop-up curves (rounded-t-3xl = 24px). No max-width cap
-          so the sheet hugs the viewport / mobile-player frame. */}
-      <div className="relative w-full bg-[#0D1B4B] rounded-t-3xl pt-3 pb-8 z-10 flex flex-col" style={{ maxHeight: "82vh", boxShadow: "0 -8px 40px rgba(0,0,0,0.5)" }}>
-        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-3 flex-shrink-0" />
+    <SheetShell ariaLabel={`Provenance for ${album.title} certificate ${certNum}`} testId="sheet-provenance" onClose={onClose}>
         <div className="flex items-center justify-between px-5 mb-4 flex-shrink-0">
           <div>
             <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Digital Provenance</p>
             <h3 className="text-white font-semibold text-base mt-0.5">{album.title}</h3>
           </div>
-          <button type="button" onClick={onClose} className="text-[#319ED8] text-sm font-semibold" data-testid="button-close-provenance">Done</button>
+          <SheetClose data-testid="button-close-provenance" />
         </div>
 
         <div className="px-5 mb-4 flex-shrink-0">
@@ -1035,8 +1052,7 @@ function ProvenanceSheet({ album, ownerName, certNum, onClose, onViewGoodDeed }:
             ))}
           </div>
         </div>
-      </div>
-    </div>
+    </SheetShell>
   );
 }
 
@@ -1054,16 +1070,13 @@ function OwnershipSheet({
   const owned = album.ownedCertificates ?? [];
   const purchasesByNum = new Map((album.purchases ?? []).map((p) => [p.num, p]));
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center" role="dialog" aria-modal="true" aria-label="Ownership">
-      <div className="absolute inset-0 bg-black/65" style={{ backdropFilter: "blur(6px)" }} onClick={onClose} />
-      <div className="relative w-full bg-[#0D1B4B] rounded-t-3xl pt-3 pb-8 z-10 flex flex-col" style={{ maxHeight: "82vh", boxShadow: "0 -8px 40px rgba(0,0,0,0.5)" }}>
-        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-3 flex-shrink-0" />
+    <SheetShell ariaLabel="Ownership" testId="sheet-ownership" onClose={onClose}>
         <div className="flex items-center justify-between px-5 mb-1 flex-shrink-0">
           <div>
             <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Ownership</p>
             <h3 className="text-white font-semibold text-base mt-0.5">{album.title}</h3>
           </div>
-          <button type="button" onClick={onClose} className="text-[#319ED8] text-sm font-semibold" data-testid="button-close-ownership">Done</button>
+          <SheetClose data-testid="button-close-ownership" />
         </div>
         <p className="px-5 text-white/50 text-xs mb-4">Held by {ownerName} · {owned.length} cop{owned.length === 1 ? "y" : "ies"}</p>
 
@@ -1100,8 +1113,7 @@ function OwnershipSheet({
         </div>
 
         <p className="px-5 mt-3 text-white/35 text-[11px] text-center">Tap a row to view that copy's provenance.</p>
-      </div>
-    </div>
+    </SheetShell>
   );
 }
 
@@ -1496,8 +1508,25 @@ export function SheetShell({
   variant?: "bottom" | "full" | "fixed";
   children: ReactNode;
 }) {
+  const reduce = !!useReducedMotion();
+  const [closing, setClosing] = useState(false);
+  // Drill-down sheets pass a `final` action to the X so it tears the whole
+  // sheet stack down once the slide-out finishes; everything else just runs
+  // the sheet's own `onClose` (pop one level).
+  const finalRef = useRef<(() => void) | null>(null);
+
+  // Self-managed close: every dismiss path (X, back chevron, Escape,
+  // backdrop tap) flips `closing`, which retargets the slide + scrim fade.
+  // `onAnimationComplete` then runs the real unmount callback. This lets
+  // call sites keep their plain `{cond && <Sheet/>}` mount — no per-site
+  // AnimatePresence needed — while still animating the close.
+  const dismiss = useCallback((final?: () => void) => {
+    finalRef.current = final ?? null;
+    setClosing(true);
+  }, []);
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") dismiss(); };
     window.addEventListener("keydown", onKey);
     // Lock the underlying page from scrolling while the sheet is open.
     // Without this, iOS passes touch-drag through to the AlbumDetail page
@@ -1512,7 +1541,7 @@ export function SheetShell({
       document.body.style.overflow = prevOverflow;
       document.body.style.touchAction = prevTouch;
     };
-  }, [onClose]);
+  }, [dismiss]);
 
   const isFull = variant === "full";
   const isFixed = variant === "fixed";
@@ -1533,55 +1562,59 @@ export function SheetShell({
   }
 
   return (
-    <div
-      className={`fixed inset-0 z-[78] flex justify-center ${isFull ? "items-stretch" : "items-end"}`}
-      role="dialog"
-      aria-modal="true"
-      aria-label={ariaLabel}
-      data-testid={testId}
-    >
-      {/* Backdrop dim — only behind a bottom-sheet. Full-screen sheets cover the
-          entire viewport edge-to-edge, Apple-style, so no backdrop is needed.
-          A solid dim (no live blur) — backdrop-filter re-samples on every paint
-          frame, which made the visible peek above the sheet wobble during
-          touch-drag on iOS. The sheet background below is already ~98% opaque
-          so the underlying page barely shows through anyway. */}
-      {!isFull && <div className="absolute inset-0 bg-black/70" onClick={onClose} />}
+    <SheetDismissProvider value={dismiss}>
       <div
-        className={containerClass}
-        style={{ background: "rgb(20, 24, 48)", boxShadow: isFull ? "none" : "0 -16px 40px rgba(0,0,0,0.6)" }}
+        className={`fixed inset-0 z-[78] flex justify-center ${isFull ? "items-stretch" : "items-end"}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={ariaLabel}
+        data-testid={testId}
       >
-        {!isFull && <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />}
-        {children}
+        {/* Backdrop dim — only behind a bottom-sheet. Full-screen sheets cover
+            the entire viewport edge-to-edge, Apple-style, so no backdrop is
+            needed. A solid dim (no live blur) — backdrop-filter re-samples on
+            every paint frame, which made the visible peek above the sheet
+            wobble during touch-drag on iOS. The sheet background below is
+            already ~98% opaque so the underlying page barely shows through. */}
+        {!isFull && (
+          <motion.div
+            className="absolute inset-0 bg-black/70"
+            onClick={() => dismiss()}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: closing ? 0 : 1 }}
+            transition={scrimFade(reduce)}
+          />
+        )}
+        <motion.div
+          className={containerClass}
+          style={{ background: "rgb(20, 24, 48)", boxShadow: isFull ? "none" : "0 -16px 40px rgba(0,0,0,0.6)" }}
+          initial={{ y: "100%" }}
+          animate={{ y: closing ? "100%" : 0 }}
+          transition={closing ? sheetClose(reduce) : sheetOpen(reduce)}
+          onAnimationComplete={() => { if (closing) (finalRef.current ?? onClose)(); }}
+        >
+          {!isFull && <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />}
+          {children}
+        </motion.div>
       </div>
-    </div>
+    </SheetDismissProvider>
   );
 }
 
 export function SheetHeader({ eyebrow, title, subtitle, onClose }: { eyebrow?: string; title: string; subtitle?: string; onClose: () => void }) {
+  const dismiss = useSheetDismiss();
   return (
     <div className="flex items-start gap-3 px-5 pb-4">
       <div className="flex-1 min-w-0">
-        {eyebrow && <p className="text-[#319ED8] text-[11px] font-semibold uppercase tracking-wider mb-1">{eyebrow}</p>}
+        {eyebrow && <p className="text-[color:var(--brand-blue)] text-xs font-semibold uppercase tracking-wider mb-1">{eyebrow}</p>}
         <h2 className="text-white text-[22px] font-bold leading-tight tracking-tight">{title}</h2>
         {subtitle && <p className="text-[15px] mt-1 leading-snug" style={{ color: "rgba(235,235,245,0.55)" }}>{subtitle}</p>}
       </div>
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close"
-        className="w-11 h-11 -m-1.5 rounded-full flex items-center justify-center text-white/70 active:opacity-70 flex-shrink-0"
+      <SheetClose
+        onClick={dismiss ? () => dismiss() : onClose}
+        className="-m-1.5"
         data-testid="button-sheet-close-x"
-      >
-        <span
-          className="flex items-center justify-center"
-          style={{ width: 32, height: 32, borderRadius: 9999, background: "rgba(255,255,255,0.08)" }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </span>
-      </button>
+      />
     </div>
   );
 }
@@ -1900,15 +1933,10 @@ function PerformerSheet({
           contextual subtitle. The close button sits in the safe top-right
           corner clear of the avatar. */}
       <div className="relative flex-shrink-0">
-        <IconButton
-          variant="glass"
-          label="Close"
-          onClick={onClose}
+        <SheetClose
           className="absolute top-1 right-4 z-10"
           data-testid="button-performer-close"
-        >
-          <XIcon strokeWidth={2.5} />
-        </IconButton>
+        />
         <div className="flex flex-col items-center text-center px-5 pt-3 pb-5">
           <PersonAvatar person={person} size={120} />
           <h2 className="text-white text-[26px] font-bold leading-tight tracking-tight mt-4" data-testid="text-performer-name">{person.name}</h2>
@@ -2241,6 +2269,16 @@ export function PersonDetailSheet({
     });
   };
 
+  // Close-all here dismisses the drill-down stack AND the person sheet that
+  // hosts it, so the X always returns to wherever the person sheet opened
+  // from (back chevron still pops one level).
+  const closeAllSheets = () => {
+    setInAppBrowser(null);
+    setVendorSheet(null);
+    setInstrumentSheet(null);
+    onClose();
+  };
+
   if (inAppBrowser) {
     return (
       <InAppBrowserSheet
@@ -2248,6 +2286,7 @@ export function PersonDetailSheet({
         title={inAppBrowser.title}
         logoUrl={inAppBrowser.logoUrl}
         onClose={() => setInAppBrowser(null)}
+        onCloseAll={closeAllSheets}
       />
     );
   }
@@ -2264,6 +2303,7 @@ export function PersonDetailSheet({
           setInstrumentSheet({ instrument: inst });
         }}
         onClose={() => setVendorSheet(null)}
+        onCloseAll={closeAllSheets}
       />
     );
   }
@@ -2278,6 +2318,7 @@ export function PersonDetailSheet({
         onOpenInAppBrowser={openVendorInAppBrowser}
         onOpenVendor={(vendor) => setVendorSheet({ vendor, instrument: instrumentSheet.instrument })}
         onClose={() => setInstrumentSheet(null)}
+        onCloseAll={closeAllSheets}
       />
     );
   }
@@ -2421,6 +2462,7 @@ function InstrumentSheet({
   onOpenInAppBrowser,
   onOpenVendor,
   onClose,
+  onCloseAll,
 }: {
   instrument: Instrument;
   tuningNotes?: string;
@@ -2430,7 +2472,9 @@ function InstrumentSheet({
   onOpenInAppBrowser: (b: { url: string; title: string; logoUrl?: string }) => void;
   onOpenVendor: (vendor: InstrumentVendor) => void;
   onClose: () => void;
+  onCloseAll: () => void;
 }) {
+  const dismiss = useSheetDismiss();
   // SuperCredits-derived list of artists who've played this instrument on
   // a track. Anchored on instrument.id (not vendor.id), so it works for
   // both demo instruments and real DB rows. Empty list → section hidden.
@@ -2514,16 +2558,7 @@ function InstrumentSheet({
         className="flex-shrink-0 flex items-center justify-between px-3 pb-2"
         style={{ background: "rgba(20,24,48,0.85)", backdropFilter: "blur(20px) saturate(180%)", paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
       >
-        <IconButton
-          variant="glass"
-          label="Back"
-          onClick={onClose}
-          data-testid="button-instrument-close"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M15 6l-6 6 6 6" />
-          </svg>
-        </IconButton>
+        <SheetBack data-testid="button-instrument-close" />
         <div className="flex items-center gap-2">
           <IconButton
             variant="glass"
@@ -2556,6 +2591,10 @@ function InstrumentSheet({
               <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
             </svg>
           </IconButton>
+          <SheetClose
+            onClick={() => (dismiss ? dismiss(onCloseAll) : onCloseAll())}
+            data-testid="button-instrument-closeall"
+          />
         </div>
       </div>
 
@@ -2782,6 +2821,7 @@ function VendorSheet({
   onOpenInAppBrowser,
   onOpenInstrument,
   onClose,
+  onCloseAll,
 }: {
   vendor: InstrumentVendor;
   instrument: Instrument;
@@ -2790,7 +2830,9 @@ function VendorSheet({
   onOpenInAppBrowser: (b: { url: string; title: string; logoUrl?: string }) => void;
   onOpenInstrument: (instrument: Instrument) => void;
   onClose: () => void;
+  onCloseAll: () => void;
 }) {
+  const dismiss = useSheetDismiss();
   const [tab, setTab] = useState<"about" | "instruments" | "artists">("about");
 
   // One-shot fetch of the vendor profile bundle (vendor entity + all
@@ -2898,16 +2940,7 @@ function VendorSheet({
               the chrome matches the rest of the player shell (Artist /
               Album hero use the same primitive at the same size). 44px
               is the Apple HIG floor and the design-system rule. */}
-          <IconButton
-            variant="dimmed"
-            label="Back"
-            onClick={onClose}
-            data-testid="button-vendor-close"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M15 6l-6 6 6 6" />
-            </svg>
-          </IconButton>
+          <SheetBack variant="dimmed" data-testid="button-vendor-close" />
           <div className="flex items-center gap-2">
             {/* Bookmark — saves the vendor to the user's bookmark list
                 (localStorage). Filled when active. */}
@@ -2949,6 +2982,11 @@ function VendorSheet({
                 <path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z" />
               </svg>
             </IconButton>
+            <SheetClose
+              variant="dimmed"
+              onClick={() => (dismiss ? dismiss(onCloseAll) : onCloseAll())}
+              data-testid="button-vendor-closeall"
+            />
           </div>
         </div>
 
@@ -3230,12 +3268,15 @@ function InAppBrowserSheet({
   title,
   logoUrl,
   onClose,
+  onCloseAll,
 }: {
   url: string;
   title: string;
   logoUrl?: string;
   onClose: () => void;
+  onCloseAll: () => void;
 }) {
+  const dismiss = useSheetDismiss();
   // Validate https. We refuse to render anything we can't safely embed/open.
   const safeUrl = (() => {
     try {
@@ -3259,16 +3300,7 @@ function InAppBrowserSheet({
         className="sticky top-0 z-20 flex items-center gap-2 px-3 py-2 border-b border-white/8"
         style={{ background: "rgba(20,24,48,0.92)", backdropFilter: "blur(20px) saturate(180%)" }}
       >
-        <IconButton
-          variant="glass"
-          label="Close"
-          onClick={onClose}
-          data-testid="button-inapp-close"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </IconButton>
+        <SheetBack data-testid="button-inapp-close" />
 
         <div className="flex-1 flex items-center gap-2 min-w-0">
           {logoUrl && (
@@ -3294,6 +3326,11 @@ function InAppBrowserSheet({
             <path d="M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" />
           </svg>
         </IconButton>
+
+        <SheetClose
+          onClick={() => (dismiss ? dismiss(onCloseAll) : onCloseAll())}
+          data-testid="button-inapp-closeall"
+        />
       </div>
 
       {/* Preview card. Virtually every vendor site (Fender, Reverb, Sweetwater,
@@ -3577,16 +3614,10 @@ export function AlbumBonusContent({ albumId }: { albumId: string }) {
         >
           <div className="flex items-center justify-between px-4 pt-12 pb-3">
             <h3 className="text-white text-[22px] font-bold tracking-tight">Videos</h3>
-            <IconButton
-              variant="glass"
-              label="Close"
+            <SheetClose
               onClick={() => setShowAllVideos(false)}
               data-testid="button-close-all-album-videos"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M6 6l12 12M18 6L6 18" />
-              </svg>
-            </IconButton>
+            />
           </div>
           <div className="flex-1 overflow-y-auto px-5 pb-10">
             <div className="flex flex-col gap-5">
@@ -3630,16 +3661,11 @@ export function AlbumBonusContent({ albumId }: { albumId: string }) {
           data-testid="overlay-album-photo"
         >
           <div className="flex justify-end p-4">
-            <IconButton
+            <SheetClose
               variant="dimmed"
-              label="Close"
               onClick={() => setActivePhoto(null)}
               data-testid="button-close-album-photo"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M6 6l12 12M18 6L6 18" />
-              </svg>
-            </IconButton>
+            />
           </div>
           <div className="flex-1 flex items-center justify-center px-4">
             <img

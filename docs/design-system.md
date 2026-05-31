@@ -72,11 +72,23 @@ Any trash / delete / "remove forever" button must pop a confirmation sheet namin
 
 `client/src/lib/motion.ts` is the single source of truth for the player's motion language so every overlay opens and closes the same way:
 
-- `sheetOpen(reduce)` / `sheetClose(reduce)` — bottom-sheet slide. Springy overshoot on open, quick eased settle on close. Every fan bottom sheet animates `translateY(100% → 0)` on its panel and pairs a `scrimFade(reduce)` opacity fade on the dim backdrop. Wrap the sheet's **call site** in framer-motion `<AnimatePresence>` (single conditional child) so the close animation actually plays on unmount. Reference: `HowToPlaySheet` in `ArtistDetail.tsx`, `PlaylistPickerSheet`, `StreamServicePickerSheet`.
+- `sheetOpen(reduce)` / `sheetClose(reduce)` — bottom-sheet slide. Springy overshoot on open, quick eased settle on close. Every fan bottom sheet animates `translateY(100% → 0)` on its panel and pairs a `scrimFade(reduce)` opacity fade on the dim backdrop. The shared `SheetShell` (in `AlbumDetail.tsx`) **self-manages** its close: it holds a `closing` flag and runs the final unmount in `onAnimationComplete`, so its call sites do **not** need a framer-motion `<AnimatePresence>` wrapper. Hand-rolled sheets that don't use `SheetShell` still wrap their **call site** in `<AnimatePresence>` (single conditional child) so the close animation plays on unmount. Reference: `HowToPlaySheet` in `ArtistDetail.tsx`, `PlaylistPickerSheet`, `StreamServicePickerSheet`.
 - `popBounce(reduce)` — small anchored popovers/menus (e.g. the Player title "Go to Album / Artist" menu).
 - `PRESS_SCALE` (0.96) — the shared tap "give" for fan tappable surfaces; admin stays press-flat (see below).
 - All helpers take a `reduce` arg from `useReducedMotion()` and fall back to a short non-overshoot tween — always pass it so call sites honor the OS setting for free.
 - **Never animate a new `backdrop-filter` layer.** Animate transform/opacity only; keep one blur surface per overlay (dim-only scrim + one frosted panel) per the iOS-WebKit stacked-blur memo.
+
+## Sheet chrome — one close button, one back chevron, room at the top
+
+Every fan-facing mobile sheet dismisses the same way (Apple HIG / Apple-Card pattern). The shared primitives live in `client/src/components/ui/SheetChrome.tsx`:
+
+- **`SheetClose`** — the *one* circular gray "X" chip used to dismiss any fan sheet. It renders through the `glass` `IconButton` (44pt target, Apple-Card-sized chip) with a `currentColor` X glyph. Prefer this X over a translated "Done" / "Cancel" string — it survives Android + localization unchanged. Place it **top-right**.
+- **`SheetBack`** — the matching back chevron for **drill-down** sheets. Drill-downs (instrument → vendor → in-app browser) show `SheetBack` **top-left** (pops one level) *and* `SheetClose` **top-right** (tears the whole stack down).
+- **`SHEET_SAFE_TOP`** — the shared top inset (`safe-area-inset-top + 12px`) so the close chip clears the device safe-area and leaves generous "room at the top" before content begins.
+- **Self-managed dismiss** — `SheetShell` exposes its animated dismiss through `SheetDismissContext`; `SheetClose` / `SheetBack` (and any in-sheet control via `useSheetDismiss()`) auto-wire to it so the close animation plays instead of yanking the sheet off-screen. Pass an explicit `onClick` only for sheets that aren't inside a `SheetShell` (standalone overlays, page-level pickers).
+- **Grabber** — resizable / picker bottom sheets keep the small grabber strip; the X chip is still the primary affordance. Pickers (`PlaylistPickerSheet`, `StreamServicePickerSheet`) keep grabber + tap-scrim and don't need a forced X.
+- **HIG exceptions — keep `Cancel` / `Done`** only where the user is *editing or confirming discardable changes*: new-playlist / rename dialogs, phone-verify OTP entry, the Account real-email capture, and destructive confirms (e.g. "Clear all recents?" → Cancel / Clear All). Everything else prefers the X.
+- **Light / hero surfaces** (the frosted light `HowToPlaySheet`, the GoodDeed certificate over vibrant art) keep a contrast-appropriate chip (dark glyph on light) but follow the same size / position / top-inset standard.
 
 ## Admin tokens — reach brand colors through CSS vars, not hex
 
