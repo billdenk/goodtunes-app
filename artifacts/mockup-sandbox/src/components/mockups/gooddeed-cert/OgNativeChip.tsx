@@ -34,8 +34,8 @@ export function OgNativeChip() {
               boxShadow: "0 4px 14px rgba(0,0,0,0.45)",
             }}
           >
-            <img src={LOGO} alt="GoodTunes" style={{ height: 28, width: "auto", display: "block" }} />
-            <span style={{ width: 1, height: 24, background: "rgba(255,255,255,0.3)" }} />
+            <img src={LOGO} alt="GoodTunes" style={{ height: 38, width: "auto", display: "block" }} />
+            <span style={{ width: 1, height: 30, background: "rgba(255,255,255,0.3)" }} />
             <span className="font-bold text-white" style={{ fontSize: 24, letterSpacing: 0.2 }}>
               #07
             </span>
