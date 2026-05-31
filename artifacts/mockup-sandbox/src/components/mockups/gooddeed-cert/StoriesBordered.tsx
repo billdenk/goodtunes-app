@@ -41,7 +41,7 @@ function nameFontSize(name: string): number {
   return 15;
 }
 
-export function BorderedStoryCard({ overlay }: { overlay?: ReactNode }) {
+export function BorderedStoryCard({ overlay, radius = 0 }: { overlay?: ReactNode; radius?: number }) {
   const { art, ownerPhoto, album, ownerName, certNumStr } = data;
 
   // Bottom caption: one line by default ("Album by Artist #NN"). If that runs too
@@ -58,7 +58,7 @@ export function BorderedStoryCard({ overlay }: { overlay?: ReactNode }) {
         width: "min(92vw, 340px)",
         aspectRatio: "9 / 16",
         border: `15px solid ${GOODTUNES_ORANGE}`,
-        borderRadius: 0, // true rectangle — square corners
+        borderRadius: radius, // 0 = true rectangle; >0 rounds the card (concentric, IG-style)
         backgroundColor: "var(--brand-bg)",
         boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
       }}
@@ -142,9 +142,12 @@ export function BorderedStoryCard({ overlay }: { overlay?: ReactNode }) {
 }
 
 export function StoriesBordered() {
+  // Optional ?r=NN drives the card corner radius so we can A/B rounded variants
+  // on the canvas without extra files. Defaults to 0 (true rectangle).
+  const r = Number(new URLSearchParams(window.location.search).get("r") ?? "0") || 0;
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "#05030f" }}>
-      <BorderedStoryCard />
+      <BorderedStoryCard radius={r} />
     </div>
   );
 }
