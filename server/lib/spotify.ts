@@ -544,3 +544,130 @@ export async function searchTrackCandidates(rawQuery: string, limit = 5): Promis
   return items.map(mapSpotifyTrack).filter((t): t is SpotifyTrackMatch => t !== null).slice(0, limit);
 }
 
+// Task #845 — per-release Spotify album deep-link resolution.
+//
+// Apple Music imports capture a real per-release Apple URL and (via
+// Odesli, Task #843) Tidal/Deezer/Pandora. Spotify is the one big
+// service Odesli doesn't reliably drive here, but we already have
+// client-credentials plumbing, so we resolve the exact Spotify album URL
+// with the Web API instead of falling back to a per-release search.
+export type SpotifyAlbumMatch = {
+  id: string;
+  name: string;
+  spotifyUrl: string;
+  artistNames: string[];
+  releaseDate: string | null;
+  totalTracks: number | null;
+};
+
+function mapSpotifyAlbum(a: any): SpotifyAlbumMatch | null {
+  const spotifyUrl = a?.external_urls?.spotify;
+  if (!a?.id || !spotifyUrl) return null;
+  return {
+    id: String(a.id),
+    name: String(a.name ?? ""),
+    spotifyUrl: String(spotifyUrl),
+    artistNames: Array.isArray(a.artists)
+      ? a.artists.map((x: any) => String(x?.name ?? "")).filter(Boolean)
+      : [],
+    releaseDate: a?.release_date ? String(a.release_date) : null,
+    totalTracks: typeof a?.total_tracks === "number" ? a.total_tracks : null,
+  };
+}
+
+// Resolve the canonical open.spotify.com album URL for a release by UPC
+// (exact, preferred when available) or by artist + title. Returns null
+// when Spotify isn't configured, on any upstream failure, or when no
+// confident match is found — callers keep the per-release search
+// fallback in that case. Best-effort: never throws.
+export async function resolveSpotifyAlbumUrl(
+  artist: string,
+  title: string,
+  opts: { upc?: string | null } = {},
+): Promise<string | null> {
+  if (!spotifyConfigured()) return null;
+  const t = (title ?? "").trim();
+  if (!t) return null;
+  const ar = (artist ?? "").trim();
+
+  // UPC is an exact barcode identifier — when we have one, trust it over
+  // a fuzzy name search. Spotify's search supports the `upc:` filter.
+  const upc = (opts.upc ?? "").trim();
+  if (upc) {
+    const url = `${SEARCH_URL}?q=${encodeURIComponent(`upc:${upc}`)}&type=album&limit=1`;
+    const json = await fetchSpotifyJson(url);
+    const hit = ((json?.albums?.items ?? []) as any[])
+      .map(mapSpotifyAlbum)
+      .find((a): a is SpotifyAlbumMatch => a !== null);
+    if (hit) return hit.spotifyUrl;
+    // No UPC hit — fall through to the name search below.
+  }
+
+  // Field-scoped query for precision; we still verify the result
+  // client-side before trusting it (Spotify's relevance ranking alone
+  // will happily return a different artist's same-titled album).
+  const q = ar ? `album:${t} artist:${ar}` : `album:${t}`;
+  const url = `${SEARCH_URL}?q=${encodeURIComponent(q)}&type=album&limit=10`;
+  const json = await fetchSpotifyJson(url);
+  const rows = ((json?.albums?.items ?? []) as any[])
+    .map(mapSpotifyAlbum)
+    .filter((a): a is SpotifyAlbumMatch => a !== null);
+  if (rows.length === 0) return null;
+
+  const wantTitle = normalize(t);
+  const titleMatches = rows.filter((a) => normalize(a.name) === wantTitle);
+  if (titleMatches.length === 0) return null;
+
+  // Without a known artist, the best we can do is the top exact-title
+  // hit. With one, require an artist match so we don't link a same-named
+  // album by someone else. Apple's artist string may carry featured
+  // guests ("Drake feat. Rihanna") while Spotify lists only the primary
+  // ("Drake"), so accept containment either way, not just equality.
+  const wantArtist = normalize(ar);
+  if (!wantArtist) return titleMatches[0].spotifyUrl;
+  const match = titleMatches.find((a) =>
+    a.artistNames.some((n) => {
+      const nn = normalize(n);
+      return nn.length > 0 && (nn === wantArtist || wantArtist.includes(nn) || nn.includes(wantArtist));
+    }),
+  );
+  return match?.spotifyUrl ?? null;
+}
+
+// Batched Spotify album resolution for the discography import, where an
+// artist can have dozens of releases. Bounded concurrency + a total
+// wall-clock budget so a big pull can't hang the save or hammer the
+// Spotify API; releases left unresolved keep the fan-side search
+// fallback. Keyed by the caller-supplied `key` (the iTunes collection
+// id) so results can be matched back. Best-effort: an individual failure
+// just leaves that key unset.
+export async function resolveSpotifyAlbumUrlsForReleases(
+  items: Array<{ key: string; artist: string; title: string; upc?: string | null }>,
+  opts: { concurrency?: number; totalBudgetMs?: number } = {},
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!spotifyConfigured() || items.length === 0) return out;
+  const concurrency = Math.max(1, opts.concurrency ?? 3);
+  const totalBudgetMs = opts.totalBudgetMs ?? 25_000;
+  const deadline = Date.now() + totalBudgetMs;
+  let cursor = 0;
+
+  async function worker(): Promise<void> {
+    while (cursor < items.length && Date.now() < deadline) {
+      const idx = cursor++;
+      const it = items[idx];
+      try {
+        const url = await resolveSpotifyAlbumUrl(it.artist, it.title, { upc: it.upc });
+        if (url) out.set(it.key, url);
+      } catch {
+        /* best-effort — leave this key unresolved */
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+  );
+  return out;
+}
+

@@ -26,7 +26,7 @@ import {
 } from "@shared/jobAlerts";
 import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
 import { geoFromRequest, forwardToPostHog, isPostHogEnabled } from "./analytics";
-import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, fetchSpotifyTrackByUrl, searchTrackCandidates, type SpotifyArtistCandidate } from "./lib/spotify";
+import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, fetchSpotifyTrackByUrl, searchTrackCandidates, resolveSpotifyAlbumUrl, resolveSpotifyAlbumUrlsForReleases, type SpotifyArtistCandidate } from "./lib/spotify";
 import { resolveStreamingLinksFromAppleCollectionId, resolveStreamingLinksForCollections, hasAnyResolvedLink } from "./lib/streamingLinks";
 
 const scryptAsync = promisify(scrypt);
@@ -5699,6 +5699,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // fallback in place.
     const extraLinks = await resolveStreamingLinksFromAppleCollectionId(collectionId, country);
 
+    // Task #845 — resolve the exact Spotify album URL via the Spotify Web
+    // API (Odesli doesn't drive Spotify here). Best-effort: a miss leaves
+    // the per-release search fallback in place, so never fail the import
+    // over a Spotify lookup.
+    let resolvedSpotifyUrl: string | null = null;
+    try {
+      resolvedSpotifyUrl = await resolveSpotifyAlbumUrl(
+        artistName,
+        String(collection.collectionName || ""),
+      );
+    } catch (e: any) {
+      console.warn("[spotify] album resolve failed", e?.message);
+    }
+
     const album = await storage.createAlbum({
       title: String(collection.collectionName || "Untitled album"),
       artist: artistName || "Unknown artist",
@@ -5709,7 +5723,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       labelId: null,
       isHidden: false,
       appleMusicUrl: String(collection.collectionViewUrl || url),
-      spotifyUrl: null,
+      spotifyUrl: resolvedSpotifyUrl,
       tidalUrl: extraLinks.tidalUrl,
       qobuzUrl: extraLinks.qobuzUrl,
       deezerUrl: extraLinks.deezerUrl,
@@ -11761,6 +11775,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       } catch (e: any) {
         // Never fail the save over an enrichment miss.
         console.warn("[streamingLinks] discography resolve failed", e?.message);
+      }
+    }
+
+    // Task #845 — resolve the exact Spotify album URL (Web API, not
+    // Odesli) for releases that don't already carry one. Keyed by Apple
+    // collection id; matched by the artist (this Person's name) + title.
+    // Best-effort + bounded so a big discography can't hang the save.
+    const needSpotify = norm.filter(
+      (r: typeof norm[number]) => /^\d+$/.test(r.collectionId) && !r.spotifyUrl,
+    );
+    if (needSpotify.length > 0) {
+      try {
+        const person = await storage.getPersonById(id);
+        const artistName = person?.name ?? "";
+        const resolvedSpotify = await resolveSpotifyAlbumUrlsForReleases(
+          needSpotify.map((r: typeof norm[number]) => ({
+            key: r.collectionId,
+            artist: artistName,
+            title: r.name,
+          })),
+        );
+        for (const r of norm) {
+          const url = resolvedSpotify.get(r.collectionId);
+          if (url) r.spotifyUrl = r.spotifyUrl ?? url;
+        }
+      } catch (e: any) {
+        // Never fail the save over a Spotify enrichment miss.
+        console.warn("[spotify] discography album resolve failed", e?.message);
       }
     }
 
