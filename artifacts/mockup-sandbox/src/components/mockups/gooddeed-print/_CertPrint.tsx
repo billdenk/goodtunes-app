@@ -11,6 +11,9 @@
 import "./_group.css";
 
 const ART = "/__mockup/images/album-california-way.png";
+// The round cert avatar is the ARTIST (a profile photo), NOT the album artwork —
+// every printed GoodDeed shows who made the record, not a second copy of the cover.
+const ARTIST = "/__mockup/images/artist-fernando-perdomo.png";
 const LOGO = "/__mockup/images/goodtunes-logo-white.png";
 const SIG = "/__mockup/images/will-signature.png";
 
@@ -112,10 +115,13 @@ export function CertPrint({
   layout,
   matBoxIn,
   sample,
+  artistPhoto,
 }: {
   paper: Paper;
   frame: Frame;
   art?: string;
+  // The round avatar's artist profile photo (defaults to the sample artist).
+  artistPhoto?: string;
   insetIn?: number;
   bleedIn?: number;
   // [widthIn, heightIn] of a real mat/frame window, drawn centered on the sheet
@@ -133,6 +139,7 @@ export function CertPrint({
   sample?: Partial<CertSample>;
 }) {
   const artSrc = art ?? ART;
+  const avatarSrc = artistPhoto ?? ARTIST;
   const S: CertSample = { ...SAMPLE, ...sample };
   const headline = `This GoodDeed\u00AE certifies that ${S.recipient} owns no.\u00A0${S.num} of ${S.title}.`;
   // A4 reads this as one naturally-wrapping block (its provenance never sits
@@ -196,7 +203,6 @@ export function CertPrint({
   // Letter footnote breathing room + QR lock-up alignment (consumed below in
   // rightColumn and the Letter leftBlock):
   const footBottomGap = 9;     // pt the provenance footnote rises off the band bottom (off the orange border)
-  const letterCreditMt = -4;   // pt the signature credit tucks up under the squiggle (a slight overlap is intentional)
   const qrCaptionBottomRel = pad + footBottomGap - 5; // drop the QR+caption lock-up so the caption baseline lands on the footnote's last line
 
   const isA4 = (layout ?? paper) === "a4";
@@ -258,7 +264,7 @@ export function CertPrint({
           background: "#1A2052",
         }}
       >
-        <img src={artSrc} alt={S.artist} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+        <img src={avatarSrc} alt={S.artist} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ color: "#FFFFFF", fontSize: px(10), fontFamily: "Helvetica, Arial, sans-serif", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -291,14 +297,16 @@ export function CertPrint({
     </div>
   );
 
-  // ── Letter geometry: headline + signature + footnote all indent to `bodyX`
-  //    (the column under the artist name). The headline and signature share ONE
-  //    flowing container anchored at headlineYRel, so the signature always sits
-  //    directly under the headline — one line or two — and can never collide
-  //    with a wrapped headline or the bottom footnote, regardless of recipient
-  //    or title length (see LetterBorderThinLong). The signature PNG carries
-  //    transparent top padding, so sigGap tucks the visible squiggle close
-  //    under the headline. Footnote stays bottom-anchored.
+  // ── Letter geometry: headline + signature + the credit/footnote lock-up all
+  //    indent to `bodyX` (the column under the artist name). The headline +
+  //    signature squiggle flow from headlineYRel (top-anchored, so the squiggle
+  //    always sits directly under the headline — one line or two). The William
+  //    credit + provenance footnote are a SEPARATE bottom-anchored lock-up off
+  //    the orange border, so they always keep their breathing space; when a
+  //    2-line headline pushes the squiggle down it simply overlaps the credit's
+  //    top (intentional) instead of shoving the footnote past the border (see
+  //    LetterBorderThinLong). The PNG carries transparent top padding, so sigGap
+  //    tucks the visible squiggle close under the headline.
   const bodyXRel = leftColLeftRel + avatarSize + 10;
   const bodyW = leftColRightRel - bodyXRel;
   const headlineYRel = safeTopRel + avatarSize + 5;
@@ -331,9 +339,10 @@ export function CertPrint({
       <div style={{ marginLeft: px(avatarSize + 10), marginTop: px(6) }}>{makeSignatureBlock(2)}</div>
     </div>
   ) : (
-    // Letter: title row top-left; headline + fixed signature slot indented to
-    // bodyX under the artist name; provenance demoted to a bottom footnote
-    // sharing the QR caption baseline.
+    // Letter: title row top-left; headline + signature squiggle flow from the top
+    // under the artist name; the William credit + provenance footnote sit as ONE
+    // bottom-anchored lock-up off the orange border, its last line sharing the QR
+    // caption baseline.
     <>
       <div
         style={{
@@ -345,15 +354,15 @@ export function CertPrint({
       >
         {titleRow}
       </div>
+      {/* Headline + signature squiggle, top-anchored under the artist name. The
+          squiggle is free to overlap the credit lock-up below when the headline
+          wraps to two lines (intentional). */}
       <div
         style={{
           position: "absolute",
           left: px(bodyXRel),
           top: px(headlineYRel),
           width: px(bodyW),
-          height: px(safeBottomRel - headlineYRel - footBottomGap),
-          display: "flex",
-          flexDirection: "column",
         }}
       >
         <div
@@ -367,13 +376,28 @@ export function CertPrint({
         >
           {headline}
         </div>
-        <div style={{ marginTop: px(sigGap) }}>{makeSignatureBlock(letterCreditMt)}</div>
-        {/* marginTop:auto bottom-anchors the footnote on the QR caption baseline
-            when there's room, and lets it flow up under the signature (never
-            overlapping) when a 2-line headline eats the slack. */}
+        <img
+          src={SIG}
+          alt="William E. Denk signature"
+          style={{ width: px(110), display: "block", marginTop: px(sigGap) }}
+        />
+      </div>
+      {/* William credit + provenance footnote: one bottom-anchored lock-up that
+          always keeps its breathing space off the orange border. */}
+      <div
+        style={{
+          position: "absolute",
+          left: px(bodyXRel),
+          bottom: px(pad + footBottomGap),
+          width: px(bodyW),
+        }}
+      >
+        <div style={{ color: "#FFFFFF", fontSize: px(6.5), fontFamily: "Helvetica, Arial, sans-serif" }}>
+          William E. Denk, CEO/Founder GoodTunes&reg;
+        </div>
         <div
           style={{
-            marginTop: "auto",
+            marginTop: px(3),
             color: "#9AA6CC",
             fontSize: px(6),
             fontFamily: "Helvetica, Arial, sans-serif",
@@ -448,10 +472,12 @@ export function CertStage({
   layout,
   matBoxIn,
   sample,
+  artistPhoto,
 }: {
   paper: Paper;
   frame: Frame;
   art?: string;
+  artistPhoto?: string;
   insetIn?: number;
   bleedIn?: number;
   frameRevealWin?: [number, number];
@@ -464,7 +490,7 @@ export function CertStage({
       className="min-h-screen flex items-center justify-center"
       style={{ background: "#E9EBF0", padding: 28 }}
     >
-      <CertPrint paper={paper} frame={frame} art={art} insetIn={insetIn} bleedIn={bleedIn} frameRevealWin={frameRevealWin} layout={layout} matBoxIn={matBoxIn} sample={sample} />
+      <CertPrint paper={paper} frame={frame} art={art} insetIn={insetIn} bleedIn={bleedIn} frameRevealWin={frameRevealWin} layout={layout} matBoxIn={matBoxIn} sample={sample} artistPhoto={artistPhoto} />
     </div>
   );
 }
