@@ -13,15 +13,26 @@ import {
 } from "@/components/search/views";
 
 /**
+ * Bottom offset shared by all three floating dock elements (collapsed
+ * puck, three-tab pillow, search/close toggle). Adds the device
+ * safe-area inset (iOS home indicator / in-app-browser chrome) plus
+ * 24px of breathing room so the dock visibly clears the bottom edge.
+ * Degrades to a flat 24px gap where the inset is 0 (desktop / non-notched).
+ * Keeping all three on this single value keeps them on one baseline.
+ */
+export const DOCK_BOTTOM = "calc(env(safe-area-inset-bottom, 0px) + 24px)";
+
+/**
  * Bottom padding every customer-shell scroll container must reserve so
  * content never slides under the floating nav + mini-player stack.
  *
- * The nav itself sits at `bottom-3` (12px), is ~64px tall (py-2 + pill),
- * and the mini-player floats ~79px above the bar. Together they occupy
- * ~155px of the viewport bottom — we round to 170px for a safe gutter
- * plus haptic breathing room on devices with a chunky home indicator.
+ * The nav sits at `DOCK_BOTTOM` (safe-area inset + 24px), is ~64px tall
+ * (py-2 + pill), and the mini-player floats ~79px above the bar.
+ * Together they occupy ~167px above the dock baseline — we reserve 182px
+ * for a safe gutter and grow it by the same safe-area inset the dock uses
+ * so content always scrolls fully clear of the raised dock.
  */
-export const NAV_CLEARANCE = 170;
+export const NAV_CLEARANCE = "calc(env(safe-area-inset-bottom, 0px) + 182px)";
 
 // Task #530 — Apple-style split nav: a labeled three-tab pillow on the
 // left (Collection · Playlists · Recents) + a standalone search circle
@@ -326,8 +337,8 @@ export function BottomNav() {
               type="button"
               onClick={() => setHidden(false)}
               aria-label={`${activeLabel} (expand navigation)`}
-              className="pointer-events-auto absolute bottom-3 left-3 flex items-center justify-center w-12 h-12 rounded-full text-[color:var(--brand-blue)]"
-              style={{ ...glassStyle, transformOrigin: "left center" }}
+              className="pointer-events-auto absolute left-3 flex items-center justify-center w-12 h-12 rounded-full text-[color:var(--brand-blue)]"
+              style={{ bottom: DOCK_BOTTOM, ...glassStyle, transformOrigin: "left center" }}
               initial={reduceMotion ? false : { scale: 0.6, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={reduceMotion ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
@@ -354,8 +365,9 @@ export function BottomNav() {
             <motion.nav
               key="nav-pillow"
               ref={pillowRef}
-              className="pointer-events-auto absolute bottom-3 left-3 flex items-center justify-around px-2 py-2 rounded-full"
+              className="pointer-events-auto absolute left-3 flex items-center justify-around px-2 py-2 rounded-full"
               style={{
+                bottom: DOCK_BOTTOM,
                 right: dockHVal + 20, // reserve the right circle + 8px gap
                 ...glassStyle,
                 transformOrigin: "left center",
@@ -392,7 +404,9 @@ export function BottomNav() {
           style={{
             // Top-anchored field (Task #770) — the toggle no longer needs
             // to dodge the keyboard, so it rests at the bottom dock.
-            bottom: 12,
+            // Shares DOCK_BOTTOM with the puck + pillow so all three stay
+            // on the same raised baseline above the browser chrome.
+            bottom: DOCK_BOTTOM,
             ...glassStyle,
           }}
           animate={{ width: toggleSize, height: toggleSize }}
