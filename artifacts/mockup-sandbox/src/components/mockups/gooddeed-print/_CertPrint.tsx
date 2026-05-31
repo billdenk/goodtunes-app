@@ -18,7 +18,7 @@ const SIG = "/__mockup/images/will-signature.png";
 const NAVY = "var(--brand-bg)";
 const ORANGE = "var(--brand-orange)";
 
-type Paper = "letter" | "a4" | "a5";
+type Paper = "letter" | "a4";
 type Frame = "navy" | "orange" | "bordered";
 
 const SAMPLE = {
@@ -39,8 +39,8 @@ const provenance =
 const subline = `${SAMPLE.genre} \u2022 GOODTUNES RELEASE ${SAMPLE.year}`;
 
 function dims(paper: Paper) {
-  const W = paper === "a4" ? 595.28 : paper === "a5" ? 419.53 : 612;
-  const H = paper === "a4" ? 841.89 : paper === "a5" ? 595.28 : 792;
+  const W = paper === "a4" ? 595.28 : 612;
+  const H = paper === "a4" ? 841.89 : 792;
   const matW = W * (2250 / 2550);
   const matH = H * (2850 / 3300);
   const matX = (W - matW) / 2;
