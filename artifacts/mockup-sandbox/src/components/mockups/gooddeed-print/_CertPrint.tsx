@@ -266,7 +266,7 @@ export function CertPrint({
   const bodyW = leftColRightRel - bodyXRel;
   const headlineYRel = safeTopRel + avatarSize + 5;
   const headLineH = 9.5 * 1.15; // ≈ Helvetica-Bold 9.5pt currentLineHeight (1 line)
-  const sigYRel = headlineYRel + headLineH * 1.6;
+  const sigYRel = headlineYRel + headLineH * 1.0;
   // QR/footnote shared baseline: server pins the caption 11pt above the band
   // bottom and lands the footnote's last line on that same baseline.
   const captionBottomRel = 11;
