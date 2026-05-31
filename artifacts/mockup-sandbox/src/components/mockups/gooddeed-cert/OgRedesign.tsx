@@ -8,10 +8,10 @@
 // Exports at 1200×630; previewed here at w = 600 with u = w/1200.
 import "./_group.css";
 
-const ART = "/__mockup/images/sample-album-art.png";
+const ART = "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png";
 const LOGO = "/__mockup/images/goodtunes-logo-white.png";
 
-const album = { title: "Wildflower", artist: "Marlowe Vance" };
+const album = { title: "Guitar as a Voice", artist: "Fernando Perdomo" };
 const ownerName = "Jordan Ellis";
 const certNumStr = "07";
 

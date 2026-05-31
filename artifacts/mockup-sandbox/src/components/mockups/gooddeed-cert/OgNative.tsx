@@ -8,7 +8,7 @@
 // This mock simulates the iMessage link bubble so the tradeoff is visible.
 import "./_group.css";
 
-const ART = "/__mockup/images/sample-album-art.png";
+const ART = "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png";
 
 export function OgNative() {
   const w = 560;
@@ -24,7 +24,7 @@ export function OgNative() {
         {/* Native caption bar drawn by the messaging app — plain text only */}
         <div style={{ background: "#2b2b2d", padding: "16px 18px 18px" }}>
           <p className="text-white font-bold leading-snug" style={{ fontSize: 21 }}>
-            Wildflower by Marlowe Vance
+            Guitar as a Voice by Fernando Perdomo
           </p>
           <p className="font-bold leading-snug" style={{ fontSize: 21, color: "rgba(255,255,255,0.55)" }}>
             Jordan Ellis owns No. 07 · GoodDeed®
