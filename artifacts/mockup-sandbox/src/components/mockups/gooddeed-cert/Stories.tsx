@@ -31,9 +31,15 @@ const album = { title: "Guitar as a Voice", artist: "Fernando Perdomo" };
 const ownerName = "Jordan Ellis";
 const certNumStr = "07";
 
-// Instagram-reserved bands (share of the 9:16 frame height).
+// Instagram-reserved bands (share of the 9:16 / 1080×1920 frame height), per
+// Meta's current (2026) spec:
+//   • TOP  ~250px = 13%  — progress bar + profile row (this is the floor).
+//   • BOTTOM ~250px = 13% for organic Stories, but the March-2026 UNIFIED
+//     Stories+Reels safe zone reserves ~320px ≈ 17% at the bottom (Reels
+//     caption/reply tray). We reserve 17% so the same asset is safe whether a
+//     fan posts it to Stories OR reshares it as a Reel.
 export const TOP_SAFE = "13%";
-export const BOTTOM_SAFE = "16%";
+export const BOTTOM_SAFE = "17%";
 
 // Full-bleed art height as a share of the card height.
 const ART_HEIGHT = "56%";

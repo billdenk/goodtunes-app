@@ -1,8 +1,11 @@
 // SAFE-ZONE STUDY of the GoodDeed Instagram Story. Renders the exact same
 // StoryCard from Stories.tsx (single source of truth — no layout drift) with
 // Instagram's own UI mocked ON TOP, so we can see what gets covered. The shaded
-// pink bands are the ~13% top / ~16% bottom strips Instagram reserves for its
-// chrome (profile row up top, "Send message" + reactions along the bottom).
+// pink bands are the strips Meta reserves for its chrome on a 1080×1920 frame
+// (2026 spec): TOP ~250px = 13% (progress bar + profile row) and BOTTOM ~320px
+// ≈ 17% — the March-2026 UNIFIED Stories+Reels reserve (organic Stories alone is
+// only ~250px/13%, but we design to the larger Reels tray so one asset is safe
+// in both placements).
 import "./_group.css";
 import { StoryCard, TOP_SAFE, BOTTOM_SAFE } from "./Stories";
 
@@ -34,7 +37,7 @@ function IgChrome() {
           <span className="text-white text-lg leading-none">×</span>
         </div>
         <span className="absolute right-2 top-1 text-[9px] font-bold tracking-wide" style={{ color: "rgba(255,84,112,0.95)" }}>
-          IG COVERS THIS
+          IG UI · ~250px (13%)
         </span>
       </div>
 
@@ -58,7 +61,7 @@ function IgChrome() {
           <polygon points="22 2 15 22 11 13 2 9 22 2" />
         </svg>
         <span className="absolute right-2 top-1 text-[9px] font-bold tracking-wide" style={{ color: "rgba(255,84,112,0.95)" }}>
-          IG COVERS THIS
+          IG UI · ~320px (17%, Stories+Reels)
         </span>
       </div>
     </>
