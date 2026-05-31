@@ -879,6 +879,17 @@ export const people = pgTable("people", {
   // join table.
   isGroup: boolean("is_group").notNull().default(false),
   groupKind: text("group_kind"),
+  // Task #824 — person-level creative-credit tags (the "many hats" case:
+  // Prince is artist + producer + writer + guitarist). Free-growing list
+  // of credit-role labels ("Artist", "Producer", "Writer", "Guitar", …)
+  // set explicitly from the multi-role person picker. This is the manual
+  // floor; the admin Person endpoint UNIONS these with roles derived from
+  // the person's actual track/album credits so a guitar credit on one
+  // song still surfaces on the profile without re-tagging. "Artist" here
+  // also drives the artist shape, same as `isArtistPromoted`. Distinct
+  // from ACCESS roles (admin/label/artist partner grants on `users.role`)
+  // — those gate the admin app; these are descriptive credits.
+  roles: text("roles").array().notNull().default(sql`'{}'::text[]`),
   // Task #490 — Mailing/shipping address for artist comp shipments and
   // outreach mail. Free-form formatted-address text written by the
   // shared AddressAutocompleteField; matches the `location` pattern on

@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { RolePicker, type AccessRoleOption } from "@/components/admin/RolePicker";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 // Task #421 — unified "+ Add ▾" trigger for partner-detail People
@@ -811,6 +812,14 @@ function AttachContactDialog(
   // for a press (manufacturer) admin invite; ignored by every other
   // partner kind. Staff get view + invite-artists only.
   const [level, setLevel] = useState<"owner_admin" | "staff">("owner_admin");
+  // Task #824 — creative credits picked up front so a partner contact can
+  // be marked artist/producer/etc. in the same step as the access grant,
+  // killing the old "add as admin → reopen → convert to artist" dead-end.
+  // `creativeRoles` is the editable floor (seeded from the picked person's
+  // existing tags so the PUT doesn't clobber them); `derivedRoles` is the
+  // read-only rollup from real track/album credits.
+  const [creativeRoles, setCreativeRoles] = useState<string[]>([]);
+  const [derivedRoles, setDerivedRoles] = useState<string[]>([]);
   // Operator-supplied/scraped photo carried through to the new Person so
   // the press invite link can show a face. Hydrated from a paste-a-URL
   // prefill in New Contact mode.
@@ -837,10 +846,27 @@ function AttachContactDialog(
     setEmail("");
     setPhone("");
     setLevel("owner_admin");
+    setCreativeRoles([]);
+    setDerivedRoles([]);
     setPhotoUrl(null);
     setInvite(null);
     setCopied(false);
   }
+
+  // Task #824 — the access role this dialog grants, expressed as a single
+  // locked Apple-style card so the operator sees exactly what access is
+  // being granted alongside the optional creative credits. Value is
+  // informational; the server derives the real grant from entityKind.
+  const accessRole: AccessRoleOption = useMemo(() => {
+    if (props.kind === "ambassador") {
+      return { value: "ambassador", label: "Ambassador", hint: `Invites on behalf of ${props.entityName}` };
+    }
+    return {
+      value: ENTITY_ROLE[props.entityKind],
+      label: `${ENTITY_LABEL[props.entityKind]} admin`,
+      hint: `Admin access to ${props.entityName}`,
+    };
+  }, [props.kind, props.entityKind, props.entityName]);
 
   // Task #699 — non-blocking warning when the invitee's email domain
   // doesn't match the press's website domain (e.g. inviting a personal
@@ -869,15 +895,27 @@ function AttachContactDialog(
   // / contact_phone columns so the operator doesn't retype. Never
   // clobber what the operator typed.
   useEffect(() => {
-    if (!picked || props.kind !== "admin") return;
+    if (!picked) return;
     let cancelled = false;
     (async () => {
       try {
         const r = await apiRequest("GET", `/api/admin/people/${picked.id}`);
-        const body = (await r.json()) as { contactEmail?: string | null; contactPhone?: string | null };
+        const body = (await r.json()) as {
+          contactEmail?: string | null;
+          contactPhone?: string | null;
+          roles?: string[] | null;
+          derivedRoles?: string[] | null;
+        };
         if (cancelled) return;
-        if (body.contactEmail && !email.trim()) setEmail(body.contactEmail);
-        if (body.contactPhone && !phone.trim()) setPhone(body.contactPhone);
+        if (props.kind === "admin") {
+          if (body.contactEmail && !email.trim()) setEmail(body.contactEmail);
+          if (body.contactPhone && !phone.trim()) setPhone(body.contactPhone);
+        }
+        // Task #824 — seed the creative picker from the person's existing
+        // tags so saving merges rather than clobbers, and surface their
+        // credit-derived roles read-only.
+        setCreativeRoles(Array.isArray(body.roles) ? body.roles : []);
+        setDerivedRoles(Array.isArray(body.derivedRoles) ? body.derivedRoles : []);
       } catch { /* silent — operator can fill the fields by hand */ }
     })();
     return () => { cancelled = true; };
@@ -905,6 +943,12 @@ function AttachContactDialog(
           `/api/admin/people/${picked.id}/can-invite-ambassadors`,
           { enabled: true },
         );
+        // Task #824 — persist any creative credits picked up front.
+        if (creativeRoles.length > 0) {
+          try {
+            await apiRequest("PUT", `/api/admin/people/${picked.id}`, { roles: creativeRoles });
+          } catch { /* non-fatal — the ambassador grant already landed */ }
+        }
         return { mode: "ambassador" as const };
       }
       // Admin path — unified partner-contacts endpoint does upsert +
@@ -926,7 +970,17 @@ function AttachContactDialog(
         level: isPressAdmin ? level : undefined,
         photoUrl: mode === "new" ? photoUrl ?? undefined : undefined,
       });
-      return { mode: "admin" as const, body: await r.json() };
+      const body = await r.json();
+      // Task #824 — tag creative credits in the same flow so a partner
+      // contact can be an artist/producer up front (no add-then-convert).
+      // Roles were seeded from the person's existing tags, so this PUT
+      // merges rather than clobbers. Non-fatal: the grant already landed.
+      if (creativeRoles.length > 0 && body?.personId) {
+        try {
+          await apiRequest("PUT", `/api/admin/people/${body.personId}`, { roles: creativeRoles });
+        } catch { /* non-fatal — the access grant already succeeded */ }
+      }
+      return { mode: "admin" as const, body };
     },
     onSuccess: (out) => {
       queryClient.invalidateQueries({ queryKey: props.contactsQueryKey });
@@ -1197,6 +1251,21 @@ function AttachContactDialog(
                 </div>
               </div>
             )}
+            {/* Task #824 — one coherent role step: a locked card showing
+                the access being granted + an optional creative-credits
+                multi-select so an artist/producer can be tagged up front. */}
+            <RolePicker
+              testIdPrefix={`${props.testIdPrefix}-${props.kind}`}
+              accessOptions={[accessRole]}
+              accessValue={accessRole.value}
+              accessLocked
+              accessLabel="Grants access as"
+              creativeValue={creativeRoles}
+              onCreativeChange={setCreativeRoles}
+              creativeLabel="Also credit as (optional)"
+              creativeHint="Tag artists / producers up front"
+              derivedCreative={derivedRoles}
+            />
           </div>
         )}
         <DialogFooter>

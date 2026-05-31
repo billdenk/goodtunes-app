@@ -37,6 +37,7 @@ import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
+import { RolePicker } from "@/components/admin/RolePicker";
 import { PersonSplitsRail } from "@/components/admin/SplitsPanels";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
@@ -164,6 +165,10 @@ interface PersonFull {
   contactEmail?: string | null;
   contactPhone?: string | null;
   isArtistPromoted?: boolean;
+  // Task #824 — manual creative-credit tags (artist/producer/writer/…)
+  // and the read-only rollup derived from real track/album credits.
+  roles?: string[] | null;
+  derivedRoles?: string[] | null;
   attachments?: Array<{
     entityKind: "vendor" | "manufacturer" | "label" | "fulfillment_partner" | "non_profit";
     entityId: string;
@@ -746,6 +751,8 @@ function ContactOverviewPanel({ person }: { person: PersonFull }) {
         ]}
       />
 
+      <RolesPanel person={person} />
+
       <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-overview-attachments">
         <div>
           <h2 className="text-sm font-bold text-slate-900">Attached to</h2>
@@ -796,6 +803,66 @@ function ContactOverviewPanel({ person }: { person: PersonFull }) {
 
 /* ─── Overview tab ─────────────────────────────────────────────────── */
 
+/* ─── Task #824 — Creative credits panel ──────────────────────────────
+   Editable multi-select of the "hats" a person wears (Artist / Producer /
+   Writer / Performer / …), persisted as people.roles[]. The credit-derived
+   rollup (from real track/album credits) renders read-only underneath so
+   the operator sees the full picture without re-tagging by hand. Tagging
+   "Artist" here flips the row to artist shape server-side, which is what
+   kills the old add-as-admin → convert-to-artist dead-end. */
+function RolesPanel({ person }: { person: PersonFull }) {
+  const { toast } = useToast();
+  const initial = useMemo(() => (Array.isArray(person.roles) ? person.roles : []), [person.roles]);
+  const [roles, setRoles] = useState<string[]>(initial);
+  useEffect(() => { setRoles(initial); }, [initial]);
+
+  const dirty = useMemo(() => {
+    if (roles.length !== initial.length) return true;
+    const a = [...roles].map((r) => r.toLowerCase()).sort();
+    const b = [...initial].map((r) => r.toLowerCase()).sort();
+    return a.some((v, i) => v !== b[i]);
+  }, [roles, initial]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PUT", `/api/admin/people/${person.id}`, { roles });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/people", person.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/people", person.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({ title: "Credits saved" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't save credits", description: e?.message || "Try again.", variant: "destructive" }),
+  });
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid="panel-overview-roles">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-slate-900">Creative credits</h3>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => save.mutate()}
+          disabled={!dirty || save.isPending}
+          data-testid="button-save-roles"
+        >
+          {save.isPending ? "Saving…" : "Save"}
+        </Button>
+      </div>
+      <RolePicker
+        testIdPrefix="person-overview"
+        creativeValue={roles}
+        onCreativeChange={setRoles}
+        creativeLabel="Hats they wear"
+        creativeHint="Artist, producer, writer, performer…"
+        derivedCreative={Array.isArray(person.derivedRoles) ? person.derivedRoles : []}
+      />
+    </div>
+  );
+}
+
 function OverviewPanel({
   person,
   labels,
@@ -833,6 +900,7 @@ function OverviewPanel({
     <div className="space-y-5">
       <ReferralSummaryPanel kind="artist" id={person.id} />
       <InvitedByPressPanel kind="people" id={person.id} currentPressId={person.invitedByPressId} currentPressMode={(person as any).pressMode} />
+      <RolesPanel person={person} />
       <EditablePanel
         title="Identity"
         testId="panel-overview-identity"

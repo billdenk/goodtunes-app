@@ -11030,6 +11030,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // under the band name ("Band", "Duo", "Orchestra", …).
     isGroup: !!p.isGroup,
     groupKind: p.groupKind ?? null,
+    // Task #824 — person-level creative-credit tags (artist/producer/
+    // writer/performer/instruments). Manual floor set from the multi-role
+    // picker; the admin Person endpoint additionally returns `derivedRoles`
+    // unioned from actual track/album credits.
+    roles: Array.isArray(p.roles) ? p.roles : [],
     // Task #350 — Surface the ambassador verb + their NPO link so the
     // admin Permissions panel can render the toggle without a second
     // round-trip. Both are admin-curation flags, not sensitive.
@@ -11161,8 +11166,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // partner via entity_contacts / organization_people, with no
     // artistic surface attached yet).
     const isPromoted = !!(p as any).isArtistPromoted;
+    const storedRoles: string[] = Array.isArray((p as any).roles) ? (p as any).roles : [];
+    // Task #824 — an explicit "Artist" creative tag is treated the same as
+    // the promote override: it flips the row to artist shape so picking
+    // "Artist" up front in the role picker never lands in the
+    // contact-shape dead-end that used to require a separate promote step.
+    const taggedArtist = storedRoles.some((r) => String(r).trim().toLowerCase() === "artist");
     let shape: "artist" | "contact" = "contact";
-    if (isPromoted || (p as any).isGroup) {
+    if (isPromoted || (p as any).isGroup || taggedArtist) {
       shape = "artist";
     } else {
       const sig = await db.execute<{ has_role: boolean; has_album: boolean; has_disco: boolean }>(sql`
@@ -11201,11 +11212,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e: any) {
       console.warn(`[person:${id}] attachments lookup failed: ${e?.message}`);
     }
+    // Task #824 — roles rolled up from the person's ACTUAL credits, so a
+    // guitar/producer/writer credit on any song or album surfaces on the
+    // profile without re-tagging by hand. Unioned with the manual `roles`
+    // tags client-side; returned separately so the picker only edits the
+    // manual floor and renders the derived ones as read-only.
+    const derivedRoles: string[] = [];
+    try {
+      const cr = await db.execute<{ role: string }>(sql`
+        SELECT DISTINCT role FROM (
+          SELECT role FROM track_writers    WHERE person_id = ${id} AND role IS NOT NULL AND role <> ''
+          UNION
+          SELECT role FROM track_performers WHERE person_id = ${id} AND role IS NOT NULL AND role <> ''
+          UNION
+          SELECT role FROM album_credits    WHERE person_id = ${id} AND role IS NOT NULL AND role <> ''
+        ) r
+        ORDER BY role ASC
+      `);
+      for (const r of ((cr as any).rows ?? [])) {
+        if (r.role) derivedRoles.push(String(r.role));
+      }
+      // A primary-artist album OR artist role-scope means "Artist" even
+      // when no per-track credit spells it out.
+      if (shape === "artist" && !derivedRoles.some((r) => r.toLowerCase() === "artist")) {
+        derivedRoles.unshift("Artist");
+      }
+    } catch (e: any) {
+      console.warn(`[person:${id}] derived roles lookup failed: ${e?.message}`);
+    }
     return res.json({
       ...toPublicPerson(p),
       shippingAddress: (p as any).shippingAddress ?? null,
       // Task #517 — structured snapshot for the address autocomplete.
       shippingAddressStruct: (p as any).shippingAddressStruct ?? null,
+      // Task #824 — credit roles inferred from real track/album credits.
+      derivedRoles,
       // Task #665 — contact-shape support fields.
       shape,
       isArtistPromoted: isPromoted,
@@ -11214,6 +11255,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       attachments,
     });
   });
+
+  // Task #824 — normalize creative-credit tags coming off the multi-role
+  // picker: trim, drop blanks, de-dupe case-insensitively (keeping the
+  // first-seen casing), cap the count so a malformed payload can't bloat
+  // the row. Returns undefined when `roles` wasn't supplied so PUT can
+  // tell "leave as-is" from "clear to empty".
+  function sanitizeRoles(input: any): string[] | undefined {
+    if (input === undefined || input === null) return undefined;
+    if (!Array.isArray(input)) return [];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const raw of input) {
+      const v = String(raw ?? "").trim();
+      if (!v) continue;
+      const key = v.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(v);
+      if (out.length >= 24) break;
+    }
+    return out;
+  }
 
   app.post("/api/admin/people", requireAdmin, async (req, res) => {
     const b = req.body ?? {};
@@ -11248,6 +11311,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       labelId: opt(b.labelId),
       isGroup: b.isGroup === true || b.isGroup === "true",
       groupKind: opt(b.groupKind),
+      // Task #824 — creative-credit tags from the multi-role picker.
+      roles: sanitizeRoles(b.roles),
     } as any);
     return res.status(201).json(p);
   });
@@ -11310,6 +11375,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.websiteUrl !== undefined) updates.websiteUrl = opt(b.websiteUrl);
     if (b.linkedinUrl !== undefined) updates.linkedinUrl = opt(b.linkedinUrl);
     if (b.labelId !== undefined) updates.labelId = opt(b.labelId);
+    // Task #824 — creative-credit tags. `undefined` (field omitted) leaves
+    // the column untouched; an explicit array (incl. []) overwrites.
+    {
+      const r = sanitizeRoles(b.roles);
+      if (r !== undefined) updates.roles = r;
+    }
     // Task #490 — artist comp / contact shipping address.
     if (b.shippingAddress !== undefined) updates.shippingAddress = opt(b.shippingAddress);
     // Task #517 — Places-picked structured snapshot of the same field.

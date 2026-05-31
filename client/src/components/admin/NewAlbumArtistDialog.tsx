@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { RolePicker } from "@/components/admin/RolePicker";
 
 /**
  * "Who's the artist?" dialog — the entry point for `+ New album`.
@@ -204,6 +205,11 @@ export function NewAlbumArtistDialog({
   const [appleErrored, setAppleErrored] = useState(false);
   const [linkApple, setLinkApple] = useState(true);
   const [creating, setCreating] = useState(false);
+  // Task #824 — creative credits for a freshly-created person. Defaults to
+  // Artist + Producer on the global People add (the two most common hats);
+  // the operator can trim/extend before committing. Only surfaced and
+  // persisted in mode="person"; album mode keeps the artist-implied path.
+  const [creativeRoles, setCreativeRoles] = useState<string[]>(["Artist", "Producer"]);
   const inputRef = useRef<HTMLInputElement>(null);
   // Per-pick sequence number so a slow Apple lookup for an earlier pick
   // can't overwrite the result for the artist the admin is now looking at.
@@ -465,6 +471,8 @@ export function NewAlbumArtistDialog({
         if (!(link.kind in body)) body[link.kind] = link.url;
       }
     }
+    // Task #824 — stamp the picked creative credits on the new person.
+    if (mode === "person" && creativeRoles.length > 0) body.roles = creativeRoles;
     try {
       const person = await createPersonMut.mutateAsync(body);
       toast({ title: `Added ${person.name}` });
@@ -588,6 +596,9 @@ export function NewAlbumArtistDialog({
         appleMusicUrl: apple?.appleMusicUrl || appleCandidate?.appleMusicUrl || null,
         itunesArtistId: apple?.itunesArtistId || appleCandidate?.artistId || null,
       };
+      // Task #824 — carry the picked creative credits onto a person added
+      // via the streaming/confirm flow too (not just manual entry).
+      if (mode === "person" && creativeRoles.length > 0) personBody.roles = creativeRoles;
       const person = await createPersonMut.mutateAsync(personBody);
 
       // 3) Fire-and-forget discography PUT — fan side reads it lazily, so the
@@ -747,6 +758,19 @@ export function NewAlbumArtistDialog({
                   We'll match against people already in your catalog as you type.
                 </p>
               </div>
+
+              {mode === "person" && (
+                <>
+                  <div className="border-t border-slate-100 -mx-5" />
+                  <RolePicker
+                    testIdPrefix="new-person"
+                    creativeValue={creativeRoles}
+                    onCreativeChange={setCreativeRoles}
+                    creativeLabel="Creative credits"
+                    creativeHint="What hats do they wear?"
+                  />
+                </>
+              )}
 
               {pastePrefill && (
                 // Staged prefill preview. Bio / photo / links from the

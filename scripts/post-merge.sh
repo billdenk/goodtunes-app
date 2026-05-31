@@ -2626,3 +2626,28 @@ SQL
 }
 migrate_task_793_booklet_bundle dev  "${DATABASE_URL:-}"
 migrate_task_793_booklet_bundle prod "${PROD_DATABASE_URL:-}"
+
+# Task #824 — person-level creative-credit tags. `people.roles` is a
+# text[] of the "hats" a person wears (Artist / Producer / Writer /
+# Performer / …), set by the unified role picker on the People adds and
+# the person Overview. Must exist on both DBs so the publish dev→prod
+# diff stays empty and the GET /api/admin/people/:id read doesn't 500.
+# Idempotent ADD COLUMN IF NOT EXISTS with the same default the schema
+# declares ('{}').
+migrate_task_824_person_roles() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-824 person-roles migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE people ADD COLUMN IF NOT EXISTS roles text[] NOT NULL DEFAULT '{}';
+SQL
+  then
+    echo "post-merge: task-824 person-roles migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-824 person-roles migration failed on $label (continuing)"
+  fi
+}
+migrate_task_824_person_roles dev  "${DATABASE_URL:-}"
+migrate_task_824_person_roles prod "${PROD_DATABASE_URL:-}"
