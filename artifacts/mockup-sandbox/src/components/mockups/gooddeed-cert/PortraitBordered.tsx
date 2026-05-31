@@ -78,7 +78,7 @@ export function BorderedPortraitCard({ overlay, radius = 22 }: { overlay?: React
       {/* Lower section — relative+z so the avatar paints ON TOP of the album art */}
       <div
         className="relative z-10 flex-1 flex flex-col items-center text-center"
-        style={{ paddingLeft: 56 * u, paddingRight: 56 * u, paddingBottom: 64 * u }}
+        style={{ paddingLeft: 56 * u, paddingRight: 56 * u, paddingBottom: 56 * u }}
       >
         <div
           className="rounded-full overflow-hidden shrink-0"
@@ -125,14 +125,14 @@ export function BorderedPortraitCard({ overlay, radius = 22 }: { overlay?: React
           </span>
         </div>
 
-        {/* secondary caption pinned near the bottom; wraps when too long */}
+        {/* secondary caption sits directly under the pill as part of the block */}
         {captionWraps ? (
-          <div className="mt-auto text-white/60 leading-snug" style={{ fontSize: 30 * u }}>
+          <div className="text-white/60 leading-snug" style={{ fontSize: 30 * u, marginTop: 22 * u }}>
             <p className="whitespace-nowrap">{album.title} #{certNumStr}</p>
             <p className="whitespace-nowrap">by {album.artist}</p>
           </div>
         ) : (
-          <p className="text-white/60 leading-snug mt-auto whitespace-nowrap" style={{ fontSize: 30 * u }}>
+          <p className="text-white/60 leading-snug whitespace-nowrap" style={{ fontSize: 30 * u, marginTop: 22 * u }}>
             {captionOneLine}
           </p>
         )}
