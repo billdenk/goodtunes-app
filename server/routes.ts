@@ -11117,6 +11117,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // anonymous /api/people endpoints (currently: `shippingAddress` for
   // artist comp shipments — physical-mail PII). New admin-only fields
   // belong here, not in `toPublicPerson`.
+  // Lightweight People typeahead for the shared PersonPicker (Invite
+  // Artist / Add Admin / Add Ambassador on every entity People tab).
+  // Returns the `{ id, name, photoUrl }` shape the picker expects, with
+  // exact/prefix matches first (mirrors the /api/admin/partner-search
+  // scoring) so an exact name like "Nightbirde" floats to the top.
+  // Soft-deleted People are already excluded by storage.searchPeople;
+  // excludeIds (People already attached to the entity) is applied
+  // client-side by the picker.
+  app.get("/api/admin/people", requireAdmin, async (req, res) => {
+    const q = String(req.query.q ?? "").trim();
+    const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 25);
+    if (q.length < 2) return res.json([]);
+    // Over-fetch a little so re-ranking the alphabetical slice still has
+    // the prefix/exact hits to surface, then cap at the requested limit.
+    const rows = await storage.searchPeople(q, Math.max(limit * 3, limit));
+    const ql = q.toLowerCase();
+    const score = (name: string) => {
+      const n = name.toLowerCase();
+      if (n === ql) return 0;
+      if (n.startsWith(ql)) return 1;
+      return 2;
+    };
+    const ranked = rows
+      .sort((a, b) => score(a.name) - score(b.name) || a.name.localeCompare(b.name))
+      .slice(0, limit);
+    return res.json(ranked);
+  });
+
   app.get("/api/admin/people/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
     const p = await storage.getPersonById(id);
