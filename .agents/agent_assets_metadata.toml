@@ -155,3 +155,9 @@ id = "iNTiP6f7L-cafLCk-Bhwk"
 uri = "file://exports/a4-new.pdf"
 type = "pdf"
 title = "GoodDeed Certificate — A4 (footnote baseline aligned)"
+
+[[outputs]]
+id = "V5RT9KwTWxoGOERIZ_vgb"
+uri = "file://docs/fan-checkout-walkthrough.md"
+type = "text"
+title = "Fan checkout — screen-by-screen walkthrough"
