@@ -23,7 +23,7 @@ type Frame = "navy" | "orange" | "bordered";
 const SAMPLE = {
   artist: "Fernando Perdomo",
   title: "Guitar as a Voice",
-  genre: "", // canonical release has no genre set; subline drops the bullet
+  genre: "ROCK",
   year: 2024,
   recipient: "Jordan Ellis",
   num: "12",
