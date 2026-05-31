@@ -20,7 +20,16 @@ const ORANGE = "var(--brand-orange)";
 type Paper = "letter" | "a4";
 type Frame = "navy" | "orange" | "bordered";
 
-const SAMPLE = {
+export type CertSample = {
+  artist: string;
+  title: string;
+  genre: string;
+  year: number;
+  recipient: string;
+  num: string;
+};
+
+const SAMPLE: CertSample = {
   artist: "Fernando Perdomo",
   title: "Guitar as a Voice",
   genre: "ROCK",
@@ -28,16 +37,6 @@ const SAMPLE = {
   recipient: "Jordan Ellis",
   num: "12",
 };
-
-const headline = `This GoodDeed\u00AE certifies that ${SAMPLE.recipient} owns no. ${SAMPLE.num} of ${SAMPLE.title}.`;
-const provenance =
-  `Digital provenance can be confirmed by accessing the QR code on this GoodDeed\u00AE. ` +
-  `In the event ownership was transferred after this certificate was issued, ` +
-  `this GoodDeed\u00AE serves as the moment in time in which ${SAMPLE.recipient} possessed ` +
-  `ownership of this good.`;
-const subline = SAMPLE.genre
-  ? `${SAMPLE.genre} \u2022 GOODTUNES RELEASE ${SAMPLE.year}`
-  : `GOODTUNES RELEASE ${SAMPLE.year}`;
 
 function dims(paper: Paper, matBoxIn?: [number, number]) {
   const W = paper === "a4" ? 595.28 : 612;
@@ -112,6 +111,7 @@ export function CertPrint({
   frameRevealWin,
   layout,
   matBoxIn,
+  sample,
 }: {
   paper: Paper;
   frame: Frame;
@@ -128,8 +128,21 @@ export function CertPrint({
   // Pin the cert content box (art + band) to a fixed real-world size, centered
   // on the sheet. See dims().
   matBoxIn?: [number, number];
+  // Per-tile override of the sample artist/title/recipient/etc., merged over the
+  // shared default SAMPLE — lets one tile stress-test long names/titles.
+  sample?: Partial<CertSample>;
 }) {
   const artSrc = art ?? ART;
+  const S: CertSample = { ...SAMPLE, ...sample };
+  const headline = `This GoodDeed\u00AE certifies that ${S.recipient} owns no. ${S.num} of ${S.title}.`;
+  const provenance =
+    `Digital provenance can be confirmed by accessing the QR code on this GoodDeed\u00AE. ` +
+    `In the event ownership was transferred after this certificate was issued, ` +
+    `this GoodDeed\u00AE serves as the moment in time in which ${S.recipient} possessed ` +
+    `ownership of this good.`;
+  const subline = S.genre
+    ? `${S.genre} \u2022 GOODTUNES RELEASE ${S.year}`
+    : `GOODTUNES RELEASE ${S.year}`;
   const s = 0.72; // pt -> px display scale (same for both papers, so A4 reads taller/narrower)
   const d = dims(paper, matBoxIn);
   const px = (pt: number) => pt * s;
@@ -227,14 +240,14 @@ export function CertPrint({
           background: "#1A2052",
         }}
       >
-        <img src={artSrc} alt={SAMPLE.artist} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+        <img src={artSrc} alt={S.artist} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ color: "#FFFFFF", fontSize: px(10), fontFamily: "Helvetica, Arial, sans-serif", lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {SAMPLE.artist}
+          {S.artist}
         </div>
         <div style={{ color: "#FFFFFF", fontSize: px(14), fontWeight: 700, fontFamily: "Helvetica, Arial, sans-serif", lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {SAMPLE.title}
+          {S.title}
         </div>
         <div style={{ color: "#A6B2D6", fontSize: px(7), letterSpacing: px(0.6), fontFamily: "Helvetica, Arial, sans-serif", marginTop: px(2), whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {subline}
@@ -371,7 +384,7 @@ export function CertPrint({
       />
       {/* Square album artwork filling the (inset) content width. */}
       <div style={{ position: "absolute", left: px(cX), top: px(cY), width: px(cW), height: px(cArtH), overflow: "hidden" }}>
-        <img src={artSrc} alt={SAMPLE.title} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+        <img src={artSrc} alt={S.title} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
       </div>
       {/* Navy band under the art. */}
       <div style={{ position: "absolute", left: px(cX), top: px(cBandTop), width: px(cW), height: px(cBandH), background: NAVY }}>
@@ -408,6 +421,7 @@ export function CertStage({
   frameRevealWin,
   layout,
   matBoxIn,
+  sample,
 }: {
   paper: Paper;
   frame: Frame;
@@ -417,13 +431,14 @@ export function CertStage({
   frameRevealWin?: [number, number];
   layout?: Paper;
   matBoxIn?: [number, number];
+  sample?: Partial<CertSample>;
 }) {
   return (
     <div
       className="min-h-screen flex items-center justify-center"
       style={{ background: "#E9EBF0", padding: 28 }}
     >
-      <CertPrint paper={paper} frame={frame} art={art} insetIn={insetIn} bleedIn={bleedIn} frameRevealWin={frameRevealWin} layout={layout} matBoxIn={matBoxIn} />
+      <CertPrint paper={paper} frame={frame} art={art} insetIn={insetIn} bleedIn={bleedIn} frameRevealWin={frameRevealWin} layout={layout} matBoxIn={matBoxIn} sample={sample} />
     </div>
   );
 }
