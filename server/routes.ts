@@ -11092,11 +11092,70 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e: any) {
       console.warn(`[people] affiliation lookup failed: ${e?.message}`);
     }
+    // Task #827 — credit roles derived from real track/album credits,
+    // batched across the whole list so the People index can filter +
+    // badge by credit without an N+1 per-person fetch. Mirrors the
+    // per-person /api/people/:id derivation (track_writers ∪
+    // track_performers ∪ album_credits) plus the "Artist" floor for
+    // primary-artist / discography / artist-role people.
+    const derivedByPerson = new Map<string, string[]>();
+    try {
+      const cr = await db.execute<any>(sql`
+        SELECT person_id, role FROM (
+          SELECT person_id, role FROM track_writers    WHERE person_id IS NOT NULL AND role IS NOT NULL AND role <> ''
+          UNION
+          SELECT person_id, role FROM track_performers WHERE person_id IS NOT NULL AND role IS NOT NULL AND role <> ''
+          UNION
+          SELECT person_id, role FROM album_credits    WHERE person_id IS NOT NULL AND role IS NOT NULL AND role <> ''
+        ) r
+      `);
+      for (const r of ((cr as any).rows ?? [])) {
+        if (!r.person_id || !r.role) continue;
+        const arr = derivedByPerson.get(r.person_id) ?? [];
+        arr.push(String(r.role));
+        derivedByPerson.set(r.person_id, arr);
+      }
+    } catch (e: any) {
+      console.warn(`[people] derived roles lookup failed: ${e?.message}`);
+    }
+    // People who count as "Artist" even without a per-track credit: a
+    // primary artist on any live album, a person_discography entry, or an
+    // artist role-scope. (is_artist_promoted / is_group come off the row.)
+    const artistShapeIds = new Set<string>();
+    try {
+      const a = await db.execute<any>(sql`
+        SELECT DISTINCT primary_artist_id AS person_id FROM albums WHERE primary_artist_id IS NOT NULL AND deleted_at IS NULL
+        UNION
+        SELECT DISTINCT person_id FROM person_discography WHERE person_id IS NOT NULL
+        UNION
+        SELECT DISTINCT role_scope_id AS person_id FROM users WHERE role = 'artist' AND role_scope_id IS NOT NULL
+      `);
+      for (const r of ((a as any).rows ?? [])) {
+        if (r.person_id) artistShapeIds.add(r.person_id);
+      }
+    } catch (e: any) {
+      console.warn(`[people] artist-shape lookup failed: ${e?.message}`);
+    }
     return res.json(
-      rows.map((p) => ({
-        ...toPublicPerson(p, p.labelId ? labelById.get(p.labelId) ?? null : null),
-        affiliation: affiliationByPerson.get(p.id) ?? null,
-      })),
+      rows.map((p) => {
+        const derived = (derivedByPerson.get(p.id) ?? []).slice();
+        const storedRoles: string[] = Array.isArray((p as any).roles) ? (p as any).roles : [];
+        const isArtist =
+          artistShapeIds.has(p.id) ||
+          !!(p as any).isArtistPromoted ||
+          !!(p as any).isGroup ||
+          storedRoles.some((r) => String(r).trim().toLowerCase() === "artist");
+        if (isArtist && !derived.some((r) => r.toLowerCase() === "artist")) {
+          derived.unshift("Artist");
+        }
+        return {
+          ...toPublicPerson(p, p.labelId ? labelById.get(p.labelId) ?? null : null),
+          affiliation: affiliationByPerson.get(p.id) ?? null,
+          // Task #827 — read-only credits inferred from real track/album
+          // work, unioned with stored `roles` client-side for filter + badge.
+          derivedRoles: derived,
+        };
+      }),
     );
   });
   app.get("/api/people/:id", async (req, res) => {

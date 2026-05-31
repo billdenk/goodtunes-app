@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Search, X, User as UserIcon } from "lucide-react";
+import { Search, X, User as UserIcon, Check } from "lucide-react";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
+import { PRIMARY_CREATIVE_CREDITS } from "@/components/admin/RolePicker";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -46,6 +47,11 @@ interface PersonLite {
   // Drives the People-index subtitle so a Hellbender contact reads
   // "Hellbender Vinyl" instead of "Independent".
   affiliation: { entityKind: string; entityId: string; name: string } | null;
+  // Task #824 — manual creative-credit tags from the role picker.
+  roles?: string[];
+  // Task #827 — read-only credits inferred from real track/album work.
+  // Unioned with `roles` for the per-row credit badge + credit filter.
+  derivedRoles?: string[];
 }
 
 interface LabelLite {
@@ -87,6 +93,7 @@ interface ScrapeResponse {
 export function AdminPeople() {
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
+  const urlSearch = useSearch();
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -125,14 +132,80 @@ export function AdminPeople() {
     return m;
   }, [labels]);
 
+  // Task #827 — credit filter state lives in the URL query string
+  // (`?role=Producer,Writer`), not the queryKey object: the People list
+  // is fetched whole and filtered client-side, so the filter is purely
+  // a view concern that must survive refresh + be shareable.
+  const selectedRoles = useMemo(() => {
+    const raw = new URLSearchParams(urlSearch).get("role") ?? "";
+    return raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }, [urlSearch]);
+  const selectedSet = useMemo(
+    () => new Set(selectedRoles.map((r) => r.toLowerCase())),
+    [selectedRoles],
+  );
+
+  const setRoleParam = (next: string[]) => {
+    const p = new URLSearchParams(urlSearch);
+    if (next.length) p.set("role", next.join(","));
+    else p.delete("role");
+    const qs = p.toString();
+    navigate(qs ? `/admin/people?${qs}` : `/admin/people`);
+  };
+  const toggleRole = (role: string) => {
+    const k = role.toLowerCase();
+    setRoleParam(
+      selectedSet.has(k)
+        ? selectedRoles.filter((r) => r.toLowerCase() !== k)
+        : [...selectedRoles, role],
+    );
+  };
+
+  // The chip rail: the four headline credits first (RolePicker is the
+  // source of truth), then any other credit actually present in the data
+  // so operators can also narrow by "Guitar", "Mixing", etc.
+  const allCredits = useMemo(() => {
+    const primaryKeys = new Set(
+      PRIMARY_CREATIVE_CREDITS.map((c) => c.toLowerCase()),
+    );
+    const extras = new Map<string, string>();
+    for (const p of people) {
+      for (const r of [...(p.roles ?? []), ...(p.derivedRoles ?? [])]) {
+        const t = (r ?? "").trim();
+        const k = t.toLowerCase();
+        if (!k || primaryKeys.has(k) || extras.has(k)) continue;
+        extras.set(k, t);
+      }
+    }
+    const extraList = Array.from(extras.values()).sort((a, b) =>
+      a.localeCompare(b),
+    );
+    return [...PRIMARY_CREATIVE_CREDITS, ...extraList];
+  }, [people]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const rows = q
+    let rows = q
       ? people.filter((p) => p.name.toLowerCase().includes(q))
       : people.slice();
+    if (selectedSet.size > 0) {
+      rows = rows.filter((p) => {
+        const tags = [...(p.roles ?? []), ...(p.derivedRoles ?? [])].map((r) =>
+          (r ?? "").trim().toLowerCase(),
+        );
+        // OR semantics: a person matches if they carry ANY selected credit.
+        for (const sel of Array.from(selectedSet)) {
+          if (tags.includes(sel)) return true;
+        }
+        return false;
+      });
+    }
     rows.sort((a, b) => a.name.localeCompare(b.name));
     return rows;
-  }, [people, search]);
+  }, [people, search, selectedSet]);
 
   const openPerson = (id: string) => {
     navigate(`/admin/people/${id}`);
@@ -219,6 +292,18 @@ export function AdminPeople() {
         </>)}
       />
 
+      {/* Task #827 — credit filter rail. Toggle chips narrow the list by
+          one or more creative credits (stored tags ∪ derived credits).
+          State lives in the URL (`?role=`) so it survives refresh. */}
+      {allCredits.length > 0 && (
+        <CreditFilterRail
+          credits={allCredits}
+          selected={selectedSet}
+          onToggle={toggleRole}
+          onClear={() => setRoleParam([])}
+        />
+      )}
+
       {/* Grid */}
       {isLoading ? (
         <div className="py-20 flex items-center justify-center">
@@ -232,7 +317,9 @@ export function AdminPeople() {
           testId="admin-people-error"
         />
       ) : filtered.length === 0 ? (
-        <EmptyState searching={search.trim().length > 0} />
+        <EmptyState
+          searching={search.trim().length > 0 || selectedSet.size > 0}
+        />
       ) : view === "grid" ? (
         <div
           className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-4 gap-y-6"
@@ -399,6 +486,11 @@ function PersonCard({
       <div className="w-full text-center text-slate-400 text-[11.5px] truncate px-1">
         {labelName || "Independent"}
       </div>
+      <CreditBadges
+        credits={creditTags(person)}
+        personId={person.id}
+        align="center"
+      />
     </button>
   );
 }
@@ -444,11 +536,143 @@ function PersonRow({
         >
           {person.name}
         </div>
+        <CreditBadges credits={creditTags(person)} personId={person.id} />
       </div>
       <div className="text-slate-400 text-[11.5px] truncate flex-shrink-0">
         {labelName || "Independent"}
       </div>
     </button>
+  );
+}
+
+// ─── Credit tags (stored ∪ derived) ──────────────────────────────────
+
+/**
+ * Task #827 — the de-duped credit list for a person: manual `roles` tags
+ * unioned with read-only `derivedRoles` (inferred from real track/album
+ * credits), case-insensitively de-duped, headline credits floated first.
+ */
+function creditTags(person: PersonLite): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const r of [...(person.roles ?? []), ...(person.derivedRoles ?? [])]) {
+    const t = (r ?? "").trim();
+    const k = t.toLowerCase();
+    if (!t || seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+  }
+  return out.sort((a, b) => {
+    const ia = PRIMARY_CREATIVE_CREDITS.findIndex(
+      (c) => c.toLowerCase() === a.toLowerCase(),
+    );
+    const ib = PRIMARY_CREATIVE_CREDITS.findIndex(
+      (c) => c.toLowerCase() === b.toLowerCase(),
+    );
+    const ra = ia === -1 ? 99 : ia;
+    const rb = ib === -1 ? 99 : ib;
+    if (ra !== rb) return ra - rb;
+    return a.localeCompare(b);
+  });
+}
+
+/**
+ * Per-row credit badge — shows up to two credit chips with a "+N"
+ * overflow so a dense grid card / list row stays scannable. Quiet
+ * slate pills, consistent with RolePicker's read-only "From credits".
+ */
+function CreditBadges({
+  credits,
+  personId,
+  align = "start",
+}: {
+  credits: string[];
+  personId: string;
+  align?: "start" | "center";
+}) {
+  if (credits.length === 0) return null;
+  const shown = credits.slice(0, 2);
+  const extra = credits.length - shown.length;
+  return (
+    <div
+      className={`mt-1 flex flex-wrap gap-1 ${
+        align === "center" ? "justify-center" : ""
+      }`}
+      data-testid={`credits-person-${personId}`}
+    >
+      {shown.map((c) => (
+        <span
+          key={c}
+          className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-medium text-slate-500"
+          title={c}
+        >
+          {c}
+        </span>
+      ))}
+      {extra > 0 && (
+        <span
+          className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-medium text-slate-400"
+          title={credits.slice(2).join(", ")}
+        >
+          +{extra}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Credit filter rail — a horizontal scroll of toggle chips that narrow
+ * the People list by one or more creative credits. "All" clears the
+ * filter; selected chips read in brand blue. Selection lives in the URL.
+ */
+function CreditFilterRail({
+  credits,
+  selected,
+  onToggle,
+  onClear,
+}: {
+  credits: string[];
+  selected: Set<string>;
+  onToggle: (role: string) => void;
+  onClear: () => void;
+}) {
+  const base =
+    "whitespace-nowrap inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-colors";
+  const on =
+    "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5 text-[var(--brand-blue)]";
+  const off = "border-slate-200 text-slate-600 hover:border-slate-300";
+  return (
+    <div
+      className="flex items-center gap-2 overflow-x-auto pb-1"
+      data-testid="filter-rail-credits"
+    >
+      <button
+        type="button"
+        onClick={onClear}
+        aria-pressed={selected.size === 0}
+        className={`${base} ${selected.size === 0 ? on : off}`}
+        data-testid="chip-credit-filter-all"
+      >
+        All
+      </button>
+      {credits.map((c) => {
+        const active = selected.has(c.toLowerCase());
+        return (
+          <button
+            key={c}
+            type="button"
+            onClick={() => onToggle(c)}
+            aria-pressed={active}
+            className={`${base} ${active ? on : off}`}
+            data-testid={`chip-credit-filter-${c}`}
+          >
+            {active && <Check className="h-3 w-3" strokeWidth={3} />}
+            {c}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
