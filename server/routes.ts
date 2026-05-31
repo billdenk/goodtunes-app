@@ -5870,8 +5870,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     spotifyUrl: string | null;
   }): Promise<{ tidalUrl?: string; deezerUrl?: string; pandoraUrl?: string; spotifyUrl?: string } | null> {
     const collectionId = appleCollectionIdFromUrl(album.appleMusicUrl);
-    if (!collectionId) return null;
-    const needsOdesli = !album.tidalUrl || !album.deezerUrl || !album.pandoraUrl;
+    // Odesli (Tidal/Deezer/Pandora) needs the Apple collection id; Spotify
+    // resolves off artist + title instead, so an album with no Apple URL can
+    // still get a Spotify link even though the others stay on search.
+    const needsOdesli =
+      !!collectionId && (!album.tidalUrl || !album.deezerUrl || !album.pandoraUrl);
     // Spotify is resolved off artist + title (not the Apple collection
     // id), but we only attempt it when Spotify is actually configured.
     const needsSpotify = !album.spotifyUrl && spotifyConfigured();
@@ -5880,7 +5883,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     const updates: { tidalUrl?: string; deezerUrl?: string; pandoraUrl?: string; spotifyUrl?: string } = {};
 
-    if (needsOdesli) {
+    if (needsOdesli && collectionId) {
       const country = appleCountryFromUrl(album.appleMusicUrl);
       const links = await resolveStreamingLinksFromAppleCollectionId(collectionId, country);
       if (!album.tidalUrl && links.tidalUrl) updates.tidalUrl = links.tidalUrl;
@@ -5911,10 +5914,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const id = String(req.params.id);
     const album = await storage.getAlbumById(id, { includeHidden: true });
     if (!album) return res.status(404).json({ message: "Album not found" });
-    if (!appleCollectionIdFromUrl(album.appleMusicUrl)) {
+    const hasAppleId = !!appleCollectionIdFromUrl(album.appleMusicUrl);
+    // Spotify resolves off artist + title, so even an album with no Apple
+    // URL can still get a Spotify deep link. Only hard-block when there's
+    // genuinely nothing to resolve: no Apple album id (→ no Odesli) AND
+    // Spotify can't help (not configured, or already has a Spotify link).
+    const spotifyOn = spotifyConfigured();
+    const canResolveSpotify = spotifyOn && !album.spotifyUrl;
+    if (!hasAppleId && !canResolveSpotify) {
       return res.status(400).json({
-        message:
-          "This album has no Apple Music URL with an album id, so per-release links can't be resolved.",
+        message: spotifyOn
+          ? "This album already has a Spotify link and no Apple Music URL with an album id, so there's nothing left to resolve."
+          : "This album has no Apple Music URL with an album id, so per-release links can't be resolved.",
       });
     }
     let filled: { tidalUrl?: string; deezerUrl?: string; pandoraUrl?: string; spotifyUrl?: string } | null = null;
@@ -5925,9 +5936,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.warn("[streamingLinks] per-album refresh failed", id, e?.message);
     }
     const updated = await storage.getAlbumById(id, { includeHidden: true });
+    // Tell the caller which services this album was even eligible for, so
+    // the UI can explain that an album without an Apple URL only attempts
+    // Spotify (Tidal/Deezer/Pandora need the Apple collection id via Odesli).
+    const attempted = hasAppleId ? ["spotify", "tidal", "deezer", "pandora"] : ["spotify"];
     return res.json({
       filled: filled ?? {},
       filledCount: filled ? Object.keys(filled).length : 0,
+      attempted,
       spotifyUrl: updated?.spotifyUrl ?? null,
       tidalUrl: updated?.tidalUrl ?? null,
       qobuzUrl: updated?.qobuzUrl ?? null,
@@ -5944,11 +5960,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/admin/albums/refresh-streaming-links", requireAdmin, async (_req, res) => {
     const all = await storage.getAlbums({ includeHidden: true });
     const spotifyOn = spotifyConfigured();
-    const candidates = all.filter(
-      (a) =>
-        !!appleCollectionIdFromUrl(a.appleMusicUrl) &&
-        !(a.tidalUrl && a.deezerUrl && a.pandoraUrl && (!spotifyOn || a.spotifyUrl)),
-    );
+    const candidates = all.filter((a) => {
+      const hasAppleId = !!appleCollectionIdFromUrl(a.appleMusicUrl);
+      // Albums with an Apple album id are eligible whenever any of
+      // Tidal/Deezer/Pandora (or, when configured, Spotify) is still null.
+      if (hasAppleId) {
+        return !(a.tidalUrl && a.deezerUrl && a.pandoraUrl && (!spotifyOn || a.spotifyUrl));
+      }
+      // No Apple album id → only Spotify can be resolved (off artist +
+      // title). Pick these up when Spotify is configured and still null.
+      return spotifyOn && !a.spotifyUrl;
+    });
 
     let updatedCount = 0;
     const concurrency = 4;

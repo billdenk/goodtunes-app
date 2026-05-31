@@ -8975,7 +8975,7 @@ function AdminRefreshStreamingLinksSweep() {
             : "No new links found",
         description:
           (data.candidates === 0
-            ? "Every album with an Apple Music URL already has its links."
+            ? "Every resolvable album already has its links."
             : `Checked ${data.candidates} album${data.candidates === 1 ? "" : "s"} missing links.`) +
           tail,
       });

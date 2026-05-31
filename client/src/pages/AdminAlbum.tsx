@@ -1797,25 +1797,36 @@ type ArtistLabelConflict = {
 // Task #846 — re-run the Tidal/Deezer/Pandora resolver for an album that
 // was imported before the resolver shipped (or where Odesli was
 // rate-limited at import time). Only fills NULL link columns server-side;
-// an operator's manual link is never overwritten. Shown only when the
-// album carries an Apple Music URL (the resolver's only input).
+// an operator's manual link is never overwritten.
+//
+// Task #856 — also show this for albums WITHOUT an Apple Music URL when
+// their Spotify link is still blank: Spotify resolves off artist + title
+// (not the Apple collection id), so it can be filled even though
+// Tidal/Deezer/Pandora stay on search (those need Apple via Odesli).
 function RefreshStreamingLinksButton({ album }: { album: AlbumFull }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const hasApple = !!(album.appleMusicUrl && /\/album\/[^/]+\/\d+/.test(album.appleMusicUrl));
+  // Without an Apple album id, Spotify is the only thing we can resolve —
+  // so the button is still useful as long as the Spotify link is blank.
+  const spotifyOnly = !hasApple && !album.spotifyUrl;
   const mut = useMutation({
     mutationFn: async () => {
       const r = await apiRequest(
         "POST",
         `/api/admin/albums/${album.id}/refresh-streaming-links`,
       );
-      return (await r.json()) as { filledCount: number };
+      return (await r.json()) as { filledCount: number; attempted?: string[] };
     },
     onSuccess: async (data) => {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["/api/albums", album.id] }),
         qc.invalidateQueries({ queryKey: ["/api/albums"] }),
       ]);
+      const spotifyOnlyAttempt =
+        Array.isArray(data.attempted) &&
+        data.attempted.length === 1 &&
+        data.attempted[0] === "spotify";
       toast({
         title:
           data.filledCount > 0
@@ -1824,7 +1835,9 @@ function RefreshStreamingLinksButton({ album }: { album: AlbumFull }) {
         description:
           data.filledCount > 0
             ? "Existing links were left untouched."
-            : "Tidal/Deezer/Pandora either resolved already or have no match.",
+            : spotifyOnlyAttempt
+              ? "Spotify either resolved already or has no confident match. (No Apple URL, so Tidal/Deezer/Pandora can't be resolved.)"
+              : "Tidal/Deezer/Pandora/Spotify either resolved already or have no match.",
       });
     },
     onError: (e: any) => {
@@ -1835,14 +1848,18 @@ function RefreshStreamingLinksButton({ album }: { album: AlbumFull }) {
       });
     },
   });
-  if (!hasApple) return null;
+  if (!hasApple && !spotifyOnly) return null;
   return (
     <button
       type="button"
       onClick={() => mut.mutate()}
       disabled={mut.isPending}
       data-testid="button-refresh-streaming-links"
-      title="Re-resolve Tidal/Deezer/Pandora links from Apple Music (fills blanks only)"
+      title={
+        hasApple
+          ? "Re-resolve Tidal/Deezer/Pandora (+ Spotify) links from Apple Music (fills blanks only)"
+          : "Resolve a Spotify link from artist + title (fills blank only; no Apple URL so Tidal/Deezer/Pandora stay on search)"
+      }
       className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 px-3 h-7 text-xs font-semibold transition-colors disabled:opacity-50"
     >
       {mut.isPending ? (
