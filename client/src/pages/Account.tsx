@@ -10,7 +10,6 @@ import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { clearLocalAnalytics } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 import { ChevronLeft, Pencil } from "lucide-react";
-import { SiSpotify, SiApplemusic } from "react-icons/si";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import {
   STREAMING_SERVICES,
@@ -20,6 +19,7 @@ import {
   isStreamingServiceId,
   type StreamingServiceId,
 } from "@/lib/streamingService";
+import { ServiceGlyphBadge } from "@/components/ui/ServiceGlyph";
 
 // Task #74 — minimal order shape for the "My Orders" card on the
 // profile. We only need a few fields to render the count + most-recent
@@ -834,11 +834,6 @@ function PrivacySheet({
  * checkmark marks the current pick; tapping the active one again clears
  * it (back to first-tap picker behavior).
  * ──────────────────────────────────────────────────────────────────── */
-const STREAMING_ICON: Record<StreamingServiceId, { Icon: typeof SiSpotify; color: string }> = {
-  spotify: { Icon: SiSpotify, color: "#1DB954" },
-  apple_music: { Icon: SiApplemusic, color: "#FA243C" },
-};
-
 function StreamingServiceSheet({
   current,
   onPick,
@@ -877,7 +872,6 @@ function StreamingServiceSheet({
         </p>
         <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
           {STREAMING_SERVICES.map((svc, i, arr) => {
-            const { Icon, color } = STREAMING_ICON[svc.id];
             const active = current === svc.id;
             return (
               <button
@@ -888,12 +882,7 @@ function StreamingServiceSheet({
                 style={i < arr.length - 1 ? { borderColor: "rgba(255,255,255,0.07)" } : undefined}
                 data-testid={`row-streaming-pick-${svc.id}`}
               >
-                <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: "rgba(255,255,255,0.08)" }}
-                >
-                  <Icon className="w-5 h-5" style={{ color }} />
-                </div>
+                <ServiceGlyphBadge id={svc.id} />
                 <span className="flex-1 text-white text-base">{svc.label}</span>
                 {active && (
                   <svg

@@ -173,6 +173,10 @@ interface AlbumFull {
   streamingReleaseDate?: string | null;
   appleMusicUrl?: string | null;
   spotifyUrl?: string | null;
+  tidalUrl?: string | null;
+  qobuzUrl?: string | null;
+  deezerUrl?: string | null;
+  pandoraUrl?: string | null;
   // Original credits-doc prose, captured verbatim by the credits importer
   // and saved here so a re-open of the album shows "saved from a previous
   // import" — no fan-side rendering yet.
@@ -1878,6 +1882,10 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           streamingReleaseDate: album.streamingReleaseDate,
           appleMusicUrl: album.appleMusicUrl,
           spotifyUrl: album.spotifyUrl,
+          tidalUrl: album.tidalUrl,
+          qobuzUrl: album.qobuzUrl,
+          deezerUrl: album.deezerUrl,
+          pandoraUrl: album.pandoraUrl,
         }}
         invalidate={invalidate}
         fields={[
@@ -1902,6 +1910,30 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
             label: "Spotify",
             type: "url",
             placeholder: "https://open.spotify.com/album/…",
+          },
+          {
+            key: "tidalUrl",
+            label: "Tidal",
+            type: "url",
+            placeholder: "https://tidal.com/browse/album/…",
+          },
+          {
+            key: "qobuzUrl",
+            label: "Qobuz",
+            type: "url",
+            placeholder: "https://open.qobuz.com/album/…",
+          },
+          {
+            key: "deezerUrl",
+            label: "Deezer",
+            type: "url",
+            placeholder: "https://www.deezer.com/album/…",
+          },
+          {
+            key: "pandoraUrl",
+            label: "Pandora",
+            type: "url",
+            placeholder: "https://www.pandora.com/artist/…/album/…",
           },
         ]}
       />

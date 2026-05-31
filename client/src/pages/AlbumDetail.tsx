@@ -226,9 +226,13 @@ function AlbumDetailMobile() {
     isExplicit: boolean;
     goodTunesReleaseDate: string | null;
     streamingReleaseDate: string | null;
-    // Album-level streaming handoff links (Task #734).
+    // Album-level streaming handoff links (Task #734 / #816).
     spotifyUrl: string | null;
     appleMusicUrl: string | null;
+    tidalUrl: string | null;
+    qobuzUrl: string | null;
+    deezerUrl: string | null;
+    pandoraUrl: string | null;
     // Denormalized record-label entity (or null). Comes from the album's
     // LEFT JOIN on `labels` so we render name/logo without a second fetch.
     label: {
@@ -289,6 +293,12 @@ function AlbumDetailMobile() {
         isExplicit: apiAlbum.isExplicit,
         spotifyUrl: apiAlbum.spotifyUrl ?? staticAlbum?.spotifyUrl ?? null,
         appleMusicUrl: apiAlbum.appleMusicUrl ?? staticAlbum?.appleMusicUrl ?? null,
+        // Task #816 — the static musicData catalog has no entries for the new
+        // four services, so these come from the API row only.
+        tidalUrl: apiAlbum.tidalUrl ?? null,
+        qobuzUrl: apiAlbum.qobuzUrl ?? null,
+        deezerUrl: apiAlbum.deezerUrl ?? null,
+        pandoraUrl: apiAlbum.pandoraUrl ?? null,
       };
     }
     return staticAlbum;
@@ -437,6 +447,11 @@ function AlbumDetailMobile() {
       {
         spotify: (album as any)?.spotifyUrl ?? firstStream?.spotifyTrackUrl ?? null,
         apple: (album as any)?.appleMusicUrl ?? firstStream?.appleMusicTrackUrl ?? null,
+        // Task #816 — album-level only (no per-track columns for the new four).
+        tidal: (album as any)?.tidalUrl ?? null,
+        qobuz: (album as any)?.qobuzUrl ?? null,
+        deezer: (album as any)?.deezerUrl ?? null,
+        pandora: (album as any)?.pandoraUrl ?? null,
       },
       album?.title,
     );

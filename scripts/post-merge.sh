@@ -427,6 +427,44 @@ SQL
 migrate_album_addons_vendor_legs dev  "${DATABASE_URL:-}"
 migrate_album_addons_vendor_legs prod "${PROD_DATABASE_URL:-}"
 
+# Task #816 — additional streaming-service handoff URLs (Tidal / Qobuz /
+# Deezer / Pandora) on albums, people, and person_discography. Additive,
+# nullable text columns; drizzle-kit push bails on this repo's unrelated
+# dev-table drift, so sweep both DBs idempotently here to keep the
+# publish dev→prod diff empty and a fresh-clone dev from 500ing the
+# album/person serializers.
+migrate_task_816_streaming_links() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-816 streaming-links migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE albums
+  ADD COLUMN IF NOT EXISTS tidal_url   text,
+  ADD COLUMN IF NOT EXISTS qobuz_url   text,
+  ADD COLUMN IF NOT EXISTS deezer_url  text,
+  ADD COLUMN IF NOT EXISTS pandora_url text;
+ALTER TABLE people
+  ADD COLUMN IF NOT EXISTS tidal_url   text,
+  ADD COLUMN IF NOT EXISTS qobuz_url   text,
+  ADD COLUMN IF NOT EXISTS deezer_url  text,
+  ADD COLUMN IF NOT EXISTS pandora_url text;
+ALTER TABLE person_discography
+  ADD COLUMN IF NOT EXISTS tidal_url   text,
+  ADD COLUMN IF NOT EXISTS qobuz_url   text,
+  ADD COLUMN IF NOT EXISTS deezer_url  text,
+  ADD COLUMN IF NOT EXISTS pandora_url text;
+SQL
+  then
+    echo "post-merge: task-816 streaming-links migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-816 streaming-links migration failed on $label (continuing)"
+  fi
+}
+migrate_task_816_streaming_links dev  "${DATABASE_URL:-}"
+migrate_task_816_streaming_links prod "${PROD_DATABASE_URL:-}"
+
 # Task #471 — Quickprinter capability + platform-default GoodDeed
 # vendor routing + per-paper-size printing ladders. Idempotent on both
 # DBs so a fresh-clone dev never 500s the Sell panel after this merge

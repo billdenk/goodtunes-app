@@ -5457,7 +5457,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/admin/albums", requireAdmin, async (req, res) => {
-    const { id, title, artist, artwork, year, type, description, appleMusicUrl, spotifyUrl, labelId, genre } = req.body ?? {};
+    const { id, title, artist, artwork, year, type, description, appleMusicUrl, spotifyUrl, tidalUrl, qobuzUrl, deezerUrl, pandoraUrl, labelId, genre } = req.body ?? {};
     if (!title || !artist || !artwork) {
       return res.status(400).json({ message: "title, artist, artwork are required" });
     }
@@ -5492,6 +5492,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       labelId: normalizedLabelId,
       appleMusicUrl: appleMusicUrl ? String(appleMusicUrl) : null,
       spotifyUrl: spotifyUrl ? String(spotifyUrl) : null,
+      tidalUrl: tidalUrl ? String(tidalUrl) : null,
+      qobuzUrl: qobuzUrl ? String(qobuzUrl) : null,
+      deezerUrl: deezerUrl ? String(deezerUrl) : null,
+      pandoraUrl: pandoraUrl ? String(pandoraUrl) : null,
       genre: genre ? String(genre).trim() : null,
       goodTunesReleaseDate: normalizeReleaseDate(req.body?.goodTunesReleaseDate),
       streamingReleaseDate: normalizeReleaseDate(req.body?.streamingReleaseDate),
@@ -5833,6 +5837,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       updates.isSpinPromo = !!req.body.isSpinPromo;
     if (req.body?.appleMusicUrl !== undefined) updates.appleMusicUrl = req.body.appleMusicUrl ? String(req.body.appleMusicUrl) : null;
     if (req.body?.spotifyUrl !== undefined) updates.spotifyUrl = req.body.spotifyUrl ? String(req.body.spotifyUrl) : null;
+    // Task #816 — four additional streaming-service handoff URLs. Same
+    // edit_metadata gate + null-on-empty normalization as the two above.
+    if (req.body?.tidalUrl !== undefined) updates.tidalUrl = req.body.tidalUrl ? String(req.body.tidalUrl) : null;
+    if (req.body?.qobuzUrl !== undefined) updates.qobuzUrl = req.body.qobuzUrl ? String(req.body.qobuzUrl) : null;
+    if (req.body?.deezerUrl !== undefined) updates.deezerUrl = req.body.deezerUrl ? String(req.body.deezerUrl) : null;
+    if (req.body?.pandoraUrl !== undefined) updates.pandoraUrl = req.body.pandoraUrl ? String(req.body.pandoraUrl) : null;
     if (req.body?.genre !== undefined)
       updates.genre = req.body.genre ? String(req.body.genre).trim() : null;
     // Bundle price in cents — admin sets per album. Null clears it (no
@@ -11004,6 +11014,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     labelId: p.labelId ?? null,
     appleMusicUrl: p.appleMusicUrl ?? null,
     spotifyUrl: p.spotifyUrl ?? null,
+    tidalUrl: p.tidalUrl ?? null,
+    qobuzUrl: p.qobuzUrl ?? null,
+    deezerUrl: p.deezerUrl ?? null,
+    pandoraUrl: p.pandoraUrl ?? null,
     itunesArtistId: p.itunesArtistId ?? null,
     instagramUrl: p.instagramUrl ?? null,
     tiktokUrl: p.tiktokUrl ?? null,
@@ -11191,6 +11205,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       bio: opt(b.bio),
       appleMusicUrl: opt(b.appleMusicUrl),
       spotifyUrl: opt(b.spotifyUrl),
+      tidalUrl: opt(b.tidalUrl),
+      qobuzUrl: opt(b.qobuzUrl),
+      deezerUrl: opt(b.deezerUrl),
+      pandoraUrl: opt(b.pandoraUrl),
       itunesArtistId: opt(b.itunesArtistId),
       instagramUrl: opt(b.instagramUrl),
       tiktokUrl: opt(b.tiktokUrl),
@@ -11246,6 +11264,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       updates.spotifyHasMatch =
         b.spotifyHasMatch === null ? null : Boolean(b.spotifyHasMatch);
     }
+    // Task #816 — four additional streaming-service handoff URLs.
+    if (b.tidalUrl !== undefined) updates.tidalUrl = opt(b.tidalUrl);
+    if (b.qobuzUrl !== undefined) updates.qobuzUrl = opt(b.qobuzUrl);
+    if (b.deezerUrl !== undefined) updates.deezerUrl = opt(b.deezerUrl);
+    if (b.pandoraUrl !== undefined) updates.pandoraUrl = opt(b.pandoraUrl);
     if (b.itunesArtistId !== undefined) updates.itunesArtistId = opt(b.itunesArtistId);
     if (b.instagramUrl !== undefined) updates.instagramUrl = opt(b.instagramUrl);
     if (b.tiktokUrl !== undefined) updates.tiktokUrl = opt(b.tiktokUrl);
@@ -11530,6 +11553,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         trackCount: typeof r.trackCount === "number" ? r.trackCount : null,
         appleMusicUrl: r.appleMusicUrl ? String(r.appleMusicUrl) : null,
         spotifyUrl: r.spotifyUrl ? String(r.spotifyUrl) : null,
+        // Task #816 — parity columns. The Apple discography pull doesn't
+        // source these today, so they normally stay null.
+        tidalUrl: r.tidalUrl ? String(r.tidalUrl) : null,
+        qobuzUrl: r.qobuzUrl ? String(r.qobuzUrl) : null,
+        deezerUrl: r.deezerUrl ? String(r.deezerUrl) : null,
+        pandoraUrl: r.pandoraUrl ? String(r.pandoraUrl) : null,
         position: typeof r.position === "number" ? r.position : idx,
       }));
     const rows = await storage.replaceDiscographyForPerson(id, norm);

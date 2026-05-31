@@ -1,8 +1,8 @@
-import { SiSpotify, SiApplemusic } from "react-icons/si";
 import {
   STREAMING_SERVICES,
   type StreamingServiceId,
 } from "@/lib/streamingService";
+import { ServiceGlyphBadge } from "@/components/ui/ServiceGlyph";
 import { motion, useReducedMotion } from "framer-motion";
 import { sheetOpen, sheetClose, scrimFade } from "@/lib/motion";
 
@@ -15,14 +15,6 @@ interface StreamServicePickerSheetProps {
   onPick: (id: StreamingServiceId) => void;
   onClose: () => void;
 }
-
-const SERVICE_ICON: Record<
-  StreamingServiceId,
-  { Icon: typeof SiSpotify; color: string }
-> = {
-  spotify: { Icon: SiSpotify, color: "#1DB954" },
-  apple_music: { Icon: SiApplemusic, color: "#FA243C" },
-};
 
 // Task #734 — first-tap streaming-service picker. Shown the first time a fan
 // hands off a stream-only track/album (and again any time they reset their
@@ -77,7 +69,6 @@ export function StreamServicePickerSheet({
         <div className="space-y-2">
           {STREAMING_SERVICES.map((svc) => {
             const enabled = available.includes(svc.id);
-            const { Icon, color } = SERVICE_ICON[svc.id];
             return (
               <button
                 key={svc.id}
@@ -91,12 +82,7 @@ export function StreamServicePickerSheet({
                 }}
                 data-testid={`row-stream-service-${svc.id}`}
               >
-                <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: "rgba(255,255,255,0.08)" }}
-                >
-                  <Icon className="w-5 h-5" style={{ color }} />
-                </div>
+                <ServiceGlyphBadge id={svc.id} />
                 <div className="flex-1 min-w-0">
                   <p className="text-white text-sm font-medium leading-tight">
                     {svc.label}

@@ -796,6 +796,10 @@ export type InsertUploadValidationRow = Omit<UploadValidationRow, "id" | "create
 type SeedAlbum = Omit<
   Album,
   | "isExplicit"
+  | "tidalUrl"
+  | "qobuzUrl"
+  | "deezerUrl"
+  | "pandoraUrl"
   | "linerNotes"
   | "payoutFeePctOverride"
   | "payoutCertCentsOverride"

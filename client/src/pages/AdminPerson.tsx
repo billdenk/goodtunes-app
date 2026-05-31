@@ -23,7 +23,7 @@ import {
 import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { SiApplemusic, SiSpotify, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook } from "react-icons/si";
+import { SiApplemusic, SiSpotify, SiTidal, SiPandora, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
 import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -131,6 +131,10 @@ interface PersonFull {
   labelId: string | null;
   appleMusicUrl: string | null;
   spotifyUrl: string | null;
+  tidalUrl: string | null;
+  qobuzUrl: string | null;
+  deezerUrl: string | null;
+  pandoraUrl: string | null;
   itunesArtistId: string | null;
   instagramUrl: string | null;
   tiktokUrl: string | null;
@@ -948,6 +952,10 @@ function OverviewPanel({
           values={{
             appleMusicUrl: person.appleMusicUrl,
             spotifyUrl: person.spotifyUrl,
+            tidalUrl: person.tidalUrl,
+            qobuzUrl: person.qobuzUrl,
+            deezerUrl: person.deezerUrl,
+            pandoraUrl: person.pandoraUrl,
           }}
           invalidate={invalidate}
           fields={[
@@ -964,6 +972,32 @@ function OverviewPanel({
               type: "url",
               readIcon: SiSpotify,
               placeholder: "https://open.spotify.com/artist/…",
+            },
+            {
+              key: "tidalUrl",
+              label: "Tidal",
+              type: "url",
+              readIcon: SiTidal,
+              placeholder: "https://tidal.com/browse/artist/…",
+            },
+            {
+              key: "qobuzUrl",
+              label: "Qobuz",
+              type: "url",
+              placeholder: "https://open.qobuz.com/artist/…",
+            },
+            {
+              key: "deezerUrl",
+              label: "Deezer",
+              type: "url",
+              placeholder: "https://www.deezer.com/artist/…",
+            },
+            {
+              key: "pandoraUrl",
+              label: "Pandora",
+              type: "url",
+              readIcon: SiPandora,
+              placeholder: "https://www.pandora.com/artist/…",
             },
           ]}
         />

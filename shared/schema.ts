@@ -184,6 +184,14 @@ export const albums = pgTable("albums", {
   // referral logic as the per-artist links on `people`.
   appleMusicUrl: text("apple_music_url"),
   spotifyUrl: text("spotify_url"),
+  // Additional streaming-service handoff links (Task #816). Same external
+  // "Listen on …" referral role as Apple Music / Spotify above — operators
+  // paste these in the album editor, fans pick any of the six as their
+  // remembered handoff service. Never in-app playback.
+  tidalUrl: text("tidal_url"),
+  qobuzUrl: text("qobuz_url"),
+  deezerUrl: text("deezer_url"),
+  pandoraUrl: text("pandora_url"),
   // Single primary genre string ("Indie Rock", "Soul", "Ambient"). Free-text
   // for now — admin types it in, fan-side renders it next to the year
   // under the artist on the album page. Optional: legacy rows + imports
@@ -763,6 +771,13 @@ export const people = pgTable("people", {
   // source for name/photo/bio on first import.
   appleMusicUrl: text("apple_music_url"),
   spotifyUrl: text("spotify_url"),
+  // Additional streaming-service handoff links (Task #816). Same external
+  // referral role as Apple Music / Spotify above — operators paste these on
+  // the artist editor, fans pick any of the six as their handoff service.
+  tidalUrl: text("tidal_url"),
+  qobuzUrl: text("qobuz_url"),
+  deezerUrl: text("deezer_url"),
+  pandoraUrl: text("pandora_url"),
   // Tri-state Spotify scan outcome, written by the bulk "Match people on
   // Spotify" walk. Lets the People grid badge people who've been searched
   // (true = candidates exist & still need admin pick; false = Spotify
@@ -969,6 +984,13 @@ export const personDiscography = pgTable("person_discography", {
   // Today the fan-side "How to Play" sheet falls back to a Spotify
   // search URL when this is null.
   spotifyUrl: text("spotify_url"),
+  // Additional streaming-service handoff links (Task #816). Parity with the
+  // album/person tables; the discography pull only fills appleMusicUrl today,
+  // so these stay null unless a future per-release link source writes them.
+  tidalUrl: text("tidal_url"),
+  qobuzUrl: text("qobuz_url"),
+  deezerUrl: text("deezer_url"),
+  pandoraUrl: text("pandora_url"),
   // Display order — admin pulls newest-first from Apple, we mirror that.
   position: integer("position").notNull().default(0),
 });
