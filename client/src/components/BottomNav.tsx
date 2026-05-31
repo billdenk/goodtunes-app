@@ -399,7 +399,7 @@ export function BottomNav() {
           transition={
             reduceMotion
               ? { duration: 0 }
-              : { type: "spring", stiffness: 500, damping: 18, mass: 0.9 }
+              : { type: "spring", stiffness: 420, damping: 40, mass: 0.9 }
           }
           whileTap={reduceMotion ? undefined : { scale: 0.92 }}
           data-testid="nav-search"
@@ -412,7 +412,7 @@ export function BottomNav() {
             transition={
               reduceMotion
                 ? { duration: 0 }
-                : { type: "spring", stiffness: 520, damping: 20, mass: 0.7 }
+                : { type: "spring", stiffness: 480, damping: 34, mass: 0.7 }
             }
           >
             {searchOpen ? closeIcon : searchIcon}
