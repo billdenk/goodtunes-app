@@ -406,12 +406,13 @@ export function Collection() {
 
         <div
           ref={scrollRef}
-          className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pt-[104px] pb-[170px]"
+          className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]"
           style={{
             WebkitMaskImage: "linear-gradient(to bottom, transparent 0px, #000 64px)",
             maskImage: "linear-gradient(to bottom, transparent 0px, #000 64px)",
           }}
         >
+          <div aria-hidden style={{ height: 104, flexShrink: 0 }} />
           {recentsLoading ? (
             <div className="mb-5" data-testid="rail-recent-loading">
               <div className="flex items-center justify-between px-5 mb-3">
