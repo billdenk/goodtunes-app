@@ -21,11 +21,11 @@ export function OgNativeChip() {
         <div className="relative w-full" style={{ height: 372 }}>
           <img src={ART} alt="" className="w-full h-full block object-cover object-top" />
           <div
-            className="absolute flex items-center gap-2"
+            className="absolute flex items-center gap-3"
             style={{
-              right: 16,
-              bottom: 16,
-              padding: "8px 14px",
+              right: 20,
+              bottom: 20,
+              padding: "13px 22px",
               borderRadius: 999,
               background: "rgba(0,6,43,0.62)",
               backdropFilter: "blur(8px)",
@@ -34,9 +34,9 @@ export function OgNativeChip() {
               boxShadow: "0 4px 14px rgba(0,0,0,0.45)",
             }}
           >
-            <img src={LOGO} alt="GoodTunes" style={{ height: 18, width: "auto", display: "block" }} />
-            <span style={{ width: 1, height: 16, background: "rgba(255,255,255,0.3)" }} />
-            <span className="font-bold text-white" style={{ fontSize: 16, letterSpacing: 0.2 }}>
+            <img src={LOGO} alt="GoodTunes" style={{ height: 28, width: "auto", display: "block" }} />
+            <span style={{ width: 1, height: 24, background: "rgba(255,255,255,0.3)" }} />
+            <span className="font-bold text-white" style={{ fontSize: 24, letterSpacing: 0.2 }}>
               #07
             </span>
           </div>
