@@ -8,7 +8,7 @@
 // This mock simulates the iMessage link bubble so the tradeoff is visible.
 import "./_group.css";
 
-const ART = "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png";
+const ART = "/__mockup/images/album-guitar-as-a-voice.png";
 
 export function OgNative() {
   const w = 560;

@@ -6,7 +6,7 @@
 // native caption, so there's no doubled text.
 import "./_group.css";
 
-const ART = "/figmaAssets/artworks-000451097049-kerecr-t500x500-2.png";
+const ART = "/__mockup/images/album-guitar-as-a-voice.png";
 const LOGO = "/__mockup/images/goodtunes-logo-white.png";
 
 export function OgNativeChip() {
