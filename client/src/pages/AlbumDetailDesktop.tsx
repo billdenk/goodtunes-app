@@ -13,6 +13,7 @@ import {
   useAlbumOwnership,
   setDevAlbumOwnership,
 } from "@/hooks/useAlbumOwnership";
+import { useFullPlaybackAccess } from "@/hooks/useFullPlaybackAccess";
 import {
   AlbumDesktopSidebar,
   BRAND_BG,
@@ -112,6 +113,15 @@ export function AlbumDetailDesktop() {
   });
 
   const isOwned = useAlbumOwnership(id);
+  // Bill's own accounts (admin sessions + a small email allowlist) are
+  // exempted from preview-first "for now" so they hear full-length tracks
+  // on every album — including ones shared to an account that doesn't own
+  // it. `effectiveOwned` is what every playback/preview branch reads;
+  // the real `isOwned` is kept for the dev ownership toggle so QA can
+  // still flip between owned/not-owned states. Temporary until the real
+  // ownership pipeline lands (Phase 4).
+  const fullPlaybackAccess = useFullPlaybackAccess();
+  const effectiveOwned = isOwned || fullPlaybackAccess;
   const favSongs = useFavoriteSongs();
   const [showAlbumCredits, setShowAlbumCredits] = useState(false);
   // Person opened from the album-credits sheet. The desktop view has no
@@ -147,13 +157,13 @@ export function AlbumDetailDesktop() {
   );
 
   const hasPreviews = songs.some((s) => s.isPreviewable);
-  const canPlay = isOwned || hasPreviews;
+  const canPlay = effectiveOwned || hasPreviews;
 
   // Is the player currently auditioning a song from this album under
   // preview-mode? Used by the rose Play pill to switch into its Pause
   // affordance + by the dock to render the PREVIEW badge.
   const previewActive =
-    !isOwned &&
+    !effectiveOwned &&
     player.previewMode &&
     !!player.currentSong &&
     player.currentSong.albumId === album?.id;
@@ -173,7 +183,7 @@ export function AlbumDetailDesktop() {
       description: album.description ?? "",
     };
     return songs
-      .filter((s) => isOwned || s.isPreviewable)
+      .filter((s) => effectiveOwned || s.isPreviewable)
       .map((s) => ({
         id: s.id,
         albumId: s.albumId,
@@ -186,7 +196,7 @@ export function AlbumDetailDesktop() {
         isExplicit: !!s.isExplicit,
         album: albumForSong,
       })) as PlayerSong[];
-  }, [album, songs, isOwned]);
+  }, [album, songs, effectiveOwned]);
 
   const handlePlayAll = () => {
     if (playableSongs.length === 0) return;
@@ -228,7 +238,7 @@ export function AlbumDetailDesktop() {
     // When the album is not owned, per-row taps audition that row's
     // 30-second preview rather than starting full playback. Mirror the
     // album-level pill so behavior stays consistent.
-    if (!isOwned) {
+    if (!effectiveOwned) {
       player.setPreviewMode(true);
     } else if (player.previewMode) {
       player.setPreviewMode(false);
@@ -255,7 +265,7 @@ export function AlbumDetailDesktop() {
       const r = await apiRequest("GET", `/api/albums/${id}/buy-options`);
       return r.json();
     },
-    enabled: !!id && buyEnabled && !isOwned,
+    enabled: !!id && buyEnabled && !effectiveOwned,
     staleTime: 60_000,
   });
   const signedCertAddon = buyOptions?.addons?.find(
@@ -276,7 +286,7 @@ export function AlbumDetailDesktop() {
   useEffect(() => {
     const was = wasPlayingRef.current;
     wasPlayingRef.current = player.isPlaying;
-    if (!buyEnabled || isOwned) return;
+    if (!buyEnabled || effectiveOwned) return;
     if (!player.previewMode) return;
     if (!was || player.isPlaying) return;
     if (player.queue.length === 0) return;
@@ -290,7 +300,7 @@ export function AlbumDetailDesktop() {
     player.queue.length,
     player.currentIndex,
     player.currentTime,
-    isOwned,
+    effectiveOwned,
   ]);
 
   // Turn preview mode off when the route unmounts so a navigation away
@@ -392,7 +402,7 @@ export function AlbumDetailDesktop() {
             songs={songs}
             videos={videos}
             photos={photos}
-            isOwned={isOwned}
+            isOwned={effectiveOwned}
             canPlay={canPlay}
             tab={tab}
             onTabChange={setTab}

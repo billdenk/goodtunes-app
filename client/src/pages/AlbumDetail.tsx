@@ -6,6 +6,7 @@ import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
 import { useAlbumOwnership } from "@/hooks/useAlbumOwnership";
+import { useFullPlaybackAccess } from "@/hooks/useFullPlaybackAccess";
 import { useAuth } from "@/hooks/useAuth";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
@@ -127,12 +128,18 @@ function AlbumDetailMobile() {
   const [, navigate] = useLocation();
   const { playSong, currentSong, isPlaying, togglePlay, playNext, playLast, addToQueue, queue, currentIndex, previewMode, setPreviewMode, currentTime } = usePlayer();
   const isOwned = useAlbumOwnership(id);
+  // Bill's own accounts (admin sessions + a small email allowlist) are
+  // exempted from preview-first "for now" so they hear full-length tracks
+  // on every album — including ones shared to an account that doesn't own
+  // them. Temporary until the real ownership pipeline lands (Phase 4).
+  const fullPlaybackAccess = useFullPlaybackAccess();
   // On web (buyEnabled) the album is in preview-first mode when the fan
   // hasn't bought it yet — every play triggers the 30s-per-track preview
   // session instead of full-track playback (matching the AlbumDetail-
   // Desktop branch). On iOS native (buyEnabled=false) we keep the in-app
   // behavior since IAP isn't wired and the player is for owned content.
-  const previewFirst = buyEnabled && !isOwned;
+  // Full-playback accounts are treated like owners here.
+  const previewFirst = buyEnabled && !isOwned && !fullPlaybackAccess;
   const queueHasUpcoming = queue.length - currentIndex - 1 > 0;
   const { user, updateProfile } = useAuth();
   const favSongs = useFavoriteSongs();
