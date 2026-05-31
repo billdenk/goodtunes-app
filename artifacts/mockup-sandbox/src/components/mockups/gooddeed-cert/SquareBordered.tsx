@@ -122,14 +122,14 @@ export function BorderedSquareCard({ overlay, radius = 22 }: { overlay?: ReactNo
           </span>
         </div>
 
-        {/* secondary caption sits directly under the pill as part of the block */}
+        {/* secondary caption pinned toward the bottom, IG-story style */}
         {captionWraps ? (
-          <div className="text-white/60 leading-snug" style={{ fontSize: 30 * u, marginTop: 22 * u }}>
+          <div className="mt-auto text-white/60 leading-snug" style={{ fontSize: 30 * u }}>
             <p className="whitespace-nowrap">{album.title} #{certNumStr}</p>
             <p className="whitespace-nowrap">by {album.artist}</p>
           </div>
         ) : (
-          <p className="text-white/60 leading-snug whitespace-nowrap" style={{ fontSize: 30 * u, marginTop: 22 * u }}>
+          <p className="mt-auto text-white/60 leading-snug whitespace-nowrap" style={{ fontSize: 30 * u }}>
             {captionOneLine}
           </p>
         )}
