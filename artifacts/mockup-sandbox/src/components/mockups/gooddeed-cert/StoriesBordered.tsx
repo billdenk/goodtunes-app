@@ -58,7 +58,7 @@ export function BorderedStoryCard({ overlay }: { overlay?: ReactNode }) {
       </div>
 
       {/* Lower section — relative+z so the avatar paints ON TOP of the album art */}
-      <div className="relative z-10 flex-1 flex flex-col items-center text-center px-6" style={{ paddingBottom: 22 }}>
+      <div className="relative z-10 flex-1 flex flex-col items-center text-center px-6" style={{ paddingBottom: 11 }}>
         <div
           className="rounded-full overflow-hidden shrink-0"
           style={{
@@ -98,11 +98,9 @@ export function BorderedStoryCard({ overlay }: { overlay?: ReactNode }) {
           </span>
         </div>
 
-        {/* secondary caption — pinned to the bottom */}
-        <p className="text-white/60 text-sm leading-snug mt-auto" style={{ maxWidth: "15rem" }}>
-          Owns #{certNumStr} of {album.title}
-          <br />
-          by {album.artist}
+        {/* secondary caption — one small, legible line pinned near the bottom */}
+        <p className="text-white/60 text-xs leading-snug mt-auto whitespace-nowrap">
+          Owns #{certNumStr} of {album.title} by {album.artist}
         </p>
       </div>
 
