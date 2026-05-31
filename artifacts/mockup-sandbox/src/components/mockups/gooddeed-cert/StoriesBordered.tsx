@@ -100,7 +100,7 @@ export function BorderedStoryCard({ overlay }: { overlay?: ReactNode }) {
 
         {/* secondary caption — one small, legible line pinned near the bottom */}
         <p className="text-white/60 text-xs leading-snug mt-auto whitespace-nowrap">
-          Owns #{certNumStr} of {album.title} by {album.artist}
+          {album.title} by {album.artist} #{certNumStr}
         </p>
       </div>
 
