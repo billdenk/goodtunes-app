@@ -93,7 +93,7 @@ export function BorderedStoryCard({ overlay, radius = 22 }: { overlay?: ReactNod
           <img src={ownerPhoto} alt={ownerName} className="w-full h-full object-cover block" />
         </div>
 
-        <p className="text-white/55 text-xs leading-snug mt-4">This GoodDeed® certifies that</p>
+        <p className="text-white/55 text-xs leading-snug mt-4">This GoodDeed® certifies</p>
         <p
           className="text-white font-bold leading-tight mt-1.5 max-w-full whitespace-nowrap"
           style={{ fontSize: nameFontSize(ownerName) }}

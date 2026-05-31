@@ -10,6 +10,16 @@
 - Apple-Music-style large headers, 44×44 minimum touch targets
 - Songs use **heart** icon (`#FF5470`); artists use **star** icon
 
+## GoodDeed® share-card (social) — approved spec
+
+The GoodDeed share-card has one approved hero format: the **orange-frame Story** (Instagram 9:16, 1080×1920). Locked decisions:
+
+- **Orange frame.** A solid GoodTunes-orange border runs edge-to-edge (`--brand-orange`, never inline the hex; ~15px on the 340-wide mockup). This is the one sanctioned use of orange — it makes the card instantly recognizable as a GoodDeed.
+- **Corner radius — subtly rounded, not square.** ≈ an Instagram feed-photo curve (mockup value `r=22` on a 340-wide card; scale to width in the real renderer). Round **concentrically** — the orange frame and the inner art/navy round together (single `border-radius` on the clipping container). Round only when the card is consumed as a **floating / shared image**; if it is ever uploaded **full-bleed** as the whole Story background, keep corners square (the device clips them anyway).
+- **No Meta HIG to match.** Instagram publishes no corner-radius spec for Story content — Stories are full-bleed, and the rounding you see is the device screen + IG's own UI chrome painted over the asset. The only Meta constraints that bind us are the **1080×1920 / 9:16** canvas and the **top/bottom safe zones** (keep key content out of them).
+- **Caption lead-in.** "This GoodDeed® certifies" → owner name (no "that"; the cert number rides the pill and the album/artist rides the bottom caption).
+- **Source of truth.** Mockup: `artifacts/mockup-sandbox/src/components/mockups/gooddeed-cert/StoriesBordered.tsx`. Prod-renderer port target: `server/certOgImage.ts` + `/share/cert` (not yet ported).
+
 ## Two surfaces, shared vocabulary, distinct chrome
 
 Mobile player and desktop admin share **icon glyphs** (Lucide for UI chrome, `react-icons/si` for company logos), **brand colors**, and **product concepts** (favorite = heart, lyrics = `Mic2`, etc.) — but use different button treatments because they live on different backgrounds and serve different users.
