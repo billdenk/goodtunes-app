@@ -101,8 +101,8 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   if (isLoading) {
     return (
       <main className="min-h-screen bg-[#00062B] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <img src="/figmaAssets/--.svg" alt="GoodTunes" className="w-8 h-10 opacity-60" />
+        <div className="flex flex-col items-center gap-6">
+          <img src="/goodtunes-logo-white-sm.png" alt="GoodTunes" className="w-40 max-w-[45vw] h-auto opacity-50" />
           <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
         </div>
       </main>
@@ -218,8 +218,8 @@ function Router() {
   if (isLoading) {
     return (
       <main className="min-h-screen bg-[#00062B] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <img src="/figmaAssets/--.svg" alt="GoodTunes" className="w-8 h-10 opacity-60" />
+        <div className="flex flex-col items-center gap-6">
+          <img src="/goodtunes-logo-white-sm.png" alt="GoodTunes" className="w-40 max-w-[45vw] h-auto opacity-50" />
           <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
         </div>
       </main>
