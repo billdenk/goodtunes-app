@@ -15570,11 +15570,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const albumId = /^[a-zA-Z0-9_-]+$/.test(albumIdRaw) ? albumIdRaw : "";
 
     const origin = `${req.protocol}://${req.get("host")}`;
-    const ogImage = artParam.startsWith("http")
-      ? artParam
-      : artParam
-        ? `${origin}${artParam.startsWith("/") ? "" : "/"}${artParam}`
-        : `${origin}/goodtunes-logo-color.png`;
+    // The OG/Twitter preview image is the generated 1200×630 GoodDeed card
+    // (server/certOgImage.ts), not the raw album cover — so a pasted link
+    // shows the "No. NN — Verified" card. Carry the same params through.
+    const ogParams = new URLSearchParams();
+    if (req.query.album) ogParams.set("album", String(req.query.album));
+    if (req.query.artist) ogParams.set("artist", String(req.query.artist));
+    if (req.query.owner) ogParams.set("owner", String(req.query.owner));
+    ogParams.set("num", numClean);
+    if (artParam) ogParams.set("art", artParam);
+    const ogImage = `${origin}/share/cert/og.png?${ogParams.toString()}`;
 
     const title = `${owner || "I"} own${owner ? "s" : ""} No. ${num} of "${album}" — GoodDeed®`;
     const description = `${album}${artist ? ` by ${artist}` : ""}. Verified ownership by GoodTunes® GoodDeed®.`;
@@ -15645,6 +15650,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   </div>
 </body>
 </html>`);
+  });
+
+  // 1200×630 link-preview (Open Graph) image for a shared GoodDeed. Crawlers
+  // (iMessage, Twitter/X, BlueSky, Facebook, Discord, WhatsApp) fetch this when
+  // a fan shares the `/share/cert` link. Rendered server-side as a real PNG.
+  app.get("/share/cert/og.png", async (req, res) => {
+    try {
+      const { renderCertOgImage } = await import("./certOgImage");
+      const numRaw = String(req.query.num ?? "1");
+      const num = (/^\d+$/.test(numRaw) ? numRaw : "1").padStart(2, "0");
+      const clamp = (v: unknown, max: number) => String(v ?? "").slice(0, max);
+      const origin = `${req.protocol}://${req.get("host")}`;
+      const png = await renderCertOgImage({
+        album: clamp(req.query.album, 120) || "GoodDeed Certificate",
+        artist: clamp(req.query.artist, 120),
+        owner: clamp(req.query.owner, 80),
+        num,
+        artUrl: clamp(req.query.art, 600) || null,
+        origin,
+      });
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+      res.send(png);
+    } catch (err) {
+      console.error("[share/cert/og.png] render failed", err);
+      res.status(500).send("og image render failed");
+    }
   });
 
   // ============================ ASCAP staging lookup ============================

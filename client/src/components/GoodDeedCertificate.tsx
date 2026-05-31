@@ -18,6 +18,7 @@ interface GoodDeedCertificateProps {
 }
 
 type IdentityKind = "display" | "username" | "real";
+type CardShape = "square" | "story";
 
 export function GoodDeedCertificate({
   album,
@@ -35,6 +36,9 @@ export function GoodDeedCertificate({
   const [savingImage, setSavingImage] = useState(false);
   const [imageSaved, setImageSaved] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
+  const [shape, setShape] = useState<CardShape>("square");
+  const [stageW, setStageW] = useState(320);
+  const [vh, setVh] = useState(720);
   const [identity, setIdentity] = useState<IdentityKind>("display");
   const [showIdentityMenu, setShowIdentityMenu] = useState(false);
   const [addRealOpen, setAddRealOpen] = useState(false);
@@ -42,6 +46,7 @@ export function GoodDeedCertificate({
   const [savingReal, setSavingReal] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const captureRef = useRef<HTMLDivElement | null>(null);
 
   const { user, updateProfile } = useAuth();
 
@@ -103,7 +108,28 @@ export function GoodDeedCertificate({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Measure the available preview width + viewport height so the on-screen card
+  // scales responsively. Capture always happens off-screen at w=1080.
+  useEffect(() => {
+    const measure = () => {
+      const el = scrollerRef.current;
+      const avail = el ? el.clientWidth : window.innerWidth;
+      setStageW(Math.max(220, Math.min(avail - 24, 360)));
+      setVh(window.innerHeight);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
   const padded = (n: number) => n.toString().padStart(2, "0");
+
+  // On-screen preview width: square fills the stage; story is capped so the
+  // 9:16 card fits the viewport height.
+  const previewW =
+    shape === "square"
+      ? stageW
+      : Math.max(180, Math.min(stageW, Math.round(((vh - 300) * 9) / 16)));
 
   const handleShare = async () => {
     const n = padded(certs[safeIdx]);
@@ -130,7 +156,7 @@ export function GoodDeedCertificate({
 
   const handleSaveImage = async () => {
     if (savingImage) return;
-    const node = cardRefs.current[safeIdx];
+    const node = captureRef.current;
     if (!node) return;
     setSavingImage(true);
     try {
@@ -145,13 +171,15 @@ export function GoodDeedCertificate({
             : img.decode().catch(() => undefined),
         ),
       );
+      // Node is already authored at full 1080-scale, so pixelRatio 1 yields an
+      // exactly-sized PNG (1080×1080 square / 1080×1920 story).
       const dataUrl = await toPng(node, {
-        pixelRatio: 3,
+        pixelRatio: 1,
         cacheBust: true,
       });
       const blob = await (await fetch(dataUrl)).blob();
       const safeTitle = album.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "") || "album";
-      const fileName = `GoodDeed-${safeTitle}-No-${padded(certs[safeIdx])}.png`;
+      const fileName = `GoodDeed-${safeTitle}-No-${padded(certs[safeIdx])}-${shape}.png`;
       const file = new File([blob], fileName, { type: "image/png" });
 
       if (navigator.canShare?.({ files: [file] })) {
@@ -390,6 +418,45 @@ export function GoodDeedCertificate({
           </div>
         </div>
 
+        {/* Shape toggle: which share format to render + save */}
+        <div className="flex justify-center mb-4 px-5">
+          <div
+            className="inline-flex rounded-full p-1"
+            role="tablist"
+            aria-label="Card format"
+            style={{
+              background: "rgba(255,255,255,0.14)",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              border: "1px solid rgba(255,255,255,0.2)",
+            }}
+          >
+            {([
+              { key: "square", label: "Square" },
+              { key: "story", label: "Story" },
+            ] as const).map((opt) => {
+              const active = shape === opt.key;
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setShape(opt.key)}
+                  className="h-10 px-5 rounded-full text-sm font-semibold transition-colors"
+                  style={{
+                    background: active ? "#ffffff" : "transparent",
+                    color: active ? "var(--brand-bg)" : "rgba(255,255,255,0.78)",
+                  }}
+                  data-testid={`button-shape-${opt.key}`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Carousel */}
         <div
           ref={scrollerRef}
@@ -397,7 +464,7 @@ export function GoodDeedCertificate({
           className="overflow-x-auto scrollbar-hide snap-x snap-mandatory"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
-          <div className="flex gap-4 px-1">
+          <div className="flex gap-4 px-1 justify-center" style={{ minWidth: "100%" }}>
             {certs.map((num, i) => (
               <CertCard
                 key={num}
@@ -406,6 +473,8 @@ export function GoodDeedCertificate({
                 ownerName={displayedName}
                 ownerPhotoUrl={user?.photoUrl ?? null}
                 num={num}
+                shape={shape}
+                w={previewW}
               />
             ))}
           </div>
@@ -431,6 +500,25 @@ export function GoodDeedCertificate({
             ))}
           </div>
         )}
+
+        {/* Hidden full-resolution capture stage. handleSaveImage snapshots this
+            off-screen node so the exported PNG is always exactly 1080×1080
+            (square) or 1080×1920 (story), independent of the preview size. */}
+        <div
+          aria-hidden
+          style={{ position: "fixed", left: -99999, top: 0, opacity: 0, pointerEvents: "none" }}
+        >
+          <div ref={captureRef}>
+            <CertCard
+              album={album}
+              ownerName={displayedName}
+              ownerPhotoUrl={user?.photoUrl ?? null}
+              num={certs[safeIdx]}
+              shape={shape}
+              w={1080}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -478,52 +566,200 @@ interface CertCardProps {
   ownerName: string;
   num: number;
   ownerPhotoUrl?: string | null;
+  shape: CardShape;
+  /** Render width in px. The whole card is authored at a 1080 base and scaled
+      by `u = w / 1080`, so the same component drives both the small on-screen
+      preview and the off-screen 1080-scale capture node. */
+  w: number;
 }
 
 const CertCard = forwardRef(function CertCard(
-  { album, ownerName, num, ownerPhotoUrl }: CertCardProps,
+  { album, ownerName, num, ownerPhotoUrl, shape, w }: CertCardProps,
   ref: Ref<HTMLDivElement>,
 ) {
   const certNumStr = num.toString().padStart(2, "0");
   const initial = (ownerName.replace(/^@/, "").trim()[0] || "?").toUpperCase();
+  const u = w / 1080;
+  const bw = (px: number) => `${Math.max(1, px * u)}px`;
+
+  if (shape === "story") {
+    const height = Math.round((w * 16) / 9);
+    return (
+      <div
+        ref={ref}
+        className="flex-shrink-0 snap-start overflow-hidden mx-auto relative flex flex-col"
+        style={{
+          width: w,
+          height,
+          borderRadius: 84 * u,
+          boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
+          backgroundColor: "var(--brand-bg)",
+        }}
+      >
+        {/* Immersive blurred album-art backdrop */}
+        <img
+          src={album.artwork}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{ filter: `blur(${84 * u}px) saturate(120%)`, transform: "scale(1.25)", opacity: 0.5 }}
+        />
+        {/* Navy gradient scrim for legibility */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(0,6,43,0.55) 0%, rgba(0,6,43,0.35) 38%, rgba(0,6,43,0.85) 72%, var(--brand-bg) 100%)",
+          }}
+        />
+
+        <div
+          className="relative flex flex-col h-full"
+          style={{ paddingLeft: 84 * u, paddingRight: 84 * u, paddingTop: 96 * u, paddingBottom: 84 * u }}
+        >
+          {/* Verified pill */}
+          <div className="flex justify-center">
+            <div
+              className="flex items-center rounded-full"
+              style={{
+                gap: 18 * u,
+                paddingLeft: 36 * u,
+                paddingRight: 36 * u,
+                paddingTop: 18 * u,
+                paddingBottom: 18 * u,
+                background: "rgba(74,255,202,0.14)",
+                border: `${bw(2)} solid rgba(74,255,202,0.35)`,
+              }}
+            >
+              <svg width={39 * u} height={39 * u} viewBox="0 0 24 24" fill="none" stroke="var(--brand-mint)" strokeWidth="3" strokeLinecap="round">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+              <span style={{ color: "var(--brand-mint)", fontSize: 33 * u, fontWeight: 700, letterSpacing: 1.5 * u }}>
+                VERIFIED OWNERSHIP
+              </span>
+            </div>
+          </div>
+
+          {/* Hero album art */}
+          <div className="flex-1 flex flex-col items-center justify-center" style={{ gap: 54 * u }}>
+            <div
+              className="overflow-hidden"
+              style={{ width: "62%", aspectRatio: "1 / 1", borderRadius: 60 * u, boxShadow: "0 18px 50px rgba(0,0,0,0.6)" }}
+            >
+              <img src={album.artwork} alt={album.title} className="w-full h-full object-cover block" />
+            </div>
+            <div className="text-center" style={{ maxWidth: "100%" }}>
+              <p className="text-white font-bold leading-tight" style={{ fontSize: 66 * u }} data-testid="text-cert-album">
+                {album.title}
+              </p>
+              <p className="text-white/65 leading-tight" style={{ fontSize: 42 * u, marginTop: 12 * u }} data-testid="text-cert-artist">
+                {album.artist}
+              </p>
+            </div>
+          </div>
+
+          {/* Ownership statement */}
+          <div
+            className="flex flex-col items-center text-center"
+            style={{ gap: 24 * u }}
+            data-testid="text-cert-owner"
+            aria-label={`${ownerName} owns no. ${certNumStr} of ${album.title}`}
+          >
+            {ownerPhotoUrl ? (
+              <img
+                src={ownerPhotoUrl}
+                alt=""
+                className="rounded-full object-cover"
+                style={{ width: 168 * u, height: 168 * u, border: `${bw(6)} solid rgba(255,255,255,0.25)` }}
+                data-testid="img-cert-owner-photo"
+              />
+            ) : (
+              <div
+                className="rounded-full flex items-center justify-center text-white font-semibold"
+                style={{
+                  width: 168 * u,
+                  height: 168 * u,
+                  fontSize: 64 * u,
+                  background: "rgba(255,255,255,0.14)",
+                  border: `${bw(6)} solid rgba(255,255,255,0.25)`,
+                }}
+                aria-hidden
+                data-testid="placeholder-cert-owner-avatar"
+              >
+                {initial}
+              </div>
+            )}
+            <p className="text-white/70 leading-snug" style={{ fontSize: 39 * u }}>This GoodDeed® certifies that</p>
+            <p className="text-white font-bold leading-tight" style={{ fontSize: 60 * u }} data-testid="text-cert-owner-name">
+              {ownerName}
+            </p>
+            <p className="text-white/70 leading-snug" style={{ fontSize: 39 * u }}>owns No. {certNumStr} of this series.</p>
+            <p
+              className="font-bold leading-none"
+              style={{ fontVariantNumeric: "tabular-nums", fontSize: 156 * u, color: "var(--brand-mint)", marginTop: 24 * u }}
+              data-testid="text-cert-serial"
+            >
+              No. {certNumStr}
+            </p>
+          </div>
+
+          {/* Footer mark */}
+          <div
+            className="flex items-center justify-center"
+            style={{ marginTop: 48 * u, paddingTop: 36 * u, borderTop: `${bw(1)} solid rgba(255,255,255,0.12)` }}
+          >
+            <img src="/goodtunes-logo-white.png" alt="GoodTunes" className="w-auto object-contain" style={{ height: 60 * u }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Square (1:1) social card.
   return (
     <div
       ref={ref}
-      className="flex-shrink-0 snap-start rounded-3xl overflow-hidden mx-auto flex flex-col"
+      className="flex-shrink-0 snap-start overflow-hidden mx-auto flex flex-col"
       style={{
-        width: "min(92vw, calc((100dvh - 220px) / 1.5))",
-        aspectRatio: "1 / 1.5",
+        width: w,
+        height: w,
+        borderRadius: 72 * u,
         boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
         backgroundColor: "var(--brand-bg)",
       }}
     >
-      {/* Top: square album art, full-bleed */}
-      <div className="relative w-full aspect-square flex-shrink-0">
+      {/* Top: album-art band, full-bleed */}
+      <div className="relative w-full flex-shrink-0" style={{ height: w * 0.5 }}>
         <img src={album.artwork} alt={album.title} className="w-full h-full object-cover block" />
       </div>
 
-      {/* Bottom: simple, legible, share-friendly panel — album title +
-          artist, a centred certifying line that names the owner in real
-          readable text, a prominent serial, and the GoodTunes mark. This
-          is the SOCIAL card; the dense archival/print look lives only on
-          the admin Sell-panel preview and the downloadable PDF. */}
+      {/* Bottom: legible, share-friendly panel. This is the SOCIAL card; the
+          dense archival/print look lives only on the admin Sell-panel preview
+          and the downloadable PDF. */}
       <div
-        className="relative w-full flex-1 px-5 py-4 flex flex-col"
-        style={{ backgroundColor: "var(--brand-bg)" }}
+        className="relative w-full flex-1 flex flex-col"
+        style={{
+          paddingLeft: 56 * u,
+          paddingRight: 56 * u,
+          paddingTop: 40 * u,
+          paddingBottom: 40 * u,
+          backgroundColor: "var(--brand-bg)",
+        }}
       >
         {/* Album title + artist */}
         <div className="min-w-0">
-          <p className="text-white text-lg font-bold leading-tight truncate" data-testid="text-cert-album">
+          <p className="text-white font-bold leading-tight truncate" style={{ fontSize: 48 * u }} data-testid="text-cert-album">
             {album.title}
           </p>
-          <p className="text-white/60 text-sm leading-tight truncate mt-0.5" data-testid="text-cert-artist">
+          <p className="text-white/60 leading-tight truncate" style={{ fontSize: 30 * u, marginTop: 4 * u }} data-testid="text-cert-artist">
             {album.artist}
           </p>
         </div>
 
-        {/* Centred ownership statement — owner shown as real, readable text */}
+        {/* Centred ownership statement */}
         <div
-          className="flex-1 flex flex-col items-center justify-center text-center gap-2 px-1"
+          className="flex-1 flex flex-col items-center justify-center text-center"
+          style={{ gap: 16 * u, paddingLeft: 8 * u, paddingRight: 8 * u }}
           data-testid="text-cert-owner"
           aria-label={`${ownerName} owns no. ${certNumStr} of ${album.title}`}
         >
@@ -531,31 +767,38 @@ const CertCard = forwardRef(function CertCard(
             <img
               src={ownerPhotoUrl}
               alt=""
-              className="w-12 h-12 rounded-full object-cover border border-white/20"
+              className="rounded-full object-cover"
+              style={{ width: 120 * u, height: 120 * u, border: `${bw(3)} solid rgba(255,255,255,0.2)` }}
               data-testid="img-cert-owner-photo"
             />
           ) : (
             <div
-              className="w-12 h-12 rounded-full flex items-center justify-center text-white text-base font-semibold border border-white/20"
-              style={{ background: "rgba(255,255,255,0.14)" }}
+              className="rounded-full flex items-center justify-center text-white font-semibold"
+              style={{
+                width: 120 * u,
+                height: 120 * u,
+                fontSize: 48 * u,
+                background: "rgba(255,255,255,0.14)",
+                border: `${bw(3)} solid rgba(255,255,255,0.2)`,
+              }}
               aria-hidden
               data-testid="placeholder-cert-owner-avatar"
             >
               {initial}
             </div>
           )}
-          <p className="text-white/70 text-sm leading-snug">This GoodDeed® certifies that</p>
-          <p className="text-white text-xl font-bold leading-tight" data-testid="text-cert-owner-name">
+          <p className="text-white/70 leading-snug" style={{ fontSize: 30 * u }}>This GoodDeed® certifies that</p>
+          <p className="text-white font-bold leading-tight" style={{ fontSize: 48 * u }} data-testid="text-cert-owner-name">
             {ownerName}
           </p>
-          <p className="text-white/70 text-sm leading-snug">owns No. {certNumStr} of this series.</p>
+          <p className="text-white/70 leading-snug" style={{ fontSize: 30 * u }}>owns No. {certNumStr} of this series.</p>
         </div>
 
         {/* Serial + GoodTunes mark */}
-        <div className="flex items-end justify-between gap-3">
+        <div className="flex items-end justify-between" style={{ gap: 24 * u }}>
           <p
-            className="text-white text-3xl font-bold leading-none"
-            style={{ fontVariantNumeric: "tabular-nums" }}
+            className="text-white font-bold leading-none"
+            style={{ fontSize: 80 * u, fontVariantNumeric: "tabular-nums" }}
             data-testid="text-cert-serial"
           >
             No. {certNumStr}
@@ -563,7 +806,8 @@ const CertCard = forwardRef(function CertCard(
           <img
             src="/goodtunes-logo-white.png"
             alt="GoodTunes"
-            className="h-7 w-auto object-contain flex-shrink-0"
+            className="w-auto object-contain flex-shrink-0"
+            style={{ height: 56 * u }}
           />
         </div>
       </div>
