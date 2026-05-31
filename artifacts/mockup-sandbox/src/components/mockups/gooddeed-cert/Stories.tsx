@@ -55,7 +55,7 @@ export function StoryCard({ overlay }: { overlay?: ReactNode }) {
 
       {/* Foreground content — confined to the IG safe center band */}
       <div
-        className="absolute left-0 right-0 flex flex-col px-7"
+        className="absolute left-0 right-0 flex flex-col px-5"
         style={{ top: TOP_SAFE, bottom: BOTTOM_SAFE }}
       >
         {/* Verified pill */}
@@ -77,7 +77,7 @@ export function StoryCard({ overlay }: { overlay?: ReactNode }) {
         <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3">
           <div
             className="rounded-2xl overflow-hidden shrink-0"
-            style={{ width: "48%", aspectRatio: "1/1", boxShadow: "0 18px 50px rgba(0,0,0,0.6)" }}
+            style={{ width: "64%", aspectRatio: "1/1", boxShadow: "0 18px 50px rgba(0,0,0,0.6)" }}
           >
             <img src={ART} alt={album.title} className="w-full h-full object-cover block" />
           </div>
@@ -89,7 +89,6 @@ export function StoryCard({ overlay }: { overlay?: ReactNode }) {
 
         {/* Ownership statement + serial */}
         <div className="flex flex-col items-center text-center gap-1.5 shrink-0">
-          <img src={OWNER_PHOTO} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-white/25" />
           <p className="text-white/70 text-xs leading-snug">This GoodDeed® certifies that</p>
           <p className="text-white text-lg font-bold leading-tight">{ownerName}</p>
           <p
