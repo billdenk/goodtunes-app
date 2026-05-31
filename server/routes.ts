@@ -15599,7 +15599,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const albumId = /^[a-zA-Z0-9_-]+$/.test(albumIdRaw) ? albumIdRaw : "";
 
     const origin = `${req.protocol}://${req.get("host")}`;
-    // The OG/Twitter preview image is the generated 1200×630 GoodDeed card
+    // The OG/Twitter preview image is the generated 1200×840 GoodDeed card
     // (server/certOgImage.ts), not the raw album cover — so a pasted link
     // shows the "No. NN — Verified" card. Carry the same params through.
     const ogParams = new URLSearchParams();
@@ -15639,7 +15639,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     .wrap { min-height:100dvh; display:flex; flex-direction:column; align-items:center; padding:20px 16px calc(168px + env(safe-area-inset-bottom, 0px)); padding-top: calc(20px + env(safe-area-inset-top, 0px)); }
     .eyebrow { font-size:13px; color:rgba(255,255,255,0.6); text-align:center; margin:0 0 14px; letter-spacing:0.01em; }
     .card { width:100%; max-width:360px; border-radius:24px; overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,.7); background:#0D2060; }
-    .art { width:100%; aspect-ratio: 1 / 1; object-fit:cover; display:block; }
+    .art { width:100%; aspect-ratio: 1200 / 840; object-fit:cover; display:block; }
     .panel { padding:24px; background:linear-gradient(135deg,#1B3A8C 0%,#4A1E8F 60%,#2A1670 100%); text-align:center; }
     .album { font-size:20px; font-weight:700; }
     .artist { font-size:14px; opacity:.7; margin-top:4px; }
@@ -15681,7 +15681,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 </html>`);
   });
 
-  // 1200×630 link-preview (Open Graph) image for a shared GoodDeed. Crawlers
+  // 1200×840 link-preview (Open Graph) image for a shared GoodDeed. Crawlers
   // (iMessage, Twitter/X, BlueSky, Facebook, Discord, WhatsApp) fetch this when
   // a fan shares the `/share/cert` link. Rendered server-side as a real PNG.
   app.get("/share/cert/og.png", async (req, res) => {

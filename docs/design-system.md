@@ -12,13 +12,18 @@
 
 ## GoodDeed® share-card (social) — approved spec
 
-The GoodDeed share-card has one approved hero format: the **orange-frame Story** (Instagram 9:16, 1080×1920). Locked decisions:
+The GoodDeed share-card has two approved formats that share the same orange-frame signature:
+
+1. **Orange-frame Story** (Instagram 9:16, 1080×1920) — the hero format for posting to Stories. Spec + locked decisions below.
+2. **Texting / link-preview (OG image)** — what a pasted `/share/cert` link unfurls to in iMessage, WhatsApp, Discord, etc. Approved variant: **"California gradient, logo right"** — the album art wrapped in the orange frame, a navy bottom-gradient scrim, and the white GoodTunes logo floated **bottom-right** (the right corner clears the album's own bottom-left title art). The album/owner/number text is **not baked in** — the messaging app draws it from the OG/Twitter meta tags, so the picture stays clean and the type stays crisp. Rendered 1200×840 (~1.43:1) to render full-bleed in texting surfaces. **Shipped** in `server/certOgImage.ts`; source mockup `artifacts/mockup-sandbox/src/components/mockups/gooddeed-cert/OgBordered.tsx` (`?brand=gradient&pos=right`).
+
+Locked decisions for the **Story** format:
 
 - **Orange frame.** A solid GoodTunes-orange border runs edge-to-edge (`--brand-orange`, never inline the hex; ~15px on the 340-wide mockup). This is the one sanctioned use of orange — it makes the card instantly recognizable as a GoodDeed.
 - **Corner radius — subtly rounded, not square.** ≈ an Instagram feed-photo curve (mockup value `r=22` on a 340-wide card; scale to width in the real renderer). Round **concentrically** — the orange frame and the inner art/navy round together (single `border-radius` on the clipping container). Round only when the card is consumed as a **floating / shared image**; if it is ever uploaded **full-bleed** as the whole Story background, keep corners square (the device clips them anyway).
 - **No Meta HIG to match.** Instagram publishes no corner-radius spec for Story content — Stories are full-bleed, and the rounding you see is the device screen + IG's own UI chrome painted over the asset. The only Meta constraints that bind us are the **1080×1920 / 9:16** canvas and the **top/bottom safe zones** (keep key content out of them).
 - **Caption lead-in.** "This GoodDeed® certifies" → owner name (no "that"; the cert number rides the pill and the album/artist rides the bottom caption).
-- **Source of truth.** Mockup: `artifacts/mockup-sandbox/src/components/mockups/gooddeed-cert/StoriesBordered.tsx`. Prod-renderer port target: `server/certOgImage.ts` + `/share/cert` (not yet ported).
+- **Source of truth.** Mockup: `artifacts/mockup-sandbox/src/components/mockups/gooddeed-cert/StoriesBordered.tsx`. The **generator + share/download path already exist** in `client/src/components/GoodDeedCertificate.tsx` (the `story` shape renders at 1080-scale and exports a 1080×1920 PNG via `html-to-image` + `navigator.share`/download). What's **not yet done**: the live `story` shape still uses the older blurred-backdrop design, not this approved orange-frame look — porting it means restyling that shape to match `StoriesBordered`, not building a new renderer.
 
 ## Two surfaces, shared vocabulary, distinct chrome
 
