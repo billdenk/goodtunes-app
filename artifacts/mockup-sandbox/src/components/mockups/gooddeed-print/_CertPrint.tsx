@@ -42,9 +42,10 @@ function dims(paper: Paper, matBoxIn?: [number, number]) {
   const W = paper === "a4" ? 595.28 : 612;
   const H = paper === "a4" ? 841.89 : 792;
   // matBoxIn (inches) lets the caller pin the cert content box (art + band) to a
-  // FIXED real-world size centered on the sheet — used so the A4 cert keeps the
-  // original US 7.5:9.5 proportion (e.g. a 180x228mm mat opening) instead of
-  // stretching to A4's taller native mat.
+  // FIXED real-world size centered on the sheet — used so the A4 cert fills a
+  // chosen A4 mat opening with even margins (square album art + a taller navy
+  // band) instead of using A4's native mat ratio. e.g. a 180x267mm opening on A4
+  // = an even 15mm mount on all four sides.
   const matW = matBoxIn ? matBoxIn[0] * 72 : W * (2250 / 2550);
   const matH = matBoxIn ? matBoxIn[1] * 72 : H * (2850 / 3300);
   const matX = (W - matW) / 2;

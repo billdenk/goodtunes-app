@@ -2,20 +2,21 @@ import { CertStage } from "./_CertPrint";
 
 const GUITAR = "/__mockup/images/album-guitar-as-a-voice.png";
 
-// A4 sheet, approved US 7.5:9.5 layout. Mat opening = 180x228mm centered (dashed).
-// Orange border STRADDLES the opening: 3mm OUTSIDE the dots + 3mm INSIDE = a 6mm
-// band. Artwork fills to the orange's inner edge (174x222mm). Orange outer edge
-// = 186x234mm (3mm bleed past the opening).
+// A4 (EU) — Path B. Mat opening 180x267mm centered = an even 15mm mount all
+// around (dashed pink line). Orange border STRADDLES the opening: 3mm INSIDE
+// the dots + 3mm OUTSIDE = a 6mm band — the metric twin of the approved US
+// Letter "thin" (1/8" each side). Square art + a taller navy band so the cert
+// fills the A4 mat evenly.
 export function A4BorderThin() {
   return (
     <CertStage
       paper="a4"
-      layout="letter"
       frame="bordered"
       art={GUITAR}
-      bleedIn={0.236220}
-      matBoxIn={[6.850394, 8.740157]}
-      frameRevealWin={[7.086614, 8.976378]}
+      insetIn={0.118110}
+      bleedIn={0.118110}
+      matBoxIn={[7.086614, 10.511811]}
+      frameRevealWin={[7.086614, 10.511811]}
     />
   );
 }
