@@ -137,7 +137,7 @@ export function CertPrint({
   const headline = `This GoodDeed\u00AE certifies that ${S.recipient} owns no. ${S.num} of ${S.title}.`;
   const provenance =
     `Digital provenance can be confirmed by accessing the QR code on this GoodDeed\u00AE. ` +
-    `In the event ownership was transferred after this certificate was issued, ` +
+    `In the event ownership was transferred, ` +
     `this GoodDeed\u00AE serves as the moment in time in which ${S.recipient} possessed ` +
     `ownership of this good.`;
   const subline = S.genre
@@ -272,14 +272,18 @@ export function CertPrint({
 
   // ── Letter geometry: headline + signature + footnote all indent to `bodyX`
   //    (the column under the artist name), and the signature sits at a FIXED
-  //    slot ~1.6 line-heights below the headline top — matching the server's
-  //    `sigY = headlineY + headLineH * 1.6` permanent slot (Bill-approved),
-  //    not flowing with content. Mirrors server/goodDeedPrintTemplate.ts.
+  //    slot just below the headline top. The signature PNG carries transparent
+  //    top padding, so a sub-1.0 multiplier tucks it tighter under a 1-line
+  //    headline (more breathing room above the footnote below) without the
+  //    visible squiggle touching the headline. NOTE: a fixed slot can only be
+  //    tuned for ONE headline length — see LetterBorderThinLong, where a 2-line
+  //    headline reclaims this space; the durable fix is to flow the signature
+  //    under the measured headline. Mirrors server/goodDeedPrintTemplate.ts.
   const bodyXRel = leftColLeftRel + avatarSize + 10;
   const bodyW = leftColRightRel - bodyXRel;
   const headlineYRel = safeTopRel + avatarSize + 5;
   const headLineH = 9.5 * 1.15; // ≈ Helvetica-Bold 9.5pt currentLineHeight (1 line)
-  const sigYRel = headlineYRel + headLineH * 1.0;
+  const sigYRel = headlineYRel + headLineH * 0.7;
   // QR/footnote shared baseline: server pins the caption 11pt above the band
   // bottom and lands the footnote's last line on that same baseline.
   const captionBottomRel = 11;
