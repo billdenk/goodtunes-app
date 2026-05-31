@@ -2,6 +2,8 @@
 // the fan GoodDeed card, sized to fill a phone story / 1080x1920 export.
 // Same data as the square social card, re-laid-out full-bleed with the album
 // art as an immersive backdrop, brand navy gradient, and a mint verified mark.
+import "./_group.css";
+
 const LOGO = "/__mockup/images/goodtunes-logo-white.png";
 const ART = "/__mockup/images/sample-album-art.png";
 const OWNER_PHOTO = "/__mockup/images/sample-owner-photo.png";
@@ -19,7 +21,7 @@ export function Stories() {
           width: "min(92vw, 360px)",
           aspectRatio: "9 / 16",
           boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
-          backgroundColor: "#00062B",
+          backgroundColor: "var(--brand-bg)",
         }}
       >
         {/* Immersive blurred backdrop from the album art */}
@@ -35,7 +37,7 @@ export function Stories() {
           className="absolute inset-0"
           style={{
             background:
-              "linear-gradient(180deg, rgba(0,6,43,0.55) 0%, rgba(0,6,43,0.35) 38%, rgba(0,6,43,0.85) 72%, #00062B 100%)",
+              "linear-gradient(180deg, rgba(0,6,43,0.55) 0%, rgba(0,6,43,0.35) 38%, rgba(0,6,43,0.85) 72%, var(--brand-bg) 100%)",
           }}
         />
 
@@ -47,10 +49,10 @@ export function Stories() {
               className="flex items-center gap-1.5 rounded-full px-3 py-1.5"
               style={{ background: "rgba(74,255,202,0.14)", border: "1px solid rgba(74,255,202,0.35)" }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4AFFCA" strokeWidth="3" strokeLinecap="round">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--brand-mint)" strokeWidth="3" strokeLinecap="round">
                 <path d="M20 6L9 17l-5-5" />
               </svg>
-              <span className="text-[11px] font-bold tracking-wide" style={{ color: "#4AFFCA" }}>
+              <span className="text-xs font-bold tracking-wide" style={{ color: "var(--brand-mint)" }}>
                 VERIFIED OWNERSHIP
               </span>
             </div>
@@ -80,7 +82,7 @@ export function Stories() {
             {/* Giant serial */}
             <p
               className="font-bold leading-none mt-2"
-              style={{ fontVariantNumeric: "tabular-nums", fontSize: "56px", color: "#4AFFCA" }}
+              style={{ fontVariantNumeric: "tabular-nums", fontSize: "56px", color: "var(--brand-mint)" }}
             >
               No. {certNumStr}
             </p>

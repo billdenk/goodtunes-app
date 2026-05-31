@@ -1,6 +1,8 @@
 // Faithful copy of the real fan GoodDeed social card (CertCard) from
 // client/src/components/GoodDeedCertificate.tsx, rendered with sample data so
 // it can be previewed on the canvas without a fan login. 1:1.5 portrait.
+import "./_group.css";
+
 const LOGO = "/__mockup/images/goodtunes-logo-white.png";
 const ART = "/__mockup/images/sample-album-art.png";
 const OWNER_PHOTO = "/__mockup/images/sample-owner-photo.png";
@@ -21,7 +23,7 @@ export function Current() {
           width: "min(86vw, 340px)",
           minHeight: "calc(min(86vw, 340px) * 1.5)",
           boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
-          backgroundColor: "#00062B",
+          backgroundColor: "var(--brand-bg)",
         }}
       >
         {/* Top: square album art, full-bleed */}
@@ -30,7 +32,7 @@ export function Current() {
         </div>
 
         {/* Bottom: title + artist, centred ownership statement, serial + mark */}
-        <div className="relative w-full flex-1 px-5 py-4 flex flex-col" style={{ backgroundColor: "#00062B" }}>
+        <div className="relative w-full flex-1 px-5 py-4 flex flex-col" style={{ backgroundColor: "var(--brand-bg)" }}>
           <div className="min-w-0">
             <p className="text-white text-lg font-bold leading-tight truncate">{album.title}</p>
             <p className="text-white/60 text-sm leading-tight truncate mt-0.5">{album.artist}</p>
