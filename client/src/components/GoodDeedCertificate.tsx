@@ -36,7 +36,7 @@ export function GoodDeedCertificate({
   const [savingImage, setSavingImage] = useState(false);
   const [imageSaved, setImageSaved] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
-  const [shape, setShape] = useState<CardShape>("square");
+  const [shape, setShape] = useState<CardShape>("story");
   const [stageW, setStageW] = useState(320);
   const [vh, setVh] = useState(720);
   const [identity, setIdentity] = useState<IdentityKind>("display");
@@ -241,6 +241,23 @@ export function GoodDeedCertificate({
         onClick={onClose}
       />
 
+      {/* Framed backdrop — for the Square + Portrait previews (which don't fill
+          the screen) the surround is a soft, blurred wash of the album art over
+          navy instead of flat black, so the card reads as framed. Uses a plain
+          `filter: blur` on an <img> (not a second backdrop-filter) to avoid the
+          iOS-WebKit stacked-blur crash. Story is full-bleed, so it's skipped. */}
+      {shape !== "story" && (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+          <img
+            src={album.artwork}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ filter: "blur(48px)", transform: "scale(1.25)", opacity: 0.45 }}
+          />
+          <div className="absolute inset-0" style={{ background: "rgba(0,6,43,0.55)" }} />
+        </div>
+      )}
+
       <div className="relative w-full z-10 animate-slide-up">
         {/* Top controls: close + identity + share */}
         <div className="flex items-center justify-between mb-5 px-5 gap-2">
@@ -248,7 +265,7 @@ export function GoodDeedCertificate({
             type="button"
             onClick={onClose}
             aria-label={certs.length === 1 ? "Back" : "Close certificate"}
-            className="w-10 h-10 rounded-full flex items-center justify-center active:opacity-70 shadow-lg flex-shrink-0"
+            className="w-11 h-11 rounded-full flex items-center justify-center active:opacity-70 shadow-lg flex-shrink-0"
             style={{ background: "#ffffff", color: "#00062B" }}
             data-testid="button-close-certificate"
           >
@@ -271,7 +288,7 @@ export function GoodDeedCertificate({
                 onClick={() => setShowIdentityMenu((s) => !s)}
                 aria-haspopup="menu"
                 aria-expanded={showIdentityMenu}
-                className="h-10 px-3.5 rounded-full flex items-center gap-1.5 text-xs font-semibold active:opacity-70 transition-opacity shadow-lg"
+                className="h-11 px-3.5 rounded-full flex items-center gap-1.5 text-xs font-semibold active:opacity-70 transition-opacity shadow-lg"
                 style={{ background: "rgba(255,255,255,0.18)", color: "#fff", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.22)" }}
                 data-testid="button-identity-toggle"
               >
@@ -366,7 +383,7 @@ export function GoodDeedCertificate({
               onClick={handleSaveImage}
               disabled={savingImage}
               aria-label="Save card as image"
-              className="w-10 h-10 rounded-full flex items-center justify-center active:opacity-70 transition-opacity shadow-lg flex-shrink-0 disabled:opacity-60"
+              className="w-11 h-11 rounded-full flex items-center justify-center active:opacity-70 transition-opacity shadow-lg flex-shrink-0 disabled:opacity-60"
               style={{
                 background: imageSaved ? "#4AFFCA" : "rgba(255,255,255,0.18)",
                 color: imageSaved ? "#00062B" : "#fff",
@@ -393,27 +410,24 @@ export function GoodDeedCertificate({
             <button
               type="button"
               onClick={handleShare}
-              className="h-10 px-4 rounded-full flex items-center justify-center gap-1.5 text-sm font-semibold active:opacity-70 transition-opacity shadow-lg flex-shrink-0"
+              aria-label={shared ? "Link copied" : "Share certificate"}
+              className="w-11 h-11 rounded-full flex items-center justify-center active:opacity-70 transition-opacity shadow-lg flex-shrink-0"
               style={{
-                background: shared ? "#4AFFCA" : "#ffffff",
-                color: "#00062B",
+                background: shared ? "var(--brand-mint)" : "rgba(255,255,255,0.18)",
+                color: shared ? "var(--brand-bg)" : "#fff",
+                backdropFilter: "blur(20px)",
+                border: "1px solid rgba(255,255,255,0.22)",
               }}
               data-testid="button-share-certificate"
             >
               {shared ? (
-                <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
-                    <path d="M20 6L9 17l-5-5" />
-                  </svg>
-                  Copied
-                </>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
               ) : (
-                <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                    <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
-                  </svg>
-                  Share
-                </>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
+                </svg>
               )}
             </button>
           </div>
@@ -433,9 +447,9 @@ export function GoodDeedCertificate({
             }}
           >
             {([
-              { key: "square", label: "Square" },
-              { key: "portrait", label: "Portrait" },
               { key: "story", label: "Story" },
+              { key: "portrait", label: "Portrait" },
+              { key: "square", label: "Square" },
             ] as const).map((opt) => {
               const active = shape === opt.key;
               return (
@@ -627,14 +641,14 @@ const CERT_SHAPE_SPECS: Record<CardShape, CertShapeSpec> = {
   },
   portrait: {
     radiusU: 0,
-    artBandU: 760,
+    artBandU: 690,
     grad: "linear-gradient(180deg, rgba(0,6,43,0) 48%, rgba(0,6,43,0.6) 76%, rgba(0,6,43,0.95) 93%, var(--brand-bg) 100%)",
     avatarU: 210, avatarMtU: -170,
     certFsU: 33, certMtU: 34,
     nameBases: [88, 76, 66, 57, 50, 44], nameMtU: 10,
     pillMtU: 26, pillPadVU: 24, pillPadHU: 44, pillGapU: 22, logoHU: 64, divHU: 50, numFsU: 42,
-    captionFsU: 30, captionPinBottom: false, captionMtU: 48,
-    padXU: 56, padBU: 56,
+    captionFsU: 30, captionPinBottom: false, captionMtU: 30,
+    padXU: 56, padBU: 64,
   },
   story: {
     radiusU: 66,

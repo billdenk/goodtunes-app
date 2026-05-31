@@ -64,7 +64,7 @@ export function BorderedPortraitCard({ overlay, radius = 22 }: { overlay?: React
       {/* Album-art band at the top, with a long soft fade into navy (matches the
           approved Story blend so the seam is seamless). 4:5 affords a taller,
           near-square art window. */}
-      <div className="relative w-full shrink-0" style={{ height: 760 * u }}>
+      <div className="relative w-full shrink-0" style={{ height: 690 * u }}>
         <img src={art} alt={album.title} className="w-full h-full object-cover object-top block" />
         <div
           className="absolute inset-0"
@@ -78,7 +78,7 @@ export function BorderedPortraitCard({ overlay, radius = 22 }: { overlay?: React
       {/* Lower section — relative+z so the avatar paints ON TOP of the album art */}
       <div
         className="relative z-10 flex-1 flex flex-col items-center text-center"
-        style={{ paddingLeft: 56 * u, paddingRight: 56 * u, paddingBottom: 56 * u }}
+        style={{ paddingLeft: 56 * u, paddingRight: 56 * u, paddingBottom: 64 * u }}
       >
         <div
           className="rounded-full overflow-hidden shrink-0"
@@ -127,12 +127,12 @@ export function BorderedPortraitCard({ overlay, radius = 22 }: { overlay?: React
 
         {/* secondary caption sits directly under the pill as part of the block */}
         {captionWraps ? (
-          <div className="text-white/60 leading-snug" style={{ fontSize: 30 * u, marginTop: 48 * u }}>
+          <div className="text-white/60 leading-snug" style={{ fontSize: 30 * u, marginTop: 30 * u }}>
             <p className="whitespace-nowrap">{album.title} #{certNumStr}</p>
             <p className="whitespace-nowrap">by {album.artist}</p>
           </div>
         ) : (
-          <p className="text-white/60 leading-snug whitespace-nowrap" style={{ fontSize: 30 * u, marginTop: 48 * u }}>
+          <p className="text-white/60 leading-snug whitespace-nowrap" style={{ fontSize: 30 * u, marginTop: 30 * u }}>
             {captionOneLine}
           </p>
         )}
