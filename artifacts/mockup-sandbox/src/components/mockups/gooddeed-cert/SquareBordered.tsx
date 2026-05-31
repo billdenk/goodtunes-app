@@ -75,14 +75,14 @@ export function BorderedSquareCard({ overlay, radius = 22 }: { overlay?: ReactNo
       {/* Lower section — relative+z so the avatar paints ON TOP of the album art */}
       <div
         className="relative z-10 flex-1 flex flex-col items-center text-center"
-        style={{ paddingLeft: 56 * u, paddingRight: 56 * u, paddingBottom: 40 * u }}
+        style={{ paddingLeft: 56 * u, paddingRight: 56 * u, paddingBottom: 64 * u }}
       >
         <div
           className="rounded-full overflow-hidden shrink-0"
           style={{
             width: 200 * u,
             height: 200 * u,
-            marginTop: -130 * u, // straddle the seam between art and navy
+            marginTop: -148 * u, // straddle the seam between art and navy
             border: `${Math.max(1, 6 * u)}px solid rgba(255,255,255,0.18)`,
             boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
           }}
