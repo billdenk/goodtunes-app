@@ -27,6 +27,20 @@ const data: StoryData = {
   certNumStr: "12",
 };
 
+// Owner names vary wildly in length ("Bo" → "Arnold Schwarzenegger"). Auto-shrink
+// the name so it stays on ONE line and the avatar/pill vertical rhythm never
+// breaks. (The real renderer should measure text width; this length clamp is the
+// mockup approximation of that intent.)
+function nameFontSize(name: string): number {
+  const n = name.trim().length;
+  if (n <= 12) return 30;
+  if (n <= 15) return 26;
+  if (n <= 18) return 23;
+  if (n <= 22) return 20;
+  if (n <= 26) return 17;
+  return 15;
+}
+
 export function BorderedStoryCard({ overlay }: { overlay?: ReactNode }) {
   const { art, ownerPhoto, album, ownerName, certNumStr } = data;
 
@@ -73,7 +87,10 @@ export function BorderedStoryCard({ overlay }: { overlay?: ReactNode }) {
         </div>
 
         <p className="text-white/55 text-xs leading-snug mt-4">This GoodDeed® certifies that</p>
-        <p className="text-white font-bold leading-tight mt-1.5" style={{ fontSize: 30 }}>
+        <p
+          className="text-white font-bold leading-tight mt-1.5 max-w-full whitespace-nowrap"
+          style={{ fontSize: nameFontSize(ownerName) }}
+        >
           {ownerName}
         </p>
 
