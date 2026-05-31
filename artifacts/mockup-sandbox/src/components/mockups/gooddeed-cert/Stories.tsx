@@ -24,12 +24,23 @@ import type { ReactNode } from "react";
 import "./_group.css";
 
 const LOGO = "/__mockup/images/goodtunes-logo-white.png";
-const ART = "/__mockup/images/album-guitar-as-a-voice.png";
-const OWNER_PHOTO = "/__mockup/images/sample-owner-photo.png";
 
-const album = { title: "Guitar as a Voice", artist: "Fernando Perdomo" };
-const ownerName = "Jordan Ellis";
-const certNumStr = "07";
+export type StoryData = {
+  art: string;
+  ownerPhoto: string;
+  album: { title: string; artist: string };
+  ownerName: string;
+  certNumStr: string;
+};
+
+// Default sample = the dark "Guitar as a Voice" cover.
+export const DEFAULT_STORY_DATA: StoryData = {
+  art: "/__mockup/images/album-guitar-as-a-voice.png",
+  ownerPhoto: "/__mockup/images/sample-owner-photo.png",
+  album: { title: "Guitar as a Voice", artist: "Fernando Perdomo" },
+  ownerName: "Jordan Ellis",
+  certNumStr: "07",
+};
 
 // Instagram-reserved bands (share of the 9:16 / 1080×1920 frame height), per
 // Meta's current (2026) spec:
@@ -49,10 +60,13 @@ export type ChipStyle = "dark" | "light";
 export function StoryCard({
   overlay,
   chipStyle = "dark",
+  data = DEFAULT_STORY_DATA,
 }: {
   overlay?: ReactNode;
   chipStyle?: ChipStyle;
+  data?: StoryData;
 }) {
+  const { art: ART, ownerPhoto: OWNER_PHOTO, album, ownerName, certNumStr } = data;
   const chip =
     chipStyle === "light"
       ? { background: "rgba(255,255,255,0.20)", border: "rgba(255,255,255,0.45)", divider: "rgba(255,255,255,0.5)" }
