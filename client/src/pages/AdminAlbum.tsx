@@ -316,6 +316,14 @@ export function AdminAlbum() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  // Task #859 — an `artist` partner explores quotes only. The press
+  // hand-off stepper is a production action that stays with operators,
+  // so we hide it for the artist role (the server blocks it too).
+  const { data: adminRoleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
+    queryKey: ["/api/me/role"],
+    enabled: !!user?.isAdmin,
+  });
+  const isArtist = adminRoleInfo?.role === "artist";
   // Smart-back deep link: `/admin/albums/:id?track=<songId>` lands the
   // Tracks tab with that row already open + scrolled into view, so a
   // user returning from a credit-tapped Person page comes back to the
@@ -993,7 +1001,7 @@ export function AdminAlbum() {
             Sell). The stepper adapts by mode — slim 3-stage strip
             for shopify, full 5-stage press flow for direct. Suppressed
             until the operator picks a sellMode in the modal. */}
-        {album.sellMode && (
+        {album.sellMode && !isArtist && (
           <div className="mt-2">
             <PressingOrderStepper
               albumId={album.id}

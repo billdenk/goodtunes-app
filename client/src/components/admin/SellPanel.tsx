@@ -2222,6 +2222,10 @@ function SkuRow({
     queryKey: ["/api/me/role"],
   });
   const isSuperAdmin = roleInfo?.role === "super_admin" || roleInfo?.role === "admin";
+  // Task #859 — an `artist` partner sees Artist Net and quantity
+  // estimates, but never the vendor cost stack, platform margin,
+  // never-lose-money ladder, or the operator-only PDF export.
+  const isArtist = roleInfo?.role === "artist";
   const { data: invitedPressRow } = useQuery<InvitedPressResponse>({
     queryKey: ["/api/admin/albums", albumId, "invited-press"],
   });
@@ -4428,6 +4432,11 @@ function SkuRow({
                 <span className="text-slate-500 mr-1">Artist Net</span>
                 <span className="font-semibold">{artistNetLabel}</span>
               </div>
+              {/* Task #859 — the deductions popover is the per-copy vendor
+                  cost stack (manufacturing/publishing/processing/GoodTunes
+                  margin). An `artist` partner sees their Net but never the
+                  cost breakdown behind it. */}
+              {!isArtist && (
               <Popover>
                 <PopoverTrigger asChild>
                   <button
@@ -4457,6 +4466,7 @@ function SkuRow({
                   )}
                 </PopoverContent>
               </Popover>
+              )}
             </div>
           </div>
           </>
@@ -4889,6 +4899,12 @@ function SkuRow({
                 )}
               </div>
               {/* Profit — collapsible inline breakdown */}
+              {/* Task #859 — "Profit / per unit sold" is platform margin and
+                  its breakdown is the full vendor cost stack (manufacturing,
+                  publishing, processing, GoodTunes, never-lose-money rung
+                  notes). An `artist` partner sees Artist Net + Total only,
+                  never this block. */}
+              {!isArtist && (
               <div className="pt-3 border-t border-slate-100">
                 <button
                   type="button"
@@ -4997,6 +5013,7 @@ function SkuRow({
                   </div>
                 )}
               </div>
+              )}
               {/* Total */}
               <div className="pt-2 border-t border-slate-100">
                 <div className="flex items-center justify-between gap-3">
@@ -5538,6 +5555,11 @@ function SkuRow({
                 </TooltipTrigger>
                 <TooltipContent>Duplicate pricing</TooltipContent>
               </Tooltip>
+              {/* Task #859 — the quote PDF is an operator deliverable that
+                  renders the cost stack/margin. An `artist` partner can
+                  duplicate and compare quotes on-screen but can't export
+                  the operator PDF. */}
+              {!isArtist && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <AddEntityButton
@@ -5551,6 +5573,7 @@ function SkuRow({
                 </TooltipTrigger>
                 <TooltipContent>Export quote as PDF</TooltipContent>
               </Tooltip>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
@@ -6223,9 +6246,13 @@ function SkuRow({
       <>
       <div className={["grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4"].join(" ")}>
         {/* Left column — Price / Cost / Profit */}
+        {/* Task #859 — Cost (vendor stack) and Profit (platform margin)
+            are operator-only; an `artist` partner sees the Price field
+            and their Artist Net (in the estimates table / Total) but
+            never the cost or margin rows. */}
         <div className="space-y-3">
           <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
-            Price · Cost · Profit
+            {isArtist ? "Price" : "Price · Cost · Profit"}
           </div>
 
           <div className="flex items-center justify-between gap-3">
@@ -6242,6 +6269,7 @@ function SkuRow({
             />
           </div>
 
+          {!isArtist && (
           <div className="flex items-center justify-between gap-3">
             <span className="text-slate-500 text-xs inline-flex items-center gap-1">
               Cost $
@@ -6283,7 +6311,8 @@ function SkuRow({
               {totalCostCents === null ? "—" : dollars(totalCostCents)}
             </span>
           </div>
-          {!isVinyl && (
+          )}
+          {!isArtist && !isVinyl && (
             <div
               className="text-[11px] text-slate-400 leading-snug -mt-1.5"
               data-testid={`text-cost-nonvinyl-note-${format}`}
@@ -6291,7 +6320,7 @@ function SkuRow({
               Quoted manually — Hellbender doesn't press this format.
             </div>
           )}
-          {isVinyl && breakdown?.needsQuote && (
+          {!isArtist && isVinyl && breakdown?.needsQuote && (
             <div
               className="text-xs text-[color:var(--brand-blue)] leading-snug -mt-1.5"
               data-testid={`text-cost-needs-quote-${format}`}
@@ -6302,6 +6331,7 @@ function SkuRow({
             </div>
           )}
 
+          {!isArtist && (
           <div className="flex items-center justify-between gap-3">
             <span className="text-slate-500 text-xs">
               Profit ${" "}
@@ -6317,6 +6347,7 @@ function SkuRow({
               {profitLabel}
             </span>
           </div>
+          )}
 
           {/* Non-vinyl keeps the per-album Stock cap — vinyl drops it
               entirely per Task #385. */}
@@ -6492,6 +6523,8 @@ function SkuRow({
               in both modes. */}
           {estimateTableRows.length <= 1 && (
             <>
+              {/* Task #859 — platform profit-per-unit is operator-only. */}
+              {!isArtist && (
               <div className="flex items-center justify-between gap-3 pt-1">
                 <span className="text-slate-500 text-xs">
                   Profit ${" "}
@@ -6507,6 +6540,7 @@ function SkuRow({
                   {profitLabel}
                 </span>
               </div>
+              )}
 
               <div className="flex items-center justify-between gap-3">
                 <span className="text-slate-500 text-xs">Total $</span>
@@ -6585,6 +6619,7 @@ function SkuRow({
             </label>
           </div>
 
+          {!isArtist && (
           <div className="flex items-center justify-between gap-3 pt-1">
             <span className="text-slate-500 text-xs">
               Profit ${" "}
@@ -6600,6 +6635,7 @@ function SkuRow({
               {profitLabel}
             </span>
           </div>
+          )}
 
           <div className="flex items-center justify-between gap-3">
             <span className="text-slate-500 text-xs">Total $</span>

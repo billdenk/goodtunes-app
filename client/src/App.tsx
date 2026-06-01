@@ -152,6 +152,15 @@ function Router() {
   const { user, isLoading } = useAuth();
   const [location] = useLocation();
   const kind = useAuthKind();
+  // Task #859 — an `artist` partner is scoped to a quote sandbox. We read
+  // their role so the deep-link guard below can bounce any /admin/* URL
+  // that isn't their releases list or an album detail. The server is the
+  // real enforcement (403/404); this just mirrors it client-side.
+  const adminRole = useQuery<{ role: string; roleScopeId: string | null }>({
+    queryKey: ["/api/me/role"],
+    enabled: !!user && kind === "admin",
+  });
+  const isArtistPartner = adminRole.data?.role === "artist";
 
   // Host-based gating: customer host blocks /admin* paths (redirect into
   // /account). Admin host blocks the customer player surfaces (redirect
@@ -212,6 +221,26 @@ function Router() {
       location.startsWith("/recents")
     )) {
       return <Redirect to="/admin" />;
+    }
+  }
+
+  // Task #859 — artist quote sandbox deep-link guard. An `artist` partner
+  // may reach only their releases list and an album detail page; every
+  // other /admin/* surface (dashboard, people, vendors, presses, the
+  // per-album engagement analytics, etc.) bounces back to the list. Auth
+  // paths stay open so a locked-out artist can still sign in/out.
+  if (isArtistPartner && location.startsWith("/admin")) {
+    const isAlbumList =
+      location === "/admin/albums" || location.startsWith("/admin/albums?");
+    const isAlbumDetail = /^\/admin\/albums\/[^/?]+(\?.*)?$/.test(location);
+    const isAuthPath =
+      location.startsWith("/admin/login") ||
+      location.startsWith("/admin/logout") ||
+      location.startsWith("/admin/register") ||
+      location.startsWith("/admin/forgot-password") ||
+      location.startsWith("/admin/reset-password");
+    if (!isAlbumList && !isAlbumDetail && !isAuthPath) {
+      return <Redirect to="/admin/albums" />;
     }
   }
 

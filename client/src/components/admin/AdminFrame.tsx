@@ -361,6 +361,11 @@ export function AdminFrame({
     enabled: !!user?.isAdmin,
   });
   const isSuperAdmin = roleInfo?.role === "super_admin";
+  // Task #859 — an `artist` partner is locked to the quote sandbox: the
+  // only reachable surface is their own releases + the builder, so the
+  // sidebar collapses to a single "My releases" entry and the global
+  // search (which spans every entity) is hidden.
+  const isArtist = roleInfo?.role === "artist";
 
   // Task #273 + #309 — Collapsible sidebar sections (Stripe-style),
   // accordion: at most one section open at a time. State persists to
@@ -424,7 +429,7 @@ export function AdminFrame({
             from sidebar → main → preview pane. */}
         <div className="h-14 flex-shrink-0 flex items-center px-4 border-b border-slate-200">
           <Link
-            href="/admin/dashboard"
+            href={isArtist ? "/admin/albums" : "/admin/dashboard"}
             className="flex items-center"
             data-testid="link-admin-home"
           >
@@ -434,10 +439,27 @@ export function AdminFrame({
         {/* Task #336 — Global admin search. Sits above Dashboard so it
             anchors the top of the sidebar; ⌘K opens/focuses from
             anywhere in the admin shell. */}
-        <div className="px-2 pt-2 border-r border-slate-200">
-          <AdminSearchBar />
-        </div>
+        {!isArtist && (
+          <div className="px-2 pt-2 border-r border-slate-200">
+            <AdminSearchBar />
+          </div>
+        )}
         <nav className="flex-1 px-2 pt-2 pb-3 space-y-0.5 border-r border-slate-200 overflow-y-auto" data-testid="nav-admin-entities">
+            {/* Task #859 — artist quote sandbox: the only reachable
+                surface for an `artist` partner is their own releases, so
+                the sidebar is a single "My releases" entry and every
+                other section is dropped. */}
+            {isArtist ? (
+              <SidebarLink
+                icon={Disc3}
+                label="My releases"
+                count={albumCount}
+                active={active === "albums"}
+                onClick={() => navigate("/admin/albums")}
+                testId="nav-albums"
+              />
+            ) : (
+            <>
             {/* Task #140 — Dashboard sits above the labelled sections as
                 the admin's at-a-glance home. No section header; it's a
                 solo entry. */}
@@ -716,6 +738,8 @@ export function AdminFrame({
                   testId="nav-trash"
                 />
               </Section>
+            )}
+            </>
             )}
           </nav>
         </aside>

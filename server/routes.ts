@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
 import { pool, db } from "./db";
@@ -294,6 +294,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     })
   );
 
+  // Task #859 — Artist quote-sandbox scope guard. An `artist`-role user
+  // is scoped to a single Person (roleScopeId = primary-artist id) and
+  // may only read/build against releases where they are the primary
+  // artist. Any other album — reached via deep link or raw API call —
+  // is denied (403), not just hidden in the UI. Operators
+  // (super_admin/admin), fans, and every other partner role pass
+  // through untouched. Mounted on both the admin album sub-routes and
+  // the consumer single-album route so URL/API tampering hits a hard
+  // wall instead of leaking another artist's release.
+  const artistAlbumScopeGuard = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    const userId = req.session?.userId;
+    if (!userId) return next();
+    let info: { role: string; roleScopeId: string | null } | null = null;
+    try {
+      const { getUserRole } = await import("./auth/roles");
+      info = await getUserRole(userId);
+    } catch {
+      return next();
+    }
+    if (!info || info.role !== "artist") return next();
+    if (!info.roleScopeId) {
+      return res.status(403).json({ message: "Artist scope not configured." });
+    }
+    let albumId = String((req.params as any).id ?? (req.params as any).albumId ?? "").trim();
+    if (!albumId) {
+      const m = req.originalUrl.match(/^\/api\/(?:admin\/)?albums\/([^/?]+)/);
+      if (m) albumId = decodeURIComponent(m[1]);
+    }
+    if (!albumId) return next();
+    let album: { primaryArtistId?: string | null } | null | undefined;
+    try {
+      album = await storage.getAlbumById(albumId, { includeHidden: true });
+    } catch {
+      return next();
+    }
+    // Literal sub-path (e.g. `/api/admin/albums/genres`) or a stale id:
+    // not an album row, so let the handler resolve it on its own terms.
+    if (!album) return next();
+    if (album.primaryArtistId !== info.roleScopeId) {
+      return res.status(403).json({ message: "Not your release." });
+    }
+    return next();
+  };
+  app.use("/api/admin/albums/:id", artistAlbumScopeGuard);
+  app.use("/api/albums/:id", artistAlbumScopeGuard);
+
   // Task #78 — role-scoped post-login landing path. Reads the same
   // user_roles table /api/auth/roles uses, then maps role to the
   // partner shell the recipient should land on after 2FA. Used by
@@ -306,7 +356,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       `);
       const role = ((row as any).rows ?? [])[0]?.role as string | undefined;
       if (role === "non_profit") return "/non-profit";
-      if (role === "artist") return "/artist";
+      // Task #859 — an `artist` partner lands in their scoped quote
+      // sandbox (their own releases + the package/quote builder), not
+      // the read-only reporting dashboard at /artist.
+      if (role === "artist") return "/admin/albums";
       if (role === "label") return "/label";
       // Task #245 — vendor partners (a press/printer/holographer quoting
       // their own GoodDeed pricing) land on a dedicated portal that is
@@ -15352,6 +15405,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       ...a,
       isExplicit: a.isExplicit || explicitAlbumIds.has(a.id),
     }));
+    // Task #859 — an `artist` partner sees ONLY their own releases in
+    // every listing. Operators and other roles get the full list.
+    const userId = req.session?.userId;
+    if (userId) {
+      const { getUserRole } = await import("./auth/roles");
+      const info = await getUserRole(userId);
+      if (info?.role === "artist") {
+        const scopeId = info.roleScopeId;
+        return res.json(
+          enriched.filter((a) => !!scopeId && a.primaryArtistId === scopeId),
+        );
+      }
+    }
     return res.json(enriched);
   });
 
@@ -21572,6 +21638,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const albumId = String(req.params.id);
     const userId = req.session.userId;
     if (!userId) return res.status(401).json({ message: "Not signed in" });
+    // Task #859 — an `artist` partner's quotes are exploratory ("play
+    // money"). Sending a run to press is a production action that stays
+    // with the operator, so block the press hand-off for the artist
+    // role even on their own release.
+    {
+      const { getUserRole } = await import("./auth/roles");
+      const submitterRole = await getUserRole(userId);
+      if (submitterRole?.role === "artist") {
+        return res.status(403).json({
+          message: "Quotes are exploratory — only a GoodTunes operator can send a run to press.",
+        });
+      }
+    }
     const resolved = await resolveAlbumScope(albumId);
     if (!resolved) return res.status(404).json({ message: "Album not found" });
     if (resolved.scope) {
