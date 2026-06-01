@@ -323,11 +323,13 @@ export function CertPrint({
   const bodyW = leftColRightRel - bodyXRel;
   const headlineYRel = safeTopRel + avatarSize + 5;
   // pt margin above the signature PNG (its transparent top padding means a slight
-  // negative tucks it under the headline). On the long-name tile the signature is
-  // part of the bottom cluster (squiggle → William → footnote), so it moves DOWN
-  // in tandem with footBottomGap to keep its tail touching the TOP of William
-  // while the whole cluster hugs the band bottom.
-  const sigGap = longLockup ? 1 : -2;
+  // negative tucks it under the headline). It is the ONLY lever on the squiggle↔William
+  // overlap and must MATCH on both Letter tiles. On the long-name tile the 2-line
+  // headline drops the top-anchored squiggle ~11pt AND the bottom-anchored William
+  // credit also drops ~11pt (footBottomGap 6→-5), so those two drops cancel — leaving
+  // sigGap alone to set how the squiggle meets "William…". Keep it equal on both tiles
+  // (do NOT couple it to footBottomGap); long previously used +1 and sat ~3pt low.
+  const sigGap = -2;
 
   // ── Left content block — the ONE place the two paper layouts diverge.
   const leftBlock = isA4 ? (
