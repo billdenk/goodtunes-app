@@ -6035,11 +6035,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       Array.from({ length: Math.min(concurrency, candidates.length) }, () => worker()),
     );
     const remaining = cursor < candidates.length ? candidates.length - cursor : 0;
+
+    // Task #861 — also backfill the per-release Tidal/Deezer/Pandora deep
+    // links on already-imported discography rows. These are what the
+    // artist-page "How to Play" sheet reads from, so without this sweep an
+    // older discography keeps the search fallback even after the album-level
+    // links are filled. Same Odesli resolver, bounded budget, fill-blanks-
+    // only; Qobuz has no free mapping so it's never resolved here. Best-
+    // effort: a failure leaves the search fallback in place.
+    let discoCandidates = 0;
+    let discoUpdated = 0;
+    try {
+      const discoRows = await storage.getDiscographyNeedingStreamingLinks();
+      discoCandidates = discoRows.length;
+      // One Odesli lookup per unique Apple collection id (a release can be
+      // on several people's discographies); resolve in the importing
+      // storefront region when the row carries an Apple URL.
+      const byId = new Map<string, string>();
+      for (const r of discoRows) {
+        if (!byId.has(r.collectionId)) {
+          byId.set(r.collectionId, appleCountryFromUrl(r.appleMusicUrl));
+        }
+      }
+      const resolved = await resolveStreamingLinksForCollections(
+        Array.from(byId.entries()).map(([collectionId, country]) => ({ collectionId, country })),
+        { concurrency: 4, totalBudgetMs: 60_000 },
+      );
+      for (const r of discoRows) {
+        const links = resolved.get(r.collectionId);
+        if (!links || !hasAnyResolvedLink(links)) continue;
+        const fill: { tidalUrl?: string; deezerUrl?: string; pandoraUrl?: string } = {};
+        if (!r.tidalUrl && links.tidalUrl) fill.tidalUrl = links.tidalUrl;
+        if (!r.deezerUrl && links.deezerUrl) fill.deezerUrl = links.deezerUrl;
+        if (!r.pandoraUrl && links.pandoraUrl) fill.pandoraUrl = links.pandoraUrl;
+        if (Object.keys(fill).length === 0) continue;
+        try {
+          if (await storage.fillDiscographyStreamingLinks(r.id, fill)) discoUpdated += 1;
+        } catch (e: any) {
+          console.warn("[streamingLinks] disco sweep row failed", r.id, e?.message);
+        }
+      }
+    } catch (e: any) {
+      console.warn("[streamingLinks] discography sweep failed", e?.message);
+    }
+
     return res.json({
       scanned: all.length,
       candidates: candidates.length,
       updated: updatedCount,
       remaining,
+      discography: { candidates: discoCandidates, updated: discoUpdated },
     });
   });
 

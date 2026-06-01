@@ -8960,6 +8960,7 @@ function AdminRefreshStreamingLinksSweep() {
         candidates: number;
         updated: number;
         remaining: number;
+        discography?: { candidates: number; updated: number };
       };
     },
     onSuccess: async (data) => {
@@ -8968,10 +8969,18 @@ function AdminRefreshStreamingLinksSweep() {
         data.remaining > 0
           ? ` ${data.remaining} left — run again to continue.`
           : "";
+      // Task #861 — the sweep also backfills discography rows (what the
+      // artist-page "How to Play" sheet reads), so roll both into the count.
+      const discoUpdated = data.discography?.updated ?? 0;
+      const totalUpdated = data.updated + discoUpdated;
+      const discoTail =
+        discoUpdated > 0
+          ? ` (incl. ${discoUpdated} discography release${discoUpdated === 1 ? "" : "s"})`
+          : "";
       toast({
         title:
-          data.updated > 0
-            ? `Filled links on ${data.updated} album${data.updated === 1 ? "" : "s"}`
+          totalUpdated > 0
+            ? `Filled links on ${totalUpdated} release${totalUpdated === 1 ? "" : "s"}${discoTail}`
             : "No new links found",
         description:
           (data.candidates === 0
@@ -8995,7 +9004,7 @@ function AdminRefreshStreamingLinksSweep() {
       disabled={sweep.isPending}
       className="w-full px-4 py-2 flex items-center gap-2 text-left text-xs text-[var(--brand-blue)] hover:bg-slate-50 disabled:opacity-50"
       data-testid="button-refresh-all-streaming-links"
-      title="Re-resolve Tidal/Deezer/Pandora for every imported album missing them (fills blanks only)"
+      title="Re-resolve Tidal/Deezer/Pandora for every imported album and artist-discography release missing them (fills blanks only)"
     >
       {sweep.isPending ? (
         <Loader2 className="w-3.5 h-3.5 animate-spin" />

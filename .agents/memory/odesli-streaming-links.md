@@ -28,3 +28,13 @@ import — any network error / 429 / no-match yields nulls. Lives in
 discography save handler. Columns already exist on albums/people/person_discography
 (added in the six-service handoff work). Spotify per-release also unresolved (needs
 Spotify Web API; separate from this).
+
+**Two tables back two fan surfaces — backfill both.** The artist-page "How to
+Play" sheet reads `person_discography` rows; the in-album "Stream this" picker
+reads `albums` (+ per-track song columns). They are separate tables, so a
+backfill that only sweeps `albums` leaves old artist pages searching. The
+catalog-wide sweep (`POST /api/admin/albums/refresh-streaming-links`) now
+backfills **both** (fill-blanks-only), and every fan picker (How to Play,
+in-album, favorite-direct handoff) opens the deep link when present and
+otherwise a per-service search — no surface should bail or dim when a link is
+missing.

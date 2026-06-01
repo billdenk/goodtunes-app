@@ -118,7 +118,7 @@ import {
   printGenerations,
   printArtifacts,
 } from "@shared/schema";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "./db";
 import { softDeleteEntity } from "./softDelete";
 
@@ -233,6 +233,11 @@ export interface IStorage {
   // writes the link (operator-entered links stay untouched).
   getDiscographyNeedingSpotify(): Promise<Array<{ id: string; collectionId: string; name: string; artistName: string }>>;
   setDiscographySpotifyUrl(id: string, spotifyUrl: string): Promise<void>;
+  // Task #861 — backfill Tidal/Deezer/Pandora deep links on already-imported
+  // discography rows (fill-blanks-only). The artist-page "How to Play" sheet
+  // reads these, so without a backfill old releases keep the search fallback.
+  getDiscographyNeedingStreamingLinks(): Promise<Array<{ id: string; collectionId: string; appleMusicUrl: string | null; tidalUrl: string | null; deezerUrl: string | null; pandoraUrl: string | null }>>;
+  fillDiscographyStreamingLinks(id: string, links: { tidalUrl?: string | null; deezerUrl?: string | null; pandoraUrl?: string | null }): Promise<boolean>;
 
   // `includeHiddenVendors` is honored only by admin call sites — public
   // reads always pass false so hidden vendor buttons don't render in the
@@ -1482,6 +1487,63 @@ export class DbStorage implements IStorage {
       .update(personDiscography)
       .set({ spotifyUrl })
       .where(and(eq(personDiscography.id, id), isNull(personDiscography.spotifyUrl)));
+  }
+
+  // Task #861 — discography rows the artist-page "How to Play" sheet reads
+  // from that still need a Tidal/Deezer/Pandora deep link. Only rows with an
+  // Apple identity (numeric iTunes collection id, the only thing song.link
+  // can map) and at least one of the three links still null. Qobuz has no
+  // free mapping so it's never a reason to resolve.
+  async getDiscographyNeedingStreamingLinks(): Promise<
+    Array<{
+      id: string;
+      collectionId: string;
+      appleMusicUrl: string | null;
+      tidalUrl: string | null;
+      deezerUrl: string | null;
+      pandoraUrl: string | null;
+    }>
+  > {
+    const rows = await db
+      .select({
+        id: personDiscography.id,
+        collectionId: personDiscography.collectionId,
+        appleMusicUrl: personDiscography.appleMusicUrl,
+        tidalUrl: personDiscography.tidalUrl,
+        deezerUrl: personDiscography.deezerUrl,
+        pandoraUrl: personDiscography.pandoraUrl,
+      })
+      .from(personDiscography)
+      .where(
+        and(
+          sql`${personDiscography.collectionId} ~ '^[0-9]+$'`,
+          sql`(${personDiscography.tidalUrl} IS NULL OR ${personDiscography.deezerUrl} IS NULL OR ${personDiscography.pandoraUrl} IS NULL)`,
+        ),
+      );
+    return rows;
+  }
+
+  // Fill-blanks-only update of a discography row's streaming links — guarded
+  // per-column with IS NULL so an operator/import edit always wins, mirroring
+  // refillAlbumStreamingLinks' contract. Returns true when a row was touched.
+  async fillDiscographyStreamingLinks(
+    id: string,
+    links: { tidalUrl?: string | null; deezerUrl?: string | null; pandoraUrl?: string | null },
+  ): Promise<boolean> {
+    const set: Record<string, string> = {};
+    if (links.tidalUrl) set.tidalUrl = links.tidalUrl;
+    if (links.deezerUrl) set.deezerUrl = links.deezerUrl;
+    if (links.pandoraUrl) set.pandoraUrl = links.pandoraUrl;
+    if (Object.keys(set).length === 0) return false;
+    const nullGuards = Object.keys(set).map(
+      (col) => sql`${(personDiscography as any)[col]} IS NULL`,
+    );
+    const result = await db
+      .update(personDiscography)
+      .set(set)
+      .where(and(eq(personDiscography.id, id), or(...nullGuards)))
+      .returning({ id: personDiscography.id });
+    return result.length > 0;
   }
 
   // Internal helper: load enriched attachments for a set of instrument ids,

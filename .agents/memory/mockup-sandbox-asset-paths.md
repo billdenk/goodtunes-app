@@ -36,3 +36,9 @@ instant feedback, then once the component renders set `url` + `state: "live"`.
 Update actions must also include `shapeType: "iframe"` in the `updates` payload or
 the call is rejected. `process.env` is NOT available in the code_execution sandbox
 — hardcode the domain (or read it elsewhere) when building the URL.
+
+## Screenshot captures go blank/partial during HMR
+After rapid edits to a mockup component, the external-URL screenshot tool often captures a blank or half-rendered sheet — it fires mid Vite HMR reload (browser console shows `[vite] connecting...` → `connected` straddling the capture), NOT a real render bug. Don't chase a phantom crash: `restart_workflow("artifacts/mockup-sandbox: Component Preview Server")` for a clean build, then capture with a fresh `?v=N` cache-buster.
+
+## Verifying multi-state interactive mockups
+Give the interactive component a tiny URL-param init (read `window.location.search` in the useState initializers, e.g. `?persona=returning&screen=confirm&pending=tidal`) so each state can be screenshotted directly. Harmless preview-only code; defaults cleanly to the first state with no params so the on-canvas interactive experience is unchanged.

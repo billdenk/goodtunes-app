@@ -26,9 +26,9 @@ import {
 import {
   getFavoriteStreamingService,
   setFavoriteStreamingService,
-  availableServices,
-  linkForService,
+  handoffUrlForService,
   openStreamLink,
+  STREAMING_SERVICES,
   type StreamingServiceId,
   type StreamLinks,
 } from "@/lib/streamingService";
@@ -158,10 +158,13 @@ function AlbumDetailMobile() {
   const [showPlaylistPicker, setShowPlaylistPicker] = useState<Song | null>(null);
   const [showAlbumPlaylistPicker, setShowAlbumPlaylistPicker] = useState(false);
   // Task #734 — stream-elsewhere handoff. When a fan taps a "Stream this"
-  // control and hasn't chosen a service yet (or it's missing for this
-  // release), we stash the candidate links + subtitle and open the picker.
+  // control and hasn't chosen a service yet, we stash the candidate links +
+  // a search query (artist + title) + subtitle and open the picker. Every
+  // service can always hand off: a stored deep link when we have one, a
+  // per-service search otherwise (Task #861).
   const [streamPicker, setStreamPicker] = useState<{
     links: StreamLinks;
+    searchQuery: string;
     subtitle?: string;
   } | null>(null);
   const [songMenuFor, setSongMenuFor] = useState<{ song: Song; rect: DOMRect } | null>(null);
@@ -414,34 +417,28 @@ function AlbumDetailMobile() {
     songs.length > 0 && songs.every((s) => !!s.streamOnly);
 
   // Hand the fan off to their chosen streaming service. If they've picked a
-  // favorite and a link exists for it, open it straight away; otherwise open
-  // the picker (first tap) which saves the choice for next time.
-  const handleStreamHandoff = (links: StreamLinks, subtitle?: string) => {
-    const services = availableServices(links);
-    if (services.length === 0) return;
+  // favorite, open it straight away — the exact release when we have a deep
+  // link for that service, otherwise a per-service search built from the
+  // artist + title (Task #861). With no saved favorite, open the picker
+  // (first tap) which saves the choice for next time.
+  const handleStreamHandoff = (
+    links: StreamLinks,
+    searchQuery: string,
+    subtitle?: string,
+  ) => {
     const fav =
       (user?.favoriteStreamingService as StreamingServiceId | undefined) ??
       getFavoriteStreamingService();
     if (fav) {
-      const url = linkForService(fav, links);
-      if (url) {
-        openStreamLink(url);
-        return;
-      }
+      openStreamLink(handoffUrlForService(fav, links, searchQuery));
+      return;
     }
-    // Only one service available + no saved favorite → skip the picker.
-    if (services.length === 1) {
-      const url = linkForService(services[0], links);
-      if (url) {
-        openStreamLink(url);
-        return;
-      }
-    }
-    setStreamPicker({ links, subtitle });
+    setStreamPicker({ links, searchQuery, subtitle });
   };
   const handleStreamSong = (song: Song) => {
     handleStreamHandoff(
       { spotify: song.spotifyTrackUrl, apple: song.appleMusicTrackUrl },
+      `${album?.artist ?? ""} ${song.title}`.trim(),
       song.title,
     );
   };
@@ -460,20 +457,21 @@ function AlbumDetailMobile() {
         deezer: (album as any)?.deezerUrl ?? null,
         pandora: (album as any)?.pandoraUrl ?? null,
       },
+      `${album?.artist ?? ""} ${album?.title ?? ""}`.trim(),
       album?.title,
     );
   };
-  // Picker pick → save favorite (localStorage + customer profile) and stream.
+  // Picker pick → save favorite (localStorage + customer profile) and stream
+  // the exact release (deep link) or a per-service search fallback.
   const handlePickStreamService = (id: StreamingServiceId) => {
     setFavoriteStreamingService(id);
     if (user?.kind === "customer") {
       updateProfile({ favoriteStreamingService: id }).catch(() => {});
     }
-    const links = streamPicker?.links;
+    const picker = streamPicker;
     setStreamPicker(null);
-    if (links) {
-      const url = linkForService(id, links);
-      if (url) openStreamLink(url);
+    if (picker) {
+      openStreamLink(handoffUrlForService(id, picker.links, picker.searchQuery));
     }
   };
   // Helper: every track on this album where this performer is credited.
@@ -837,7 +835,7 @@ function AlbumDetailMobile() {
         <AnimatePresence>
           {streamPicker && (
             <StreamServicePickerSheet
-              available={availableServices(streamPicker.links)}
+              available={STREAMING_SERVICES.map((s) => s.id)}
               subtitle={streamPicker.subtitle}
               onPick={handlePickStreamService}
               onClose={() => setStreamPicker(null)}
