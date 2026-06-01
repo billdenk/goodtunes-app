@@ -19,6 +19,9 @@ import {
   albums,
   albumSkus,
   albumAddons,
+  customAddons,
+  customAddonArtists,
+  organizations,
   payoutFormatCosts,
   pressFormatCosts,
   orders,
@@ -162,6 +165,45 @@ async function listActiveAddons(albumId: string): Promise<AlbumAddon[]> {
 }
 async function listAllAddons(albumId: string): Promise<AlbumAddon[]> {
   return db.select().from(albumAddons).where(eq(albumAddons.albumId, albumId)).orderBy(asc(albumAddons.position));
+}
+
+// Task #844 — Operator-created custom ("Gift of Hope") add-ons that apply
+// to an album by way of its primary artist. An add-on is attached to one
+// or more People; it surfaces on every album whose `primaryArtistId` is
+// one of those People. Returns only `active` rows, joined to the owning
+// non-profit for display. Empty when the album has no primary artist or
+// no add-on targets that artist.
+type CustomAddonForAlbum = {
+  id: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  priceCents: number;
+  fulfiller: string | null;
+  orgName: string;
+  orgLogoUrl: string | null;
+};
+async function listCustomAddonsForAlbum(
+  primaryArtistId: string | null,
+): Promise<CustomAddonForAlbum[]> {
+  if (!primaryArtistId) return [];
+  const rows = await db
+    .select({
+      id: customAddons.id,
+      name: customAddons.name,
+      description: customAddons.description,
+      imageUrl: customAddons.imageUrl,
+      priceCents: customAddons.priceCents,
+      fulfiller: customAddons.fulfiller,
+      orgName: organizations.name,
+      orgLogoUrl: organizations.logoUrl,
+    })
+    .from(customAddons)
+    .innerJoin(customAddonArtists, eq(customAddonArtists.customAddonId, customAddons.id))
+    .innerJoin(organizations, eq(organizations.id, customAddons.organizationId))
+    .where(and(eq(customAddonArtists.personId, primaryArtistId), eq(customAddons.active, true)))
+    .orderBy(asc(customAddons.createdAt));
+  return rows;
 }
 
 async function upsertSku(input: {
@@ -682,6 +724,10 @@ export function registerCommerceRoutes(app: Express) {
       sevenSku && bookletAddonRow
         ? resolveBookletBundleCents(sevenSku.priceCents, bookletAddonRow)
         : null;
+    // Task #844 — operator-created custom ("Gift of Hope") add-ons that
+    // target this album's primary artist. Rendered as a single optional
+    // checkbox (one per order) in the Buy sheet.
+    const customAddonRows = await listCustomAddonsForAlbum(album.primaryArtistId);
     res.json({
       albumId: album.id,
       title: album.title,
@@ -718,6 +764,18 @@ export function registerCommerceRoutes(app: Express) {
       // Task #793 — flat "7\" + booklet" set price for the either/or
       // variant on the 7" single. Null when not applicable.
       bookletBundlePriceCents,
+      // Task #844 — custom ("Gift of Hope") add-ons for this album's
+      // primary artist. Each is a single optional checkbox (one per
+      // order); empty array when none apply.
+      customAddons: customAddonRows.map((c) => ({
+        id: c.id,
+        name: c.name,
+        description: c.description,
+        imageUrl: c.imageUrl,
+        priceCents: c.priceCents,
+        orgName: c.orgName,
+        orgLogoUrl: c.orgLogoUrl,
+      })),
     });
   });
 
@@ -1667,6 +1725,12 @@ export function registerCommerceRoutes(app: Express) {
       .min(1)
       .max(MAX_COPIES_PER_CHECKOUT)
       .optional(),
+    // Task #844 — ids of operator-created custom ("Gift of Hope") add-ons
+    // the fan ticked. Each is added once (one per order); the server
+    // re-validates that every id is active AND targets this album's
+    // primary artist before charging, and always uses the server-side
+    // price (client can't influence the amount).
+    customAddonIds: z.array(z.string().min(1)).optional(),
   });
   app.post("/api/checkout/session", async (req, res) => {
     const auth = req.headers.authorization;
@@ -1792,6 +1856,27 @@ export function registerCommerceRoutes(app: Express) {
       }
     }
 
+    // Task #844 — Resolve the ticked custom ("Gift of Hope") add-ons. We
+    // re-derive eligibility server-side (active AND targets this album's
+    // primary artist) and always use the stored price, so a stale or
+    // spoofed client can't add an add-on that doesn't apply or change the
+    // amount charged. De-duped (one per order) and capped defensively.
+    const selectedCustomAddons: CustomAddonForAlbum[] = [];
+    if (parsed.data.customAddonIds && parsed.data.customAddonIds.length > 0) {
+      const eligible = await listCustomAddonsForAlbum(album.primaryArtistId);
+      const eligibleById = new Map(eligible.map((c) => [c.id, c]));
+      const seen = new Set<string>();
+      for (const id of parsed.data.customAddonIds) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const match = eligibleById.get(id);
+        if (!match) {
+          return res.status(400).json({ message: "That add-on isn't available for this album." });
+        }
+        selectedCustomAddons.push(match);
+      }
+    }
+
     const stripe = await getStripe();
     // Make sure the customer has a Stripe Customer attached (reuse on
     // repeat purchases so address / saved cards persist).
@@ -1859,6 +1944,30 @@ export function registerCommerceRoutes(app: Express) {
             description: `16-page booklet for ${album.title}`,
             images: bookletAddon.artworkUrl ? [absoluteUrl(req, bookletAddon.artworkUrl)] : [],
             metadata: { gt_kind: "addon", gt_sku: bookletAddon.kind, gt_album_id: album.id },
+          },
+        },
+        quantity: 1,
+      });
+    }
+
+    // Task #844 — One line item per ticked custom add-on (qty 1). The
+    // add-on id + fulfiller ride in the product metadata so materialize
+    // can persist them on the order_items row for the fulfiller.
+    for (const ca of selectedCustomAddons) {
+      lineItems.push({
+        price_data: {
+          currency: "usd",
+          unit_amount: ca.priceCents,
+          product_data: {
+            name: ca.name,
+            description: `${ca.orgName} — for ${album.title}`,
+            images: ca.imageUrl ? [absoluteUrl(req, ca.imageUrl)] : [],
+            metadata: {
+              gt_kind: "custom_addon",
+              gt_sku: ca.id,
+              gt_album_id: album.id,
+              gt_fulfiller: ca.fulfiller ?? "",
+            },
           },
         },
         quantity: 1,
@@ -2450,9 +2559,14 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
   const items: Array<Omit<OrderItem, "id" | "orderId" | "createdAt">> = [];
   for (const li of lineItems.data) {
     const product = li.price?.product as Stripe.Product | undefined;
-    const kind = (product?.metadata?.gt_kind as "format" | "addon") ?? "format";
+    // Task #844 — "custom_addon" joins the existing "format" | "addon"
+    // kinds. Its sku holds the custom_addons.id and it carries a
+    // fulfiller snapshot the format/addon rows don't have.
+    const kind = (product?.metadata?.gt_kind as "format" | "addon" | "custom_addon") ?? "format";
     const sku = product?.metadata?.gt_sku ?? "unknown";
     const pressingSnap = kind === "format" ? skuByFormatAtPurchase.get(sku as any) : undefined;
+    const fulfiller =
+      kind === "custom_addon" ? (product?.metadata?.gt_fulfiller || null) : null;
     items.push({
       kind,
       sku,
@@ -2461,6 +2575,7 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
       quantity: li.quantity ?? 1,
       vinylColor: pressingSnap?.vinylColor ?? null,
       jacketUpgrade: (pressingSnap?.jacketUpgrade as JacketUpgrade | null) ?? null,
+      fulfiller,
     });
   }
   const totalCents = full.amount_total ?? items.reduce((a, b) => a + b.unitPriceCents * b.quantity, 0);

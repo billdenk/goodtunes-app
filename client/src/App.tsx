@@ -40,6 +40,7 @@ import { AdminPeople } from "@/pages/AdminPeople";
 import { AdminPerson } from "@/pages/AdminPerson";
 import AdminNonProfit from "@/pages/AdminNonProfit";
 import { AdminNonProfits } from "@/pages/AdminNonProfits";
+import { AdminCustomAddons } from "@/pages/AdminCustomAddons";
 import { AdminFanOrders } from "@/pages/AdminFanOrders";
 import { AdminInstruments } from "@/pages/AdminInstruments";
 import { AdminInstrument } from "@/pages/AdminInstrument";
@@ -480,6 +481,10 @@ function Router() {
             CATALOG section of the admin sidebar. */}
         <Route path="/admin/non-profits">
           <ProtectedRoute component={AdminNonProfits} />
+        </Route>
+        {/* Task #844 — operator-built custom ("Gift of Hope") add-ons. */}
+        <Route path="/admin/custom-addons">
+          <ProtectedRoute component={AdminCustomAddons} />
         </Route>
         {/* Task #230 — Fan orders queue (design stub for now). */}
         <Route path="/admin/fan-orders">

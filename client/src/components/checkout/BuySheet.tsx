@@ -25,7 +25,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { IconButton } from "@/components/ui/IconButton";
 import { SheetClose } from "@/components/ui/SheetChrome";
 import { cn } from "@/lib/utils";
-import { Check, Minus, Plus } from "lucide-react";
+import { Check, Gift, Minus, Plus } from "lucide-react";
 import { VinylPreview } from "@/components/VinylPreview";
 import {
   DEFAULT_VINYL_COLOR_ID,
@@ -84,6 +84,22 @@ type BuyOptions = {
   // server can report how many slots remain so we can cap per-copy
   // toggles in a multi-quantity checkout. Undefined = uncapped.
   signedCertRemaining?: number | null;
+  // Task #844 — operator-built custom ("Gift of Hope") add-ons offered
+  // on this album (resolved from the primary artist). Each is a single
+  // optional checkbox; one per order, no quantity. Empty when none.
+  customAddons?: CustomAddon[];
+};
+
+// Task #844 — fan-facing shape of a custom add-on (mirrors the server's
+// buy-options payload). Kept inline so the fan bundle stays light.
+type CustomAddon = {
+  id: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  priceCents: number;
+  orgName: string;
+  orgLogoUrl: string | null;
 };
 
 // Task #579 — Booklet anchors to a 7" vinyl or cassette purchase. Kept
@@ -163,6 +179,10 @@ export function BuySheet({
   // toggling on), so the displayed total can't drift from what we
   // POST to /api/checkout/session.
   const [booklet, setBooklet] = useState(false);
+  // Task #844 — ticked custom ("Gift of Hope") add-ons. Each is a single
+  // optional checkbox (one per order, no quantity). Independent of every
+  // other line; the server re-validates eligibility + price on checkout.
+  const [customAddonIds, setCustomAddonIds] = useState<string[]>([]);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -258,7 +278,11 @@ export function BuySheet({
   // add-on; the 7" variant is folded into the format price above.
   const bookletLineCents =
     booklet && bookletAvailable && !bundleAvailable ? bookletAddon!.priceCents : 0;
-  const totalCents = formatLineCents + certLineCents + bookletLineCents;
+  // Task #844 — each ticked custom add-on adds its flat price once.
+  const customAddonsList = options?.customAddons ?? [];
+  const selectedCustomAddons = customAddonsList.filter((c) => customAddonIds.includes(c.id));
+  const customAddonsLineCents = selectedCustomAddons.reduce((sum, c) => sum + c.priceCents, 0);
+  const totalCents = formatLineCents + certLineCents + bookletLineCents + customAddonsLineCents;
 
   // If the run is capped, don't let the fan toggle more copies than
   // remain in inventory. The server validates this too — this is just
@@ -303,6 +327,10 @@ export function BuySheet({
         booklet: booklet && bookletAvailable,
         bookletPriceCents:
           booklet && bookletAvailable ? bookletAddon!.priceCents : undefined,
+        // Task #844 — ids of ticked custom ("Gift of Hope") add-ons.
+        // Server re-validates each is active + targets this album's
+        // artist and always uses the stored price.
+        customAddonIds: selectedCustomAddons.map((c) => c.id),
       });
       const j = await r.json();
       if (!j.clientSecret) throw new Error(j?.message ?? "Checkout failed to start");
@@ -671,6 +699,73 @@ export function BuySheet({
                   </button>
                 )}
 
+                {/* Task #844 — Operator-built custom ("Gift of Hope")
+                    add-ons. Each is a single optional checkbox (one per
+                    order, no quantity). Shows the owning non-profit so
+                    the fan knows where the money goes. */}
+                {customAddonsList.length > 0 && (
+                  <div className="mb-5">
+                    <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">
+                      Add a little extra
+                    </div>
+                    <Group>
+                      {customAddonsList.map((ca) => {
+                        const selected = customAddonIds.includes(ca.id);
+                        return (
+                          <button
+                            key={ca.id}
+                            type="button"
+                            onClick={() =>
+                              setCustomAddonIds((prev) =>
+                                prev.includes(ca.id)
+                                  ? prev.filter((x) => x !== ca.id)
+                                  : [...prev, ca.id],
+                              )
+                            }
+                            className={cn(
+                              "w-full flex items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors",
+                              selected
+                                ? "bg-[color:var(--brand-mint)]/15"
+                                : "hover:bg-white/[0.03]",
+                            )}
+                            data-testid={`button-toggle-custom-addon-${ca.id}`}
+                          >
+                            <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
+                              <div
+                                className="w-12 h-12 rounded-md bg-white/[0.06] flex-shrink-0 overflow-hidden flex items-center justify-center"
+                                data-testid={`img-custom-addon-${ca.id}`}
+                              >
+                                {ca.imageUrl ? (
+                                  <img src={ca.imageUrl} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <Gift className="w-5 h-5 text-white/40" />
+                                )}
+                              </div>
+                              <div className="flex flex-col flex-1 min-w-0">
+                                <span className="text-sm font-medium">{ca.name}</span>
+                                <span className="text-[12px] text-white/55 leading-snug mt-0.5">
+                                  {ca.description || `Supports ${ca.orgName}.`}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 whitespace-nowrap">
+                              <span className="text-[14px] font-semibold whitespace-nowrap">
+                                + {dollars(ca.priceCents)}
+                              </span>
+                              {selected && (
+                                <Check
+                                  className="w-[18px] h-[18px] text-[color:var(--brand-mint)]"
+                                  strokeWidth={2.75}
+                                />
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </Group>
+                  </div>
+                )}
+
                 {/* Live breakdown — separate lines so the fan can verify
                     the math before tapping checkout. */}
                 <div className="rounded-2xl bg-white/[0.05] p-4 mb-4 text-[13px]" data-testid="block-breakdown">
@@ -695,6 +790,15 @@ export function BuySheet({
                       <span className="text-white/85" data-testid="text-line-booklet">{dollars(bookletLineCents)}</span>
                     </div>
                   )}
+                  {/* Task #844 — one line per ticked custom add-on. */}
+                  {selectedCustomAddons.map((ca) => (
+                    <div key={ca.id} className="flex items-center justify-between mt-1.5">
+                      <span className="text-white/65">{ca.name}</span>
+                      <span className="text-white/85" data-testid={`text-line-custom-addon-${ca.id}`}>
+                        {dollars(ca.priceCents)}
+                      </span>
+                    </div>
+                  ))}
                   <div className="border-t border-white/[0.08] mt-3 pt-3 flex items-center justify-between">
                     <span className="text-white/55">Total</span>
                     <span className="text-[18px] font-bold" data-testid="text-buy-total">

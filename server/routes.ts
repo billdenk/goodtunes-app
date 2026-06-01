@@ -17341,6 +17341,186 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ---------------------------------------------------------------------
+  // Task #844 — Custom ("Gift of Hope") add-ons. A super-admin builds a
+  // non-profit-owned product, attaches it to one or more artists (people),
+  // and it surfaces as a single optional checkbox in the Buy sheet of
+  // every album by an attached artist. Reads are open to any admin; writes
+  // are super-admin only (mirrors the NPO CRUD above). Stored in the
+  // `custom_addons` + `custom_addon_artists` tables.
+  app.get("/api/admin/custom-addons", requireAdmin, async (_req, res) => {
+    const rows = await db.execute<any>(sql`
+      SELECT ca.id, ca.organization_id, ca.name, ca.description, ca.image_url,
+             ca.price_cents, ca.fulfiller, ca.active, ca.created_at,
+             o.name AS org_name, o.logo_url AS org_logo_url,
+             COALESCE(
+               json_agg(
+                 json_build_object('personId', p.id, 'name', p.name, 'photoUrl', p.photo_url)
+                 ORDER BY p.name
+               ) FILTER (WHERE p.id IS NOT NULL),
+               '[]'
+             ) AS artists
+      FROM custom_addons ca
+      JOIN organizations o ON o.id = ca.organization_id
+      LEFT JOIN custom_addon_artists caa ON caa.custom_addon_id = ca.id
+      LEFT JOIN people p ON p.id = caa.person_id
+      GROUP BY ca.id, o.name, o.logo_url
+      ORDER BY ca.created_at DESC
+    `);
+    res.json(((rows as any).rows ?? []).map((r: any) => ({
+      id: r.id,
+      organizationId: r.organization_id,
+      orgName: r.org_name,
+      orgLogoUrl: r.org_logo_url,
+      name: r.name,
+      description: r.description,
+      imageUrl: r.image_url,
+      priceCents: r.price_cents,
+      fulfiller: r.fulfiller,
+      active: r.active,
+      artists: r.artists ?? [],
+    })));
+  });
+
+  app.get("/api/admin/custom-addons/:id", requireAdmin, async (req, res) => {
+    const rows = await db.execute<any>(sql`
+      SELECT ca.id, ca.organization_id, ca.name, ca.description, ca.image_url,
+             ca.price_cents, ca.fulfiller, ca.active,
+             o.name AS org_name, o.logo_url AS org_logo_url,
+             COALESCE(
+               json_agg(
+                 json_build_object('personId', p.id, 'name', p.name, 'photoUrl', p.photo_url)
+                 ORDER BY p.name
+               ) FILTER (WHERE p.id IS NOT NULL),
+               '[]'
+             ) AS artists
+      FROM custom_addons ca
+      JOIN organizations o ON o.id = ca.organization_id
+      LEFT JOIN custom_addon_artists caa ON caa.custom_addon_id = ca.id
+      LEFT JOIN people p ON p.id = caa.person_id
+      WHERE ca.id = ${req.params.id}
+      GROUP BY ca.id, o.name, o.logo_url
+    `);
+    const r = ((rows as any).rows ?? [])[0];
+    if (!r) return res.status(404).json({ message: "Add-on not found" });
+    res.json({
+      id: r.id,
+      organizationId: r.organization_id,
+      orgName: r.org_name,
+      orgLogoUrl: r.org_logo_url,
+      name: r.name,
+      description: r.description,
+      imageUrl: r.image_url,
+      priceCents: r.price_cents,
+      fulfiller: r.fulfiller,
+      active: r.active,
+      artists: r.artists ?? [],
+    });
+  });
+
+  app.post("/api/admin/custom-addons", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    const name = String(req.body?.name || "").trim();
+    if (!name) return res.status(400).json({ message: "Name is required" });
+    const organizationId = String(req.body?.organizationId || "").trim();
+    if (!organizationId) return res.status(400).json({ message: "A non-profit is required" });
+    const priceCents = Math.round(Number(req.body?.priceCents));
+    if (!Number.isFinite(priceCents) || priceCents < 0) {
+      return res.status(400).json({ message: "Price must be zero or more" });
+    }
+    const org = await db.execute(sql`
+      SELECT 1 FROM organizations WHERE id = ${organizationId} AND kind = 'non_profit' LIMIT 1
+    `);
+    if (((org as any).rows ?? []).length === 0) {
+      return res.status(400).json({ message: "Pick a valid non-profit" });
+    }
+    const description = req.body?.description ? String(req.body.description).trim() || null : null;
+    const imageUrl = req.body?.imageUrl ? String(req.body.imageUrl).trim() || null : null;
+    const fulfiller = req.body?.fulfiller ? String(req.body.fulfiller).trim() || null : null;
+    const ins = await db.execute<{ id: string }>(sql`
+      INSERT INTO custom_addons (organization_id, name, description, image_url, price_cents, fulfiller)
+      VALUES (${organizationId}, ${name}, ${description}, ${imageUrl}, ${priceCents}, ${fulfiller})
+      RETURNING id
+    `);
+    res.status(201).json({ id: (ins as any).rows?.[0]?.id });
+  });
+
+  const updateCustomAddon: import("express").RequestHandler = async (req, res) => {
+    const b = req.body ?? {};
+    const exists = await db.execute(sql`SELECT 1 FROM custom_addons WHERE id = ${req.params.id} LIMIT 1`);
+    if (((exists as any).rows ?? []).length === 0) {
+      return res.status(404).json({ message: "Add-on not found" });
+    }
+    const sets: any[] = [];
+    if (b.name !== undefined) {
+      const name = String(b.name).trim();
+      if (!name) return res.status(400).json({ message: "Name cannot be empty" });
+      sets.push(sql`name = ${name}`);
+    }
+    if (b.organizationId !== undefined) {
+      const organizationId = String(b.organizationId).trim();
+      const org = await db.execute(sql`
+        SELECT 1 FROM organizations WHERE id = ${organizationId} AND kind = 'non_profit' LIMIT 1
+      `);
+      if (((org as any).rows ?? []).length === 0) {
+        return res.status(400).json({ message: "Pick a valid non-profit" });
+      }
+      sets.push(sql`organization_id = ${organizationId}`);
+    }
+    if (b.priceCents !== undefined) {
+      const priceCents = Math.round(Number(b.priceCents));
+      if (!Number.isFinite(priceCents) || priceCents < 0) {
+        return res.status(400).json({ message: "Price must be zero or more" });
+      }
+      sets.push(sql`price_cents = ${priceCents}`);
+    }
+    if (b.description !== undefined) {
+      const v = b.description == null || String(b.description).trim() === "" ? null : String(b.description).trim();
+      sets.push(sql`description = ${v}`);
+    }
+    if (b.imageUrl !== undefined) {
+      const v = b.imageUrl == null || String(b.imageUrl).trim() === "" ? null : String(b.imageUrl).trim();
+      sets.push(sql`image_url = ${v}`);
+    }
+    if (b.fulfiller !== undefined) {
+      const v = b.fulfiller == null || String(b.fulfiller).trim() === "" ? null : String(b.fulfiller).trim();
+      sets.push(sql`fulfiller = ${v}`);
+    }
+    if (b.active !== undefined) {
+      sets.push(sql`active = ${!!b.active}`);
+    }
+    if (sets.length === 0) return res.status(400).json({ message: "Nothing to update" });
+    const setSql = sets.reduce((acc, frag, i) => (i === 0 ? frag : sql`${acc}, ${frag}`));
+    await db.execute(sql`UPDATE custom_addons SET ${setSql} WHERE id = ${req.params.id}`);
+    res.json({ id: req.params.id });
+  };
+  app.put("/api/admin/custom-addons/:id", requireAdmin, requireRole("super_admin"), updateCustomAddon);
+  app.patch("/api/admin/custom-addons/:id", requireAdmin, requireRole("super_admin"), updateCustomAddon);
+
+  // Attach an artist (person) to a custom add-on. Idempotent.
+  app.post("/api/admin/custom-addons/:id/artists", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    const personId = String(req.body?.personId || "").trim();
+    if (!personId) return res.status(400).json({ message: "personId is required" });
+    const addon = await db.execute(sql`SELECT 1 FROM custom_addons WHERE id = ${req.params.id} LIMIT 1`);
+    if (((addon as any).rows ?? []).length === 0) return res.status(404).json({ message: "Add-on not found" });
+    const person = await db.execute(sql`SELECT 1 FROM people WHERE id = ${personId} LIMIT 1`);
+    if (((person as any).rows ?? []).length === 0) return res.status(404).json({ message: "Person not found" });
+    await db.execute(sql`
+      INSERT INTO custom_addon_artists (custom_addon_id, person_id)
+      VALUES (${req.params.id}, ${personId})
+      ON CONFLICT (custom_addon_id, person_id) DO NOTHING
+    `);
+    res.status(201).json({ customAddonId: req.params.id, personId });
+  });
+
+  // Detach an artist from a custom add-on. No-op if the row isn't there.
+  app.delete("/api/admin/custom-addons/:id/artists/:personId", requireAdmin, requireRole("super_admin"), async (req, res) => {
+    await db.execute(sql`
+      DELETE FROM custom_addon_artists
+      WHERE custom_addon_id = ${req.params.id} AND person_id = ${req.params.personId}
+    `);
+    res.status(204).end();
+  });
+
+  // ---------------------------------------------------------------------
   // Task #295 — entity-detail Albums + Analytics tabs (NPO / Reseller /
   // Press). Each entity has its own connection-to-album semantics; the
   // response shape is identical so the same client component renders

@@ -6,6 +6,7 @@ import {
   Disc3,
   User,
   Guitar,
+  Gift,
   Hammer,
   Store,
   Tag,
@@ -64,6 +65,7 @@ const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   albums: "catalog",
   people: "catalog",
   gear: "catalog",
+  "custom-addons": "catalog",
   labels: "partners",
   nonprofits: "partners",
   manufacturers: "partners",
@@ -109,6 +111,7 @@ export type EntityKey =
   | "people"
   | "nonprofits"
   | "gear"
+  | "custom-addons"
   | "makers"
   | "vendors"
   | "payouts-release"
@@ -510,6 +513,14 @@ export function AdminFrame({
                 active={active === "gear"}
                 onClick={() => navigate("/admin/instruments")}
                 testId="nav-gear"
+              />
+              {/* Task #844 — operator-built custom ("Gift of Hope") add-ons. */}
+              <SidebarLink
+                icon={Gift}
+                label="Custom add-ons"
+                active={active === "custom-addons"}
+                onClick={() => navigate("/admin/custom-addons")}
+                testId="nav-custom-addons"
               />
             </Section>
 
@@ -980,7 +991,7 @@ function SidebarLink({
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  count: number;
+  count?: number;
   active: boolean;
   onClick: () => void;
   testId?: string;
@@ -1005,7 +1016,7 @@ function SidebarLink({
         ].join(" ")}
       />
       <span className="flex-1 text-left">{label}</span>
-      {count >= 0 && (
+      {count != null && count >= 0 && (
         <span
           className={[
             "tabular-nums text-[11.5px] font-bold",

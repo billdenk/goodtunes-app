@@ -1266,6 +1266,47 @@ export const organizationPeople = pgTable(
 );
 export type OrganizationPerson = typeof organizationPeople.$inferSelect;
 
+// ----- Operator-created custom add-ons (Task #844) ----------------------
+// "Gift of Hope"-style add-ons: a super-admin creates a non-profit-owned
+// product and attaches it to one or more artists. It then surfaces as a
+// single optional checkbox in the fan Buy sheet of every album by an
+// attached artist (one per order, no quantity selection). Paid through the
+// same Stripe embedded checkout and recorded on the order so the named
+// fulfiller knows to ship it. Built to support cost ladders / artist
+// opt-in later; v1 is flat-price, operator-curated.
+export const customAddons = pgTable("custom_addons", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // The non-profit that owns / benefits from the add-on.
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  imageUrl: text("image_url"),
+  priceCents: integer("price_cents").notNull(),
+  // Free-text name of whoever fulfils / ships the add-on (the NPO, a
+  // vendor, the artist, …). Snapshotted onto the order line at checkout
+  // so fulfillment knows who handles it without a second lookup.
+  fulfiller: text("fulfiller"),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type CustomAddon = typeof customAddons.$inferSelect;
+
+// Many-to-many: one custom add-on can apply to one or more artists
+// (people). Built for multiple artists; used for Nightbirde only at
+// launch. Composite PK dedupes a re-attach.
+export const customAddonArtists = pgTable(
+  "custom_addon_artists",
+  {
+    customAddonId: varchar("custom_addon_id").notNull().references(() => customAddons.id, { onDelete: "cascade" }),
+    personId: varchar("person_id").notNull().references(() => people.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.customAddonId, t.personId] }),
+  }),
+);
+export type CustomAddonArtist = typeof customAddonArtists.$inferSelect;
+
 // ----- Generic entity ↔ Person contacts ---------------------------------
 // Task #294 — every entity kind that has contacts (vendor / manufacturer /
 // label / fulfillment_partner) shares a single join table here so the
@@ -2497,6 +2538,11 @@ export const orderItems = pgTable("order_items", {
   // read, then black if the SKU is gone).
   vinylColor: text("vinyl_color"),
   jacketUpgrade: text("jacket_upgrade"),
+  // Task #844 — name of who fulfils a custom ("Gift of Hope") add-on,
+  // snapshotted from custom_addons.fulfiller at checkout so the order
+  // line tells fulfillment who ships it. Null on format / signed-cert /
+  // booklet rows and on historical orders.
+  fulfiller: text("fulfiller"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -2953,6 +2999,10 @@ export type Order = typeof orders.$inferSelect;
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true, createdAt: true });
 export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 export type OrderItem = typeof orderItems.$inferSelect;
+
+// Task #844 — custom ("Gift of Hope") add-ons.
+export const insertCustomAddonSchema = createInsertSchema(customAddons).omit({ id: true, createdAt: true });
+export type InsertCustomAddon = z.infer<typeof insertCustomAddonSchema>;
 
 // Task #46 — gift create/update inputs. Recipient name fields are
 // required; contact is "at least one of email/phone" — enforced at the
