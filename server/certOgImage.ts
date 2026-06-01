@@ -15,6 +15,7 @@
 // externalized in script/build.ts, so this adds no new native deps.
 import path from "path";
 import { existsSync, readFileSync } from "fs";
+import { safeRasterForRender } from "./imageProcessing";
 
 export interface CertOgInput {
   album: string;
@@ -170,7 +171,12 @@ export async function renderCertOgImage(input: CertOgInput): Promise<Buffer> {
   // logo land, so cropping there is intentional and matches the approved card).
   let artDrawn = false;
   const safeArt = input.artUrl ? resolveArtUrl(input.artUrl, input.origin) : null;
-  const artBuf = safeArt ? await fetchArtBuffer(safeArt) : null;
+  const rawArtBuf = safeArt ? await fetchArtBuffer(safeArt) : null;
+  // Bound the art before decoding: a legacy oversized original (the served
+  // URL is normally the ~1500px display derivative, but un-backfilled art
+  // can still be huge) is downscaled or skipped here so loadImage never
+  // OOMs. null → fall through to the gradient panel below.
+  const artBuf = rawArtBuf ? await safeRasterForRender(rawArtBuf) : null;
   if (artBuf) {
     try {
       const img = await loadImage(artBuf);

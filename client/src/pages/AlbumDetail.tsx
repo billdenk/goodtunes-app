@@ -3549,6 +3549,61 @@ export function AlbumLineupRail({
   );
 }
 
+// Map a served display-derivative URL to its full-resolution ".orig"
+// sibling. Admin uploads keep the original next to the downsized display
+// image (see server/imageProcessing.ts); the zoom lightbox pulls it for a
+// crisp close-up and falls back to the display image if no original exists.
+function originalUploadUrl(url: string): string | null {
+  const m = /^\/objects\/uploads\/([a-zA-Z0-9._-]+)$/.exec(url);
+  if (!m) return null;
+  const id = m[1];
+  if (id.includes(".orig.")) return url;
+  const dot = id.lastIndexOf(".");
+  if (dot <= 0) return null;
+  return `/objects/uploads/${id.slice(0, dot)}.orig${id.slice(dot)}`;
+}
+
+// A single photo slide inside PhotoLightbox. Renders the lightweight display
+// image by default; the moment its slide is the active one AND the fan zooms
+// in, it swaps to the full-resolution original (only the active slide ever
+// loads its original, so memory stays bounded) and reverts to the display
+// image when zoom is released or another photo becomes active. Falls back to
+// the display image if no original exists (404).
+function LightboxSlide({
+  photo,
+  active,
+  zoomed,
+}: {
+  photo: BonusPhoto;
+  active: boolean;
+  zoomed: boolean;
+}) {
+  const displayUrl = photo.photoUrl;
+  const originalUrl = originalUploadUrl(displayUrl);
+  const wantOriginal = active && zoomed && !!originalUrl;
+  const [src, setSrc] = useState(displayUrl);
+
+  useEffect(() => {
+    setSrc(wantOriginal && originalUrl ? originalUrl : displayUrl);
+  }, [wantOriginal, originalUrl, displayUrl]);
+
+  return (
+    <div className="w-full h-full flex-shrink-0 flex items-center justify-center px-4">
+      <img
+        src={src}
+        alt={photo.caption ?? ""}
+        draggable={false}
+        className="max-w-full max-h-full object-contain select-none transition-transform duration-200"
+        style={{ transform: active && zoomed ? "scale(2)" : "scale(1)" }}
+        onError={() => {
+          if (src !== displayUrl) setSrc(displayUrl);
+        }}
+        data-testid={`img-album-photo-${photo.id}`}
+      />
+    </div>
+  );
+}
+
 export function AlbumBonusContent({ albumId }: { albumId: string }) {
   const { data: videos = [] } = useQuery<BonusVideo[]>({
     queryKey: ["/api/albums", albumId, "videos"],
@@ -3830,18 +3885,12 @@ function PhotoLightbox({
           onTouchEnd={onTouchEnd}
         >
           {photos.map((p, i) => (
-            <div
+            <LightboxSlide
               key={p.id}
-              className="w-full h-full flex-shrink-0 flex items-center justify-center px-4"
-            >
-              <img
-                src={p.photoUrl}
-                alt={p.caption ?? ""}
-                draggable={false}
-                className="max-w-full max-h-full object-contain select-none transition-transform duration-200"
-                style={{ transform: i === index && zoomed ? "scale(2)" : "scale(1)" }}
-              />
-            </div>
+              photo={p}
+              active={i === index}
+              zoomed={zoomed}
+            />
           ))}
         </div>
 

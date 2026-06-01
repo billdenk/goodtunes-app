@@ -7,6 +7,7 @@ import { sql, and, eq, or, ilike, isNull, desc, inArray } from "drizzle-orm";
 import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, TERMS_VERSION } from "@shared/schema";
 import { MRP_DOMAIN, getPressCatalog } from "./pressCatalog";
 import { MRP_COLOR_LIBRARY_URL, type MrpParsedTile, maskToVinylDisc, parseMrpColorPage, matchFamilyToTier } from "./vendorColorScrape";
+import { isProcessableImage, makeDisplayDerivative } from "./imageProcessing";
 import { closeSaleWindow as closeCertSaleWindow } from "./saleWindow";
 import { generateBatchPdf as generateCertBatchPdf, CERT_BATCH_STEPS } from "./certBatch";
 import { sqlConnectedAlbums, sqlNpoArtistAlbums } from "./adminAlbumQueries";
@@ -2481,13 +2482,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   }
 
 
-  // Helper: write a buffer to Object Storage under `.private/uploads/<uuid><ext>`
-  // and mark it public so anyone hitting /objects/uploads/<uuid><ext> can read.
-  async function uploadBufferToObjectStorage(
+  // Helper: write a buffer to Object Storage under `.private/uploads/<name>`
+  // and mark it public so anyone hitting /objects/uploads/<name> can read.
+  async function saveBufferToObjectStorage(
+    bucketName: string,
+    objectName: string,
     buf: Buffer,
     mime: string,
-  ): Promise<string> {
-    const { bucketName, objectName, publicUrl } = resolveUploadTarget(mime);
+  ): Promise<void> {
     const file = objectStorageClient.bucket(bucketName).file(objectName);
     await file.save(buf, {
       contentType: mime,
@@ -2495,6 +2497,55 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       resumable: false,
     });
     await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
+  }
+
+  // Insert ".orig" before the final extension of an object name so the
+  // full-resolution original sits as a sibling of the served display object
+  // (e.g. ".private/uploads/abc.png" → ".private/uploads/abc.orig.png").
+  function origSiblingObjectName(objectName: string): string {
+    const dot = objectName.lastIndexOf(".");
+    if (dot <= objectName.lastIndexOf("/")) return objectName;
+    return `${objectName.slice(0, dot)}.orig${objectName.slice(dot)}`;
+  }
+
+  // Write a buffer to Object Storage and return its public /objects/uploads
+  // URL. For raster images that exceed the display size we additionally keep
+  // the full-resolution ORIGINAL at a ".orig" sibling and serve a downsized
+  // (~1500px) DISPLAY derivative from the returned URL — so every existing
+  // surface automatically renders the smaller image, the GoodDeed renderers
+  // never decode the huge original, and the fan zoom lightbox can still pull
+  // the crisp original. Non-images (PDF/audio/video) and already-small
+  // images pass straight through unchanged.
+  async function uploadBufferToObjectStorage(
+    buf: Buffer,
+    mime: string,
+  ): Promise<string> {
+    const { bucketName, objectName, publicUrl } = resolveUploadTarget(mime);
+    let derivative: { buffer: Buffer; mime: string } | null = null;
+    if (isProcessableImage(mime)) {
+      try {
+        derivative = await makeDisplayDerivative(buf, mime);
+      } catch {
+        derivative = null;
+      }
+    }
+    if (derivative) {
+      // Preserve the original at the ".orig" sibling, serve the derivative.
+      await saveBufferToObjectStorage(
+        bucketName,
+        origSiblingObjectName(objectName),
+        buf,
+        mime,
+      );
+      await saveBufferToObjectStorage(
+        bucketName,
+        objectName,
+        derivative.buffer,
+        derivative.mime,
+      );
+    } else {
+      await saveBufferToObjectStorage(bucketName, objectName, buf, mime);
+    }
     return publicUrl;
   }
 

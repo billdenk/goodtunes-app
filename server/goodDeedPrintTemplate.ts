@@ -34,6 +34,7 @@ import fs from "fs";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { albums, people } from "@shared/schema";
+import { safeRasterForRender } from "./imageProcessing";
 
 const SIGNATURE_ASSET = path.resolve(
   process.cwd(),
@@ -109,7 +110,14 @@ async function fetchArtworkBytes(url: string | null): Promise<Buffer | null> {
       : `http://127.0.0.1:${process.env.PORT ?? 5000}${url.startsWith("/") ? "" : "/"}${url}`;
     const r = await fetch(full);
     if (!r.ok) return null;
-    return Buffer.from(await r.arrayBuffer());
+    const raw = Buffer.from(await r.arrayBuffer());
+    // Bound + normalize before the bytes ever reach PDFKit's `doc.image`.
+    // The served URL is normally the ~1500px display derivative, but a
+    // legacy oversized original (Daniel Lew "Destiny") would OOM the
+    // embedder — safeRasterForRender downscales it (or returns null, in
+    // which case the caller paints its grey art fallback). Also re-encodes
+    // webp/avif to PNG so PDFKit, which only embeds PNG/JPEG, can use it.
+    return await safeRasterForRender(raw);
   } catch {
     return null;
   }

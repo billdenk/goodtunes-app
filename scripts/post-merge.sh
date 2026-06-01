@@ -2759,3 +2759,34 @@ SQL
 }
 backfill_task_862_oauth_email_verified dev  "${DATABASE_URL:-}"
 backfill_task_862_oauth_email_verified prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #898 — Display-derivative backfill for oversized art ──────────
+# New admin uploads keep a full-res ".orig" sibling + serve a downsized
+# (~1500px) display image (server/imageProcessing.ts). This pass applies the
+# same to art uploaded BEFORE that change — chiefly the prod-only oversized
+# album art that OOM-crashed GoodDeed cert/share-card rendering. The script
+# owns its own `post_merge_data_backfills` marker (per-DB) and is idempotent
+# (skips anything whose ".orig" sibling already exists). Object Storage is
+# shared dev↔prod, so converting either DB's URLs benefits both.
+#
+# Run DETACHED in the background: downloading + re-encoding multi-MB source
+# images (some 5792×8688 ~5 MB) is far too slow to fit inside the post-merge
+# harness's wall-clock budget, and blocking it timed the whole merge out. The
+# marker + ".orig"-exists idempotency mean a run that's killed mid-pass simply
+# resumes (skipping already-converted images) on the next merge until it
+# completes and stamps its marker — so backgrounding is safe and never blocks.
+backfill_task_898_display_derivatives() {
+  local label="$1"; local url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-898 display-derivative backfill on $label (no URL set)"
+    return 0
+  fi
+  local logf="/tmp/backfill-display-derivatives-${label}.log"
+  echo "post-merge: launching task-898 display-derivative backfill on $label in background (log: $logf)"
+  DATABASE_URL="$url" nohup timeout 1800 npx tsx scripts/backfill-display-derivatives.ts \
+    >"$logf" 2>&1 &
+  disown 2>/dev/null || true
+  return 0
+}
+backfill_task_898_display_derivatives dev  "${DATABASE_URL:-}"
+backfill_task_898_display_derivatives prod "${PROD_DATABASE_URL:-}"
