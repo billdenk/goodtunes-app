@@ -28,7 +28,7 @@ const SHOW_FRAME_WINDOW = false;
 
 // PRINT (signed GoodDeed) ONLY: the printed/signed copies get a holographic
 // authenticity sticker applied by fulfillment, in place of the GoodTunes logo.
-// The `signed` cert variant swaps the logo for a thin 50%-white rounded-rect
+// The `signed` cert variant swaps the logo for a thin faint-white rounded-rect
 // PLACEMENT GUIDE so there's no question where the sticker goes. Sized a hair
 // under the real 0.8"w x 0.75"h sticker so the sticker fully covers the guide.
 // The free PDF (everyone gets with a purchase) keeps the logo (signed = false).
@@ -145,7 +145,7 @@ export function CertPrint({
   frame: Frame;
   art?: string;
   // PRINT (signed GoodDeed) variant: swap the GoodTunes logo for the holographic
-  // sticker placement guide (thin 50%-white rounded rect). Free PDF leaves this
+  // sticker placement guide (thin faint-white rounded rect). Free PDF leaves this
   // false and keeps the logo.
   signed?: boolean;
   // The round avatar's artist profile photo (defaults to the sample artist).
@@ -263,7 +263,7 @@ export function CertPrint({
             top: px(safeTopRel),
             width: px(holoW),
             height: px(holoH),
-            border: "1px solid rgba(255,255,255,0.5)",
+            border: "1px solid rgba(255,255,255,0.28)",
             borderRadius: px(5),
             boxSizing: "border-box",
             pointerEvents: "none",
