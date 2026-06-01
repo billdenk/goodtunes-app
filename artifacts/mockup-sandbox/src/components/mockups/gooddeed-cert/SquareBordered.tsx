@@ -50,6 +50,7 @@ export function BorderedSquareCard({
   art: artProp,
   bg = "slab",
   blur = 0,
+  gblur = 0,
 }: {
   overlay?: ReactNode;
   radius?: number;
@@ -63,6 +64,10 @@ export function BorderedSquareCard({
   bg?: "slab" | "bleed" | "bleed-dark";
   // Background blur in preview px (only meaningful for bg="bleed"). 0 = crisp.
   blur?: number;
+  // Graduated background blur in preview px: a blurred copy of the cover is
+  // layered over the sharp one and masked so the blur is strongest at the BOTTOM
+  // and clears to fully sharp by the midway line. 0 = off. Pairs with bg="bleed*".
+  gblur?: number;
 }) {
   const { ownerPhoto, album, ownerName, certNumStr } = data;
   const art = artProp ?? data.art;
@@ -112,6 +117,27 @@ export function BorderedSquareCard({
               transformOrigin: "center",
             }}
           />
+          {/* Graduated blur: a blurred copy of the cover, masked so it only shows
+              in the lower half — strongest at the bottom, fully faded (sharp) by
+              the midway line. Sits above the sharp art, below the scrim. */}
+          {gblur > 0 && (
+            <img
+              src={art}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 w-full h-full object-cover object-top block"
+              style={{
+                zIndex: 0,
+                filter: `blur(${gblur}px)`,
+                transform: "scale(1.12)",
+                transformOrigin: "center",
+                WebkitMaskImage:
+                  "linear-gradient(180deg, rgba(0,0,0,0) 48%, rgba(0,0,0,1) 92%)",
+                maskImage:
+                  "linear-gradient(180deg, rgba(0,0,0,0) 48%, rgba(0,0,0,1) 92%)",
+              }}
+            />
+          )}
           <div className="absolute inset-0" style={{ zIndex: 0, background: bleedScrim }} />
         </>
       )}
@@ -214,9 +240,11 @@ export function SquareBordered() {
   const bg = bgParam === "bleed" ? "bleed" : bgParam === "bleed-dark" ? "bleed-dark" : "slab";
   const blurRaw = Number(params.get("blur") ?? "0");
   const blur = Number.isFinite(blurRaw) ? Math.max(0, blurRaw) : 0;
+  const gblurRaw = Number(params.get("gblur") ?? "0");
+  const gblur = Number.isFinite(gblurRaw) ? Math.max(0, gblurRaw) : 0;
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "#05030f" }}>
-      <BorderedSquareCard radius={r} art={art} bg={bg} blur={blur} />
+      <BorderedSquareCard radius={r} art={art} bg={bg} blur={blur} gblur={gblur} />
     </div>
   );
 }
