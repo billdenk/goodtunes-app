@@ -214,7 +214,7 @@ export function CertPrint({
 
   // Letter footnote breathing room + QR lock-up alignment (consumed below in
   // rightColumn and the Letter leftBlock):
-  const footBottomGap = longLockup ? 5 : lowerCreditLockup ? 6 : 9; // pt the provenance footnote rises off the band bottom (off the orange border); the credit lock-up sits lower on the normal tile (clear William) and lower still on the long tile (2-line squiggle just touches William's top)
+  const footBottomGap = longLockup ? -5 : lowerCreditLockup ? 6 : 9; // pt the provenance footnote rises off the band bottom (off the orange border); the credit lock-up sits lower on the normal tile (clear William) and lower still on the long tile (whole bottom cluster pulled down to hug the band bottom; QR caption tracks it via qrCaptionBottomRel so the baselines stay locked)
   const qrCaptionBottomRel = pad + footBottomGap - 5; // drop the QR+caption lock-up so the caption baseline lands on the footnote's last line (footnote + caption move in lockstep, staying aligned)
 
   const isA4 = (layout ?? paper) === "a4";
@@ -323,10 +323,11 @@ export function CertPrint({
   const bodyW = leftColRightRel - bodyXRel;
   const headlineYRel = safeTopRel + avatarSize + 5;
   // pt margin above the signature PNG (its transparent top padding means a slight
-  // negative tucks it under the headline). The long-name tile's 2-line headline
-  // pushes the squiggle down into the dropped William lock-up, so pull the
-  // signature up further there until its tail just touches the TOP of William.
-  const sigGap = longLockup ? -9 : -2;
+  // negative tucks it under the headline). On the long-name tile the signature is
+  // part of the bottom cluster (squiggle → William → footnote), so it moves DOWN
+  // in tandem with footBottomGap to keep its tail touching the TOP of William
+  // while the whole cluster hugs the band bottom.
+  const sigGap = longLockup ? 1 : -2;
 
   // ── Left content block — the ONE place the two paper layouts diverge.
   const leftBlock = isA4 ? (
