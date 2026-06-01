@@ -57,13 +57,17 @@ export function BorderedSquareCard({
   // "slab" = shipped look (art band fades into a solid navy lower half).
   // "bleed" = album art fills the whole card behind a lighter navy scrim, so the
   //           cover stays visible the whole way down (more transparent feel).
-  bg?: "slab" | "bleed";
+  // "bleed-dark" = same full-bleed SHARP art as "bleed", but a deeper navy scrim
+  //           so the whole card reads richer/darker and blends down into navy
+  //           like the slab — the album stays clearly visible, just dimmed.
+  bg?: "slab" | "bleed" | "bleed-dark";
   // Background blur in preview px (only meaningful for bg="bleed"). 0 = crisp.
   blur?: number;
 }) {
   const { ownerPhoto, album, ownerName, certNumStr } = data;
   const art = artProp ?? data.art;
-  const bleed = bg === "bleed";
+  const bleed = bg === "bleed" || bg === "bleed-dark";
+  const darkBleed = bg === "bleed-dark";
 
   // Preview at w = 360 with the same u = w/1080 scale the exporter uses.
   const w = 360;
@@ -75,8 +79,9 @@ export function BorderedSquareCard({
   // Lower, lighter scrim for the full-bleed treatment: the cover stays visible up
   // top and only deepens toward the bottom enough to keep the caption legible —
   // noticeably more transparent than the slab, which goes fully solid below 92%.
-  const bleedScrim =
-    "linear-gradient(180deg, rgba(0,6,43,0.10) 0%, rgba(0,6,43,0.30) 42%, rgba(0,6,43,0.68) 78%, rgba(0,6,43,0.90) 100%)";
+  const bleedScrim = darkBleed
+    ? "linear-gradient(180deg, rgba(0,6,43,0.18) 0%, rgba(0,6,43,0.40) 40%, rgba(0,6,43,0.86) 72%, rgba(0,6,43,1) 100%)"
+    : "linear-gradient(180deg, rgba(0,6,43,0.10) 0%, rgba(0,6,43,0.30) 42%, rgba(0,6,43,0.68) 78%, rgba(0,6,43,0.90) 100%)";
 
   return (
     <div
@@ -205,7 +210,8 @@ export function SquareBordered() {
   // Canvas A/B knobs: ?art=guitar|california|sample, ?bg=slab|bleed, ?blur=NN(px).
   const artName = params.get("art");
   const art = artName ? ART[artName] ?? undefined : undefined;
-  const bg = params.get("bg") === "bleed" ? "bleed" : "slab";
+  const bgParam = params.get("bg");
+  const bg = bgParam === "bleed" ? "bleed" : bgParam === "bleed-dark" ? "bleed-dark" : "slab";
   const blurRaw = Number(params.get("blur") ?? "0");
   const blur = Number.isFinite(blurRaw) ? Math.max(0, blurRaw) : 0;
   return (
