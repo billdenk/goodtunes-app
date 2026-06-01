@@ -14,6 +14,7 @@ export function LetterBorderThinLong() {
       insetIn={0.125}
       bleedIn={0.125}
       frameRevealWin={[7.5, 9.5]}
+      longLockup
       sample={{
         recipient: "Maximilian Aleksandrov-Castellanos",
         title: "Songs from the Edge of a Long Forgotten Summer",

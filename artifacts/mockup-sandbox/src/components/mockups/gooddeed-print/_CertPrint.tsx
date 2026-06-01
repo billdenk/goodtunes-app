@@ -117,18 +117,23 @@ export function CertPrint({
   sample,
   artistPhoto,
   lowerCreditLockup,
+  longLockup,
 }: {
   paper: Paper;
   frame: Frame;
   art?: string;
   // The round avatar's artist profile photo (defaults to the sample artist).
   artistPhoto?: string;
-  // Letter normal-name tile only: seat the William credit just under the
-  // William credit + footnote bottom lock-up a touch lower (and, in tandem, the
-  // QR caption) so the signature squiggle clears the William line — the squiggle
-  // stays put. The long-name tile leaves this off so a 2-line headline's squiggle
-  // keeps its intentional overlap with William (no room to drop the lock-up).
+  // Letter normal-name tile: drop the William credit + footnote + QR-caption
+  // lock-up a touch lower so the (1-line-headline) signature squiggle clears the
+  // William line, and lift the signature above the credit so its ink reads in
+  // front of the name where they meet.
   lowerCreditLockup?: boolean;
+  // Letter LONG-name tile: same idea, but a 2-line headline pushes the squiggle
+  // lower, so the lock-up drops further (footBottomGap) and the signature is
+  // lifted in front so it just touches the TOP of the William line (instead of
+  // striking through it). Footnote last line stays locked to the QR caption.
+  longLockup?: boolean;
   insetIn?: number;
   bleedIn?: number;
   // [widthIn, heightIn] of a real mat/frame window, drawn centered on the sheet
@@ -209,8 +214,8 @@ export function CertPrint({
 
   // Letter footnote breathing room + QR lock-up alignment (consumed below in
   // rightColumn and the Letter leftBlock):
-  const footBottomGap = lowerCreditLockup ? 6 : 9; // pt the provenance footnote rises off the band bottom (off the orange border); normal-name tile sits a touch lower so the squiggle clears William
-  const qrCaptionBottomRel = pad + footBottomGap - 5; // drop the QR+caption lock-up so the caption baseline lands on the footnote's last line
+  const footBottomGap = longLockup ? 5 : lowerCreditLockup ? 6 : 9; // pt the provenance footnote rises off the band bottom (off the orange border); the credit lock-up sits lower on the normal tile (clear William) and lower still on the long tile (2-line squiggle just touches William's top)
+  const qrCaptionBottomRel = pad + footBottomGap - 5; // drop the QR+caption lock-up so the caption baseline lands on the footnote's last line (footnote + caption move in lockstep, staying aligned)
 
   const isA4 = (layout ?? paper) === "a4";
 
@@ -317,7 +322,11 @@ export function CertPrint({
   const bodyXRel = leftColLeftRel + avatarSize + 10;
   const bodyW = leftColRightRel - bodyXRel;
   const headlineYRel = safeTopRel + avatarSize + 5;
-  const sigGap = -2; // pt; the PNG's top padding means a slight negative tucks it under
+  // pt margin above the signature PNG (its transparent top padding means a slight
+  // negative tucks it under the headline). The long-name tile's 2-line headline
+  // pushes the squiggle down into the dropped William lock-up, so pull the
+  // signature up further there until its tail just touches the TOP of William.
+  const sigGap = longLockup ? -9 : -2;
 
   // ── Left content block — the ONE place the two paper layouts diverge.
   const leftBlock = isA4 ? (
@@ -371,11 +380,12 @@ export function CertPrint({
           left: px(bodyXRel),
           top: px(headlineYRel),
           width: px(bodyW),
-          // Normal-name tile: lift the headline+signature block above the credit
-          // lock-up so the squiggle's ink reads continuously IN FRONT of the
-          // "William…" line where they meet (instead of the name punching through
-          // the stroke). The long-name tile leaves stacking in DOM order.
-          zIndex: lowerCreditLockup ? 1 : undefined,
+          // Lift the headline+signature block above the credit lock-up so the
+          // squiggle's ink reads continuously IN FRONT of the "William…" line
+          // where they meet (instead of the name punching through the stroke).
+          // Applies to both the normal tile (clears William) and the long tile
+          // (squiggle touches William's top).
+          zIndex: lowerCreditLockup || longLockup ? 1 : undefined,
         }}
       >
         <div
@@ -490,12 +500,14 @@ export function CertStage({
   sample,
   artistPhoto,
   lowerCreditLockup,
+  longLockup,
 }: {
   paper: Paper;
   frame: Frame;
   art?: string;
   artistPhoto?: string;
   lowerCreditLockup?: boolean;
+  longLockup?: boolean;
   insetIn?: number;
   bleedIn?: number;
   frameRevealWin?: [number, number];
@@ -508,7 +520,7 @@ export function CertStage({
       className="min-h-screen flex items-center justify-center"
       style={{ background: "#E9EBF0", padding: 28 }}
     >
-      <CertPrint paper={paper} frame={frame} art={art} insetIn={insetIn} bleedIn={bleedIn} frameRevealWin={frameRevealWin} layout={layout} matBoxIn={matBoxIn} sample={sample} artistPhoto={artistPhoto} lowerCreditLockup={lowerCreditLockup} />
+      <CertPrint paper={paper} frame={frame} art={art} insetIn={insetIn} bleedIn={bleedIn} frameRevealWin={frameRevealWin} layout={layout} matBoxIn={matBoxIn} sample={sample} artistPhoto={artistPhoto} lowerCreditLockup={lowerCreditLockup} longLockup={longLockup} />
     </div>
   );
 }
