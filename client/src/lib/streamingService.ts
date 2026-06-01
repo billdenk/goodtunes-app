@@ -157,10 +157,11 @@ export function openStreamLink(url: string): void {
 // picker sheet, and the Account settings sheet) so the icons can never drift
 // between them. Each asset is a self-contained 44px-ready brand tile — a
 // rounded square (or, for Spotify, a circle) carrying the service's own brand
-// color + mark, used as-supplied (never recolored). Spotify / Apple Music use
-// their published app icons; Tidal / Qobuz / Deezer / Pandora use their
-// official brand marks (Qobuz is its published favicon icon) on the brand
-// color, replacing the old react-icons glyph + single-letter fallbacks.
+// color + mark, used as-supplied (never recolored). Spotify / Apple Music /
+// Tidal use their published app icons. Deezer (black tile + purple
+// equalizer-heart + "DEEZER" wordmark), Pandora (white tile + gradient "P"),
+// and Qobuz (black tile + "qobuz" wordmark) are vector reproductions of each
+// service's current App Store app icon.
 export const SERVICE_LOGO: Record<StreamingServiceId, string> = {
   spotify: spotifyLogo,
   apple_music: appleMusicLogo,
