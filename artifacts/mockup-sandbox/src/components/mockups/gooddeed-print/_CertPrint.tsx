@@ -259,7 +259,10 @@ export function CertPrint({
         <div
           style={{
             position: "absolute",
-            left: px(qrColRightRel + QR_PLATE_PAD - holoW),
+            // Center the holo guide horizontally over the QR plate center (the QR
+            // is centered in qrColW). Bill: keep the QR anchored, nudge the guide
+            // right so it sits centered above the QR instead of flush-right.
+            left: px(qrColLeftRel + qrColW / 2 - holoW / 2),
             top: px(safeTopRel),
             width: px(holoW),
             height: px(holoH),
