@@ -2268,11 +2268,26 @@ export function registerCommerceRoutes(app: Express) {
       ? await db.select().from(gifts).where(inArray(gifts.orderId, orderIds))
       : [];
     const giftByOrder = new Map(giftRows.map((g) => [g.orderId, g]));
+    // Task #863 — custom ("Gift of Hope") add-on rows snapshot the
+    // fulfiller at checkout but not the owning non-profit. Look that up
+    // once for the whole queue (custom_addons is a small operator table)
+    // keyed by id so each custom_addon line can show who owns it. The
+    // org may be missing if the add-on was hard-deleted; null is fine.
+    const caRows = await db
+      .select({ id: customAddons.id, orgName: organizations.name })
+      .from(customAddons)
+      .innerJoin(organizations, eq(organizations.id, customAddons.organizationId));
+    const orgByAddonId = new Map(caRows.map((c) => [c.id, c.orgName]));
     // Flat shape matches client/src/pages/AdminOrders.tsx AdminOrderRow.
     const out = await Promise.all(
       rows.map(async (r) => {
         const ship: any = r.order.shippingAddress ?? null;
         const g = giftByOrder.get(r.order.id);
+        const items = (await getOrderItems(r.order.id)).map((it) =>
+          it.kind === "custom_addon"
+            ? { ...it, orgName: orgByAddonId.get(it.sku) ?? null }
+            : it,
+        );
         return {
           ...r.order,
           albumTitle: r.album.title,
@@ -2281,7 +2296,7 @@ export function registerCommerceRoutes(app: Express) {
           customerEmail: r.customer.email,
           customerName: r.customer.realName ?? r.customer.displayName ?? null,
           shippingName: ship?.name ?? null,
-          items: await getOrderItems(r.order.id),
+          items,
           gift: g
             ? {
                 id: g.id,

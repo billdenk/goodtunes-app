@@ -15,7 +15,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
-import { AlertTriangle, Settings2, RefreshCw, Loader2 } from "lucide-react";
+import { AlertTriangle, Settings2, RefreshCw, Loader2, Gift } from "lucide-react";
 import type { PayoutSettings, AlbumFormat } from "@shared/schema";
 import { VinylPreview } from "@/components/VinylPreview";
 import {
@@ -74,6 +74,11 @@ type AdminOrderRow = {
     // Task #212 — pressing snapshot per item; null on non-vinyl rows.
     vinylColor?: string | null;
     jacketUpgrade?: JacketUpgrade | null;
+    // Task #863 — custom ("Gift of Hope") add-on snapshot. fulfiller is
+    // who ships it; orgName is the owning non-profit. Both null on
+    // format / addon rows.
+    fulfiller?: string | null;
+    orgName?: string | null;
   }[];
   gift: GiftInfo | null;
   // Task #73 — Order Desk fulfillment lifecycle.
@@ -157,6 +162,9 @@ export function AdminOrders() {
 
 function AdminOrdersInner() {
   const [filter, setFilter] = useState<StatusFilter>("all");
+  // Task #863 — filter the queue to orders carrying a custom add-on
+  // fulfilled by the selected party. "all" = no fulfiller filter.
+  const [fulfillerFilter, setFulfillerFilter] = useState<string>("all");
   const [showSettings, setShowSettings] = useState(false);
   const { toast } = useToast();
   const {
@@ -249,7 +257,25 @@ function AdminOrdersInner() {
   });
 
 
-  const filtered = (orders ?? []).filter((o) => (filter === "all" ? true : o.status === filter));
+  // Task #863 — the set of distinct fulfillers across every custom
+  // add-on line, so we can offer a "who ships this" filter only when
+  // there's actually something to filter by.
+  const fulfillers = Array.from(
+    new Set(
+      (orders ?? [])
+        .flatMap((o) => o.items)
+        .filter((it) => it.kind === "custom_addon" && it.fulfiller)
+        .map((it) => it.fulfiller as string),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+
+  const filtered = (orders ?? [])
+    .filter((o) => (filter === "all" ? true : o.status === filter))
+    .filter((o) =>
+      fulfillerFilter === "all"
+        ? true
+        : o.items.some((it) => it.kind === "custom_addon" && it.fulfiller === fulfillerFilter),
+    );
 
   // Task #131 — Deep-link focus. When AdminCustomerDetail (or any
   // other admin page) links here as `/admin/orders?orderId=<id>` we
@@ -304,6 +330,25 @@ function AdminOrdersInner() {
             >
               <Settings2 className="w-3.5 h-3.5" /> Payout settings
             </button>
+            {fulfillers.length > 0 && (
+              <div className="relative inline-flex items-center">
+                <Gift className="w-3.5 h-3.5 text-emerald-600 absolute left-2.5 pointer-events-none" />
+                <select
+                  value={fulfillerFilter}
+                  onChange={(e) => setFulfillerFilter(e.target.value)}
+                  className="h-8 pl-7 pr-3 rounded-md border border-slate-200 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50"
+                  data-testid="filter-fulfiller"
+                  title="Show only orders with a custom add-on this party fulfills"
+                >
+                  <option value="all">All fulfillers</option>
+                  {fulfillers.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex p-0.5 rounded-md bg-slate-100">
               {STATUSES.map((s) => (
                 <button
@@ -450,12 +495,66 @@ function AdminOrdersInner() {
                   )}
                 </div>
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {o.items.map((it) => (
-                    <span key={it.id} className="text-[10.5px] px-2 py-0.5 rounded bg-slate-100 text-slate-600">
-                      {it.label}
-                    </span>
-                  ))}
+                  {o.items.map((it) =>
+                    it.kind === "custom_addon" ? (
+                      <span
+                        key={it.id}
+                        className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold inline-flex items-center gap-1"
+                        data-testid={`pill-custom-addon-${it.id}`}
+                      >
+                        <Gift className="w-3 h-3" />
+                        {it.label}
+                      </span>
+                    ) : (
+                      <span key={it.id} className="text-[10.5px] px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                        {it.label}
+                      </span>
+                    ),
+                  )}
                 </div>
+                {/* Task #863 — custom ("Gift of Hope") add-on detail. The
+                    party shipping a non-profit add-on isn't the press or
+                    the artist, so call out the add-on name, owning
+                    non-profit, and the snapshotted fulfiller so whoever
+                    owes the physical item can see it without opening the
+                    order. */}
+                {(() => {
+                  const addonLines = o.items.filter((it) => it.kind === "custom_addon");
+                  if (addonLines.length === 0) return null;
+                  return (
+                    <div className="mt-2 flex flex-col gap-2" data-testid={`admin-order-custom-addons-${o.id}`}>
+                      {addonLines.map((it) => (
+                        <div
+                          key={`custom-addon-line-${it.id}`}
+                          className="flex items-start gap-2.5 rounded-md border border-emerald-200 bg-emerald-50/60 px-2.5 py-2"
+                          data-testid={`admin-order-custom-addon-line-${it.id}`}
+                        >
+                          <Gift className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                          <div className="min-w-0 flex-1 text-[12px] leading-snug">
+                            <div className="font-medium text-slate-900">
+                              {it.label}
+                              {it.quantity > 1 && <span className="text-slate-500"> · ×{it.quantity}</span>}
+                            </div>
+                            <div className="text-slate-500">
+                              {it.orgName ? (
+                                <span data-testid={`text-addon-org-${it.id}`}>{it.orgName}</span>
+                              ) : (
+                                <span className="text-slate-400">Non-profit removed</span>
+                              )}
+                              <span className="text-slate-300"> · </span>
+                              <span data-testid={`text-addon-fulfiller-${it.id}`}>
+                                Fulfilled by{" "}
+                                <span className="font-medium text-emerald-700">
+                                  {it.fulfiller || "Unassigned"}
+                                </span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
                 {/* Task #212 — per-vinyl-line detail. Mirrors the fan-side
                     Orders detail layout: jacket + colored disc on the left,
                     color name + jacket upgrade + format label on the right. */}
