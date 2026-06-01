@@ -41,6 +41,7 @@ type CustomAddon = {
   priceCents: number;
   fulfiller: string | null;
   active: boolean;
+  position: number;
   artists: AddonArtist[];
 };
 
@@ -151,7 +152,7 @@ export function AdminCustomAddons() {
       <div className="space-y-5" data-testid="page-admin-custom-addons">
         <AdminPageHeader
           title="Custom add-ons"
-          subtitle="Operator-built “Gift of Hope” products owned by a non-profit and offered as an optional checkbox in the Buy sheet of attached artists."
+          subtitle="Non-profit-owned products offered as an optional checkbox in the Buy sheet of attached artists (e.g. the Nightbirde Foundation’s Gift of Hope)."
           actions={
             <>
               <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">
@@ -290,6 +291,7 @@ function AddonDialog({
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [active, setActive] = useState(true);
+  const [position, setPosition] = useState("0");
   const [formError, setFormError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -305,6 +307,7 @@ function AddonDialog({
       setDescription(addon.description ?? "");
       setImageUrl(addon.imageUrl);
       setActive(addon.active);
+      setPosition(String(addon.position ?? 0));
     } else if (!isEdit) {
       setName("");
       setOrganizationId("");
@@ -313,6 +316,7 @@ function AddonDialog({
       setDescription("");
       setImageUrl(null);
       setActive(true);
+      setPosition("0");
     }
     setFormError(null);
   }, [open, isEdit, addon]);
@@ -325,6 +329,7 @@ function AddonDialog({
   const save = useMutation({
     mutationFn: async () => {
       const priceCents = Math.round(parseFloat(priceDollars) * 100);
+      const positionNum = Math.round(parseFloat(position));
       const payload = {
         name: name.trim(),
         organizationId,
@@ -332,6 +337,7 @@ function AddonDialog({
         fulfiller: fulfiller.trim() || null,
         description: description.trim() || null,
         imageUrl: imageUrl || null,
+        position: Number.isFinite(positionNum) ? positionNum : 0,
         ...(isEdit ? { active } : {}),
       };
       if (isEdit && addon) {
@@ -429,7 +435,7 @@ function AddonDialog({
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Gift of Hope"
+                placeholder="e.g. Gift of Hope"
                 className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
                 data-testid="input-custom-addon-name"
               />
@@ -482,6 +488,21 @@ function AddonDialog({
               placeholder="e.g. The Nightbirde Foundation"
               className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
               data-testid="input-custom-addon-fulfiller"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-600">
+              Display order <span className="text-slate-400 font-normal">(lower shows first in the Buy sheet)</span>
+            </label>
+            <input
+              type="number"
+              step="1"
+              value={position}
+              onChange={(e) => setPosition(e.target.value)}
+              placeholder="0"
+              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+              data-testid="input-custom-addon-position"
             />
           </div>
 

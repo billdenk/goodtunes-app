@@ -202,7 +202,7 @@ async function listCustomAddonsForAlbum(
     .innerJoin(customAddonArtists, eq(customAddonArtists.customAddonId, customAddons.id))
     .innerJoin(organizations, eq(organizations.id, customAddons.organizationId))
     .where(and(eq(customAddonArtists.personId, primaryArtistId), eq(customAddons.active, true)))
-    .orderBy(asc(customAddons.createdAt));
+    .orderBy(asc(customAddons.position), asc(customAddons.createdAt));
   return rows;
 }
 

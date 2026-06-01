@@ -17447,7 +17447,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/admin/custom-addons", requireAdmin, async (_req, res) => {
     const rows = await db.execute<any>(sql`
       SELECT ca.id, ca.organization_id, ca.name, ca.description, ca.image_url,
-             ca.price_cents, ca.fulfiller, ca.active, ca.created_at,
+             ca.price_cents, ca.fulfiller, ca.active, ca.position, ca.created_at,
              o.name AS org_name, o.logo_url AS org_logo_url,
              COALESCE(
                json_agg(
@@ -17461,7 +17461,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       LEFT JOIN custom_addon_artists caa ON caa.custom_addon_id = ca.id
       LEFT JOIN people p ON p.id = caa.person_id
       GROUP BY ca.id, o.name, o.logo_url
-      ORDER BY ca.created_at DESC
+      ORDER BY ca.position ASC, ca.created_at DESC
     `);
     res.json(((rows as any).rows ?? []).map((r: any) => ({
       id: r.id,
@@ -17474,6 +17474,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       priceCents: r.price_cents,
       fulfiller: r.fulfiller,
       active: r.active,
+      position: r.position,
       artists: r.artists ?? [],
     })));
   });
@@ -17481,7 +17482,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/admin/custom-addons/:id", requireAdmin, async (req, res) => {
     const rows = await db.execute<any>(sql`
       SELECT ca.id, ca.organization_id, ca.name, ca.description, ca.image_url,
-             ca.price_cents, ca.fulfiller, ca.active,
+             ca.price_cents, ca.fulfiller, ca.active, ca.position,
              o.name AS org_name, o.logo_url AS org_logo_url,
              COALESCE(
                json_agg(
@@ -17510,6 +17511,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       priceCents: r.price_cents,
       fulfiller: r.fulfiller,
       active: r.active,
+      position: r.position,
       artists: r.artists ?? [],
     });
   });
@@ -17532,9 +17534,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const description = req.body?.description ? String(req.body.description).trim() || null : null;
     const imageUrl = req.body?.imageUrl ? String(req.body.imageUrl).trim() || null : null;
     const fulfiller = req.body?.fulfiller ? String(req.body.fulfiller).trim() || null : null;
+    let position = Math.round(Number(req.body?.position));
+    if (!Number.isFinite(position)) position = 0;
     const ins = await db.execute<{ id: string }>(sql`
-      INSERT INTO custom_addons (organization_id, name, description, image_url, price_cents, fulfiller)
-      VALUES (${organizationId}, ${name}, ${description}, ${imageUrl}, ${priceCents}, ${fulfiller})
+      INSERT INTO custom_addons (organization_id, name, description, image_url, price_cents, fulfiller, position)
+      VALUES (${organizationId}, ${name}, ${description}, ${imageUrl}, ${priceCents}, ${fulfiller}, ${position})
       RETURNING id
     `);
     res.status(201).json({ id: (ins as any).rows?.[0]?.id });
@@ -17583,6 +17587,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     if (b.active !== undefined) {
       sets.push(sql`active = ${!!b.active}`);
+    }
+    if (b.position !== undefined) {
+      const position = Math.round(Number(b.position));
+      if (!Number.isFinite(position)) {
+        return res.status(400).json({ message: "Display order must be a number" });
+      }
+      sets.push(sql`position = ${position}`);
     }
     if (sets.length === 0) return res.status(400).json({ message: "Nothing to update" });
     const setSql = sets.reduce((acc, frag, i) => (i === 0 ? frag : sql`${acc}, ${frag}`));

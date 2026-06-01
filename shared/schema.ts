@@ -1287,6 +1287,9 @@ export const customAddons = pgTable("custom_addons", {
   // so fulfillment knows who handles it without a second lookup.
   fulfiller: text("fulfiller"),
   active: boolean("active").notNull().default(true),
+  // Operator-controlled display order on the Buy sheet (lower = shown
+  // first). Ties fall back to createdAt so older add-ons stay stable.
+  position: integer("position").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
 export type CustomAddon = typeof customAddons.$inferSelect;
