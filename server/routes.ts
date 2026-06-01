@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
 import { sql, and, eq, or, ilike, isNull, desc, inArray } from "drizzle-orm";
-import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns } from "@shared/schema";
+import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, TERMS_VERSION } from "@shared/schema";
 import { MRP_DOMAIN, getPressCatalog } from "./pressCatalog";
 import { MRP_COLOR_LIBRARY_URL, type MrpParsedTile, maskToVinylDisc, parseMrpColorPage, matchFamilyToTier } from "./vendorColorScrape";
 import { closeSaleWindow as closeCertSaleWindow } from "./saleWindow";
@@ -412,6 +412,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         handle: usernameNorm,
         contactEmail: emailNorm,
         signupCompletedAt: new Date(),
+        // Task #860 — record Terms acceptance at account creation.
+        termsAcceptedAt: new Date(),
+        termsVersion: TERMS_VERSION,
       } as any) ?? c;
       req.session.userId = c2.id;
       req.session.kind = "customer";
@@ -1094,6 +1097,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           password: placeholderPwd,
         });
         userIdInv = u.id;
+        // Task #860 — record Terms acceptance only for the freshly minted
+        // row. The invitee consented via the inline microcopy under the
+        // OAuth buttons on the invite-accept screen. Reused existing admin
+        // rows (byIdent/byEmail above) are never re-consented.
+        await db.execute(sql`UPDATE users SET terms_accepted_at = now(), terms_version = ${TERMS_VERSION} WHERE id = ${userIdInv}`);
         await storage.linkIdentity("admin", { userId: userIdInv, provider, providerUserId: identity.sub, email: identity.email });
       }
       // Grant role+scope, mark used, wire referrer — same shape as the
@@ -1235,6 +1243,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         password: placeholderPwd,
       });
       userId = c.id;
+      // Task #860 — record Terms acceptance for first-time OAuth signups.
+      // The fan consented via the inline microcopy under the OAuth
+      // buttons on the signup screen. Returning OAuth fans never reach
+      // this branch, so they're never re-consented.
+      await storage.updateCustomer(c.id, {
+        termsAcceptedAt: new Date(),
+        termsVersion: TERMS_VERSION,
+      });
       // Task #537 — flag this branch for the redirect below. Existing
       // OAuth fans (the `userId` was set on the linkIdentity branch
       // above) skip /finish-setup; first-time OAuth signups go there.
@@ -19357,8 +19373,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
     // Promote to admin + write role/scope via raw SQL (the columns live
     // outside the pgTable so we touch them through setUserRole + a
-    // direct is_admin update).
-    await db.execute(sql`UPDATE users SET is_admin = true WHERE id = ${user.id}`);
+    // direct is_admin update). Task #860 — fold in Terms acceptance: the
+    // invitee consented via the inline microcopy under the Accept button.
+    // This row is always freshly created above, so it's never re-consent.
+    await db.execute(sql`UPDATE users SET is_admin = true, terms_accepted_at = now(), terms_version = ${TERMS_VERSION} WHERE id = ${user.id}`);
     await setUserRole(user.id, invite.role as any, invite.roleScopeId ?? null);
 
     // Task #78 — Wire the referrer onto the artist Person row so the

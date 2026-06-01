@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/drawer";
 
 import { ADMIN_CHROME, CUSTOMER_CHROME, type Mode } from "./authChrome";
+import { TERMS_URL, PRIVACY_POLICY_URL } from "@shared/schema";
 
 // Step 1: name/email/password (admin) or email+password (customer).
 // Step 2: username/displayName (admin only — customer skips and gets a
@@ -1130,6 +1131,39 @@ export function Login() {
               </button>
             </div>
           </>
+        )}
+
+        {/* Task #860 — Terms acceptance at sign-up. Industry-standard
+            inline microcopy under the signup CTA (no checkbox); applies
+            to both the password "Continue/Verify & create" flow and the
+            OAuth buttons on this screen. Customer-only — admin/partner
+            consent is captured on the invite-accept page. Links open the
+            public policy pages in a new tab. Inline-link treatment:
+            inherit color at rest, brand-blue + underline on hover. */}
+        {!isAdmin && mode === "register" && (
+          <p className="mt-5 text-center text-xs leading-relaxed text-white/40" data-testid="text-terms-consent">
+            By continuing, you agree to our{" "}
+            <a
+              href={TERMS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline-offset-2 transition-colors hover:text-[color:var(--brand-blue)] hover:underline"
+              data-testid="link-terms"
+            >
+              Terms
+            </a>{" "}
+            and{" "}
+            <a
+              href={PRIVACY_POLICY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline-offset-2 transition-colors hover:text-[color:var(--brand-blue)] hover:underline"
+              data-testid="link-privacy"
+            >
+              Privacy Policy
+            </a>
+            .
+          </p>
         )}
       </div>
       {!isAdmin && (

@@ -22,6 +22,18 @@ export const softDeleteCols = {
   deletedViaParentId: varchar("deleted_via_parent_id"),
 };
 
+// Task #860 — Terms acceptance at sign-up. We capture consent the
+// industry-standard way: inline microcopy under the signup CTA
+// ("By continuing, you agree to the Terms and Privacy Policy") with no
+// checkbox, and record the moment + the version of Terms in force on the
+// new account row (`terms_accepted_at` / `terms_version`). Bump
+// TERMS_VERSION (a plain dated string) whenever the Terms materially
+// change so a future re-consent flow can tell who agreed to what. URLs
+// are the canonical public policy pages; links open in a new tab.
+export const TERMS_VERSION = "2026-05-31";
+export const TERMS_URL = "https://goodtunes.music/terms";
+export const PRIVACY_POLICY_URL = "https://goodtunes.music/privacy";
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
@@ -45,6 +57,12 @@ export const users = pgTable("users", {
   // only runs when the user changes their number.
   phoneE164: text("phone_e164"),
   phoneVerifiedAt: timestamp("phone_verified_at"),
+  // Task #860 — Terms acceptance captured at account creation. NULL for
+  // admins/partners minted before this shipped (no re-consent for
+  // existing accounts); set to now() + the in-force TERMS_VERSION the
+  // moment a fresh row is provisioned via invite accept.
+  termsAcceptedAt: timestamp("terms_accepted_at"),
+  termsVersion: text("terms_version"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1492,6 +1510,11 @@ export const customerUsers = pgTable("customer_users", {
   // the Apple-style settings screen. Mirrored to localStorage client-
   // side for instant/anon resolution.
   favoriteStreamingService: text("favorite_streaming_service"),
+  // Task #860 — Terms acceptance captured at fan account creation (see
+  // the `users` table for the rationale). NULL for fans who signed up
+  // before this shipped — no re-consent.
+  termsAcceptedAt: timestamp("terms_accepted_at"),
+  termsVersion: text("terms_version"),
 }, (t) => ({
   legacyGogoodsIdUniq: uniqueIndex("customer_users_legacy_gogoods_id_uniq")
     .on(t.legacyGogoodsId)

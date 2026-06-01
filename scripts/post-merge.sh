@@ -2651,3 +2651,32 @@ SQL
 }
 migrate_task_824_person_roles dev  "${DATABASE_URL:-}"
 migrate_task_824_person_roles prod "${PROD_DATABASE_URL:-}"
+
+# Task #860 — Terms acceptance at sign-up. Additive nullable columns on
+# both account tables (users = admin/partner, customer_users = fan):
+# `terms_accepted_at` (timestamp) + `terms_version` (text). NULL for
+# accounts created before this shipped — no re-consent. Idempotent
+# ADD COLUMN IF NOT EXISTS on both DBs so a fresh-clone dev never 500s
+# the auth serializers and the publish dev->prod diff stays empty.
+migrate_task_860_terms_consent() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-860 terms-consent migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS terms_accepted_at timestamp,
+  ADD COLUMN IF NOT EXISTS terms_version     text;
+ALTER TABLE customer_users
+  ADD COLUMN IF NOT EXISTS terms_accepted_at timestamp,
+  ADD COLUMN IF NOT EXISTS terms_version     text;
+SQL
+  then
+    echo "post-merge: task-860 terms-consent migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-860 terms-consent migration failed on $label (continuing)"
+  fi
+}
+migrate_task_860_terms_consent dev  "${DATABASE_URL:-}"
+migrate_task_860_terms_consent prod "${PROD_DATABASE_URL:-}"

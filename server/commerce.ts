@@ -30,6 +30,7 @@ import {
   userAlbums,
   authTokens,
   signupVerifyTokens,
+  TERMS_VERSION,
   gifts,
   ALBUM_FORMATS,
   ALBUM_FORMAT_LABEL,
@@ -1532,7 +1533,14 @@ export function registerCommerceRoutes(app: Express) {
       realName: null,
       password: hashed,
     });
-    await storage.updateCustomer(c.id, { emailVerifiedAt: new Date() });
+    // Task #860 — record Terms acceptance at account creation. The fan
+    // consented via the inline microcopy under the signup CTA; stamp the
+    // moment + the version of Terms in force.
+    await storage.updateCustomer(c.id, {
+      emailVerifiedAt: new Date(),
+      termsAcceptedAt: new Date(),
+      termsVersion: TERMS_VERSION,
+    });
     const token = generateToken();
     await storage.createAuthToken(token, c.id, "customer");
     (req.session as any).userId = c.id;

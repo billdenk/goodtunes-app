@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { setAuthToken } from "@/lib/queryClient";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
+import { TERMS_URL, PRIVACY_POLICY_URL } from "@shared/schema";
 
 // Task #351 — Team-invite fields surfaced here so the accept page can
 // render the right hero copy and (after accept) the server-supplied
@@ -228,6 +229,36 @@ export default function AcceptInvite() {
         </div>
         <p className="mt-3 text-[11px] text-slate-500 text-center">
           The Google/Apple account email must match <span className="font-semibold">{data.email}</span>.
+        </p>
+
+        {/* Task #860 — Terms acceptance at sign-up. Industry-standard
+            inline microcopy (no checkbox); covers both the password and
+            OAuth accept paths above, which both provision the admin/
+            partner account. Links open the public policy pages in a new
+            tab. Inline-link treatment: inherit color at rest, brand-blue
+            + underline on hover. */}
+        <p className="mt-4 text-xs leading-relaxed text-slate-500 text-center" data-testid="text-terms-consent">
+          By continuing, you agree to our{" "}
+          <a
+            href={TERMS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline-offset-2 transition-colors hover:text-[color:var(--brand-blue)] hover:underline"
+            data-testid="link-terms"
+          >
+            Terms
+          </a>{" "}
+          and{" "}
+          <a
+            href={PRIVACY_POLICY_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline-offset-2 transition-colors hover:text-[color:var(--brand-blue)] hover:underline"
+            data-testid="link-privacy"
+          >
+            Privacy Policy
+          </a>
+          .
         </p>
       </form>
     </main>
