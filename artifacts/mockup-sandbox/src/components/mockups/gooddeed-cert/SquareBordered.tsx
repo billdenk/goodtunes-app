@@ -21,6 +21,14 @@ import type { StoryData } from "./Stories";
 const LOGO = "/__mockup/images/goodtunes-logo-white.png";
 const GOODTUNES_ORANGE = "var(--brand-orange)";
 
+// Named album art so canvas A/B tiles can swap the image via ?art=NAME and we can
+// preview the background treatment against real-feeling covers (faces, busy art).
+const ART: Record<string, string> = {
+  california: "/__mockup/images/album-california-way.png",
+  guitar: "/__mockup/images/album-guitar-as-a-voice.png",
+  sample: "/__mockup/images/sample-album-art.png",
+};
+
 const data: StoryData = {
   art: "/__mockup/images/album-california-way.png",
   ownerPhoto: "/__mockup/images/sample-owner-photo.png",
@@ -36,8 +44,26 @@ function nameFontSize(name: string, u: number): number {
   return base * u;
 }
 
-export function BorderedSquareCard({ overlay, radius = 22 }: { overlay?: ReactNode; radius?: number }) {
-  const { art, ownerPhoto, album, ownerName, certNumStr } = data;
+export function BorderedSquareCard({
+  overlay,
+  radius = 22,
+  art: artProp,
+  bg = "slab",
+  blur = 0,
+}: {
+  overlay?: ReactNode;
+  radius?: number;
+  art?: string;
+  // "slab" = shipped look (art band fades into a solid navy lower half).
+  // "bleed" = album art fills the whole card behind a lighter navy scrim, so the
+  //           cover stays visible the whole way down (more transparent feel).
+  bg?: "slab" | "bleed";
+  // Background blur in preview px (only meaningful for bg="bleed"). 0 = crisp.
+  blur?: number;
+}) {
+  const { ownerPhoto, album, ownerName, certNumStr } = data;
+  const art = artProp ?? data.art;
+  const bleed = bg === "bleed";
 
   // Preview at w = 360 with the same u = w/1080 scale the exporter uses.
   const w = 360;
@@ -45,6 +71,12 @@ export function BorderedSquareCard({ overlay, radius = 22 }: { overlay?: ReactNo
 
   const captionOneLine = `${album.title} by ${album.artist} #${certNumStr}`;
   const captionWraps = captionOneLine.length > 34;
+
+  // Lower, lighter scrim for the full-bleed treatment: the cover stays visible up
+  // top and only deepens toward the bottom enough to keep the caption legible —
+  // noticeably more transparent than the slab, which goes fully solid below 92%.
+  const bleedScrim =
+    "linear-gradient(180deg, rgba(0,6,43,0.10) 0%, rgba(0,6,43,0.30) 42%, rgba(0,6,43,0.68) 78%, rgba(0,6,43,0.90) 100%)";
 
   return (
     <div
@@ -59,17 +91,42 @@ export function BorderedSquareCard({ overlay, radius = 22 }: { overlay?: ReactNo
         boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
       }}
     >
+      {/* FULL-BLEED treatment: album art fills the whole card behind a lighter
+          scrim. Blur (when set) softens busy covers so the white text stays
+          readable; the avatar/text below sit on their own layer and stay crisp. */}
+      {bleed && (
+        <>
+          <img
+            src={art}
+            alt={album.title}
+            className="absolute inset-0 w-full h-full object-cover object-top block"
+            style={{
+              zIndex: 0,
+              filter: blur > 0 ? `blur(${blur}px)` : undefined,
+              transform: blur > 0 ? "scale(1.12)" : undefined,
+              transformOrigin: "center",
+            }}
+          />
+          <div className="absolute inset-0" style={{ zIndex: 0, background: bleedScrim }} />
+        </>
+      )}
+
       {/* Album-art band at the top, with a long soft fade into navy (matches the
-          approved Story blend so the seam is seamless). */}
-      <div className="relative w-full shrink-0" style={{ height: 470 * u }}>
-        <img src={art} alt={album.title} className="w-full h-full object-cover object-top block" />
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(180deg, rgba(0,6,43,0) 40%, rgba(0,6,43,0.6) 72%, rgba(0,6,43,0.95) 92%, var(--brand-bg) 100%)",
-          }}
-        />
+          approved Story blend so the seam is seamless). In bleed mode this becomes
+          a transparent spacer so the avatar/text keep the exact same positions. */}
+      <div className="relative w-full shrink-0" style={{ height: 470 * u, zIndex: 1 }}>
+        {!bleed && (
+          <>
+            <img src={art} alt={album.title} className="w-full h-full object-cover object-top block" />
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(0,6,43,0) 40%, rgba(0,6,43,0.6) 72%, rgba(0,6,43,0.95) 92%, var(--brand-bg) 100%)",
+              }}
+            />
+          </>
+        )}
       </div>
 
       {/* Lower section — relative+z so the avatar paints ON TOP of the album art */}
@@ -141,12 +198,19 @@ export function BorderedSquareCard({ overlay, radius = 22 }: { overlay?: ReactNo
 }
 
 export function SquareBordered() {
+  const params = new URLSearchParams(window.location.search);
   // Approved/locked card radius is 22 (matches the Story). Optional ?r=NN A/B.
-  const raw = Number(new URLSearchParams(window.location.search).get("r") ?? "22");
+  const raw = Number(params.get("r") ?? "22");
   const r = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 22;
+  // Canvas A/B knobs: ?art=guitar|california|sample, ?bg=slab|bleed, ?blur=NN(px).
+  const artName = params.get("art");
+  const art = artName ? ART[artName] ?? undefined : undefined;
+  const bg = params.get("bg") === "bleed" ? "bleed" : "slab";
+  const blurRaw = Number(params.get("blur") ?? "0");
+  const blur = Number.isFinite(blurRaw) ? Math.max(0, blurRaw) : 0;
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "#05030f" }}>
-      <BorderedSquareCard radius={r} />
+      <BorderedSquareCard radius={r} art={art} bg={bg} blur={blur} />
     </div>
   );
 }
