@@ -240,8 +240,8 @@ export function CertPrint({
 
   // Letter footnote breathing room + QR lock-up alignment (consumed below in
   // rightColumn and the Letter leftBlock):
-  const footBottomGap = longLockup ? -5 : lowerCreditLockup ? 6 : 9; // pt the provenance footnote rises off the band bottom (off the orange border); the credit lock-up sits lower on the normal tile (clear William) and lower still on the long tile (whole bottom cluster pulled down to hug the band bottom; QR caption tracks it via qrCaptionBottomRel so the baselines stay locked)
-  const qrCaptionBottomRel = pad + footBottomGap - (longLockup ? 3 : 5); // raise/lower the QR+caption lock-up so the bottom of the "GoodDeed®" caption sits on the footnote's last-line baseline. The long tile needs a different offset than the normal/A4 tiles (whose shared -5 must not change): the larger 7pt caption read as floating high at offset 0, so drop it 3pt more so the bottom of "GoodDeed" lands right on the footnote's second-line baseline
+  const footBottomGap = longLockup || lowerCreditLockup ? -5 : 9; // pt the provenance footnote rises off the band bottom (off the orange border). The normal Letter tile now hugs the band bottom like the long tile (Bill: pull the provenance footer + QR/GoodDeed lock-up down to match the long), with the William credit lifted OUT of this lock-up to stay tucked under the signature squiggle. QR caption tracks this via qrCaptionBottomRel so the baselines stay locked.
+  const qrCaptionBottomRel = pad + footBottomGap - (longLockup || lowerCreditLockup ? 3 : 5); // raise/lower the QR+caption lock-up so the bottom of the "GoodDeed®" caption sits on the footnote's last-line baseline. The normal Letter + long tiles share the bottom-hugging footer so they share the -3 offset; A4 keeps -5.
 
   const isA4 = (layout ?? paper) === "a4";
 
@@ -484,12 +484,24 @@ export function CertPrint({
           alt="William E. Denk signature"
           style={{ width: px(110), display: "block", marginTop: px(sigGap) }}
         />
+        {/* Normal Letter tile: the William credit is lifted OUT of the bottom
+            lock-up and tucked under the signature squiggle so it stays put while
+            the provenance footer + QR/GoodDeed lock-up drops to the band bottom
+            (Bill's ask — match the long tile's tighter footer spacing). The long
+            tile keeps the credit in the bottom lock-up (its 2-line headline drops
+            the squiggle down to meet it there). */}
+        {lowerCreditLockup && (
+          <div style={{ color: "#FFFFFF", fontSize: px(6.5), fontFamily: "Helvetica, Arial, sans-serif", marginTop: px(-2) }}>
+            William E. Denk, CEO/Founder GoodTunes&reg;
+          </div>
+        )}
       </div>
-      {/* William credit + provenance footnote: one bottom-anchored lock-up that
-          keeps its breathing space off the orange border, its last line on the QR
-          caption baseline. On the normal-name tile (lowerCreditLockup) it sits a
-          touch lower (footBottomGap) so the signature squiggle clears the William
-          line; the long-name tile keeps the squiggle's intentional overlap. */}
+      {/* Bottom-anchored provenance lock-up, its last line on the QR caption
+          baseline. On the long-name tile it ALSO carries the William credit (the
+          2-line headline drops the squiggle to meet it here). On the normal-name
+          tile (lowerCreditLockup) the credit is lifted up under the signature
+          squiggle and ONLY the provenance footer rides this bottom lock-up, so it
+          hugs the band bottom matching the long tile (Bill's ask). */}
       <div
         style={{
           position: "absolute",
@@ -498,12 +510,14 @@ export function CertPrint({
           width: px(bodyW),
         }}
       >
-        <div style={{ color: "#FFFFFF", fontSize: px(6.5), fontFamily: "Helvetica, Arial, sans-serif" }}>
-          William E. Denk, CEO/Founder GoodTunes&reg;
-        </div>
+        {!lowerCreditLockup && (
+          <div style={{ color: "#FFFFFF", fontSize: px(6.5), fontFamily: "Helvetica, Arial, sans-serif" }}>
+            William E. Denk, CEO/Founder GoodTunes&reg;
+          </div>
+        )}
         <div
           style={{
-            marginTop: px(3),
+            marginTop: lowerCreditLockup ? 0 : px(3),
             color: "#9AA6CC",
             fontSize: px(6),
             fontFamily: "Helvetica, Arial, sans-serif",
