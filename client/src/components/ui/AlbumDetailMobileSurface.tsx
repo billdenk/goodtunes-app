@@ -5,6 +5,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { createPortal } from "react-dom";
 import { ChevronLeft, Share, MoreHorizontal, Info } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
@@ -151,7 +152,26 @@ export function AlbumDetailMobileSurface({
   onAddAlbumToPlaylist,
 }: AlbumDetailMobileSurfaceProps) {
   const [showMenu, setShowMenu] = useState(false);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(
+    null,
+  );
   const reduceMotion = useReducedMotion();
+
+  useLayoutEffect(() => {
+    if (!showMenu) return;
+    const measure = () => {
+      const rect = menuBtnRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setMenuPos({
+        top: rect.bottom + 8,
+        right: window.innerWidth - rect.right,
+      });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [showMenu]);
 
   const isMulti = ownedNums.length > 1;
   const totalDuration = songs.reduce((acc, s) => acc + s.duration, 0);
@@ -191,6 +211,7 @@ export function AlbumDetailMobileSurface({
         <div className="w-px h-4 bg-white/25" aria-hidden />
         <div className="relative">
           <button
+            ref={menuBtnRef}
             type="button"
             onClick={() => {
               if (!onOpenAlbumMenu) return;
@@ -206,11 +227,12 @@ export function AlbumDetailMobileSurface({
             <MoreHorizontal className="w-[19px] h-[19px]" strokeWidth={2} />
           </button>
         </div>
+        {createPortal(
         <AnimatePresence>
-        {showMenu && onOpenAlbumMenu && (
+        {showMenu && onOpenAlbumMenu && menuPos && (
           <>
             <motion.div
-              className="fixed inset-0 z-30"
+              className="fixed inset-0 z-[60]"
               onClick={() => setShowMenu(false)}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -219,8 +241,10 @@ export function AlbumDetailMobileSurface({
             />
             <motion.div
               role="menu"
-              className="absolute right-0 top-full mt-2 z-40 rounded-2xl py-1 min-w-[230px] overflow-hidden"
+              className="fixed z-[61] rounded-2xl py-1 min-w-[230px] overflow-hidden"
               style={{
+                top: menuPos.top,
+                right: menuPos.right,
                 background: "rgba(28, 30, 38, 0.96)",
                 backdropFilter: "blur(28px) saturate(180%)",
                 WebkitBackdropFilter: "blur(28px) saturate(180%)",
@@ -318,7 +342,9 @@ export function AlbumDetailMobileSurface({
             </motion.div>
           </>
         )}
-        </AnimatePresence>
+        </AnimatePresence>,
+        document.body,
+        )}
       </div>
 
       <div
