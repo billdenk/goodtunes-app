@@ -20,6 +20,12 @@ const SIG = "/__mockup/images/will-signature.png";
 const NAVY = "var(--brand-bg)";
 const ORANGE = "var(--brand-orange)";
 
+// Dashed pink mat/frame WINDOW guide. Bill asked to hide it on all tiles now
+// that the layout is settled — flip to `true` to bring the guide back if we ever
+// need to re-check the mat opening. (The frameRevealWin geometry stays wired so
+// nothing else has to change.)
+const SHOW_FRAME_WINDOW = false;
+
 type Paper = "letter" | "a4";
 type Frame = "navy" | "orange" | "bordered";
 
@@ -502,7 +508,7 @@ export function CertPrint({
       {/* TEMPORARY: dashed rectangle = a real mat/frame WINDOW (fixed size,
           centered), e.g. 7.5"x9.5". Everything OUTSIDE this window is hidden
           behind the mat/frame; only what's inside stays visible. */}
-      {frameRevealWin != null && (
+      {SHOW_FRAME_WINDOW && frameRevealWin != null && (
         <div
           style={{
             position: "absolute",
