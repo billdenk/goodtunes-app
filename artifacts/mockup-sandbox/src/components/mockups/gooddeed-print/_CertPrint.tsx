@@ -215,7 +215,7 @@ export function CertPrint({
   // Letter footnote breathing room + QR lock-up alignment (consumed below in
   // rightColumn and the Letter leftBlock):
   const footBottomGap = longLockup ? -5 : lowerCreditLockup ? 6 : 9; // pt the provenance footnote rises off the band bottom (off the orange border); the credit lock-up sits lower on the normal tile (clear William) and lower still on the long tile (whole bottom cluster pulled down to hug the band bottom; QR caption tracks it via qrCaptionBottomRel so the baselines stay locked)
-  const qrCaptionBottomRel = pad + footBottomGap - (longLockup ? -3 : 5); // raise/lower the QR+caption lock-up so the "GoodDeed®" caption baseline lands on the footnote's last line. The long tile needs a different offset than the normal/A4 tiles (whose shared -5 must not change): on the long tile the caption sat ~8pt low, so lift it (+3 instead of -5)
+  const qrCaptionBottomRel = pad + footBottomGap - (longLockup ? 0 : 5); // raise/lower the QR+caption lock-up so the "GoodDeed®" caption baseline lands on the footnote's last line. The long tile needs a different offset than the normal/A4 tiles (whose shared -5 must not change): on the long tile the caption sat low, so anchor the caption lock-up bottom flush with the footnote block bottom (offset 0) — measured baselines then sit within ~0.5pt of each other
 
   const isA4 = (layout ?? paper) === "a4";
 
