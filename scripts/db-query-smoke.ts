@@ -36,6 +36,7 @@ import {
   sqlPressSummaryStages,
   sqlPressPipeline,
   sqlPaidPaymentIntentsForAlbum,
+  sqlEarlyCutPoolsForPress,
 } from "../server/pressPortal";
 
 // Stable dummy bind values — content is irrelevant because EXPLAIN never
@@ -62,6 +63,7 @@ const SMOKE_QUERIES: { name: string; sql: SQL }[] = [
   { name: "pressPortal.summaryStages", sql: sqlPressSummaryStages(PRESS) },
   { name: "pressPortal.pipeline", sql: sqlPressPipeline(PRESS) },
   { name: "pressPortal.paidPaymentIntentsForAlbum", sql: sqlPaidPaymentIntentsForAlbum(ALBUM) },
+  { name: "pressPortal.earlyCutPoolsForPress", sql: sqlEarlyCutPoolsForPress(PRESS) },
 ];
 
 async function main() {

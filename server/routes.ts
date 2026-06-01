@@ -17643,7 +17643,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       SELECT
         a.id,
         a.title,
-        a.cover_url,
+        a.artwork AS cover_url,
         a.first_sold_at,
         a.is_goodtunes_release,
         a.is_prepping,
@@ -20768,7 +20768,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const albumsByArtist: Record<string, any[]> = {};
     if (activeArtistIds.length > 0) {
       const albumRows = await db.execute<any>(sql`
-        SELECT a.id, a.title, a.cover_url, a.primary_artist_id,
+        SELECT a.id, a.title, a.artwork AS cover_url, a.primary_artist_id,
           COALESCE((
             SELECT SUM(oi.quantity)::int
             FROM orders o

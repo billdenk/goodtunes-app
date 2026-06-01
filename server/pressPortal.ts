@@ -366,6 +366,32 @@ export function sqlPaidPaymentIntentsForAlbum(albumId: string): SQL {
   `;
 }
 
+// /early-cut-pools — per-album pool ledger summary for every album homed
+// to this press that has a pool building (accrued > 0).
+export function sqlEarlyCutPoolsForPress(pressId: string): SQL {
+  return sql`
+      SELECT a.id                                   AS "albumId",
+             a.title                                AS "albumTitle",
+             a.artwork                              AS "coverUrl",
+             a.press_pool_accrued_cents::int        AS "accruedCents",
+             a.press_pool_released_cents::int       AS "releasedCents",
+             GREATEST(0, a.press_pool_accrued_cents - a.press_pool_released_cents)::int
+                                                    AS "availableCents",
+             a.early_cut_consent_at                 AS "artistConsentAt",
+             a.masters_triggered_at                 AS "mastersTriggeredAt"
+        FROM albums a
+       WHERE a.deleted_at IS NULL
+         AND a.press_pool_accrued_cents > 0
+         AND EXISTS (
+           SELECT 1 FROM pressing_order_requests por
+            WHERE por.album_id = a.id
+              AND por.status <> 'cancelled'
+              AND por.package_snapshot ->> 'pressId' = ${pressId}
+         )
+       ORDER BY (a.press_pool_accrued_cents - a.press_pool_released_cents) DESC
+  `;
+}
+
 // Earmarked revenue from paid orders against an album, for the
 // masters-trigger threshold check. Sum of (unit_price_cents * quantity)
 // across order_items.kind='format' on paid+un-refunded orders.
@@ -1156,7 +1182,7 @@ export function registerPressPortalRoutes(
     `);
     const account = ((acctRows as any).rows ?? [])[0] ?? null;
     const invoiceRows = await db.execute<any>(sql`
-      SELECT a.id AS "albumId", a.title, a.cover_url AS "coverUrl",
+      SELECT a.id AS "albumId", a.title, a.artwork AS "coverUrl",
              a.press_invoice_total_cents AS "invoiceTotalCents",
              a.press_invoice_uploaded_at AS "invoiceUploadedAt",
              a.press_invoice_outside_system AS "outsideSystem",
@@ -1459,27 +1485,7 @@ export function registerPressPortalRoutes(
   // pressing_order_requests.package_snapshot->>'pressId'.
   app.get("/api/admin/manufacturers/:id/early-cut-pools", requireAdmin, async (req, res) => {
     const pressId = String(req.params.id);
-    const rows = await db.execute<any>(sql`
-      SELECT a.id                                   AS "albumId",
-             a.title                                AS "albumTitle",
-             a.cover_url                            AS "coverUrl",
-             a.press_pool_accrued_cents::int        AS "accruedCents",
-             a.press_pool_released_cents::int       AS "releasedCents",
-             GREATEST(0, a.press_pool_accrued_cents - a.press_pool_released_cents)::int
-                                                    AS "availableCents",
-             a.early_cut_consent_at                 AS "artistConsentAt",
-             a.masters_triggered_at                 AS "mastersTriggeredAt"
-        FROM albums a
-       WHERE a.deleted_at IS NULL
-         AND a.press_pool_accrued_cents > 0
-         AND EXISTS (
-           SELECT 1 FROM pressing_order_requests por
-            WHERE por.album_id = a.id
-              AND por.status <> 'cancelled'
-              AND por.package_snapshot ->> 'pressId' = ${pressId}
-         )
-       ORDER BY (a.press_pool_accrued_cents - a.press_pool_released_cents) DESC
-    `);
+    const rows = await db.execute<any>(sqlEarlyCutPoolsForPress(pressId));
     res.json(((rows as any).rows ?? []));
   });
 
@@ -1528,7 +1534,7 @@ export function registerPressPortalRoutes(
              q.pool_available_cents AS "poolAvailableCents",
              q.units_sold AS "unitsSold", q.tier_name AS "tierName",
              q.format, q.created_at AS "createdAt",
-             a.title AS "albumTitle", a.cover_url AS "coverUrl",
+             a.title AS "albumTitle", a.artwork AS "coverUrl",
              m.name AS "pressName"
         FROM press_early_cut_queue q
         JOIN albums a ON a.id = q.album_id
