@@ -41,6 +41,10 @@ args = "design-lint"
 task = "workflow.run"
 args = "db-query-smoke"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "test"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -68,6 +72,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "tsx scripts/db-query-smoke.ts"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "test"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx tsx --test $(find shared server -name '*.test.ts' -not -path '*/node_modules/*')"
 
 [workflows.workflow.metadata]
 isValidation = true
