@@ -51,6 +51,10 @@ export function GoodDeedCertificate({
   const { user, updateProfile } = useAuth();
 
   const safeIdx = Math.min(Math.max(activeIdx, 0), certs.length - 1);
+  // Track the active card without retriggering the resize-resync effect so a
+  // manual swipe (which updates activeIdx) doesn't fight the user with a snap.
+  const activeIdxRef = useRef(0);
+  activeIdxRef.current = safeIdx;
 
   const resolvedIdentities: ShareIdentities = useMemo(
     () =>
@@ -131,6 +135,24 @@ export function GoodDeedCertificate({
     shape === "square"
       ? stageW
       : Math.max(180, Math.min(stageW, Math.round((vh - 300) / previewRatio)));
+
+  // When the card size changes (Story/Portrait/Square switch or a viewport
+  // resize re-derives previewW), snap-mandatory can strand the scroll position
+  // between two now-resized snap targets, leaving a card half-cut and frozen on
+  // iOS. Re-center the active card after the new layout paints so every card
+  // stays reachable. Read the index from a ref so a manual swipe doesn't
+  // retrigger this and fight the user.
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const id = requestAnimationFrame(() => {
+      const card = cardRefs.current[activeIdxRef.current];
+      if (!card) return;
+      const target = card.offsetLeft - (el.clientWidth - card.offsetWidth) / 2;
+      el.scrollTo({ left: Math.max(0, target), behavior: "auto" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [shape, previewW]);
 
   const handleShare = async () => {
     const n = padded(certs[safeIdx]);
@@ -480,7 +502,7 @@ export function GoodDeedCertificate({
           className="overflow-x-auto scrollbar-hide snap-x snap-mandatory"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
-          <div className="flex gap-4 px-1 justify-center" style={{ minWidth: "100%" }}>
+          <div className="flex gap-4 px-1" style={{ minWidth: "100%", justifyContent: "safe center" }}>
             {certs.map((num, i) => (
               <CertCard
                 key={num}

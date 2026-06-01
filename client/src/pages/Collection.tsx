@@ -216,7 +216,44 @@ export function Collection() {
     },
   });
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
+
+  // Task #896 — on iOS WebKit the vertical scroller can cache stale scrollable
+  // bounds when its content grows asynchronously: artwork images decode after
+  // first paint and "Show more" appends rows. Combined with the compositing
+  // layer the top-fade WebkitMaskImage forces, this leaves the last row
+  // unreachable until a manual refresh. Watch the content box for size changes
+  // and nudge a re-layout (toggle overflow + force reflow, preserving the
+  // scroll position) so WebKit recomputes the bounds and the bottom stays
+  // reachable.
+  useEffect(() => {
+    const el = scrollRef.current;
+    const content = contentRef.current;
+    if (!el || !content || typeof ResizeObserver === "undefined") return;
+    let raf = 0;
+    let firstRun = true;
+    const nudge = () => {
+      const top = el.scrollTop;
+      el.style.overflowY = "hidden";
+      void el.offsetHeight; // force a synchronous reflow between the toggles
+      el.style.overflowY = "auto";
+      el.scrollTop = top;
+    };
+    const ro = new ResizeObserver(() => {
+      if (firstRun) {
+        firstRun = false;
+        return;
+      }
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(nudge);
+    });
+    ro.observe(content);
+    return () => {
+      ro.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
 
   // Apple-Music-style collapsing header: as the fan scrolls the collection,
   // the large "Collection" title fades + lifts away first, then the account
@@ -413,6 +450,7 @@ export function Collection() {
             maskImage: "linear-gradient(to bottom, transparent 0px, #000 64px)",
           }}
         >
+          <div ref={contentRef}>
           <div aria-hidden style={{ height: 104, flexShrink: 0 }} />
           {recentsLoading ? (
             <div className="mb-5" data-testid="rail-recent-loading">
@@ -793,6 +831,7 @@ export function Collection() {
             </div>
             );
           })()}
+          </div>
         </div>
 
         <MiniPlayer />
