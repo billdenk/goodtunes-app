@@ -5531,74 +5531,101 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!title || !artist || !artwork) {
       return res.status(400).json({ message: "title, artist, artwork are required" });
     }
-    // Validate the FK up front so an unknown label id returns a clean 400
-    // rather than a generic 500 from the underlying foreign-key violation.
-    // Empty string is normalized to null (no label).
-    const normalizedLabelId = labelId ? String(labelId) : null;
-    if (normalizedLabelId && !(await storage.getLabelById(normalizedLabelId))) {
-      return res.status(400).json({ message: "Unknown labelId" });
+    try {
+      // Validate the FK up front so an unknown label id returns a clean 400
+      // rather than a generic 500 from the underlying foreign-key violation.
+      // Empty string is normalized to null (no label).
+      const normalizedLabelId = labelId ? String(labelId) : null;
+      if (normalizedLabelId && !(await storage.getLabelById(normalizedLabelId))) {
+        return res.status(400).json({ message: "Unknown labelId" });
+      }
+      // Task #335 — sell mode + physical format. Optional on create: the
+      // two-step modal sets them after the row exists. We only validate
+      // the strings if the client did pass them, so the legacy "+ Add"
+      // path stays a one-call POST.
+      const { ALBUM_SELL_MODES, ALBUM_PHYSICAL_FORMATS } = await import("@shared/schema");
+      const rawSellMode = req.body?.sellMode;
+      const rawPhysicalFormat = req.body?.physicalFormat;
+      if (rawSellMode != null && !ALBUM_SELL_MODES.includes(rawSellMode)) {
+        return res.status(400).json({ message: "Unknown sellMode" });
+      }
+      if (rawPhysicalFormat != null && !ALBUM_PHYSICAL_FORMATS.includes(rawPhysicalFormat)) {
+        return res.status(400).json({ message: "Unknown physicalFormat" });
+      }
+      const album = await storage.createAlbum({
+        id: id || undefined,
+        title: String(title),
+        artist: String(artist),
+        artwork: String(artwork),
+        year: year != null ? Number(year) : null,
+        type: normalizeAlbumType(type),
+        description: description ? String(description) : null,
+        labelId: normalizedLabelId,
+        appleMusicUrl: appleMusicUrl ? String(appleMusicUrl) : null,
+        spotifyUrl: spotifyUrl ? String(spotifyUrl) : null,
+        tidalUrl: tidalUrl ? String(tidalUrl) : null,
+        qobuzUrl: qobuzUrl ? String(qobuzUrl) : null,
+        deezerUrl: deezerUrl ? String(deezerUrl) : null,
+        pandoraUrl: pandoraUrl ? String(pandoraUrl) : null,
+        genre: genre ? String(genre).trim() : null,
+        goodTunesReleaseDate: normalizeReleaseDate(req.body?.goodTunesReleaseDate),
+        streamingReleaseDate: normalizeReleaseDate(req.body?.streamingReleaseDate),
+        primaryArtistId: await resolvePrimaryArtistId(req.body?.primaryArtistId),
+        // Discography "+ Add" + Apple-URL seed paths leave this off; admin
+        // flips it on once an album is actually being released by GoodTunes.
+        isGoodTunesRelease: !!req.body?.isGoodTunesRelease,
+        // Task #440 — new GoodTunes shells land in Prepping so the Released
+        // tab stays clean. Default to true on any GT-release create unless
+        // the caller explicitly says otherwise; legacy (`!isGoodTunesRelease`)
+        // streaming imports always start with isPrepping=false because the
+        // gate is meaningless for non-curated rows. The admin "Mark as
+        // released" / "Move back to prepping" CTAs flip this via PUT.
+        isPrepping:
+          req.body?.isPrepping !== undefined
+            ? !!req.body.isPrepping
+            : !!req.body?.isGoodTunesRelease,
+        sellMode: rawSellMode ?? null,
+        physicalFormat: rawPhysicalFormat ?? null,
+      } as any);
+      // Task #644 — same auto-sign behaviour the PUT path uses. On create
+      // we don't have a UI to confirm a reassign, so a conflict is left
+      // as-is (the operator can resolve it from the artist row); on a
+      // clean unsigned artist the labelId is propagated silently.
+      let artistLabelConflict: AlbumArtistLabelConflict | null = null;
+      if (album.labelId) {
+        artistLabelConflict = await syncPrimaryArtistLabel(album);
+      }
+      // Task #857 — best-effort Spotify deep-link resolution for a new
+      // release created without an Apple URL. Fire-and-forget so the create
+      // response isn't blocked on a Spotify lookup.
+      maybeAutoResolveSpotifyLink(album);
+      return res.status(201).json(artistLabelConflict ? { ...album, artistLabelConflict } : album);
+    } catch (err: any) {
+      // Task #872 — the create path previously had no try/catch, so any
+      // failure surfaced as a bare "500: Internal Server Error" with no
+      // server log to diagnose it. Log a structured error (message, stack,
+      // and the album payload that failed) and return a specific, safe
+      // message so the operator's toast says something actionable.
+      console.error("[admin] POST /api/admin/albums failed", {
+        message: err?.message,
+        stack: err?.stack,
+        payload: {
+          id: id || undefined,
+          title,
+          artist,
+          artwork,
+          year,
+          type,
+          labelId,
+          isGoodTunesRelease: req.body?.isGoodTunesRelease,
+          isPrepping: req.body?.isPrepping,
+          primaryArtistId: req.body?.primaryArtistId,
+        },
+      });
+      return res.status(500).json({
+        message: `Couldn't create album: ${err?.message || "unexpected server error"}`,
+      });
     }
-    // Task #335 — sell mode + physical format. Optional on create: the
-    // two-step modal sets them after the row exists. We only validate
-    // the strings if the client did pass them, so the legacy "+ Add"
-    // path stays a one-call POST.
-    const { ALBUM_SELL_MODES, ALBUM_PHYSICAL_FORMATS } = await import("@shared/schema");
-    const rawSellMode = req.body?.sellMode;
-    const rawPhysicalFormat = req.body?.physicalFormat;
-    if (rawSellMode != null && !ALBUM_SELL_MODES.includes(rawSellMode)) {
-      return res.status(400).json({ message: "Unknown sellMode" });
-    }
-    if (rawPhysicalFormat != null && !ALBUM_PHYSICAL_FORMATS.includes(rawPhysicalFormat)) {
-      return res.status(400).json({ message: "Unknown physicalFormat" });
-    }
-    const album = await storage.createAlbum({
-      id: id || undefined,
-      title: String(title),
-      artist: String(artist),
-      artwork: String(artwork),
-      year: year != null ? Number(year) : null,
-      type: normalizeAlbumType(type),
-      description: description ? String(description) : null,
-      labelId: normalizedLabelId,
-      appleMusicUrl: appleMusicUrl ? String(appleMusicUrl) : null,
-      spotifyUrl: spotifyUrl ? String(spotifyUrl) : null,
-      tidalUrl: tidalUrl ? String(tidalUrl) : null,
-      qobuzUrl: qobuzUrl ? String(qobuzUrl) : null,
-      deezerUrl: deezerUrl ? String(deezerUrl) : null,
-      pandoraUrl: pandoraUrl ? String(pandoraUrl) : null,
-      genre: genre ? String(genre).trim() : null,
-      goodTunesReleaseDate: normalizeReleaseDate(req.body?.goodTunesReleaseDate),
-      streamingReleaseDate: normalizeReleaseDate(req.body?.streamingReleaseDate),
-      primaryArtistId: await resolvePrimaryArtistId(req.body?.primaryArtistId),
-      // Discography "+ Add" + Apple-URL seed paths leave this off; admin
-      // flips it on once an album is actually being released by GoodTunes.
-      isGoodTunesRelease: !!req.body?.isGoodTunesRelease,
-      // Task #440 — new GoodTunes shells land in Prepping so the Released
-      // tab stays clean. Default to true on any GT-release create unless
-      // the caller explicitly says otherwise; legacy (`!isGoodTunesRelease`)
-      // streaming imports always start with isPrepping=false because the
-      // gate is meaningless for non-curated rows. The admin "Mark as
-      // released" / "Move back to prepping" CTAs flip this via PUT.
-      isPrepping:
-        req.body?.isPrepping !== undefined
-          ? !!req.body.isPrepping
-          : !!req.body?.isGoodTunesRelease,
-      sellMode: rawSellMode ?? null,
-      physicalFormat: rawPhysicalFormat ?? null,
-    } as any);
-    // Task #644 — same auto-sign behaviour the PUT path uses. On create
-    // we don't have a UI to confirm a reassign, so a conflict is left
-    // as-is (the operator can resolve it from the artist row); on a
-    // clean unsigned artist the labelId is propagated silently.
-    let artistLabelConflict: AlbumArtistLabelConflict | null = null;
-    if (album.labelId) {
-      artistLabelConflict = await syncPrimaryArtistLabel(album);
-    }
-    // Task #857 — best-effort Spotify deep-link resolution for a new
-    // release created without an Apple URL. Fire-and-forget so the create
-    // response isn't blocked on a Spotify lookup.
-    maybeAutoResolveSpotifyLink(album);
-    return res.status(201).json(artistLabelConflict ? { ...album, artistLabelConflict } : album);
   });
 
   // One-shot backfill: flips `isGoodTunesRelease=true` on the small,
