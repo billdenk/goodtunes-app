@@ -34,6 +34,12 @@ const SHOW_FRAME_WINDOW = false;
 // The free PDF (everyone gets with a purchase) keeps the logo (signed = false).
 const HOLO_W_IN = 0.78;
 const HOLO_H_IN = 0.73;
+// pt of white padding around the QR plate. The plate overflows its centered
+// column by this on each side, so the QR's VISIBLE right edge sits this far
+// right of the column edge (qrColRightRel). The holo guide's right edge anchors
+// to the plate edge (qrColRightRel + this), NOT the column edge, so the two read
+// as flush. Shared by the QR plate padding + the holo offset so they can't drift.
+const QR_PLATE_PAD = 3;
 
 type Paper = "letter" | "a4";
 type Frame = "navy" | "orange" | "bordered";
@@ -253,7 +259,7 @@ export function CertPrint({
         <div
           style={{
             position: "absolute",
-            left: px(qrColRightRel - holoW),
+            left: px(qrColRightRel + QR_PLATE_PAD - holoW),
             top: px(safeTopRel),
             width: px(holoW),
             height: px(holoH),
@@ -287,7 +293,7 @@ export function CertPrint({
           alignItems: "center",
         }}
       >
-        <div style={{ background: "#FFFFFF", padding: px(3), lineHeight: 0 }}>
+        <div style={{ background: "#FFFFFF", padding: px(QR_PLATE_PAD), lineHeight: 0 }}>
           <QrFaux size={px(d.qrSize)} />
         </div>
         <span
