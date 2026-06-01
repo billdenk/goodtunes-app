@@ -1213,6 +1213,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // on /account.
     let isNewOauthSignup = false;
 
+    // Task #862 — a provider that reports the email verified, on a real
+    // (non-private-relay) address, lets us stamp `emailVerifiedAt`
+    // without sending our own 6-digit verification email — the provider
+    // already proved the address. Apple "Hide my email" relay masks are
+    // NOT a verifiable real address, so we never stamp them. Customer
+    // side only; admin verification is governed by the invite flow.
+    const isRelayEmail = !!identity.email && /@privaterelay\.appleid\.com$/i.test(identity.email);
+    const providerVerifiedEmail =
+      kind === "customer" && !!identity.email && identity.emailVerified === true && !isRelayEmail;
+
     if (!userId && identity.email) {
       // Don't auto-merge — if an existing account with this email is on
       // this side, surface the email to the login UI so it can prompt
@@ -1310,6 +1320,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       isNewOauthSignup = true;
       await storage.linkIdentity(kind, { userId, provider, providerUserId: identity.sub, email: identity.email });
 
+      // Task #862 — stamp email verification straight away when the
+      // provider already proved a real (non-relay) address, so the fan
+      // shows VERIFIED in the admin customer view without us ever
+      // sending a GoodTunes verification email.
+      if (providerVerifiedEmail) {
+        await storage.updateCustomer(userId, { emailVerifiedAt: new Date() });
+      }
+
       // Capture Google's profile picture on first signup. Only set it if
       // we don't already have one for this user (we never overwrite a
       // returning user's own upload on subsequent logins). Best-effort —
@@ -1324,6 +1342,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         } catch (err: any) {
           console.warn(`[oauth] google avatar rehost failed for ${userId}: ${err?.message}`);
         }
+      }
+    }
+
+    // Task #862 — returning OAuth fan whose row is still unverified. If
+    // the provider reports a real (non-relay) verified email this sign-in,
+    // stamp it now. This is what clears existing unverified fans (e.g.
+    // Andrew) the next time they sign in, even without the backfill.
+    if (providerVerifiedEmail && !isNewOauthSignup && userId) {
+      const existing = await storage.getCustomer(userId);
+      if (existing && !existing.emailVerifiedAt) {
+        await storage.updateCustomer(userId, { emailVerifiedAt: new Date() });
       }
     }
 
