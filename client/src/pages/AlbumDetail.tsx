@@ -628,7 +628,7 @@ function AlbumDetailMobile() {
 
   const handleShare = async () => {
     const url = `${window.location.origin}/album/${album.id}`;
-    const shareData = { title: album.title, text: `${album.title} by ${album.artist}`, url };
+    const shareData = { title: album.title, text: `Preview ${album.artist}'s ${album.title} on GoodTunes®`, url };
     const hasNativeShare = typeof navigator.share === "function";
     const destination: "native" | "copy" = hasNativeShare ? "native" : "copy";
     track("share_initiated", { albumId: album.id, destination });
