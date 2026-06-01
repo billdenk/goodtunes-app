@@ -297,9 +297,11 @@ export function CertPrint({
       {headline}
     </div>
   );
-  // creditMt = top margin (pt) under the signature squiggle. A4 keeps a small
-  // positive gap; Letter passes a negative value so the credit tucks up under the
-  // squiggle (a slight overlap is intentional) to free room for the footnote.
+  // creditMt = top margin (pt) under the signature squiggle. The SIG png carries
+  // ~3.8pt of transparent bottom padding (16px of 132 at px(110) width), so a
+  // small NEGATIVE value pulls the credit up under the visible squiggle ink.
+  // Both A4 and Letter now tuck the credit close under the squiggle (Bill's ask:
+  // match the Letter's tucked credit on A4).
   const makeSignatureBlock = (creditMt: number) => (
     <div>
       <img src={SIG} alt="William E. Denk signature" style={{ width: px(110), display: "block" }} />
@@ -331,32 +333,59 @@ export function CertPrint({
   // (do NOT couple it to footBottomGap); long previously used +1 and sat ~3pt low.
   const sigGap = -2;
 
+  // A4-only: the provenance is demoted to a bottom-anchored footnote (like the
+  // Letter) instead of a mid-stack paragraph. a4ProvBottom is its box bottom off
+  // the band bottom — start level with the QR "GoodDeed®" caption and tune so the
+  // footnote's LAST line baseline lands on the caption baseline. a4ProvReserve is
+  // the bottom band height kept clear so the centred upper block (title + headline
+  // + signature) never overlaps the footnote.
+  const a4ProvBottom = qrCaptionBottomRel;
+  const a4ProvReserve = 44;
+
   // ── Left content block — the ONE place the two paper layouts diverge.
   const leftBlock = isA4 ? (
-    // A4: one vertically-centred stack across the taller band. Server centres
-    // the measured stack and uses non-uniform gaps (title→headline 11,
-    // headline→prov 3, prov→sig 6), so mirror those exact gaps here.
-    <div
-      style={{
-        position: "absolute",
-        left: px(leftColLeftRel),
-        top: px(safeTopRel),
-        width: px(leftColW),
-        height: px(safeBottomRel - safeTopRel),
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-      }}
-    >
-      {titleRow}
-      {/* Indent body to align with the text column (under "Fernando Perdomo"),
-          i.e. past the avatar + its 10pt gap — not under the avatar itself. */}
-      <div style={{ marginLeft: px(avatarSize + 10), marginTop: px(11) }}>{headlineEl("#FFFFFF")}</div>
-      <div style={{ marginLeft: px(avatarSize + 10), marginTop: px(3), color: "#C7CFE8", fontSize: px(7.5), fontFamily: "Helvetica, Arial, sans-serif", lineHeight: 1.3 }}>
+    // A4: title + headline + signature/credit centre as an UPPER block; the
+    // provenance is demoted to a bottom-anchored footnote (like the Letter) whose
+    // last line shares the QR "GoodDeed®" caption baseline. The upper block centres
+    // in the band height ABOVE the reserved footnote zone (a4ProvReserve) so the
+    // two never collide.
+    <>
+      <div
+        style={{
+          position: "absolute",
+          left: px(leftColLeftRel),
+          top: px(safeTopRel),
+          width: px(leftColW),
+          height: px(safeBottomRel - safeTopRel - a4ProvReserve),
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+        }}
+      >
+        {titleRow}
+        {/* Indent body to align with the text column (under "Fernando Perdomo"),
+            i.e. past the avatar + its 10pt gap — not under the avatar itself. */}
+        <div style={{ marginLeft: px(avatarSize + 10), marginTop: px(11) }}>{headlineEl("#FFFFFF")}</div>
+        <div style={{ marginLeft: px(avatarSize + 10), marginTop: px(6) }}>{makeSignatureBlock(-4)}</div>
+      </div>
+      {/* Provenance footnote — bottom-anchored, 7pt, last line on the GoodDeed
+          caption baseline (a4ProvBottom tuned to match). Indented to the body text
+          column like the headline/signature above. */}
+      <div
+        style={{
+          position: "absolute",
+          left: px(leftColLeftRel + avatarSize + 10),
+          bottom: px(a4ProvBottom),
+          width: px(leftColW - (avatarSize + 10)),
+          color: "#C7CFE8",
+          fontSize: px(7),
+          fontFamily: "Helvetica, Arial, sans-serif",
+          lineHeight: 1.3,
+        }}
+      >
         {provenance}
       </div>
-      <div style={{ marginLeft: px(avatarSize + 10), marginTop: px(6) }}>{makeSignatureBlock(2)}</div>
-    </div>
+    </>
   ) : (
     // Letter: title row top-left; headline + signature squiggle flow from the top
     // under the artist name; the William credit + provenance footnote sit as ONE
