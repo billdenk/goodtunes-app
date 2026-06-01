@@ -17,6 +17,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Check, Truck, Package, MapPin, ExternalLink, Award, Clock, Lock, Printer } from "lucide-react";
 import type { StripeAddressSnapshot, AlbumFormat } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
+import { buyEnabled } from "@/lib/platform";
 import { VinylPreview } from "@/components/VinylPreview";
 import { PhoneVerifySheet } from "@/components/PhoneVerifySheet";
 import {
@@ -266,15 +267,19 @@ export function Orders() {
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center" data-testid="orders-empty">
             <div className="text-white/85 font-medium">No orders yet</div>
             <div className="text-white/55 text-[13px] mt-1 mb-4">
-              When you buy a record, it shows up here — with its tracking number once it ships.
+              {buyEnabled
+                ? "When you buy a record, it shows up here — with its tracking number once it ships."
+                : "Records you own will show up here — with a tracking number once one ships."}
             </div>
-            <Link
-              href="/"
-              className="inline-flex items-center px-4 py-2 rounded-full bg-[#319ED8] text-white text-[13px] font-semibold active:opacity-80"
-              data-testid="button-browse-music"
-            >
-              Browse music
-            </Link>
+            {buyEnabled && (
+              <Link
+                href="/"
+                className="inline-flex items-center px-4 py-2 rounded-full bg-[#319ED8] text-white text-[13px] font-semibold active:opacity-80"
+                data-testid="button-browse-music"
+              >
+                Browse music
+              </Link>
+            )}
           </div>
         )}
 

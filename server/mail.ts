@@ -402,23 +402,32 @@ export async function sendCustomerPasswordResetEmail(
   toEmail: string,
   resetUrl: string,
   ttlMinutes: number,
+  // Task #873 — a passwordless fan opting in to set a password for the
+  // first time gets honest "set" copy instead of "reset". Same token +
+  // /reset-password page; only the wording changes.
+  firstTime = false,
 ): Promise<SendResult> {
-  const subject = `Reset your GoodTunes password`;
+  const subject = firstTime ? `Set your GoodTunes password` : `Reset your GoodTunes password`;
+  const lead = firstTime
+    ? `You asked to set a password for your GoodTunes account.`
+    : `Someone (hopefully you) asked to reset the password for your GoodTunes account.`;
+  const heading = firstTime ? `Set your password` : `Reset your password`;
+  const cta = firstTime ? `Choose a password` : `Choose a new password`;
   const text = [
-    `Someone (hopefully you) asked to reset the password for your GoodTunes account.`,
+    lead,
     ``,
-    `Open this link to choose a new password (expires in ${ttlMinutes} minutes):`,
+    `Open this link to choose a password (expires in ${ttlMinutes} minutes):`,
     resetUrl,
     ``,
-    `If you didn't request this, you can ignore this email — your password is unchanged.`,
+    `If you didn't request this, you can ignore this email — your account is unchanged.`,
   ].join("\n");
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #00062B; color: #ffffff; border-radius: 16px;">
       <div style="font-size: 14px; color: #4AFFCA; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">GoodTunes</div>
-      <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700; color: #ffffff;">Reset your password</h1>
-      <p style="font-size: 15px; line-height: 1.5; color: rgba(255,255,255,0.75);">Someone (hopefully you) asked to reset the password for your GoodTunes account.</p>
+      <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700; color: #ffffff;">${heading}</h1>
+      <p style="font-size: 15px; line-height: 1.5; color: rgba(255,255,255,0.75);">${lead}</p>
       <p style="margin: 28px 0;">
-        <a href="${resetUrl}" style="display: inline-block; background: #319ED8; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 999px; font-weight: 600; font-size: 15px;">Choose a new password</a>
+        <a href="${resetUrl}" style="display: inline-block; background: #319ED8; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 999px; font-weight: 600; font-size: 15px;">${cta}</a>
       </p>
       <p style="font-size: 13px; color: rgba(255,255,255,0.55); line-height: 1.5;">Or paste this URL into your browser:<br /><span style="color: #4AFFCA; word-break: break-all;">${resetUrl}</span></p>
       <p style="font-size: 13px; color: rgba(255,255,255,0.55); margin-top: 24px;">This link expires in <strong style="color: #ffffff;">${ttlMinutes} minutes</strong> and can only be used once.</p>

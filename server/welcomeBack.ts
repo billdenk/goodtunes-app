@@ -208,7 +208,7 @@ export function registerWelcomeBackRoutes(
     // "look what's already in your account" reveal. Inexpensive — two
     // aggregates and one bounded album-join (top 6 most recent).
     let libraryStats: { albums: number; orders: number } | null = null;
-    let recentItems: Array<{ id: string; albumId: string; title: string; artist: string; artwork: string; certificateNumber: number | null }> = [];
+    let recentItems: Array<{ id: string; albumId: string; title: string; artist: string; artwork: string; certificateNumber: number | null; acquiredAt: string | null }> = [];
     if (needsOnboarding) {
       const [albumRow] = await db
         .select({ n: sql<number>`count(*)::int` })
@@ -249,6 +249,7 @@ export function registerWelcomeBackRoutes(
         artist: r.artist,
         artwork: r.artwork,
         certificateNumber: r.certificateNumber,
+        acquiredAt: r.acquiredAt ? new Date(r.acquiredAt).toISOString() : null,
       }));
     }
 

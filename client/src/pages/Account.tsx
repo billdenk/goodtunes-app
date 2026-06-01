@@ -522,6 +522,11 @@ export function Account() {
               that history into the account they're using now. */}
           <AccountMergePanel />
 
+          {/* Task #873 — Passwordless is the default (email magic links).
+              A fan who'd rather have a password can opt in here; we reuse
+              the reset-password flow and email a secure link. */}
+          <PasswordPanel />
+
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
             <button
               type="button"
@@ -704,6 +709,101 @@ function AccountMergePanel() {
                 </button>
               </div>
             </form>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Task #873 — Opt-in password for a passwordless fan. GoodTunes signs
+// fans in with email magic links; this panel lets a fan who'd prefer a
+// password add one without disturbing the magic-link default. It reuses
+// the reset-password flow: tapping "Send me a link" mints a single-use
+// reset token server-side and emails the /reset-password link. Mirrors
+// AccountMergePanel's initiate-in-account, complete-via-email pattern.
+function PasswordPanel() {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const { data: status } = useQuery<{ hasPassword: boolean }>({
+    queryKey: ["/api/auth/password/customer-status"],
+  });
+  const hasPassword = !!status?.hasPassword;
+
+  const sendLink = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/auth/password/set-link");
+      return res.json();
+    },
+    onSuccess: () => {
+      setSent(true);
+      toast({ title: "Check your inbox", description: "We've emailed you a secure link to set your password." });
+    },
+    onError: () => {
+      toast({ title: "Couldn't send the link", description: "Please try again in a moment.", variant: "destructive" });
+    },
+  });
+
+  return (
+    <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }} data-testid="panel-password">
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="w-full flex items-center justify-between px-4 py-3.5 text-left active:bg-white/[0.06]"
+          data-testid="button-password-open"
+        >
+          <div>
+            <div className="text-white text-base">{hasPassword ? "Change your password" : "Set a password"}</div>
+            <div className="text-white/45 text-xs mt-0.5">
+              {hasPassword
+                ? "Prefer a password? We'll email you a secure link to change it."
+                : "You sign in with an email link. Prefer a password? You can add one."}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
+            <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      ) : (
+        <div className="px-4 py-4">
+          {sent ? (
+            <div data-testid="password-link-sent">
+              <div className="text-white text-sm font-semibold mb-1">Link sent.</div>
+              <p className="text-white/55 text-xs leading-relaxed">
+                Open your inbox and tap the link to {hasPassword ? "choose a new password" : "set your password"}.
+                The link expires in 30 minutes. Email sign-in still works either way.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-white/55 text-xs mb-3 leading-relaxed">
+                Magic-link sign-in is staying on — this just adds a password as another way in.
+                We'll email you a secure link to {hasPassword ? "change it" : "choose one"}.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="px-3 py-2 rounded-xl text-white/70 text-sm border border-white/10"
+                  data-testid="button-password-cancel"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendLink.mutate()}
+                  disabled={sendLink.isPending}
+                  className="flex-1 py-2 rounded-xl text-white text-sm font-semibold disabled:opacity-40"
+                  style={{ background: "linear-gradient(135deg, #1D5E8F, var(--brand-blue))" }}
+                  data-testid="button-password-send"
+                >
+                  {sendLink.isPending ? "Sending…" : "Send me a link"}
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}

@@ -45,3 +45,4 @@
 - [Letter print-cert signature slot](print-cert-letter-signature-slot.md) — Letter cert signature sits in a FIXED Y slot assuming a 1-line headline; long recipient/title wraps the headline and the signature collides with the footnote. A4 is flow-based, immune. Per-tile `sample` override merges over SAMPLE.
 - [GoodDeed print-cert circle image](gooddeed-circle-image.md) — print-cert circle avatar pulls the artist/band image (artSrc), not the owner photo.
 - [GoodDeed design lives on canvas](gooddeed-design-lives-on-canvas.md) — cert/share-card *design* is iterated in canvas mockups; ignore stale board tasks asking for cert/card design (only "Match GoodDeed preview to Figma" overlaps); commerce/print-size/unfurl/email tasks stay active.
+- [Passwordless fan set-password](passwordless-fan-set-password.md) — forgot-password skips fans with no password; account-initiated "set a password" needs its own requireCustomer endpoint that mints a reset token regardless.

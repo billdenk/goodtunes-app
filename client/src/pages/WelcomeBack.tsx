@@ -34,8 +34,20 @@ type WelcomeState = {
     artist: string;
     artwork: string;
     certificateNumber: number | null;
+    acquiredAt: string | null;
   }>;
 };
+
+// Render the original purchase date on each reclaimed record. Legacy
+// gogoods imports carry `acquiredAt` = the date the fan bought it, so
+// "Purchased Mar 2021" reassures a returning fan that this really is
+// their own history. Bad/empty dates collapse to null (no line).
+function formatPurchased(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+}
 
 // Matches server: 3–30 chars, lowercase a–z, 0–9, dot, underscore, hyphen.
 const USERNAME_RE = /^[a-z0-9._-]{3,30}$/;
@@ -300,6 +312,14 @@ export function WelcomeBack() {
                           {it.title}
                         </div>
                         <div className="text-xs text-white/55 truncate">{it.artist}</div>
+                        {formatPurchased(it.acquiredAt) && (
+                          <div
+                            className="text-xs text-white/40 mt-0.5"
+                            data-testid={`welcomeback-record-date-${it.albumId}`}
+                          >
+                            Purchased {formatPurchased(it.acquiredAt)}
+                          </div>
+                        )}
                       </div>
                       {it.certificateNumber != null && (
                         <div
@@ -332,6 +352,19 @@ export function WelcomeBack() {
                 </ul>
               </div>
             )}
+            <p className="text-white/45 text-xs leading-relaxed mb-4" data-testid="welcomeback-reassurance">
+              Is something missing or not quite right? You can fix it or reach
+              out anytime from{" "}
+              <button
+                type="button"
+                onClick={() => navigate("/account")}
+                className="text-[var(--brand-blue)] underline underline-offset-2 active:opacity-70"
+                data-testid="link-welcomeback-account"
+              >
+                your account
+              </button>
+              .
+            </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setStep(2)}

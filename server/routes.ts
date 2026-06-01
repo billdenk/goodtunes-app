@@ -2090,6 +2090,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ ok: true });
   });
 
+  // ─── Task #873 — Signed-in fan opts in to set/change a password ────
+  //
+  // GoodTunes fans are passwordless by default (email magic links). A
+  // returning fan who *wants* a password can opt in from /account. We
+  // reuse the existing customer reset-password infrastructure: mint a
+  // single-use reset token for the *currently signed-in* fan and email
+  // them the same /reset-password/:token link.
+  //
+  // Key difference from /api/auth/forgot-password: that endpoint skips
+  // passwordless fans (no password to "reset") and is unauthenticated /
+  // non-enumerating. This one is requireCustomer-gated and works whether
+  // or not the fan already has a password, so it can bootstrap one.
+  app.get("/api/auth/password/customer-status", requireCustomer, async (req, res) => {
+    const c = await storage.getCustomer((req.session as any).userId);
+    if (!c) return res.status(404).json({ message: "Not found" });
+    return res.json({ hasPassword: !!c.password });
+  });
+
+  app.post("/api/auth/password/set-link", requireCustomer, async (req, res) => {
+    const RESET_TTL_MINUTES = 30;
+    const c = await storage.getCustomer((req.session as any).userId);
+    if (!c) return res.status(404).json({ message: "Not found" });
+    try {
+      const raw = randomBytes(32).toString("hex");
+      const hash = hashResetToken(raw);
+      const expiresAt = new Date(Date.now() + RESET_TTL_MINUTES * 60 * 1000);
+      await storage.createCustomerPasswordResetToken(c.id, hash, expiresAt);
+      const resetUrl = `${customerResetOrigin(req)}/reset-password/${raw}`;
+      const { sendCustomerPasswordResetEmail } = await import("./mail");
+      await sendCustomerPasswordResetEmail(c.email, resetUrl, RESET_TTL_MINUTES, !c.password);
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`[password/set-link] customer dev link: ${resetUrl}`);
+      }
+    } catch (e: any) {
+      console.warn(`[password/set-link] customer internal error: ${e?.message ?? e}`);
+      return res.status(500).json({ message: "Couldn't send the link. Try again in a moment." });
+    }
+    return res.json({ ok: true });
+  });
+
   // ─── Linked identities (profile) ──────────────────────────────────
   app.get("/api/auth/identities", requireAuth, async (req, res) => {
     const list = await storage.listIdentities(req.session.kind!, req.session.userId!);
