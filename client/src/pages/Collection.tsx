@@ -89,6 +89,16 @@ export function Collection() {
   const { data: songsRaw } = useQuery<Song[]>({
     queryKey: ["/api/songs"],
   });
+  // Task #909 — the fan's collection (real owned/comp + active previews;
+  // expired previews already filtered server-side). Used to flag previewed
+  // albums with a "Demo" chip in the grid and a [Demo] GoodDeed cert.
+  const { data: myAlbumsRaw } = useQuery<Array<{ albumId: string; isPreview?: boolean }> | null>({
+    queryKey: ["/api/my-albums"],
+  });
+  const previewAlbumIds = useMemo(
+    () => new Set((myAlbumsRaw ?? []).filter((a) => a.isPreview).map((a) => a.albumId)),
+    [myAlbumsRaw],
+  );
   // The /api/albums endpoint returns BOTH GoodTunes-curated releases and
   // the streaming-only discography rows we ingest from Apple Music (used
   // to power the artist sheet's "How to Play" links). The main Collection
@@ -667,6 +677,7 @@ export function Collection() {
                       <AlbumCard
                         key={album.id}
                         album={album}
+                        isPreview={previewAlbumIds.has(album.id)}
                         isCurrentlyPlaying={currentSong?.albumId === album.id}
                         onPress={() => openAlbum(album)}
                         onCertPress={() => setCertAlbum(album)}
@@ -937,6 +948,7 @@ export function Collection() {
             }}
             certificateNumber={certAlbum.certificateNumber ?? 1}
             certificateNumbers={certAlbum.ownedCertificates}
+            isPreview={previewAlbumIds.has(certAlbum.id)}
             onClose={() => setCertAlbum(null)}
           />
         )}
@@ -947,17 +959,21 @@ export function Collection() {
 
 function AlbumCard({
   album,
+  isPreview = false,
   isCurrentlyPlaying,
   onPress,
   onCertPress,
 }: {
   album: Album;
+  isPreview?: boolean;
   isCurrentlyPlaying: boolean;
   onPress: () => void;
   onCertPress: () => void;
 }) {
   const ownedCount = album.ownedCertificates?.length ?? 1;
-  const isMulti = ownedCount > 1;
+  // A preview is never a purchase, so it never shows the owned/×N badge or
+  // the stacked-cards multi treatment — it gets the single "Demo" chip.
+  const isMulti = !isPreview && ownedCount > 1;
   return (
     <div className="flex flex-col">
       <div className="relative aspect-square">
@@ -1032,6 +1048,20 @@ function AlbumCard({
                 data-testid={`badge-owned-${album.id}`}
               >
                 ×{ownedCount}
+              </span>
+            </div>
+          )}
+          {/* Task #909 — a previewed album shows a small, tasteful "Demo"
+              chip in place of the owned/×N badge. Neutral white glass (no
+              accent) so it reads as a temporary state, not a purchase. */}
+          {isPreview && (
+            <div className="absolute top-2 right-2">
+              <span
+                className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                style={{ background: "rgba(255,255,255,0.22)", color: "#ffffff", border: "1px solid rgba(255,255,255,0.4)", backdropFilter: "blur(4px)" }}
+                data-testid={`badge-demo-${album.id}`}
+              >
+                Demo
               </span>
             </div>
           )}

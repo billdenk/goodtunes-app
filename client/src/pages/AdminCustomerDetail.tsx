@@ -40,6 +40,12 @@ type Profile = {
     albumArtwork: string;
     certificateNumber: number | null;
     acquiredAt: string | null;
+    // Task #909 — admin-granted preview state. A preview is NOT ownership:
+    // it counts toward nothing and shows a Demo chip + expiry instead of a
+    // cert number. The admin sees expired previews too (so they can extend
+    // or clear them).
+    isPreview?: boolean;
+    previewExpiresAt?: string | null;
   }>;
   playlists: Array<{ id: string; name: string; songCount: number; createdAt: string | null }>;
 };
@@ -117,6 +123,10 @@ export function AdminCustomerDetail() {
   }
 
   const { customer: c, orders, collection, playlists } = data;
+  // Task #909 — a preview counts toward nothing, so the Collection stat and
+  // section header count only real owned/comp rows. Previews still render in
+  // the grid (flagged as Demo), just below the owned ones.
+  const ownedCollectionCount = collection.filter((a) => !a.isPreview).length;
   const name = c.realName || c.displayName;
   const ship = formatAddress(c.shippingAddress);
   const bill = formatAddress(c.billingAddress);
@@ -212,7 +222,7 @@ export function AdminCustomerDetail() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Stat label="Orders" value={String(orders.length)} testId="stat-orders" />
           <Stat label="Lifetime" value={formatMoney(lifetime)} testId="stat-lifetime" />
-          <Stat label="Collection" value={String(collection.length)} testId="stat-collection" />
+          <Stat label="Collection" value={String(ownedCollectionCount)} testId="stat-collection" />
           <Stat label="Playlists" value={String(playlists.length)} testId="stat-playlists" />
         </div>
 
@@ -274,35 +284,39 @@ export function AdminCustomerDetail() {
 
         {/* Collection */}
         <Section
-          title={`Collection (${collection.length})`}
-          action={id ? <GrantAlbumGate customerId={id} ownedAlbumIds={collection.map((a) => a.albumId)} /> : null}
+          title={`Collection (${ownedCollectionCount})`}
+          action={id ? <GrantAlbumGate customerId={id} ownedAlbumIds={collection.filter((a) => !a.isPreview).map((a) => a.albumId)} previewAlbumIds={collection.filter((a) => a.isPreview).map((a) => a.albumId)} /> : null}
         >
           {collection.length === 0 ? (
             <EmptyRow icon={Disc3} text="No albums in this fan's collection yet." />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {collection.map((a) => (
-                <Link
-                  key={a.id}
-                  href={`/admin/albums/${a.albumId}`}
-                  className="block rounded-lg border border-slate-200 bg-white overflow-hidden hover:border-slate-300 transition-colors"
-                  data-testid={`card-collection-${a.id}`}
-                >
-                  <div className="aspect-square bg-slate-100">
-                    {a.albumArtwork && (
-                      <img src={a.albumArtwork} alt="" className="w-full h-full object-cover" />
-                    )}
-                  </div>
-                  <div className="p-3">
-                    <div className="text-slate-900 text-sm font-medium truncate">{a.albumTitle}</div>
-                    <div className="text-slate-500 text-xs truncate">{a.albumArtist}</div>
-                    <div className="text-slate-400 text-xs mt-1">
-                      {a.certificateNumber != null ? `Cert #${a.certificateNumber} · ` : ""}
-                      {formatDate(a.acquiredAt)}
+              {collection.map((a) =>
+                a.isPreview && id ? (
+                  <PreviewCollectionCard key={a.id} customerId={id} item={a} />
+                ) : (
+                  <Link
+                    key={a.id}
+                    href={`/admin/albums/${a.albumId}`}
+                    className="block rounded-lg border border-slate-200 bg-white overflow-hidden hover:border-slate-300 transition-colors"
+                    data-testid={`card-collection-${a.id}`}
+                  >
+                    <div className="aspect-square bg-slate-100">
+                      {a.albumArtwork && (
+                        <img src={a.albumArtwork} alt="" className="w-full h-full object-cover" />
+                      )}
                     </div>
-                  </div>
-                </Link>
-              ))}
+                    <div className="p-3">
+                      <div className="text-slate-900 text-sm font-medium truncate">{a.albumTitle}</div>
+                      <div className="text-slate-500 text-xs truncate">{a.albumArtist}</div>
+                      <div className="text-slate-400 text-xs mt-1">
+                        {a.certificateNumber != null ? `Cert #${a.certificateNumber} · ` : ""}
+                        {formatDate(a.acquiredAt)}
+                      </div>
+                    </div>
+                  </Link>
+                ),
+              )}
             </div>
           )}
         </Section>
@@ -501,15 +515,15 @@ function Section({ title, children, action }: { title: string; children: React.R
 
 type AdminAlbumLite = { id: string; title: string; artist: string; artwork: string | null };
 
-function GrantAlbumGate({ customerId, ownedAlbumIds }: { customerId: string; ownedAlbumIds: string[] }) {
+function GrantAlbumGate({ customerId, ownedAlbumIds, previewAlbumIds }: { customerId: string; ownedAlbumIds: string[]; previewAlbumIds: string[] }) {
   const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
     queryKey: ["/api/me/role"],
   });
   if (roleInfo?.role !== "super_admin") return null;
-  return <GrantAlbumButton customerId={customerId} ownedAlbumIds={ownedAlbumIds} />;
+  return <GrantAlbumButton customerId={customerId} ownedAlbumIds={ownedAlbumIds} previewAlbumIds={previewAlbumIds} />;
 }
 
-function GrantAlbumButton({ customerId, ownedAlbumIds }: { customerId: string; ownedAlbumIds: string[] }) {
+function GrantAlbumButton({ customerId, ownedAlbumIds, previewAlbumIds }: { customerId: string; ownedAlbumIds: string[]; previewAlbumIds: string[] }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -525,6 +539,7 @@ function GrantAlbumButton({ customerId, ownedAlbumIds }: { customerId: string; o
         <GrantAlbumDialog
           customerId={customerId}
           ownedAlbumIds={ownedAlbumIds}
+          previewAlbumIds={previewAlbumIds}
           onClose={() => setOpen(false)}
         />
       )}
@@ -532,18 +547,199 @@ function GrantAlbumButton({ customerId, ownedAlbumIds }: { customerId: string; o
   );
 }
 
+// Task #909 — human-friendly "expires in / expired N ago" for a preview
+// deadline. Admin-facing, so it stays terse.
+function formatExpiry(iso: string | null | undefined): { label: string; expired: boolean } {
+  if (!iso) return { label: "No expiry", expired: false };
+  const ms = new Date(iso).getTime();
+  if (Number.isNaN(ms)) return { label: "—", expired: false };
+  const diff = ms - Date.now();
+  const expired = diff <= 0;
+  const mins = Math.round(Math.abs(diff) / 60000);
+  const hrs = Math.floor(mins / 60);
+  const days = Math.floor(hrs / 24);
+  const span = days >= 1 ? `${days}d` : hrs >= 1 ? `${hrs}h` : `${mins}m`;
+  return { label: expired ? `Expired ${span} ago` : `Expires in ${span}`, expired };
+}
+
+// datetime-local needs a `YYYY-MM-DDTHH:mm` string in LOCAL time.
+function toLocalInputValue(d: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Task #909 — one previewed album in the fan's collection. Shows the Demo
+// chip + expiry and gives super-admin inline Extend + Remove controls.
+function PreviewCollectionCard({
+  customerId,
+  item,
+}: {
+  customerId: string;
+  item: Profile["collection"][number];
+}) {
+  const { toast } = useToast();
+  const [extending, setExtending] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const base = item.previewExpiresAt ? new Date(item.previewExpiresAt) : new Date(Date.now() + 24 * 3600 * 1000);
+  const [when, setWhen] = useState(() => toLocalInputValue(base.getTime() > Date.now() ? base : new Date(Date.now() + 24 * 3600 * 1000)));
+  const expiry = formatExpiry(item.previewExpiresAt);
+
+  const extend = useMutation({
+    mutationFn: async () => {
+      const expiresAt = new Date(when);
+      if (Number.isNaN(expiresAt.getTime())) throw new Error("Pick a valid date & time");
+      const r = await apiRequest("POST", `/api/admin/customers/${customerId}/extend-preview`, {
+        albumId: item.albumId,
+        expiresAt: expiresAt.toISOString(),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.message || `Failed (${r.status})`);
+      }
+    },
+    onSuccess: () => {
+      toast({ title: "Preview updated", description: `${item.albumTitle} — new expiry saved.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/customers", customerId] });
+      setExtending(false);
+    },
+    onError: (e: Error) => toast({ title: "Couldn't update preview", description: e.message, variant: "destructive" }),
+  });
+
+  const remove = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/customers/${customerId}/revoke-album`, {
+        albumId: item.albumId,
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.message || `Failed (${r.status})`);
+      }
+    },
+    onSuccess: () => {
+      toast({ title: "Preview revoked", description: `${item.albumTitle} removed from this fan.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/customers", customerId] });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't revoke preview", description: e.message, variant: "destructive" }),
+  });
+
+  return (
+    <div
+      className="rounded-lg border border-slate-200 bg-white overflow-hidden"
+      data-testid={`card-collection-preview-${item.id}`}
+    >
+      <Link href={`/admin/albums/${item.albumId}`} className="block hover:opacity-95 transition-opacity">
+        <div className="relative aspect-square bg-slate-100">
+          {item.albumArtwork && <img src={item.albumArtwork} alt="" className="w-full h-full object-cover" />}
+          <span
+            className="absolute top-2 right-2 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-900/70 text-white"
+            data-testid={`badge-collection-demo-${item.id}`}
+          >
+            Demo
+          </span>
+        </div>
+      </Link>
+      <div className="p-3">
+        <div className="text-slate-900 text-sm font-medium truncate">{item.albumTitle}</div>
+        <div className="text-slate-500 text-xs truncate">{item.albumArtist}</div>
+        <div
+          className={`text-xs mt-1 font-medium ${expiry.expired ? "text-rose-600" : "text-amber-600"}`}
+          data-testid={`text-preview-expiry-${item.id}`}
+        >
+          {expiry.label}
+        </div>
+
+        {extending ? (
+          <div className="mt-2 space-y-2">
+            <input
+              type="datetime-local"
+              value={when}
+              onChange={(e) => setWhen(e.target.value)}
+              className="w-full rounded border border-slate-200 px-2 py-1 text-xs text-slate-900 focus:outline-none focus:border-[var(--brand-blue)]"
+              data-testid={`input-preview-expiry-${item.id}`}
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => extend.mutate()}
+                disabled={extend.isPending}
+                className="rounded-md bg-[var(--brand-blue)] text-white px-2.5 py-1 text-xs font-medium hover:opacity-90 disabled:opacity-50"
+                data-testid={`button-preview-extend-save-${item.id}`}
+              >
+                {extend.isPending ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setExtending(false)}
+                className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                data-testid={`button-preview-extend-cancel-${item.id}`}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : removing ? (
+          <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 p-2">
+            <p className="text-xs text-rose-900 leading-snug mb-1.5">Revoke this preview now?</p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => remove.mutate()}
+                disabled={remove.isPending}
+                className="rounded-md bg-rose-700 text-white px-2.5 py-1 text-xs font-medium hover:bg-rose-800 disabled:opacity-50"
+                data-testid={`button-preview-remove-confirm-${item.id}`}
+              >
+                {remove.isPending ? "Removing…" : "Revoke"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setRemoving(false)}
+                className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                data-testid={`button-preview-remove-cancel-${item.id}`}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 mt-2">
+            <button
+              type="button"
+              onClick={() => setExtending(true)}
+              className="text-xs font-medium text-[var(--brand-blue)] hover:underline"
+              data-testid={`button-preview-extend-${item.id}`}
+            >
+              Extend
+            </button>
+            <button
+              type="button"
+              onClick={() => setRemoving(true)}
+              className="text-xs font-medium text-rose-700 hover:text-rose-900"
+              data-testid={`button-preview-remove-${item.id}`}
+            >
+              Remove
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function GrantAlbumDialog({
   customerId,
   ownedAlbumIds,
+  previewAlbumIds,
   onClose,
 }: {
   customerId: string;
   ownedAlbumIds: string[];
+  previewAlbumIds: string[];
   onClose: () => void;
 }) {
   const { toast } = useToast();
   const [q, setQ] = useState("");
   const owned = useMemo(() => new Set(ownedAlbumIds), [ownedAlbumIds]);
+  const previewing = useMemo(() => new Set(previewAlbumIds), [previewAlbumIds]);
   const { data: allAlbums = [], isLoading } = useQuery<AdminAlbumLite[]>({
     queryKey: ["/api/albums"],
   });
@@ -560,20 +756,23 @@ function GrantAlbumDialog({
   }, [allAlbums, q]);
 
   const grant = useMutation({
-    mutationFn: async (albumId: string) => {
+    mutationFn: async (vars: { albumId: string; preview: boolean }) => {
       const r = await apiRequest(
         "POST",
         `/api/admin/customers/${customerId}/grant-album`,
-        { albumId },
+        vars.preview ? { albumId: vars.albumId, preview: true } : { albumId: vars.albumId },
       );
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
         throw new Error(j.message || `Failed (${r.status})`);
       }
     },
-    onSuccess: (_, albumId) => {
-      const a = allAlbums.find((x) => x.id === albumId);
-      toast({ title: "Album granted", description: a ? `${a.title} — ${a.artist}` : undefined });
+    onSuccess: (_, vars) => {
+      const a = allAlbums.find((x) => x.id === vars.albumId);
+      toast({
+        title: vars.preview ? "Preview granted (24h)" : "Album granted",
+        description: a ? `${a.title} — ${a.artist}` : undefined,
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/customers", customerId] });
     },
     onError: (e: Error) => {
@@ -594,7 +793,7 @@ function GrantAlbumDialog({
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
           <div>
             <div className="text-slate-900 text-sm font-semibold">Grant album (demo)</div>
-            <div className="text-slate-500 text-xs">Free comp — no payment, no order, super-admin only</div>
+            <div className="text-slate-500 text-xs">Preview = 24h full-playback, no order/number · Grant = permanent comp · super-admin only</div>
           </div>
           <button
             type="button"
@@ -628,6 +827,7 @@ function GrantAlbumDialog({
             <ul className="divide-y divide-slate-100">
               {filtered.map((a) => {
                 const isOwned = owned.has(a.id);
+                const isPreviewing = previewing.has(a.id);
                 return (
                   <li key={a.id} className="flex items-center gap-3 px-4 py-2.5">
                     <div className="w-10 h-10 rounded bg-slate-100 overflow-hidden flex-shrink-0">
@@ -644,15 +844,36 @@ function GrantAlbumDialog({
                         <CheckCircle2 className="w-3.5 h-3.5" /> Owned
                       </span>
                     ) : (
-                      <button
-                        type="button"
-                        disabled={grant.isPending}
-                        onClick={() => grant.mutate(a.id)}
-                        className="rounded-md bg-[var(--brand-blue)] text-white px-2.5 py-1 text-xs font-medium hover:opacity-90 disabled:opacity-50"
-                        data-testid={`button-grant-album-${a.id}`}
-                      >
-                        Grant
-                      </button>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {isPreviewing && (
+                          <span
+                            className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-100 text-slate-600"
+                            data-testid={`badge-grant-demo-${a.id}`}
+                          >
+                            Demo
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          disabled={grant.isPending}
+                          onClick={() => grant.mutate({ albumId: a.id, preview: true })}
+                          className="rounded-md border border-[var(--brand-blue)] text-[var(--brand-blue)] px-2.5 py-1 text-xs font-medium hover:bg-blue-50 disabled:opacity-50"
+                          data-testid={`button-preview-album-${a.id}`}
+                          title="Time-boxed 24h full-playback preview — no order, no GoodDeed number"
+                        >
+                          {isPreviewing ? "Renew preview" : "Preview"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={grant.isPending}
+                          onClick={() => grant.mutate({ albumId: a.id, preview: false })}
+                          className="rounded-md bg-[var(--brand-blue)] text-white px-2.5 py-1 text-xs font-medium hover:opacity-90 disabled:opacity-50"
+                          data-testid={`button-grant-album-${a.id}`}
+                          title="Permanent free comp — mints a GoodDeed number"
+                        >
+                          Grant
+                        </button>
+                      </div>
                     )}
                   </li>
                 );

@@ -1,20 +1,25 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 /**
- * Returns whether the signed-in fan owns the given album.
+ * Returns whether the signed-in fan "owns" the given album for the purpose
+ * of full-length playback.
  *
- * Today this is a stub: real ownership detection lands with the Stripe +
- * OrderDesk pipeline in a later task and will hit `/api/my-albums`. For
- * now the hook returns `false` in production and reads a per-album
- * `localStorage` flag in dev so QA can flip the Preview & Purchase page
- * between "not owned" (pre-release) and "owned" (post-purchase) without
- * needing a real checkout.
+ * Task #909 — this is now server-driven. It reads the fan's collection from
+ * `/api/my-albums`, which returns real owned/comp copies AND any *active*
+ * (non-expired) preview, while excluding previews whose 24h window has
+ * lapsed. So an admin-granted preview unlocks full playback exactly while
+ * it's live, and the album silently drops back to the 30s preview the moment
+ * it expires — no client-side expiry math required.
  *
- * Storage key: `gt:dev:ownership:<albumId>` → `"1"` means owned. Anything
- * else (including missing) is treated as not-owned.
+ * The dev-only `localStorage` override is kept as an additional OR so QA can
+ * still flip the Preview & Purchase page between "not owned" and "owned"
+ * without a real checkout. Storage key: `gt:dev:ownership:<albumId>` → `"1"`.
  */
 const KEY_PREFIX = "gt:dev:ownership:";
 const CHANGE_EVT = "gt:dev:ownership-changed";
+
+type MyAlbumRow = { albumId: string };
 
 function readDevOwned(albumId: string): boolean {
   if (typeof window === "undefined") return false;
@@ -26,22 +31,27 @@ function readDevOwned(albumId: string): boolean {
 }
 
 export function useAlbumOwnership(albumId: string | undefined): boolean {
-  const [owned, setOwned] = useState(false);
+  // Server-side collection (owned/comp + active previews; expired previews
+  // already filtered out by the API). staleTime: Infinity in the shared
+  // queryClient means this is fetched once and reused across surfaces.
+  const { data: myAlbums } = useQuery<MyAlbumRow[] | null>({
+    queryKey: ["/api/my-albums"],
+  });
+  const serverOwned =
+    !!albumId && (myAlbums ?? []).some((a) => a.albumId === albumId);
 
+  // Dev-only localStorage override (QA toggle pill).
+  const [devOwned, setDevOwned] = useState(false);
   useEffect(() => {
-    if (!albumId) {
-      setOwned(false);
+    if (!albumId || !import.meta.env.DEV) {
+      setDevOwned(false);
       return;
     }
-    if (!import.meta.env.DEV) {
-      setOwned(false);
-      return;
-    }
-    setOwned(readDevOwned(albumId));
+    setDevOwned(readDevOwned(albumId));
     const onChange = (e: Event) => {
       const detail = (e as CustomEvent<{ albumId: string }>).detail;
       if (!detail || detail.albumId === albumId) {
-        setOwned(readDevOwned(albumId));
+        setDevOwned(readDevOwned(albumId));
       }
     };
     window.addEventListener(CHANGE_EVT, onChange);
@@ -52,7 +62,7 @@ export function useAlbumOwnership(albumId: string | undefined): boolean {
     };
   }, [albumId]);
 
-  return owned;
+  return serverOwned || devOwned;
 }
 
 /**

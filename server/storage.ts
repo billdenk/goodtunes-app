@@ -2796,6 +2796,11 @@ export class DbStorage implements IStorage {
     // show/hide toggle keeps the album out of the fan-facing Library tab
     // even after the user has added it. Admin still sees the row in the
     // CMS list (that path goes through getAlbums(includeHidden=true)).
+    //
+    // Task #909 — an EXPIRED preview is treated as "not granted": filter
+    // out any preview row whose deadline has passed so the album silently
+    // leaves the fan's Library the moment its preview lapses. Real
+    // owned/comp rows (is_preview=false) are always included.
     const rows = await db
       .select()
       .from(userAlbums)
@@ -2804,8 +2809,31 @@ export class DbStorage implements IStorage {
         eq(userAlbums.userId, userId),
         eq(albums.isHidden, false),
         isNull(albums.deletedAt),
+        or(
+          eq(userAlbums.isPreview, false),
+          sql`${userAlbums.previewExpiresAt} > now()`,
+        ),
       ));
     return rows.map((r) => ({ ...r.user_albums, album: r.albums }));
+  }
+
+  // Task #909 — does this fan currently have full-playback access to the
+  // album? True for a real owned/comp row, or a preview that hasn't
+  // expired yet. Used to gate the playback-URL endpoint.
+  async hasActiveAlbumAccess(userId: string, albumId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: userAlbums.id })
+      .from(userAlbums)
+      .where(and(
+        eq(userAlbums.userId, userId),
+        eq(userAlbums.albumId, albumId),
+        or(
+          eq(userAlbums.isPreview, false),
+          sql`${userAlbums.previewExpiresAt} > now()`,
+        ),
+      ))
+      .limit(1);
+    return !!row;
   }
 
   async getPlaylists(userId: string): Promise<(Playlist & { artworks: string[]; songCount: number })[]> {
@@ -3212,6 +3240,11 @@ export class DbStorage implements IStorage {
         albumArtwork: albums.artwork,
         certificateNumber: userAlbums.certificateNumber,
         acquiredAt: userAlbums.acquiredAt,
+        // Task #909 — surface preview state so the admin UI can render the
+        // Demo chip + expiry and Extend/Remove. Admin sees EXPIRED previews
+        // too (unlike the fan library), so they can extend or clear them.
+        isPreview: userAlbums.isPreview,
+        previewExpiresAt: userAlbums.previewExpiresAt,
       })
       .from(userAlbums)
       .innerJoin(albums, eq(userAlbums.albumId, albums.id))

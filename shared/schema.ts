@@ -677,6 +677,14 @@ export const userAlbums = pgTable(
     albumId: varchar("album_id").notNull().references(() => albums.id),
     certificateNumber: integer("certificate_number"),
     acquiredAt: timestamp("acquired_at").defaultNow(),
+    // Task #909 — a preview is a time-boxed full-playback grant that is
+    // NOT a purchase: it mints no GoodDeed number, creates no order, and
+    // counts toward nothing. `isPreview` distinguishes it from a real
+    // owned/comp row; `previewExpiresAt` is the lazy auto-revoke deadline
+    // (a preview past its expiry is treated as "not granted" everywhere
+    // it's read). Real owned/comp rows keep isPreview=false / null expiry.
+    isPreview: boolean("is_preview").notNull().default(false),
+    previewExpiresAt: timestamp("preview_expires_at"),
   },
   (t) => ({
     userAlbumUnique: uniqueIndex("user_albums_user_album_uniq").on(t.userId, t.albumId),

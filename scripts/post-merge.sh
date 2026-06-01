@@ -427,6 +427,32 @@ SQL
 migrate_album_addons_vendor_legs dev  "${DATABASE_URL:-}"
 migrate_album_addons_vendor_legs prod "${PROD_DATABASE_URL:-}"
 
+# Task #909 — admin per-fan album PREVIEW (Demo). shared/schema.ts adds two
+# columns to user_albums (is_preview + preview_expires_at) that gate the
+# 24h time-boxed full-playback preview. drizzle-kit push bails on this
+# repo's unrelated dev-table drift, so sweep both DBs idempotently here to
+# keep the publish dev→prod diff empty and a fresh-clone dev from failing
+# the my-albums / playback-gate reads. Additive + nullable; safe to re-run.
+migrate_task_909_album_preview() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-909 album-preview migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE user_albums
+  ADD COLUMN IF NOT EXISTS is_preview         boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS preview_expires_at timestamp;
+SQL
+  then
+    echo "post-merge: task-909 album-preview migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-909 album-preview migration failed on $label (continuing)"
+  fi
+}
+migrate_task_909_album_preview dev  "${DATABASE_URL:-}"
+migrate_task_909_album_preview prod "${PROD_DATABASE_URL:-}"
+
 # Task #816 — additional streaming-service handoff URLs (Tidal / Qobuz /
 # Deezer / Pandora) on albums, people, and person_discography. Additive,
 # nullable text columns; drizzle-kit push bails on this repo's unrelated

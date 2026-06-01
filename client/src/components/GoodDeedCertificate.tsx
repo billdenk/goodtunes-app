@@ -14,6 +14,9 @@ interface GoodDeedCertificateProps {
   identities?: ShareIdentities;
   certificateNumber?: number;
   certificateNumbers?: number[];
+  /** Task #909 — an admin-granted preview mints NO GoodDeed number, so the
+      cert shows "[Demo]" everywhere a serial would otherwise appear. */
+  isPreview?: boolean;
   onClose: () => void;
 }
 
@@ -26,6 +29,7 @@ export function GoodDeedCertificate({
   identities,
   certificateNumber,
   certificateNumbers,
+  isPreview = false,
   onClose,
 }: GoodDeedCertificateProps) {
   const certs =
@@ -165,7 +169,9 @@ export function GoodDeedCertificate({
       albumId: album.id,
     });
     const url = `${window.location.origin}/share/cert?${params.toString()}`;
-    const text = `${displayedName} owns No. ${n} of "${album.title}" by ${album.artist} — verified by GoodTunes® GoodDeed®`;
+    const text = isPreview
+      ? `${displayedName} is previewing "${album.title}" by ${album.artist} on GoodTunes® — [Demo]`
+      : `${displayedName} owns No. ${n} of "${album.title}" by ${album.artist} — verified by GoodTunes® GoodDeed®`;
     try {
       if (navigator.share) {
         await navigator.share({ title: "My GoodDeed® Certificate", text, url });
@@ -202,7 +208,9 @@ export function GoodDeedCertificate({
       });
       const blob = await (await fetch(dataUrl)).blob();
       const safeTitle = album.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "") || "album";
-      const fileName = `GoodDeed-${safeTitle}-No-${padded(certs[safeIdx])}-${shape}.png`;
+      const fileName = isPreview
+        ? `GoodDeed-${safeTitle}-Demo-${shape}.png`
+        : `GoodDeed-${safeTitle}-No-${padded(certs[safeIdx])}-${shape}.png`;
       const file = new File([blob], fileName, { type: "image/png" });
 
       if (navigator.canShare?.({ files: [file] })) {
@@ -511,6 +519,7 @@ export function GoodDeedCertificate({
                 ownerName={displayedName}
                 ownerPhotoUrl={user?.photoUrl ?? null}
                 num={num}
+                isPreview={isPreview}
                 shape={shape}
                 w={previewW}
               />
@@ -553,6 +562,7 @@ export function GoodDeedCertificate({
               ownerName={displayedName}
               ownerPhotoUrl={user?.photoUrl ?? null}
               num={certs[safeIdx]}
+              isPreview={isPreview}
               shape={shape}
               w={1080}
             />
@@ -604,6 +614,8 @@ interface CertCardProps {
   album: Album;
   ownerName: string;
   num: number;
+  /** Task #909 — when true the serial pill/caption render "[Demo]". */
+  isPreview?: boolean;
   ownerPhotoUrl?: string | null;
   shape: CardShape;
   /** Render width in px. The whole card is authored at a 1080 base and scaled
@@ -697,10 +709,10 @@ function certNameFontU(name: string, bases: CertShapeSpec["nameBases"], u: numbe
 }
 
 const CertCard = forwardRef(function CertCard(
-  { album, ownerName, num, ownerPhotoUrl, shape, w }: CertCardProps,
+  { album, ownerName, num, isPreview = false, ownerPhotoUrl, shape, w }: CertCardProps,
   ref: Ref<HTMLDivElement>,
 ) {
-  const certNumStr = num.toString().padStart(2, "0");
+  const certNumStr = isPreview ? "[Demo]" : `#${num.toString().padStart(2, "0")}`;
   const initial = (ownerName.replace(/^@/, "").trim()[0] || "?").toUpperCase();
   const u = w / 1080;
   const spec = CERT_SHAPE_SPECS[shape];
@@ -708,7 +720,7 @@ const CertCard = forwardRef(function CertCard(
   const border = Math.max(1, 45 * u);
   const avatarBorder = `${Math.max(1, 6 * u)}px solid rgba(255,255,255,0.18)`;
 
-  const captionOneLine = `${album.title} by ${album.artist} #${certNumStr}`;
+  const captionOneLine = `${album.title} by ${album.artist} ${certNumStr}`;
   const captionWraps = captionOneLine.length > 34;
   const captionMt = spec.captionPinBottom ? undefined : spec.captionMtU * u;
   const pinClass = spec.captionPinBottom ? "mt-auto" : "";
@@ -751,7 +763,7 @@ const CertCard = forwardRef(function CertCard(
         className="relative z-10 flex-1 flex flex-col items-center text-center"
         style={{ paddingLeft: spec.padXU * u, paddingRight: spec.padXU * u, paddingBottom: spec.padBU * u }}
         data-testid="text-cert-owner"
-        aria-label={`${ownerName} owns no. ${certNumStr} of ${album.title}`}
+        aria-label={`${ownerName} owns ${certNumStr} of ${album.title}`}
       >
         {ownerPhotoUrl ? (
           <img
@@ -815,7 +827,7 @@ const CertCard = forwardRef(function CertCard(
           <img src="/goodtunes-logo-white.png" alt="GoodTunes" style={{ height: spec.logoHU * u, width: "auto", display: "block" }} />
           <span style={{ width: 1, height: spec.divHU * u, background: "rgba(255,255,255,0.3)" }} />
           <span className="font-bold text-white" style={{ fontSize: spec.numFsU * u, letterSpacing: 0.2 }} data-testid="text-cert-serial">
-            #{certNumStr}
+            {certNumStr}
           </span>
         </div>
 
@@ -823,7 +835,7 @@ const CertCard = forwardRef(function CertCard(
             directly under the pill as part of the block (portrait) */}
         {captionWraps ? (
           <div className={`text-white/60 leading-snug ${pinClass}`} style={{ fontSize: spec.captionFsU * u, marginTop: captionMt }} data-testid="text-cert-album">
-            <p className="whitespace-nowrap">{album.title} #{certNumStr}</p>
+            <p className="whitespace-nowrap">{album.title} {certNumStr}</p>
             <p className="whitespace-nowrap">by {album.artist}</p>
           </div>
         ) : (

@@ -128,6 +128,13 @@ function AlbumDetailMobile() {
   const [, navigate] = useLocation();
   const { playSong, currentSong, isPlaying, togglePlay, playNext, playLast, addToQueue, queue, currentIndex, previewMode, setPreviewMode, currentTime } = usePlayer();
   const isOwned = useAlbumOwnership(id);
+  // Task #909 — is this album an *active* admin-granted preview (vs a real
+  // owned/comp copy)? Drives the [Demo] GoodDeed cert. Server already
+  // excludes expired previews from /api/my-albums.
+  const { data: myAlbumsForPreview } = useQuery<Array<{ albumId: string; isPreview?: boolean }> | null>({
+    queryKey: ["/api/my-albums"],
+  });
+  const isPreviewAlbum = !!id && (myAlbumsForPreview ?? []).some((a) => a.albumId === id && a.isPreview);
   // Bill's own accounts (admin sessions + a small email allowlist) are
   // exempted from preview-first "for now" so they hear full-length tracks
   // on every album — including ones shared to an account that doesn't own
@@ -807,6 +814,7 @@ function AlbumDetailMobile() {
             }}
             certificateNumber={singleCertNum ?? album.certificateNumber ?? 1}
             certificateNumbers={singleCertNum !== null ? [singleCertNum] : album.ownedCertificates}
+            isPreview={isPreviewAlbum}
             onClose={() => { setShowCert(false); setSingleCertNum(null); }}
           />
         )}

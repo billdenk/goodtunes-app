@@ -16845,12 +16845,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         lastError: (song as any).muxLastError ?? null,
       });
     }
-    // TODO(phase 4): verify the requesting user owns the album OR the
-    // song is a free preview. Until ownership records exist, gate on
-    // authentication only.
+    // Task #909 — full-length playback is unlocked by the fan's actual
+    // collection entry (real owned/comp OR a non-expired preview) rather
+    // than the old hardcoded email allowlist. Admin/operator sessions keep
+    // full access. `fullAccess: false` signals the client to run the
+    // 30s-per-track preview session. We still sign + return the URL either
+    // way because the preview player needs it to play the first 30s — Mux
+    // can't clip server-side, so the cap is enforced client-side off this
+    // flag. (Minimal version of Task #839's ownership-driven playback.)
+    let fullAccess = req.session?.kind === "admin";
+    if (!fullAccess && req.session?.userId && (song as any).albumId) {
+      fullAccess = await storage.hasActiveAlbumAccess(
+        req.session.userId,
+        (song as any).albumId,
+      );
+    }
     try {
       const url = await signPlaybackUrl(song.muxPlaybackId);
-      res.json({ url, expiresInSec: 3600 });
+      res.json({ url, expiresInSec: 3600, fullAccess });
     } catch (err: any) {
       console.error("[playback-url] failed", err?.message);
       res.status(500).json({ message: err?.message || "Failed to sign playback URL" });
@@ -21143,6 +21155,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // player flow without standing up a real purchase. Lives next to the
   // customer profile route since the UI dock is on the same page. Uses
   // user_albums' (user_id, album_id) unique index for idempotency.
+  //
+  // Task #909 — when `preview: true` the grant is a time-boxed *preview*
+  // instead of a permanent comp: full-length playback for `previewHours`
+  // (default 24h), but it mints NO GoodDeed number, creates NO order, and
+  // counts toward nothing. A preview row is `is_preview=true` with a
+  // `preview_expires_at` deadline; reads treat an expired preview as
+  // "not granted". Re-granting a preview the fan already has refreshes
+  // the expiry (acts like Extend). We never silently downgrade an existing
+  // real owned/comp row into a preview.
   app.post(
     "/api/admin/customers/:id/grant-album",
     requireAdmin,
@@ -21150,16 +21171,78 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     async (req, res) => {
       const customerId = String(req.params.id);
       const albumId = String(req.body?.albumId || "").trim();
+      const preview = req.body?.preview === true;
       if (!albumId) return res.status(400).json({ message: "albumId required" });
       const profile = await storage.getAdminCustomerProfile(customerId);
       if (!profile) return res.status(404).json({ message: "Customer not found" });
       const [album] = await db.select().from(albums).where(eq(albums.id, albumId));
       if (!album) return res.status(404).json({ message: "Album not found" });
+
+      if (!preview) {
+        await db
+          .insert(userAlbums)
+          .values({ userId: customerId, albumId })
+          .onConflictDoNothing();
+        return res.json({ ok: true });
+      }
+
+      // Preview path. Default 24h; allow an override (1..720h) so the
+      // dialog can offer a different default later without a new route.
+      const rawHours = Number(req.body?.previewHours);
+      const hours = Number.isFinite(rawHours) && rawHours > 0 ? Math.min(rawHours, 720) : 24;
+      const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
+
+      const [existing] = await db
+        .select()
+        .from(userAlbums)
+        .where(and(eq(userAlbums.userId, customerId), eq(userAlbums.albumId, albumId)));
+      if (existing && !existing.isPreview) {
+        return res
+          .status(409)
+          .json({ message: "Fan already owns this album — can't grant a preview over it." });
+      }
+      if (existing) {
+        await db
+          .update(userAlbums)
+          .set({ isPreview: true, previewExpiresAt: expiresAt, certificateNumber: null })
+          .where(eq(userAlbums.id, existing.id));
+      } else {
+        await db
+          .insert(userAlbums)
+          .values({ userId: customerId, albumId, isPreview: true, previewExpiresAt: expiresAt });
+      }
+      return res.json({ ok: true, previewExpiresAt: expiresAt.toISOString() });
+    },
+  );
+
+  // Task #909 — extend (or shorten) an existing preview's expiry to an
+  // operator-chosen instant. Super-admin only; only touches preview rows.
+  app.post(
+    "/api/admin/customers/:id/extend-preview",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const customerId = String(req.params.id);
+      const albumId = String(req.body?.albumId || "").trim();
+      const expiresAtRaw = String(req.body?.expiresAt || "").trim();
+      if (!albumId) return res.status(400).json({ message: "albumId required" });
+      if (!expiresAtRaw) return res.status(400).json({ message: "expiresAt required" });
+      const expiresAt = new Date(expiresAtRaw);
+      if (Number.isNaN(expiresAt.getTime())) {
+        return res.status(400).json({ message: "expiresAt is not a valid date" });
+      }
+      const [existing] = await db
+        .select()
+        .from(userAlbums)
+        .where(and(eq(userAlbums.userId, customerId), eq(userAlbums.albumId, albumId)));
+      if (!existing || !existing.isPreview) {
+        return res.status(404).json({ message: "No preview to extend for this album" });
+      }
       await db
-        .insert(userAlbums)
-        .values({ userId: customerId, albumId })
-        .onConflictDoNothing();
-      res.json({ ok: true });
+        .update(userAlbums)
+        .set({ previewExpiresAt: expiresAt })
+        .where(eq(userAlbums.id, existing.id));
+      return res.json({ ok: true, previewExpiresAt: expiresAt.toISOString() });
     },
   );
 
