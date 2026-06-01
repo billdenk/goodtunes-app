@@ -251,8 +251,13 @@ export function CertPrint({
   // QR's right edge; top inset from the band top by the SAME gap the QR right edge
   // sits in from the band's right edge (= bandPad), so it tucks symmetrically into
   // the top-right corner where the logo used to be.
-  const holoW = HOLO_W_IN * 72;
-  const holoH = HOLO_H_IN * 72;
+  // Pull the guide in from its center by a few pt so its edges no longer overhang
+  // the QR plate (Bill: shrink each from center, no overage). Horizontal center
+  // already tracks the QR column center; top is nudged down by half so the
+  // vertical center stays put too.
+  const HOLO_SHRINK = 8;
+  const holoW = HOLO_W_IN * 72 - HOLO_SHRINK;
+  const holoH = HOLO_H_IN * 72 - HOLO_SHRINK;
   const rightColumn = (
     <>
       {signed ? (
@@ -263,7 +268,7 @@ export function CertPrint({
             // is centered in qrColW). Bill: keep the QR anchored, nudge the guide
             // right so it sits centered above the QR instead of flush-right.
             left: px(qrColLeftRel + qrColW / 2 - holoW / 2),
-            top: px(safeTopRel),
+            top: px(safeTopRel + HOLO_SHRINK / 2),
             width: px(holoW),
             height: px(holoH),
             border: "1px solid rgba(255,255,255,0.28)",
