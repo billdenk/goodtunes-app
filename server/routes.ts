@@ -9,6 +9,7 @@ import { MRP_DOMAIN, getPressCatalog } from "./pressCatalog";
 import { MRP_COLOR_LIBRARY_URL, type MrpParsedTile, maskToVinylDisc, parseMrpColorPage, matchFamilyToTier } from "./vendorColorScrape";
 import { closeSaleWindow as closeCertSaleWindow } from "./saleWindow";
 import { generateBatchPdf as generateCertBatchPdf, CERT_BATCH_STEPS } from "./certBatch";
+import { sqlConnectedAlbums, sqlNpoArtistAlbums } from "./adminAlbumQueries";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual, randomUUID, createHash } from "crypto";
@@ -17708,26 +17709,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     opts: { includePresses?: boolean } = {},
   ) {
     if (albumIds.length === 0) return { inQueue: [], released: [] };
-    const rows = await db.execute<AlbumPipelineRow>(sql`
-      SELECT
-        a.id,
-        a.title,
-        a.artwork AS cover_url,
-        a.first_sold_at,
-        a.is_goodtunes_release,
-        a.is_prepping,
-        a.is_hidden,
-        a.price_cents,
-        (SELECT name FROM people WHERE id = a.primary_artist_id) AS artist_name,
-        (SELECT COUNT(*)::int FROM album_skus WHERE album_id = a.id) AS sku_count,
-        (SELECT COUNT(*)::int FROM songs WHERE album_id = a.id) AS song_count,
-        (SELECT COUNT(*)::int FROM songs WHERE album_id = a.id AND audio_url IS NOT NULL AND audio_url <> '') AS songs_with_audio,
-        (SELECT COUNT(*)::int FROM songs WHERE album_id = a.id AND mux_status = 'ready') AS songs_mux_ready,
-        NULL::text AS connection_reason
-      FROM albums a
-      WHERE a.id = ANY(${albumIds})
-      ORDER BY a.first_sold_at DESC NULLS LAST, a.title ASC
-    `);
+    const rows = await db.execute<AlbumPipelineRow>(sqlConnectedAlbums(albumIds));
     const list = ((rows as any).rows ?? []).map((r: AlbumPipelineRow) => {
       const shaped = shapePipelineAlbum(r);
       shaped.connectionReason = reasonFor(r.id);
@@ -20836,22 +20818,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // yet so they're skipped from this query entirely.
     const albumsByArtist: Record<string, any[]> = {};
     if (activeArtistIds.length > 0) {
-      const albumRows = await db.execute<any>(sql`
-        SELECT a.id, a.title, a.artwork AS cover_url, a.primary_artist_id,
-          COALESCE((
-            SELECT SUM(oi.quantity)::int
-            FROM orders o
-            JOIN order_items oi ON oi.order_id = o.id AND oi.kind = 'format'
-            WHERE o.album_id = a.id AND o.status = 'paid'
-          ), 0) AS units
-        FROM albums a
-        WHERE a.primary_artist_id = ANY(${activeArtistIds}::varchar[])
-          AND EXISTS (
-            SELECT 1 FROM album_skus s
-            WHERE s.album_id = a.id AND s.active = true
-          )
-        ORDER BY a.title ASC
-      `);
+      const albumRows = await db.execute<any>(sqlNpoArtistAlbums(activeArtistIds));
       for (const ar of ((albumRows as any).rows ?? []) as any[]) {
         const list = albumsByArtist[ar.primary_artist_id] ?? [];
         list.push({ id: ar.id, title: ar.title, coverUrl: ar.cover_url, paidUnits: ar.units });

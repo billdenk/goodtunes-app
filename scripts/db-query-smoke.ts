@@ -38,6 +38,10 @@ import {
   sqlPaidPaymentIntentsForAlbum,
   sqlEarlyCutPoolsForPress,
 } from "../server/pressPortal";
+import {
+  sqlConnectedAlbums,
+  sqlNpoArtistAlbums,
+} from "../server/adminAlbumQueries";
 
 // Stable dummy bind values — content is irrelevant because EXPLAIN never
 // executes the query; only the column/table references are validated.
@@ -64,6 +68,9 @@ const SMOKE_QUERIES: { name: string; sql: SQL }[] = [
   { name: "pressPortal.pipeline", sql: sqlPressPipeline(PRESS) },
   { name: "pressPortal.paidPaymentIntentsForAlbum", sql: sqlPaidPaymentIntentsForAlbum(ALBUM) },
   { name: "pressPortal.earlyCutPoolsForPress", sql: sqlEarlyCutPoolsForPress(PRESS) },
+  // server/adminAlbumQueries.ts
+  { name: "adminAlbumQueries.connectedAlbums", sql: sqlConnectedAlbums([ALBUM]) },
+  { name: "adminAlbumQueries.npoArtistAlbums", sql: sqlNpoArtistAlbums([ALBUM]) },
 ];
 
 async function main() {
