@@ -1,6 +1,10 @@
 import type { CSSProperties, ReactNode } from "react";
 import appleMusicLogoSrc from "../../../assets/brand/apple-music.svg";
 import spotifyLogoSrc from "../../../assets/brand/spotify.svg";
+import tidalLogoSrc from "../../../assets/brand/tidal.svg";
+import qobuzLogoSrc from "../../../assets/brand/qobuz.svg";
+import deezerLogoSrc from "../../../assets/brand/deezer.svg";
+import pandoraLogoSrc from "../../../assets/brand/pandora.svg";
 
 export const ALBUM = {
   title: "Here Now Evolve",
@@ -30,6 +34,14 @@ export function AlbumArt({ size = 176 }: { size?: number }) {
 // against #0E1334; dropping to /10 + blur reads as actual glass), or a
 // soft black/8 on light surfaces. X glyph is pure white (or near-black)
 // at full opacity so it doesn't smudge into the chip.
+// Visible glyph stays a 30px Apple-style chip, but the button itself is a
+// full 44x44 tap target (transparent padding around the chip) so it clears
+// the HIG mobile minimum. SheetShell offsets its wrapper by the 7px padding
+// so the visible chip lands in the same spot as before.
+export const CLOSE_HIT = 44;
+export const CLOSE_CHIP = 30;
+export const CLOSE_PAD = (CLOSE_HIT - CLOSE_CHIP) / 2; // 7
+
 export function CloseX({ tone = "onDark" }: { tone?: "onDark" | "onLight" }) {
   const bg = tone === "onDark" ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.06)";
   const stroke = tone === "onDark" ? "#ffffff" : "rgba(0,0,0,0.65)";
@@ -38,12 +50,9 @@ export function CloseX({ tone = "onDark" }: { tone?: "onDark" | "onLight" }) {
       type="button"
       aria-label="Close"
       style={{
-        width: 30,
-        height: 30,
-        borderRadius: 999,
-        background: bg,
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
+        width: CLOSE_HIT,
+        height: CLOSE_HIT,
+        background: "transparent",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -53,14 +62,28 @@ export function CloseX({ tone = "onDark" }: { tone?: "onDark" | "onLight" }) {
         padding: 0,
       }}
     >
-      <svg width={12} height={12} viewBox="0 0 12 12" aria-hidden="true">
-        <path
-          d="M1.5 1.5 L10.5 10.5 M10.5 1.5 L1.5 10.5"
-          stroke={stroke}
-          strokeWidth={2.2}
-          strokeLinecap="round"
-        />
-      </svg>
+      <span
+        style={{
+          width: CLOSE_CHIP,
+          height: CLOSE_CHIP,
+          borderRadius: 999,
+          background: bg,
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <svg width={12} height={12} viewBox="0 0 12 12" aria-hidden="true">
+          <path
+            d="M1.5 1.5 L10.5 10.5 M10.5 1.5 L1.5 10.5"
+            stroke={stroke}
+            strokeWidth={2.2}
+            strokeLinecap="round"
+          />
+        </svg>
+      </span>
     </button>
   );
 }
@@ -108,7 +131,7 @@ export function SheetShell({
       >
         {/* Apple's sheet close sits noticeably inset from the corner —
             more to the left and further down than a hugging corner chip. */}
-        <div style={{ position: "absolute", right: 22, top: 26 }}>
+        <div style={{ position: "absolute", right: 22 - CLOSE_PAD, top: 26 - CLOSE_PAD }}>
           <CloseX tone={closeTone} />
         </div>
         {children}
@@ -267,4 +290,60 @@ export function ListenOnSpotifyBadge({ height = 52 }: { height?: number }) {
 
 export function pressFx(): CSSProperties {
   return { transition: "transform 0.15s ease, background 0.15s ease" };
+}
+
+// --- Streaming service registry ---
+// All six services GoodTunes hands off to. Each logo is a square app icon
+// with its own rounded-rect background baked in (rx=40 on a 180 viewbox),
+// so they render uniformly as <img> at any size — no recoloring, no extra
+// container, per each brand's linking guidelines.
+export type StreamingService = {
+  name: string;
+  src: string;
+  accent: string; // brand color, used only for the picked/default state ring
+};
+
+export const STREAMING_SERVICES: StreamingService[] = [
+  { name: "Apple Music", src: appleMusicLogoSrc, accent: "#FA2D48" },
+  { name: "Spotify", src: spotifyLogoSrc, accent: "#1ED760" },
+  { name: "Tidal", src: tidalLogoSrc, accent: "#000000" },
+  { name: "Qobuz", src: qobuzLogoSrc, accent: "#000000" },
+  { name: "Deezer", src: deezerLogoSrc, accent: "#A238FF" },
+  { name: "Pandora", src: pandoraLogoSrc, accent: "#3668FF" },
+];
+
+// Generic service icon — square app icon, corners already baked in.
+export function ServiceIcon({ src, name, size = 48 }: { src: string; name: string; size?: number }) {
+  return (
+    <img
+      src={src}
+      alt={name}
+      width={size}
+      height={size}
+      style={{ display: "block", flexShrink: 0, borderRadius: Math.round(size * 0.22) }}
+    />
+  );
+}
+
+// "DEFAULT" pill — used to mark the fan's saved service in lists/menus.
+export function DefaultChip() {
+  return (
+    <span
+      style={{
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: "0.10em",
+        textTransform: "uppercase",
+        color: "#4AFFCA",
+        background: "rgba(74,255,202,0.14)",
+        border: "1px solid rgba(74,255,202,0.30)",
+        borderRadius: 999,
+        padding: "3px 9px",
+        lineHeight: 1,
+        flexShrink: 0,
+      }}
+    >
+      Default
+    </span>
+  );
 }
