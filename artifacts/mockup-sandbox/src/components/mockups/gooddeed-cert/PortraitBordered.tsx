@@ -21,6 +21,14 @@ import type { StoryData } from "./Stories";
 const LOGO = "/__mockup/images/goodtunes-logo-white.png";
 const GOODTUNES_ORANGE = "var(--brand-orange)";
 
+// Named album art so canvas A/B tiles can swap the image via ?art=NAME and we can
+// preview the background treatment against real-feeling covers (faces, busy art).
+const ART: Record<string, string> = {
+  california: "/__mockup/images/album-california-way.png",
+  guitar: "/__mockup/images/album-guitar-as-a-voice.png",
+  sample: "/__mockup/images/sample-album-art.png",
+};
+
 const data: StoryData = {
   art: "/__mockup/images/album-california-way.png",
   ownerPhoto: "/__mockup/images/sample-owner-photo.png",
@@ -36,8 +44,35 @@ function nameFontSize(name: string, u: number): number {
   return base * u;
 }
 
-export function BorderedPortraitCard({ overlay, radius = 22 }: { overlay?: ReactNode; radius?: number }) {
-  const { art, ownerPhoto, album, ownerName, certNumStr } = data;
+export function BorderedPortraitCard({
+  overlay,
+  radius = 22,
+  art: artProp,
+  bg = "slab",
+  blur = 0,
+  gblur = 0,
+}: {
+  overlay?: ReactNode;
+  radius?: number;
+  art?: string;
+  // "slab" = shipped look (art band fades into a solid navy lower half).
+  // "bleed" = album art fills the whole card behind a lighter navy scrim, so the
+  //           cover stays visible the whole way down (more transparent feel).
+  // "bleed-dark" = same full-bleed SHARP art as "bleed", but a deeper navy scrim
+  //           so the whole card reads richer/darker and blends down into navy
+  //           like the slab — the album stays clearly visible, just dimmed.
+  bg?: "slab" | "bleed" | "bleed-dark";
+  // Background blur in preview px (only meaningful for bg="bleed"). 0 = crisp.
+  blur?: number;
+  // Graduated background blur in preview px: a blurred copy of the cover is
+  // layered over the sharp one and masked so the blur is strongest at the BOTTOM
+  // and clears to fully sharp by the midway line. 0 = off. Pairs with bg="bleed*".
+  gblur?: number;
+}) {
+  const { ownerPhoto, album, ownerName, certNumStr } = data;
+  const art = artProp ?? data.art;
+  const bleed = bg === "bleed" || bg === "bleed-dark";
+  const darkBleed = bg === "bleed-dark";
 
   // Preview at w = 360 with the same u = w/1080 scale the exporter uses. 4:5 →
   // height = w * 1350/1080.
@@ -47,6 +82,13 @@ export function BorderedPortraitCard({ overlay, radius = 22 }: { overlay?: React
 
   const captionOneLine = `${album.title} by ${album.artist} #${certNumStr}`;
   const captionWraps = captionOneLine.length > 34;
+
+  // Lower, lighter scrim for the full-bleed treatment: the cover stays visible up
+  // top and only deepens toward the bottom enough to keep the caption legible —
+  // noticeably more transparent than the slab, which goes fully solid below 92%.
+  const bleedScrim = darkBleed
+    ? "linear-gradient(180deg, rgba(0,6,43,0.18) 0%, rgba(0,6,43,0.40) 40%, rgba(0,6,43,0.86) 72%, rgba(0,6,43,1) 100%)"
+    : "linear-gradient(180deg, rgba(0,6,43,0.10) 0%, rgba(0,6,43,0.30) 42%, rgba(0,6,43,0.68) 78%, rgba(0,6,43,0.90) 100%)";
 
   return (
     <div
@@ -61,18 +103,63 @@ export function BorderedPortraitCard({ overlay, radius = 22 }: { overlay?: React
         boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
       }}
     >
+      {/* FULL-BLEED treatment: album art fills the whole card behind a navy
+          scrim. The avatar/text below sit on their own layer and stay crisp. */}
+      {bleed && (
+        <>
+          <img
+            src={art}
+            alt={album.title}
+            className="absolute inset-0 w-full h-full object-cover object-top block"
+            style={{
+              zIndex: 0,
+              filter: blur > 0 ? `blur(${blur}px)` : undefined,
+              transform: blur > 0 ? "scale(1.12)" : undefined,
+              transformOrigin: "center",
+            }}
+          />
+          {/* Graduated blur: a blurred copy of the cover, masked so it only shows
+              in the lower half — strongest at the bottom, fully faded (sharp) by
+              the midway line. Sits above the sharp art, below the scrim. */}
+          {gblur > 0 && (
+            <img
+              src={art}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 w-full h-full object-cover object-top block"
+              style={{
+                zIndex: 0,
+                filter: `blur(${gblur}px)`,
+                transform: "scale(1.12)",
+                transformOrigin: "center",
+                WebkitMaskImage:
+                  "linear-gradient(180deg, rgba(0,0,0,0) 48%, rgba(0,0,0,1) 92%)",
+                maskImage:
+                  "linear-gradient(180deg, rgba(0,0,0,0) 48%, rgba(0,0,0,1) 92%)",
+              }}
+            />
+          )}
+          <div className="absolute inset-0" style={{ zIndex: 0, background: bleedScrim }} />
+        </>
+      )}
+
       {/* Album-art band at the top, with a long soft fade into navy (matches the
           approved Story blend so the seam is seamless). 4:5 affords a taller,
-          near-square art window. */}
-      <div className="relative w-full shrink-0" style={{ height: 690 * u }}>
-        <img src={art} alt={album.title} className="w-full h-full object-cover object-top block" />
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(180deg, rgba(0,6,43,0) 48%, rgba(0,6,43,0.6) 76%, rgba(0,6,43,0.95) 93%, var(--brand-bg) 100%)",
-          }}
-        />
+          near-square art window. In bleed mode this becomes a transparent spacer
+          so the avatar/text keep the exact same positions. */}
+      <div className="relative w-full shrink-0" style={{ height: 690 * u, zIndex: 1 }}>
+        {!bleed && (
+          <>
+            <img src={art} alt={album.title} className="w-full h-full object-cover object-top block" />
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(0,6,43,0) 48%, rgba(0,6,43,0.6) 76%, rgba(0,6,43,0.95) 93%, var(--brand-bg) 100%)",
+              }}
+            />
+          </>
+        )}
       </div>
 
       {/* Lower section — relative+z so the avatar paints ON TOP of the album art */}
@@ -144,12 +231,23 @@ export function BorderedPortraitCard({ overlay, radius = 22 }: { overlay?: React
 }
 
 export function PortraitBordered() {
+  const params = new URLSearchParams(window.location.search);
   // Approved/locked card radius is 22 (matches the Story). Optional ?r=NN A/B.
-  const raw = Number(new URLSearchParams(window.location.search).get("r") ?? "22");
+  const raw = Number(params.get("r") ?? "22");
   const r = Number.isFinite(raw) ? Math.max(0, Math.round(raw)) : 22;
+  // Canvas A/B knobs: ?art=guitar|california|sample, ?bg=slab|bleed|bleed-dark,
+  // ?blur=NN(px), ?gblur=NN(px) — mirrors SquareBordered.
+  const artName = params.get("art");
+  const art = artName ? ART[artName] ?? undefined : undefined;
+  const bgParam = params.get("bg");
+  const bg = bgParam === "bleed" ? "bleed" : bgParam === "bleed-dark" ? "bleed-dark" : "slab";
+  const blurRaw = Number(params.get("blur") ?? "0");
+  const blur = Number.isFinite(blurRaw) ? Math.max(0, blurRaw) : 0;
+  const gblurRaw = Number(params.get("gblur") ?? "0");
+  const gblur = Number.isFinite(gblurRaw) ? Math.max(0, gblurRaw) : 0;
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "#05030f" }}>
-      <BorderedPortraitCard radius={r} />
+      <BorderedPortraitCard radius={r} art={art} bg={bg} blur={blur} gblur={gblur} />
     </div>
   );
 }
