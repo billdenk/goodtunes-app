@@ -116,12 +116,19 @@ export function CertPrint({
   matBoxIn,
   sample,
   artistPhoto,
+  lowerCreditLockup,
 }: {
   paper: Paper;
   frame: Frame;
   art?: string;
   // The round avatar's artist profile photo (defaults to the sample artist).
   artistPhoto?: string;
+  // Letter normal-name tile only: seat the William credit just under the
+  // William credit + footnote bottom lock-up a touch lower (and, in tandem, the
+  // QR caption) so the signature squiggle clears the William line — the squiggle
+  // stays put. The long-name tile leaves this off so a 2-line headline's squiggle
+  // keeps its intentional overlap with William (no room to drop the lock-up).
+  lowerCreditLockup?: boolean;
   insetIn?: number;
   bleedIn?: number;
   // [widthIn, heightIn] of a real mat/frame window, drawn centered on the sheet
@@ -202,7 +209,7 @@ export function CertPrint({
 
   // Letter footnote breathing room + QR lock-up alignment (consumed below in
   // rightColumn and the Letter leftBlock):
-  const footBottomGap = 9;     // pt the provenance footnote rises off the band bottom (off the orange border)
+  const footBottomGap = lowerCreditLockup ? 6 : 9; // pt the provenance footnote rises off the band bottom (off the orange border); normal-name tile sits a touch lower so the squiggle clears William
   const qrCaptionBottomRel = pad + footBottomGap - 5; // drop the QR+caption lock-up so the caption baseline lands on the footnote's last line
 
   const isA4 = (layout ?? paper) === "a4";
@@ -354,15 +361,21 @@ export function CertPrint({
       >
         {titleRow}
       </div>
-      {/* Headline + signature squiggle, top-anchored under the artist name. The
-          squiggle is free to overlap the credit lock-up below when the headline
-          wraps to two lines (intentional). */}
+      {/* Headline + signature squiggle, top-anchored under the artist name. On
+          the normal-name tile (lowerCreditLockup) the William credit is seated just
+          under the squiggle here; the long-name tile keeps it in the bottom
+          lock-up so a 2-line headline's squiggle can't crash into it. */}
       <div
         style={{
           position: "absolute",
           left: px(bodyXRel),
           top: px(headlineYRel),
           width: px(bodyW),
+          // Normal-name tile: lift the headline+signature block above the credit
+          // lock-up so the squiggle's ink reads continuously IN FRONT of the
+          // "William…" line where they meet (instead of the name punching through
+          // the stroke). The long-name tile leaves stacking in DOM order.
+          zIndex: lowerCreditLockup ? 1 : undefined,
         }}
       >
         <div
@@ -383,7 +396,10 @@ export function CertPrint({
         />
       </div>
       {/* William credit + provenance footnote: one bottom-anchored lock-up that
-          always keeps its breathing space off the orange border. */}
+          keeps its breathing space off the orange border, its last line on the QR
+          caption baseline. On the normal-name tile (lowerCreditLockup) it sits a
+          touch lower (footBottomGap) so the signature squiggle clears the William
+          line; the long-name tile keeps the squiggle's intentional overlap. */}
       <div
         style={{
           position: "absolute",
@@ -473,11 +489,13 @@ export function CertStage({
   matBoxIn,
   sample,
   artistPhoto,
+  lowerCreditLockup,
 }: {
   paper: Paper;
   frame: Frame;
   art?: string;
   artistPhoto?: string;
+  lowerCreditLockup?: boolean;
   insetIn?: number;
   bleedIn?: number;
   frameRevealWin?: [number, number];
@@ -490,7 +508,7 @@ export function CertStage({
       className="min-h-screen flex items-center justify-center"
       style={{ background: "#E9EBF0", padding: 28 }}
     >
-      <CertPrint paper={paper} frame={frame} art={art} insetIn={insetIn} bleedIn={bleedIn} frameRevealWin={frameRevealWin} layout={layout} matBoxIn={matBoxIn} sample={sample} artistPhoto={artistPhoto} />
+      <CertPrint paper={paper} frame={frame} art={art} insetIn={insetIn} bleedIn={bleedIn} frameRevealWin={frameRevealWin} layout={layout} matBoxIn={matBoxIn} sample={sample} artistPhoto={artistPhoto} lowerCreditLockup={lowerCreditLockup} />
     </div>
   );
 }
