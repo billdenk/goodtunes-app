@@ -26,6 +26,15 @@ const ORANGE = "var(--brand-orange)";
 // nothing else has to change.)
 const SHOW_FRAME_WINDOW = false;
 
+// PRINT (signed GoodDeed) ONLY: the printed/signed copies get a holographic
+// authenticity sticker applied by fulfillment, in place of the GoodTunes logo.
+// The `signed` cert variant swaps the logo for a thin 50%-white rounded-rect
+// PLACEMENT GUIDE so there's no question where the sticker goes. Sized a hair
+// under the real 0.8"w x 0.75"h sticker so the sticker fully covers the guide.
+// The free PDF (everyone gets with a purchase) keeps the logo (signed = false).
+const HOLO_W_IN = 0.78;
+const HOLO_H_IN = 0.73;
+
 type Paper = "letter" | "a4";
 type Frame = "navy" | "orange" | "bordered";
 
@@ -124,10 +133,15 @@ export function CertPrint({
   artistPhoto,
   lowerCreditLockup,
   longLockup,
+  signed,
 }: {
   paper: Paper;
   frame: Frame;
   art?: string;
+  // PRINT (signed GoodDeed) variant: swap the GoodTunes logo for the holographic
+  // sticker placement guide (thin 50%-white rounded rect). Free PDF leaves this
+  // false and keeps the logo.
+  signed?: boolean;
   // The round avatar's artist profile photo (defaults to the sample artist).
   artistPhoto?: string;
   // Letter normal-name tile: drop the William credit + footnote + QR-caption
@@ -227,19 +241,41 @@ export function CertPrint({
 
   // ── Right column (logo top, QR + caption bottom) — anchored to band edges on
   //    BOTH paper sizes, per the template.
+  // Holo sticker placement guide (PRINT/signed only). Right edge in line with the
+  // QR's right edge; top inset from the band top by the SAME gap the QR right edge
+  // sits in from the band's right edge (= bandPad), so it tucks symmetrically into
+  // the top-right corner where the logo used to be.
+  const holoW = HOLO_W_IN * 72;
+  const holoH = HOLO_H_IN * 72;
   const rightColumn = (
     <>
-      <img
-        src={LOGO}
-        alt="GoodTunes"
-        style={{
-          position: "absolute",
-          left: px(qrColRightRel - d.logoW),
-          top: px(safeTopRel),
-          width: px(d.logoW),
-          display: "block",
-        }}
-      />
+      {signed ? (
+        <div
+          style={{
+            position: "absolute",
+            left: px(qrColRightRel - holoW),
+            top: px(safeTopRel),
+            width: px(holoW),
+            height: px(holoH),
+            border: "1px solid rgba(255,255,255,0.5)",
+            borderRadius: px(5),
+            boxSizing: "border-box",
+            pointerEvents: "none",
+          }}
+        />
+      ) : (
+        <img
+          src={LOGO}
+          alt="GoodTunes"
+          style={{
+            position: "absolute",
+            left: px(qrColRightRel - d.logoW),
+            top: px(safeTopRel),
+            width: px(d.logoW),
+            display: "block",
+          }}
+        />
+      )}
       <div
         style={{
           position: "absolute",
@@ -539,6 +575,7 @@ export function CertStage({
   artistPhoto,
   lowerCreditLockup,
   longLockup,
+  signed,
 }: {
   paper: Paper;
   frame: Frame;
@@ -546,6 +583,7 @@ export function CertStage({
   artistPhoto?: string;
   lowerCreditLockup?: boolean;
   longLockup?: boolean;
+  signed?: boolean;
   insetIn?: number;
   bleedIn?: number;
   frameRevealWin?: [number, number];
@@ -558,7 +596,7 @@ export function CertStage({
       className="min-h-screen flex items-center justify-center"
       style={{ background: "#E9EBF0", padding: 28 }}
     >
-      <CertPrint paper={paper} frame={frame} art={art} insetIn={insetIn} bleedIn={bleedIn} frameRevealWin={frameRevealWin} layout={layout} matBoxIn={matBoxIn} sample={sample} artistPhoto={artistPhoto} lowerCreditLockup={lowerCreditLockup} longLockup={longLockup} />
+      <CertPrint paper={paper} frame={frame} art={art} insetIn={insetIn} bleedIn={bleedIn} frameRevealWin={frameRevealWin} layout={layout} matBoxIn={matBoxIn} sample={sample} artistPhoto={artistPhoto} lowerCreditLockup={lowerCreditLockup} longLockup={longLockup} signed={signed} />
     </div>
   );
 }
