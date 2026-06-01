@@ -118,9 +118,10 @@ import {
   printGenerations,
   printArtifacts,
 } from "@shared/schema";
-import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "./db";
 import { softDeleteEntity } from "./softDelete";
+import { todayISODate } from "@shared/albumStage";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -975,7 +976,19 @@ export class DbStorage implements IStorage {
     // read path; the only surface that sees them is /admin/trash via
     // raw SQL in server/softDelete.ts.
     const conds = [isNull(albums.deletedAt)];
-    if (!opts?.includeHidden) conds.push(eq(albums.isHidden, false));
+    if (!opts?.includeHidden) {
+      conds.push(eq(albums.isHidden, false));
+      // Task #800 — sunrise gate. A future-dated GoodTunes release sits in
+      // the admin "Staged" tab and must NOT be visible to fans until its
+      // date arrives. Dateless/today/past albums stay live. Admin
+      // (includeHidden) reads skip this so Staged rows stay editable.
+      conds.push(
+        or(
+          isNull(albums.goodTunesReleaseDate),
+          lte(albums.goodTunesReleaseDate, todayISODate()),
+        )!,
+      );
+    }
     const rows = await db
       .select()
       .from(albums)
@@ -996,6 +1009,16 @@ export class DbStorage implements IStorage {
     if (!row) return undefined;
     if (row.albums.deletedAt && !opts?.includeTrashed) return undefined;
     if (row.albums.isHidden && !opts?.includeHidden) return undefined;
+    // Task #800 — sunrise gate, mirrored from getAlbums. A future-dated
+    // album reads as not-found for fans (404) until its date arrives;
+    // admin (includeHidden) reads keep returning it for the Staged tab.
+    if (
+      !opts?.includeHidden &&
+      row.albums.goodTunesReleaseDate &&
+      row.albums.goodTunesReleaseDate > todayISODate()
+    ) {
+      return undefined;
+    }
     return { ...row.albums, label: row.labels ?? null };
   }
   async getSongsByAlbum(albumId: string): Promise<Song[]> {
@@ -1034,7 +1057,20 @@ export class DbStorage implements IStorage {
       .select({ song: songs })
       .from(songs)
       .innerJoin(albums, eq(songs.albumId, albums.id))
-      .where(and(eq(albums.isHidden, false), isNull(songs.deletedAt), isNull(albums.deletedAt)));
+      .where(
+        and(
+          eq(albums.isHidden, false),
+          isNull(songs.deletedAt),
+          isNull(albums.deletedAt),
+          // Task #800 — sunrise gate, mirrored from getAlbums so fans
+          // can't enumerate songs from a future-dated (Staged) album
+          // before its date arrives.
+          or(
+            isNull(albums.goodTunesReleaseDate),
+            lte(albums.goodTunesReleaseDate, todayISODate()),
+          ),
+        ),
+      );
     return rows.map((r) => normalizePreviewHide(r.song));
   }
   async createAlbum(data: Omit<Album, "id"> & { id?: string }): Promise<Album> {

@@ -22,6 +22,7 @@ import {
 import { Combobox } from "@/components/admin/Combobox";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { NewAlbumTitleDialog } from "@/components/admin/NewAlbumTitleDialog";
+import { albumStage } from "@shared/albumStage";
 
 /**
  * Admin home · Albums (Phase 1).
@@ -34,7 +35,9 @@ import { NewAlbumTitleDialog } from "@/components/admin/NewAlbumTitleDialog";
  *   - Prepping — we're working on it (Task #440: `isPrepping=true` on the
  *                row, i.e. a new GoodTunes shell that hasn't been promoted
  *                to Released yet — artwork swap, tracks, pricing pending)
- *   - Staged   — ready, waiting for sunrise (today: schema doesn't model this; count is 0)
+ *   - Staged   — ready, waiting for sunrise (Task #800: a finished
+ *                GoodTunes release whose `goodTunesReleaseDate` is still
+ *                in the future; derived from the date, no schema field)
  *   - Released — visible for purchase (isGoodTunesRelease && !isHidden).
  *                Industry standard term (Apple Music, Spotify, every
  *                distro / label tool says "Released"); we used "Live"
@@ -185,14 +188,21 @@ export function AdminAlbums() {
       // New "+ Add Album" shells land here; admin promotes them to Released
       // from the album page once artwork / tracks / pricing are in place.
       prepping: albums.filter(
-        (a) => a.isGoodTunesRelease && a.isPrepping && !a.isHidden,
+        (a) => a.isGoodTunesRelease && albumStage(a) === "prepping",
       ).length,
-      // No schema field for staged yet — see Storefront in docs/roadmap.md.
-      staged: 0,
+      // Task #800 — Staged is no longer a dead placeholder: it's every
+      // GoodTunes release that's finished but whose sunrise
+      // (`goodTunesReleaseDate`) is still in the future. Derived from the
+      // date via the shared `albumStage` helper.
+      staged: albums.filter(
+        (a) => a.isGoodTunesRelease && albumStage(a) === "staged",
+      ).length,
       live: albums.filter(
-        (a) => a.isGoodTunesRelease && !a.isPrepping && !a.isHidden,
+        (a) => a.isGoodTunesRelease && albumStage(a) === "released",
       ).length,
-      sunset: albums.filter((a) => a.isGoodTunesRelease && a.isHidden).length,
+      sunset: albums.filter(
+        (a) => a.isGoodTunesRelease && albumStage(a) === "sunset",
+      ).length,
     }),
     [albums],
   );
@@ -205,16 +215,20 @@ export function AdminAlbums() {
     switch (tab) {
       case "prepping":
         return albums.filter(
-          (a) => a.isGoodTunesRelease && a.isPrepping && !a.isHidden,
+          (a) => a.isGoodTunesRelease && albumStage(a) === "prepping",
         );
       case "staged":
-        return [];
+        return albums.filter(
+          (a) => a.isGoodTunesRelease && albumStage(a) === "staged",
+        );
       case "live":
         return albums.filter(
-          (a) => a.isGoodTunesRelease && !a.isPrepping && !a.isHidden,
+          (a) => a.isGoodTunesRelease && albumStage(a) === "released",
         );
       case "sunset":
-        return albums.filter((a) => a.isGoodTunesRelease && a.isHidden);
+        return albums.filter(
+          (a) => a.isGoodTunesRelease && albumStage(a) === "sunset",
+        );
     }
   }, [albums, tab]);
 
@@ -335,7 +349,7 @@ export function AdminAlbums() {
       case "prepping":
         return "Nothing in prepping. GoodTunes releases that are still being worked on will show up here once the lifecycle enum lands.";
       case "staged":
-        return "Staged releases (ready, waiting for sunrise) will appear here when the schedule schema lands.";
+        return "Nothing staged. Finished releases scheduled for a future date wait here for sunrise, then go live for fans automatically.";
       case "live":
         return "No released albums yet. Tap + to create one.";
       case "sunset":
