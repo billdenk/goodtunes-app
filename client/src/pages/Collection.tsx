@@ -269,6 +269,15 @@ export function Collection() {
   // hairline divider, and soft elevation on the glass layer.
   const barRef = useRef<HTMLDivElement>(null);
   const glassRef = useRef<HTMLDivElement>(null);
+  // Task #895 — single source of truth for where the scope bar docks. The
+  // bar sticks flush just under the device status bar (safe-area inset, with
+  // a 64px floor so it always clears a notch / Dynamic Island even off a
+  // standalone PWA). The scroll container masks everything above this line to
+  // fully transparent so NO scrolling content peeks through the gap above the
+  // docked bar — content slides cleanly behind the bar's glass instead of
+  // floating above it. The JS "stuck" check below resolves this same value
+  // off the bar's computed `top`, so all three stay in lock-step.
+  const BAR_DOCK = "max(64px, env(safe-area-inset-top, 0px))";
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -294,8 +303,12 @@ export function Collection() {
       // has actually stuck to the top with content scrolling behind it.
       // At rest it sits flush below the Collection title with no chrome.
       if (barRef.current && glassRef.current) {
+        // Resolve the dock offset (BAR_DOCK / `max(64px, safe-area)`) straight
+        // off the bar's computed `top` so the stuck threshold tracks the same
+        // value the bar actually sticks at — no hardcoded 64/65 to drift.
+        const dockPx = parseFloat(getComputedStyle(barRef.current).top) || 0;
         const stuck =
-          barRef.current.getBoundingClientRect().top - el.getBoundingClientRect().top <= 65;
+          barRef.current.getBoundingClientRect().top - el.getBoundingClientRect().top <= dockPx + 1;
         const g = glassRef.current.style;
         g.background = stuck ? "rgba(0,6,43,0.72)" : "rgba(0,6,43,0)";
         g.borderBottomColor = stuck ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0)";
@@ -446,8 +459,14 @@ export function Collection() {
           ref={scrollRef}
           className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]"
           style={{
-            WebkitMaskImage: "linear-gradient(to bottom, transparent 0px, #000 64px)",
-            maskImage: "linear-gradient(to bottom, transparent 0px, #000 64px)",
+            // Task #895 — hard cut (fully transparent up to the dock line, then
+            // opaque) rather than a soft fade. A gradient fade leaves the first
+            // ~64px of scrolling content partly visible above the docked bar —
+            // the "floating pill" look. Hiding that band outright means content
+            // disappears exactly at the bar's top edge / hairline, reading as
+            // content sliding cleanly behind the glass.
+            WebkitMaskImage: `linear-gradient(to bottom, transparent 0px, transparent ${BAR_DOCK}, #000 ${BAR_DOCK})`,
+            maskImage: `linear-gradient(to bottom, transparent 0px, transparent ${BAR_DOCK}, #000 ${BAR_DOCK})`,
           }}
         >
           <div ref={contentRef}>
@@ -516,7 +535,7 @@ export function Collection() {
               the padded content) so the sort menu's `fixed` scrim still
               escapes to the viewport instead of being trapped by a filter
               containing-block. */}
-          <div ref={barRef} className="sticky top-[64px] z-30">
+          <div ref={barRef} className="sticky z-30" style={{ top: BAR_DOCK }}>
             <div
               ref={glassRef}
               aria-hidden
