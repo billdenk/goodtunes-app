@@ -118,11 +118,19 @@ export function BorderedPortraitCard({
               zIndex: 0,
               height: "auto",
               filter: blur > 0 ? `blur(${blur}px)` : undefined,
+              // Dissolve the album's OWN bottom edge into transparent over a long
+              // ramp so there is no hard pixel cut where the square ends — it melts
+              // into the navy below instead of stopping abruptly.
+              WebkitMaskImage:
+                "linear-gradient(180deg, #000 0%, #000 55%, rgba(0,0,0,0) 100%)",
+              maskImage:
+                "linear-gradient(180deg, #000 0%, #000 55%, rgba(0,0,0,0) 100%)",
             }}
           />
-          {/* Graduated blur: a blurred copy of the cover, masked so it only shows
-              toward the BOTTOM of the album and clears to fully sharp by the
-              midway line. Sits above the sharp art, below the scrim. */}
+          {/* Graduated blur: a blurred copy of the cover, shown as a soft BAND in
+              the lower-middle of the album — fades in from sharp above and fades
+              back out to transparent before the album's bottom, so it reinforces
+              the melt-into-navy instead of re-introducing a hard edge. */}
           {gblur > 0 && (
             <img
               src={art}
@@ -134,9 +142,9 @@ export function BorderedPortraitCard({
                 height: "auto",
                 filter: `blur(${gblur}px)`,
                 WebkitMaskImage:
-                  "linear-gradient(180deg, rgba(0,0,0,0) 48%, rgba(0,0,0,1) 92%)",
+                  "linear-gradient(180deg, rgba(0,0,0,0) 42%, rgba(0,0,0,1) 64%, rgba(0,0,0,1) 80%, rgba(0,0,0,0) 100%)",
                 maskImage:
-                  "linear-gradient(180deg, rgba(0,0,0,0) 48%, rgba(0,0,0,1) 92%)",
+                  "linear-gradient(180deg, rgba(0,0,0,0) 42%, rgba(0,0,0,1) 64%, rgba(0,0,0,1) 80%, rgba(0,0,0,0) 100%)",
               }}
             />
           )}
