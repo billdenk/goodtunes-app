@@ -26,6 +26,7 @@ const GOODTUNES_ORANGE = "var(--brand-orange)";
 const ART: Record<string, string> = {
   california: "/__mockup/images/album-california-way.png",
   guitar: "/__mockup/images/album-guitar-as-a-voice.png",
+  nick: "/__mockup/images/album-nick-love-life-tragedy.jpg",
   sample: "/__mockup/images/sample-album-art.png",
 };
 
