@@ -107,31 +107,32 @@ export function BorderedPortraitCard({
           scrim. The avatar/text below sit on their own layer and stay crisp. */}
       {bleed && (
         <>
+          {/* Album is square — show it FULL WIDTH at its natural height anchored to
+              the top (no object-cover crop / zoom), so the whole cover is visible.
+              The taller 4:5 card leaves navy below, which the scrim blends into. */}
           <img
             src={art}
             alt={album.title}
-            className="absolute inset-0 w-full h-full object-cover object-top block"
+            className="absolute top-0 left-0 w-full block"
             style={{
               zIndex: 0,
+              height: "auto",
               filter: blur > 0 ? `blur(${blur}px)` : undefined,
-              transform: blur > 0 ? "scale(1.12)" : undefined,
-              transformOrigin: "center",
             }}
           />
           {/* Graduated blur: a blurred copy of the cover, masked so it only shows
-              in the lower half — strongest at the bottom, fully faded (sharp) by
-              the midway line. Sits above the sharp art, below the scrim. */}
+              toward the BOTTOM of the album and clears to fully sharp by the
+              midway line. Sits above the sharp art, below the scrim. */}
           {gblur > 0 && (
             <img
               src={art}
               alt=""
               aria-hidden
-              className="absolute inset-0 w-full h-full object-cover object-top block"
+              className="absolute top-0 left-0 w-full block"
               style={{
                 zIndex: 0,
+                height: "auto",
                 filter: `blur(${gblur}px)`,
-                transform: "scale(1.12)",
-                transformOrigin: "center",
                 WebkitMaskImage:
                   "linear-gradient(180deg, rgba(0,0,0,0) 48%, rgba(0,0,0,1) 92%)",
                 maskImage:
