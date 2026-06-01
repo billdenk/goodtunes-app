@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -10,8 +11,14 @@ import { ChevronLeft, Share, MoreHorizontal, Info } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import { IconButton } from "@/components/ui/IconButton";
+import { ChromeScrim } from "@/components/ui/ChromeScrim";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { popBounce } from "@/lib/motion";
+
+// Height (px) of the top ChromeScrim band. The scrim is rendered at this
+// height and the album-options menu is clamped to open strictly below it so
+// the two never stack their backdrop-filters (iOS-WebKit one-blur-per-region).
+const TOP_SCRIM_PX = 112;
 
 export interface AlbumDetailMobileSurfaceAlbum {
   id: string;
@@ -164,7 +171,14 @@ export function AlbumDetailMobileSurface({
       const rect = menuBtnRef.current?.getBoundingClientRect();
       if (!rect) return;
       setMenuPos({
-        top: rect.bottom + 8,
+        // Clamp the menu so its frosted body starts strictly BELOW the top
+        // ChromeScrim band (TOP_SCRIM_PX). Otherwise the menu's own
+        // backdrop-blur(28px) overlaps the active scrim blur, re-stacking two
+        // backdrop-filter surfaces in the top region (iOS-WebKit
+        // one-blur-per-region rule). The +12 headroom also keeps the pop-in
+        // animation (initial y:-6 / exit y:-4) from crossing the band on any
+        // frame, not just at rest.
+        top: Math.max(rect.bottom + 8, TOP_SCRIM_PX + 12),
         right: window.innerWidth - rect.right,
       });
     };
@@ -172,6 +186,26 @@ export function AlbumDetailMobileSurface({
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, [showMenu]);
+
+  // The top ChromeScrim's frosted layer is the region's single blur owner while
+  // the menu is open. On open it appears immediately; on close it fades out via
+  // AnimatePresence (~200ms). The share/menu capsule must keep its own blur
+  // suppressed for that whole window — including the close fade — or the two
+  // backdrop-filters briefly coexist in the top region (iOS-WebKit
+  // one-blur-per-region rule). `scrimBlurPresent` tracks that lifecycle: true
+  // the instant the menu opens, false only once the scrim's exit fade finishes.
+  const [scrimBlurPresent, setScrimBlurPresent] = useState(false);
+  useEffect(() => {
+    if (showMenu) {
+      setScrimBlurPresent(true);
+      return;
+    }
+    const t = setTimeout(
+      () => setScrimBlurPresent(false),
+      reduceMotion ? 80 : 240,
+    );
+    return () => clearTimeout(t);
+  }, [showMenu, reduceMotion]);
 
   const isMulti = ownedNums.length > 1;
   const totalDuration = songs.reduce((acc, s) => acc + s.duration, 0);
@@ -183,8 +217,30 @@ export function AlbumDetailMobileSurface({
     !!downloadedSongIds &&
     songs.every((s) => downloadedSongIds.has(s.id));
 
+  // Share / menu capsule background. It carries its own frosted blur ONLY while
+  // the top ChromeScrim is NOT the region's blur owner. We gate on
+  // `scrimBlurPresent` (not raw `showMenu`) so the capsule blur stays off for
+  // the scrim's full open→close lifecycle, including its exit fade — otherwise
+  // the two backdrop-filters briefly stack over the hero (iOS-WebKit rule).
+  const capsuleStyle: React.CSSProperties = {
+    background: "rgba(255,255,255,0.17)",
+    ...(scrimBlurPresent
+      ? {}
+      : { backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }),
+  };
+
   return (
     <div className="relative w-full h-full flex flex-col text-white">
+      {/* Top chrome scrim — a soft navy gradient fade at rest so the hero art
+          reads cleanly under the floating back/share/menu chips (no hard
+          band), swapping in a single frosted blur band only while the album
+          options menu is open. Sits behind the chips (z-40 < z-50). */}
+      <ChromeScrim
+        edge="top"
+        active={showMenu}
+        className="absolute inset-x-0 top-0 z-40"
+        style={{ height: TOP_SCRIM_PX }}
+      />
       <IconButton
         variant="glass"
         label="Back to collection"
@@ -196,8 +252,8 @@ export function AlbumDetailMobileSurface({
       </IconButton>
 
       <div
-        className="absolute top-14 right-4 z-50 flex items-center rounded-full backdrop-blur-md"
-        style={{ background: "rgba(255,255,255,0.17)" }}
+        className="absolute top-14 right-4 z-50 flex items-center rounded-full"
+        style={capsuleStyle}
       >
         <button
           type="button"

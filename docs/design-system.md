@@ -97,11 +97,22 @@ Any trash / delete / "remove forever" button must pop a confirmation sheet namin
 - All helpers take a `reduce` arg from `useReducedMotion()` and fall back to a short non-overshoot tween — always pass it so call sites honor the OS setting for free.
 - **Never animate a new `backdrop-filter` layer.** Animate transform/opacity only; keep one blur surface per overlay (dim-only scrim + one frosted panel) per the iOS-WebKit stacked-blur memo.
 
+## Chrome scrim — gradient at rest, one frosted band on action
+
+`client/src/components/ui/ChromeScrim.tsx` is the shared fan-chrome scrim behind every top/bottom control bar (Apple's header/footer treatment). It exists so no fan region hand-rolls its own frosted band and accidentally stacks two `backdrop-filter` surfaces over a scrolling list.
+
+- **At rest** the bar shows **only a soft navy gradient fade** (`to top`/`to bottom`, reached through `--brand-bg-rgb` — never the raw `#00062B` hex) so content scrolling behind the bar stays legible with no hard edge. There is **zero** `backdrop-filter` surface at rest.
+- **When `active`** (a selection / open menu / picker / search is engaged) exactly **one** frosted blur band cross-fades in. It is mounted/unmounted by `AnimatePresence` and fades by **opacity** — we never animate the `backdrop-filter` property itself — then unmounts back to gradient-only when the mode ends. Honors `prefers-reduced-motion`.
+- Props: `edge` (`"top"` | `"bottom"`, drives gradient direction), `active`, plus `className`/`style` for positioning. **Positioning is the consumer's job** — pass `fixed`/`absolute` + the inset/height that pins it to the edge. The component is always `pointer-events-none` so it never eats taps meant for the controls above it.
+- Adopted by `BottomNav` (bottom, `active={searchOpen}`), `AlbumDetailMobileSurface` (top, `active={showMenu}`), and the instrument-sheet toolbar (top). When adding a new fan chrome bar, reach for `ChromeScrim` rather than a hand-rolled frosted `div`.
+- **One blur owner per region.** When you set `active`, the scrim becomes the region's single frosted layer — so any *other* control that overlaps the band must drop its own `backdrop-filter` while active or you re-stack two blur surfaces (the exact iOS-WebKit hazard). Pattern: keep the control's own blur at rest (scrim is gradient-only then) and swap to a blur-free opaque fill while active. See BottomNav's search/close toggle (`glassStyle` ↔ `solidDockStyle`) and the album share/menu capsule (`backdrop-blur-md` gated off when `showMenu`). Note the `IconButton` `glass` variant is *not* a blur surface (translucent fill only), so glass chips never count toward the per-region blur budget.
+- **Player dock stays untouched**: `PlayerDock` is a shared admin+fan primitive (centered floating pill) and admin is out of scope for the scrim — leave its visual as-is.
+
 ## Sheet chrome — one close button, one back chevron, room at the top
 
 Every fan-facing mobile sheet dismisses the same way (Apple HIG / Apple-Card pattern). The shared primitives live in `client/src/components/ui/SheetChrome.tsx`:
 
-- **`SheetClose`** — the *one* circular gray "X" chip used to dismiss any fan sheet. It renders through the `glass` `IconButton` (44pt target, Apple-Card-sized chip) with a `currentColor` X glyph. Prefer this X over a translated "Done" / "Cancel" string — it survives Android + localization unchanged. Place it **top-right**.
+- **`SheetClose`** — the *one* circular "X" chip used to dismiss any fan sheet. It renders through the `IconButton` `fill` variant at `size="lg"`: a **big, opaque light-gray circle with a dark glyph** — Apple's `xmark.circle.fill` sheet-dismiss chip. Callers no longer hand-pick a variant (the old `dimmed`/`glass` overrides are gone) so every sheet matches. Prefer this X over a translated "Done" / "Cancel" string — it survives Android + localization unchanged. Place it **top-right**.
 - **`SheetBack`** — the matching back chevron for **drill-down** sheets. Drill-downs (instrument → vendor → in-app browser) show `SheetBack` **top-left** (pops one level) *and* `SheetClose` **top-right** (tears the whole stack down).
 - **`SHEET_SAFE_TOP`** — the shared top inset (`safe-area-inset-top + 12px`) so the close chip clears the device safe-area and leaves generous "room at the top" before content begins.
 - **Self-managed dismiss** — `SheetShell` exposes its animated dismiss through `SheetDismissContext`; `SheetClose` / `SheetBack` (and any in-sheet control via `useSheetDismiss()`) auto-wire to it so the close animation plays instead of yanking the sheet off-screen. Pass an explicit `onClick` only for sheets that aren't inside a `SheetShell` (standalone overlays, page-level pickers).

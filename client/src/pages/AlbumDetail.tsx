@@ -35,6 +35,7 @@ import {
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { toast } from "@/hooks/use-toast";
 import { IconButton } from "@/components/ui/IconButton";
+import { ChromeScrim } from "@/components/ui/ChromeScrim";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { ChevronLeft, Share, MoreHorizontal } from "lucide-react";
 import { buyEnabled, nativeDownloadsEnabled } from "@/lib/platform";
@@ -1632,7 +1633,7 @@ export function SheetShell({
 export function SheetHeader({ eyebrow, title, subtitle, onClose }: { eyebrow?: string; title: string; subtitle?: string; onClose: () => void }) {
   const dismiss = useSheetDismiss();
   return (
-    <div className="flex items-start gap-3 px-5 pb-4">
+    <div className="flex items-start gap-3 px-5 pt-1 pb-4">
       <div className="flex-1 min-w-0">
         {eyebrow && <p className="text-[color:var(--brand-blue)] text-xs font-semibold uppercase tracking-wider mb-1">{eyebrow}</p>}
         <h2 className="text-white text-[22px] font-bold leading-tight tracking-tight">{title}</h2>
@@ -2581,11 +2582,15 @@ function InstrumentSheet({
   return (
     <SheetShell ariaLabel={instrument.name} testId="sheet-instrument" variant="full" onClose={onClose}>
       {/* Apple-style top bar: back chevron on left (this is a sub-sheet from credits),
-          Share + Bookmark on right. shrink-0 so it stays pinned. Top padding respects safe area. */}
-      <div
-        className="flex-shrink-0 flex items-center justify-between px-3 pb-2"
-        style={{ background: "rgba(20,24,48,0.85)", backdropFilter: "blur(20px) saturate(180%)", paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
-      >
+          Share + Bookmark on right. shrink-0 so it stays pinned. Top padding respects safe area.
+          Background is the shared ChromeScrim (soft navy gradient fade, no hard
+          frosted band) so it matches the rest of the fan chrome. */}
+      <div className="relative flex-shrink-0">
+        <ChromeScrim edge="top" className="absolute inset-0" />
+        <div
+          className="relative flex items-center justify-between px-3 pb-2"
+          style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+        >
         <SheetBack data-testid="button-instrument-close" />
         <div className="flex items-center gap-2">
           <IconButton
@@ -2623,6 +2628,7 @@ function InstrumentSheet({
             onClick={() => (dismiss ? dismiss(onCloseAll) : onCloseAll())}
             data-testid="button-instrument-closeall"
           />
+        </div>
         </div>
       </div>
 
@@ -3011,7 +3017,6 @@ function VendorSheet({
               </svg>
             </IconButton>
             <SheetClose
-              variant="dimmed"
               onClick={() => (dismiss ? dismiss(onCloseAll) : onCloseAll())}
               data-testid="button-vendor-closeall"
             />

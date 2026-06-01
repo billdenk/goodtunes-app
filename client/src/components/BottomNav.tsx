@@ -11,6 +11,7 @@ import {
   CompactPreview,
   FullResults,
 } from "@/components/search/views";
+import { ChromeScrim } from "@/components/ui/ChromeScrim";
 
 /**
  * Bottom offset shared by all three floating dock elements (collapsed
@@ -248,6 +249,16 @@ export function BottomNav() {
     boxShadow: "0 8px 36px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.08) inset",
   } as const;
 
+  // Blur-free twin of glassStyle (opaque fill, no backdrop-filter). Used by the
+  // search/close toggle while search is open: the bottom ChromeScrim then owns
+  // the region's single frosted layer, so the toggle must NOT add a second
+  // backdrop-filter on top of it (iOS-WebKit stacked-blur rule).
+  const solidDockStyle = {
+    background: "rgba(20, 22, 38, 0.95)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    boxShadow: "0 8px 36px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.08) inset",
+  } as const;
+
   const dockHVal = dockH ?? 56;
   // Right search/close circle: matches the pillow height at rest /
   // expanded; shrinks to the 48px scrolled-state puck only when the dock
@@ -325,6 +336,15 @@ export function BottomNav() {
       )}
 
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-40 pointer-events-none">
+        {/* Shared chrome scrim behind the dock: a soft navy gradient fade at
+            rest so collection art scrolls cleanly under the floating pills
+            (no hard band), swapping in a single frosted blur band only while
+            search is open. First child so it sits behind every pill. */}
+        <ChromeScrim
+          edge="bottom"
+          active={searchOpen}
+          className="absolute inset-x-0 bottom-0 h-32"
+        />
         {/* LEFT — collapsed active-tab puck (scrolled), shown only when
             the dock is hidden and search is closed. Springs in from the
             pillow's left edge so it reads as the pillow collapsing into the
@@ -407,7 +427,9 @@ export function BottomNav() {
             // Shares DOCK_BOTTOM with the puck + pillow so all three stay
             // on the same raised baseline above the browser chrome.
             bottom: DOCK_BOTTOM,
-            ...glassStyle,
+            // Glass (own blur) at rest; blur-free fill while search is open so
+            // the active ChromeScrim is the bottom region's only blur surface.
+            ...(searchOpen ? solidDockStyle : glassStyle),
           }}
           animate={{ width: toggleSize, height: toggleSize }}
           transition={

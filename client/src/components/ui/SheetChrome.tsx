@@ -63,11 +63,17 @@ interface SheetChromeButtonProps {
   "data-testid"?: string;
 }
 
-/** The one shared circular close ("X") chip used by every fan sheet. */
+/**
+ * The one shared circular close ("X") chip used by every fan sheet.
+ *
+ * Apple's `xmark.circle.fill`: a large opaque light-gray circle with a dark
+ * glyph, pinned top-right. Defaults to `fill` + `lg` so every sheet closes
+ * with the same big, unmistakable X — callers no longer hand-pick a variant.
+ */
 export function SheetClose({
   onClick,
   label = "Close",
-  variant = "glass",
+  variant = "fill",
   className,
   "data-testid": testId = "button-sheet-close",
 }: SheetChromeButtonProps) {
@@ -76,6 +82,7 @@ export function SheetClose({
   return (
     <IconButton
       variant={variant}
+      size="lg"
       label={label}
       onClick={handle}
       className={className}

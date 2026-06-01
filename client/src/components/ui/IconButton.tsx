@@ -19,6 +19,9 @@ import { cn } from "@/lib/utils";
  *               would wash out.
  *  - `solid`  — filled brand color, white icon. Primary action like
  *               "Send" in chat composer.
+ *  - `fill`   — opaque light-gray circle with a dark glyph. Apple's
+ *               `xmark.circle.fill` sheet-dismiss chip — the one big X
+ *               every fan sheet closes with (see `SheetClose`).
  *  - `ghost`  — no background, just icon. Tertiary, when the surface
  *               itself supplies enough contrast.
  *
@@ -27,7 +30,7 @@ import { cn } from "@/lib/utils";
  */
 
 export type IconButtonSize = "md" | "lg";
-export type IconButtonVariant = "glass" | "dimmed" | "solid" | "ghost";
+export type IconButtonVariant = "glass" | "dimmed" | "solid" | "fill" | "ghost";
 
 export interface IconButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -57,6 +60,9 @@ const VARIANT_CLASSES: Record<IconButtonVariant, string> = {
   glass: "text-white",
   dimmed: "text-white bg-black/45 hover:bg-black/55 backdrop-blur-md",
   solid: "text-white bg-[#319ED8] hover:bg-[#319ED8]/90",
+  // Apple's xmark.circle.fill: opaque light-gray circle, dark glyph. Reads
+  // cleanly on a dark navy sheet and over hero artwork alike.
+  fill: "text-slate-800 bg-slate-200 hover:bg-slate-300",
   ghost: "text-white",
 };
 

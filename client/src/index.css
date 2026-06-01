@@ -183,6 +183,10 @@
      so partner dashboards can stop hardcoding the hex. */
   --brand-heart: #FF5470;
   --brand-bg: #00062B;
+  /* RGB channel triplet for the navy bg so chrome scrims can build a
+     navy→transparent gradient via `rgba(var(--brand-bg-rgb), <a>)` without
+     hardcoding `#00062B` per file. Keep in lock-step with `--brand-bg`. */
+  --brand-bg-rgb: 0, 6, 43;
   /* Partner-dashboard page-header gradient top stop. Sits one notch
      above `--brand-bg` so the dashboards (Label/Artist/NPO) get the
      same indigo-to-navy fade without hardcoding `#0B1457` per file. */
