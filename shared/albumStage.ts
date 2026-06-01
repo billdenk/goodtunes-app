@@ -42,6 +42,56 @@ export function isSunrisePending(
   return goodTunesReleaseDate > today;
 }
 
+// Whole-day countdown to a pending sunrise. Returns the number of calendar
+// days from `today` to the (strictly future) release date, or null when
+// there's no future sunrise (null date / today / past). Parsed from the ISO
+// date parts at local midnight so the count matches the operator's calendar
+// rather than drifting with UTC/timezone math.
+export function daysUntilSunrise(
+  goodTunesReleaseDate: string | null | undefined,
+  today: string = todayISODate(),
+): number | null {
+  if (!isSunrisePending(goodTunesReleaseDate, today)) return null;
+  const [ty, tm, td] = today.split("-").map(Number);
+  const [ry, rm, rd] = (goodTunesReleaseDate as string).split("-").map(Number);
+  const todayMs = new Date(ty, tm - 1, td).getTime();
+  const releaseMs = new Date(ry, rm - 1, rd).getTime();
+  if (Number.isNaN(todayMs) || Number.isNaN(releaseMs)) return null;
+  return Math.round((releaseMs - todayMs) / 86_400_000);
+}
+
+// Short, human date label for an ISO `YYYY-MM-DD`, e.g. "Jun 14". The year
+// is appended ("Jun 14, 2027") only when it differs from `today`'s year so
+// near-term dates stay terse. Built from the string parts (no Date parsing)
+// to avoid timezone day-shifts.
+export function formatSunriseDate(
+  goodTunesReleaseDate: string,
+  today: string = todayISODate(),
+): string {
+  const MONTHS = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+  const [ry, rm, rd] = goodTunesReleaseDate.split("-").map(Number);
+  const base = `${MONTHS[rm - 1]} ${rd}`;
+  const curYear = Number(today.split("-")[0]);
+  return ry === curYear ? base : `${base}, ${ry}`;
+}
+
+// Combined scannable countdown label for a staged release, e.g.
+// "Live Jun 14 · in 13 days" (or "· tomorrow" for a one-day countdown).
+// Returns null when the album has no pending sunrise.
+export function sunriseCountdownLabel(
+  goodTunesReleaseDate: string | null | undefined,
+  today: string = todayISODate(),
+): string | null {
+  const days = daysUntilSunrise(goodTunesReleaseDate, today);
+  if (days == null) return null;
+  const when = formatSunriseDate(goodTunesReleaseDate as string, today);
+  const rel = days === 1 ? "tomorrow" : `in ${days} days`;
+  return `Live ${when} · ${rel}`;
+}
+
 // Derive the lifecycle stage. Order matters: Prepping and Sunset are hard
 // flags that win over the date, and Staged/Released split purely on the
 // sunrise once an album is neither prepping nor hidden.

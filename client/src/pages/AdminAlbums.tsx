@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, Filter, EyeOff, X, Plus, Disc3 } from "lucide-react";
+import { Search, Filter, EyeOff, X, Plus, Disc3, Clock } from "lucide-react";
 import {
   Popover,
   PopoverArrow,
@@ -22,7 +22,7 @@ import {
 import { Combobox } from "@/components/admin/Combobox";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { NewAlbumTitleDialog } from "@/components/admin/NewAlbumTitleDialog";
-import { albumStage } from "@shared/albumStage";
+import { albumStage, sunriseCountdownLabel } from "@shared/albumStage";
 
 /**
  * Admin home · Albums (Phase 1).
@@ -63,6 +63,9 @@ interface AlbumLite {
   // Released tab stays clean; admin promotes via the album page.
   isPrepping: boolean;
   isExplicit: boolean;
+  // ISO `YYYY-MM-DD` sunrise date for finished GoodTunes releases. Drives
+  // the Staged-tab "Live <date> · in N days" countdown. Null = no schedule.
+  goodTunesReleaseDate: string | null;
   // Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only legacy)"
   // marker. Drives the small tile/row badge below. No fan-facing effect.
   isSpinPromo?: boolean;
@@ -687,6 +690,10 @@ export function AdminAlbums() {
 /* ─── Pieces ────────────────────────────────────────────────────────── */
 
 function AlbumTile({ album }: { album: AlbumLite }) {
+  const countdown =
+    albumStage(album) === "staged"
+      ? sunriseCountdownLabel(album.goodTunesReleaseDate)
+      : null;
   return (
     <Link
       href={`/admin/albums/${album.id}`}
@@ -739,12 +746,26 @@ function AlbumTile({ album }: { album: AlbumLite }) {
           </span>
           {album.isExplicit && <ExplicitBadge tone="slate" />}
         </div>
+        {countdown && (
+          <div
+            className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[color:var(--brand-blue)]/10 text-[color:var(--brand-blue)] text-[10.5px] font-semibold tabular-nums"
+            title={`Goes live for fans on ${album.goodTunesReleaseDate}`}
+            data-testid={`text-sunrise-countdown-tile-${album.id}`}
+          >
+            <Clock className="w-2.5 h-2.5" />
+            {countdown}
+          </div>
+        )}
       </div>
     </Link>
   );
 }
 
 function AlbumRow({ album }: { album: AlbumLite }) {
+  const countdown =
+    albumStage(album) === "staged"
+      ? sunriseCountdownLabel(album.goodTunesReleaseDate)
+      : null;
   return (
     <Link
       href={`/admin/albums/${album.id}`}
@@ -791,6 +812,16 @@ function AlbumRow({ album }: { album: AlbumLite }) {
           >
             <EyeOff className="w-2.5 h-2.5" />
             Sunset
+          </span>
+        )}
+        {countdown && (
+          <span
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[color:var(--brand-blue)]/10 text-[color:var(--brand-blue)] text-[11px] font-semibold tabular-nums"
+            title={`Goes live for fans on ${album.goodTunesReleaseDate}`}
+            data-testid={`text-sunrise-countdown-row-${album.id}`}
+          >
+            <Clock className="w-2.5 h-2.5" />
+            {countdown}
           </span>
         )}
         <span className="text-slate-400 text-[11px] uppercase tracking-wide font-semibold tabular-nums">
