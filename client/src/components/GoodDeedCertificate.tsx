@@ -620,15 +620,16 @@ const SHAPE_RATIO: Record<CardShape, number> = {
 };
 
 /** Per-format spec for the approved GoodDeed "bordered" card family. All three
-    share one signature — orange (#FF7C06) edge-to-edge frame, album-art band
-    fading into navy, owner avatar straddling the seam, then
+    share one signature — orange (#FF7C06) edge-to-edge frame, the sharp album
+    cover filling the whole card behind a translucent darker-navy scrim (the
+    approved "D" treatment), owner avatar straddling the seam, then
     certifies → name → [GoodTunes | #NN] pill → caption. Square + portrait use
     SQUARE corners (radius 0); the story keeps the approved rounded curve. Every
-    value is in 1080-base units and multiplied by `u = w / 1080`. */
+    value is in 1080-base units and multiplied by `u = w / 1080`. `artBandU` is
+    the height of the transparent top spacer that holds the avatar/text rhythm. */
 type CertShapeSpec = {
   radiusU: number;
   artBandU: number | "square";
-  grad: string;
   avatarU: number;
   avatarMtU: number;
   certFsU: number;
@@ -649,11 +650,16 @@ type CertShapeSpec = {
   padBU: number;
 };
 
+// Approved "D" treatment: a translucent darker-navy scrim laid over the sharp,
+// full-bleed album cover. The cover stays clearly visible up top and ramps to
+// solid navy at the bottom so the avatar/name/number/caption block stays clean.
+const BLEED_SCRIM =
+  "linear-gradient(180deg, rgba(0,6,43,0.18) 0%, rgba(0,6,43,0.40) 40%, rgba(0,6,43,0.86) 72%, rgba(0,6,43,1) 100%)";
+
 const CERT_SHAPE_SPECS: Record<CardShape, CertShapeSpec> = {
   square: {
     radiusU: 0,
     artBandU: 470,
-    grad: "linear-gradient(180deg, rgba(0,6,43,0) 40%, rgba(0,6,43,0.6) 72%, rgba(0,6,43,0.95) 92%, var(--brand-bg) 100%)",
     avatarU: 200, avatarMtU: -148,
     certFsU: 33, certMtU: 28,
     nameBases: [84, 72, 63, 54, 48, 42], nameMtU: 8,
@@ -664,7 +670,6 @@ const CERT_SHAPE_SPECS: Record<CardShape, CertShapeSpec> = {
   portrait: {
     radiusU: 0,
     artBandU: 690,
-    grad: "linear-gradient(180deg, rgba(0,6,43,0) 48%, rgba(0,6,43,0.6) 76%, rgba(0,6,43,0.95) 93%, var(--brand-bg) 100%)",
     avatarU: 210, avatarMtU: -170,
     certFsU: 33, certMtU: 34,
     nameBases: [88, 76, 66, 57, 50, 44], nameMtU: 10,
@@ -675,7 +680,6 @@ const CERT_SHAPE_SPECS: Record<CardShape, CertShapeSpec> = {
   story: {
     radiusU: 66,
     artBandU: "square",
-    grad: "linear-gradient(180deg, rgba(0,6,43,0) 55%, rgba(0,6,43,0.6) 80%, rgba(0,6,43,0.95) 94%, var(--brand-bg) 100%)",
     avatarU: 248, avatarMtU: -178,
     certFsU: 38, certMtU: 51,
     nameBases: [95, 83, 73, 64, 54, 48], nameMtU: 19,
@@ -723,14 +727,24 @@ const CertCard = forwardRef(function CertCard(
         boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
       }}
     >
-      {/* Album-art band with a long, soft fade into navy so the seam is seamless */}
+      {/* Approved "D" treatment: the sharp album cover fills the WHOLE card behind
+          a translucent darker-navy scrim that ramps to solid navy at the bottom,
+          so the cover reads top-to-bottom while the text block stays legible. */}
+      <img
+        src={album.artwork}
+        alt={album.title}
+        className="absolute inset-0 w-full h-full object-cover object-top block"
+        style={{ zIndex: 0 }}
+        data-testid="img-cert-art"
+      />
+      <div className="absolute inset-0" style={{ zIndex: 0, background: BLEED_SCRIM }} />
+
+      {/* Transparent top spacer — holds the avatar/text vertical rhythm (the avatar
+          is pulled up over this seam) now that the art is a full-bleed layer. */}
       <div
         className="relative w-full shrink-0"
-        style={spec.artBandU === "square" ? { aspectRatio: "1 / 1" } : { height: spec.artBandU * u }}
-      >
-        <img src={album.artwork} alt={album.title} className="w-full h-full object-cover object-top block" data-testid="img-cert-art" />
-        <div className="absolute inset-0" style={{ background: spec.grad }} />
-      </div>
+        style={{ zIndex: 1, ...(spec.artBandU === "square" ? { aspectRatio: "1 / 1" } : { height: spec.artBandU * u }) }}
+      />
 
       {/* Ownership block — relative+z so the avatar paints ON TOP of the art seam */}
       <div
