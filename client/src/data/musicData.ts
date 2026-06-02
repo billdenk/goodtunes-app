@@ -53,6 +53,10 @@ export interface Album {
   // albums that carry no SuperCredits.
   spotifyUrl?: string | null;
   appleMusicUrl?: string | null;
+  // Task #970 — clean per-release share slug (get.goodtunes.music/<slug>).
+  // When present, the fan copy-link / share controls copy the clean URL
+  // instead of the long /album/:id path. Comes from the API row only.
+  shareSlug?: string | null;
 }
 
 export interface Song {

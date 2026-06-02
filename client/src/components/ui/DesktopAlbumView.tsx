@@ -5,6 +5,7 @@ import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { IconButton } from "@/components/ui/IconButton";
 import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
 import { useToast } from "@/hooks/use-toast";
+import { shareUrlForSlug } from "@shared/shareSlug";
 
 /* Trimmed-down song/album/video/photo shapes — DesktopAlbumView consumes
    the SAME response shapes the fan route + admin preview do. We pin only
@@ -30,6 +31,9 @@ export type DesktopAlbumData = {
   genre?: string | null;
   priceCents?: number | null;
   primaryArtistId?: string | null;
+  // Task #970 — clean per-release share slug. When present, the copy-link
+  // CTA copies https://get.goodtunes.music/<slug> instead of /album/:id.
+  shareSlug?: string | null;
 };
 
 export type DesktopAlbumVideo = {
@@ -205,7 +209,13 @@ export function DesktopAlbumView({
       };
   const { toast } = useToast();
   const handleCopyShareLink = async () => {
-    const url = typeof window !== "undefined" ? `${window.location.origin}/album/${album.id}` : `/album/${album.id}`;
+    // Task #970 — copy the clean per-release share link when the album has
+    // a slug so what fans share matches what operators promote.
+    const url = album.shareSlug
+      ? shareUrlForSlug(album.shareSlug)
+      : typeof window !== "undefined"
+      ? `${window.location.origin}/album/${album.id}`
+      : `/album/${album.id}`;
     try {
       await navigator.clipboard.writeText(url);
       toast({ title: "Link copied", description: "Share this album anywhere." });

@@ -60,6 +60,7 @@ type ApiAlbum = {
   goodTunesReleaseDate?: string | null;
   priceCents?: number | null;
   primaryArtistId?: string | null;
+  shareSlug?: string | null;
   label?: { id: string; name: string; logoUrl: string | null } | null;
   songs: ApiSong[];
 };

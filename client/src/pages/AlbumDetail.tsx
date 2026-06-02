@@ -96,6 +96,7 @@ function normalizeInstrument(i: ApiInstrument): Instrument {
 
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { AlbumDetailDesktop } from "@/pages/AlbumDetailDesktop";
+import { shareUrlForSlug } from "@shared/shareSlug";
 
 /**
  * Fan-facing album route. Switches between the Apple-Music-style mobile
@@ -255,6 +256,8 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
     qobuzUrl: string | null;
     deezerUrl: string | null;
     pandoraUrl: string | null;
+    // Task #970 — clean per-release share slug (get.goodtunes.music/<slug>).
+    shareSlug: string | null;
     // Denormalized record-label entity (or null). Comes from the album's
     // LEFT JOIN on `labels` so we render name/logo without a second fetch.
     label: {
@@ -321,6 +324,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
         qobuzUrl: apiAlbum.qobuzUrl ?? null,
         deezerUrl: apiAlbum.deezerUrl ?? null,
         pandoraUrl: apiAlbum.pandoraUrl ?? null,
+        shareSlug: apiAlbum.shareSlug ?? null,
       };
     }
     return staticAlbum;
@@ -639,7 +643,11 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
   const hasMoreBy = moreByArtist.length > 0;
 
   const handleShare = async () => {
-    const url = `${window.location.origin}/album/${album.id}`;
+    // Task #970 — prefer the clean per-release share link when the album
+    // has a slug, so what fans share matches what operators promote.
+    const url = album.shareSlug
+      ? shareUrlForSlug(album.shareSlug)
+      : `${window.location.origin}/album/${album.id}`;
     const shareData = { title: album.title, text: `Preview ${album.artist}'s ${album.title} on GoodTunes®`, url };
     const hasNativeShare = typeof navigator.share === "function";
     const destination: "native" | "copy" = hasNativeShare ? "native" : "copy";

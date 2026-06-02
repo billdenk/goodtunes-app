@@ -91,6 +91,17 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
 export const SHARE_SLUG_MIN = 2;
 export const SHARE_SLUG_MAX = 64;
 
+// Canonical host that fronts the clean per-release share links
+// (get.goodtunes.music/<slug>). One source of truth so the admin editor,
+// the fan copy-link buttons, and OG/unfurl all build the same URL.
+export const SHARE_LINK_HOST = "get.goodtunes.music";
+
+// Build the clean public share URL for a saved slug. Callers should only
+// pass an already-saved slug (normalize first if it came from raw input).
+export function shareUrlForSlug(slug: string): string {
+  return `https://${SHARE_LINK_HOST}/${slug}`;
+}
+
 // Normalize any operator input into a URL-safe slug:
 // lowercase, ASCII letters/digits/hyphens only, no leading/trailing or
 // doubled hyphens. Spaces and underscores collapse to a single hyphen.
