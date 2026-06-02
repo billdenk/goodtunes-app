@@ -5058,6 +5058,7 @@ function SkuRow({
                     priceCents={goodDeedSignal.priceCents}
                     existing={signedAddon ?? null}
                     livePlatformCostCents={livePlatformCostCents ?? null}
+                    vinylTotalCents={econ.total}
                     idSuffix={idSuffix}
                   />
                 )}
@@ -7888,16 +7889,21 @@ function BookletPill({
   );
 }
 
-// Task #758 — per-option GoodDeed revenue card. Rendered under each
-// pricing option column in SkuRow (primary + every duplicated option)
-// when the GoodDeed cert is active. It is a read-only consumer of the
-// signal lifted from GoodDeedPill: it applies the chosen attach ratio
-// to THIS option's quantity, resolves the per-cert wholesale for that
-// option's cert-run via the same gooddeed-pricing-preview endpoint the
-// pill uses, and shows cert count, GoodDeed revenue, and net for the
-// run. The cost-resolution chain (preview ladder → snapshot → flat
-// platform default) mirrors GoodDeedPill so the numbers never contradict
-// the panel below. Loss renders in brand pink.
+// Task #758 / #985 — per-option GoodDeed profit card. Rendered under
+// each pricing option column in SkuRow (primary + every duplicated
+// option) when the GoodDeed cert is active. It is a read-only consumer
+// of the signal lifted from GoodDeedPill: it applies the chosen attach
+// ratio to THIS option's quantity, resolves the per-cert wholesale for
+// that option's cert-run via the same gooddeed-pricing-preview endpoint
+// the pill uses, and presents the run's profit the SAME way the vinyl
+// block above does — a per-unit profit line plus a total profit line
+// (Task #985 retired the old "Revenue"/"Net" wording). Below the card
+// it shows a combined whole-run total (vinyl total profit + GoodDeed
+// total profit) so the operator sees the run's full profit at a glance.
+// The cost-resolution chain (preview ladder → snapshot → flat platform
+// default) mirrors GoodDeedPill so the numbers never contradict the
+// panel below. Losses render in brand pink; the combined total only
+// appears when both halves can be computed.
 function GoodDeedOptionCard({
   albumId,
   optionQty,
@@ -7905,6 +7911,7 @@ function GoodDeedOptionCard({
   priceCents,
   existing,
   livePlatformCostCents,
+  vinylTotalCents,
   idSuffix,
 }: {
   albumId: string;
@@ -7913,6 +7920,7 @@ function GoodDeedOptionCard({
   priceCents: number;
   existing: AlbumAddon | null;
   livePlatformCostCents: number | null;
+  vinylTotalCents: number | null;
   idSuffix: string;
 }) {
   const certCount = Math.max(0, Math.round(optionQty * ratio));
@@ -7951,10 +7959,22 @@ function GoodDeedOptionCard({
   // the cert retail.
   const ccFeeCents = Math.round(priceCents * 0.029) + 30;
   const canComputeNet = costCents !== null;
-  const revenueCents = priceCents * certCount;
-  const netTotalCents = canComputeNet
-    ? (priceCents - costCents! - ccFeeCents) * certCount
+  // Task #985 — present profit the way the vinyl block does: a per-unit
+  // profit (per-cert net = retail − GoodDeed cost − CC fee) and a total
+  // profit for the run. Same cost-resolution chain + CC-fee math the
+  // pill uses, so these never drift from the GoodDeed pill below.
+  const perUnitProfitCents = canComputeNet
+    ? priceCents - costCents! - ccFeeCents
     : null;
+  const netTotalCents =
+    perUnitProfitCents !== null ? perUnitProfitCents * certCount : null;
+  const perUnitIsLoss = perUnitProfitCents !== null && perUnitProfitCents < 0;
+  const perUnitLabel =
+    perUnitProfitCents === null
+      ? "—"
+      : perUnitIsLoss
+        ? `-${dollars(Math.abs(perUnitProfitCents))}`
+        : dollars(perUnitProfitCents);
   const netIsLoss = netTotalCents !== null && netTotalCents < 0;
   const netLabel =
     netTotalCents === null
@@ -7962,47 +7982,100 @@ function GoodDeedOptionCard({
       : netIsLoss
         ? `-${dollars(Math.abs(netTotalCents))}`
         : dollars(netTotalCents);
+  // Combined whole-run total = vinyl total profit (this option's own
+  // Total) + GoodDeed total profit. Only shown when BOTH halves can be
+  // computed, so it never contradicts a "—" net above.
+  const combinedTotalCents =
+    vinylTotalCents !== null && netTotalCents !== null
+      ? vinylTotalCents + netTotalCents
+      : null;
+  const combinedIsLoss = combinedTotalCents !== null && combinedTotalCents < 0;
+  const combinedLabel =
+    combinedTotalCents === null
+      ? "—"
+      : combinedIsLoss
+        ? `-${dollars(Math.abs(combinedTotalCents))}`
+        : dollars(combinedTotalCents);
   return (
-    <div
-      className="rounded-md border border-slate-200 bg-slate-50/60 p-2.5 space-y-1.5"
-      data-testid={`gooddeed-option-card-${idSuffix}`}
-    >
-      <div className="flex items-center gap-1.5">
-        <Award className="w-3.5 h-3.5 text-[color:var(--brand-purple)]" />
-        <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
-          GoodDeed
-        </span>
-      </div>
+    <>
       <div
-        className="text-xs text-slate-500 tabular-nums"
-        data-testid={`text-gooddeed-option-certs-${idSuffix}`}
+        className="rounded-md border border-slate-200 bg-slate-50/60 p-2.5 space-y-1.5"
+        data-testid={`gooddeed-option-card-${idSuffix}`}
       >
-        {pct}% · {certCount.toLocaleString()} of {optionQty.toLocaleString()}
-      </div>
-      <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="text-slate-600">Revenue</span>
-        <span
-          className="tabular-nums font-medium text-slate-900"
-          data-testid={`text-gooddeed-option-revenue-${idSuffix}`}
+        <div className="flex items-center gap-1.5">
+          <Award className="w-3.5 h-3.5 text-[color:var(--brand-purple)]" />
+          <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+            GoodDeed
+          </span>
+        </div>
+        <div
+          className="text-xs text-slate-500 tabular-nums"
+          data-testid={`text-gooddeed-option-certs-${idSuffix}`}
         >
-          {dollars(revenueCents)}
-        </span>
+          {pct}% · {certCount.toLocaleString()} of {optionQty.toLocaleString()}
+        </div>
+        <div className="flex items-center justify-between gap-3 text-xs">
+          <span className="text-slate-600">
+            Profit{" "}
+            <span className="text-slate-400 text-[11px]">Per unit sold</span>
+          </span>
+          <span
+            className={[
+              "tabular-nums font-medium",
+              perUnitIsLoss
+                ? "text-[color:var(--brand-pink)]"
+                : "text-slate-900",
+            ].join(" ")}
+            data-testid={`text-gooddeed-option-perunit-${idSuffix}`}
+          >
+            {perUnitLabel}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-3 text-xs">
+          <span className="text-slate-600">Total</span>
+          <span
+            className={[
+              "tabular-nums font-semibold",
+              netIsLoss
+                ? "text-[color:var(--brand-pink)]"
+                : "text-slate-900",
+            ].join(" ")}
+            data-testid={`text-gooddeed-option-net-${idSuffix}`}
+          >
+            {netLabel}
+          </span>
+        </div>
       </div>
-      <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="text-slate-600">Net</span>
-        <span
-          className={[
-            "tabular-nums font-semibold",
-            netIsLoss
-              ? "text-[color:var(--brand-pink)]"
-              : "text-slate-900",
-          ].join(" ")}
-          data-testid={`text-gooddeed-option-net-${idSuffix}`}
-        >
-          {netLabel}
-        </span>
-      </div>
-    </div>
+      {/* Task #985 — combined whole-run total (vinyl + GoodDeed). Hidden
+          unless both totals compute so it never contradicts a "—" net. */}
+      {combinedTotalCents !== null && (
+        <div className="px-0.5">
+          <div className="flex items-center justify-between gap-3">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                Combined total
+              </span>
+              <InfoTip
+                label="About combined total"
+                testId={`info-gooddeed-combined-${idSuffix}`}
+                text="Whole-run profit at this quantity: vinyl total profit + GoodDeed total profit."
+              />
+            </span>
+            <span
+              className={[
+                "tabular-nums text-base font-semibold",
+                combinedIsLoss
+                  ? "text-[color:var(--brand-pink)]"
+                  : "text-slate-900",
+              ].join(" ")}
+              data-testid={`text-gooddeed-combined-total-${idSuffix}`}
+            >
+              {combinedLabel}
+            </span>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
