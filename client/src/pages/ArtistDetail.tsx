@@ -991,7 +991,7 @@ function HowToPlaySheet({
       transition={scrimFade(!!reduceMotion)}
     >
       <motion.div
-        className="relative w-full max-w-[440px] text-[#0B0F2A] pb-9 overflow-hidden"
+        className="relative w-full max-w-[440px] text-[#0B0F2A] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
         style={{
           borderTopLeftRadius: 38,
@@ -1004,6 +1004,12 @@ function HowToPlaySheet({
           background: "rgba(244,245,248,0.78)",
           backdropFilter: "blur(40px) saturate(180%)",
           WebkitBackdropFilter: "blur(40px) saturate(180%)",
+          // Never taller than the viewport: cap at the dynamic viewport
+          // height minus the top safe-area + a little breathing room, so
+          // the album art, title, "How to Play" heading, and close chip
+          // are always reachable. The service-row area (below) scrolls
+          // internally when the content is taller than this cap.
+          maxHeight: "calc(100dvh - env(safe-area-inset-top) - 24px)",
         }}
         initial={{ y: "100%" }}
         animate={{ y: 0, transition: sheetOpen(!!reduceMotion) }}
@@ -1038,8 +1044,9 @@ function HowToPlaySheet({
           </span>
         </button>
 
-        {/* Centered hero: large rounded album art + title + meta */}
-        <div className="flex flex-col items-center text-center px-6 pt-7 pb-6">
+        {/* Centered hero: large rounded album art + title + meta. Pinned
+            (flex-shrink-0) so it stays visible while the rows scroll. */}
+        <div className="flex flex-col items-center text-center px-6 pt-7 pb-6 flex-shrink-0">
           {release.artworkUrl ? (
             <img
               src={release.artworkUrl}
@@ -1066,7 +1073,14 @@ function HowToPlaySheet({
             service's official app icon at 44px + name + "Listen now"
             + a trailing chevron. Identity-compliant: no recolor,
             no extra brand container. */}
-        <div className="px-5">
+        <div
+          className="px-5 flex-1 min-h-0 overflow-y-auto overscroll-contain"
+          style={{
+            // Clear the device's bottom safe-area (home indicator) plus the
+            // original sheet padding so the last service row is fully tappable.
+            paddingBottom: "calc(env(safe-area-inset-bottom) + 36px)",
+          }}
+        >
           <h4
             className="text-[11px] font-semibold uppercase tracking-[0.14em] text-center mb-4"
             style={{ color: "rgba(11,15,42,0.5)" }}
