@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Search, Filter, EyeOff, X, Plus, Disc3, Clock } from "lucide-react";
 import {
@@ -75,10 +75,38 @@ interface AlbumLite {
 
 type TabKey = "prepping" | "staged" | "live" | "sunset";
 
+const TAB_KEYS: TabKey[] = ["prepping", "staged", "live", "sunset"];
+
+// Task #1007 — build the link into an album, carrying the originating tab so
+// the album page's delete redirect + "Back to albums" link can return the
+// operator to the tab they came from. The default Released tab is omitted to
+// keep links clean; the album page falls back to `/admin/albums` (Released)
+// when no tab rides along. The existing `from=person` smart-back is set by
+// the Person page instead and takes precedence on the album side.
+function albumHref(albumId: string, tab: TabKey): string {
+  if (tab === "live") return `/admin/albums/${albumId}`;
+  return `/admin/albums/${albumId}?from=albums&albumsTab=${tab}`;
+}
+
 export function AdminAlbums() {
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
-  const [tab, setTab] = useState<TabKey>("live");
+  const urlSearch = useSearch();
+  // Task #1007 — restore the active tab from the URL (`?tab=`) so a refresh
+  // (or a return navigation after deleting/leaving an album) reopens the
+  // tab the operator was on instead of snapping back to Released. Read
+  // ONCE on mount; the mirror effect below keeps the URL in sync after.
+  const initialTab = useMemo<TabKey>(() => {
+    try {
+      const t = new URLSearchParams(urlSearch).get("tab");
+      if (t && (TAB_KEYS as string[]).includes(t)) return t as TabKey;
+    } catch {
+      /* malformed query string — fall through to the default */
+    }
+    return "live";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [tab, setTab] = useState<TabKey>(initialTab);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -172,6 +200,30 @@ export function AdminAlbums() {
   useEffect(() => {
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
+
+  // Task #1007 — mirror the active tab into the URL (`?tab=`) using `replace`
+  // so a refresh or a return navigation (e.g. after deleting an album) lands
+  // back on the same tab. The default Released tab keeps a clean URL (param
+  // removed); any non-default tab is written. Early-returns when the URL
+  // already matches so repeated clicks don't loop the navigate.
+  useEffect(() => {
+    let params: URLSearchParams;
+    try {
+      params = new URLSearchParams(urlSearch);
+    } catch {
+      params = new URLSearchParams();
+    }
+    const current = params.get("tab");
+    if (tab === "live") {
+      if (current === null) return;
+      params.delete("tab");
+    } else {
+      if (current === tab) return;
+      params.set("tab", tab);
+    }
+    const qs = params.toString();
+    navigate(`/admin/albums${qs ? `?${qs}` : ""}`, { replace: true });
+  }, [tab, urlSearch, navigate]);
 
   const {
     data: albumsData,
@@ -668,7 +720,7 @@ export function AdminAlbums() {
             data-testid="grid-admin-albums"
           >
             {filtered.map((a) => (
-              <AlbumTile key={a.id} album={a} />
+              <AlbumTile key={a.id} album={a} tab={tab} />
             ))}
           </div>
         ) : (
@@ -677,7 +729,7 @@ export function AdminAlbums() {
             data-testid="list-admin-albums"
           >
             {filtered.map((a) => (
-              <AlbumRow key={a.id} album={a} />
+              <AlbumRow key={a.id} album={a} tab={tab} />
             ))}
           </div>
         )}
@@ -689,14 +741,14 @@ export function AdminAlbums() {
 
 /* ─── Pieces ────────────────────────────────────────────────────────── */
 
-function AlbumTile({ album }: { album: AlbumLite }) {
+function AlbumTile({ album, tab }: { album: AlbumLite; tab: TabKey }) {
   const countdown =
     albumStage(album) === "staged"
       ? sunriseCountdownLabel(album.goodTunesReleaseDate)
       : null;
   return (
     <Link
-      href={`/admin/albums/${album.id}`}
+      href={albumHref(album.id, tab)}
       className="group block"
       data-testid={`tile-album-${album.id}`}
     >
@@ -761,14 +813,14 @@ function AlbumTile({ album }: { album: AlbumLite }) {
   );
 }
 
-function AlbumRow({ album }: { album: AlbumLite }) {
+function AlbumRow({ album, tab }: { album: AlbumLite; tab: TabKey }) {
   const countdown =
     albumStage(album) === "staged"
       ? sunriseCountdownLabel(album.goodTunesReleaseDate)
       : null;
   return (
     <Link
-      href={`/admin/albums/${album.id}`}
+      href={albumHref(album.id, tab)}
       className="group flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
       data-testid={`row-album-${album.id}`}
     >

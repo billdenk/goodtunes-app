@@ -358,6 +358,31 @@ export function AdminAlbum() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Task #1007 — smart-back target for the delete redirect, the breadcrumb,
+  // and the not-found "Back to albums" link. Precedence:
+  //   1. `?from=person&personId=…` → back to that Person (Task #468).
+  //   2. `?from=albums&albumsTab=<tab>` → back to the Albums list on the tab
+  //      the operator opened the album from (Prepping/Staged/Released/Sunset).
+  //   3. Otherwise the canonical Albums list (Released default).
+  const backToAlbumsHref = useMemo(() => {
+    try {
+      const sp = new URLSearchParams(search);
+      if (sp.get("from") === "person") {
+        const personId = sp.get("personId");
+        if (personId) return `/admin/people/${personId}`;
+      }
+      if (sp.get("from") === "albums") {
+        const t = sp.get("albumsTab");
+        const valid = ["prepping", "staged", "live", "sunset"];
+        if (t && valid.includes(t)) {
+          return t === "live" ? "/admin/albums" : `/admin/albums?tab=${t}`;
+        }
+      }
+    } catch {
+      /* malformed query string — fall through to the default */
+    }
+    return "/admin/albums";
+  }, [search]);
   // Task #674 — Persist the active tab in the URL (`?tab=`) so a refresh
   // reopens the same tab instead of snapping back to Overview. Read once
   // on mount, AFTER the `track`/`onboarding` deep-link precedence above,
@@ -462,17 +487,7 @@ export function AdminAlbum() {
       // page (`?from=person&personId=…`), return them to that Person
       // instead of dumping them on the global Albums list. Falls back
       // to `/admin/albums` for direct links + the canonical entry.
-      let returnTo = "/admin/albums";
-      try {
-        const sp = new URLSearchParams(window.location.search);
-        if (sp.get("from") === "person") {
-          const personId = sp.get("personId");
-          if (personId) returnTo = `/admin/people/${personId}`;
-        }
-      } catch {
-        /* malformed query string — fall through to the default */
-      }
-      navigate(returnTo);
+      navigate(backToAlbumsHref);
     },
     onError: (e: any) => {
       toast({
@@ -793,7 +808,7 @@ export function AdminAlbum() {
             Album not found
           </h1>
           <Link
-            href="/admin/albums"
+            href={backToAlbumsHref}
             className="text-[var(--brand-blue)] text-sm hover:underline inline-flex items-center gap-1"
             data-testid="link-back-to-albums"
           >
@@ -829,7 +844,7 @@ export function AdminAlbum() {
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
           <Link
-            href="/admin/albums"
+            href={backToAlbumsHref}
             className="hover:text-slate-700"
             data-testid="link-breadcrumb-albums"
           >
