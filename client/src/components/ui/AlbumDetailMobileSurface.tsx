@@ -21,6 +21,12 @@ import { popBounce } from "@/lib/motion";
 // the two never stack their backdrop-filters (iOS-WebKit one-blur-per-region).
 const TOP_SCRIM_PX = 112;
 
+// Task #918 — Bill asked to hide the mint "SuperCredits™" pill over album
+// artwork everywhere fans (and admin previews) can see it. The detection
+// plumbing (`hasSuperCredits` + its stream-gating consumers) stays wired, so
+// flip this back to `true` to restore the chip later.
+const SHOW_SUPERCREDITS_CHIP = false;
+
 export interface AlbumDetailMobileSurfaceAlbum {
   id: string;
   title: string;
@@ -435,8 +441,12 @@ export function AlbumDetailMobileSurface({
               {/* Task #734 — SuperCredits™ badge. Only shown on albums that
                   actually carry credits, so it doubles as the "this album
                   has full liner notes" signal even when the master streams
-                  elsewhere. */}
-              {hasSuperCredits && (
+                  elsewhere.
+                  Task #918 — Bill asked to hide the chip everywhere fans can
+                  see it for now. The `hasSuperCredits` prop + its other
+                  consumers (e.g. stream gating) stay wired so this can be
+                  flipped back on by setting SHOW_SUPERCREDITS_CHIP = true. */}
+              {SHOW_SUPERCREDITS_CHIP && hasSuperCredits && (
                 <div
                   className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 backdrop-blur-md"
                   style={{ background: "rgba(0,6,43,0.55)" }}
