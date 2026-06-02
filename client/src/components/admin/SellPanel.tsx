@@ -5024,7 +5024,7 @@ function SkuRow({
                     <InfoTip
                       label="About total"
                       testId={`info-total-${idSuffix}`}
-                      text="Estimated total revenue at this quantity and price."
+                      text="Estimated total profit at this quantity and price (per-unit profit × quantity)."
                     />
                   </span>
                   <span
