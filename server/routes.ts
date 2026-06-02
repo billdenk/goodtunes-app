@@ -11,6 +11,15 @@ import { ImageTooLargeError, makeDisplayDerivative } from "./imageProcessing";
 import { closeSaleWindow as closeCertSaleWindow } from "./saleWindow";
 import { generateBatchPdf as generateCertBatchPdf, CERT_BATCH_STEPS } from "./certBatch";
 import { sqlConnectedAlbums, sqlNpoArtistAlbums } from "./adminAlbumQueries";
+import {
+  isAllowedSelfServeInviteeRole,
+  ownsPartnerInvite,
+  partnerInviteAcceptUrl,
+  isOutstandingInvite,
+  isOverOutstandingCap,
+  sqlPartnerInviteList,
+  sqlPartnerOutstandingInviteToEmail,
+} from "./partnerInvites";
 import { pgArray } from "./lib/pgArray";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -18874,7 +18883,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           AND expires_at > NOW()
       `);
       const ct = ((outstanding as any).rows ?? [])[0]?.ct ?? 0;
-      if (ct >= ARTIST_INVITE_OUTSTANDING_LIMIT) {
+      if (isOverOutstandingCap(ct, ARTIST_INVITE_OUTSTANDING_LIMIT)) {
         return res.status(429).json({
           message: `You've hit the cap of ${ARTIST_INVITE_OUTSTANDING_LIMIT} outstanding invites. Revoke one or wait for someone to accept.`,
           code: "INVITE_CAP_REACHED",
@@ -19156,35 +19165,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const { ARTIST_INVITE_OUTSTANDING_LIMIT } = await import("@shared/schema");
     // Task #952 — an artist can now invite a fresh LABEL as well as an
-    // artist, so join both scope tables and COALESCE the display name +
-    // thumbnail. `role` tells the UI which kind each row is.
-    const rows = await db.execute<any>(sql`
-      SELECT ai.id, ai.email, ai.role, ai.role_scope_id AS "roleScopeId", ai.token,
-             ai.welcome_note AS "welcomeNote", ai.expires_at AS "expiresAt",
-             ai.created_at AS "createdAt", ai.used_at AS "usedAt",
-             ai.revoked_at AS "revokedAt", ai.resent_at AS "resentAt",
-             ai.invite_role AS "inviteRole", ai.review_status AS "reviewStatus",
-             COALESCE(p.name, l.name) AS "scopeName",
-             COALESCE(p.photo_url, l.logo_url) AS "scopeThumbUrl"
-        FROM admin_invites ai
-        LEFT JOIN people p ON p.id = ai.role_scope_id AND ai.role = 'artist'
-        LEFT JOIN labels l ON l.id = ai.role_scope_id AND ai.role = 'label'
-       WHERE ai.referrer_kind = 'artist'
-         AND ai.referrer_scope_id = ${role.roleScopeId}
-         AND ai.invite_role IS NULL
-       ORDER BY ai.created_at DESC
-       LIMIT 100
-    `);
+    // artist, so the builder joins both scope tables and COALESCEs the
+    // display name + thumbnail. `role` tells the UI which kind each row is.
+    const rows = await db.execute<any>(sqlPartnerInviteList("artist", role.roleScopeId));
     const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
     const host = req.headers["x-forwarded-host"] || req.headers.host;
     const list = (((rows as any).rows ?? []) as any[]).map((r) => {
       const { token, ...rest } = r;
-      // Only expose the magic link for live, un-held invites — never for
-      // revoked / used / held-for-review rows (the token is the bearer).
-      const live = !r.usedAt && !r.revokedAt && r.reviewStatus === "not_required";
-      return { ...rest, acceptUrl: live && token ? `${proto}://${host}/invite/${token}` : null };
+      return { ...rest, acceptUrl: partnerInviteAcceptUrl(r, (t) => `${proto}://${host}/invite/${t}`) };
     });
-    const outstanding = list.filter((r) => !r.usedAt && !r.revokedAt && new Date(r.expiresAt) > new Date()).length;
+    const outstanding = list.filter((r) => isOutstandingInvite(r)).length;
     res.json({
       invites: list,
       outstanding,
@@ -19210,14 +19200,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     // Reject if there's already a non-rejected invite for this email
     // from this artist (idempotency — they should resend, not duplicate).
-    const dup = await db.execute<{ id: string }>(sql`
-      SELECT id FROM admin_invites
-       WHERE LOWER(email) = ${email}
-         AND referrer_kind = 'artist' AND referrer_scope_id = ${role.roleScopeId}
-         AND invite_role IS NULL
-         AND used_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()
-       LIMIT 1
-    `);
+    const dup = await db.execute<{ id: string }>(sqlPartnerOutstandingInviteToEmail("artist", email, role.roleScopeId));
     if (((dup as any).rows ?? []).length > 0) {
       return res.status(409).json({ message: "You already have an outstanding invite to that email — resend it instead." });
     }
@@ -19258,14 +19241,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRe.test(email)) return res.status(400).json({ message: "Enter a valid email address" });
 
-    const dup = await db.execute<{ id: string }>(sql`
-      SELECT id FROM admin_invites
-       WHERE LOWER(email) = ${email}
-         AND referrer_kind = 'artist' AND referrer_scope_id = ${role.roleScopeId}
-         AND invite_role IS NULL
-         AND used_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()
-       LIMIT 1
-    `);
+    const dup = await db.execute<{ id: string }>(sqlPartnerOutstandingInviteToEmail("artist", email, role.roleScopeId));
     if (((dup as any).rows ?? []).length > 0) {
       return res.status(409).json({ message: "You already have an outstanding invite to that email — resend it instead." });
     }
@@ -19291,7 +19267,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const existing = await storage.getAdminInviteById(String(req.params.id));
     if (!existing) return res.status(404).json({ message: "Invite not found" });
-    if ((existing as any).referrerKind !== "artist" || (existing as any).referrerScopeId !== role.roleScopeId) {
+    if (!ownsPartnerInvite(existing, "artist", role.roleScopeId)) {
       return res.status(403).json({ message: "Not your invite" });
     }
     if (existing.usedAt) return res.status(410).json({ message: "Invite already accepted" });
@@ -19319,7 +19295,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const existing = await storage.getAdminInviteById(String(req.params.id));
     if (!existing) return res.status(404).json({ message: "Invite not found" });
-    if ((existing as any).referrerKind !== "artist" || (existing as any).referrerScopeId !== role.roleScopeId) {
+    if (!ownsPartnerInvite(existing, "artist", role.roleScopeId)) {
       return res.status(403).json({ message: "Not your invite" });
     }
     await storage.revokeAdminInvite(String(req.params.id));
@@ -19372,7 +19348,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const labelInviteGuard = async (req: any) => {
     const role = await getUserRole(req.session.userId!);
     if (!role || role.role !== "label" || !role.roleScopeId) return null;
-    return role;
+    // Narrow roleScopeId to non-null for the call sites below — the guard
+    // above already rejects the null case at runtime, but TS can't see
+    // through the helper boundary the way the inline artist guards do.
+    return { role: role.role, roleScopeId: role.roleScopeId as string };
   };
 
   // List the invites this label has sent (pending + accepted), newest
@@ -19381,31 +19360,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const role = await labelInviteGuard(req);
     if (!role) return res.status(403).json({ message: "Only label partners can use this endpoint" });
     const { ARTIST_INVITE_OUTSTANDING_LIMIT } = await import("@shared/schema");
-    const rows = await db.execute<any>(sql`
-      SELECT ai.id, ai.email, ai.role, ai.role_scope_id AS "roleScopeId", ai.token,
-             ai.welcome_note AS "welcomeNote", ai.expires_at AS "expiresAt",
-             ai.created_at AS "createdAt", ai.used_at AS "usedAt",
-             ai.revoked_at AS "revokedAt", ai.resent_at AS "resentAt",
-             ai.invite_role AS "inviteRole", ai.review_status AS "reviewStatus",
-             COALESCE(p.name, l.name) AS "scopeName",
-             COALESCE(p.photo_url, l.logo_url) AS "scopeThumbUrl"
-        FROM admin_invites ai
-        LEFT JOIN people p ON p.id = ai.role_scope_id AND ai.role = 'artist'
-        LEFT JOIN labels l ON l.id = ai.role_scope_id AND ai.role = 'label'
-       WHERE ai.referrer_kind = 'label'
-         AND ai.referrer_scope_id = ${role.roleScopeId}
-         AND ai.invite_role IS NULL
-       ORDER BY ai.created_at DESC
-       LIMIT 100
-    `);
+    const rows = await db.execute<any>(sqlPartnerInviteList("label", role.roleScopeId));
     const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
     const host = req.headers["x-forwarded-host"] || req.headers.host;
     const list = (((rows as any).rows ?? []) as any[]).map((r) => {
       const { token, ...rest } = r;
-      const live = !r.usedAt && !r.revokedAt && r.reviewStatus === "not_required";
-      return { ...rest, acceptUrl: live && token ? `${proto}://${host}/invite/${token}` : null };
+      return { ...rest, acceptUrl: partnerInviteAcceptUrl(r, (t) => `${proto}://${host}/invite/${t}`) };
     });
-    const outstanding = list.filter((r) => !r.usedAt && !r.revokedAt && new Date(r.expiresAt) > new Date()).length;
+    const outstanding = list.filter((r) => isOutstandingInvite(r)).length;
     res.json({ invites: list, outstanding, cap: ARTIST_INVITE_OUTSTANDING_LIMIT });
   });
 
@@ -19418,21 +19380,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const name = String(req.body?.name || "").trim();
     const inviteeRole = String(req.body?.role || "").trim();
     const welcomeNote = req.body?.welcomeNote ? String(req.body.welcomeNote).slice(0, 1000) : null;
-    if (inviteeRole !== "artist" && inviteeRole !== "label") {
+    if (!isAllowedSelfServeInviteeRole(inviteeRole)) {
       return res.status(400).json({ message: "Pick artist or label" });
     }
     if (!name) return res.status(400).json({ message: `Enter the ${inviteeRole}'s name` });
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRe.test(email)) return res.status(400).json({ message: "Enter a valid email address" });
 
-    const dup = await db.execute<{ id: string }>(sql`
-      SELECT id FROM admin_invites
-       WHERE LOWER(email) = ${email}
-         AND referrer_kind = 'label' AND referrer_scope_id = ${role.roleScopeId}
-         AND invite_role IS NULL
-         AND used_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()
-       LIMIT 1
-    `);
+    const dup = await db.execute<{ id: string }>(sqlPartnerOutstandingInviteToEmail("label", email, role.roleScopeId));
     if (((dup as any).rows ?? []).length > 0) {
       return res.status(409).json({ message: "You already have an outstanding invite to that email — resend it instead." });
     }
@@ -19456,7 +19411,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!role) return res.status(403).json({ message: "Only label partners can use this endpoint" });
     const existing = await storage.getAdminInviteById(String(req.params.id));
     if (!existing) return res.status(404).json({ message: "Invite not found" });
-    if ((existing as any).referrerKind !== "label" || (existing as any).referrerScopeId !== role.roleScopeId) {
+    if (!ownsPartnerInvite(existing, "label", role.roleScopeId)) {
       return res.status(403).json({ message: "Not your invite" });
     }
     if (existing.usedAt) return res.status(410).json({ message: "Invite already accepted" });
@@ -19481,7 +19436,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!role) return res.status(403).json({ message: "Only label partners can use this endpoint" });
     const existing = await storage.getAdminInviteById(String(req.params.id));
     if (!existing) return res.status(404).json({ message: "Invite not found" });
-    if ((existing as any).referrerKind !== "label" || (existing as any).referrerScopeId !== role.roleScopeId) {
+    if (!ownsPartnerInvite(existing, "label", role.roleScopeId)) {
       return res.status(403).json({ message: "Not your invite" });
     }
     await storage.revokeAdminInvite(String(req.params.id));

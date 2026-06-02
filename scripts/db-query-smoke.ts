@@ -43,6 +43,10 @@ import {
   sqlNpoArtistAlbums,
   sqlNpoAlbumLedger,
 } from "../server/adminAlbumQueries";
+import {
+  sqlPartnerInviteList,
+  sqlPartnerOutstandingInviteToEmail,
+} from "../server/partnerInvites";
 
 // Stable dummy bind values — content is irrelevant because EXPLAIN never
 // executes the query; only the column/table references are validated.
@@ -74,6 +78,11 @@ const SMOKE_QUERIES: { name: string; sql: SQL }[] = [
   { name: "adminAlbumQueries.connectedAlbums", sql: sqlConnectedAlbums([ALBUM]) },
   { name: "adminAlbumQueries.npoArtistAlbums", sql: sqlNpoArtistAlbums([ALBUM]) },
   { name: "adminAlbumQueries.npoAlbumLedger", sql: sqlNpoAlbumLedger(ORG) },
+  // server/partnerInvites.ts — Task #952/#964 self-serve invite reads.
+  { name: "partnerInvites.inviteList(artist)", sql: sqlPartnerInviteList("artist", ORG) },
+  { name: "partnerInvites.inviteList(label)", sql: sqlPartnerInviteList("label", ORG) },
+  { name: "partnerInvites.outstandingToEmail(artist)", sql: sqlPartnerOutstandingInviteToEmail("artist", "nobody@example.com", ORG) },
+  { name: "partnerInvites.outstandingToEmail(label)", sql: sqlPartnerOutstandingInviteToEmail("label", "nobody@example.com", ORG) },
 ];
 
 async function main() {
