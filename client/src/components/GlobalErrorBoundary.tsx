@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from "react";
 import { FriendlyError } from "@/components/FriendlyError";
+import { reportBootFailure } from "@/lib/bootHeal";
 
 /**
  * Customer-facing error boundary. Renders a dark, brand-styled card with
@@ -9,55 +10,64 @@ import { FriendlyError } from "@/components/FriendlyError";
  *
  * `installGlobalErrorReporter()` (called once from main.tsx) catches the
  * errors that React boundaries can't — pre-mount module-load failures,
- * window.onerror, and unhandled promise rejections — and paints a
- * minimal red banner directly into the DOM so we still get a
- * screenshot-able diagnosis when React never even started.
+ * window.onerror, unhandled promise rejections, AND failed asset/script
+ * loads (capture-phase, Task #921) — and paints a minimal red banner
+ * directly into the DOM so we still get a screenshot-able diagnosis when
+ * React never even started.
  */
+
+/**
+ * Paint the minimal brand fatal banner straight into the DOM. Module-
+ * level + exported so the boot self-heal (`@/lib/bootHeal`) can render
+ * the same diagnosis when a stale-bundle reload has been exhausted,
+ * without re-implementing the escaping/styling. Never throws.
+ */
+export function paintFatalBanner(kind: string, message: string, stack?: string) {
+  try {
+    const id = "__gt_fatal_banner";
+    const existing = document.getElementById(id);
+    if (existing) existing.remove();
+    const el = document.createElement("div");
+    el.id = id;
+    el.setAttribute("data-testid", "global-fatal-banner");
+    el.style.cssText = [
+      "position:fixed",
+      "left:0",
+      "right:0",
+      "top:0",
+      "z-index:2147483647",
+      "background:#FF5470",
+      "color:white",
+      "font:600 12px/1.4 -apple-system,system-ui,sans-serif",
+      "padding:10px 12px",
+      "max-height:50vh",
+      "overflow:auto",
+      "border-bottom:1px solid rgba(0,0,0,0.2)",
+    ].join(";");
+    const safeMsg = String(message).slice(0, 800);
+    const safeStack = stack ? String(stack).split("\n").slice(0, 5).join("\n") : "";
+    el.innerHTML =
+      '<div style="font-weight:700;margin-bottom:4px">' +
+      kind +
+      '</div><div style="font-family:ui-monospace,monospace;font-weight:400;white-space:pre-wrap;word-break:break-all">' +
+      safeMsg.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]!)) +
+      "</div>" +
+      (safeStack
+        ? '<pre style="margin:6px 0 0;font:400 10px/1.3 ui-monospace,monospace;opacity:0.85;white-space:pre-wrap;word-break:break-all">' +
+          safeStack.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]!)) +
+          "</pre>"
+        : "");
+    (document.body || document.documentElement).appendChild(el);
+  } catch {
+    /* never throw from the error reporter */
+  }
+}
 
 let installed = false;
 export function installGlobalErrorReporter() {
   if (installed || typeof window === "undefined") return;
   installed = true;
-  const paint = (kind: string, message: string, stack?: string) => {
-    try {
-      const id = "__gt_fatal_banner";
-      const existing = document.getElementById(id);
-      if (existing) existing.remove();
-      const el = document.createElement("div");
-      el.id = id;
-      el.setAttribute("data-testid", "global-fatal-banner");
-      el.style.cssText = [
-        "position:fixed",
-        "left:0",
-        "right:0",
-        "top:0",
-        "z-index:2147483647",
-        "background:#FF5470",
-        "color:white",
-        "font:600 12px/1.4 -apple-system,system-ui,sans-serif",
-        "padding:10px 12px",
-        "max-height:50vh",
-        "overflow:auto",
-        "border-bottom:1px solid rgba(0,0,0,0.2)",
-      ].join(";");
-      const safeMsg = String(message).slice(0, 800);
-      const safeStack = stack ? String(stack).split("\n").slice(0, 5).join("\n") : "";
-      el.innerHTML =
-        '<div style="font-weight:700;margin-bottom:4px">' +
-        kind +
-        '</div><div style="font-family:ui-monospace,monospace;font-weight:400;white-space:pre-wrap;word-break:break-all">' +
-        safeMsg.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]!)) +
-        "</div>" +
-        (safeStack
-          ? '<pre style="margin:6px 0 0;font:400 10px/1.3 ui-monospace,monospace;opacity:0.85;white-space:pre-wrap;word-break:break-all">' +
-            safeStack.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]!)) +
-            "</pre>"
-          : "");
-      (document.body || document.documentElement).appendChild(el);
-    } catch {
-      /* never throw from the error reporter */
-    }
-  };
+  const paint = paintFatalBanner;
   // An error counts as "ours" if any frame in its stack references a URL on
   // our own origin, or — when the stack is empty — if the ErrorEvent's
   // `filename` is on our origin. Cross-origin scripts (Replit preview chrome,
@@ -93,6 +103,39 @@ export function installGlobalErrorReporter() {
     }
     paint("Uncaught error", (err && (err.message || String(err))) || e.message || "(no message)", stack);
   });
+  // Task #921 — Failed asset/script loads. A `<script>`/`<link>` 404 fires
+  // an `error` event ON THE ELEMENT that does NOT bubble, so the
+  // window-targeted listener above never sees it — that's the silent
+  // white screen after a redeploy orphans a content-hashed bundle. We
+  // must listen in the CAPTURE phase to catch it. Scoped to our own
+  // origin the same way `isOurError` is: a foreign asset (preview chrome,
+  // an extension, an analytics beacon) failing must NEVER paint a banner
+  // over a healthy app (preserve Task #406). Broken <img>/<audio> are
+  // intentionally ignored — a missing album cover is not a fatal boot
+  // failure. A same-origin script/stylesheet 404 IS the stale-bundle
+  // signature, so we also hand it to the boot self-heal for one guarded
+  // reload (see @/lib/bootHeal).
+  window.addEventListener(
+    "error",
+    (ev) => {
+      const target = ev.target as (Element & { src?: string; href?: string; rel?: string }) | null;
+      // Uncaught JS errors target `window` (handled above); only element-
+      // targeted resource failures are interesting here.
+      if (!target || !(target instanceof Element)) return;
+      const tag = target.tagName;
+      const isScript = tag === "SCRIPT";
+      const isStylesheet = tag === "LINK" && (target as HTMLLinkElement).rel === "stylesheet";
+      if (!isScript && !isStylesheet) return;
+      const url = (target.src || target.href || "").toString();
+      if (!url || !url.startsWith(ourOrigin)) {
+        console.warn("[global-error-reporter] ignoring foreign asset load failure", url || "(no url)");
+        return;
+      }
+      paint("Couldn't load a required file", url);
+      reportBootFailure("Couldn't start the app", "A required file failed to load:\n" + url);
+    },
+    true,
+  );
   window.addEventListener("unhandledrejection", (ev) => {
     const r: any = (ev as PromiseRejectionEvent).reason;
     const stack: string | undefined = r && r.stack;

@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { installGlobalErrorReporter } from "@/components/GlobalErrorBoundary";
+import { armBootWatchdog } from "@/lib/bootHeal";
 
 // Task #424 — Apply the admin light-theme body class BEFORE React mounts.
 // Previously this lived in AdminFrame's useEffect, so any delay or
@@ -21,3 +22,13 @@ try {
 
 installGlobalErrorReporter();
 createRoot(document.getElementById("root")!).render(<App />);
+
+// Task #921 — Backstop the stale-bundle self-heal. If the shell hasn't
+// painted anything into #root shortly after this entry runs, treat it as
+// a failed boot and recover with one guarded reload (then fall through to
+// a visible diagnosis if it's a genuinely broken deploy). The capture-
+// phase <script>/<link> 404 listener in installGlobalErrorReporter()
+// catches the common case faster; App clears the guard on real mount via
+// markBootSucceeded(). Do NOT remove — this is what turns Bill's manual
+// "just reload it" into an automatic recovery.
+armBootWatchdog();

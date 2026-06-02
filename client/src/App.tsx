@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Switch, Route, useLocation, Redirect } from "wouter";
 import { AnimatePresence } from "framer-motion";
 import { queryClient } from "./lib/queryClient";
@@ -8,6 +9,7 @@ import { PlayerProvider, usePlayer } from "@/context/PlayerContext";
 import { NavVisibilityProvider } from "@/hooks/useNavVisibility";
 import { TopChromeFrostProvider } from "@/hooks/useTopChromeFrost";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
+import { markBootSucceeded } from "@/lib/bootHeal";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthKind } from "@/hooks/useAuthKind";
 import { useQuery } from "@tanstack/react-query";
@@ -606,6 +608,13 @@ function Router() {
 }
 
 function App() {
+  // Task #921 — Tell the boot self-heal the shell actually mounted, which
+  // clears the one-reload guard so future redeploys can recover again and
+  // ordinary navigation/runtime errors are never mistaken for a failed
+  // boot. See client/src/main.tsx + @/lib/bootHeal.
+  useEffect(() => {
+    markBootSucceeded();
+  }, []);
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

@@ -109,6 +109,20 @@ Endpoints (all customer-side, behind `requireAuth`):
 
 CNAMEs at the user's DNS provider point both subdomains at the deployment. Apple's domain-association file is served at `/.well-known/apple-developer-domain-association.txt` on both hosts. Two ways to provide it: (1) commit the verification file Apple gives you to `public/.well-known/apple-developer-domain-association.txt` (preferred — survives redeploy, no secret-manager fiddling), or (2) set `APPLE_DOMAIN_ASSOCIATION` in the env. The route prefers the file when present and falls back to the env var.
 
+### Self-heal on boot failure (Task #921)
+
+Bill intermittently hit a **blank white screen** at `admin.goodtunes.music` after a redeploy — correct tab title, correct light admin body background, but React never painted. The server was healthy; the cause was a stale/orphaned page still pointing at an old content-hashed bundle that no longer exists, so a same-origin `<script>`/`<link>` 404'd and the shell never mounted. A manual reload always fixed it (`index.html` is `no-store`, so the reload fetches the fresh hash — see `server/static.ts`).
+
+That manual reload is now automatic and **strictly bounded**, mirroring the Task #424 pre-mount note in `client/src/main.tsx`. Three pieces, all in lock-step on both the admin and customer shells:
+
+1. **Capture-phase asset-error listener** (`installGlobalErrorReporter` in `client/src/components/GlobalErrorBoundary.tsx`). Resource-load failures fire an `error` event **on the element** that does **not** bubble, so the existing window-targeted listener never saw them — that's why the screen went silently white. The new listener runs in the **capture** phase to catch a failed `<script>`/`<link>` load, scoped to our own origin exactly like `isOurError` (foreign assets — preview chrome, extensions, beacons — are ignored so we never paint a banner over a healthy app, preserving Task #406). Broken `<img>`/`<audio>` are intentionally ignored: a missing album cover is not a fatal boot failure.
+
+2. **One guarded reload, fail-closed** (`reportBootFailure` in `client/src/lib/bootHeal.ts`). A same-origin script/stylesheet 404, **or** the mount watchdog below, triggers at most **one** automatic reload — guarded by `firedThisLoad` (once per load) plus a durable cross-reload marker. The marker is a `sessionStorage` timestamp (one per 30s window) **with a `window.name` sentinel fallback** for contexts where storage throws (Safari Private Browsing, storage-partitioned/sandboxed embeds). Critically, if **neither** marker can be persisted, `reportBootFailure` does **not** reload — it fails closed straight to the banner, because an auto-reload with no surviving guard could loop forever. A genuinely broken deploy therefore reloads exactly once (or zero times if storage is fully blocked), then shows the visible brand fatal banner (`paintFatalBanner`, with the failing URL).
+
+3. **Mount watchdog + success clear** (`armBootWatchdog` in `client/src/main.tsx`, `markBootSucceeded` from `client/src/App.tsx`). If nothing has painted into `#root` ~7s after the entry runs, it's treated as a failed boot (backstop for "rendered nothing for an unknown reason"). The instant React mounts, `App`'s effect calls `markBootSucceeded()` to clear the guard, so ordinary navigation and ordinary in-app runtime errors (which still route through `GlobalErrorBoundary` → `FriendlyError`) are never affected.
+
+Do **not** remove the capture-phase listener or the watchdog: without them the stale-bundle case is a silent white screen with no banner and no recovery.
+
 ## Transactional mail — sender reputation rules (Task #380)
 
 Resend is the only transport. Three rules keep our sending-domain reputation green so legitimate mail (admin password resets to Workspace inboxes like `bill@gogoods.com`) lands in the Inbox tab, not Quarantine or Spam:
