@@ -12,6 +12,7 @@ import {
   Tag,
   Factory,
   Truck,
+  Radar,
   Users,
   ArrowLeft,
   BarChart3,
@@ -69,6 +70,7 @@ const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   labels: "partners",
   nonprofits: "partners",
   manufacturers: "partners",
+  "press-match": "partners",
   makers: "partners",
   vendors: "partners",
   fulfillment: "partners",
@@ -117,6 +119,7 @@ export type EntityKey =
   | "payouts-release"
   | "labels"
   | "manufacturers"
+  | "press-match"
   | "pressing-orders"
   | "fan-orders"
   | "early-cut"
@@ -600,6 +603,16 @@ export function AdminFrame({
                 active={active === "manufacturers"}
                 onClick={() => navigate("/admin/manufacturers")}
                 testId="nav-manufacturers"
+              />
+              {/* Task #1013 — Find-a-press tool. Spec in → ranked presses
+                  out; tool, not a CRUD list, so pass -1 to drop the count. */}
+              <SidebarLink
+                icon={Radar}
+                label="Find a press"
+                count={-1}
+                active={active === "press-match"}
+                onClick={() => navigate("/admin/press-match")}
+                testId="nav-press-match"
               />
               {/* Task #174 — Makers and Resellers are two sides of the
                   same vendor table. A single row can carry both flags

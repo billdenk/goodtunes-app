@@ -5,7 +5,16 @@ import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
 import { sql, and, eq, or, ilike, isNull, desc, inArray } from "drizzle-orm";
 import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, TERMS_VERSION } from "@shared/schema";
-import { MRP_DOMAIN, getPressCatalog } from "./pressCatalog";
+import {
+  MRP_DOMAIN,
+  HELLBENDER_DOMAIN,
+  PMP_DOMAIN,
+  getPressCatalog,
+  seedHellbenderCatalog,
+  seedMrpCatalog,
+  seedPmpCatalog,
+} from "./pressCatalog";
+import { scorePressMatches, type PressCandidateInput } from "@shared/pressMatch";
 import { MRP_COLOR_LIBRARY_URL, type MrpParsedTile, maskToVinylDisc, parseMrpColorPage, matchFamilyToTier } from "./vendorColorScrape";
 import { ImageTooLargeError, makeDisplayDerivative } from "./imageProcessing";
 import { closeSaleWindow as closeCertSaleWindow } from "./saleWindow";
@@ -30,6 +39,7 @@ import { scrypt, randomBytes, timingSafeEqual, randomUUID, createHash } from "cr
 import { promisify } from "util";
 import { z } from "zod";
 import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema, insertTrackPublishingSplitSchema, insertTrackMechanicalSplitSchema, insertOrganizationSchema } from "@shared/schema";
+import { ALBUM_FORMATS, type AlbumFormat } from "@shared/schema";
 import { SHORT_CATEGORIES } from "@shared/categories";
 import { normalizeAudioUrl } from "@shared/audioUrl";
 import {
@@ -19811,6 +19821,83 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const r = await setInvitedByPress("labels", String(req.params.id), pressId);
       if ("error" in r) return res.status(400).json({ message: r.error });
       res.json({ ok: true });
+    },
+  );
+
+  // ─── Task #1013 — Find-a-press tool ─────────────────────────────────
+  // Operator enters a spec (format + quantity required, optional color,
+  // preferred location, max turnaround) and gets the presses that can
+  // fulfill it, ranked + explained. Format/color are hard filters; price,
+  // color quality, turnaround and location are the soft ranking factors
+  // (see shared/pressMatch.ts for the documented weighting). Reuses the
+  // existing catalog read path (getPressCatalog) — no pricing duplication.
+  app.post(
+    "/api/admin/press-match",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const format = String(req.body?.format ?? "");
+      if (!ALBUM_FORMATS.includes(format as AlbumFormat)) {
+        return res.status(400).json({ message: "A valid format is required" });
+      }
+      const quantity = Number(req.body?.quantity);
+      if (!Number.isFinite(quantity) || quantity < 1) {
+        return res.status(400).json({ message: "A quantity of at least 1 is required" });
+      }
+      const color = req.body?.color != null ? String(req.body.color).trim() : null;
+      const preferredLocation =
+        req.body?.preferredLocation != null ? String(req.body.preferredLocation).trim() : null;
+      const rawMax = req.body?.maxTurnaroundWeeks;
+      const maxTurnaroundWeeks =
+        rawMax != null && Number.isFinite(Number(rawMax)) && Number(rawMax) > 0
+          ? Math.floor(Number(rawMax))
+          : null;
+
+      // Only presses that actually do vinyl, and aren't soft-deleted.
+      const all = await storage.getManufacturers();
+      const presses = all.filter((m: any) => m.doesVinyl && !m.deletedAt);
+
+      // Cold-start safety: the three founding presses ship their catalogs
+      // in code behind idempotent seed guards. Fire them once so a fresh
+      // environment ranks them with real ladders.
+      await Promise.all([
+        presses.some((p: any) => p.domain === HELLBENDER_DOMAIN) ? seedHellbenderCatalog() : Promise.resolve(),
+        presses.some((p: any) => p.domain === MRP_DOMAIN) ? seedMrpCatalog() : Promise.resolve(),
+        presses.some((p: any) => p.domain === PMP_DOMAIN) ? seedPmpCatalog() : Promise.resolve(),
+      ]);
+
+      const candidates: PressCandidateInput[] = await Promise.all(
+        presses.map(async (m: any): Promise<PressCandidateInput> => {
+          const catalog = await getPressCatalog(m.id);
+          const formatRow = catalog.formats.find((f) => f.format === (format as AlbumFormat));
+          return {
+            pressId: m.id,
+            name: m.name,
+            logoUrl: m.logoUrl ?? null,
+            location: m.location ?? null,
+            turnaroundWeeksMin: m.turnaroundWeeksMin ?? null,
+            turnaroundWeeksMax: m.turnaroundWeeksMax ?? null,
+            turnaroundDays: m.turnaroundDays ?? null,
+            brokerDiscountPct: Number(m.brokerDiscountPct ?? 0),
+            formats: catalog.formats.map((f) => f.format),
+            tiers: (formatRow?.tiers ?? []).map((t) => ({
+              id: t.id,
+              name: t.name,
+              colors: t.colors.map((c) => ({ id: c.id, name: c.name, swatchHex: c.swatchHex })),
+              ladder: t.priceLadder,
+            })),
+          };
+        }),
+      );
+
+      const results = scorePressMatches(
+        { format: format as AlbumFormat, color, quantity, preferredLocation, maxTurnaroundWeeks },
+        candidates,
+      );
+      res.json({
+        spec: { format, color, quantity, preferredLocation, maxTurnaroundWeeks },
+        results,
+      });
     },
   );
 
