@@ -30,6 +30,13 @@ ids) — only the blob + its URL are shared.
 
 **Press swatch photo provenance** (matched by color NAME, not id):
 - Memphis: the all-vinyl-colors page PNGs (e.g. Metallic Blends = HB01–HB36).
+  These arrive ALREADY pre-cut as clean transparent-background discs (no studio
+  backdrop), so maskToVinylDisc bails (periCount===0) and the raw mirror IS the
+  clean disc — Memphis needs NO re-masking even though add-memphis-metallic.ts
+  mirrors raw. Only Memphis's "Metallic Blends" tier has photos; its other tiers
+  (Opaque/Translucent/etc.) carry neither hex nor photo. PMP (Physical Music
+  Products) is hex-only, no photos. So as of the swatch-consistency audit, NO
+  press serves square studio mockups — only Hellbender's mockups needed masking.
 - Hellbender: `hellbendervinyl.com/products.json` — each "Custom Vinyl
   Records - <Color>" product's first image is that color's mockup (square
   gray/white background, png + a few webp/jpg); pull at `?width=600`. DB color
