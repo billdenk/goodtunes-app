@@ -17705,6 +17705,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // are super-admin only (mirrors the NPO CRUD above). Stored in the
   // `custom_addons` + `custom_addon_artists` tables.
   app.get("/api/admin/custom-addons", requireAdmin, async (_req, res) => {
+    try {
     const rows = await db.execute<any>(sql`
       SELECT ca.id, ca.organization_id, ca.name, ca.description, ca.image_url,
              ca.price_cents, ca.fulfiller, ca.active, ca.applies_to_all_artists,
@@ -17739,9 +17740,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       position: r.position,
       artists: r.artists ?? [],
     })));
+    } catch (err) {
+      console.error("[custom-addons] list failed:", err);
+      res.status(500).json({ message: "Couldn't load custom add-ons, please try again" });
+    }
   });
 
   app.get("/api/admin/custom-addons/:id", requireAdmin, async (req, res) => {
+    try {
     const rows = await db.execute<any>(sql`
       SELECT ca.id, ca.organization_id, ca.name, ca.description, ca.image_url,
              ca.price_cents, ca.fulfiller, ca.active, ca.applies_to_all_artists,
@@ -17778,6 +17784,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       position: r.position,
       artists: r.artists ?? [],
     });
+    } catch (err) {
+      console.error("[custom-addons] detail failed:", err);
+      res.status(500).json({ message: "Couldn't load the add-on, please try again" });
+    }
   });
 
   app.post("/api/admin/custom-addons", requireAdmin, requireRole("super_admin"), async (req, res) => {
@@ -17801,12 +17811,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     let position = Math.round(Number(req.body?.position));
     if (!Number.isFinite(position)) position = 0;
     const appliesToAllArtists = !!req.body?.appliesToAllArtists;
-    const ins = await db.execute<{ id: string }>(sql`
-      INSERT INTO custom_addons (organization_id, name, description, image_url, price_cents, fulfiller, applies_to_all_artists, position)
-      VALUES (${organizationId}, ${name}, ${description}, ${imageUrl}, ${priceCents}, ${fulfiller}, ${appliesToAllArtists}, ${position})
-      RETURNING id
-    `);
-    res.status(201).json({ id: (ins as any).rows?.[0]?.id });
+    try {
+      const ins = await db.execute<{ id: string }>(sql`
+        INSERT INTO custom_addons (organization_id, name, description, image_url, price_cents, fulfiller, applies_to_all_artists, position)
+        VALUES (${organizationId}, ${name}, ${description}, ${imageUrl}, ${priceCents}, ${fulfiller}, ${appliesToAllArtists}, ${position})
+        RETURNING id
+      `);
+      res.status(201).json({ id: (ins as any).rows?.[0]?.id });
+    } catch (err) {
+      console.error("[custom-addons] create failed:", err);
+      res.status(500).json({ message: "Couldn't save the add-on, please try again" });
+    }
   });
 
   const updateCustomAddon: import("express").RequestHandler = async (req, res) => {
@@ -17865,8 +17880,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     if (sets.length === 0) return res.status(400).json({ message: "Nothing to update" });
     const setSql = sets.reduce((acc, frag, i) => (i === 0 ? frag : sql`${acc}, ${frag}`));
-    await db.execute(sql`UPDATE custom_addons SET ${setSql} WHERE id = ${req.params.id}`);
-    res.json({ id: req.params.id });
+    try {
+      await db.execute(sql`UPDATE custom_addons SET ${setSql} WHERE id = ${req.params.id}`);
+      res.json({ id: req.params.id });
+    } catch (err) {
+      console.error("[custom-addons] update failed:", err);
+      res.status(500).json({ message: "Couldn't save the add-on, please try again" });
+    }
   };
   app.put("/api/admin/custom-addons/:id", requireAdmin, requireRole("super_admin"), updateCustomAddon);
   app.patch("/api/admin/custom-addons/:id", requireAdmin, requireRole("super_admin"), updateCustomAddon);
@@ -17879,12 +17899,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (((addon as any).rows ?? []).length === 0) return res.status(404).json({ message: "Add-on not found" });
     const person = await db.execute(sql`SELECT 1 FROM people WHERE id = ${personId} LIMIT 1`);
     if (((person as any).rows ?? []).length === 0) return res.status(404).json({ message: "Person not found" });
-    await db.execute(sql`
-      INSERT INTO custom_addon_artists (custom_addon_id, person_id)
-      VALUES (${req.params.id}, ${personId})
-      ON CONFLICT (custom_addon_id, person_id) DO NOTHING
-    `);
-    res.status(201).json({ customAddonId: req.params.id, personId });
+    try {
+      await db.execute(sql`
+        INSERT INTO custom_addon_artists (custom_addon_id, person_id)
+        VALUES (${req.params.id}, ${personId})
+        ON CONFLICT (custom_addon_id, person_id) DO NOTHING
+      `);
+      res.status(201).json({ customAddonId: req.params.id, personId });
+    } catch (err) {
+      console.error("[custom-addons] attach artist failed:", err);
+      res.status(500).json({ message: "Couldn't attach the artist, please try again" });
+    }
   });
 
   // Detach an artist from a custom add-on. No-op if the row isn't there.

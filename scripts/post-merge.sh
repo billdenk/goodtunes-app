@@ -923,6 +923,48 @@ SQL
 migrate_album_anticipated_track_count dev  "${DATABASE_URL:-}"
 migrate_album_anticipated_track_count prod "${PROD_DATABASE_URL:-}"
 
+# Task #998 — base custom_addons + custom_addon_artists tables. shared/schema.ts
+# declares these (Task #844) but drizzle-kit push bailed interactively, so the
+# CREATE TABLE never landed on either DB and every custom-add-on read/write
+# 500s ("relation custom_addons does not exist"). Hand-apply idempotent CREATE
+# TABLE IF NOT EXISTS matching the schema. MUST run BEFORE the all-artists
+# ALTER below so that ALTER finally has a table to operate on.
+migrate_custom_addons_tables() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping custom_addons tables migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+CREATE TABLE IF NOT EXISTS custom_addons (
+  id                       varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id          varchar NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name                     text NOT NULL,
+  description              text,
+  image_url                text,
+  price_cents              integer NOT NULL,
+  fulfiller                text,
+  active                   boolean NOT NULL DEFAULT true,
+  applies_to_all_artists   boolean NOT NULL DEFAULT false,
+  position                 integer NOT NULL DEFAULT 0,
+  created_at               timestamp DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS custom_addon_artists (
+  custom_addon_id varchar NOT NULL REFERENCES custom_addons(id) ON DELETE CASCADE,
+  person_id       varchar NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  created_at      timestamp DEFAULT now(),
+  PRIMARY KEY (custom_addon_id, person_id)
+);
+SQL
+  then
+    echo "post-merge: custom_addons tables migration ok on $label"
+  else
+    echo "post-merge: WARNING — custom_addons tables migration failed on $label (continuing)"
+  fi
+}
+migrate_custom_addons_tables dev  "${DATABASE_URL:-}"
+migrate_custom_addons_tables prod "${PROD_DATABASE_URL:-}"
+
 # Task #987 — custom add-on "all artists" scope. When true the add-on
 # applies to every eligible album regardless of the per-artist attach
 # join; default false preserves the original attach-to-specific-artists
