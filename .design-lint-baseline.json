@@ -27,7 +27,7 @@
   {
     "rule": "brand-hex-literal",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-album-bonus/BonusTab.tsx",
-    "snippet": "<PhotoTile gradient=\"from-[#FF5470] to-[#7F10A7]\" caption=\"Cover shoot \u00b7 roll 1\" />"
+    "snippet": "<PhotoTile gradient=\"from-[#FF5470] to-[#7F10A7]\" caption=\"Cover shoot · roll 1\" />"
   },
   {
     "rule": "brand-hex-literal",
@@ -37,12 +37,12 @@
   {
     "rule": "brand-hex-literal",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-album-bonus/BonusTab.tsx",
-    "snippet": "<PhotoTile gradient=\"from-[#7F10A7] to-[#00062B]\" caption=\"Studio \u00b7 Nashville TN\" />"
+    "snippet": "<PhotoTile gradient=\"from-[#7F10A7] to-[#00062B]\" caption=\"Studio · Nashville TN\" />"
   },
   {
     "rule": "brand-hex-literal",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-album-bonus/BonusTab.tsx",
-    "snippet": "<PhotoTile gradient=\"from-[#4AFFCA] to-[#319ED8]\" caption=\"Hallway scene \u00b7 BTS\" />"
+    "snippet": "<PhotoTile gradient=\"from-[#4AFFCA] to-[#319ED8]\" caption=\"Hallway scene · BTS\" />"
   },
   {
     "rule": "brand-hex-literal",
@@ -912,7 +912,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-credits-row/Progressive.tsx",
-    "snippet": "<span className=\"text-slate-300 text-[12px]\">\u00b7</span>"
+    "snippet": "<span className=\"text-slate-300 text-[12px]\">·</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -1072,7 +1072,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-credits-row/ProgressiveV2.tsx",
-    "snippet": "<span className=\"text-slate-400 text-[11px]\">\u00b7 {count}</span>"
+    "snippet": "<span className=\"text-slate-400 text-[11px]\">· {count}</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -1287,7 +1287,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-credits-row/ProgressiveV3.tsx",
-    "snippet": "<span className=\"text-slate-300 text-[10.5px]\">\u00b7</span>"
+    "snippet": "<span className=\"text-slate-300 text-[10.5px]\">·</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -1327,7 +1327,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-credits-row/ProgressiveV3.tsx",
-    "snippet": "<span className=\"text-slate-300 text-[10.5px]\">\u00b7 4 aliases</span>"
+    "snippet": "<span className=\"text-slate-300 text-[10.5px]\">· 4 aliases</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -1417,7 +1417,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-credits-row/ProgressiveV3.tsx",
-    "snippet": "<span className=\"text-slate-400 text-[11px]\">\u00b7 {count}</span>"
+    "snippet": "<span className=\"text-slate-400 text-[11px]\">· {count}</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -1607,7 +1607,7 @@
   {
     "rule": "destructive-without-confirm",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-credits-row/Stacked.tsx",
-    "snippet": "<span className=\"font-semibold text-slate-500\">Idea:</span> three clear bands \u2014 who, what they did, and the gear they used. Auto-saves on blur, so no inline Save / red-x buttons fighting with data fie"
+    "snippet": "<span className=\"font-semibold text-slate-500\">Idea:</span> three clear bands — who, what they did, and the gear they used. Auto-saves on blur, so no inline Save / red-x buttons fighting with data fie"
   },
   {
     "rule": "hardcoded-font-size",
@@ -1902,7 +1902,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-credits-row/WritersV2.tsx",
-    "snippet": "<span className=\"text-slate-400 text-[11px]\">\u00b7</span>"
+    "snippet": "<span className=\"text-slate-400 text-[11px]\">·</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -2197,7 +2197,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-credits-row/WritersV3.tsx",
-    "snippet": "<span className=\"text-slate-400 text-[11px]\">\u00b7</span>"
+    "snippet": "<span className=\"text-slate-400 text-[11px]\">·</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -2262,7 +2262,7 @@
   {
     "rule": "brand-hex-literal",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-track-edit/TrackDetails.tsx",
-    "snippet": "<span className=\"text-[#319ED8] text-[10px]\">\u00b7</span>"
+    "snippet": "<span className=\"text-[#319ED8] text-[10px]\">·</span>"
   },
   {
     "rule": "brand-hex-literal",
@@ -2352,7 +2352,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-track-edit/TrackDetails.tsx",
-    "snippet": "<span className=\"text-[#319ED8] text-[10px]\">\u00b7</span>"
+    "snippet": "<span className=\"text-[#319ED8] text-[10px]\">·</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -3562,7 +3562,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-tracks-mode/Interactive.tsx",
-    "snippet": "<div className=\"text-[10.5px] text-slate-500\">.vtt \u00b7 .lrc \u00b7 .srt \u00b7 .txt</div>"
+    "snippet": "<div className=\"text-[10.5px] text-slate-500\">.vtt · .lrc · .srt · .txt</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -3642,7 +3642,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-tracks-mode/Interactive.tsx",
-    "snippet": "<span className=\"text-[10.5px]\">.vtt \u00b7 .lrc \u00b7 .srt \u00b7 .txt</span>"
+    "snippet": "<span className=\"text-[10.5px]\">.vtt · .lrc · .srt · .txt</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -3872,17 +3872,17 @@
   {
     "rule": "naked-icon-button",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-tracks-mode/Interactive.tsx",
-    "snippet": "<button aria-label={`Edit ${r.name} \u2014 ${r.role}`} title={`Edit ${r.name} \u2014 ${r.role}`} className=\"w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center jus"
+    "snippet": "<button aria-label={`Edit ${r.name} — ${r.role}`} title={`Edit ${r.name} — ${r.role}`} className=\"w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center jus"
   },
   {
     "rule": "naked-icon-button",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-tracks-mode/Interactive.tsx",
-    "snippet": "<button onClick={handleCloseAdd} aria-label=\"Cancel \u2014 close the picker\" title=\"Cancel\" className=\"w-6 h-6 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center j"
+    "snippet": "<button onClick={handleCloseAdd} aria-label=\"Cancel — close the picker\" title=\"Cancel\" className=\"w-6 h-6 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center j"
   },
   {
     "rule": "naked-icon-button",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-tracks-mode/Interactive.tsx",
-    "snippet": "<button onClick={handleCloseAdd} aria-label=\"Cancel \u2014 close the picker\" title=\"Cancel\" className=\"w-7 h-7 rounded-full text-slate-400 hover:text-slate-700 hover:bg-white inline-flex items-center justi"
+    "snippet": "<button onClick={handleCloseAdd} aria-label=\"Cancel — close the picker\" title=\"Cancel\" className=\"w-7 h-7 rounded-full text-slate-400 hover:text-slate-700 hover:bg-white inline-flex items-center justi"
   },
   {
     "rule": "naked-icon-button",
@@ -3892,7 +3892,7 @@
   {
     "rule": "naked-icon-button",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-tracks-mode/Interactive.tsx",
-    "snippet": "<button aria-label=\"Delete track (asks to confirm)\" title=\"Delete track \u2014 asks to confirm\" className=\"w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hove"
+    "snippet": "<button aria-label=\"Delete track (asks to confirm)\" title=\"Delete track — asks to confirm\" className=\"w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hove"
   },
   {
     "rule": "naked-icon-button",
@@ -4087,7 +4087,7 @@
   {
     "rule": "brand-hex-literal",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-tracks-mode/Seamless.tsx",
-    "snippet": "//   \u2022 on / all / one : brand-blue (#319ED8) icon + soft blue bubble"
+    "snippet": "//   • on / all / one : brand-blue (#319ED8) icon + soft blue bubble"
   },
   {
     "rule": "brand-hex-literal",
@@ -4257,7 +4257,7 @@
   {
     "rule": "naked-icon-button",
     "file": "artifacts/mockup-sandbox/src/components/mockups/admin-tracks-mode/Seamless.tsx",
-    "snippet": "<button aria-label=\"Delete track\" title=\"Delete track \u2014 asks to confirm\" className=\"w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50\" > <T"
+    "snippet": "<button aria-label=\"Delete track\" title=\"Delete track — asks to confirm\" className=\"w-7 h-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50\" > <T"
   },
   {
     "rule": "naked-icon-button",
@@ -4807,7 +4807,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "artifacts/mockup-sandbox/src/components/mockups/cert-footers/Engraved.tsx",
-    "snippet": "<div className=\"text-[7px] tracking-[0.28em] uppercase mt-0.5\" style={{ fontFamily: \"ui-sans-serif, system-ui\", color: \"rgba(255,255,255,0.45)\" }}>Will Bowen \u00b7 Founder</div>"
+    "snippet": "<div className=\"text-[7px] tracking-[0.28em] uppercase mt-0.5\" style={{ fontFamily: \"ui-sans-serif, system-ui\", color: \"rgba(255,255,255,0.45)\" }}>Will Bowen · Founder</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -4837,12 +4837,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "artifacts/mockup-sandbox/src/components/mockups/cert-footers/Stamped.tsx",
-    "snippet": "<div className=\"px-2 py-0.5 rounded-sm text-[8px] tracking-[0.32em] font-bold\" style={{ color: \"rgba(74,255,202,0.18)\", border: \"1px solid rgba(74,255,202,0.18)\" }}>ISSUED \u00b7 2026</div>"
+    "snippet": "<div className=\"px-2 py-0.5 rounded-sm text-[8px] tracking-[0.32em] font-bold\" style={{ color: \"rgba(74,255,202,0.18)\", border: \"1px solid rgba(74,255,202,0.18)\" }}>ISSUED · 2026</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "artifacts/mockup-sandbox/src/components/mockups/cert-footers/Stamped.tsx",
-    "snippet": "<div className=\"text-[7px] tracking-[0.32em] uppercase font-semibold\" style={{ fontFamily: \"ui-monospace,SFMono-Regular,monospace\", color: \"rgba(255,255,255,0.5)\" }}>Archive \u00b7 GoodDeed</div>"
+    "snippet": "<div className=\"text-[7px] tracking-[0.32em] uppercase font-semibold\" style={{ fontFamily: \"ui-monospace,SFMono-Regular,monospace\", color: \"rgba(255,255,255,0.5)\" }}>Archive · GoodDeed</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -4898,6 +4898,261 @@
     "rule": "player-touch-target-too-small",
     "file": "artifacts/mockup-sandbox/src/components/mockups/cert-footers/Stub.tsx",
     "snippet": "<div className=\"w-7 h-7 rounded-full flex-shrink-0\" style={{ background: \"rgba(255,255,255,0.32)\" }} />"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-cert/StoriesBorderedSafe.tsx",
+    "snippet": "<span className=\"absolute right-2 top-1 text-[9px] font-bold tracking-wide\" style={{ color: \"rgba(255,84,112,0.95)\" }}>"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-cert/StoriesBorderedSafe.tsx",
+    "snippet": "<span className=\"w-7 h-7 rounded-full bg-white/30 border border-white/50\" />"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-cert/StoriesSafeZone.tsx",
+    "snippet": "<span className=\"absolute right-2 top-1 text-[9px] font-bold tracking-wide\" style={{ color: \"rgba(255,84,112,0.95)\" }}>"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-cert/StoriesSafeZone.tsx",
+    "snippet": "<span className=\"w-7 h-7 rounded-full bg-white/30 border border-white/50\" />"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/how-to-play/_shared.tsx",
+    "snippet": "color: \"#4AFFCA\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/how-to-play/MakeDefault.tsx",
+    "snippet": "background: \"#4AFFCA\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/how-to-play/MakeDefault.tsx",
+    "snippet": "color: \"#00062B\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "const BRAND_BG = \"#00062B\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "const BRAND_BLUE = \"#319ED8\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "{ title: \"Who I Am\", artist: \"Nick Carter\", from: \"#7F10A7\", to: \"#319ED8\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "{ title: \"All American\", artist: \"Nick Carter\", from: \"#FF5470\", to: \"#FF7C06\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "{ title: \"Now or Never\", artist: \"Nick Carter\", from: \"#319ED8\", to: \"#4AFFCA\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "{ title: \"The Sequel\", artist: \"Various\", from: \"#4AFFCA\", to: \"#7F10A7\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "{ title: \"Heartbreaker\", artist: \"Various\", from: \"#FF7C06\", to: \"#FF5470\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "{ title: \"Midnight Blue\", artist: \"Various\", from: \"#00062B\", to: \"#319ED8\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "<div className=\"w-9 h-9 rounded-full flex items-center justify-center text-white text-[13px] font-semibold\" style={{ background: \"linear-gradient(135deg,#7F10A7,#319ED8)\" }}>NC</div>"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "<div className=\"relative flex-shrink-0\" style={{ width: 44, height: 44, borderRadius: 10, background: \"linear-gradient(140deg,#7F10A7,#319ED8)\", boxShadow: \"0 4px 12px rgba(0,0,0,0.3)\" }}>"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "<button type=\"button\" className=\"w-9 h-9 flex items-center justify-center mr-1 text-[#FF5470]\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "<div className=\"absolute left-0 top-0 bottom-0 bg-[#319ED8] rounded-r-full\" style={{ width: '42%', boxShadow: '0 0 8px rgba(49,158,216,0.6)' }} />"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "className=\"relative z-10 text-[10px] font-semibold tracking-wide\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "<div className=\"flex items-center justify-between px-6 pt-3 text-white text-[13px] font-semibold\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "<h1 className=\"text-white text-[30px] font-bold tracking-tight\">Collection</h1>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "<div className=\"w-9 h-9 rounded-full flex items-center justify-center text-white text-[13px] font-semibold\" style={{ background: \"linear-gradient(135deg,#7F10A7,#319ED8)\" }}>NC</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "className=\"flex-1 text-center text-[13px] font-semibold py-[7px] rounded-full\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "<p className=\"text-white text-[13px] font-semibold truncate mt-2\">{a.title}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "<p className=\"text-white/50 text-[12px] truncate\">{a.artist}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "<p className=\"text-white text-[15px] font-bold tracking-tight truncate leading-tight\">Who I Am</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "<p className=\"text-white/60 text-[13px] truncate leading-tight mt-[1px]\">Nick Carter</p>"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "<div className=\"w-9 h-9 rounded-full flex items-center justify-center text-white text-[13px] font-semibold\" style={{ background: \"linear-gradient(135deg,#7F10A7,#319ED8)\" }}>NC</div>"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "<button type=\"button\" className=\"w-10 h-10 flex items-center justify-center rounded-full bg-white/10 active:bg-white/20 transition-colors\">"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerEnvisioned.tsx",
+    "snippet": "<button type=\"button\" className=\"w-10 h-10 flex items-center justify-center rounded-full bg-transparent active:bg-white/10 transition-colors\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "const BRAND_BG = \"#00062B\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "const BRAND_BLUE = \"#319ED8\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "{ title: \"Who I Am\", artist: \"Nick Carter\", from: \"#7F10A7\", to: \"#319ED8\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "{ title: \"All American\", artist: \"Nick Carter\", from: \"#FF5470\", to: \"#FF7C06\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "{ title: \"Now or Never\", artist: \"Nick Carter\", from: \"#319ED8\", to: \"#4AFFCA\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "{ title: \"The Sequel\", artist: \"Various\", from: \"#4AFFCA\", to: \"#7F10A7\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "{ title: \"Heartbreaker\", artist: \"Various\", from: \"#FF7C06\", to: \"#FF5470\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "{ title: \"Midnight Blue\", artist: \"Various\", from: \"#00062B\", to: \"#319ED8\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "<div className=\"w-9 h-9 rounded-full flex items-center justify-center text-white text-[13px] font-semibold\" style={{ background: \"linear-gradient(135deg,#7F10A7,#319ED8)\" }}>NC</div>"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "<div className=\"flex-shrink-0\" style={{ width: 32, height: 32, borderRadius: 6, background: \"linear-gradient(140deg,#7F10A7,#319ED8)\", boxShadow: \"0 2px 8px rgba(0,0,0,0.45)\" }} />"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "className=\"relative text-[10px] font-medium\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "<div className=\"flex items-center justify-between px-6 pt-3 text-white text-[13px] font-semibold\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "<h1 className=\"text-white text-[30px] font-bold tracking-tight\">Collection</h1>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "<div className=\"w-9 h-9 rounded-full flex items-center justify-center text-white text-[13px] font-semibold\" style={{ background: \"linear-gradient(135deg,#7F10A7,#319ED8)\" }}>NC</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "className=\"flex-1 text-center text-[13px] font-semibold py-[7px] rounded-full\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "<p className=\"text-white text-[13px] font-semibold truncate mt-2\">{a.title}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "<p className=\"text-white/50 text-[12px] truncate\">{a.artist}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "<p className=\"text-white text-[14px] font-semibold truncate leading-snug\">Who I Am</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "<p className=\"text-white/55 text-[12px] truncate leading-snug\">Nick Carter</p>"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/player-dock/PlayerNow.tsx",
+    "snippet": "<div className=\"w-9 h-9 rounded-full flex items-center justify-center text-white text-[13px] font-semibold\" style={{ background: \"linear-gradient(135deg,#7F10A7,#319ED8)\" }}>NC</div>"
   },
   {
     "rule": "brand-hex-literal",
@@ -5266,6 +5521,66 @@
   },
   {
     "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
+    "snippet": "export const BRAND_BG = \"#00062B\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
+    "snippet": "export const BRAND_BLUE = \"#319ED8\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
+    "snippet": "export const HEART_PINK = \"#FF5470\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
+    "snippet": "mint: \"#4AFFCA\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
+    "snippet": "background: \"linear-gradient(135deg, #319ED8 0%, #7F10A7 100%)\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
+    "snippet": "\"linear-gradient(135deg, #1a1f4a 0%, #2a1156 50%, #319ED8 120%)\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
+    "snippet": "className=\"relative text-[10px] font-medium\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
+    "snippet": "<h1 className=\"text-white text-[34px] font-bold leading-none tracking-tight\">{title}</h1>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 px-2 py-[3px] rounded-full text-[10px] font-bold uppercase tracking-wider\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
+    "snippet": "<p className=\"text-white text-[13px] font-semibold leading-tight truncate\">{title}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
+    "snippet": "<p className=\"text-white/45 text-[11px] leading-tight mt-0.5 truncate\">{artist}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
+    "snippet": "<h2 className=\"text-white text-[17px] font-bold leading-tight\">{title}</h2>"
+  },
+  {
+    "rule": "brand-hex-literal",
     "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/Home.tsx",
     "snippet": "<SiQobuz size={22} color=\"#4AFFCA\" />"
   },
@@ -5370,66 +5685,6 @@
     "snippet": "<p className=\"text-[#319ED8] font-bold uppercase tracking-wider text-[9px] mb-1\">"
   },
   {
-    "rule": "brand-hex-literal",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
-    "snippet": "export const BRAND_BG = \"#00062B\";"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
-    "snippet": "export const BRAND_BLUE = \"#319ED8\";"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
-    "snippet": "export const HEART_PINK = \"#FF5470\";"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
-    "snippet": "mint: \"#4AFFCA\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
-    "snippet": "background: \"linear-gradient(135deg, #319ED8 0%, #7F10A7 100%)\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
-    "snippet": "\"linear-gradient(135deg, #1a1f4a 0%, #2a1156 50%, #319ED8 120%)\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
-    "snippet": "className=\"relative text-[10px] font-medium\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
-    "snippet": "<h1 className=\"text-white text-[34px] font-bold leading-none tracking-tight\">{title}</h1>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1 px-2 py-[3px] rounded-full text-[10px] font-bold uppercase tracking-wider\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
-    "snippet": "<p className=\"text-white text-[13px] font-semibold leading-tight truncate\">{title}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
-    "snippet": "<p className=\"text-white/45 text-[11px] leading-tight mt-0.5 truncate\">{artist}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/tab-bar-launch/_shared.tsx",
-    "snippet": "<h2 className=\"text-white text-[17px] font-bold leading-tight\">{title}</h2>"
-  },
-  {
     "rule": "player-touch-target-too-small",
     "file": "artifacts/mockup-sandbox/src/components/ui/avatar.tsx",
     "snippet": "\"relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full\","
@@ -5478,151 +5733,6 @@
     "rule": "player-touch-target-too-small",
     "file": "client/src/App.tsx",
     "snippet": "<div className=\"w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin\" />"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/BottomNav.tsx",
-    "snippet": "className={`relative text-[10px] font-medium transition-colors duration-150 ${contentShift} ${active ? \"text-[color:var(--brand-blue)]\" : \"text-white/35\"}`}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/BottomNav.tsx",
-    "snippet": "className=\"flex-1 min-w-0 bg-transparent border-0 py-0 pr-2 text-white placeholder-white/45 text-[15px] focus:outline-none\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/components/BottomNav.tsx",
-    "snippet": "className=\"mr-3 w-5 h-5 flex items-center justify-center rounded-full flex-shrink-0\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/GlobalErrorBoundary.tsx",
-    "snippet": "\"background:#FF5470\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "style={{ background: \"#ffffff\", color: \"#00062B\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "className=\"w-full border border-white/15 rounded-xl px-3 py-2 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8]\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "style={{ background: \"linear-gradient(135deg, #1D5E8F, #319ED8)\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "background: imageSaved ? \"#4AFFCA\" : \"rgba(255,255,255,0.18)\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "color: imageSaved ? \"#00062B\" : \"#fff\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "background: shared ? \"#4AFFCA\" : \"#ffffff\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "color: \"#00062B\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#319ED8\" strokeWidth=\"3\" strokeLinecap=\"round\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "<p className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2\">Add Real Name</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "className=\"flex-1 py-2 rounded-xl text-[12px] font-semibold text-white/70 active:opacity-70\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "className=\"flex-1 py-2 rounded-xl text-[12px] font-semibold text-white disabled:opacity-50 active:opacity-80\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "<p className=\"text-white/45 text-[10px] font-semibold uppercase tracking-wider\">{label}</p>"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "className=\"w-10 h-10 rounded-full flex items-center justify-center active:opacity-70 shadow-lg flex-shrink-0\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "className=\"w-10 h-10 rounded-full flex items-center justify-center active:opacity-70 transition-opacity shadow-lg flex-shrink-0 disabled:opacity-60\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/MiniPlayer.tsx",
-    "snippet": "<p className=\"text-white text-[13px] font-semibold truncate leading-tight\">{currentSong.title}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/MiniPlayer.tsx",
-    "snippet": "<p className=\"text-white/55 text-[11px] truncate leading-tight\">{currentSong.album.artist}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/MiniPlayer.tsx",
-    "snippet": "<p className=\"text-white text-[14px] font-semibold truncate leading-snug\">{currentSong.title}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/MiniPlayer.tsx",
-    "snippet": "<p className=\"text-white/55 text-[12px] truncate leading-snug\">{currentSong.album.artist}</p>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/PlaylistPickerSheet.tsx",
-    "snippet": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill={allInFavorites ? \"#FF5470\" : \"none\"} stroke={allInFavorites ? \"#FF5470\" : \"rgba(255,255,255,0.6)\"} strokeWidth=\"1.8\" strokeLinecap=\"round\" strokeL"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/PlaylistPickerSheet.tsx",
-    "snippet": "<svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#FF5470\" strokeWidth=\"2.5\" strokeLinecap=\"round\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/PlaylistPickerSheet.tsx",
-    "snippet": "style={{ background: \"linear-gradient(135deg, #1D5E8F, #319ED8)\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/PlaylistPickerSheet.tsx",
-    "snippet": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#4AFFCA\" strokeWidth=\"2.5\" strokeLinecap=\"round\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/PlaylistPickerSheet.tsx",
-    "snippet": "<span className={isAdded ? \"text-[#4AFFCA]\" : \"text-white\"}>"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/components/PlaylistPickerSheet.tsx",
-    "snippet": "<div className=\"w-10 h-1 rounded-full mx-auto mb-5\" style={{ background: \"rgba(255,255,255,0.2)\" }} />"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/components/StreamServicePickerSheet.tsx",
-    "snippet": "className=\"w-10 h-1 rounded-full mx-auto mb-5\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -6406,6 +6516,51 @@
   },
   {
     "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressingOrderFlow.tsx",
+    "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">Path to Shopify</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressingOrderFlow.tsx",
+    "snippet": "<div className=\"text-[12px] text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressingOrderFlow.tsx",
+    "snippet": "className=\"text-[12px] font-semibold text-[color:var(--brand-blue)] hover:underline shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressingOrderFlow.tsx",
+    "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">Path to press</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressingOrderFlow.tsx",
+    "snippet": "className=\"text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressingOrderFlow.tsx",
+    "snippet": "className=\"text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressingOrderFlow.tsx",
+    "snippet": "<div className=\"text-[12.5px] font-semibold text-slate-900\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressingOrderFlow.tsx",
+    "snippet": "<div className=\"text-[12px] text-slate-700 mt-0.5\">“{latest.rejectionNote}”</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressingOrderFlow.tsx",
+    "snippet": "<div className=\"text-[11.5px] text-slate-500 mt-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
     "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">Masters on file</h2>"
   },
@@ -6450,49 +6605,389 @@
     "snippet": "<p className=\"text-[11px] text-slate-500\">"
   },
   {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressingOrderFlow.tsx",
-    "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">Path to Shopify</div>"
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/AlbumDesktopPreviewCard.tsx",
+    "snippet": "className=\"flex flex-col h-full bg-[#00062B]\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
+    "snippet": "style={{ color: it.active ? \"#319ED8\" : \"rgba(255,255,255,0.35)\" }}"
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressingOrderFlow.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-500\">"
+    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
+    "snippet": "className=\"w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold\""
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressingOrderFlow.tsx",
-    "snippet": "className=\"text-[12px] font-semibold text-[color:var(--brand-blue)] hover:underline shrink-0\""
+    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
+    "snippet": "className=\"relative text-[9px] font-medium\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
+    "snippet": "borderColor: \"#319ED8\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
+    "snippet": "<span className=\"text-[11px] font-bold\" style={{ color: \"#00062B\" }}>"
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressingOrderFlow.tsx",
-    "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">Path to press</div>"
+    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
+    "snippet": "className=\"text-[11px] font-semibold uppercase tracking-[0.1em]\""
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressingOrderFlow.tsx",
-    "snippet": "className=\"text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200\""
+    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
+    "snippet": "className=\"text-white text-[22px] font-bold leading-tight tracking-tight mt-1\""
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressingOrderFlow.tsx",
-    "snippet": "className=\"text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200\""
+    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
+    "snippet": "className=\"text-[13px] leading-relaxed whitespace-pre-line line-clamp-6\""
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressingOrderFlow.tsx",
-    "snippet": "<div className=\"text-[12.5px] font-semibold text-slate-900\">"
+    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
+    "snippet": "className=\"text-[12.5px] italic leading-relaxed line-clamp-5\""
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressingOrderFlow.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-700 mt-0.5\">\u201c{latest.rejectionNote}\u201d</div>"
+    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
+    "snippet": "className=\"text-[11px] font-semibold uppercase tracking-[0.1em] mb-2\""
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressingOrderFlow.tsx",
-    "snippet": "<div className=\"text-[11.5px] text-slate-500 mt-1\">"
+    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
+    "snippet": "className=\"text-[12.5px] py-3\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
+    "snippet": "<span className=\"text-[11px] font-bold\" style={{ color: \"#00062B\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
+    "snippet": "<p className=\"text-white text-[13px] font-semibold truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
+    "snippet": "className=\"text-[11px] truncate mt-0.5\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "background: \"#00062B\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "<div className=\"w-full h-full rounded-[32px] overflow-hidden bg-[#00062B] flex flex-col\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "// muddy / off-brand. Solid #00062B (the player bg) with"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "style={{ background: \"#00062B\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "\"linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.55) 35%, #00062B 70%, #00062B 100%)\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "\"linear-gradient(135deg, #4AFFCA 0%, #319ED8 50%, #7F10A7 100%)\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "style={{ color: \"#00062B\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "style={{ background: \"#319ED8\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "style={{ color: \"#319ED8\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "background: \"#319ED8\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-3\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "<div className=\"flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-1 text-[11px] font-medium text-white\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "className=\"text-[26px] font-bold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "className=\"text-[13px] mt-0.5 line-clamp-2\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "className=\"pb-2 text-[14px] font-semibold active:opacity-80 flex items-baseline gap-1.5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "className=\"text-[12px] font-medium\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "<h3 className=\"text-white text-[18px] font-bold leading-tight tracking-tight mb-1.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "className={`text-[13px] leading-relaxed whitespace-pre-line ${"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "className=\"mt-1.5 text-[13px] font-semibold active:opacity-70\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "<p className=\"text-[12px] mb-0.5\" style={{ color: \"rgba(235,235,245,0.55)\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "<p className=\"text-white text-[14px]\">{label.location}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "className=\"text-[14px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "<h3 className=\"text-white text-[18px] font-bold leading-tight tracking-tight mb-3\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "<p className=\"text-[13px]\" style={{ color: \"rgba(235,235,245,0.5)\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "className=\"w-full h-full flex items-center justify-center text-white/40 text-[28px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "<p className=\"text-white text-[13px] font-semibold leading-tight truncate mt-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "className=\"text-[11px] truncate mt-0.5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "<p className=\"text-white text-[13px] font-semibold leading-tight mt-2 line-clamp-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[11px] mt-3 text-center\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
+    "snippet": "style={{ background: \"#00062B\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
+    "snippet": "\"linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.55) 35%, #00062B 70%, #00062B 100%)\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
+    "snippet": "\"linear-gradient(135deg, #4AFFCA 0%, #319ED8 50%, #7F10A7 100%)\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
+    "snippet": "<span className=\"text-[28px] font-bold\" style={{ color: \"#00062B\" }}>"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
+    "snippet": "<Star className=\"w-4 h-4 flex-shrink-0\" style={{ color: \"#FF5470\", fill: \"#FF5470\" }} />"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
+    "snippet": "<span className=\"text-[28px] font-bold\" style={{ color: \"#00062B\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
+    "snippet": "<p className=\"text-[12.5px] mt-0.5\" style={{ color: \"rgba(235,235,245,0.7)\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
+    "snippet": "className=\"text-[13px] leading-relaxed whitespace-pre-line line-clamp-5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
+    "snippet": "<h3 className=\"text-white text-[16px] font-bold leading-tight tracking-tight mb-3\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
+    "snippet": "className=\"text-[13px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
+    "snippet": "<p className=\"text-white text-[12.5px] font-semibold leading-tight truncate mt-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
+    "snippet": "className=\"text-[11px] truncate mt-0.5\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/PhoneBezel.tsx",
+    "snippet": "background: \"#00062B\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/PhoneBezel.tsx",
+    "snippet": "<div className=\"w-full h-full rounded-[32px] overflow-hidden bg-[#00062B] flex flex-col\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/PhoneBezel.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-3\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/PhoneBezel.tsx",
+    "snippet": "<div className=\"flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-1 text-[11px] font-medium text-white\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/PhoneBezel.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[11px] mt-3 text-center max-w-[320px]\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/TabletBezel.tsx",
+    "snippet": "background: \"#00062B\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/TabletBezel.tsx",
+    "snippet": "<div className=\"w-full h-full rounded-[18px] overflow-hidden bg-[#00062B] relative\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/TabletBezel.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-3\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/TabletBezel.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[11px] mt-3 text-center max-w-[640px]\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
+    "snippet": "style={{ background: \"#00062B\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
+    "snippet": "\"linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.55) 35%, #00062B 70%, #00062B 100%)\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
+    "snippet": "<span className=\"text-[26px] font-bold\" style={{ color: \"#00062B\" }}>"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
+    "snippet": "style={{ color: \"#319ED8\" }}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
+    "snippet": "<span className=\"text-[26px] font-bold\" style={{ color: \"#00062B\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
+    "snippet": "className=\"text-[13px] mt-0.5 line-clamp-2\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 text-[12px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
+    "snippet": "className=\"text-[13px] leading-relaxed whitespace-pre-line line-clamp-5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
+    "snippet": "<h3 className=\"text-white text-[16px] font-bold leading-tight tracking-tight mb-3\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
+    "snippet": "<p className=\"text-[13px]\" style={{ color: \"rgba(235,235,245,0.5)\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
+    "snippet": "<p className=\"text-white text-[12.5px] font-semibold leading-tight truncate mt-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
+    "snippet": "className=\"text-[11px] truncate mt-0.5\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -6557,7 +7052,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SellPanel.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">Printed &amp; Signed GoodDeed\u00ae</h2>"
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">Printed &amp; Signed GoodDeed®</h2>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -6842,7 +7337,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "<span className=\"text-[11.5px] text-slate-400\">Must be \u2265 the album's per-album minimum floor.</span>"
+    "snippet": "<span className=\"text-[11.5px] text-slate-400\">Must be ≥ the album's per-album minimum floor.</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -6907,7 +7402,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
-    "snippet": "return <p className=\"text-[13px] text-slate-500 py-2\">Loading vendor routing\u2026</p>;"
+    "snippet": "return <p className=\"text-[13px] text-slate-500 py-2\">Loading vendor routing…</p>;"
   },
   {
     "rule": "hardcoded-font-size",
@@ -6972,7 +7467,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/SignedCertVendorPanel.tsx",
-    "snippet": "<div className=\"text-[12px] text-slate-400\">\u2014</div>"
+    "snippet": "<div className=\"text-[12px] text-slate-400\">—</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -7382,7 +7877,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/UploadValidationsPanel.tsx",
-    "snippet": "{validations.isLoading && <div className=\"text-[13px] text-slate-500\">Loading\u2026</div>}"
+    "snippet": "{validations.isLoading && <div className=\"text-[13px] text-slate-500\">Loading…</div>}"
   },
   {
     "rule": "hardcoded-font-size",
@@ -7402,7 +7897,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/UploadValidationsPanel.tsx",
-    "snippet": "<span className=\"text-[11px] text-slate-400\">{row.vendorId.toUpperCase()}{row.templateId ? ` \u00b7 ${row.templateId}` : \"\"}</span>"
+    "snippet": "<span className=\"text-[11px] text-slate-400\">{row.vendorId.toUpperCase()}{row.templateId ? ` · ${row.templateId}` : \"\"}</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -7515,389 +8010,19 @@
     "snippet": "<p className=\"text-[11px] text-slate-400\">"
   },
   {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/AlbumDesktopPreviewCard.tsx",
-    "snippet": "className=\"flex flex-col h-full bg-[#00062B]\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
-    "snippet": "style={{ color: it.active ? \"#319ED8\" : \"rgba(255,255,255,0.35)\" }}"
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/BottomNav.tsx",
+    "snippet": "className={`relative text-[10px] font-medium transition-colors duration-150 ${contentShift} ${active ? \"text-[color:var(--brand-blue)]\" : \"text-white/35\"}`}"
   },
   {
     "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
-    "snippet": "className=\"w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold\""
+    "file": "client/src/components/BottomNav.tsx",
+    "snippet": "className=\"flex-1 min-w-0 bg-transparent border-0 py-0 pr-2 text-white placeholder-white/45 text-[15px] focus:outline-none\""
   },
   {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/AlbumPreviewCard.tsx",
-    "snippet": "className=\"relative text-[9px] font-medium\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
-    "snippet": "borderColor: \"#319ED8\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
-    "snippet": "<span className=\"text-[11px] font-bold\" style={{ color: \"#00062B\" }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
-    "snippet": "className=\"text-[11px] font-semibold uppercase tracking-[0.1em]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
-    "snippet": "className=\"text-white text-[22px] font-bold leading-tight tracking-tight mt-1\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
-    "snippet": "className=\"text-[13px] leading-relaxed whitespace-pre-line line-clamp-6\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
-    "snippet": "className=\"text-[12.5px] italic leading-relaxed line-clamp-5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
-    "snippet": "className=\"text-[11px] font-semibold uppercase tracking-[0.1em] mb-2\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
-    "snippet": "className=\"text-[12.5px] py-3\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
-    "snippet": "<span className=\"text-[11px] font-bold\" style={{ color: \"#00062B\" }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
-    "snippet": "<p className=\"text-white text-[13px] font-semibold truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/InstrumentPreviewCard.tsx",
-    "snippet": "className=\"text-[11px] truncate mt-0.5\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "background: \"#00062B\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "<div className=\"w-full h-full rounded-[32px] overflow-hidden bg-[#00062B] flex flex-col\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "// muddy / off-brand. Solid #00062B (the player bg) with"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "style={{ background: \"#00062B\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "\"linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.55) 35%, #00062B 70%, #00062B 100%)\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "\"linear-gradient(135deg, #4AFFCA 0%, #319ED8 50%, #7F10A7 100%)\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "style={{ color: \"#00062B\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "style={{ background: \"#319ED8\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "style={{ color: \"#319ED8\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "background: \"#319ED8\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-3\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "<div className=\"flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-1 text-[11px] font-medium text-white\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "className=\"text-[26px] font-bold\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "className=\"text-[13px] mt-0.5 line-clamp-2\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "className=\"pb-2 text-[14px] font-semibold active:opacity-80 flex items-baseline gap-1.5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "className=\"text-[12px] font-medium\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "<h3 className=\"text-white text-[18px] font-bold leading-tight tracking-tight mb-1.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "className={`text-[13px] leading-relaxed whitespace-pre-line ${"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "className=\"mt-1.5 text-[13px] font-semibold active:opacity-70\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "<p className=\"text-[12px] mb-0.5\" style={{ color: \"rgba(235,235,245,0.55)\" }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "<p className=\"text-white text-[14px]\">{label.location}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "className=\"text-[14px]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "<h3 className=\"text-white text-[18px] font-bold leading-tight tracking-tight mb-3\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "<p className=\"text-[13px]\" style={{ color: \"rgba(235,235,245,0.5)\" }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "className=\"w-full h-full flex items-center justify-center text-white/40 text-[28px]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "<p className=\"text-white text-[13px] font-semibold leading-tight truncate mt-2\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "className=\"text-[11px] truncate mt-0.5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "<p className=\"text-white text-[13px] font-semibold leading-tight mt-2 line-clamp-2\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/LabelPreviewCard.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[11px] mt-3 text-center\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
-    "snippet": "style={{ background: \"#00062B\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
-    "snippet": "\"linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.55) 35%, #00062B 70%, #00062B 100%)\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
-    "snippet": "\"linear-gradient(135deg, #4AFFCA 0%, #319ED8 50%, #7F10A7 100%)\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
-    "snippet": "<span className=\"text-[28px] font-bold\" style={{ color: \"#00062B\" }}>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
-    "snippet": "<Star className=\"w-4 h-4 flex-shrink-0\" style={{ color: \"#FF5470\", fill: \"#FF5470\" }} />"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
-    "snippet": "<span className=\"text-[28px] font-bold\" style={{ color: \"#00062B\" }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
-    "snippet": "<p className=\"text-[12.5px] mt-0.5\" style={{ color: \"rgba(235,235,245,0.7)\" }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
-    "snippet": "className=\"text-[13px] leading-relaxed whitespace-pre-line line-clamp-5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
-    "snippet": "<h3 className=\"text-white text-[16px] font-bold leading-tight tracking-tight mb-3\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
-    "snippet": "className=\"text-[13px]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
-    "snippet": "<p className=\"text-white text-[12.5px] font-semibold leading-tight truncate mt-2\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/PersonPreviewCard.tsx",
-    "snippet": "className=\"text-[11px] truncate mt-0.5\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/PhoneBezel.tsx",
-    "snippet": "background: \"#00062B\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/PhoneBezel.tsx",
-    "snippet": "<div className=\"w-full h-full rounded-[32px] overflow-hidden bg-[#00062B] flex flex-col\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/PhoneBezel.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-3\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/PhoneBezel.tsx",
-    "snippet": "<div className=\"flex-shrink-0 flex items-center justify-between px-5 pt-3 pb-1 text-[11px] font-medium text-white\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/PhoneBezel.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[11px] mt-3 text-center max-w-[320px]\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/TabletBezel.tsx",
-    "snippet": "background: \"#00062B\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/TabletBezel.tsx",
-    "snippet": "<div className=\"w-full h-full rounded-[18px] overflow-hidden bg-[#00062B] relative\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/TabletBezel.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[10.5px] font-semibold uppercase tracking-[0.12em] mb-3\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/TabletBezel.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[11px] mt-3 text-center max-w-[640px]\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
-    "snippet": "style={{ background: \"#00062B\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
-    "snippet": "\"linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.55) 35%, #00062B 70%, #00062B 100%)\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
-    "snippet": "<span className=\"text-[26px] font-bold\" style={{ color: \"#00062B\" }}>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
-    "snippet": "style={{ color: \"#319ED8\" }}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
-    "snippet": "<span className=\"text-[26px] font-bold\" style={{ color: \"#00062B\" }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
-    "snippet": "className=\"text-[13px] mt-0.5 line-clamp-2\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1 text-[12px]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
-    "snippet": "className=\"text-[13px] leading-relaxed whitespace-pre-line line-clamp-5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
-    "snippet": "<h3 className=\"text-white text-[16px] font-bold leading-tight tracking-tight mb-3\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
-    "snippet": "<p className=\"text-[13px]\" style={{ color: \"rgba(235,235,245,0.5)\" }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
-    "snippet": "<p className=\"text-white text-[12.5px] font-semibold leading-tight truncate mt-2\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/previews/VendorPreviewCard.tsx",
-    "snippet": "className=\"text-[11px] truncate mt-0.5\""
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/components/BottomNav.tsx",
+    "snippet": "className=\"mr-3 w-5 h-5 flex items-center justify-center rounded-full flex-shrink-0\""
   },
   {
     "rule": "brand-hex-literal",
@@ -8025,6 +8150,101 @@
     "snippet": "<p className=\"mt-3 text-white/40 text-[11px] text-center leading-snug\">"
   },
   {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/GlobalErrorBoundary.tsx",
+    "snippet": "\"background:#FF5470\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "style={{ background: \"#ffffff\", color: \"#00062B\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "className=\"w-full border border-white/15 rounded-xl px-3 py-2 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8]\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "style={{ background: \"linear-gradient(135deg, #1D5E8F, #319ED8)\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "background: imageSaved ? \"#4AFFCA\" : \"rgba(255,255,255,0.18)\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "color: imageSaved ? \"#00062B\" : \"#fff\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "background: shared ? \"#4AFFCA\" : \"#ffffff\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "color: \"#00062B\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#319ED8\" strokeWidth=\"3\" strokeLinecap=\"round\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "<p className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2\">Add Real Name</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "className=\"flex-1 py-2 rounded-xl text-[12px] font-semibold text-white/70 active:opacity-70\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "className=\"flex-1 py-2 rounded-xl text-[12px] font-semibold text-white disabled:opacity-50 active:opacity-80\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "<p className=\"text-white/45 text-[10px] font-semibold uppercase tracking-wider\">{label}</p>"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "className=\"w-10 h-10 rounded-full flex items-center justify-center active:opacity-70 shadow-lg flex-shrink-0\""
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/components/GoodDeedCertificate.tsx",
+    "snippet": "className=\"w-10 h-10 rounded-full flex items-center justify-center active:opacity-70 transition-opacity shadow-lg flex-shrink-0 disabled:opacity-60\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/MiniPlayer.tsx",
+    "snippet": "<p className=\"text-white text-[13px] font-semibold truncate leading-tight\">{currentSong.title}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/MiniPlayer.tsx",
+    "snippet": "<p className=\"text-white/55 text-[11px] truncate leading-tight\">{currentSong.album.artist}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/MiniPlayer.tsx",
+    "snippet": "<p className=\"text-white text-[14px] font-semibold truncate leading-snug\">{currentSong.title}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/MiniPlayer.tsx",
+    "snippet": "<p className=\"text-white/55 text-[12px] truncate leading-snug\">{currentSong.album.artist}</p>"
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/partner/PartnerDashboard.tsx",
     "snippet": "<p className=\"text-white/55 text-[12px] uppercase tracking-wider font-semibold\">Dashboard</p>"
@@ -8085,6 +8305,36 @@
     "snippet": "<time className=\"text-[11px] text-white/45 tabular-nums shrink-0\">"
   },
   {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/PlaylistPickerSheet.tsx",
+    "snippet": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill={allInFavorites ? \"#FF5470\" : \"none\"} stroke={allInFavorites ? \"#FF5470\" : \"rgba(255,255,255,0.6)\"} strokeWidth=\"1.8\" strokeLinecap=\"round\" strokeL"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/PlaylistPickerSheet.tsx",
+    "snippet": "<svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#FF5470\" strokeWidth=\"2.5\" strokeLinecap=\"round\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/PlaylistPickerSheet.tsx",
+    "snippet": "style={{ background: \"linear-gradient(135deg, #1D5E8F, #319ED8)\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/PlaylistPickerSheet.tsx",
+    "snippet": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#4AFFCA\" strokeWidth=\"2.5\" strokeLinecap=\"round\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/PlaylistPickerSheet.tsx",
+    "snippet": "<span className={isAdded ? \"text-[#4AFFCA]\" : \"text-white\"}>"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/components/PlaylistPickerSheet.tsx",
+    "snippet": "<div className=\"w-10 h-1 rounded-full mx-auto mb-5\" style={{ background: \"rgba(255,255,255,0.2)\" }} />"
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/search/views.tsx",
     "snippet": "<h2 className=\"text-white text-[15px] font-bold\">Recently Searched</h2>"
@@ -8102,7 +8352,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/search/views.tsx",
-    "snippet": "{s.subtitle && <span className=\"text-white/40 text-[13px] truncate\">\u2014 {s.subtitle}</span>}"
+    "snippet": "{s.subtitle && <span className=\"text-white/40 text-[13px] truncate\">— {s.subtitle}</span>}"
   },
   {
     "rule": "hardcoded-font-size",
@@ -8113,6 +8363,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/search/views.tsx",
     "snippet": "className=\"flex-shrink-0 px-3.5 py-1.5 rounded-full text-[13px] font-semibold transition-all\""
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/components/StreamServicePickerSheet.tsx",
+    "snippet": "className=\"w-10 h-1 rounded-full mx-auto mb-5\""
   },
   {
     "rule": "brand-hex-literal",
@@ -8487,7 +8742,7 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/components/ui/ExplicitBadge.tsx",
-    "snippet": "* `dark` \u2014 for consumer surfaces on the #00062B background (default)."
+    "snippet": "* `dark` — for consumer surfaces on the #00062B background (default)."
   },
   {
     "rule": "brand-hex-literal",
@@ -8507,7 +8762,7 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/components/ui/PlayerDock.tsx",
-    "snippet": "// (off \u2192 all \u2192 one \u2192 off). Active states use brand blue (#319ED8);"
+    "snippet": "// (off → all → one → off). Active states use brand blue (#319ED8);"
   },
   {
     "rule": "brand-hex-literal",
@@ -8767,7 +9022,7 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Admin.tsx",
-    "snippet": "{/* Bottom gradient \u2014 soft fade into #00062B so the avatar overlap"
+    "snippet": "{/* Bottom gradient — soft fade into #00062B so the avatar overlap"
   },
   {
     "rule": "brand-hex-literal",
@@ -9087,7 +9342,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Admin.tsx",
-    "snippet": "<span className=\"text-slate-300 text-[11px]\">{isOpen ? \"\u25be\" : \"\u25b8\"}</span>"
+    "snippet": "<span className=\"text-slate-300 text-[11px]\">{isOpen ? \"▾\" : \"▸\"}</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -9197,7 +9452,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Admin.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[11px] truncate\">{alb.albumYear ? `${alb.albumYear} \u00b7 ` : \"\"}{alb.tracks.length} track{alb.tracks.length === 1 ? \"\" : \"s\"}</p>"
+    "snippet": "<p className=\"text-slate-400 text-[11px] truncate\">{alb.albumYear ? `${alb.albumYear} · ` : \"\"}{alb.tracks.length} track{alb.tracks.length === 1 ? \"\" : \"s\"}</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -9217,7 +9472,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Admin.tsx",
-    "snippet": "<span className=\"text-slate-400 text-[11px] truncate max-w-[200px]\">\u00b7 {t.instrumentName}</span>"
+    "snippet": "<span className=\"text-slate-400 text-[11px] truncate max-w-[200px]\">· {t.instrumentName}</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -10392,7 +10647,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "Search GoodSync<sup className=\"text-[8px] font-medium\">\u2122</sup>"
+    "snippet": "Search GoodSync<sup className=\"text-[8px] font-medium\">™</sup>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -10452,7 +10707,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<span className=\"text-[10.5px] text-slate-400\">\u2192 ends 30s later</span>"
+    "snippet": "<span className=\"text-[10.5px] text-slate-400\">→ ends 30s later</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -10502,7 +10757,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<p className=\"text-[11px] text-slate-400\">Uploading\u2026</p>"
+    "snippet": "<p className=\"text-[11px] text-slate-400\">Uploading…</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -10782,12 +11037,12 @@
   {
     "rule": "naked-icon-button",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<button type=\"button\" aria-label=\"What is GoodSync\u2122?\" className=\"w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shri"
+    "snippet": "<button type=\"button\" aria-label=\"What is GoodSync™?\" className=\"w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex-shri"
   },
   {
     "rule": "naked-icon-button",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<button type=\"button\" onClick={enterEdit} aria-label=\"Edit cue text\" title=\"Edit cue text \u2014 fix words STT misheard. Timings stay put.\" className=\"w-6 h-6 rounded-full text-slate-400 hover:text-[var(--"
+    "snippet": "<button type=\"button\" onClick={enterEdit} aria-label=\"Edit cue text\" title=\"Edit cue text — fix words STT misheard. Timings stay put.\" className=\"w-6 h-6 rounded-full text-slate-400 hover:text-[var(--"
   },
   {
     "rule": "naked-icon-button",
@@ -11147,7 +11402,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminDashboard.tsx",
-    "snippet": "return <span className=\"text-[11px] text-slate-400\">vs prior: \u2014</span>;"
+    "snippet": "return <span className=\"text-[11px] text-slate-400\">vs prior: —</span>;"
   },
   {
     "rule": "hardcoded-font-size",
@@ -12337,7 +12592,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminOrders.tsx",
-    "snippet": "<div className=\"text-slate-400 text-[12px]\">Loading\u2026</div>"
+    "snippet": "<div className=\"text-slate-400 text-[12px]\">Loading…</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -12702,7 +12957,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "<p className=\"px-5 py-6 text-[13px] text-slate-500\">Loading\u2026</p>"
+    "snippet": "<p className=\"px-5 py-6 text-[13px] text-slate-500\">Loading…</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -13082,7 +13337,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<td className=\"py-2.5 text-slate-500 font-mono text-[12px]\">{r.orderDeskOrderId || \"\u2014\"}</td>"
+    "snippet": "<td className=\"py-2.5 text-slate-500 font-mono text-[12px]\">{r.orderDeskOrderId || \"—\"}</td>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -13122,12 +13377,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<td className=\"py-2 text-slate-500 font-mono text-[11px]\">{r.userId ? r.userId.slice(0, 8) : \"\u2014\"}</td>"
+    "snippet": "<td className=\"py-2 text-slate-500 font-mono text-[11px]\">{r.userId ? r.userId.slice(0, 8) : \"—\"}</td>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminReports.tsx",
-    "snippet": "<td className=\"py-2 text-slate-500 font-mono text-[11px]\">{r.sessionId ? r.sessionId.slice(0, 10) : \"\u2014\"}</td>"
+    "snippet": "<td className=\"py-2 text-slate-500 font-mono text-[11px]\">{r.sessionId ? r.sessionId.slice(0, 10) : \"—\"}</td>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -13257,7 +13512,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<p className=\"text-[11.5px] text-slate-500 mb-2\">Save these \u2014 each works once if you lose your authenticator. You won't see them again.</p>"
+    "snippet": "<p className=\"text-[11.5px] text-slate-500 mb-2\">Save these — each works once if you lose your authenticator. You won't see them again.</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -13272,7 +13527,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminSecurity.tsx",
-    "snippet": "<p className=\"text-[11.5px] text-slate-500 mb-2\">Save these \u2014 you won't see them again.</p>"
+    "snippet": "<p className=\"text-[11.5px] text-slate-500 mb-2\">Save these — you won't see them again.</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -13667,7 +13922,7 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "{ date: \"2024-03-12\", actor: \"GoodTunes\u00ae Created\", action: \"Certificate #\" + certNum + \" created\", color: \"#7F10A7\" },"
+    "snippet": "{ date: \"2024-03-12\", actor: \"GoodTunes® Created\", action: \"Certificate #\" + certNum + \" created\", color: \"#7F10A7\" },"
   },
   {
     "rule": "brand-hex-literal",
@@ -14062,7 +14317,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-[15px] mt-1.5\" style={{ color: \"rgba(235,235,245,0.55)\" }}>Tuning \u00b7 {tuningNotes}</p>"
+    "snippet": "<p className=\"text-[15px] mt-1.5\" style={{ color: \"rgba(235,235,245,0.55)\" }}>Tuning · {tuningNotes}</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14197,7 +14452,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-[12px] mt-0.5\" style={{ color: \"rgba(235,235,245,0.45)\" }}>The instrument that opened this page \u2014 tap the Gear tab to see the rest.</p>"
+    "snippet": "<p className=\"text-[12px] mt-0.5\" style={{ color: \"rgba(235,235,245,0.45)\" }}>The instrument that opened this page — tap the Gear tab to see the rest.</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14212,7 +14467,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-[14px]\" style={{ color: \"rgba(235,235,245,0.5)\" }}>Loading\u2026</p>"
+    "snippet": "<p className=\"text-[14px]\" style={{ color: \"rgba(235,235,245,0.5)\" }}>Loading…</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14222,7 +14477,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<div className=\"w-full h-full flex items-center justify-center text-white/40 text-[20px]\">\u266a</div>"
+    "snippet": "<div className=\"w-full h-full flex items-center justify-center text-white/40 text-[20px]\">♪</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14452,7 +14707,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "return <p className=\"py-10 text-center text-white/45 text-[13px]\">Loading\u2026</p>;"
+    "snippet": "return <p className=\"py-10 text-center text-white/45 text-[13px]\">Loading…</p>;"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14573,6 +14828,116 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDetail.tsx",
     "snippet": "className=\"text-[12px] font-normal leading-tight mt-0.5\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "\"w-full h-9 border border-slate-300 rounded-md px-3 text-slate-900 placeholder-slate-400 text-sm bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8] transition-colors\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "\"w-full h-10 border border-slate-300 rounded-md px-3 text-slate-900 text-center text-lg tracking-widest bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "\"mt-3 w-full h-9 rounded-md font-medium text-sm text-white bg-[#319ED8] hover:bg-[#2a8cc1] disabled:opacity-40 disabled:cursor-not-allowed transition-colors active:scale-[0.98]\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "\"w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "\"w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white text-center text-lg tracking-widest focus:outline-none focus:border-[#319ED8]\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "primaryBtnStyle: { background: \"linear-gradient(135deg, #1D5E8F, #319ED8)\" },"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "subtitle: \"mt-3 text-slate-500 text-[13px] text-center\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "label: \"text-slate-600 text-[11px] font-semibold uppercase tracking-wider block mb-1.5\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "hint: \"text-slate-500 text-[11px] mt-1.5\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "stepLabel: \"text-slate-400 text-[11px] ml-2\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "subtitle: \"mt-3 text-white/55 text-[13px] text-center\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "hint: \"text-white/35 text-[11px] mt-1.5 ml-1\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "stepLabel: \"text-white/40 text-[11px] ml-2\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "footer: \"w-full max-w-[440px] text-center text-[10px] leading-snug px-8\","
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/authChrome.ts",
+    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
   },
   {
     "rule": "brand-hex-literal",
@@ -14702,7 +15067,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Chat.tsx",
-    "snippet": "<p className=\"text-white/55 text-[13px] truncate\">{t.lastPreview || \"\u2014\"}</p>"
+    "snippet": "<p className=\"text-white/55 text-[13px] truncate\">{t.lastPreview || \"—\"}</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14732,7 +15097,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Chat.tsx",
-    "snippet": "<p className=\"text-white/45 text-[12px] mt-1.5\">Tap to open in browser \u203a</p>"
+    "snippet": "<p className=\"text-white/45 text-[12px] mt-1.5\">Tap to open in browser ›</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14762,7 +15127,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Chat.tsx",
-    "snippet": "<p className=\"text-center text-white/40 text-[13px] py-6\">Say hi to {thread.vendorName} \ud83d\udc4b</p>"
+    "snippet": "<p className=\"text-center text-white/40 text-[13px] py-6\">Say hi to {thread.vendorName} 👋</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -15017,12 +15382,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/GiftClaim.tsx",
-    "snippet": "<div className=\"text-[40px] mb-2\">\ud83c\udf81</div>"
+    "snippet": "<div className=\"text-[40px] mb-2\">🎁</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/GiftClaim.tsx",
-    "snippet": "<div className=\"text-[44px] mb-2\">\ud83c\udf81</div>"
+    "snippet": "<div className=\"text-[44px] mb-2\">🎁</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -15052,7 +15417,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/GiftClaim.tsx",
-    "snippet": "<div className=\"text-white/40 text-[11px] mt-1\">Full album \u00b7 Lossless \u00b7 Your GoodDeed certificate</div>"
+    "snippet": "<div className=\"text-white/40 text-[11px] mt-1\">Full album · Lossless · Your GoodDeed certificate</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -15217,7 +15582,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/LabelDashboard.tsx",
-    "snippet": "<span className=\"text-[9px] w-2\">{active ? (sortDir === \"asc\" ? \"\u25b2\" : \"\u25bc\") : \"\"}</span>"
+    "snippet": "<span className=\"text-[9px] w-2\">{active ? (sortDir === \"asc\" ? \"▲\" : \"▼\") : \"\"}</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -15227,7 +15592,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/LabelDashboard.tsx",
-    "snippet": "<p className=\"text-white/45 text-[11px] truncate\">{t.albumTitle} \u00b7 {t.albumArtist}</p>"
+    "snippet": "<p className=\"text-white/45 text-[11px] truncate\">{t.albumTitle} · {t.albumArtist}</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16102,7 +16467,7 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Welcome.tsx",
-    "snippet": "<div className=\"text-[#FF5470] text-[11px] uppercase tracking-wider font-semibold mb-2\">\ud83c\udf81 Your gift is ready</div>"
+    "snippet": "<div className=\"text-[#FF5470] text-[11px] uppercase tracking-wider font-semibold mb-2\">🎁 Your gift is ready</div>"
   },
   {
     "rule": "brand-hex-literal",
@@ -16127,7 +16492,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Welcome.tsx",
-    "snippet": "<div className=\"text-white/40 text-[11px] uppercase tracking-wider font-semibold\">Your GoodDeed\u00ae</div>"
+    "snippet": "<div className=\"text-white/40 text-[11px] uppercase tracking-wider font-semibold\">Your GoodDeed®</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16142,7 +16507,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Welcome.tsx",
-    "snippet": "<div className=\"text-white/40 text-[11px] uppercase tracking-wider font-semibold\">Your GoodDeeds\u00ae</div>"
+    "snippet": "<div className=\"text-white/40 text-[11px] uppercase tracking-wider font-semibold\">Your GoodDeeds®</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16202,7 +16567,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Welcome.tsx",
-    "snippet": "<div className=\"text-[#FF5470] text-[11px] uppercase tracking-wider font-semibold mb-2\">\ud83c\udf81 Your gift is ready</div>"
+    "snippet": "<div className=\"text-[#FF5470] text-[11px] uppercase tracking-wider font-semibold mb-2\">🎁 Your gift is ready</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16233,115 +16598,5 @@
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/Welcome.tsx",
     "snippet": "<div className=\"w-10 h-10 rounded-full border-2 border-white/20 border-t-[#319ED8] animate-spin mx-auto mb-4\" />"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "\"w-full h-9 border border-slate-300 rounded-md px-3 text-slate-900 placeholder-slate-400 text-sm bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8] transition-colors\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "\"w-full h-10 border border-slate-300 rounded-md px-3 text-slate-900 text-center text-lg tracking-widest bg-white focus:outline-none focus:border-[#319ED8] focus:ring-1 focus:ring-[#319ED8]\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "\"mt-3 w-full h-9 rounded-md font-medium text-sm text-white bg-[#319ED8] hover:bg-[#2a8cc1] disabled:opacity-40 disabled:cursor-not-allowed transition-colors active:scale-[0.98]\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "\"w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[#319ED8] transition-colors\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "\"w-full border border-white/10 rounded-2xl px-4 py-3.5 text-white text-center text-lg tracking-widest focus:outline-none focus:border-[#319ED8]\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "primaryBtnStyle: { background: \"linear-gradient(135deg, #1D5E8F, #319ED8)\" },"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "subtitle: \"mt-3 text-slate-500 text-[13px] text-center\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "label: \"text-slate-600 text-[11px] font-semibold uppercase tracking-wider block mb-1.5\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "hint: \"text-slate-500 text-[11px] mt-1.5\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "stepLabel: \"text-slate-400 text-[11px] ml-2\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "subtitle: \"mt-3 text-white/55 text-[13px] text-center\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "hint: \"text-white/35 text-[11px] mt-1.5 ml-1\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "stepLabel: \"text-white/40 text-[11px] ml-2\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "footer: \"w-full max-w-[440px] text-center text-[10px] leading-snug px-8\","
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-slate-200\"}`,"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "step1Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/authChrome.ts",
-    "snippet": "step2Tick: (on) => `h-1 w-10 rounded-full ${on ? \"bg-[#319ED8]\" : \"bg-white/15\"}`,"
   }
 ]

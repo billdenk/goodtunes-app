@@ -748,7 +748,7 @@ function AlbumTile({ album }: { album: AlbumLite }) {
         </div>
         {countdown && (
           <div
-            className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[color:var(--brand-blue)]/10 text-[color:var(--brand-blue)] text-[10.5px] font-semibold tabular-nums"
+            className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[color:var(--brand-blue)]/10 text-[color:var(--brand-blue)] text-xs font-semibold tabular-nums"
             title={`Goes live for fans on ${album.goodTunesReleaseDate}`}
             data-testid={`text-sunrise-countdown-tile-${album.id}`}
           >
@@ -816,7 +816,7 @@ function AlbumRow({ album }: { album: AlbumLite }) {
         )}
         {countdown && (
           <span
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[color:var(--brand-blue)]/10 text-[color:var(--brand-blue)] text-[11px] font-semibold tabular-nums"
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[color:var(--brand-blue)]/10 text-[color:var(--brand-blue)] text-xs font-semibold tabular-nums"
             title={`Goes live for fans on ${album.goodTunesReleaseDate}`}
             data-testid={`text-sunrise-countdown-row-${album.id}`}
           >
