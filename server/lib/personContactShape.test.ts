@@ -16,6 +16,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+// Task #968 — the artist-vs-contact predicate now lives in a real shared
+// module that both the People list endpoint and the Person detail
+// endpoint import, so the two can never drift. Test the real code, not a
+// transcription.
+import { personShape, hasArtistShape } from "./personArtistShape";
 
 // ---------------------------------------------------------------------------
 // Reference implementations — mirror of server/routes.ts GET
@@ -47,37 +52,6 @@ function gtRoleFor(kind: EntityKind, canAmb: boolean): string {
     default:
       return "Contact";
   }
-}
-
-type PersonRow = {
-  isArtistPromoted?: boolean;
-  isGroup?: boolean;
-  roles?: string[];
-};
-
-// Signals that would come from the EXISTS query (users role-scope, a
-// primary-artist album, or a person_discography row).
-type ArtistSignals = {
-  hasRole?: boolean;
-  hasAlbum?: boolean;
-  hasDisco?: boolean;
-};
-
-// computeShape: a Person is 'artist' when promoted, a group, explicitly
-// tagged "Artist", OR carries any artist signal; otherwise 'contact'.
-// The first three short-circuit before the DB EXISTS probe in the route.
-function computeShape(
-  p: PersonRow,
-  signals: ArtistSignals = {},
-): "artist" | "contact" {
-  const isPromoted = !!p.isArtistPromoted;
-  const storedRoles = Array.isArray(p.roles) ? p.roles : [];
-  const taggedArtist = storedRoles.some(
-    (r) => String(r).trim().toLowerCase() === "artist",
-  );
-  if (isPromoted || p.isGroup || taggedArtist) return "artist";
-  if (signals.hasRole || signals.hasAlbum || signals.hasDisco) return "artist";
-  return "contact";
 }
 
 type InviteRow = {
@@ -198,34 +172,57 @@ test("gtRole: unknown kind falls back to Contact", () => {
 // shape heuristic — artist vs contact.
 // ---------------------------------------------------------------------------
 
-test("shape: a pure contact (no signals, no tags) is 'contact'", () => {
-  assert.equal(computeShape({ roles: ["Director"] }), "contact");
+test("shape: a pure contact (no signals, no credits) is 'contact'", () => {
+  // A business contact carries no creative credits at all — their title
+  // ("Director") lives on the entity_contacts row, not in people.roles[].
+  assert.equal(personShape({}), "contact");
+  assert.equal(personShape({ manualRoles: [] }), "contact");
+  assert.equal(personShape({ manualRoles: ["", "  "] }), "contact");
 });
 
 test("shape: isArtistPromoted override flips to 'artist'", () => {
-  assert.equal(computeShape({ isArtistPromoted: true }), "artist");
+  assert.equal(personShape({ isArtistPromoted: true }), "artist");
 });
 
 test("shape: a group is 'artist'", () => {
-  assert.equal(computeShape({ isGroup: true }), "artist");
+  assert.equal(personShape({ isGroup: true }), "artist");
 });
 
-test("shape: an explicit 'Artist' role tag flips to 'artist' (case-insensitive)", () => {
-  assert.equal(computeShape({ roles: ["artist"] }), "artist");
-  assert.equal(computeShape({ roles: ["  ARTIST  "] }), "artist");
+test("shape: an explicit 'Artist' role tag flips to 'artist'", () => {
+  assert.equal(personShape({ manualRoles: ["artist"] }), "artist");
+  assert.equal(personShape({ manualRoles: ["  ARTIST  "] }), "artist");
 });
 
-test("shape: any artist signal (role-scope / album / discography) is 'artist'", () => {
-  assert.equal(computeShape({}, { hasRole: true }), "artist");
-  assert.equal(computeShape({}, { hasAlbum: true }), "artist");
-  assert.equal(computeShape({}, { hasDisco: true }), "artist");
+test("shape: Task #968 — ANY non-empty creative-credit hat is 'artist'", () => {
+  // The catalog is music-only by design, so any non-empty people.roles[]
+  // entry — guitar, lyricist, producer, engineer — means artist, not
+  // just the literal "Artist" hat. Island Styles (Guitar / Lyricist)
+  // becomes an artist automatically.
+  assert.equal(personShape({ manualRoles: ["Guitar"] }), "artist");
+  assert.equal(personShape({ manualRoles: ["Lyricist", "Electric guitar"] }), "artist");
+  assert.equal(personShape({ manualRoles: ["Producer"] }), "artist");
+});
+
+test("shape: Task #968 — a per-track/album credit (derived) is 'artist'", () => {
+  // A player credited only on songs (no manual tag, no primary-artist
+  // album) still reads as an artist.
+  assert.equal(personShape({ hasDerivedCredit: true }), "artist");
+});
+
+test("shape: any catalog artist signal (role-scope / album / discography) is 'artist'", () => {
+  assert.equal(personShape({ hasArtistCatalogSignal: true }), "artist");
+});
+
+test("shape: hasArtistShape mirrors personShape", () => {
+  assert.equal(hasArtistShape({ manualRoles: ["Drums"] }), true);
+  assert.equal(hasArtistShape({}), false);
 });
 
 test("shape: dual artist+NPO contact keeps artist shape", () => {
-  // Seeded: tagged Artist AND attached to a non-profit as staff. The
-  // artist tag wins, so the page renders the artist shape, not contact.
-  const dual: PersonRow = { roles: ["Artist", "Director"] };
-  assert.equal(computeShape(dual), "artist");
+  // Tagged Artist AND attached to a non-profit as staff. The artist
+  // credit wins, so the page renders the artist shape (the affiliation
+  // is shown alongside, not instead).
+  assert.equal(personShape({ manualRoles: ["Artist", "Director"] }), "artist");
 });
 
 // ---------------------------------------------------------------------------

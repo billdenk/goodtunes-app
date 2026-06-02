@@ -724,6 +724,64 @@ const CONTACT_ATTACHMENT_LABEL: Record<NonNullable<PersonFull["attachments"]>[nu
   non_profit: "Non-profit",
 };
 
+/* ─── Affiliation panel (Task #968) ──────────────────────────────────
+   The partner/business affiliations a Person represents, as deep links.
+   Shared by both shapes: the contact shape always renders it (with the
+   "Not affiliated yet" empty state), while the artist shape passes
+   `hideWhenEmpty` so a pure performer isn't cluttered — but a dual-role
+   person (band artist + MRP sales contact, etc.) still sees both roles
+   on their artist page. Reuses the same attachment links either way. */
+function AffiliationPanel({
+  person,
+  hideWhenEmpty = false,
+}: {
+  person: PersonFull;
+  hideWhenEmpty?: boolean;
+}) {
+  const attachments = person.attachments ?? [];
+  if (hideWhenEmpty && attachments.length === 0) return null;
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-overview-affiliation">
+      <div>
+        <h2 className="text-sm font-bold text-slate-900">Affiliation</h2>
+        <p className="text-xs text-slate-500">Where this person fits on GoodTunes and the partner they represent.</p>
+      </div>
+      {attachments.length === 0 ? (
+        <p className="text-xs text-slate-500" data-testid="text-overview-no-attachments">Not affiliated with any partner yet.</p>
+      ) : (
+        <ul className="divide-y divide-slate-100 -mx-1">
+          {attachments.map((a) => (
+            <li key={`${a.entityKind}-${a.entityId}`} className="flex items-center gap-3 px-1 py-2.5" data-testid={`row-overview-attachment-${a.entityId}`}>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-slate-900 truncate" data-testid={`text-affiliation-role-${a.entityId}`}>
+                  {a.role || a.gtRole || "Contact"}
+                  <span className="font-normal text-slate-400"> at </span>
+                  <Link
+                    href={CONTACT_ATTACHMENT_HREF[a.entityKind](a.entityId)}
+                    className="font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+                    data-testid={`link-overview-attachment-${a.entityId}`}
+                  >
+                    {a.entityName}
+                  </Link>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">{CONTACT_ATTACHMENT_LABEL[a.entityKind]}</p>
+              </div>
+              {a.gtRole && (
+                <span
+                  className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand-purple)] bg-[color:var(--brand-purple)]/10 rounded-full px-2.5 py-1 flex-shrink-0"
+                  data-testid={`badge-gtrole-${a.entityId}`}
+                >
+                  {a.gtRole}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function ContactOverviewPanel({ person }: { person: PersonFull }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -741,7 +799,6 @@ function ContactOverviewPanel({ person }: { person: PersonFull }) {
     },
     onError: (e: any) => toast({ title: "Couldn't promote", description: e?.message ?? "Try again in a moment.", variant: "destructive" }),
   });
-  const attachments = person.attachments ?? [];
   return (
     <div className="space-y-5">
       <EditablePanel
@@ -763,44 +820,7 @@ function ContactOverviewPanel({ person }: { person: PersonFull }) {
         ]}
       />
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-overview-affiliation">
-        <div>
-          <h2 className="text-sm font-bold text-slate-900">Affiliation</h2>
-          <p className="text-xs text-slate-500">Where this person fits on GoodTunes and the partner they represent.</p>
-        </div>
-        {attachments.length === 0 ? (
-          <p className="text-xs text-slate-500" data-testid="text-overview-no-attachments">Not affiliated with any partner yet.</p>
-        ) : (
-          <ul className="divide-y divide-slate-100 -mx-1">
-            {attachments.map((a) => (
-              <li key={`${a.entityKind}-${a.entityId}`} className="flex items-center gap-3 px-1 py-2.5" data-testid={`row-overview-attachment-${a.entityId}`}>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-slate-900 truncate" data-testid={`text-affiliation-role-${a.entityId}`}>
-                    {a.role || a.gtRole || "Contact"}
-                    <span className="font-normal text-slate-400"> at </span>
-                    <Link
-                      href={CONTACT_ATTACHMENT_HREF[a.entityKind](a.entityId)}
-                      className="font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
-                      data-testid={`link-overview-attachment-${a.entityId}`}
-                    >
-                      {a.entityName}
-                    </Link>
-                  </div>
-                  <p className="text-xs text-slate-500 mt-0.5">{CONTACT_ATTACHMENT_LABEL[a.entityKind]}</p>
-                </div>
-                {a.gtRole && (
-                  <span
-                    className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand-purple)] bg-[color:var(--brand-purple)]/10 rounded-full px-2.5 py-1 flex-shrink-0"
-                    data-testid={`badge-gtrole-${a.entityId}`}
-                  >
-                    {a.gtRole}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <AffiliationPanel person={person} />
 
       <RolesPanel person={person} />
 
@@ -984,6 +1004,11 @@ function OverviewPanel({
       <ReferralSummaryPanel kind="artist" id={person.id} />
       <InvitedByPressPanel kind="people" id={person.id} currentPressId={person.invitedByPressId} currentPressMode={(person as any).pressMode} />
       <RolesPanel person={person} />
+      {/* Task #968 — an artist who is also partner staff (band artist +
+          MRP sales contact, label/NPO/vendor staff, …) sees their
+          business affiliation here too, so neither role hides the other.
+          Hidden entirely for a pure artist with no affiliations. */}
+      <AffiliationPanel person={person} hideWhenEmpty />
       <EditablePanel
         title="Identity"
         testId="panel-overview-identity"

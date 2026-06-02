@@ -23,6 +23,7 @@ import {
   revokePlaceholderIfUnused,
 } from "./partnerInvites";
 import { pgArray } from "./lib/pgArray";
+import { hasArtistShape, personShape } from "./lib/personArtistShape";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual, randomUUID, createHash } from "crypto";
@@ -11751,11 +11752,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       rows.map((p) => {
         const derived = (derivedByPerson.get(p.id) ?? []).slice();
         const storedRoles: string[] = Array.isArray((p as any).roles) ? (p as any).roles : [];
-        const isArtist =
-          artistShapeIds.has(p.id) ||
-          !!(p as any).isArtistPromoted ||
-          !!(p as any).isGroup ||
-          storedRoles.some((r) => String(r).trim().toLowerCase() === "artist");
+        // Task #968 — classify artist vs contact with the SAME predicate
+        // the detail page uses (server/lib/personArtistShape.ts), so the
+        // People list never disagrees with the Person page. Any per-track
+        // credit (derived) or any non-empty manual role tag is enough —
+        // streaming links are NOT part of the artist/contact decision.
+        const isArtist = hasArtistShape({
+          isArtistPromoted: (p as any).isArtistPromoted,
+          isGroup: (p as any).isGroup,
+          manualRoles: storedRoles,
+          hasDerivedCredit: derived.length > 0,
+          hasArtistCatalogSignal: artistShapeIds.has(p.id),
+        });
         if (isArtist && !derived.some((r) => r.toLowerCase() === "artist")) {
           derived.unshift("Artist");
         }
@@ -11837,23 +11845,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // artistic surface attached yet).
     const isPromoted = !!(p as any).isArtistPromoted;
     const storedRoles: string[] = Array.isArray((p as any).roles) ? (p as any).roles : [];
-    // Task #824 — an explicit "Artist" creative tag is treated the same as
-    // the promote override: it flips the row to artist shape so picking
-    // "Artist" up front in the role picker never lands in the
-    // contact-shape dead-end that used to require a separate promote step.
-    const taggedArtist = storedRoles.some((r) => String(r).trim().toLowerCase() === "artist");
+    // Task #968 — any creative credit ⇒ artist. The cheap signals
+    // (promote override, group, any non-empty manual creative-credit tag
+    // in people.roles[]) short-circuit before the DB probe. Otherwise we
+    // probe for the catalog artist signals (artist role-scope, a
+    // primary-artist album, a discography row) AND for any per-track /
+    // per-album credit, so a player/writer/producer credited only on
+    // songs (e.g. Island Styles: Guitar / Lyricist) is an artist too —
+    // not stuck in the contact shape. See server/lib/personArtistShape.ts.
     let shape: "artist" | "contact" = "contact";
-    if (isPromoted || (p as any).isGroup || taggedArtist) {
+    if (hasArtistShape({ isArtistPromoted: isPromoted, isGroup: (p as any).isGroup, manualRoles: storedRoles })) {
       shape = "artist";
     } else {
-      const sig = await db.execute<{ has_role: boolean; has_album: boolean; has_disco: boolean }>(sql`
+      const sig = await db.execute<{ has_role: boolean; has_album: boolean; has_disco: boolean; has_credit: boolean }>(sql`
         SELECT
           EXISTS(SELECT 1 FROM users WHERE role = 'artist' AND role_scope_id = ${id}) AS has_role,
           EXISTS(SELECT 1 FROM albums WHERE primary_artist_id = ${id} AND deleted_at IS NULL) AS has_album,
-          EXISTS(SELECT 1 FROM person_discography WHERE person_id = ${id}) AS has_disco
+          EXISTS(SELECT 1 FROM person_discography WHERE person_id = ${id}) AS has_disco,
+          EXISTS(
+            SELECT 1 FROM track_writers    WHERE person_id = ${id} AND role IS NOT NULL AND role <> ''
+            UNION ALL
+            SELECT 1 FROM track_performers WHERE person_id = ${id} AND role IS NOT NULL AND role <> ''
+            UNION ALL
+            SELECT 1 FROM album_credits    WHERE person_id = ${id} AND role IS NOT NULL AND role <> ''
+          ) AS has_credit
       `);
       const row = ((sig as any).rows ?? [])[0];
-      if (row?.has_role || row?.has_album || row?.has_disco) shape = "artist";
+      shape = personShape({
+        hasArtistCatalogSignal: !!(row?.has_role || row?.has_album || row?.has_disco),
+        hasDerivedCredit: !!row?.has_credit,
+      });
     }
     // Partner attachments — every entity this contact is attached to,
     // so the contact-shape Overview can list them as deep links. Each
