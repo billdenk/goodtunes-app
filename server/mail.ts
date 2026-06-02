@@ -437,6 +437,151 @@ export async function sendCustomerPasswordResetEmail(
   return sendViaResend("customer-password-reset", toEmail, subject, html, text);
 }
 
+// Task #937 — Branded order receipt. Fired once, best-effort, when an
+// order materializes from a paid Stripe session (see server/commerce.ts
+// dispatchOrderReceipt). Shows the order summary (format, qty, add-ons,
+// total), the GoodDeed number(s), a "Play on the web" button that deep-
+// links into the now-unlocked album, and Apple/Google app-download
+// buttons. The two app buttons are config-driven (IOS_APP_STORE_URL /
+// ANDROID_PLAY_STORE_URL) and only render when their env var is set —
+// no dead buttons before the apps ship. Brand chrome matches the dark
+// fan-facing templates above (#00062B field, #4AFFCA eyebrow, #319ED8
+// primary CTA).
+export type OrderReceiptLine = {
+  label: string;
+  quantity: number;
+  amountCents: number;
+};
+export type OrderReceiptData = {
+  albumTitle: string;
+  albumArtist: string;
+  artworkUrl: string | null;
+  lines: OrderReceiptLine[];
+  totalCents: number;
+  currency: string;
+  goodDeedNumbers: number[];
+  webPlayUrl: string;
+  appleUrl: string | null;
+  googleUrl: string | null;
+};
+
+function formatMoney(cents: number, currency: string): string {
+  const amount = (cents / 100).toFixed(2);
+  const cur = (currency || "usd").toUpperCase();
+  return cur === "USD" ? `$${amount}` : `${amount} ${cur}`;
+}
+
+export async function sendOrderReceiptEmail(
+  toEmail: string,
+  data: OrderReceiptData,
+): Promise<SendResult> {
+  const {
+    albumTitle,
+    albumArtist,
+    artworkUrl,
+    lines,
+    totalCents,
+    currency,
+    goodDeedNumbers,
+    webPlayUrl,
+    appleUrl,
+    googleUrl,
+  } = data;
+
+  const subject = `Your GoodTunes order — ${albumTitle}`;
+  const gdLabel = goodDeedNumbers.length === 1 ? "GoodDeed number" : "GoodDeed numbers";
+  const gdText = goodDeedNumbers.map((n) => `#${n}`).join(", ");
+
+  const text = [
+    `You're in. Your album is unlocked and your record is on its way.`,
+    ``,
+    `${albumTitle} — ${albumArtist}`,
+    ...(goodDeedNumbers.length > 0 ? [``, `${gdLabel}: ${gdText}`] : []),
+    ``,
+    `Order summary`,
+    ...lines.map(
+      (l) => `  ${l.label}${l.quantity > 1 ? ` ×${l.quantity}` : ""}  ${formatMoney(l.amountCents, currency)}`,
+    ),
+    `  Total  ${formatMoney(totalCents, currency)}`,
+    ``,
+    `Play on the web: ${webPlayUrl}`,
+    ...(appleUrl ? [`Download on the App Store: ${appleUrl}`] : []),
+    ...(googleUrl ? [`Get it on Google Play: ${googleUrl}`] : []),
+    ``,
+    `— The GoodTunes team`,
+  ].join("\n");
+
+  const artworkHtml = artworkUrl
+    ? `<img src="${escapeHtml(artworkUrl)}" alt="" width="56" height="56" style="width:56px;height:56px;border-radius:10px;object-fit:cover;display:block;" />`
+    : "";
+
+  const goodDeedHtml =
+    goodDeedNumbers.length > 0
+      ? `
+      <div style="margin: 24px 0; padding: 16px 18px; background: rgba(74,255,202,0.08); border: 1px solid rgba(74,255,202,0.25); border-radius: 12px;">
+        <div style="font-size: 12px; color: #4AFFCA; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 700;">${escapeHtml(gdLabel)}</div>
+        <div style="font-size: 24px; font-weight: 800; color: #ffffff; margin-top: 4px;">${escapeHtml(gdText)}</div>
+        <div style="font-size: 12px; color: rgba(255,255,255,0.55); margin-top: 6px;">Numbered for life. Refundable up until shipping.</div>
+      </div>`
+      : "";
+
+  const linesHtml = lines
+    .map(
+      (l) => `
+        <tr>
+          <td style="padding: 6px 0; font-size: 14px; color: rgba(255,255,255,0.85);">${escapeHtml(l.label)}${l.quantity > 1 ? ` <span style="color: rgba(255,255,255,0.5);">×${l.quantity}</span>` : ""}</td>
+          <td style="padding: 6px 0; font-size: 14px; color: rgba(255,255,255,0.85); text-align: right; white-space: nowrap;">${escapeHtml(formatMoney(l.amountCents, currency))}</td>
+        </tr>`,
+    )
+    .join("");
+
+  const appButton = (href: string, label: string) => `
+    <a href="${escapeHtml(href)}" style="display: inline-block; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: #ffffff; text-decoration: none; padding: 11px 18px; border-radius: 999px; font-weight: 600; font-size: 14px; margin: 6px 8px 6px 0;">${escapeHtml(label)}</a>`;
+
+  const appButtonsHtml =
+    appleUrl || googleUrl
+      ? `
+      <p style="font-size: 13px; color: rgba(255,255,255,0.55); margin: 28px 0 8px;">Or take it with you:</p>
+      <p style="margin: 0;">
+        ${appleUrl ? appButton(appleUrl, "Download on the App Store") : ""}
+        ${googleUrl ? appButton(googleUrl, "Get it on Google Play") : ""}
+      </p>`
+      : "";
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #00062B; color: #ffffff; border-radius: 16px;">
+      <div style="font-size: 14px; color: #4AFFCA; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">GoodTunes · Receipt</div>
+      <h1 style="font-size: 28px; margin: 12px 0 8px; font-weight: 700; color: #ffffff;">You're in.</h1>
+      <p style="font-size: 15px; line-height: 1.5; color: rgba(255,255,255,0.75); margin: 0 0 20px;">Your album is unlocked and your record is on its way.</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 0 4px;">
+        <tr>
+          <td style="width: 56px; vertical-align: middle;">${artworkHtml}</td>
+          <td style="vertical-align: middle; padding-left: ${artworkUrl ? "14px" : "0"};">
+            <div style="font-size: 16px; font-weight: 700; color: #ffffff;">${escapeHtml(albumTitle)}</div>
+            <div style="font-size: 14px; color: rgba(255,255,255,0.6);">${escapeHtml(albumArtist)}</div>
+          </td>
+        </tr>
+      </table>
+      ${goodDeedHtml}
+      <div style="font-size: 12px; color: rgba(255,255,255,0.5); letter-spacing: 0.5px; text-transform: uppercase; font-weight: 700; margin: 24px 0 6px;">Order summary</div>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+        ${linesHtml}
+        <tr><td colspan="2" style="border-top: 1px solid rgba(255,255,255,0.15); padding: 0;"></td></tr>
+        <tr>
+          <td style="padding: 8px 0 0; font-size: 15px; font-weight: 700; color: #ffffff;">Total</td>
+          <td style="padding: 8px 0 0; font-size: 15px; font-weight: 700; color: #ffffff; text-align: right;">${escapeHtml(formatMoney(totalCents, currency))}</td>
+        </tr>
+      </table>
+      <p style="margin: 28px 0 0;">
+        <a href="${escapeHtml(webPlayUrl)}" style="display: inline-block; background: #319ED8; color: #ffffff; text-decoration: none; padding: 13px 26px; border-radius: 999px; font-weight: 600; font-size: 15px;">Play on the web</a>
+      </p>
+      ${appButtonsHtml}
+      <p style="font-size: 13px; color: rgba(255,255,255,0.45); margin-top: 28px;">Manage your order and certificate anytime from "Your orders" in the player.</p>
+    </div>
+  `;
+  return sendViaResend("order-receipt", toEmail, subject, html, text);
+}
+
 // Task #284 — Tap-to-report error capture from the friendly error card.
 // The reporter's email (when we know who they are, OR what they typed
 // into the inline email field) is wired up as reply_to so a quick

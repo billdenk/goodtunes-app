@@ -218,6 +218,17 @@ webhook may land a beat after the redirect). The fan sees a spinner with
 6. **"Open my player"** button — saves the handle (if changed) and navigates to
    **`/album/:id`**, now with the album unlocked for instant digital listening.
 
+**A receipt also lands in their inbox.** The moment the order materializes from the
+paid Stripe session (the same event that powers this page), GoodTunes sends **one
+branded order-receipt email** to the buyer — order summary (format, quantity,
+add-ons, total), the GoodDeed number(s), a **"Play on the web"** button that
+deep-links into `/album/:id`, and — **only when** the app-store URLs are configured
+(`IOS_APP_STORE_URL` / `ANDROID_PLAY_STORE_URL`) — **Download on the App Store** and
+**Get it on Google Play** buttons. It's sent exactly once (an atomic claim guards
+the webhook-vs-this-page race) and is best-effort, so a mail hiccup never blocks the
+order or the fan's instant access. This is the *GoodTunes* receipt — Stripe's own
+card receipt, if enabled, is a separate email.
+
 ---
 
 ## Step 6 — After checkout (where the purchase lives)

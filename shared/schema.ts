@@ -2241,6 +2241,12 @@ export const orders = pgTable("orders", {
   returnedAt: timestamp("returned_at"),
   // Last raw OD payload for admin debugging — small enough to inline.
   fulfillmentRaw: jsonb("fulfillment_raw"),
+  // Task #937 — stamped the moment the branded order-receipt email is
+  // claimed for sending. The send is best-effort, but the claim is an
+  // atomic conditional UPDATE (… WHERE receipt_email_sent_at IS NULL)
+  // so two concurrent materializations (webhook vs. /welcome fetch)
+  // can never dispatch two receipts for one order.
+  receiptEmailSentAt: timestamp("receipt_email_sent_at"),
   createdAt: timestamp("created_at").defaultNow(),
   legacyGogoodsId: text("legacy_gogoods_id"),
 }, (t) => ({

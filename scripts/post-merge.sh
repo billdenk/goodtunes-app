@@ -130,6 +130,29 @@ SQL
 migrate_songs_mux_retry_ladder dev  "${DATABASE_URL:-}"
 migrate_songs_mux_retry_ladder prod "${PROD_DATABASE_URL:-}"
 
+# Task #937 — branded order-receipt email. orders.receipt_email_sent_at
+# is the atomic single-send claim (UPDATE … WHERE receipt_email_sent_at
+# IS NULL). Pre-create on both DBs so the publish dev→prod diff stays
+# empty and a freshly-cloned dev can fire the receipt without 500'ing
+# materializeOrderFromSession. Additive nullable timestamp — safe.
+migrate_orders_receipt_email_sent_at() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping orders.receipt_email_sent_at migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS receipt_email_sent_at timestamp;
+SQL
+  then
+    echo "post-merge: orders.receipt_email_sent_at migration ok on $label"
+  else
+    echo "post-merge: WARNING — orders.receipt_email_sent_at migration failed on $label (continuing)"
+  fi
+}
+migrate_orders_receipt_email_sent_at dev  "${DATABASE_URL:-}"
+migrate_orders_receipt_email_sent_at prod "${PROD_DATABASE_URL:-}"
+
 # Task #269 — Admin "Forgot password?" reset tokens. Pre-create on both
 # DBs so the publish dev→prod diff doesn't try to invent the table
 # (and so signing in on a freshly-cloned dev DB never 500s the

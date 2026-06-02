@@ -69,7 +69,7 @@ import {
   MRP_DOMAIN,
 } from "./pressCatalog";
 import { registerPressPortalRoutes } from "./pressPortal";
-import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "./storage";
 import { getStripe, getStripePublishableKey, getStripeWebhookSecret } from "./stripe";
@@ -2483,6 +2483,82 @@ function absoluteUrl(req: Request, path: string): string {
   return `${absoluteOrigin(req)}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
+// Task #937 — fan-facing origin for the receipt's "Play on the web"
+// deep link. materializeOrderFromSession has no `req` (the webhook path
+// has no inbound request), so we resolve the canonical customer host
+// from config the same way the Shopify redemption page does:
+// APP_URL wins, else https://${GOODTUNES_HOST}, else my.goodtunes.music.
+function fanOrigin(): string {
+  const explicit = (process.env.APP_URL || "").trim();
+  if (explicit) return explicit.replace(/\/+$/, "");
+  const host = (process.env.GOODTUNES_HOST || "my.goodtunes.music").trim();
+  return `https://${host}`;
+}
+
+// Task #937 — config-driven app-store links. Each button only renders
+// when its env var is set, so there are no dead "download the app"
+// buttons in the receipt before the native apps actually ship.
+function appStoreUrls(): { appleUrl: string | null; googleUrl: string | null } {
+  const apple = (process.env.IOS_APP_STORE_URL || "").trim();
+  const google = (process.env.ANDROID_PLAY_STORE_URL || "").trim();
+  return { appleUrl: apple.length > 0 ? apple : null, googleUrl: google.length > 0 ? google : null };
+}
+
+// Task #937 — gather the receipt payload and dispatch the single
+// branded order-receipt email. Best-effort: it resolves a recipient,
+// builds the order summary + GoodDeed numbers, and hands off to the
+// shared Resend transport (synthetic-recipient guard + failure ring
+// buffer + never-throws). The one-time guarantee lives at the call
+// site (atomic claim on orders.receipt_email_sent_at), not here.
+async function dispatchOrderReceipt(order: Order): Promise<void> {
+  // Recipient: prefer the Stripe-collected buyer email, fall back to
+  // the customer row's account email.
+  let toEmail = (order.buyerEmail || "").trim();
+  if (!toEmail) {
+    const [cust] = await db
+      .select({ email: customerUsers.email })
+      .from(customerUsers)
+      .where(eq(customerUsers.id, order.customerId));
+    toEmail = (cust?.email || "").trim();
+  }
+  if (!toEmail) {
+    console.warn(`[commerce] order ${order.id} has no email for receipt`);
+    return;
+  }
+
+  const album = await storage.getAlbumById(order.albumId, { includeHidden: true });
+  const items = await getOrderItems(order.id);
+  const copies = await db
+    .select({ goodDeedNumber: orderCopies.goodDeedNumber })
+    .from(orderCopies)
+    .where(eq(orderCopies.orderId, order.id))
+    .orderBy(asc(orderCopies.position));
+  const goodDeedNumbers = copies
+    .map((c) => c.goodDeedNumber)
+    .filter((n): n is number => n != null);
+
+  const lines = items.map((it) => ({
+    label: it.label,
+    quantity: it.quantity ?? 1,
+    amountCents: (it.unitPriceCents ?? 0) * (it.quantity ?? 1),
+  }));
+  const { appleUrl, googleUrl } = appStoreUrls();
+
+  const { sendOrderReceiptEmail } = await import("./mail");
+  await sendOrderReceiptEmail(toEmail, {
+    albumTitle: album?.title ?? "Your GoodTunes album",
+    albumArtist: album?.artist ?? "",
+    artworkUrl: album?.artwork ?? null,
+    lines,
+    totalCents: order.totalCents,
+    currency: order.currency,
+    goodDeedNumbers,
+    webPlayUrl: `${fanOrigin()}/album/${order.albumId}`,
+    appleUrl,
+    googleUrl,
+  });
+}
+
 // Creates / updates an Order row from a Stripe Checkout Session. This is
 // the single idempotent write path used by both the webhook and the
 // `/welcome` page's just-in-case fetch. Safe to call twice — the unique
@@ -2981,6 +3057,30 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
     await accruePressPool(albumId, order.id, quantity).catch((e) =>
       console.error(`[commerce] press-pool accrual failed for ${order!.id}`, e?.message),
     );
+  }
+
+  // Task #937 — branded order receipt, sent exactly once per order.
+  // The claim is an atomic conditional UPDATE: only the first caller to
+  // flip receipt_email_sent_at from NULL gets a row back, so a webhook
+  // and the /welcome fetch racing on the same session can never send
+  // two receipts. The send itself is best-effort — it never throws and
+  // never blocks order materialization (mirrors the OD-handoff and
+  // press-pool patterns above).
+  if (order && order.status === "paid") {
+    try {
+      const claimed = await db
+        .update(orders)
+        .set({ receiptEmailSentAt: new Date() })
+        .where(and(eq(orders.id, order.id), isNull(orders.receiptEmailSentAt)))
+        .returning({ id: orders.id });
+      if (claimed.length > 0) {
+        await dispatchOrderReceipt(order).catch((e) =>
+          console.error(`[commerce] receipt email failed for ${order!.id}`, e?.message),
+        );
+      }
+    } catch (e: any) {
+      console.error(`[commerce] receipt claim failed for ${order.id}`, e?.message);
+    }
   }
 
   return order!;
