@@ -507,7 +507,7 @@ export function Player() {
                   data-testid="button-favorite-song"
                 >
                   {favorited ? (
-                    <svg viewBox="0 0 24 24" fill="#FF5470" stroke="#FF5470" strokeWidth="1.5">
+                    <svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.55)" stroke="rgba(255,255,255,0.55)" strokeWidth="1.5">
                       <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
                     </svg>
                   ) : (
@@ -1174,7 +1174,7 @@ export function Player() {
                 style={{ background: "rgba(255,255,255,0.08)" }}
                 aria-label={favorited ? "Unfavorite" : "Favorite"}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill={favorited ? "#FF5470" : "none"} stroke={favorited ? "#FF5470" : "white"} strokeWidth="1.8" strokeLinecap="round">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill={favorited ? "rgba(255,255,255,0.55)" : "none"} stroke={favorited ? "rgba(255,255,255,0.55)" : "white"} strokeWidth="1.8" strokeLinecap="round">
                   <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
                 </svg>
               </button>

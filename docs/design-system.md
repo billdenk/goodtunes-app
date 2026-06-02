@@ -8,7 +8,7 @@
   - **Orange (`#FF7C06`)** is the official GoodTunes logo orange (from the 2025 logo SVG — `rgb(255,124,6)`, H28° S97% B100%). It is **not** a general-purpose accent — reserve it for GoodDeed® share-card framing (the orange-bordered Story variant). Reach it via `--brand-orange`, never inline the hex.
 - Mobile-first single column, max width ~440px
 - Apple-Music-style large headers, 44×44 minimum touch targets
-- Songs use **heart** icon (`#FF5470`); artists use **star** icon
+- Songs use **heart** icon; artists use **star** icon. **Favorite markers (favorited-song hearts + favorited-artist stars) render in dimmed-white `rgba(255,255,255,0.55)`** — the shared quiet secondary-indicator value, *not* heart-pink `#FF5470` — so they read for color-blind users and match the `white/55` secondary text treatment. Favorited = filled dimmed-white, not-favorited = hollow outline. On a light surface (e.g. the album-detail track action popover) use the contrast-appropriate equivalent `rgba(0,0,0,0.55)` instead. `#FF5470` stays a brand color for non-favorite roles (now-playing rose accent, unread badges, preview tags).
 
 ## GoodDeed® share-card (social) — approved spec
 

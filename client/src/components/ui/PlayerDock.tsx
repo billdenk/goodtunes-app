@@ -203,8 +203,8 @@ export function PlayerDock({
   const [volumeLevel, setVolumeLevel] = useState(defaultVolume);
 
   // Shuffle: binary toggle. Repeat: tri-state matching Apple's pattern
-  // (off → all → one → off). Active states use brand blue (#319ED8);
-  // #FF5470 stays reserved for fan-side favorites per design system.
+  // (off → all → one → off). Active states use brand blue.
+  // (Fan favorites now render as quiet dimmed-white, not pink.)
   const [shuffleOn, setShuffleOn] = useState(false);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>("off");
 

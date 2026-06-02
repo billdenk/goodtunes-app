@@ -150,7 +150,7 @@ export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClo
               className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
               style={{ background: allInFavorites ? "rgba(255,84,112,0.18)" : "rgba(255,255,255,0.08)" }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill={allInFavorites ? "#FF5470" : "none"} stroke={allInFavorites ? "#FF5470" : "rgba(255,255,255,0.6)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill={allInFavorites ? "rgba(255,255,255,0.55)" : "none"} stroke={allInFavorites ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.6)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
               </svg>
             </div>

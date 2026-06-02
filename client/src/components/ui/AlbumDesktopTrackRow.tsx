@@ -16,7 +16,8 @@ export type AlbumDesktopTrackRowProps = {
   isPlaying: boolean;
   isExplicit?: boolean;
   /** Display-only — when true and the row is not currently playing,
-   *  the leading number cell renders a small brand-pink heart instead.
+   *  the leading number cell renders a small dimmed-white favorite heart
+   *  (rgba(255,255,255,0.55), the shared quiet-indicator value) instead.
    *  Not a tap target; favoriting is toggled from the ⋯ menu. */
   isFavorite?: boolean;
   state: "locked" | "preview" | "full";
@@ -89,7 +90,7 @@ export function AlbumDesktopTrackRow({
             width="11"
             height="11"
             viewBox="0 0 24 24"
-            fill="rgba(255,255,255,0.7)"
+            fill="rgba(255,255,255,0.55)"
             data-testid={`icon-favorite-row-${trackNumber}`}
           >
             <path d="M12 21s-7-4.5-9.5-9C1 9 2.5 5 6.5 5c2 0 3.5 1 5.5 3 2-2 3.5-3 5.5-3 4 0 5.5 4 4 7-2.5 4.5-9.5 9-9.5 9z" />
