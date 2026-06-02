@@ -49,6 +49,12 @@ const DRY = process.argv.includes("--dry");
 // and re-point existing rows at the new circle-cropped image, even when they
 // already carry a square photo. Without it the script only fills NULL rows.
 const REMASK = process.argv.includes("--remask");
+// Bump whenever maskToVinylDisc changes how it crops, so --remask knows a
+// manifest entry was minted by an OLDER mask and re-mirrors it. v2 added the
+// shape/edge-aware pass that crops the translucent white/clear/silver/smokey/
+// natural stocks (v1 bailed those to a raw square). Entries written before
+// versioning carry `masked: true` and no `maskVersion`, so they read as v1.
+const MASK_VERSION = 2;
 const PRODUCTS_URL = "https://hellbendervinyl.com/products.json?limit=250";
 const MANIFEST = "scripts/data/hellbender-photos.json";
 
@@ -64,7 +70,8 @@ type Entry = {
   shopifyTitle: string;
   importSourceUrl: string;
   publicUrl?: string;
-  masked?: boolean; // true once mirrored through maskToVinylDisc (--remask)
+  masked?: boolean; // legacy v1 flag: mirrored through maskToVinylDisc (--remask)
+  maskVersion?: number; // which maskToVinylDisc version minted publicUrl
 };
 type Manifest = { source: string; colors: Entry[] };
 
@@ -184,10 +191,10 @@ async function main() {
   // Normal run: mirror only colors with no photo yet. --remask: also
   // re-mirror any color not yet passed through the disc mask, so a single
   // dev run mints the circle-cropped images once into the shared bucket and
-  // a later prod run reuses those same URLs (masked=true) instead of
-  // re-mirroring — keeping dev and prod pointed at one image.
+  // a later prod run reuses those same URLs (maskVersion stamped) instead
+  // of re-mirroring — keeping dev and prod pointed at one image.
   const targets = dbNames.map((n) => byName.get(norm(n))).filter((e): e is Entry => !!e);
-  const need = targets.filter((e) => !e.publicUrl || (REMASK && !e.masked));
+  const need = targets.filter((e) => !e.publicUrl || (REMASK && (e.maskVersion ?? 1) !== MASK_VERSION));
   console.log(
     `\nMatched ${targets.length}/${dbNames.length} colors · ${need.length} images to ${REMASK ? "re-mask" : "mirror"}.`,
   );
@@ -195,7 +202,8 @@ async function main() {
     let done = 0;
     for (const e of need) {
       e.publicUrl = await mirrorImage(e.importSourceUrl);
-      e.masked = true;
+      e.maskVersion = MASK_VERSION;
+      delete e.masked; // drop the legacy v1 flag once re-minted
       done++;
       if (done % 6 === 0 || done === need.length) console.log(`  mirrored ${done}/${need.length}`);
       writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2));
