@@ -5185,8 +5185,51 @@ function SkuRow({
               tooltip (was a loop/recycle icon w/ aria-label only). */}
           <div className="sm:order-2">
           <div className="relative">
+            {/* Task #919 — ambient vendor-color backdrop. When the
+                selected catalog color carries a real swatch photo
+                (MRP per-color images; PMP/Hellbender are hex-only), it
+                blooms a soft, blurred copy of that photo behind the
+                disc/album preview so the Design page reads as "this is
+                YOUR stuff." A solid base fill (the color's hex) sits
+                under the image so the masked/transparent PNGs never
+                show a gap, and a white scrim on top keeps the foreground
+                disc, jacket, and hover controls legible on the light
+                admin surface. Hex-only colors get no image — just a
+                faint tint from the swatch — so we never render a broken
+                image box. The clip box reserves the preview's own
+                footprint (incl. the disc peek) and `overflow-hidden`
+                keeps the blur bloom from spilling past the card at
+                mobile widths. */}
+            <div className="relative overflow-hidden rounded-xl">
+              {previewColor.thumbnailUrl ? (
+                <div
+                  className="pointer-events-none absolute inset-0"
+                  aria-hidden
+                  data-testid={`vinyl-preview-backdrop-${format}`}
+                >
+                  <div
+                    className="absolute inset-0"
+                    style={{ background: previewColor.swatch }}
+                  />
+                  <img
+                    src={previewColor.thumbnailUrl}
+                    alt=""
+                    className="w-full h-full object-cover blur-2xl opacity-60"
+                    style={{ transform: "scale(1.35)" }}
+                    draggable={false}
+                  />
+                  <div className="absolute inset-0 bg-white/45" />
+                </div>
+              ) : (
+                <div
+                  className="pointer-events-none absolute inset-0 opacity-15"
+                  aria-hidden
+                  data-testid={`vinyl-preview-backdrop-${format}`}
+                  style={{ background: previewColor.swatch }}
+                />
+              )}
             <div
-              className="group relative w-full rounded-lg"
+              className="group relative w-full rounded-lg p-3 sm:p-4"
               data-testid={`vinyl-preview-group-${format}`}
             >
               <div className="flex items-center justify-start">
@@ -5245,6 +5288,7 @@ function SkuRow({
                   ) : null}
                 />
               </div>
+            </div>
             </div>
             {/* Task #655 — 12" LP jacket footnote, demoted from a
                 full labeled control row in the controls column to a
