@@ -11670,6 +11670,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // round-trip. Both are admin-curation flags, not sensitive.
     canInviteAmbassadors: !!p.canInviteAmbassadors,
     referredByOrgId: p.referredByOrgId ?? null,
+    // Task #736 — stored press mode (Dedicated vs All Presses). The
+    // admin Person page reads through this projection, so the
+    // InvitedByPressPanel toggle needs the saved value to highlight the
+    // right segment instead of always falling back to "dedicated".
+    // null = inherit (resolver falls to the label, then "dedicated").
+    pressMode: p.pressMode ?? null,
   });
   app.get("/api/people", async (_req, res) => {
     const [rows, allLabels] = await Promise.all([

@@ -53,6 +53,12 @@ export function InvitedByPressPanel({
       const partnerKey = kind === "people" ? "/api/people" : "/api/labels";
       qc.invalidateQueries({ queryKey: [partnerKey, id] });
       qc.invalidateQueries({ queryKey: [partnerKey] });
+      // Task #736 — the admin Person page reads from the admin query key
+      // (not the public one), so the open page only refetches the saved
+      // mode — keeping the highlighted segment in sync — when we
+      // invalidate the admin key too. Labels read from the public key
+      // above, but invalidate the admin key for parity.
+      qc.invalidateQueries({ queryKey: [`/api/admin/${kind}`, id] });
       qc.invalidateQueries({ queryKey: ["/api/admin/albums"] });
       onChanged?.();
       toast({ title: "Press mode updated" });
