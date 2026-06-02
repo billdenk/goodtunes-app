@@ -923,6 +923,29 @@ SQL
 migrate_album_anticipated_track_count dev  "${DATABASE_URL:-}"
 migrate_album_anticipated_track_count prod "${PROD_DATABASE_URL:-}"
 
+# Task #987 — custom add-on "all artists" scope. When true the add-on
+# applies to every eligible album regardless of the per-artist attach
+# join; default false preserves the original attach-to-specific-artists
+# behavior. Additive + idempotent, safe on every merge / pre-migrated DB.
+migrate_custom_addons_all_artists() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping custom_addons all-artists migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE custom_addons
+  ADD COLUMN IF NOT EXISTS applies_to_all_artists boolean NOT NULL DEFAULT false;
+SQL
+  then
+    echo "post-merge: custom_addons all-artists migration ok on $label"
+  else
+    echo "post-merge: WARNING — custom_addons all-artists migration failed on $label (continuing)"
+  fi
+}
+migrate_custom_addons_all_artists dev  "${DATABASE_URL:-}"
+migrate_custom_addons_all_artists prod "${PROD_DATABASE_URL:-}"
+
 # Task #350 — Invite tree + multi-level referrals.
 #   1. people.can_invite_ambassadors — per-person flag NPO partners
 #      toggle on a contact to grant them the ambassador invite verb.

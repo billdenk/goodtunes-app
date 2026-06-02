@@ -1307,6 +1307,12 @@ export const customAddons = pgTable("custom_addons", {
   // so fulfillment knows who handles it without a second lookup.
   fulfiller: text("fulfiller"),
   active: boolean("active").notNull().default(true),
+  // Task #987 — scope. When true the add-on applies to EVERY eligible
+  // album (a global option) regardless of the per-artist attach join
+  // below; when false it only surfaces on albums whose primary artist
+  // is attached via `custom_addon_artists`. Default false preserves the
+  // original attach-to-specific-artists behavior.
+  appliesToAllArtists: boolean("applies_to_all_artists").notNull().default(false),
   // Operator-controlled display order on the Buy sheet (lower = shown
   // first). Ties fall back to createdAt so older add-ons stay stable.
   position: integer("position").notNull().default(0),

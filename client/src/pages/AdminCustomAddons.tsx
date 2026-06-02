@@ -41,6 +41,7 @@ type CustomAddon = {
   priceCents: number;
   fulfiller: string | null;
   active: boolean;
+  appliesToAllArtists: boolean;
   position: number;
   artists: AddonArtist[];
 };
@@ -239,9 +240,11 @@ export function AdminCustomAddons() {
                   </div>
                   <div className="text-slate-400 text-xs truncate">
                     {a.orgName}
-                    {a.artists.length > 0
-                      ? ` · ${a.artists.map((p) => p.name).join(", ")}`
-                      : " · no artists yet"}
+                    {a.appliesToAllArtists
+                      ? " · all artists"
+                      : a.artists.length > 0
+                        ? ` · ${a.artists.map((p) => p.name).join(", ")}`
+                        : " · no artists yet"}
                   </div>
                 </div>
                 <div className="text-slate-700 text-sm font-semibold flex-shrink-0">
@@ -270,16 +273,26 @@ export function AdminCustomAddons() {
 
 /* ─── Create / edit dialog ─────────────────────────────────────────── */
 
-function AddonDialog({
+export function AddonDialog({
   mode,
   addon,
   open,
   onOpenChange,
+  inline = false,
+  albumArtist = null,
+  onCreated,
 }: {
   mode: "create" | "edit";
   addon?: CustomAddon | null;
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  // Task #987 — inline-from-Sell-page context. When inline, the scope
+  // picker offers "Just {artist}" vs "All artists"; on create with the
+  // artist scope we attach the album's primary artist after the POST so
+  // the operator doesn't have to open the dedicated page.
+  inline?: boolean;
+  albumArtist?: { personId: string | null; name: string } | null;
+  onCreated?: () => void;
 }) {
   const { toast } = useToast();
   const isEdit = mode === "edit";
@@ -292,9 +305,17 @@ function AddonDialog({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [active, setActive] = useState(true);
   const [position, setPosition] = useState("0");
+  // "specific" = attach to particular artists (the join table); "all" =
+  // applies to every eligible album regardless of attachments.
+  const [scope, setScope] = useState<"specific" | "all">("specific");
   const [formError, setFormError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+
+  // When opened inline from an album with no primary artist linked, the
+  // "Just this artist" scope has nothing to attach to, so force/offer
+  // "All artists" only.
+  const canScopeToArtist = !inline || !!albumArtist?.personId;
 
   // Re-seed the form whenever the target add-on (or dialog open) changes.
   useEffect(() => {
@@ -308,6 +329,7 @@ function AddonDialog({
       setImageUrl(addon.imageUrl);
       setActive(addon.active);
       setPosition(String(addon.position ?? 0));
+      setScope(addon.appliesToAllArtists ? "all" : "specific");
     } else if (!isEdit) {
       setName("");
       setOrganizationId("");
@@ -317,9 +339,10 @@ function AddonDialog({
       setImageUrl(null);
       setActive(true);
       setPosition("0");
+      setScope(inline && !albumArtist?.personId ? "all" : "specific");
     }
     setFormError(null);
-  }, [open, isEdit, addon]);
+  }, [open, isEdit, addon, inline, albumArtist?.personId]);
 
   const { data: npos = [] } = useQuery<NonProfit[]>({
     queryKey: ["/api/non-profits"],
@@ -330,6 +353,7 @@ function AddonDialog({
     mutationFn: async () => {
       const priceCents = Math.round(parseFloat(priceDollars) * 100);
       const positionNum = Math.round(parseFloat(position));
+      const appliesToAllArtists = scope === "all";
       const payload = {
         name: name.trim(),
         organizationId,
@@ -338,6 +362,7 @@ function AddonDialog({
         description: description.trim() || null,
         imageUrl: imageUrl || null,
         position: Number.isFinite(positionNum) ? positionNum : 0,
+        appliesToAllArtists,
         ...(isEdit ? { active } : {}),
       };
       if (isEdit && addon) {
@@ -346,11 +371,20 @@ function AddonDialog({
       }
       const res = await apiRequest("POST", "/api/admin/custom-addons", payload);
       const j = (await res.json()) as { id: string };
+      // Inline create scoped to this artist: attach the album's primary
+      // artist right away so the add-on surfaces on its Buy sheet without
+      // a trip to the dedicated page. (All-artists scope needs no attach.)
+      if (!appliesToAllArtists && albumArtist?.personId) {
+        await apiRequest("POST", `/api/admin/custom-addons/${j.id}/artists`, {
+          personId: albumArtist.personId,
+        });
+      }
       return j.id;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ADDONS_KEY });
       toast({ title: isEdit ? "Add-on saved" : "Add-on created" });
+      if (!isEdit) onCreated?.();
       onOpenChange(false);
     },
     onError: (err) => setFormError(humanizeApiError(err)),
@@ -477,6 +511,54 @@ function AddonDialog({
             </div>
           </div>
 
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-600">Who sees it</label>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Add-on scope">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={scope === "specific"}
+                disabled={!canScopeToArtist}
+                onClick={() => setScope("specific")}
+                className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                  scope === "specific"
+                    ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5 text-slate-900"
+                    : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
+                } ${!canScopeToArtist ? "opacity-50 cursor-not-allowed" : ""}`}
+                data-testid="button-custom-addon-scope-specific"
+              >
+                <span className="block font-semibold">
+                  {inline && albumArtist?.name ? `Just ${albumArtist.name}` : "Specific artists"}
+                </span>
+                <span className="block text-xs text-slate-400">
+                  {inline
+                    ? "Only this artist's albums"
+                    : "Pick artists below after saving"}
+                </span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={scope === "all"}
+                onClick={() => setScope("all")}
+                className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                  scope === "all"
+                    ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5 text-slate-900"
+                    : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
+                }`}
+                data-testid="button-custom-addon-scope-all"
+              >
+                <span className="block font-semibold">All artists</span>
+                <span className="block text-xs text-slate-400">Every eligible album</span>
+              </button>
+            </div>
+            {!canScopeToArtist && (
+              <p className="text-xs text-slate-400">
+                Link a primary artist to this album to scope the add-on to just them.
+              </p>
+            )}
+          </div>
+
           <div className="space-y-1">
             <label className="text-xs font-semibold text-slate-600">
               Fulfiller <span className="text-slate-400 font-normal">(who ships / handles it)</span>
@@ -562,7 +644,21 @@ function AddonDialog({
           </DialogFooter>
         </form>
 
-        {isEdit && addon && <AddonArtists addon={addon} />}
+        {isEdit && addon && scope === "specific" && <AddonArtists addon={addon} />}
+        {inline && (
+          <p className="text-xs text-slate-400 pt-1" data-testid="text-custom-addon-inline-note">
+            Manage every custom add-on — including attaching more artists — on the{" "}
+            <a
+              href="/admin/custom-addons"
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-[var(--brand-blue)] hover:underline underline-offset-2"
+            >
+              Custom add-ons
+            </a>{" "}
+            page.
+          </p>
+        )}
       </DialogContent>
     </Dialog>
   );

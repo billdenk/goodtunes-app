@@ -17699,7 +17699,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/admin/custom-addons", requireAdmin, async (_req, res) => {
     const rows = await db.execute<any>(sql`
       SELECT ca.id, ca.organization_id, ca.name, ca.description, ca.image_url,
-             ca.price_cents, ca.fulfiller, ca.active, ca.position, ca.created_at,
+             ca.price_cents, ca.fulfiller, ca.active, ca.applies_to_all_artists,
+             ca.position, ca.created_at,
              o.name AS org_name, o.logo_url AS org_logo_url,
              COALESCE(
                json_agg(
@@ -17726,6 +17727,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       priceCents: r.price_cents,
       fulfiller: r.fulfiller,
       active: r.active,
+      appliesToAllArtists: r.applies_to_all_artists,
       position: r.position,
       artists: r.artists ?? [],
     })));
@@ -17734,7 +17736,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/admin/custom-addons/:id", requireAdmin, async (req, res) => {
     const rows = await db.execute<any>(sql`
       SELECT ca.id, ca.organization_id, ca.name, ca.description, ca.image_url,
-             ca.price_cents, ca.fulfiller, ca.active, ca.position,
+             ca.price_cents, ca.fulfiller, ca.active, ca.applies_to_all_artists,
+             ca.position,
              o.name AS org_name, o.logo_url AS org_logo_url,
              COALESCE(
                json_agg(
@@ -17763,6 +17766,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       priceCents: r.price_cents,
       fulfiller: r.fulfiller,
       active: r.active,
+      appliesToAllArtists: r.applies_to_all_artists,
       position: r.position,
       artists: r.artists ?? [],
     });
@@ -17788,9 +17792,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const fulfiller = req.body?.fulfiller ? String(req.body.fulfiller).trim() || null : null;
     let position = Math.round(Number(req.body?.position));
     if (!Number.isFinite(position)) position = 0;
+    const appliesToAllArtists = !!req.body?.appliesToAllArtists;
     const ins = await db.execute<{ id: string }>(sql`
-      INSERT INTO custom_addons (organization_id, name, description, image_url, price_cents, fulfiller, position)
-      VALUES (${organizationId}, ${name}, ${description}, ${imageUrl}, ${priceCents}, ${fulfiller}, ${position})
+      INSERT INTO custom_addons (organization_id, name, description, image_url, price_cents, fulfiller, applies_to_all_artists, position)
+      VALUES (${organizationId}, ${name}, ${description}, ${imageUrl}, ${priceCents}, ${fulfiller}, ${appliesToAllArtists}, ${position})
       RETURNING id
     `);
     res.status(201).json({ id: (ins as any).rows?.[0]?.id });
@@ -17839,6 +17844,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     if (b.active !== undefined) {
       sets.push(sql`active = ${!!b.active}`);
+    }
+    if (b.appliesToAllArtists !== undefined) {
+      sets.push(sql`applies_to_all_artists = ${!!b.appliesToAllArtists}`);
     }
     if (b.position !== undefined) {
       const position = Math.round(Number(b.position));

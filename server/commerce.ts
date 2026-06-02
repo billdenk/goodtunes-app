@@ -186,7 +186,22 @@ type CustomAddonForAlbum = {
 async function listCustomAddonsForAlbum(
   primaryArtistId: string | null,
 ): Promise<CustomAddonForAlbum[]> {
-  if (!primaryArtistId) return [];
+  // Task #987 — an add-on surfaces on this album when it's active AND
+  // either (a) it's scoped to all artists, or (b) the album's primary
+  // artist is explicitly attached. All-artists add-ons therefore show
+  // even on albums with no primary artist linked.
+  const attachedToArtist = primaryArtistId
+    ? inArray(
+        customAddons.id,
+        db
+          .select({ id: customAddonArtists.customAddonId })
+          .from(customAddonArtists)
+          .where(eq(customAddonArtists.personId, primaryArtistId)),
+      )
+    : undefined;
+  const scope = attachedToArtist
+    ? or(eq(customAddons.appliesToAllArtists, true), attachedToArtist)
+    : eq(customAddons.appliesToAllArtists, true);
   const rows = await db
     .select({
       id: customAddons.id,
@@ -199,9 +214,8 @@ async function listCustomAddonsForAlbum(
       orgLogoUrl: organizations.logoUrl,
     })
     .from(customAddons)
-    .innerJoin(customAddonArtists, eq(customAddonArtists.customAddonId, customAddons.id))
     .innerJoin(organizations, eq(organizations.id, customAddons.organizationId))
-    .where(and(eq(customAddonArtists.personId, primaryArtistId), eq(customAddons.active, true)))
+    .where(and(eq(customAddons.active, true), scope))
     .orderBy(asc(customAddons.position), asc(customAddons.createdAt));
   return rows;
 }

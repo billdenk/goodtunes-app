@@ -25,7 +25,7 @@ import { createPortal } from "react-dom";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen, Award, BookOpen, Disc3, Loader2, Copy, Share } from "lucide-react";
+import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen, Award, BookOpen, Disc3, Loader2, Copy, Share, Gift } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
@@ -39,6 +39,7 @@ import {
 } from "@/lib/pathToPressNav";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { ShareQuoteWithArtist } from "@/components/admin/ShareQuoteWithArtist";
+import { AddonDialog } from "@/pages/AdminCustomAddons";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -1112,6 +1113,7 @@ export function SellPanel({
                           albumTitle={albumTitle}
                           artistName={artistName}
                           artistPhotoUrl={artistPhotoUrl}
+                          primaryArtistId={primaryArtistId}
                           albumQuoteLockedAt={sellQuoteLockedAt ?? null}
                           totalRuntimeSec={totalRuntimeSec}
                           costByFormat={costByFormat}
@@ -1180,6 +1182,7 @@ export function SellPanel({
                         albumTitle={albumTitle}
                         artistName={artistName}
                         artistPhotoUrl={artistPhotoUrl}
+                        primaryArtistId={primaryArtistId}
                         albumQuoteLockedAt={sellQuoteLockedAt ?? null}
                         totalRuntimeSec={totalRuntimeSec}
                         costByFormat={costByFormat}
@@ -2014,6 +2017,7 @@ function SkuRow({
   albumTitle,
   artistName,
   artistPhotoUrl,
+  primaryArtistId = null,
   albumQuoteLockedAt = null,
   totalRuntimeSec = 0,
   costByFormat,
@@ -2161,6 +2165,10 @@ function SkuRow({
   albumTitle?: string;
   artistName?: string;
   artistPhotoUrl?: string | null;
+  // Task #987 — primary artist (person) id, threaded through so the
+  // inline "Custom" add-on tile can scope a new add-on to just this
+  // artist (attach-on-create) or all artists.
+  primaryArtistId?: string | null;
   // Task #433 — album-level Quote lock cascades to the row: when the
   // bigger Lock-in-quote CTA is engaged, every row is locked too
   // (visual + behavioural) so the album lock and per-row lock can't
@@ -6178,7 +6186,7 @@ function SkuRow({
           pill respect the partner-permissions edit_metadata lock. */}
       <div className="flex items-center gap-2 mt-5 mb-3">
         <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-          Optional · Upsells
+          Optional · Add-ons
         </span>
         <span className="flex-1 h-px bg-slate-200" aria-hidden />
       </div>
@@ -6277,6 +6285,15 @@ function SkuRow({
               setOpenUpsell((k) => (k === "cd-quote" ? null : "cd-quote"))
             }
             bodyContainer={upsellBodyEl}
+          />
+        ) : null}
+        {/* Task #987 — inline Custom (non-profit) add-on tile. Opens its
+            own modal dialog (not the portal body), pre-scoped to this
+            album's primary artist. */}
+        {albumId && isPrimaryVinyl ? (
+          <CustomAddonInlineTile
+            artistName={artistName}
+            primaryArtistId={primaryArtistId}
           />
         ) : null}
       </div>
@@ -7184,6 +7201,65 @@ function AddonQuotePill({
             bodyContainer,
           )
         : null}
+    </>
+  );
+}
+
+/* Task #987 — inline "Custom" add-on tile. Sits in the Add-ons row next
+   to GoodDeed / Booklet / CD and opens the same create dialog used on the
+   dedicated Custom add-ons page, pre-scoped to this album's primary
+   artist. Writes are super-admin only (server enforces requireRole), so
+   non-super-admins get a clear toast rather than a dead button — flag
+   this with Bill before loosening the permission. */
+function CustomAddonInlineTile({
+  artistName,
+  primaryArtistId,
+}: {
+  artistName?: string;
+  primaryArtistId?: string | null;
+}) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
+    queryKey: ["/api/me/role"],
+  });
+  const canCreate = roleInfo?.role === "super_admin";
+  return (
+    <>
+      <UpsellTile
+        icon={Gift}
+        title="Custom"
+        subtitle={
+          <span data-testid="text-custom-addon-tile-summary">
+            Non-profit add-on
+          </span>
+        }
+        active={open}
+        onClick={() => {
+          if (!canCreate) {
+            toast({
+              title: "Super-admin only",
+              description:
+                "Custom non-profit add-ons can only be created by a super-admin. Ask one to add it for you.",
+            });
+            return;
+          }
+          setOpen(true);
+        }}
+        testId="button-toggle-custom-addon-tile"
+      />
+      {canCreate && (
+        <AddonDialog
+          mode="create"
+          open={open}
+          onOpenChange={setOpen}
+          inline
+          albumArtist={{
+            personId: primaryArtistId ?? null,
+            name: artistName ?? "this artist",
+          }}
+        />
+      )}
     </>
   );
 }
