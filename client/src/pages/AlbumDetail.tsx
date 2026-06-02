@@ -2503,7 +2503,6 @@ function InstrumentSheet({
   onClose: () => void;
   onCloseAll: () => void;
 }) {
-  const dismiss = useSheetDismiss();
   // SuperCredits-derived list of artists who've played this instrument on
   // a track. Anchored on instrument.id (not vendor.id), so it works for
   // both demo instruments and real DB rows. Empty list → section hidden.
@@ -2624,10 +2623,6 @@ function InstrumentSheet({
               <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
             </svg>
           </IconButton>
-          <SheetClose
-            onClick={() => (dismiss ? dismiss(onCloseAll) : onCloseAll())}
-            data-testid="button-instrument-closeall"
-          />
         </div>
         </div>
       </div>
@@ -2866,7 +2861,6 @@ function VendorSheet({
   onClose: () => void;
   onCloseAll: () => void;
 }) {
-  const dismiss = useSheetDismiss();
   const [tab, setTab] = useState<"about" | "instruments" | "artists">("about");
 
   // One-shot fetch of the vendor profile bundle (vendor entity + all
@@ -2970,11 +2964,13 @@ function VendorSheet({
           className="sticky top-0 z-20 flex items-center justify-between px-3 pb-2"
           style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
         >
-          {/* Bumped from raw 36px circles to 44px IconButton (dimmed) so
-              the chrome matches the rest of the player shell (Artist /
-              Album hero use the same primitive at the same size). 44px
-              is the Apple HIG floor and the design-system rule. */}
-          <SheetBack variant="dimmed" data-testid="button-vendor-close" />
+          {/* 44px IconButton (glass) so the chrome matches the rest of the
+              player shell (the gear sheet's back chevron uses the same
+              primitive + variant). 44px is the Apple HIG floor and the
+              design-system rule; the glass chip stays legible over both
+              dark and bright hero covers where a black `dimmed` chip
+              vanished. This is now the ONLY dismiss/return control. */}
+          <SheetBack data-testid="button-vendor-close" />
           <div className="flex items-center gap-2">
             {/* Bookmark — saves the vendor to the user's bookmark list
                 (localStorage). Filled when active. */}
@@ -3016,10 +3012,6 @@ function VendorSheet({
                 <path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z" />
               </svg>
             </IconButton>
-            <SheetClose
-              onClick={() => (dismiss ? dismiss(onCloseAll) : onCloseAll())}
-              data-testid="button-vendor-closeall"
-            />
           </div>
         </div>
 
