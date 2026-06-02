@@ -4909,7 +4909,7 @@ function SkuRow({
                 <button
                   type="button"
                   onClick={() => toggleProfit(opts.blockKey)}
-                  className="w-full flex items-center justify-between gap-2 text-left rounded-md hover:bg-slate-50 -mx-1 px-1 py-0.5 transition-colors"
+                  className="w-full flex items-center justify-between gap-2 text-left rounded-md hover:bg-slate-50 py-0.5 transition-colors"
                   aria-expanded={open}
                   data-testid={`button-toggle-breakdown-${idSuffix}`}
                 >
