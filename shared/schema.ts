@@ -3672,14 +3672,59 @@ export const referralCredits = pgTable("referral_credits", {
   payoutRunId: varchar("payout_run_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
-  // One credit per (order, referrer-of-each-kind). A single order can
-  // earn two credits if both an artist AND an NPO referred the artist
-  // — distinct rows because referrerKind differs.
-  orderRefUniq: uniqueIndex("referral_credits_order_kind_uniq")
-    .on(t.orderId, t.referrerKind),
+  // Task #922 — an order can now earn MANY non_profit credits (one per
+  // per-album NPO beneficiary) plus at most one artist credit. The old
+  // (order_id, referrer_kind) unique blocked multiple NPO rows, so it is
+  // replaced by two partial uniques:
+  //   • artist: one per order      → (order_id) WHERE kind = 'artist'
+  //   • non_profit: one per (order, org) → (order_id, referrer_org_id)
+  //                  WHERE kind = 'non_profit'
+  // The matching ON CONFLICT targets live in server/commerce.ts.
+  orderArtistUniq: uniqueIndex("referral_credits_order_artist_uniq")
+    .on(t.orderId)
+    .where(sql`${t.referrerKind} = 'artist'`),
+  orderOrgUniq: uniqueIndex("referral_credits_order_org_uniq")
+    .on(t.orderId, t.referrerOrgId)
+    .where(sql`${t.referrerKind} = 'non_profit'`),
 }));
 
 export type ReferralCredit = typeof referralCredits.$inferSelect;
+
+// ─── Task #922 — Per-album NPO donation split ─────────────────────────
+// An album can name up to 4 NPO beneficiaries, each earning a per-unit
+// donation (cents). The total across an album's beneficiaries is capped
+// at $1.00/unit (100¢) and funded out of GoodTunes' margin — album
+// pricing never changes. At sale time the splitter mints one
+// referral_credits row per beneficiary instead of one artist-level NPO
+// credit. New albums default their split from the artist's existing NPO
+// referral (people.referred_by_org_id); the split is freely editable
+// until first sale, after which an operator can only ADD from the
+// unallocated remainder (existing shares can't be reduced or removed).
+export const albumNpoBeneficiaries = pgTable("album_npo_beneficiaries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  perUnitCents: integer("per_unit_cents").notNull(),
+  // Audit: which admin user last set/added this beneficiary (nullable —
+  // backfilled rows and seed defaults carry no user).
+  allocatedByUserId: varchar("allocated_by_user_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  albumOrgUniq: uniqueIndex("album_npo_beneficiaries_album_org_uniq")
+    .on(t.albumId, t.organizationId),
+  perUnitChk: check(
+    "album_npo_beneficiaries_per_unit_chk",
+    sql`${t.perUnitCents} > 0 AND ${t.perUnitCents} <= 100`,
+  ),
+}));
+export const insertAlbumNpoBeneficiarySchema = createInsertSchema(albumNpoBeneficiaries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertAlbumNpoBeneficiary = z.infer<typeof insertAlbumNpoBeneficiarySchema>;
+export type AlbumNpoBeneficiary = typeof albumNpoBeneficiaries.$inferSelect;
 
 // ─── Task #350 — Per-album artist↔artist attribution ────────────────
 // An artist referring another artist (invite_subusers + artist scope)

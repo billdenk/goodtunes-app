@@ -28,6 +28,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db";
 import { storage } from "./storage";
 import { getUserRole } from "./auth/roles";
+import { sqlNpoAlbumLedger } from "./adminAlbumQueries";
 
 const INVITE_TTL_DAYS = 14;
 
@@ -127,6 +128,31 @@ export function registerNpoPortalRoutes(
       logoUrl: row.logo_url,
       websiteUrl: row.website_url,
       caller: caps,
+    });
+  });
+
+  // GET /api/non-profit/:id/album-ledger — Task #922 per-album donation
+  // ledger. One row per album this NPO is a beneficiary of (or has ever
+  // earned a credit from), showing the per-unit donation, units sold,
+  // expected (pending) cents, paid cents, and the allocating artist.
+  // referral_credits has no album_id, so units/cents join through
+  // orders.album_id; the per-unit rate + zero-sale albums come from
+  // album_npo_beneficiaries.
+  app.get("/api/non-profit/:id/album-ledger", requireAdmin, requireNpoScope, async (req, res) => {
+    const npoId = String(req.params.id);
+    const rows = await db.execute<any>(sqlNpoAlbumLedger(npoId));
+    res.json({
+      albums: ((rows as any).rows ?? []).map((r: any) => ({
+        albumId: r.album_id,
+        title: r.title,
+        coverUrl: r.cover_url,
+        artistId: r.artist_id,
+        artistName: r.artist_name,
+        perUnitCents: r.per_unit_cents,
+        unitsSold: r.units_sold,
+        expectedCents: r.expected_cents,
+        paidCents: r.paid_cents,
+      })),
     });
   });
 

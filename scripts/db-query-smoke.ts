@@ -41,6 +41,7 @@ import {
 import {
   sqlConnectedAlbums,
   sqlNpoArtistAlbums,
+  sqlNpoAlbumLedger,
 } from "../server/adminAlbumQueries";
 
 // Stable dummy bind values — content is irrelevant because EXPLAIN never
@@ -48,6 +49,7 @@ import {
 const ALBUM = "00000000-0000-0000-0000-000000000000";
 const PRESS = "00000000-0000-0000-0000-000000000001";
 const ORDER = "00000000-0000-0000-0000-000000000002";
+const ORG = "00000000-0000-0000-0000-000000000003";
 
 const SMOKE_QUERIES: { name: string; sql: SQL }[] = [
   // server/earlyCut.ts
@@ -71,6 +73,7 @@ const SMOKE_QUERIES: { name: string; sql: SQL }[] = [
   // server/adminAlbumQueries.ts
   { name: "adminAlbumQueries.connectedAlbums", sql: sqlConnectedAlbums([ALBUM]) },
   { name: "adminAlbumQueries.npoArtistAlbums", sql: sqlNpoArtistAlbums([ALBUM]) },
+  { name: "adminAlbumQueries.npoAlbumLedger", sql: sqlNpoAlbumLedger(ORG) },
 ];
 
 async function main() {

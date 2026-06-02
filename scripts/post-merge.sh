@@ -2391,6 +2391,108 @@ SQL
 backfill_task_727_gooddeed_25_20 dev  "${DATABASE_URL:-}"
 backfill_task_727_gooddeed_25_20 prod "${PROD_DATABASE_URL:-}"
 
+# ─── Task #922 — Per-album NPO donation split ──────────────────────────
+# Schema-only DDL: the album_npo_beneficiaries table plus the referral_credits
+# unique-index swap (one (order_id) WHERE kind='artist' + one
+# (order_id, referrer_org_id) WHERE kind='non_profit', replacing the old
+# (order_id, referrer_kind) unique that blocked >1 NPO credit per order).
+# Idempotent CREATE/DROP IF EXISTS so it is safe on every merge, dev+prod.
+migrate_task_922_npo_split() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-922 npo-split migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS album_npo_beneficiaries (
+  id                   varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id             varchar NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  organization_id      varchar NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  per_unit_cents       integer NOT NULL,
+  allocated_by_user_id varchar,
+  created_at           timestamp NOT NULL DEFAULT now(),
+  updated_at           timestamp NOT NULL DEFAULT now(),
+  CONSTRAINT album_npo_beneficiaries_per_unit_chk CHECK (per_unit_cents > 0 AND per_unit_cents <= 100)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS album_npo_beneficiaries_album_org_uniq
+  ON album_npo_beneficiaries (album_id, organization_id);
+-- Swap the referral_credits unique. The old one may be a constraint or a
+-- bare index depending on how an environment's DB was built — drop both.
+ALTER TABLE referral_credits DROP CONSTRAINT IF EXISTS referral_credits_order_kind_uniq;
+DROP INDEX IF EXISTS referral_credits_order_kind_uniq;
+CREATE UNIQUE INDEX IF NOT EXISTS referral_credits_order_artist_uniq
+  ON referral_credits (order_id) WHERE referrer_kind = 'artist';
+CREATE UNIQUE INDEX IF NOT EXISTS referral_credits_order_org_uniq
+  ON referral_credits (order_id, referrer_org_id) WHERE referrer_kind = 'non_profit';
+COMMIT;
+SQL
+  then
+    echo "post-merge: task-922 npo-split migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-922 npo-split migration failed on $label (continuing)"
+  fi
+}
+migrate_task_922_npo_split dev  "${DATABASE_URL:-}"
+migrate_task_922_npo_split prod "${PROD_DATABASE_URL:-}"
+
+# One-time data backfill: every album whose primary artist carries an NPO
+# referral (people.referred_by_org_id) and that has NO explicit beneficiary
+# yet gets a single default beneficiary at the artist's referrer_per_unit_cents
+# (clamped to 1..100). Marker-guarded in post_merge_data_backfills so a later
+# operator edit (re-split, remove) is never clobbered on the next merge.
+backfill_task_922_npo_default() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-922 npo-default backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_inserted integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_922_npo_default'
+  ) THEN
+    INSERT INTO album_npo_beneficiaries (album_id, organization_id, per_unit_cents)
+    SELECT a.id, p.referred_by_org_id,
+           GREATEST(LEAST(COALESCE(p.referrer_per_unit_cents, 100), 100), 1)
+      FROM albums a
+      JOIN people p ON p.id = a.primary_artist_id
+     WHERE p.referred_by_org_id IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM album_npo_beneficiaries b WHERE b.album_id = a.id
+       )
+    ON CONFLICT (album_id, organization_id) DO NOTHING;
+    GET DIAGNOSTICS v_inserted = ROW_COUNT;
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_922_npo_default');
+    RAISE NOTICE 'task-922 backfill applied: % default beneficiaries minted', v_inserted;
+  ELSE
+    RAISE NOTICE 'task-922 backfill already applied — skipping (operator edits preserved)';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-922 npo-default backfill ok on $label"
+    echo "$out" | grep -i 'task-922' || true
+  else
+    echo "post-merge: WARNING — task-922 npo-default backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_922_npo_default dev  "${DATABASE_URL:-}"
+backfill_task_922_npo_default prod "${PROD_DATABASE_URL:-}"
+
 # ─── Task #533 — Pool-funded early masters cut ─────────────────────────
 # New ledger + queue tables and the per-album pool / consent columns plus
 # the per-press auto-trigger consent columns. Schema-only DDL — idempotent

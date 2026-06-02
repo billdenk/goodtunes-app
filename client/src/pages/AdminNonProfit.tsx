@@ -8,6 +8,7 @@ import { EditablePanel } from "@/components/admin/EditablePanel";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
+import { NpoAlbumLedger } from "@/components/NpoAlbumLedger";
 import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
@@ -44,8 +45,8 @@ export default function AdminNonProfit() {
   // contacts endpoint for People).
   // Task #590 — Dashboard leads, Overview demoted to second; `?tab=`
   // round-trip so deep links survive.
-  type NpoTab = "dashboard" | "overview" | "people" | "albums" | "analytics" | "payouts";
-  const NPO_TAB_KEYS: readonly NpoTab[] = ["dashboard", "overview", "people", "albums", "analytics", "payouts"];
+  type NpoTab = "dashboard" | "overview" | "people" | "albums" | "ledger" | "analytics" | "payouts";
+  const NPO_TAB_KEYS: readonly NpoTab[] = ["dashboard", "overview", "people", "albums", "ledger", "analytics", "payouts"];
   const [tab, setTabState] = useState<NpoTab>(() => {
     if (typeof window === "undefined") return "dashboard";
     const q = new URLSearchParams(window.location.search).get("tab");
@@ -177,6 +178,7 @@ export default function AdminNonProfit() {
               { key: "overview", label: "Overview" },
               { key: "people", label: "People" },
               { key: "albums", label: "Albums" },
+              { key: "ledger", label: "Donation ledger" },
               { key: "analytics", label: "Analytics" },
               { key: "payouts", label: "Payouts" },
             ] as const).map((t) => (
@@ -266,6 +268,7 @@ export default function AdminNonProfit() {
             emptyHint="No albums tied to this NPO yet — no referred artists or GoodDeed-routed orders."
           />
         )}
+        {tab === "ledger" && <NpoAlbumLedger npoId={npo.id} />}
         {tab === "analytics" && (
           <EntityAnalyticsTab
             apiPath={`/api/admin/non-profits/${npo.id}/analytics`}

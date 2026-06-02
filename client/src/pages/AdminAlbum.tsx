@@ -85,6 +85,7 @@ import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { AlbumPreviewCard } from "@/components/admin/previews/AlbumPreviewCard";
 import { AlbumDesktopPreviewCard } from "@/components/admin/previews/AlbumDesktopPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
+import { AlbumNpoSplitPanel } from "@/components/admin/AlbumNpoSplitPanel";
 import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
 import { SplitsImportSheet, TrackSplitsEditor } from "@/components/admin/SplitsPanels";
 import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
@@ -2183,6 +2184,7 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           </div>
         </DialogContent>
       </Dialog>
+      <AlbumNpoSplitPanel albumId={album.id} />
     </div>
   );
 }

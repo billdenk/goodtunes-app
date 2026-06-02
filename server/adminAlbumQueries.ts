@@ -38,6 +38,48 @@ export function sqlConnectedAlbums(albumIds: string[]): SQL {
   `;
 }
 
+// Task #922 — per-album NPO donation ledger for one non-profit. One row per
+// album the NPO is a beneficiary of (album_npo_beneficiaries) OR has ever
+// earned a credit from (referral_credits, which carries no album_id so it
+// joins through orders.album_id). `a.artwork AS cover_url` — same column
+// note as above. Drives the NPO portal + admin "Donation ledger" tab.
+export function sqlNpoAlbumLedger(npoId: string): SQL {
+  return sql`
+    WITH bens AS (
+      SELECT b.album_id, b.per_unit_cents
+      FROM album_npo_beneficiaries b
+      WHERE b.organization_id = ${npoId}
+    ),
+    credits AS (
+      SELECT o.album_id,
+             COALESCE(SUM(rc.units), 0)::int AS units_sold,
+             COALESCE(SUM(rc.amount_cents) FILTER (WHERE rc.status = 'pending_payout'), 0)::int AS expected_cents,
+             COALESCE(SUM(rc.amount_cents) FILTER (WHERE rc.status = 'paid'), 0)::int AS paid_cents
+      FROM referral_credits rc
+      JOIN orders o ON o.id = rc.order_id
+      WHERE rc.referrer_kind = 'non_profit' AND rc.referrer_org_id = ${npoId}
+      GROUP BY o.album_id
+    ),
+    album_ids AS (
+      SELECT album_id FROM bens
+      UNION
+      SELECT album_id FROM credits
+    )
+    SELECT a.id AS album_id, a.title, a.artwork AS cover_url,
+           a.primary_artist_id AS artist_id,
+           (SELECT name FROM people WHERE id = a.primary_artist_id) AS artist_name,
+           bens.per_unit_cents,
+           COALESCE(credits.units_sold, 0) AS units_sold,
+           COALESCE(credits.expected_cents, 0) AS expected_cents,
+           COALESCE(credits.paid_cents, 0) AS paid_cents
+    FROM album_ids
+    JOIN albums a ON a.id = album_ids.album_id
+    LEFT JOIN bens ON bens.album_id = album_ids.album_id
+    LEFT JOIN credits ON credits.album_id = album_ids.album_id
+    ORDER BY a.title ASC
+  `;
+}
+
 // For-sale albums + paid units per artist — backs the non-profit dashboard
 // artist roster. Same `a.artwork AS cover_url` note as above; only albums
 // with an active album_skus row are returned.

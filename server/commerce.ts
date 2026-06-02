@@ -2808,7 +2808,21 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
         }>(sql`SELECT referred_by_person_id, referred_by_org_id, invited_by_press_id, referrer_per_unit_cents
                FROM people WHERE id = ${order.artistSnapshotId} LIMIT 1`);
         const row = (r as any).rows?.[0];
-        if (row && (row.referred_by_person_id || row.referred_by_org_id || row.invited_by_press_id)) {
+        // Task #922 — per-album NPO beneficiaries are a property of the
+        // ALBUM, not of the artist's referral columns, so the NPO branch
+        // below must run even when the people row carries no referrer.
+        // The artist + press branches still gate on their referrer cols.
+        const benRows = await db.execute<{ organization_id: string; per_unit_cents: number }>(sql`
+          SELECT organization_id, per_unit_cents
+          FROM album_npo_beneficiaries
+          WHERE album_id = ${albumId}
+          ORDER BY created_at ASC
+        `);
+        const beneficiaries = ((benRows as any).rows ?? []) as {
+          organization_id: string;
+          per_unit_cents: number;
+        }[];
+        if (row && (row.referred_by_person_id || row.referred_by_org_id || row.invited_by_press_id || beneficiaries.length > 0)) {
           const basePerUnit = row.referrer_per_unit_cents ?? 100;
           const currency = (order.currency || "usd").toLowerCase();
           const u = await db.execute<{ units: number }>(sql`
@@ -2845,13 +2859,32 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
               await db.execute(sql`
                 INSERT INTO referral_credits (order_id, referred_artist_id, referrer_kind, referrer_person_id, amount_cents, currency, status, units)
                 VALUES (${order.id}, ${order.artistSnapshotId}, 'artist', ${row.referred_by_person_id}, ${amountCents}, ${currency}, 'pending_payout', ${safeUnits})
-                ON CONFLICT (order_id, referrer_kind) DO NOTHING
+                ON CONFLICT (order_id) WHERE referrer_kind = 'artist' DO NOTHING
               `);
             }
           }
 
-          // ── NPO branch with optional $1.50 funded-up bonus ──
-          if (row.referred_by_org_id) {
+          // ── NPO branch — per-album beneficiary split (Task #922) ──
+          // Source of truth is album_npo_beneficiaries: mint ONE credit
+          // per beneficiary, each at its own per-unit rate (total already
+          // capped ≤ $1/unit when the split was saved). When the album
+          // has NO explicit split yet (un-backfilled legacy album) we
+          // fall back to the artist's single referred_by_org_id credit,
+          // preserving the optional $1.50 funded-up charity bonus. Once
+          // an album has explicit beneficiaries, the operator's
+          // allocation is the source of truth and the global bonus is
+          // consciously folded into that ≤$1 cap (see docs/roadmap +
+          // commit notes).
+          if (beneficiaries.length > 0) {
+            for (const b of beneficiaries) {
+              const amountCents = b.per_unit_cents * safeUnits;
+              await db.execute(sql`
+                INSERT INTO referral_credits (order_id, referred_artist_id, referrer_kind, referrer_org_id, amount_cents, currency, status, units)
+                VALUES (${order.id}, ${order.artistSnapshotId}, 'non_profit', ${b.organization_id}, ${amountCents}, ${currency}, 'pending_payout', ${safeUnits})
+                ON CONFLICT (order_id, referrer_org_id) WHERE referrer_kind = 'non_profit' DO NOTHING
+              `);
+            }
+          } else if (row.referred_by_org_id) {
             let npoPerUnit = basePerUnit;
             try {
               const cfg = await db.execute<{ enabled: boolean }>(sql`
@@ -2864,7 +2897,7 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
             await db.execute(sql`
               INSERT INTO referral_credits (order_id, referred_artist_id, referrer_kind, referrer_org_id, amount_cents, currency, status, units)
               VALUES (${order.id}, ${order.artistSnapshotId}, 'non_profit', ${row.referred_by_org_id}, ${amountCents}, ${currency}, 'pending_payout', ${safeUnits})
-              ON CONFLICT (order_id, referrer_kind) DO NOTHING
+              ON CONFLICT (order_id, referrer_org_id) WHERE referrer_kind = 'non_profit' DO NOTHING
             `);
           }
 

@@ -11,6 +11,7 @@ import { ImageTooLargeError, makeDisplayDerivative } from "./imageProcessing";
 import { closeSaleWindow as closeCertSaleWindow } from "./saleWindow";
 import { generateBatchPdf as generateCertBatchPdf, CERT_BATCH_STEPS } from "./certBatch";
 import { sqlConnectedAlbums, sqlNpoArtistAlbums } from "./adminAlbumQueries";
+import { pgArray } from "./lib/pgArray";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual, randomUUID, createHash } from "crypto";
@@ -21682,6 +21683,201 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json(out);
     },
   );
+
+  // ─── Task #922 — Per-album NPO donation split ─────────────────────────
+  // GET returns the album's current beneficiaries (or, when none are set
+  // yet, a single default derived from the artist's referred_by_org_id),
+  // plus the remaining unallocated cents and the post-sale lock state so
+  // AdminAlbum can render the editor. PUT replaces the split, enforcing
+  // ≤4 beneficiaries, each 1..100¢, total ≤100¢, and — after first sale —
+  // an add-only rule (existing shares can't be reduced or removed).
+  const NPO_SPLIT_CAP_CENTS = 100;
+  const NPO_SPLIT_MAX = 4;
+
+  // The split an album would mint today when it has NO explicit beneficiary
+  // rows: the single inherited credit from the artist's NPO referral. This is
+  // what the sale-time splitter falls back to, so it's also the baseline the
+  // post-sale add-only rule must protect — otherwise a locked album with only
+  // the implicit default could be silently re-split (reducing/removing the
+  // inherited NPO's share) because there's no row to guard.
+  const inheritedNpoDefault = async (
+    albumId: string,
+  ): Promise<{ organizationId: string; perUnitCents: number } | null> => {
+    const a = await db.execute<{ primary_artist_id: string | null }>(sql`
+      SELECT primary_artist_id FROM albums WHERE id = ${albumId} LIMIT 1
+    `);
+    const artistId = ((a as any).rows ?? [])[0]?.primary_artist_id;
+    if (!artistId) return null;
+    const def = await db.execute<{ organization_id: string; per_unit_cents: number }>(sql`
+      SELECT o.id AS organization_id, COALESCE(p.referrer_per_unit_cents, 100) AS per_unit_cents
+      FROM people p
+      JOIN organizations o ON o.id = p.referred_by_org_id
+      WHERE p.id = ${artistId} AND p.referred_by_org_id IS NOT NULL
+      LIMIT 1
+    `);
+    const d = ((def as any).rows ?? [])[0];
+    if (!d) return null;
+    return {
+      organizationId: d.organization_id,
+      perUnitCents: Math.max(1, Math.min(NPO_SPLIT_CAP_CENTS, d.per_unit_cents)),
+    };
+  };
+
+  app.get("/api/admin/albums/:id/npo-beneficiaries", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const a = await db.execute<{ first_sold_at: string | null; primary_artist_id: string | null }>(sql`
+      SELECT first_sold_at, primary_artist_id FROM albums WHERE id = ${id} LIMIT 1
+    `);
+    const album = ((a as any).rows ?? [])[0];
+    if (!album) return res.status(404).json({ message: "Album not found" });
+
+    const rows = await db.execute<any>(sql`
+      SELECT b.id, b.organization_id, b.per_unit_cents, o.name, o.logo_url
+      FROM album_npo_beneficiaries b
+      JOIN organizations o ON o.id = b.organization_id
+      WHERE b.album_id = ${id}
+      ORDER BY b.created_at ASC
+    `);
+    let beneficiaries = ((rows as any).rows ?? []).map((r: any) => ({
+      id: r.id,
+      organizationId: r.organization_id,
+      perUnitCents: r.per_unit_cents,
+      name: r.name,
+      logoUrl: r.logo_url,
+    }));
+    let isDefault = false;
+    if (beneficiaries.length === 0 && album.primary_artist_id) {
+      // No explicit split — surface the inherited default from the
+      // artist's NPO referral so the operator sees what would mint today.
+      const def = await db.execute<any>(sql`
+        SELECT o.id AS organization_id, o.name, o.logo_url,
+               COALESCE(p.referrer_per_unit_cents, 100) AS per_unit_cents
+        FROM people p
+        JOIN organizations o ON o.id = p.referred_by_org_id
+        WHERE p.id = ${album.primary_artist_id} AND p.referred_by_org_id IS NOT NULL
+        LIMIT 1
+      `);
+      const d = ((def as any).rows ?? [])[0];
+      if (d) {
+        beneficiaries = [{
+          id: null,
+          organizationId: d.organization_id,
+          perUnitCents: Math.max(1, Math.min(NPO_SPLIT_CAP_CENTS, d.per_unit_cents)),
+          name: d.name,
+          logoUrl: d.logo_url,
+        }];
+        isDefault = true;
+      }
+    }
+    const totalCents = beneficiaries.reduce((s: number, b: any) => s + b.perUnitCents, 0);
+    res.json({
+      beneficiaries,
+      totalCents,
+      remainingCents: Math.max(0, NPO_SPLIT_CAP_CENTS - totalCents),
+      capCents: NPO_SPLIT_CAP_CENTS,
+      maxBeneficiaries: NPO_SPLIT_MAX,
+      isDefault,
+      locked: !!album.first_sold_at,
+    });
+  });
+
+  app.put("/api/admin/albums/:id/npo-beneficiaries", requireAdmin, async (req, res) => {
+    const info = await getUserRole(req.session.userId!);
+    if (!info || (info.role !== "super_admin" && info.role !== "admin")) {
+      return res.status(403).json({ message: "Only GoodTunes admins can set the donation split" });
+    }
+    const id = String(req.params.id);
+    const schema = z.object({
+      beneficiaries: z.array(z.object({
+        organizationId: z.string().min(1),
+        perUnitCents: z.number().int().min(1).max(NPO_SPLIT_CAP_CENTS),
+      })).max(NPO_SPLIT_MAX),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Invalid split", errors: parsed.error.flatten() });
+    }
+    const next = parsed.data.beneficiaries;
+    // No duplicate orgs.
+    const orgIds = next.map((b) => b.organizationId);
+    if (new Set(orgIds).size !== orgIds.length) {
+      return res.status(400).json({ message: "Each NPO can appear only once" });
+    }
+    // Total cap.
+    const total = next.reduce((s, b) => s + b.perUnitCents, 0);
+    if (total > NPO_SPLIT_CAP_CENTS) {
+      return res.status(400).json({ message: `Total exceeds the $1.00/unit cap (${total}¢)` });
+    }
+    const a = await db.execute<{ first_sold_at: string | null }>(sql`
+      SELECT first_sold_at FROM albums WHERE id = ${id} LIMIT 1
+    `);
+    const album = ((a as any).rows ?? [])[0];
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    // Every org must be an existing non-profit.
+    if (orgIds.length > 0) {
+      const orgCheck = await db.execute<{ id: string }>(sql`
+        SELECT id FROM organizations WHERE id = ANY(${pgArray(orgIds, "varchar")}) AND kind = 'non_profit'
+      `);
+      const known = new Set(((orgCheck as any).rows ?? []).map((r: any) => r.id));
+      const unknown = orgIds.filter((o) => !known.has(o));
+      if (unknown.length > 0) {
+        return res.status(400).json({ message: "One or more beneficiaries are not non-profits" });
+      }
+    }
+    // Current explicit rows (for the post-sale add-only rule).
+    const curRows = await db.execute<{ organization_id: string; per_unit_cents: number }>(sql`
+      SELECT organization_id, per_unit_cents FROM album_npo_beneficiaries WHERE album_id = ${id}
+    `);
+    let current = ((curRows as any).rows ?? []) as { organization_id: string; per_unit_cents: number }[];
+    // When a locked album has no explicit rows, the split it's actually been
+    // minting is the inherited default — protect THAT as the post-sale baseline
+    // so the implicit-default case can't bypass the add-only rule.
+    if (current.length === 0 && album.first_sold_at) {
+      const inh = await inheritedNpoDefault(id);
+      if (inh) {
+        current = [{ organization_id: inh.organizationId, per_unit_cents: inh.perUnitCents }];
+      }
+    }
+    const nextByOrg = new Map(next.map((b) => [b.organizationId, b.perUnitCents]));
+    if (album.first_sold_at) {
+      // After first sale: existing beneficiaries can't be removed or
+      // reduced — only added to (from the unallocated remainder).
+      for (const c of current) {
+        const nv = nextByOrg.get(c.organization_id);
+        if (nv === undefined) {
+          return res.status(409).json({ message: "Can't remove an existing beneficiary after the first sale" });
+        }
+        if (nv < c.per_unit_cents) {
+          return res.status(409).json({ message: "Can't reduce an existing beneficiary's share after the first sale" });
+        }
+      }
+    }
+    const userId = req.session.userId!;
+    await db.transaction(async (tx) => {
+      // Remove beneficiaries dropped from the set (pre-sale only — the
+      // post-sale guard above already rejected removals).
+      const keepOrgs = next.map((b) => b.organizationId);
+      if (keepOrgs.length > 0) {
+        await tx.execute(sql`
+          DELETE FROM album_npo_beneficiaries
+          WHERE album_id = ${id} AND organization_id <> ALL(${pgArray(keepOrgs, "varchar")})
+        `);
+      } else {
+        await tx.execute(sql`DELETE FROM album_npo_beneficiaries WHERE album_id = ${id}`);
+      }
+      for (const b of next) {
+        await tx.execute(sql`
+          INSERT INTO album_npo_beneficiaries (album_id, organization_id, per_unit_cents, allocated_by_user_id)
+          VALUES (${id}, ${b.organizationId}, ${b.perUnitCents}, ${userId})
+          ON CONFLICT (album_id, organization_id)
+          DO UPDATE SET per_unit_cents = EXCLUDED.per_unit_cents,
+                        allocated_by_user_id = EXCLUDED.allocated_by_user_id,
+                        updated_at = now()
+        `);
+      }
+    });
+    res.json({ ok: true });
+  });
 
   // List override audit for one album so AdminAlbum can show "Unlocked
   // by Nick on 2026-05-22 — typo in title" alongside the lock badge.
