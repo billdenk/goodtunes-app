@@ -7,7 +7,7 @@ import { sql, and, eq, or, ilike, isNull, desc, inArray } from "drizzle-orm";
 import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, TERMS_VERSION } from "@shared/schema";
 import { MRP_DOMAIN, getPressCatalog } from "./pressCatalog";
 import { MRP_COLOR_LIBRARY_URL, type MrpParsedTile, maskToVinylDisc, parseMrpColorPage, matchFamilyToTier } from "./vendorColorScrape";
-import { isProcessableImage, makeDisplayDerivative } from "./imageProcessing";
+import { ImageTooLargeError, makeDisplayDerivative } from "./imageProcessing";
 import { closeSaleWindow as closeCertSaleWindow } from "./saleWindow";
 import { generateBatchPdf as generateCertBatchPdf, CERT_BATCH_STEPS } from "./certBatch";
 import { sqlConnectedAlbums, sqlNpoArtistAlbums } from "./adminAlbumQueries";
@@ -2521,15 +2521,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     mime: string,
   ): Promise<string> {
     const { bucketName, objectName, publicUrl } = resolveUploadTarget(mime);
-    let derivative: { buffer: Buffer; mime: string } | null = null;
-    if (isProcessableImage(mime)) {
-      try {
-        derivative = await makeDisplayDerivative(buf, mime);
-      } catch {
-        derivative = null;
-      }
+    // For processable rasters this returns a downsized derivative (and we keep
+    // the original at the ".orig" sibling); already-small / non-image inputs
+    // come back "passthrough" (store as-is). An oversized raster we can't
+    // safely shrink comes back "reject" — we MUST NOT persist that raw
+    // original (the huge bytes are what OOM-crashed mobile WebKit), so we fail
+    // the upload loudly instead.
+    const result = await makeDisplayDerivative(buf, mime);
+    if (result.kind === "reject") {
+      throw new ImageTooLargeError(
+        `Refusing to store oversized image: ${result.reason}`,
+      );
     }
-    if (derivative) {
+    if (result.kind === "derivative") {
       // Preserve the original at the ".orig" sibling, serve the derivative.
       await saveBufferToObjectStorage(
         bucketName,
@@ -2540,8 +2544,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await saveBufferToObjectStorage(
         bucketName,
         objectName,
-        derivative.buffer,
-        derivative.mime,
+        result.derivative.buffer,
+        result.derivative.mime,
       );
     } else {
       await saveBufferToObjectStorage(bucketName, objectName, buf, mime);

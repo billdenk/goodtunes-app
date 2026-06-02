@@ -42,8 +42,18 @@ const MAX_UPLOAD_DECODE_PIXELS = 64_000_000;
 // Render-time decode ceiling. The renderers normally see only the ≤1500px
 // display derivative, so this only bounds legacy un-backfilled art. Kept
 // lower than the upload cap because cert batches can render several pages in
-// flight at once. Above this → fallback (the crash fix); below → downscale.
+// flight at once. Above this → memory-safe downscale (the crash fix); below
+// → cheap canvas downscale.
 const MAX_RENDER_DECODE_PIXELS = 24_000_000;
+
+// Hard ceiling for the memory-safe (libvips shrink-on-load) path. Inputs
+// ABOVE the cheap canvas ceilings but at/below this are downscaled via sharp
+// without ever materializing the full decoded raster (e.g. Daniel Lew
+// "Destiny" is 13,333×13,333 ≈ 178MP — full RGBA would be ~712MB and OOM the
+// worker; libvips shrinks it on load, peaking ~150MB). 300MP comfortably
+// covers the largest real raster art (a max-dimension 16,383² WebP is
+// ~268MP) while still refusing a pathological pixel-bomb.
+export const MAX_SAFE_DOWNSCALE_PIXELS = 300_000_000;
 
 export type ImageFormat = "png" | "jpeg" | "gif" | "webp" | "avif";
 
@@ -179,44 +189,157 @@ export function sniffImageDimensions(
   return null;
 }
 
-// Produce a downsized display derivative for an uploaded raster, or null
-// when no derivative is warranted/safe:
-//   - non-derivative mime (gif/avif/pdf/audio/…)         → null (store original)
-//   - dimensions can't be verified                       → null
-//   - already ≤ DISPLAY_MAX_EDGE on the long edge        → null
-//   - so large it would risk OOM to even decode it       → null
-// On success returns the encoded derivative + its mime (same format family
-// as the source, so the served extension stays consistent).
+type OutFormat = "png" | "jpeg" | "webp";
+
+function outFormatForMime(mime: string): OutFormat {
+  if (mime === "image/png") return "png";
+  if (mime === "image/webp") return "webp";
+  return "jpeg";
+}
+
+function mimeForOutFormat(fmt: OutFormat): string {
+  if (fmt === "png") return "image/png";
+  if (fmt === "webp") return "image/webp";
+  return "image/jpeg";
+}
+
+let sharpConfigured = false;
+async function loadSharp() {
+  const sharp = (await import("sharp")).default;
+  if (!sharpConfigured) {
+    // Bound libvips memory for our one-image-at-a-time use: no operation
+    // cache and a single worker thread, so a huge source can't fan out into
+    // many full-width scanline buffers across threads.
+    sharp.cache(false);
+    sharp.concurrency(1);
+    sharpConfigured = true;
+  }
+  return sharp;
+}
+
+// Memory-safe downscale for rasters too large for the cheap @napi-rs/canvas
+// path. libvips shrinks WebP/JPEG on load and streams PNG through a
+// demand-driven pipeline, so peak memory tracks the OUTPUT size, not the
+// (potentially ~178MP) source — no full decoded buffer is ever materialized.
+// Returns encoded bytes in `outFormat`, or null when the source is beyond
+// MAX_SAFE_DOWNSCALE_PIXELS / unreadable.
+async function downscaleHugeRaster(
+  buf: Buffer,
+  outFormat: OutFormat,
+  maxEdge: number,
+): Promise<Buffer | null> {
+  try {
+    const sharp = await loadSharp();
+    let pipeline = sharp(buf, {
+      limitInputPixels: MAX_SAFE_DOWNSCALE_PIXELS,
+      failOn: "none",
+    }).resize({
+      width: maxEdge,
+      height: maxEdge,
+      fit: "inside",
+      withoutEnlargement: true,
+    });
+    if (outFormat === "png") pipeline = pipeline.png();
+    else if (outFormat === "webp") pipeline = pipeline.webp({ quality: 82 });
+    else pipeline = pipeline.jpeg({ quality: 82 });
+    return await pipeline.toBuffer();
+  } catch {
+    return null;
+  }
+}
+
+// Result of asking for a display derivative. The three outcomes exist so a
+// caller can tell a benign "nothing to do, the original is fine as-is" apart
+// from a dangerous "this is an oversized raster we will NOT keep raw":
+//   - "derivative": produced a downsized display image; serve it and preserve
+//     the source at the ".orig" sibling.
+//   - "passthrough": store/keep the original unchanged — a non-derivable mime
+//     (gif/avif/pdf/audio/…), a header we couldn't verify, or art already
+//     ≤ DISPLAY_MAX_EDGE on the long edge.
+//   - "reject": a PROCESSABLE raster that is oversized but we cannot safely
+//     shrink — beyond MAX_SAFE_DOWNSCALE_PIXELS, or one that neither decode
+//     path could handle. Callers MUST NOT store/serve the raw original here
+//     (uploads reject the request; the backfill marks a blocking error).
+//     Serving the raw huge bytes is exactly what OOM-crashed mobile WebKit.
+export type DisplayDerivative = { buffer: Buffer; mime: string };
+export type DerivativeResult =
+  | { kind: "derivative"; derivative: DisplayDerivative }
+  | { kind: "passthrough" }
+  | { kind: "reject"; reason: string };
+
+// Thrown by the upload pipeline when art is too large to process safely, so
+// the raw original is never persisted at its canonical /objects/uploads URL.
+export class ImageTooLargeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ImageTooLargeError";
+  }
+}
+
+// Decide how to handle an uploaded raster (see DerivativeResult). Inputs
+// at/below MAX_UPLOAD_DECODE_PIXELS take the cheap @napi-rs/canvas full-decode
+// path; larger-but-in-cap inputs route through the libvips shrink-on-load
+// path. An oversized image is NEVER returned as "passthrough" — it's either
+// downscaled or rejected, so a huge original can't slip through served raw.
 export async function makeDisplayDerivative(
   buf: Buffer,
   mime: string,
-): Promise<{ buffer: Buffer; mime: string } | null> {
-  if (!isProcessableImage(mime)) return null;
+): Promise<DerivativeResult> {
+  if (!isProcessableImage(mime)) return { kind: "passthrough" };
   const dims = sniffImageDimensions(buf);
-  if (!dims) return null;
+  if (!dims) return { kind: "passthrough" };
   const longEdge = Math.max(dims.width, dims.height);
-  if (longEdge <= DISPLAY_MAX_EDGE) return null;
-  if (dims.width * dims.height > MAX_UPLOAD_DECODE_PIXELS) return null;
+  if (longEdge <= DISPLAY_MAX_EDGE) return { kind: "passthrough" };
+  const pixels = dims.width * dims.height;
+  const outFormat = outFormatForMime(mime);
+  // Beyond the memory-safe ceiling: refuse rather than risk an OOM — and
+  // never fall back to storing the raw original.
+  if (pixels > MAX_SAFE_DOWNSCALE_PIXELS) {
+    return {
+      kind: "reject",
+      reason: `${dims.width}×${dims.height} (${pixels}px) exceeds the ${MAX_SAFE_DOWNSCALE_PIXELS}px safe-downscale ceiling`,
+    };
+  }
+  const ok = (buffer: Buffer, m: string): DerivativeResult => ({
+    kind: "derivative",
+    derivative: { buffer, mime: m },
+  });
+  // Above the cheap canvas ceiling → memory-safe libvips shrink-on-load.
+  if (pixels > MAX_UPLOAD_DECODE_PIXELS) {
+    const out = await downscaleHugeRaster(buf, outFormat, DISPLAY_MAX_EDGE);
+    if (out) return ok(out, mimeForOutFormat(outFormat));
+    return {
+      kind: "reject",
+      reason: `libvips could not downscale ${dims.width}×${dims.height}`,
+    };
+  }
+  // In-cap oversized: cheap @napi-rs/canvas decode.
   try {
     const { loadImage, createCanvas } = await import("@napi-rs/canvas");
     const img = await loadImage(buf);
     const scale = DISPLAY_MAX_EDGE / Math.max(img.width, img.height);
-    if (!(scale > 0) || scale >= 1) return null;
-    const w = Math.max(1, Math.round(img.width * scale));
-    const h = Math.max(1, Math.round(img.height * scale));
-    const canvas = createCanvas(w, h);
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img as any, 0, 0, w, h);
-    if (mime === "image/png") {
-      return { buffer: await canvas.encode("png"), mime: "image/png" };
+    if (scale > 0 && scale < 1) {
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = createCanvas(w, h);
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img as any, 0, 0, w, h);
+      if (mime === "image/png") return ok(await canvas.encode("png"), "image/png");
+      if (mime === "image/webp") return ok(await canvas.encode("webp", 82), "image/webp");
+      return ok(await canvas.encode("jpeg", 82), "image/jpeg");
     }
-    if (mime === "image/webp") {
-      return { buffer: await canvas.encode("webp", 82), mime: "image/webp" };
-    }
-    return { buffer: await canvas.encode("jpeg", 82), mime: "image/jpeg" };
   } catch {
-    return null;
+    // fall through to the libvips fallback below
   }
+  // Canvas couldn't handle it (decode quirk / odd scale): try the libvips
+  // path before giving up, so an oversized image still downscales rather than
+  // being stored raw. Only reject if BOTH paths fail.
+  const out = await downscaleHugeRaster(buf, outFormat, DISPLAY_MAX_EDGE);
+  if (out) return ok(out, mimeForOutFormat(outFormat));
+  return {
+    kind: "reject",
+    reason: `could not decode oversized ${dims.width}×${dims.height} image`,
+  };
 }
 
 // Return a buffer that's safe to hand to a renderer (PDFKit `doc.image` or
@@ -234,8 +357,15 @@ export async function safeRasterForRender(
   const longEdge = Math.max(dims.width, dims.height);
   // Fast path: already small AND directly embeddable by PDFKit → as-is.
   if (longEdge <= maxEdge && (fmt === "png" || fmt === "jpeg")) return buf;
-  // Too large to decode safely → let the caller fall back.
-  if (dims.width * dims.height > MAX_RENDER_DECODE_PIXELS) return null;
+  const pixels = dims.width * dims.height;
+  // Above the cheap canvas ceiling: route through the memory-safe libvips
+  // shrink-on-load path (PNG out keeps alpha + is always PDFKit-safe) so a
+  // legacy un-backfilled oversized original downscales rather than OOM-ing.
+  // Beyond the hard cap we still let the caller draw its fallback.
+  if (pixels > MAX_RENDER_DECODE_PIXELS) {
+    if (pixels > MAX_SAFE_DOWNSCALE_PIXELS) return null;
+    return await downscaleHugeRaster(buf, "png", maxEdge);
+  }
   try {
     const { loadImage, createCanvas } = await import("@napi-rs/canvas");
     const img = await loadImage(buf);

@@ -52,6 +52,12 @@ async function buildAll() {
     // by the filter above. esbuild then tries to bundle the .node files
     // and fails. Mark the whole @napi-rs/* family external instead.
     "@napi-rs/canvas-*",
+    // sharp (libvips, used by server/imageProcessing.ts for the memory-safe
+    // shrink-on-load downscale of oversized art) ships its native binary +
+    // libvips in optional sibling packages (@img/sharp-linux-x64,
+    // @img/sharp-libvips-linux-x64, …) that likewise aren't in our deps.
+    // Externalize the whole @img/* family for the same reason.
+    "@img/*",
   ];
 
   await esbuild({

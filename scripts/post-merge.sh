@@ -2786,14 +2786,21 @@ SQL
 backfill_task_862_oauth_email_verified dev  "${DATABASE_URL:-}"
 backfill_task_862_oauth_email_verified prod "${PROD_DATABASE_URL:-}"
 
-# ─── Task #898 — Display-derivative backfill for oversized art ──────────
+# ─── Task #898/#915 — Display-derivative backfill for oversized art ─────
 # New admin uploads keep a full-res ".orig" sibling + serve a downsized
 # (~1500px) display image (server/imageProcessing.ts). This pass applies the
 # same to art uploaded BEFORE that change — chiefly the prod-only oversized
-# album art that OOM-crashed GoodDeed cert/share-card rendering. The script
-# owns its own `post_merge_data_backfills` marker (per-DB) and is idempotent
-# (skips anything whose ".orig" sibling already exists). Object Storage is
-# shared dev↔prod, so converting either DB's URLs benefits both.
+# album art that OOM-crashed GoodDeed rendering AND (Daniel Lew "Destiny",
+# ~178MP) crashed mobile album pages by serving the raw original.
+#
+# Task #915: the first pass marked itself "done" even though "Destiny" was
+# ABOVE the old 64MP decode ceiling and got skipped. The pipeline now has a
+# memory-safe libvips (sharp) shrink-on-load path for over-ceiling art, the
+# script uses a fresh `task_898_display_derivatives_v2` marker so the
+# corrected pass re-runs, and it ONLY stamps that marker when nothing errored
+# (a failed conversion stays re-runnable on the next merge). The script is
+# idempotent (skips anything whose ".orig" sibling already exists). Object
+# Storage is shared dev↔prod, so converting either DB's URLs benefits both.
 #
 # Run DETACHED in the background: downloading + re-encoding multi-MB source
 # images (some 5792×8688 ~5 MB) is far too slow to fit inside the post-merge
