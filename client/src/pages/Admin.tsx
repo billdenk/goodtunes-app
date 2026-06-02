@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { RecentsRail } from "@/components/admin/RecentsRail";
+import { DemoModeControl } from "@/components/admin/DemoModeControl";
 import {
   pushRecentPerson,
   usePersonCreditRecents,
@@ -10080,7 +10081,13 @@ export function Admin() {
         {/* ADMIN badge is pushed to the far right so the logo can breathe.
             ml-auto on a flex parent keeps it stuck to the edge regardless
             of viewport width. */}
-        <span className="ml-auto text-[11px] uppercase tracking-widest text-slate-400 font-medium">
+        {/* Task #752 — Demo Mode control. Lives in the always-visible
+            header so the on-state pill is impossible to miss while
+            pitching. Renders nothing for non-super-admins. */}
+        <div className="ml-auto">
+          <DemoModeControl />
+        </div>
+        <span className="text-xs uppercase tracking-widest text-slate-400 font-medium">
           Admin
         </span>
         <PromotePanel />

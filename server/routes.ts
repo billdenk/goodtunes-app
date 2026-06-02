@@ -79,6 +79,14 @@ declare module "express-session" {
     // provided". Used for both TOTP and email-OTP flows — the session is
     // useless for everything else (requireAuth checks both userId+kind).
     pendingTotpUserId?: string;
+    // Task #752 — super_admin-only Demo Mode. Session-scoped (never
+    // persisted to any entity row) so it lives and dies with the
+    // operator's browser session and can never leak to a fan / partner.
+    // Off = unset. "press" forces every album's Sell-panel view onto one
+    // chosen plant; "competitive" forces "all" (open picker + side-by-side
+    // bids) everywhere. Read-only override applied at the /invited-press
+    // resolution — save paths are untouched, so Live data is never mutated.
+    demoMode?: { kind: "press"; pressId: string } | { kind: "competitive" };
   }
 }
 
@@ -19778,6 +19786,55 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const r = await setInvitedByPress("labels", String(req.params.id), pressId);
       if ("error" in r) return res.status(400).json({ message: r.error });
       res.json({ ok: true });
+    },
+  );
+
+  // ─── Task #752 — Demo Mode (super_admin-only, session-scoped) ───────
+  // A global pitch switch for the operator: force every album's Sell
+  // panel onto one chosen press ("press") or open the press picker +
+  // side-by-side bids everywhere ("competitive"). The state lives ONLY
+  // on the operator's session (see SessionData.demoMode) — it never
+  // touches any entity row, so Live data can't be mutated and the
+  // override can't leak to a fan / partner session. The actual view
+  // override is applied read-only at GET /api/admin/albums/:id/invited-press
+  // (see getDemoOverride in server/commerce.ts). Gated to super_admin on
+  // BOTH read + write so a lower admin role can never arm it.
+  app.get(
+    "/api/admin/demo-mode",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      res.json({ demoMode: req.session.demoMode ?? null });
+    },
+  );
+  app.put(
+    "/api/admin/demo-mode",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const mode = String(req.body?.mode ?? "");
+      if (mode === "off") {
+        delete req.session.demoMode;
+      } else if (mode === "competitive") {
+        req.session.demoMode = { kind: "competitive" };
+      } else if (mode === "press") {
+        const pressId = req.body?.pressId ? String(req.body.pressId) : "";
+        if (!pressId) {
+          return res.status(400).json({ message: "pressId required for demo press mode" });
+        }
+        const press = await storage.getManufacturerById(pressId);
+        if (!press) return res.status(400).json({ message: "Press not found" });
+        req.session.demoMode = { kind: "press", pressId };
+      } else {
+        return res.status(400).json({ message: "mode must be 'off', 'press', or 'competitive'" });
+      }
+      // Persist before responding so a refresh immediately reflects the
+      // new state (express-session would save on response-end anyway, but
+      // an explicit save keeps the GET that the client fires next honest).
+      req.session.save((err) => {
+        if (err) return res.status(500).json({ message: "Could not save demo mode" });
+        res.json({ demoMode: req.session.demoMode ?? null });
+      });
     },
   );
 

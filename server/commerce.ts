@@ -602,6 +602,34 @@ export async function resolveAlbumPressMode(album: {
   return "dedicated";
 }
 
+// Task #752 — Demo Mode override. Reads the session-scoped demo state set
+// by PUT /api/admin/demo-mode and returns it ONLY after re-confirming the
+// caller is a super_admin. The double-check matters: the demo state can
+// only ever be written by a super_admin session, but a defensive re-read
+// here means that even if a session were somehow shared / downgraded, a
+// non-super viewer never gets the forced view. Returns null = no override
+// (normal Live resolution). View-only by contract — callers must apply it
+// to the read response, never to a save path.
+async function getDemoOverride(
+  req: Request,
+): Promise<{ kind: "press"; pressId: string } | { kind: "competitive" } | null> {
+  const demo = (req.session as any)?.demoMode as
+    | { kind: "press"; pressId: string }
+    | { kind: "competitive" }
+    | undefined;
+  if (!demo) return null;
+  const userId = req.session?.userId;
+  if (!userId) return null;
+  try {
+    const { getUserRole } = await import("./auth/roles");
+    const info = await getUserRole(userId);
+    if (info?.role !== "super_admin") return null;
+  } catch {
+    return null;
+  }
+  return demo;
+}
+
 // Task #736 — re-resolve a single album's saved catalog SKU snapshots
 // against the album's *currently* resolved press. Used when a governing
 // stamp is corrected (PATCH invited-press) so a previously-saved SKU
@@ -1243,7 +1271,7 @@ export function registerCommerceRoutes(app: Express) {
     // Task #736 — resolved press mode drives whether the SellPanel locks
     // to the single plant (dedicated) or unlocks the picker + cross-press
     // comparison (all). Independent of the invitedByPressId stamp below.
-    const pressMode = await resolveAlbumPressMode(album);
+    let pressMode = await resolveAlbumPressMode(album);
 
     let pressId: string | null = null;
     let scopeKind: "artist" | "label" | null = null;
@@ -1264,6 +1292,29 @@ export function registerCommerceRoutes(app: Express) {
         scopeId = album.labelId;
       }
     }
+
+    // Task #752 — Demo Mode override (super_admin-only, view-only). This
+    // ONLY rewrites the read response the SellPanel renders from; nothing
+    // here persists, and `getDemoOverride` re-confirms super_admin so a
+    // fan / partner can never receive a forced view. Two shapes:
+    //   • press       → force the whole view onto one chosen plant. Drop
+    //                    the real scope (so the post-sale has-shipped lock
+    //                    doesn't apply to a borrowed press) and pin
+    //                    "dedicated" so it reads as that single plant.
+    //   • competitive → force "all" so the picker + side-by-side bid
+    //                    comparison open everywhere, even on an album with
+    //                    no invited press (the press:null / mrpDefaults
+    //                    branch below still returns, just in "all" mode).
+    const demo = await getDemoOverride(req);
+    if (demo?.kind === "press") {
+      pressId = demo.pressId;
+      scopeKind = null;
+      scopeId = null;
+      pressMode = "dedicated";
+    } else if (demo?.kind === "competitive") {
+      pressMode = "all";
+    }
+    const demoKind = demo?.kind ?? null;
 
     if (!pressId) {
       // Task #656 — no press has been invited yet. Default the
@@ -1291,6 +1342,7 @@ export function registerCommerceRoutes(app: Express) {
         catalog: { formats: [] },
         mrpDefaults,
         pressMode,
+        demo: demoKind,
       });
     }
 
@@ -1299,7 +1351,7 @@ export function registerCommerceRoutes(app: Express) {
     // isn't on the column — we left it untyped to keep the migration
     // simple). Treat a dangling reference as "no lock".
     if (!press) {
-      return res.json({ press: null, hasShippedFirst: false, formatCosts: await listFormatCosts(), catalog: { formats: [] }, pressMode });
+      return res.json({ press: null, hasShippedFirst: false, formatCosts: await listFormatCosts(), catalog: { formats: [] }, pressMode, demo: demoKind });
     }
     // Task #218 — make sure Hellbender's catalog rows exist on first
     // read so an existing dev/prod DB with the Hellbender press but
@@ -1372,6 +1424,7 @@ export function registerCommerceRoutes(app: Express) {
       // their catalog yet; SellPanel falls back to a no-physical menu.
       catalog: await getPressCatalog(pressId),
       pressMode,
+      demo: demoKind,
     });
   });
   app.delete("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {
