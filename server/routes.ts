@@ -18752,6 +18752,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       referrerScopeId: r.referrerScopeId ?? null,
       ...refMeta(r.referrerKind ?? null, r.referrerScopeId ?? null),
       welcomeNote: r.welcomeNote ?? null,
+      inviteRole: r.inviteRole ?? null,
+      reviewStatus: r.reviewStatus ?? null,
       expiresAt: r.expiresAt,
       createdAt: r.createdAt,
       resentAt: r.resentAt ?? null,

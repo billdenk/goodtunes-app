@@ -24,6 +24,8 @@ interface PendingInvite {
   referrerScopeId: string | null;
   referrerName: string | null;
   welcomeNote: string | null;
+  inviteRole: string | null;
+  reviewStatus: string | null;
   expiresAt: string;
   createdAt: string;
   resentAt: string | null;

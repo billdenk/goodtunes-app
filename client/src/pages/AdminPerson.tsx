@@ -35,6 +35,7 @@ import { EditablePanel } from "@/components/admin/EditablePanel";
 import { NewAlbumTitleDialog } from "@/components/admin/NewAlbumTitleDialog";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
+import { InviteToArtistPanel } from "@/components/admin/InviteToArtistPanel";
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
 import { RolePicker } from "@/components/admin/RolePicker";
@@ -607,6 +608,9 @@ export function AdminPerson() {
         {tab === "permissions" && (
           <>
             <PartnerPermissionsPanel scopeKind="artist" scopeId={person.id} scopeName={person.name} />
+            {/* Task #1020 — Invite someone to this artist without leaving
+                the page; scope is hard-locked to this Person. */}
+            <InviteToArtistPanel personId={person.id} personName={person.name} />
             {/* Task #350 — Per-person ambassador toggle. Only meaningful
                 when the person is tied to a non-profit (server enforces
                 — toggle disabled otherwise). When ON, the NPO partner
