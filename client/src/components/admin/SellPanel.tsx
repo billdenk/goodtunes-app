@@ -8503,7 +8503,7 @@ function GoodDeedPill({
                 opens the shared cover-art editor — single source of
                 truth on `albums.artwork`. */}
             <div
-              className="rounded-md border border-slate-200 bg-white overflow-hidden shadow-sm"
+              className="rounded-md border-2 border-[color:var(--brand-orange)] bg-white overflow-hidden shadow-sm"
               data-testid="card-gooddeed-cert"
             >
               {onEditArtwork ? (
@@ -8608,16 +8608,10 @@ function GoodDeedPill({
                   />
                 </div>
 
-                {/* Bottom row — signature overlaid on a bar (left), small square QR placeholder (right) */}
+                {/* Bottom row — owner/serial bar (left), small square QR placeholder (right) */}
                 <div className="flex items-end justify-between gap-3">
-                  <div className="flex-1 min-w-0 relative" aria-label="Founder signature" data-testid="signature-gooddeed">
+                  <div className="flex-1 min-w-0 relative" data-testid="signature-gooddeed">
                     <div className="h-2 w-[60%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} aria-hidden />
-                    <img
-                      src="/will-signature.png"
-                      alt="Will Bowen, Founder"
-                      className="absolute left-0 bottom-0 h-7 w-auto max-w-[55%] object-contain object-left-bottom select-none"
-                      draggable={false}
-                    />
                   </div>
                   <div
                     className="w-7 h-7 rounded-sm flex-shrink-0"
