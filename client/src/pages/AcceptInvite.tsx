@@ -68,9 +68,14 @@ export default function AcceptInvite() {
       if (j.token) setAuthToken(j.token);
       queryClient.setQueryData(["/api/me"], j);
       queryClient.invalidateQueries();
-      // Task #78 — server returns landingPath so non-profit partners
-      // land on /non-profit, artists on /artist, labels on /label, etc.
-      navigate(j.landingPath || "/admin/albums");
+      // Task #78 — server returns landingPath (/non-profit, /artist,
+      // /label, or a specific /admin/albums/<id> when an album draft is
+      // pre-flighted or already waiting).
+      // Task #933 — partners get a role-aware welcome first (shown once,
+      // right after sign-up). Skip it only when a specific album draft
+      // is waiting, in which case we drop them straight into the editor.
+      const landing = j.landingPath || "/admin/albums";
+      navigate(landing.startsWith("/admin/albums/") ? landing : "/welcome-invitee");
     } catch (e: any) {
       setErrMsg(e.message || "Something went wrong");
       setSubmitting(false);

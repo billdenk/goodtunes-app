@@ -325,14 +325,7 @@ function KpiTile({ k, section }: { k: Kpi; section: SectionKind }) {
           {value}
         </p>
         <div className="mt-1 flex items-center gap-2 text-xs">
-          {k.comingSoon ? (
-            <span
-              className="px-1.5 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-600"
-              data-testid={`${testId}-coming-soon`}
-            >
-              Coming soon
-            </span>
-          ) : showDelta ? (
+          {showDelta ? (
             <>
               <span className="text-slate-500">vs prior</span>
               <span
@@ -404,7 +397,7 @@ function TrendChart({
               className={cn(
                 "h-7 px-2.5 rounded text-xs font-semibold transition-colors",
                 isActive
-                  ? "bg-slate-900 text-white"
+                  ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
                   : "text-slate-500 hover:text-slate-900 hover:bg-slate-100",
               )}
               data-testid={`button-section-trend-tab-${m.id}`}

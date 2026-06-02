@@ -258,7 +258,10 @@ function KpiTile({ k, scope }: { k: DashboardKpi; scope: PartnerScopeKind }) {
   const delta = showDelta ? deltaPct(k.value as number, k.prior as number) : null;
   const positive = showDelta && (k.value as number) >= (k.prior as number);
   return (
-    <Card data-testid={testId}>
+    <Card
+      data-testid={testId}
+      className="transition-shadow duration-200 hover:shadow-md hover:border-slate-300"
+    >
       <CardContent className="p-4">
         <p className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
           {k.label}
@@ -273,14 +276,7 @@ function KpiTile({ k, scope }: { k: DashboardKpi; scope: PartnerScopeKind }) {
           {value}
         </p>
         <div className="mt-1 flex items-center gap-2 text-xs">
-          {k.comingSoon ? (
-            <span
-              className="px-1.5 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-600"
-              data-testid={`${testId}-coming-soon`}
-            >
-              Coming soon
-            </span>
-          ) : showDelta ? (
+          {showDelta ? (
             <>
               <span className="text-slate-500">vs prior</span>
               <span
@@ -382,7 +378,7 @@ function ActivityList({ items, loading }: { items: ActivityItem[]; loading: bool
   if (!items.length) {
     return (
       <p className="text-slate-400 text-sm py-2" data-testid="activity-empty">
-        No recent activity in this window.
+        Nothing here yet — your latest activity will show up as it comes in.
       </p>
     );
   }

@@ -369,6 +369,15 @@ export function AdminFrame({
   // sidebar collapses to a single "My releases" entry and the global
   // search (which spans every entity) is hidden.
   const isArtist = roleInfo?.role === "artist";
+  // Task #933 — press (manufacturer) & non-profit partners are trimmed
+  // the same way as artists. Their real home is their dark partner
+  // portal; inside the admin shell they can only read Reports (scoped
+  // to their own cohort) + the read-only GoodDeed pricing summary, so
+  // every god-view section is hidden and the global search is dropped.
+  const isPress = roleInfo?.role === "manufacturer";
+  const isNonProfit = roleInfo?.role === "non_profit";
+  const isTrimmedPartner = isArtist || isPress || isNonProfit;
+  const partnerHome = isPress ? "/vendor" : isNonProfit ? "/non-profit" : "/admin/albums";
 
   // Task #273 + #309 — Collapsible sidebar sections (Stripe-style),
   // accordion: at most one section open at a time. State persists to
@@ -432,7 +441,7 @@ export function AdminFrame({
             from sidebar → main → preview pane. */}
         <div className="h-14 flex-shrink-0 flex items-center px-4 border-b border-slate-200">
           <Link
-            href={isArtist ? "/admin/albums" : "/admin/dashboard"}
+            href={isTrimmedPartner ? partnerHome : "/admin/dashboard"}
             className="flex items-center"
             data-testid="link-admin-home"
           >
@@ -442,7 +451,7 @@ export function AdminFrame({
         {/* Task #336 — Global admin search. Sits above Dashboard so it
             anchors the top of the sidebar; ⌘K opens/focuses from
             anywhere in the admin shell. */}
-        {!isArtist && (
+        {!isTrimmedPartner && (
           <div className="px-2 pt-2 border-r border-slate-200">
             <AdminSearchBar />
           </div>
@@ -461,6 +470,33 @@ export function AdminFrame({
                 onClick={() => navigate("/admin/albums")}
                 testId="nav-albums"
               />
+            ) : isPress || isNonProfit ? (
+              <>
+                <SidebarLink
+                  icon={LayoutDashboard}
+                  label="Dashboard"
+                  count={-1}
+                  active={false}
+                  onClick={() => navigate(partnerHome)}
+                  testId="nav-partner-home"
+                />
+                <SidebarLink
+                  icon={BarChart3}
+                  label="Reports"
+                  count={-1}
+                  active={active === "reports"}
+                  onClick={() => navigate("/admin/reports")}
+                  testId="nav-reports"
+                />
+                <SidebarLink
+                  icon={Receipt}
+                  label="GoodDeed pricing"
+                  count={-1}
+                  active={active === "gooddeed-pricing"}
+                  onClick={() => navigate("/admin/gooddeed-pricing")}
+                  testId="nav-gooddeed-pricing"
+                />
+              </>
             ) : (
             <>
             {/* Task #140 — Dashboard sits above the labelled sections as

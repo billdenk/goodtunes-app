@@ -18513,9 +18513,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // GET /api/me/role — small helper so the client knows what to render.
+  // Task #933 — also resolves the scope's display name + the inviter's
+  // welcome note so the first-visit welcome page can greet the partner
+  // by their org/artist name and surface the note their inviter wrote.
   app.get("/api/me/role", requireAdmin, async (req, res) => {
-    const info = await getUserRole(req.session.userId!);
-    res.json(info ?? { role: "super_admin", roleScopeId: null });
+    const userId = req.session.userId!;
+    const info = await getUserRole(userId);
+    const role = info?.role ?? "super_admin";
+    const roleScopeId = info?.roleScopeId ?? null;
+
+    let scopeName: string | null = null;
+    if (roleScopeId) {
+      try {
+        if (role === "artist") scopeName = (await storage.getPersonById(roleScopeId))?.name ?? null;
+        else if (role === "label") scopeName = (await storage.getLabelById(roleScopeId))?.name ?? null;
+        else if (role === "manufacturer") scopeName = (await storage.getManufacturerById(roleScopeId))?.name ?? null;
+        else if (role === "fulfillment") scopeName = (await storage.getFulfillmentPartnerById(roleScopeId))?.name ?? null;
+        else if (role === "vendor") scopeName = (await storage.getVendorById(roleScopeId))?.name ?? null;
+        else if (role === "non_profit") {
+          const r = await db.execute<{ name: string }>(sql`SELECT name FROM organizations WHERE id = ${roleScopeId} LIMIT 1`);
+          scopeName = ((r as any).rows ?? [])[0]?.name ?? null;
+        }
+      } catch {}
+    }
+
+    let welcomeNote: string | null = null;
+    try {
+      const r = await db.execute<{ welcome_note: string | null }>(sql`
+        SELECT welcome_note FROM admin_invites
+        WHERE accepted_user_id = ${userId} AND welcome_note IS NOT NULL
+        ORDER BY used_at DESC NULLS LAST
+        LIMIT 1
+      `);
+      welcomeNote = ((r as any).rows ?? [])[0]?.welcome_note ?? null;
+    } catch {}
+
+    res.json({ role, roleScopeId, scopeName, welcomeNote });
   });
 
   // List pending invites (super-admin only). For scoped roles

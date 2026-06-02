@@ -196,7 +196,10 @@ function KpiTile({ k, scope }: { k: DashboardKpi; scope: PartnerScopeKind }) {
   const delta = showDelta ? deltaPct(k.value as number, k.prior as number) : null;
   const positive = showDelta && (k.value as number) >= (k.prior as number);
   return (
-    <DashboardPanel data-testid={testId}>
+    <DashboardPanel
+      data-testid={testId}
+      className="transition-colors duration-200 hover:ring-white/20 hover:bg-white/[0.07]"
+    >
       <p className="text-[11px] uppercase tracking-wider text-white/55 font-semibold">{k.label}</p>
       <p
         className={`mt-1 text-2xl sm:text-[28px] font-bold tabular-nums ${k.comingSoon ? "text-white/40" : ""}`}
@@ -205,11 +208,7 @@ function KpiTile({ k, scope }: { k: DashboardKpi; scope: PartnerScopeKind }) {
         {value}
       </p>
       <div className="mt-1 flex items-center gap-2 text-[11px]">
-        {k.comingSoon ? (
-          <span className="px-1.5 py-0.5 rounded-full font-semibold bg-white/5 text-white/55" data-testid={`${testId}-coming-soon`}>
-            Coming soon
-          </span>
-        ) : showDelta ? (
+        {showDelta ? (
           <>
             <span className="text-white/55">vs prior</span>
             <span
@@ -296,7 +295,7 @@ function ActivityList({ items, loading }: { items: ActivityItem[]; loading: bool
   if (!items.length) {
     return (
       <p className="text-white/45 text-[13px] py-2" data-testid="activity-empty">
-        No recent activity in this window.
+        Nothing here yet — your latest activity will show up as it comes in.
       </p>
     );
   }

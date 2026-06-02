@@ -5,7 +5,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { Link } from "wouter";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Copy, Check, X, ChevronDown, RefreshCw, Heart } from "lucide-react";
+import { Trash2, Copy, Check, X, ChevronDown, RefreshCw, Heart, Factory, HeartHandshake, Star, SlidersHorizontal, ArrowLeft } from "lucide-react";
 import {
   ROLE_OPTIONS,
   ROLE_LABEL,
@@ -49,10 +49,24 @@ const REFERRER_CONFIG = {
 // hoisted to @/components/admin/RoleScopePicker so the "Make admin…"
 // dialog on AdminCustomers can share the same widget.
 
+// Task #933 — the three partner types Bill actually invites lead the
+// flow. Each maps onto an existing server role; the scope picker +
+// welcome note are all that type needs. Power options (any role,
+// referrer attribution, team sub-roles) live behind "Advanced invite".
+const PARTNER_TYPES: { value: string; label: string; Icon: typeof Factory; blurb: string }[] = [
+  { value: "manufacturer", label: "Press", Icon: Factory, blurb: "A vinyl pressing plant or printer." },
+  { value: "non_profit", label: "Non-profit", Icon: HeartHandshake, blurb: "A charity partner referring artists." },
+  { value: "artist", label: "Artist", Icon: Star, blurb: "An artist running their own releases." },
+];
+
 export function AdminInvites() {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("super_admin");
+  const [role, setRole] = useState("");
+  // Task #933 — "quick" leads with the three partner types and only
+  // asks for what each needs; "advanced" reveals the full power form
+  // (any role + referrer attribution + team sub-roles).
+  const [inviteMode, setInviteMode] = useState<"quick" | "advanced">("quick");
   const [scopeId, setScopeId] = useState<string | null>(null);
   const [referrerKind, setReferrerKind] = useState<"" | "artist" | "non_profit" | "manufacturer" | "ambassador">("");
   const [duplicateConfirm, setDuplicateConfirm] = useState<{ name: string } | null>(null);
@@ -127,7 +141,7 @@ export function AdminInvites() {
     },
     onSuccess: (data) => {
       setEmail("");
-      setRole("super_admin");
+      setRole(inviteMode === "advanced" ? "super_admin" : "");
       setScopeId(null);
       setReferrerKind("");
       setReferrerScopeId(null);
@@ -206,7 +220,7 @@ export function AdminInvites() {
   }
 
   const submitDisabled =
-    createMutation.isPending || !email.trim() || (needsScope && !scopeId) ||
+    createMutation.isPending || !email.trim() || !role || (needsScope && !scopeId) ||
     (!!referrerKind && !referrerScopeId);
 
   return (
@@ -214,9 +228,8 @@ export function AdminInvites() {
       <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-slate-900 mb-1" data-testid="text-page-title">Invites</h1>
         <p className="text-sm text-slate-600 mb-6">
-          Invite a teammate or partner to the admin. They'll get a one-time link to set their username + password.
-          Optionally attribute the invite to a referring artist or non-profit — referrers earn $1 per paid unit on
-          the artists they refer.
+          Invite a partner to join GoodTunes. Pick the kind of partner, tell us who they are, and we'll email them a
+          one-time link to set their password and land on their own dashboard.
         </p>
 
         <form
@@ -240,7 +253,40 @@ export function AdminInvites() {
           className="bg-white border border-slate-200 rounded-2xl p-5 mb-6"
           data-testid="form-create-invite"
         >
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr,200px,auto] gap-3 items-end">
+          {inviteMode === "quick" && (
+            <div className="mb-4">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                Who are you inviting?
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" data-testid="partner-type-grid">
+                {PARTNER_TYPES.map((t) => {
+                  const selected = role === t.value;
+                  return (
+                    <button
+                      key={t.value}
+                      type="button"
+                      onClick={() => setRole(t.value)}
+                      aria-pressed={selected}
+                      className={[
+                        "flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition-colors",
+                        selected
+                          ? "border-[var(--brand-blue)] bg-[var(--brand-blue)]/5 ring-1 ring-[var(--brand-blue)]/30"
+                          : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+                      ].join(" ")}
+                      data-testid={`button-partner-type-${t.value}`}
+                    >
+                      <t.Icon className={selected ? "w-5 h-5 text-[var(--brand-blue)]" : "w-5 h-5 text-slate-400"} />
+                      <span className="text-sm font-semibold text-slate-900">{t.label}</span>
+                      <span className="text-xs text-slate-500 leading-snug">{t.blurb}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {(inviteMode === "advanced" || !!role) && (
+          <div className={`grid grid-cols-1 gap-3 items-end ${inviteMode === "advanced" ? "sm:grid-cols-[1fr,200px,auto]" : "sm:grid-cols-[1fr,auto]"}`}>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Email</label>
               <input
@@ -253,19 +299,22 @@ export function AdminInvites() {
                 data-testid="input-invite-email"
               />
             </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Role</label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
-                data-testid="select-invite-role"
-              >
-                {ROLE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
+            {inviteMode === "advanced" && (
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Role</label>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                  data-testid="select-invite-role"
+                >
+                  <option value="">— Choose a role —</option>
+                  {ROLE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <button
               type="submit"
               disabled={submitDisabled}
@@ -275,6 +324,7 @@ export function AdminInvites() {
               {createMutation.isPending ? "Sending…" : "Send invite"}
             </button>
           </div>
+          )}
 
           {needsScope && (
             <ScopePicker
@@ -284,6 +334,8 @@ export function AdminInvites() {
             />
           )}
 
+          {inviteMode === "advanced" && (
+          <>
           {/* Optional referrer attribution — collapsed unless a kind is chosen. */}
           <div className="mt-4 pt-4 border-t border-slate-100">
             <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
@@ -396,7 +448,10 @@ export function AdminInvites() {
               </div>
             )}
           </div>
+          </>
+          )}
 
+          {(inviteMode === "advanced" || !!role) && (
           <div className="mt-4">
             <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
               Welcome note (optional)
@@ -410,6 +465,34 @@ export function AdminInvites() {
               className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20 text-sm"
               data-testid="textarea-welcome-note"
             />
+            <p className="mt-1 text-xs text-slate-500">
+              They'll see this note on their first sign-in, above their dashboard.
+            </p>
+          </div>
+          )}
+
+          {/* Task #933 — power options live behind a disclosure so the
+              everyday partner invite stays a three-field flow. */}
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            {inviteMode === "quick" ? (
+              <button
+                type="button"
+                onClick={() => { setInviteMode("advanced"); if (!role) setRole("super_admin"); }}
+                className="text-xs font-semibold text-[var(--brand-blue)] hover:underline inline-flex items-center gap-1.5"
+                data-testid="button-advanced-invite"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" /> Advanced invite — other roles, referrer attribution, team
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setInviteMode("quick"); setRole(""); setReferrerKind(""); setReferrerScopeId(null); setInviteRole(""); setTargetPersonId(null); setTargetPersonName(""); setPreFlightedAlbumId(null); }}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 inline-flex items-center gap-1.5"
+                data-testid="button-quick-invite"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Back to quick partner invite
+              </button>
+            )}
           </div>
 
           {duplicateConfirm && (
