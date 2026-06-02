@@ -556,7 +556,10 @@ function creditTags(person: PersonLite): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const r of [...(person.roles ?? []), ...(person.derivedRoles ?? [])]) {
-    const t = (r ?? "").trim();
+    // Trim long "Role — description" credits down to the headline role
+    // (text before the "—") so a verbose variant collapses into the short
+    // pill it shares a headline with, instead of overflowing the card.
+    const t = (r ?? "").split("—")[0].trim();
     const k = t.toLowerCase();
     if (!t || seen.has(k)) continue;
     seen.add(k);
