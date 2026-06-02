@@ -319,7 +319,16 @@ export function AdminVendors() {
       }
     },
     onSuccess: ({ vendor, scrapedName }) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/vendors"] });
+      // The list this page reads is keyed ["/api/vendors?role=${mode}"], so a
+      // bare ["/api/vendors"] invalidation never matches it. Invalidate every
+      // ?role= variant by predicate so the freshly created vendor appears in
+      // the maker/reseller list (and any picker) without a manual reload.
+      queryClient.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          typeof q.queryKey[0] === "string" &&
+          q.queryKey[0].startsWith("/api/vendors"),
+      });
       setAddOpen(false);
       setPasteUrl("");
       setPasteError(null);

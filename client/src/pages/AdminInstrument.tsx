@@ -1906,6 +1906,7 @@ function AddVendorForm({
   onClose: () => void;
 }) {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [affiliateUrl, setAffiliateUrl] = useState("");
   const [vendorName, setVendorName] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
@@ -1943,6 +1944,16 @@ function AddVendorForm({
     },
     onSuccess: async () => {
       await onSaved();
+      // Attaching here can MINT a brand-new reseller (unknown domain +
+      // display name). Refresh every ?role= variant of /api/vendors so the
+      // freshly created reseller shows up in any picker/list immediately —
+      // no manual reload — mirroring AddMakerComposer.
+      qc.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          typeof q.queryKey[0] === "string" &&
+          q.queryKey[0].startsWith("/api/vendors"),
+      });
       toast({ title: "Vendor attached" });
       onClose();
     },
