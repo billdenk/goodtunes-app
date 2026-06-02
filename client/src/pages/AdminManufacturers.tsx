@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, Factory, Clock, Loader2, X } from "lucide-react";
+import { Search, Factory, Clock, Loader2, X, Disc3, BadgeCheck, Truck } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
 import { useToast } from "@/hooks/use-toast";
@@ -87,6 +87,11 @@ export function AdminManufacturers() {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useViewMode("presses");
+  // Task #916 — capability filter. A press can do more than one thing, so this
+  // narrows the list to a single capability without hiding multi-capability
+  // rows from the others. Fulfillment stays its own nav, so the segmented
+  // control only offers All / Vinyl / GoodDeeds here.
+  const [capFilter, setCapFilter] = useState<"all" | "vinyl" | "gooddeed">("all");
   const [addOpen, setAddOpen] = useState(false);
   const [draftInput, setDraftInput] = useState("");
   const [pasteError, setPasteError] = useState<string | null>(null);
@@ -190,9 +195,18 @@ export function AdminManufacturers() {
     );
   }
 
-  const filtered = rows.filter((r) =>
-    search ? (r.name + " " + (r.location ?? "")).toLowerCase().includes(search.toLowerCase()) : true,
-  );
+  const filtered = rows.filter((r) => {
+    const matchesSearch = search
+      ? (r.name + " " + (r.location ?? "")).toLowerCase().includes(search.toLowerCase())
+      : true;
+    const matchesCap =
+      capFilter === "all"
+        ? true
+        : capFilter === "vinyl"
+          ? r.doesVinyl
+          : r.doesGoodDeed;
+    return matchesSearch && matchesCap;
+  });
 
   const inputLooksLikeUrl = /^https?:\/\//i.test(draftInput.trim());
 
@@ -244,6 +258,33 @@ export function AdminManufacturers() {
                   <Search className="w-4 h-4" />
                 </button>
               )}
+              {/* Task #916 — capability filter (All / Vinyl / GoodDeeds).
+                  slate-100 segmented control, matching ViewModeToggle. */}
+              <div
+                className="inline-flex items-center rounded-md bg-slate-100 p-0.5"
+                data-testid="filter-capability"
+              >
+                {([
+                  { key: "all", label: "All" },
+                  { key: "vinyl", label: "Vinyl" },
+                  { key: "gooddeed", label: "GoodDeeds" },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setCapFilter(opt.key)}
+                    className={[
+                      "h-8 px-2.5 rounded text-xs font-semibold transition-colors",
+                      capFilter === opt.key
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-500 hover:text-slate-800",
+                    ].join(" ")}
+                    data-testid={`filter-capability-${opt.key}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
               <ViewModeToggle
                 value={view}
                 onChange={setView}
@@ -410,6 +451,37 @@ export function AdminManufacturers() {
   );
 }
 
+// Task #916 — per-card capability chips. Renders one small slate pill per
+// active capability so the operator can see at a glance what each press does
+// (a single row can carry all three). Empty when, somehow, none are set.
+const CAPABILITY_CHIPS = [
+  { key: "doesVinyl" as const, label: "Vinyl", icon: Disc3 },
+  { key: "doesGoodDeed" as const, label: "GoodDeeds", icon: BadgeCheck },
+  { key: "doesFulfillment" as const, label: "Fulfillment", icon: Truck },
+];
+
+function CapabilityChips({ press, className = "" }: { press: Manufacturer; className?: string }) {
+  const active = CAPABILITY_CHIPS.filter((c) => Boolean(press[c.key]));
+  if (active.length === 0) return null;
+  return (
+    <span className={`inline-flex flex-wrap items-center gap-1 ${className}`}>
+      {active.map((c) => {
+        const Icon = c.icon;
+        return (
+          <span
+            key={c.key}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-xs font-medium"
+            data-testid={`chip-capability-${c.key}-${press.id}`}
+          >
+            <Icon className="w-3 h-3" />
+            {c.label}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 function PressCard({ press }: { press: Manufacturer }) {
   return (
     <Link
@@ -444,6 +516,7 @@ function PressCard({ press }: { press: Manufacturer }) {
             </div>
           );
         })()}
+        <CapabilityChips press={press} className="mt-1.5" />
       </div>
     </Link>
   );
@@ -471,6 +544,7 @@ function PressRow({ press }: { press: Manufacturer }) {
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs text-slate-500">
+          <CapabilityChips press={press} className="hidden sm:inline-flex" />
           {(() => {
             const label = pressTurnaroundLabel(press);
             if (!label) return null;

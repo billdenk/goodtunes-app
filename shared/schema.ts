@@ -3204,6 +3204,22 @@ export const manufacturers = pgTable("manufacturers", {
   // from `bio` (which is the marketing intro the scraper fills in)
   // so a re-scrape doesn't clobber operator-entered quote notes.
   operationalNote: text("operational_note"),
+  // Task #916 — capability flags. A single production partner can serve
+  // up to three capabilities and appears in every matching list
+  // automatically: Vinyl (pressing plant, shown on the Presses tab +
+  // RFQ broadcast), GoodDeeds (prints/finishes GoodDeed certificates),
+  // Fulfillment (warehouses + ships finished units — also surfaced in
+  // the Fulfillment nav). `manufacturers` is the canonical home for
+  // these three; the legacy `vendors.is_quickprinter` + `fulfillment_partners`
+  // consumers are read alongside it (union) rather than hard-cut, and the
+  // vendor-FK-keyed GoodDeed pricing/routing-default selection stays
+  // vendor-keyed. A row with all three off is invisible everywhere, so a
+  // DB CHECK + the PUT/POST guard require at least one (mirrors
+  // `vendors_role_at_least_one`). Defaults: new presses are Vinyl-on so
+  // an "Add press" with nothing else set still lands on the Presses tab.
+  doesVinyl: boolean("does_vinyl").notNull().default(true),
+  doesGoodDeed: boolean("does_good_deed").notNull().default(false),
+  doesFulfillment: boolean("does_fulfillment").notNull().default(false),
   // Typical lead-time the plant quotes for a standard 12" LP press run,
   // in calendar days. Admin-entered; surfaces on the RFQ comparison
   // table so the operator can sort by turnaround. Nullable while the
@@ -3247,7 +3263,16 @@ export const manufacturers = pgTable("manufacturers", {
   autoTriggerConsentBy: varchar("auto_trigger_consent_by"),
   createdAt: timestamp("created_at").defaultNow(),
   ...softDeleteCols,
-});
+}, (table) => ({
+  // Task #916 — a manufacturer row with all three capability flags off
+  // would be invisible to every list. The DB-level CHECK is the truth;
+  // the API guard in PUT/POST /api/admin/manufacturers mirrors it for a
+  // friendlier 400 message. Mirrors `vendors_role_at_least_one`.
+  capabilityAtLeastOne: check(
+    "manufacturers_capability_at_least_one",
+    sql`${table.doesVinyl} OR ${table.doesGoodDeed} OR ${table.doesFulfillment}`,
+  ),
+}));
 
 export const fulfillmentPartners = pgTable("fulfillment_partners", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

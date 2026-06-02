@@ -2823,3 +2823,112 @@ backfill_task_898_display_derivatives() {
 }
 backfill_task_898_display_derivatives dev  "${DATABASE_URL:-}"
 backfill_task_898_display_derivatives prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #916 — production-partner capability flags on `manufacturers` ─────
+# Additive schema: three boolean capability flags + an at-least-one CHECK.
+# does_vinyl defaults TRUE so every existing press auto-backfills as a vinyl
+# plant (they all are today). Idempotent (IF NOT EXISTS + pg_constraint guard),
+# safe on dev + prod, safe to re-run. Mirrors the standalone reference SQL in
+# scripts/prod-schema-fixups/2026-06-02-task-916-manufacturer-capabilities.sql.
+migrate_manufacturer_capabilities() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-916 manufacturer-capabilities migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE manufacturers
+  ADD COLUMN IF NOT EXISTS does_vinyl       boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS does_good_deed   boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS does_fulfillment boolean NOT NULL DEFAULT false;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'manufacturers_capability_at_least_one'
+  ) THEN
+    ALTER TABLE manufacturers
+      ADD CONSTRAINT manufacturers_capability_at_least_one
+      CHECK (does_vinyl OR does_good_deed OR does_fulfillment);
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  then
+    echo "post-merge: task-916 manufacturer-capabilities migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-916 manufacturer-capabilities migration failed on $label (continuing)"
+  fi
+}
+migrate_manufacturer_capabilities dev  "${DATABASE_URL:-}"
+migrate_manufacturer_capabilities prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #916 — real-data capability flips (domain-keyed, ID-drift safe) ───
+# Hoover Printing is GoodDeeds-only (prints certs, presses no vinyl); MRP
+# (Memphis Record Pressing) does all three. Keyed by DOMAIN, not id, because
+# manufacturer ids drift dev↔prod (see .agents/memory/press-roster-dev-prod-drift.md).
+# TRUE ONE-TIME backfill gated by a marker in post_merge_data_backfills so a
+# later operator edit (flipping a flag in the admin UI) is never clobbered on
+# the next merge. Domain match is ILIKE-loose so a stored "www." or trailing
+# slash still resolves. Safe on dev + prod, safe to re-run.
+backfill_task_916_capability_flips() {
+  local label="$1"; local url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-916 capability-flip backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_hoover integer := 0;
+  v_mrp    integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills
+    WHERE name = 'task_916_capability_flips'
+  ) THEN
+    -- Hoover Printing → GoodDeeds-only.
+    UPDATE manufacturers
+       SET does_vinyl = false, does_good_deed = true
+     WHERE deleted_at IS NULL
+       AND (domain ILIKE '%hooverprinting%' OR name ILIKE '%hoover%');
+    GET DIAGNOSTICS v_hoover = ROW_COUNT;
+
+    -- Memphis Record Pressing (MRP) → all three capabilities.
+    UPDATE manufacturers
+       SET does_vinyl = true, does_good_deed = true, does_fulfillment = true
+     WHERE deleted_at IS NULL
+       AND (domain ILIKE '%memphisrecordpressing%'
+            OR name ILIKE '%memphis record pressing%'
+            OR name ILIKE '%MRP%');
+    GET DIAGNOSTICS v_mrp = ROW_COUNT;
+
+    INSERT INTO post_merge_data_backfills (name)
+    VALUES ('task_916_capability_flips');
+
+    RAISE NOTICE 'task-916 capability flips applied: hoover=% mrp=%', v_hoover, v_mrp;
+  ELSE
+    RAISE NOTICE 'task-916 capability flips already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-916 capability-flip backfill ok on $label"
+    echo "$out" | grep -i 'task-916' || true
+  else
+    echo "post-merge: WARNING — task-916 capability-flip backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_916_capability_flips dev  "${DATABASE_URL:-}"
+backfill_task_916_capability_flips prod "${PROD_DATABASE_URL:-}"

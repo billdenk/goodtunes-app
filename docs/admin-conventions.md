@@ -87,6 +87,22 @@ The Quickprinter's price ladder is per-paper-size (`vendor_gooddeed_services.siz
 
 **How to apply:** any new per-album operational-routing field that always resolves to the same vendor across albums should default at the platform level (payout_settings singleton) with the per-album column kept only as a back-compat override. New paper sizes extend `PaperSize` in `server/vendorGoodDeedPricing.ts` and add a tab in the Quickprinter ladder editor; the walking rule stays the same.
 
+## Production-partner capabilities — one press, up to three jobs (Vinyl / GoodDeeds / Fulfillment)
+
+A single production partner can do more than one job. The capability model lives on the canonical `manufacturers` table as three notNull booleans — `does_vinyl` (default true), `does_good_deed` (default false), `does_fulfillment` (default false) — guarded by a `manufacturers_capability_at_least_one` CHECK so a partner can never end up with zero capabilities. `insertManufacturerSchema` picks them up automatically; `POST`/`PUT /api/admin/manufacturers` accept the three flags (PUT merges the patch over the current row) and reject an all-off payload with a 400, mirroring the `vendors` Maker/Reseller at-least-one guard.
+
+- **Capability selector** — the press detail page (`AdminManufacturer.tsx` → Overview, `PressCapabilitiesCard`) shows three toggle pills (Vinyl / GoodDeeds / Fulfillment) that auto-save on toggle and refuse to turn off the last remaining capability (toast + revert).
+- **Presses tab** — `AdminManufacturers.tsx` carries an All / Vinyl / GoodDeeds segmented filter and per-card/row `CapabilityChips` so an operator sees at a glance what each press does.
+- **Fulfillment nav union** — `AdminFulfillmentPartners.tsx` lists dedicated `fulfillment_partners` **and** any `manufacturers` with `does_fulfillment = true` in one combined browse list (discriminated `kind`); the press entries carry a "Press" chip and link back to `/admin/manufacturers/:id` (their single source of truth), not into the fulfillment-partner detail page.
+
+**Backfill / domain seeds:** existing rows fill `does_vinyl = true` from the column default. The post-merge `backfill_task_916_capability_flips` (marker `task_916_capability_flips`, domain-keyed so it survives founding-seed ID drift) flips Hoover → GoodDeeds-only and MRP → all three. Hellbender + PMP stay vinyl-only.
+
+**Drift / out of scope:** the GoodDeed *routing-default printer picker* stays vendor-FK-keyed — `payout_settings.default_{print,hologram,insertion}_vendor_id` and `album_addons.*_vendor_id` are real FKs → `vendors.id`, and GoodDeed pricing resolves by vendor id (`vendor_gooddeed_services`). A manufacturer can't be stored there without breaking the FK and zeroing pricing, so the "deeper printer-picker redesign" is a separate task. The in-app RFQ creation UI (a client press-picker) doesn't exist yet either, so there's nothing to filter by capability there yet.
+
+**Why:** GoodTunes' production partners aren't one-job-each — a plant that presses vinyl may also warehouse + ship, and a printer may only mint GoodDeeds. Modeling capabilities as flags on the one canonical partner row (instead of a second entity per job) keeps a partner editable in one place and lets every capability surface filter the same list.
+
+**How to apply:** a new partner capability is a new boolean on `manufacturers` + the CHECK, a pill in `PressCapabilitiesCard`, an optional filter token on the Presses tab, and (if it has its own nav) a union into that nav keyed off the flag. Never split a multi-capability partner into multiple rows.
+
 ## Vendors carry two role flags — Maker + Reseller (one row, both flags)
 
 The `vendors` table carries `is_maker` and `is_reseller` booleans (both default-true on insert via the admin "Add" dialog, but the surface you create from decides which flag the new row gets set to — the other defaults off). A single row can carry **both** flags: Gibson is a Maker (builds the gear) *and* a Reseller (sells it direct), and that's the expected shape — don't split the row.

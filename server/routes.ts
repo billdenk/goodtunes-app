@@ -13336,6 +13336,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const tWkMax = intOrNull(b.turnaroundWeeksMax);
     if (tWkMax === INVALID) return res.status(400).json({ message: "turnaroundWeeksMax must be a number" });
     const dom = normDomain(b.domain);
+    // Task #916 — capability flags. A new press defaults to Vinyl-on (so an
+    // "Add press" with nothing else set still lands on the Presses tab); the
+    // other two default off. Whatever booleans the client sends are honored,
+    // but a row with all three off is rejected (mirrors the DB CHECK
+    // `manufacturers_capability_at_least_one`).
+    const doesVinyl = b.doesVinyl === undefined ? true : Boolean(b.doesVinyl);
+    const doesGoodDeed = b.doesGoodDeed === undefined ? false : Boolean(b.doesGoodDeed);
+    const doesFulfillment = b.doesFulfillment === undefined ? false : Boolean(b.doesFulfillment);
+    if (!doesVinyl && !doesGoodDeed && !doesFulfillment) {
+      return res.status(400).json({
+        message: "A press must have at least one capability (Vinyl, GoodDeeds, or Fulfillment)",
+      });
+    }
     // Mirror vendors/labels: when a domain is supplied, surface an existing
     // manufacturer with that domain as a 409 (+ the row), so the admin UI
     // can offer "open existing" instead of silently double-creating.
@@ -13366,6 +13379,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           ? b.specialties.map((s: unknown) => String(s)).filter(Boolean)
           : [],
         defaultFulfillmentPartnerId: strOrNull(b.defaultFulfillmentPartnerId),
+        doesVinyl,
+        doesGoodDeed,
+        doesFulfillment,
       });
       return res.status(201).json(m);
     } catch (err: any) {
@@ -13561,6 +13577,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     if (b.defaultFulfillmentPartnerId !== undefined) {
       u.defaultFulfillmentPartnerId = strOrNull(b.defaultFulfillmentPartnerId);
+    }
+    // Task #916 — capability flags. The admin UI auto-saves one toggle at a
+    // time, so the at-least-one guard must merge the incoming patch over the
+    // CURRENT row (you can't tell "all off" from a single-flag PATCH alone).
+    // Mirrors the DB CHECK `manufacturers_capability_at_least_one`.
+    if (
+      b.doesVinyl !== undefined ||
+      b.doesGoodDeed !== undefined ||
+      b.doesFulfillment !== undefined
+    ) {
+      const current = await storage.getManufacturerById(String(req.params.id));
+      if (!current) return res.status(404).json({ message: "Manufacturer not found" });
+      const nextVinyl = b.doesVinyl !== undefined ? Boolean(b.doesVinyl) : current.doesVinyl;
+      const nextGoodDeed = b.doesGoodDeed !== undefined ? Boolean(b.doesGoodDeed) : current.doesGoodDeed;
+      const nextFulfillment = b.doesFulfillment !== undefined ? Boolean(b.doesFulfillment) : current.doesFulfillment;
+      if (!nextVinyl && !nextGoodDeed && !nextFulfillment) {
+        return res.status(400).json({
+          message: "A press must have at least one capability (Vinyl, GoodDeeds, or Fulfillment)",
+        });
+      }
+      if (b.doesVinyl !== undefined) u.doesVinyl = nextVinyl;
+      if (b.doesGoodDeed !== undefined) u.doesGoodDeed = nextGoodDeed;
+      if (b.doesFulfillment !== undefined) u.doesFulfillment = nextFulfillment;
     }
     const m = await storage.updateManufacturer(String(req.params.id), u);
     if (!m) return res.status(404).json({ message: "Manufacturer not found" });

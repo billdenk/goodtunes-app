@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, Truck, X, Loader2 } from "lucide-react";
+import { Search, Truck, X, Loader2, Factory } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -20,7 +20,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import type { FulfillmentPartner } from "@shared/schema";
+import type { FulfillmentPartner, Manufacturer } from "@shared/schema";
 
 // apiRequest throws errors shaped like `"502: {\"message\":\"…\"}"` —
 // strip the status prefix and unwrap the JSON `message` so inline
@@ -106,6 +106,17 @@ export function AdminFulfillmentPartners() {
     enabled: !!user?.isAdmin,
   });
 
+  // Task #916 — a single production partner can declare a Fulfillment
+  // capability on its press record (e.g. MRP warehouses + ships in-house).
+  // Those presses appear HERE too, alongside dedicated fulfillment partners,
+  // so the Fulfillment nav is the one place an operator sees everyone who
+  // ships — without a second data model. They link back to the press detail
+  // page (where the capability is toggled), tagged with a "Press" chip.
+  const { data: manufacturers = [] } = useQuery<Manufacturer[]>({
+    queryKey: ["/api/manufacturers"],
+    enabled: !!user?.isAdmin,
+  });
+
   const create = useMutation({
     mutationFn: async (input: string) => {
       const trimmed = input.trim();
@@ -183,18 +194,30 @@ export function AdminFulfillmentPartners() {
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
 
-  const filtered = useMemo(() => {
+  // Combined browse list: dedicated fulfillment partners + presses that
+  // declared a Fulfillment capability. A discriminated `kind` keeps the two
+  // entity shapes (and their detail-page routes) straight at render time.
+  type FulfillmentEntry =
+    | { kind: "partner"; row: FulfillmentPartner }
+    | { kind: "press"; row: Manufacturer };
+  const entries = useMemo<FulfillmentEntry[]>(() => {
     const q = search.trim().toLowerCase();
-    const list = q
-      ? rows.filter((r) =>
-          (r.name + " " + (r.location ?? "") + " " + (r.domain ?? ""))
+    const combined: FulfillmentEntry[] = [
+      ...rows.map((r) => ({ kind: "partner" as const, row: r })),
+      ...manufacturers
+        .filter((m) => m.doesFulfillment)
+        .map((m) => ({ kind: "press" as const, row: m })),
+    ];
+    const matched = q
+      ? combined.filter((e) =>
+          (e.row.name + " " + (e.row.location ?? "") + " " + (e.row.domain ?? ""))
             .toLowerCase()
             .includes(q),
         )
-      : rows.slice();
-    list.sort((a, b) => a.name.localeCompare(b.name));
-    return list;
-  }, [rows, search]);
+      : combined;
+    matched.sort((a, b) => a.row.name.localeCompare(b.row.name));
+    return matched;
+  }, [rows, manufacturers, search]);
 
   if (authLoading) {
     return (
@@ -282,7 +305,7 @@ export function AdminFulfillmentPartners() {
             title="Couldn't load fulfillment partners"
             testId="admin-fulfillment-error"
           />
-        ) : filtered.length === 0 ? (
+        ) : entries.length === 0 ? (
           <div
             className="py-16 flex flex-col items-center justify-center text-center"
             data-testid="empty-fulfillment"
@@ -304,18 +327,26 @@ export function AdminFulfillmentPartners() {
             className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
             data-testid="grid-fulfillment"
           >
-            {filtered.map((f) => (
-              <PartnerCard key={f.id} partner={f} />
-            ))}
+            {entries.map((e) =>
+              e.kind === "partner" ? (
+                <PartnerCard key={`p-${e.row.id}`} partner={e.row} />
+              ) : (
+                <PressFulfillmentCard key={`m-${e.row.id}`} press={e.row} />
+              ),
+            )}
           </div>
         ) : (
           <div
             className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden"
             data-testid="list-fulfillment"
           >
-            {filtered.map((f) => (
-              <PartnerRow key={f.id} partner={f} />
-            ))}
+            {entries.map((e) =>
+              e.kind === "partner" ? (
+                <PartnerRow key={`p-${e.row.id}`} partner={e.row} />
+              ) : (
+                <PressFulfillmentRow key={`m-${e.row.id}`} press={e.row} />
+              ),
+            )}
           </div>
         )}
       </div>
@@ -467,6 +498,85 @@ function PartnerRow({ partner }: { partner: FulfillmentPartner }) {
           </div>
           <div className="text-slate-500 text-xs truncate">
             {partner.location || partner.shippingAddress || partner.domain || "—"}
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+// Task #916 — a press that declared a Fulfillment capability, shown in the
+// Fulfillment nav. Links to the PRESS detail page (its single source of
+// truth) and carries a "Press" chip so the operator knows this row's
+// capabilities are edited over on the Presses tab, not here.
+function PressCapabilityBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-xs font-medium flex-shrink-0">
+      <Factory className="w-3 h-3" />
+      Press
+    </span>
+  );
+}
+
+function PressFulfillmentCard({ press }: { press: Manufacturer }) {
+  return (
+    <Link
+      href={`/admin/manufacturers/${press.id}`}
+      className="group text-left rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5"
+      data-testid={`card-fulfillment-press-${press.id}`}
+    >
+      <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+        {press.logoUrl ? (
+          <img src={press.logoUrl} alt={press.name} className="w-full h-full object-cover" />
+        ) : (
+          <Factory className="w-6 h-6 text-slate-300" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <div
+            className="text-slate-900 text-sm font-semibold leading-tight truncate"
+            data-testid={`text-fulfillment-press-name-${press.id}`}
+          >
+            {press.name}
+          </div>
+          <PressCapabilityBadge />
+        </div>
+        <div className="text-slate-400 text-xs truncate mt-0.5">
+          {press.location || press.domain || "—"}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function PressFulfillmentRow({ press }: { press: Manufacturer }) {
+  return (
+    <Link
+      href={`/admin/manufacturers/${press.id}`}
+      className="block px-4 py-3 hover:bg-slate-50 transition-colors"
+      data-testid={`row-fulfillment-press-${press.id}`}
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-md bg-white ring-1 ring-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+          {press.logoUrl ? (
+            <img src={press.logoUrl} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <Factory className="w-5 h-5 text-slate-400" strokeWidth={1.5} />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <div
+              className="text-slate-900 text-sm font-medium truncate"
+              data-testid={`text-fulfillment-press-name-${press.id}`}
+            >
+              {press.name}
+            </div>
+            <PressCapabilityBadge />
+          </div>
+          <div className="text-slate-500 text-xs truncate">
+            {press.location || press.domain || "—"}
           </div>
         </div>
       </div>
