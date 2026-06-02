@@ -179,6 +179,10 @@ export function NewAlbumArtistDialog({
   const { toast } = useToast();
   const qc = useQueryClient();
   const [stage, setStage] = useState<Stage>("intro");
+  // Intro-stage segmented tab. "search" (default) holds the name field +
+  // live catalog matches; "paste" holds the paste-a-URL prefill; "credits"
+  // (person mode only) holds the creative-credits role picker.
+  const [introTab, setIntroTab] = useState<"search" | "paste" | "credits">("search");
   const [name, setName] = useState("");
   // Paste-a-URL prefill (Bandcamp / artist site / Spotify / Apple Music
   // / generic Person JSON-LD). Runs through the same /api/admin/people/
@@ -221,6 +225,7 @@ export function NewAlbumArtistDialog({
   useEffect(() => {
     if (open) {
       setStage("intro");
+      setIntroTab("search");
       setName("");
       setPasteUrl("");
       setPasteError(null);
@@ -674,218 +679,320 @@ export function NewAlbumArtistDialog({
         {/* ------------ INTRO ------------ */}
         {stage === "intro" && (
           <div className="flex-1 flex flex-col p-5 overflow-hidden">
-            <div className="flex-1 overflow-y-auto space-y-4">
-              {/* Paste-a-URL prefill — same shape as the Add dialogs on
-                  vendors / labels / presses. Accepts Apple Music, Spotify,
-                  Bandcamp, or any generic bio page with Person JSON-LD or
-                  OG tags. Routes Apple/Spotify URLs through the normal
-                  confirm + discography flow; commits Bandcamp/generic
-                  directly with whatever fields we extracted. */}
-              <div>
-                <label
-                  htmlFor="new-album-artist-paste-url"
-                  className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider block mb-1"
-                >
-                  Paste a URL
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    id="new-album-artist-paste-url"
-                    type="url"
-                    value={pasteUrl}
-                    onChange={(e) => { setPasteUrl(e.target.value); setPasteError(null); }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && pasteUrl.trim() && !busy) {
-                        e.preventDefault();
-                        handlePasteUrl();
-                      }
-                    }}
-                    placeholder="Apple Music, Spotify, Bandcamp, or a bio page"
-                    disabled={busy}
-                    className="flex-1 h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-60"
-                    data-testid="input-artist-paste-url"
-                  />
-                  <button
-                    type="button"
-                    onClick={handlePasteUrl}
-                    disabled={busy || !pasteUrl.trim()}
-                    className="h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-xs font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
-                    data-testid="button-artist-paste-url"
-                  >
-                    {scrapeMut.isPending ? <Spinner className="w-3.5 h-3.5 animate-spin" /> : null}
-                    Prefill
-                  </button>
-                </div>
-                {pasteError && (
-                  <p
-                    className="text-xs text-amber-700 mt-1.5 leading-snug"
-                    data-testid="text-paste-url-error"
-                  >
-                    {pasteError}
-                  </p>
-                )}
-              </div>
-
-              <div className="border-t border-slate-100 -mx-5" />
-
-              <div>
-                <label
-                  htmlFor="new-album-artist-name"
-                  className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider block mb-1"
-                >
-                  Name
-                </label>
-                <input
-                  id="new-album-artist-name"
-                  ref={inputRef}
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && localMatches[0] && hasExactLocal) {
-                      e.preventDefault();
-                      pickLocal(localMatches[0]);
-                    } else if (e.key === "Enter" && trimmed && localMatches.length === 0) {
-                      e.preventDefault();
-                      handleSearchStreaming();
-                    }
-                  }}
-                  placeholder="Start typing an artist…"
-                  className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--brand-blue)] focus:border-transparent"
-                  data-testid="input-artist-name"
-                />
-                <p className="text-[11.5px] text-slate-400 mt-1.5 leading-snug">
-                  We'll match against people already in your catalog as you type.
-                </p>
-              </div>
-
+            {/* Apple-Music-style segmented tabs (admin slate-100 chrome).
+                Search is the default; Paste holds the URL prefill; Credits
+                (person mode only) holds the creative-credits picker and
+                shows a count badge so selections are visible without
+                switching to it. Active tab resets to Search on reopen. */}
+            <div
+              className="inline-flex items-center self-start rounded-md bg-slate-100 p-0.5 mb-4"
+              role="tablist"
+              aria-label="Add person input method"
+              data-testid="tabs-add-person"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={introTab === "search"}
+                onClick={() => setIntroTab("search")}
+                className={[
+                  "h-8 px-3 rounded text-xs font-semibold transition-colors inline-flex items-center gap-1.5",
+                  introTab === "search"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-800",
+                ].join(" ")}
+                data-testid="tab-add-person-search"
+              >
+                Search
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={introTab === "paste"}
+                onClick={() => setIntroTab("paste")}
+                className={[
+                  "h-8 px-3 rounded text-xs font-semibold transition-colors inline-flex items-center gap-1.5",
+                  introTab === "paste"
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-800",
+                ].join(" ")}
+                data-testid="tab-add-person-paste"
+              >
+                Paste
+              </button>
               {mode === "person" && (
-                <>
-                  <div className="border-t border-slate-100 -mx-5" />
-                  <RolePicker
-                    testIdPrefix="new-person"
-                    creativeValue={creativeRoles}
-                    onCreativeChange={setCreativeRoles}
-                    creativeLabel="Creative credits"
-                    creativeHint="What hats do they wear?"
-                  />
-                </>
-              )}
-
-              {pastePrefill && (
-                // Staged prefill preview. Bio / photo / links from the
-                // pasted URL haven't been saved yet — the operator sees
-                // what *will* land when they click "Enter manually"
-                // below and can drop the prefill entirely with the X.
-                <div
-                  className="rounded-lg border border-slate-200 bg-slate-50 p-3 flex gap-3"
-                  data-testid="card-paste-prefill-preview"
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={introTab === "credits"}
+                  onClick={() => setIntroTab("credits")}
+                  className={[
+                    "h-8 px-3 rounded text-xs font-semibold transition-colors inline-flex items-center gap-1.5",
+                    introTab === "credits"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-800",
+                  ].join(" ")}
+                  data-testid="tab-add-person-credits"
                 >
-                  {pastePrefill.photoUrl ? (
-                    <img
-                      src={pastePrefill.photoUrl}
-                      alt=""
-                      className="w-14 h-14 rounded-md object-cover bg-slate-100 flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="w-14 h-14 rounded-md bg-slate-100 flex-shrink-0" />
+                  Credits
+                  {creativeRoles.length > 0 && (
+                    <span
+                      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--brand-blue)] text-white text-xs font-bold leading-none"
+                      data-testid="badge-credits-count"
+                    >
+                      {creativeRoles.length}
+                    </span>
                   )}
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                        Prefilled — click Enter manually to save
+                </button>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {/* ---- SEARCH TAB ---- */}
+              {introTab === "search" && (
+                <div className="space-y-4">
+                  <div>
+                    <label
+                      htmlFor="new-album-artist-name"
+                      className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider block mb-1"
+                    >
+                      Name
+                    </label>
+                    <input
+                      id="new-album-artist-name"
+                      ref={inputRef}
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && localMatches[0] && hasExactLocal) {
+                          e.preventDefault();
+                          pickLocal(localMatches[0]);
+                        } else if (e.key === "Enter" && trimmed && localMatches.length === 0) {
+                          e.preventDefault();
+                          handleSearchStreaming();
+                        }
+                      }}
+                      placeholder="Start typing an artist…"
+                      className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--brand-blue)] focus:border-transparent"
+                      data-testid="input-artist-name"
+                    />
+                    <p className="text-[11.5px] text-slate-400 mt-1.5 leading-snug">
+                      We'll match against people already in your catalog as you type.
+                    </p>
+                  </div>
+
+                  {/* Live catalog matches render directly under the input so
+                      they're visible the moment a name is typed. */}
+                  {trimmed && localMatches.length > 0 && (
+                    <div>
+                      <div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                        In your catalog
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setPastePrefill(null)}
-                        className="text-slate-400 hover:text-slate-700 -mt-0.5"
-                        aria-label="Discard prefilled data"
-                        data-testid="button-paste-prefill-clear"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    {pastePrefill.bio && (
-                      <p className="text-xs text-slate-700 leading-snug line-clamp-2">
-                        {pastePrefill.bio}
-                      </p>
-                    )}
-                    {pastePrefill.links.length > 0 && (
-                      <div className="flex flex-wrap gap-1 pt-0.5">
-                        {pastePrefill.links.map((l) => (
-                          <span
-                            key={l.kind + l.url}
-                            className="inline-flex items-center rounded-full bg-white border border-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600"
+                      <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 bg-white overflow-hidden">
+                        {localMatches.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => pickLocal(p)}
+                            className="w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left"
+                            data-testid={`option-local-${p.id}`}
                           >
-                            {l.kind.replace(/Url$/, "")}
-                          </span>
+                            <Avatar name={p.name} photoUrl={p.photoUrl ?? null} size={36} />
+                            <span className="flex-1 text-[13.5px] font-medium text-slate-900 truncate">
+                              {p.name}
+                            </span>
+                            <Check className="w-3.5 h-3.5 text-slate-300" />
+                          </button>
                         ))}
                       </div>
-                    )}
-                  </div>
-                </div>
-              )}
+                    </div>
+                  )}
 
-              {trimmed && localMatches.length > 0 && (
-                <div>
-                  <div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                    In your catalog
-                  </div>
-                  <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 bg-white overflow-hidden">
-                    {localMatches.map((p) => (
+                  {trimmed && localMatches.length === 0 && (
+                    // Demo-day pitfall: a previous layout used a 2-column
+                    // grid with a generic "Search Spotify" button on the
+                    // right. Viewers kept clicking it after typing just a
+                    // few letters of the name. Fix: echo the partial name
+                    // inside the button label — "Search 'Stevi' on Spotify"
+                    // makes it obvious the name isn't finished. "Enter
+                    // manually" demotes to a flush-left text link so the
+                    // Spotify CTA owns the row visually.
+                    <div className="flex items-center justify-between gap-3 pt-1">
                       <button
-                        key={p.id}
                         type="button"
-                        onClick={() => pickLocal(p)}
-                        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-slate-50 text-left"
-                        data-testid={`option-local-${p.id}`}
+                        onClick={handleManual}
+                        disabled={busy}
+                        className="text-[12.5px] font-medium text-slate-500 hover:text-slate-900 underline-offset-2 hover:underline disabled:opacity-60"
+                        data-testid="button-enter-manually"
                       >
-                        <Avatar name={p.name} photoUrl={p.photoUrl ?? null} size={36} />
-                        <span className="flex-1 text-[13.5px] font-medium text-slate-900 truncate">
-                          {p.name}
-                        </span>
-                        <Check className="w-3.5 h-3.5 text-slate-300" />
+                        {createPersonMut.isPending ? (
+                          <Spinner className="inline w-3.5 h-3.5 animate-spin mr-1 -mt-0.5" />
+                        ) : null}
+                        Enter manually
                       </button>
-                    ))}
-                  </div>
+                      <button
+                        type="button"
+                        onClick={handleSearchStreaming}
+                        disabled={busy}
+                        className="h-9 px-3 rounded-md bg-[#1DB954] text-black text-[12.5px] font-semibold hover:bg-[#19a449] inline-flex items-center justify-center gap-1.5 disabled:opacity-60 max-w-[70%]"
+                        data-testid="button-search-streaming"
+                      >
+                        <SiSpotify className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">
+                          Search <span className="font-bold">"{trimmed}"</span> on Spotify
+                        </span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {trimmed && localMatches.length === 0 && (
-                // Demo-day pitfall: a previous layout used a 2-column
-                // grid with a generic "Search Spotify" button on the
-                // right. Viewers kept clicking it after typing just a
-                // few letters of the name. Fix: echo the partial name
-                // inside the button label — "Search 'Stevi' on Spotify"
-                // makes it obvious the name isn't finished. "Enter
-                // manually" demotes to a flush-left text link so the
-                // Spotify CTA owns the row visually.
-                <div className="flex items-center justify-between gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={handleManual}
-                    disabled={busy}
-                    className="text-[12.5px] font-medium text-slate-500 hover:text-slate-900 underline-offset-2 hover:underline disabled:opacity-60"
-                    data-testid="button-enter-manually"
-                  >
-                    {createPersonMut.isPending ? (
-                      <Spinner className="inline w-3.5 h-3.5 animate-spin mr-1 -mt-0.5" />
-                    ) : null}
-                    Enter manually
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSearchStreaming}
-                    disabled={busy}
-                    className="h-9 px-3 rounded-md bg-[#1DB954] text-black text-[12.5px] font-semibold hover:bg-[#19a449] inline-flex items-center justify-center gap-1.5 disabled:opacity-60 max-w-[70%]"
-                    data-testid="button-search-streaming"
-                  >
-                    <SiSpotify className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">
-                      Search <span className="font-bold">"{trimmed}"</span> on Spotify
-                    </span>
-                  </button>
+              {/* ---- PASTE TAB ---- */}
+              {introTab === "paste" && (
+                <div className="space-y-4">
+                  {/* Paste-a-URL prefill — same shape as the Add dialogs on
+                      vendors / labels / presses. Accepts Apple Music, Spotify,
+                      Bandcamp, or any generic bio page with Person JSON-LD or
+                      OG tags. Routes Apple/Spotify URLs through the normal
+                      confirm + discography flow; commits Bandcamp/generic
+                      directly with whatever fields we extracted. */}
+                  <div>
+                    <label
+                      htmlFor="new-album-artist-paste-url"
+                      className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider block mb-1"
+                    >
+                      Paste a URL
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        id="new-album-artist-paste-url"
+                        type="url"
+                        value={pasteUrl}
+                        onChange={(e) => { setPasteUrl(e.target.value); setPasteError(null); }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && pasteUrl.trim() && !busy) {
+                            e.preventDefault();
+                            handlePasteUrl();
+                          }
+                        }}
+                        placeholder="Apple Music, Spotify, Bandcamp, or a bio page"
+                        disabled={busy}
+                        className="flex-1 h-9 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[var(--brand-blue)] focus:border-transparent disabled:opacity-60"
+                        data-testid="input-artist-paste-url"
+                      />
+                      <button
+                        type="button"
+                        onClick={handlePasteUrl}
+                        disabled={busy || !pasteUrl.trim()}
+                        className="h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-xs font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+                        data-testid="button-artist-paste-url"
+                      >
+                        {scrapeMut.isPending ? <Spinner className="w-3.5 h-3.5 animate-spin" /> : null}
+                        Prefill
+                      </button>
+                    </div>
+                    {pasteError && (
+                      <p
+                        className="text-xs text-amber-700 mt-1.5 leading-snug"
+                        data-testid="text-paste-url-error"
+                      >
+                        {pasteError}
+                      </p>
+                    )}
+                    <p className="text-[11.5px] text-slate-400 mt-1.5 leading-snug">
+                      Apple Music & Spotify links run through the streaming confirm flow. Bandcamp or a bio page prefills the fields below to save.
+                    </p>
+                  </div>
+
+                  {pastePrefill && (
+                    // Staged prefill preview. Bio / photo / links from the
+                    // pasted URL haven't been saved yet — the operator sees
+                    // what *will* land when they click "Enter manually"
+                    // below and can drop the prefill entirely with the X.
+                    <div
+                      className="rounded-lg border border-slate-200 bg-slate-50 p-3 flex gap-3"
+                      data-testid="card-paste-prefill-preview"
+                    >
+                      {pastePrefill.photoUrl ? (
+                        <img
+                          src={pastePrefill.photoUrl}
+                          alt=""
+                          className="w-14 h-14 rounded-md object-cover bg-slate-100 flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-md bg-slate-100 flex-shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                            {(name.trim() || "Prefilled")} — ready to save
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setPastePrefill(null)}
+                            className="text-slate-400 hover:text-slate-700 -mt-0.5"
+                            aria-label="Discard prefilled data"
+                            data-testid="button-paste-prefill-clear"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {pastePrefill.bio && (
+                          <p className="text-xs text-slate-700 leading-snug line-clamp-2">
+                            {pastePrefill.bio}
+                          </p>
+                        )}
+                        {pastePrefill.links.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            {pastePrefill.links.map((l) => (
+                              <span
+                                key={l.kind + l.url}
+                                className="inline-flex items-center rounded-full bg-white border border-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600"
+                              >
+                                {l.kind.replace(/Url$/, "")}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Commit affordance for a staged prefill — keeps the
+                      paste flow self-contained so the operator doesn't have
+                      to hop to the Search tab to save. Applies the selected
+                      creative credits the same way the Search tab does. */}
+                  {pastePrefill && trimmed && (
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={handleManual}
+                        disabled={busy}
+                        className="h-9 px-4 rounded-md bg-[var(--brand-blue)] text-white text-xs font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+                        data-testid="button-paste-save"
+                      >
+                        {createPersonMut.isPending ? (
+                          <Spinner className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Check className="w-3.5 h-3.5" />
+                        )}
+                        {mode === "person" ? "Add person" : "Save artist"}
+                      </button>
+                    </div>
+                  )}
                 </div>
+              )}
+
+              {/* ---- CREDITS TAB (person mode only) ---- */}
+              {mode === "person" && introTab === "credits" && (
+                <RolePicker
+                  testIdPrefix="new-person"
+                  creativeValue={creativeRoles}
+                  onCreativeChange={setCreativeRoles}
+                  creativeLabel="Creative credits"
+                  creativeHint="What hats do they wear?"
+                />
               )}
             </div>
 
