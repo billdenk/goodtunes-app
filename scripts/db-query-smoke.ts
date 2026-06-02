@@ -46,6 +46,11 @@ import {
 import {
   sqlPartnerInviteList,
   sqlPartnerOutstandingInviteToEmail,
+  sqlStampReferredByPerson,
+  sqlStampReferredByOrg,
+  sqlOpenArtistReferral,
+  sqlAmbassadorOrg,
+  sqlPlaceholderScopeInUseCount,
 } from "../server/partnerInvites";
 
 // Stable dummy bind values — content is irrelevant because EXPLAIN never
@@ -83,6 +88,13 @@ const SMOKE_QUERIES: { name: string; sql: SQL }[] = [
   { name: "partnerInvites.inviteList(label)", sql: sqlPartnerInviteList("label", ORG) },
   { name: "partnerInvites.outstandingToEmail(artist)", sql: sqlPartnerOutstandingInviteToEmail("artist", "nobody@example.com", ORG) },
   { name: "partnerInvites.outstandingToEmail(label)", sql: sqlPartnerOutstandingInviteToEmail("label", "nobody@example.com", ORG) },
+  // server/partnerInvites.ts — Task #966 accept/revoke side-effect SQL.
+  { name: "partnerInvites.stampReferredByPerson", sql: sqlStampReferredByPerson(ALBUM, PRESS) },
+  { name: "partnerInvites.stampReferredByOrg", sql: sqlStampReferredByOrg(ALBUM, ORG) },
+  { name: "partnerInvites.openArtistReferral", sql: sqlOpenArtistReferral(PRESS, ALBUM) },
+  { name: "partnerInvites.ambassadorOrg", sql: sqlAmbassadorOrg(PRESS) },
+  { name: "partnerInvites.placeholderScopeInUseCount(artist)", sql: sqlPlaceholderScopeInUseCount("artist", ORG, ORDER) },
+  { name: "partnerInvites.placeholderScopeInUseCount(label)", sql: sqlPlaceholderScopeInUseCount("label", ORG, ORDER) },
 ];
 
 async function main() {

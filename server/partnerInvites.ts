@@ -120,3 +120,132 @@ export function sqlPartnerOutstandingInviteToEmail(
      LIMIT 1
   `;
 }
+
+// ─── Accept-time referrer stamping (DB side effects) ──────────────────
+//
+// When an artist invitee accepts, the accept handler resolves the
+// invite's referrer chain (referrer_kind / referrer_scope_id) onto the
+// new artist's Person row so the existing referral-attribution machinery
+// lights up. These were inline `db.execute(sql`...`)` calls inside the
+// /api/invites/:token/accept closure; extracted here so:
+//   - the exact SQL is column-validated by db-query-smoke, and
+//   - the branch logic (which kind stamps what) is integration-tested
+//     against a real DB rather than mirrored in a test.
+//
+// Note the asymmetry that the tests pin: an `artist`-referred invitee
+// gets `people.referred_by_person_id` stamped AND an open
+// `artist_referrals` row; a `label`-referred invitee gets NOTHING on the
+// Person row — a label's provenance lives only on the invite row
+// (referrer_kind='label'), because labels carry no per-unit referral.
+
+// Stamp the invitee artist's referrer Person, but only if not already
+// referred (NULL-guarded so a stale re-accept can't re-home them).
+export function sqlStampReferredByPerson(inviteePersonId: string, referrerPersonId: string): SQL {
+  return sql`UPDATE people SET referred_by_person_id = ${referrerPersonId} WHERE id = ${inviteePersonId} AND referred_by_person_id IS NULL`;
+}
+
+// Stamp the invitee artist's referring organization (NPO), NULL-guarded.
+export function sqlStampReferredByOrg(inviteePersonId: string, referrerOrgId: string): SQL {
+  return sql`UPDATE people SET referred_by_org_id = ${referrerOrgId} WHERE id = ${inviteePersonId} AND referred_by_org_id IS NULL`;
+}
+
+// Open the per-album referral row with album_id NULL until the invitee
+// starts a release. ON CONFLICT keys off the COALESCE(album_id,'')
+// expression index, so a duplicate accept is a no-op.
+export function sqlOpenArtistReferral(referrerPersonId: string, inviteePersonId: string): SQL {
+  return sql`
+    INSERT INTO artist_referrals (referrer_person_id, invitee_person_id, album_id)
+    VALUES (${referrerPersonId}, ${inviteePersonId}, NULL)
+    ON CONFLICT (referrer_person_id, invitee_person_id, COALESCE(album_id, '')) DO NOTHING
+  `;
+}
+
+// Read an ambassador Person's parent NPO so an ambassador-referred
+// artist can inherit it (the NPO's roll-up then includes the new artist).
+export function sqlAmbassadorOrg(ambassadorPersonId: string): SQL {
+  return sql`SELECT referred_by_org_id AS org FROM people WHERE id = ${ambassadorPersonId} LIMIT 1`;
+}
+
+// A minimal executor shape so callers can pass `db.execute` (or a tx) and
+// these helpers stay transport-agnostic / unit-drivable.
+export type SqlExecutor = (q: SQL) => Promise<{ rows?: any[] } | any>;
+
+// Apply the full accept-time referrer stamp for an artist invitee. This
+// is the single source of truth the /accept handler delegates to, so a
+// regression in the branch logic (e.g. a label-referred invitee wrongly
+// stamping the Person, or ambassador inheritance dropping) surfaces in
+// server/partnerInvites.db.test.ts. No-ops for non-artist invitees and
+// for any invite missing a referrer chain. Throws on SQL failure — the
+// caller keeps its best-effort try/catch.
+export async function applyArtistAcceptReferral(
+  exec: SqlExecutor,
+  invite: {
+    role?: string | null;
+    roleScopeId?: string | null;
+    referrerKind?: string | null;
+    referrerScopeId?: string | null;
+  },
+): Promise<void> {
+  const { role, roleScopeId, referrerKind, referrerScopeId } = invite;
+  if (role !== "artist" || !roleScopeId || !referrerKind || !referrerScopeId) return;
+  if (referrerKind === "artist") {
+    await exec(sqlStampReferredByPerson(roleScopeId, referrerScopeId));
+    await exec(sqlOpenArtistReferral(referrerScopeId, roleScopeId));
+  } else if (referrerKind === "non_profit") {
+    await exec(sqlStampReferredByOrg(roleScopeId, referrerScopeId));
+  } else if (referrerKind === "ambassador") {
+    const o = await exec(sqlAmbassadorOrg(referrerScopeId));
+    const ambOrg = ((o as any)?.rows ?? [])[0]?.org ?? null;
+    await exec(sqlStampReferredByPerson(roleScopeId, referrerScopeId));
+    if (ambOrg) await exec(sqlStampReferredByOrg(roleScopeId, ambOrg));
+  }
+  // referrerKind === "label" (and any other kind) intentionally stamps
+  // nothing on the Person — provenance stays on the invite row.
+}
+
+// ─── Revoke-time placeholder cleanup (DB side effects) ────────────────
+//
+// Revoking an un-accepted artist/label invite should delete the
+// placeholder Person/Label it minted — but ONLY when nothing else
+// depends on that scope. The guard counts everything that would make the
+// scope "in use": releases under it, an admin login bound to it, or any
+// OTHER invite still pointing at it. A wrong guard either leaks orphan
+// rows into the catalog or deletes a scope that's actually in use.
+
+// COUNT(*) of everything that pins a placeholder scope row in place.
+// Zero ⇒ safe to delete the placeholder.
+export function sqlPlaceholderScopeInUseCount(
+  scopeKind: PartnerInviterKind,
+  scopeId: string,
+  excludeInviteId: string,
+): SQL {
+  const albumCol = scopeKind === "label" ? sql`label_id` : sql`primary_artist_id`;
+  return sql`
+    SELECT (
+      (SELECT COUNT(*) FROM albums WHERE ${albumCol} = ${scopeId}) +
+      (SELECT COUNT(*) FROM users WHERE role = ${scopeKind} AND role_scope_id = ${scopeId}) +
+      (SELECT COUNT(*) FROM admin_invites WHERE role_scope_id = ${scopeId} AND id <> ${excludeInviteId})
+    )::int AS ct
+  `;
+}
+
+// Delete the placeholder scope row iff the in-use guard is zero. Returns
+// true when the placeholder was removed, false when it was preserved
+// because something still references it. The single source of truth the
+// revoke handlers delegate to.
+export async function revokePlaceholderIfUnused(
+  exec: SqlExecutor,
+  scopeKind: PartnerInviterKind,
+  scopeId: string,
+  excludeInviteId: string,
+): Promise<boolean> {
+  const guard = await exec(sqlPlaceholderScopeInUseCount(scopeKind, scopeId, excludeInviteId));
+  const ct = ((guard as any)?.rows ?? [])[0]?.ct ?? 0;
+  if (ct !== 0) return false;
+  await exec(
+    scopeKind === "label"
+      ? sql`DELETE FROM labels WHERE id = ${scopeId}`
+      : sql`DELETE FROM people WHERE id = ${scopeId}`,
+  );
+  return true;
+}

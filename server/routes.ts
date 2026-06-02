@@ -19,6 +19,8 @@ import {
   isOverOutstandingCap,
   sqlPartnerInviteList,
   sqlPartnerOutstandingInviteToEmail,
+  applyArtistAcceptReferral,
+  revokePlaceholderIfUnused,
 } from "./partnerInvites";
 import { pgArray } from "./lib/pgArray";
 import session from "express-session";
@@ -19356,29 +19358,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // (Task #952), so clean up the placeholder Label in that case too.
     if (existing.roleScopeId && !existing.usedAt) {
       try {
-        if (existing.role === "label") {
-          const guard = await db.execute<{ ct: number }>(sql`
-            SELECT (
-              (SELECT COUNT(*) FROM albums WHERE label_id = ${existing.roleScopeId}) +
-              (SELECT COUNT(*) FROM users WHERE role = 'label' AND role_scope_id = ${existing.roleScopeId}) +
-              (SELECT COUNT(*) FROM admin_invites WHERE role_scope_id = ${existing.roleScopeId} AND id <> ${existing.id})
-            )::int AS ct
-          `);
-          if ((((guard as any).rows ?? [])[0]?.ct ?? 0) === 0) {
-            await db.execute(sql`DELETE FROM labels WHERE id = ${existing.roleScopeId}`);
-          }
-        } else {
-          const guard = await db.execute<{ ct: number }>(sql`
-            SELECT (
-              (SELECT COUNT(*) FROM albums WHERE primary_artist_id = ${existing.roleScopeId}) +
-              (SELECT COUNT(*) FROM users WHERE role = 'artist' AND role_scope_id = ${existing.roleScopeId}) +
-              (SELECT COUNT(*) FROM admin_invites WHERE role_scope_id = ${existing.roleScopeId} AND id <> ${existing.id})
-            )::int AS ct
-          `);
-          if ((((guard as any).rows ?? [])[0]?.ct ?? 0) === 0) {
-            await db.execute(sql`DELETE FROM people WHERE id = ${existing.roleScopeId}`);
-          }
-        }
+        await revokePlaceholderIfUnused(
+          (q) => db.execute(q),
+          existing.role === "label" ? "label" : "artist",
+          existing.roleScopeId,
+          existing.id,
+        );
       } catch (e: any) {
         console.warn(`[invite] placeholder cleanup failed: ${e?.message}`);
       }
@@ -19493,29 +19478,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await storage.revokeAdminInvite(String(req.params.id));
     if (existing.roleScopeId && !existing.usedAt) {
       try {
-        if (existing.role === "artist") {
-          const guard = await db.execute<{ ct: number }>(sql`
-            SELECT (
-              (SELECT COUNT(*) FROM albums WHERE primary_artist_id = ${existing.roleScopeId}) +
-              (SELECT COUNT(*) FROM users WHERE role = 'artist' AND role_scope_id = ${existing.roleScopeId}) +
-              (SELECT COUNT(*) FROM admin_invites WHERE role_scope_id = ${existing.roleScopeId} AND id <> ${existing.id})
-            )::int AS ct
-          `);
-          if ((((guard as any).rows ?? [])[0]?.ct ?? 0) === 0) {
-            await db.execute(sql`DELETE FROM people WHERE id = ${existing.roleScopeId}`);
-          }
-        } else if (existing.role === "label") {
-          const guard = await db.execute<{ ct: number }>(sql`
-            SELECT (
-              (SELECT COUNT(*) FROM albums WHERE label_id = ${existing.roleScopeId}) +
-              (SELECT COUNT(*) FROM users WHERE role = 'label' AND role_scope_id = ${existing.roleScopeId}) +
-              (SELECT COUNT(*) FROM admin_invites WHERE role_scope_id = ${existing.roleScopeId} AND id <> ${existing.id})
-            )::int AS ct
-          `);
-          if ((((guard as any).rows ?? [])[0]?.ct ?? 0) === 0) {
-            await db.execute(sql`DELETE FROM labels WHERE id = ${existing.roleScopeId}`);
-          }
-        }
+        await revokePlaceholderIfUnused(
+          (q) => db.execute(q),
+          existing.role === "label" ? "label" : "artist",
+          existing.roleScopeId,
+          existing.id,
+        );
       } catch (e: any) {
         console.warn(`[invite] label placeholder cleanup failed: ${e?.message}`);
       }
@@ -20163,44 +20131,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await db.execute(sql`UPDATE users SET is_admin = true, terms_accepted_at = now(), terms_version = ${TERMS_VERSION} WHERE id = ${user.id}`);
     await setUserRole(user.id, invite.role as any, invite.roleScopeId ?? null);
 
-    // Task #78 — Wire the referrer onto the artist Person row so the
-    // existing referral-attribution machinery (people.referredByPersonId /
-    // referredByOrgId) lights up immediately. We only do this when the
-    // new partner is an artist with a person scope; non-profit partners
-    // are referrers themselves, never referred.
-    const referrerKind = (invite as any).referrerKind as string | null;
-    const referrerScopeId = (invite as any).referrerScopeId as string | null;
-    if (invite.role === "artist" && invite.roleScopeId && referrerKind && referrerScopeId) {
-      try {
-        if (referrerKind === "artist") {
-          await db.execute(sql`UPDATE people SET referred_by_person_id = ${referrerScopeId} WHERE id = ${invite.roleScopeId} AND referred_by_person_id IS NULL`);
-          // Task #350 — open per-album attribution row with album_id NULL
-          // until the invitee starts a release. swap_state defaults to
-          // 'referrer_keeps_full' (commerce splitter flips on first sale
-          // if the invitee elected the swap before then).
-          await db.execute(sql`
-            INSERT INTO artist_referrals (referrer_person_id, invitee_person_id, album_id)
-            VALUES (${referrerScopeId}, ${invite.roleScopeId}, NULL)
-            ON CONFLICT (referrer_person_id, invitee_person_id, COALESCE(album_id, '')) DO NOTHING
-          `);
-        } else if (referrerKind === "non_profit") {
-          await db.execute(sql`UPDATE people SET referred_by_org_id = ${referrerScopeId} WHERE id = ${invite.roleScopeId} AND referred_by_org_id IS NULL`);
-        } else if (referrerKind === "ambassador") {
-          // Ambassador is a Person. Point the new artist at the
-          // ambassador person AND inherit the ambassador's NPO so the
-          // NPO's rollup naturally includes the new artist.
-          const o = await db.execute<{ org: string | null }>(sql`
-            SELECT referred_by_org_id AS org FROM people WHERE id = ${referrerScopeId} LIMIT 1
-          `);
-          const ambOrg = ((o as any).rows ?? [])[0]?.org ?? null;
-          await db.execute(sql`UPDATE people SET referred_by_person_id = ${referrerScopeId} WHERE id = ${invite.roleScopeId} AND referred_by_person_id IS NULL`);
-          if (ambOrg) {
-            await db.execute(sql`UPDATE people SET referred_by_org_id = ${ambOrg} WHERE id = ${invite.roleScopeId} AND referred_by_org_id IS NULL`);
-          }
-        }
-      } catch (e: any) {
-        console.warn(`[invite] referrer wiring failed for ${invite.id}: ${e?.message}`);
-      }
+    // Task #78/#350 — Resolve the invite's referrer chain onto the new
+    // artist's Person row (referred_by_person_id / referred_by_org_id +
+    // an open artist_referrals row for the artist kind), so the existing
+    // referral-attribution machinery lights up immediately. The branch
+    // logic (artist vs non_profit vs ambassador; label stamps nothing)
+    // lives in applyArtistAcceptReferral so it stays integration-tested.
+    try {
+      await applyArtistAcceptReferral((q) => db.execute(q), invite as any);
+    } catch (e: any) {
+      console.warn(`[invite] referrer wiring failed for ${invite.id}: ${e?.message}`);
     }
 
     // Task #199 — when the inviting party is a press (manufacturer),
