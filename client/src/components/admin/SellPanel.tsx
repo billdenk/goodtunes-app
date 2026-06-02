@@ -39,7 +39,7 @@ import {
 } from "@/lib/pathToPressNav";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { ShareQuoteWithArtist } from "@/components/admin/ShareQuoteWithArtist";
-import { AddonDialog } from "@/pages/AdminCustomAddons";
+import { AddonDialog, type CustomAddon } from "@/pages/AdminCustomAddons";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -7220,12 +7220,64 @@ function CustomAddonInlineTile({
 }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  // Task #1002 — the add-on currently open for inline edit (null = none).
+  const [editing, setEditing] = useState<CustomAddon | null>(null);
   const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
     queryKey: ["/api/me/role"],
   });
   const canCreate = roleInfo?.role === "super_admin";
+
+  // Task #1002 — load every custom add-on so we can surface the ones that
+  // apply to THIS album right on the Sell page (closing the feedback gap
+  // where a freshly-saved add-on reverted to an unchanged-looking screen).
+  // Same query key the create/edit dialog invalidates on save, so a save
+  // refreshes this list immediately. Reads are open to any admin; only
+  // super-admins can open the edit dialog (server enforces it regardless).
+  const { data: allAddons = [] } = useQuery<CustomAddon[]>({
+    queryKey: ["/api/admin/custom-addons"],
+  });
+  // Applicable = global (all-artists) add-ons + those attached to this
+  // album's primary artist. The list endpoint already returns each
+  // add-on's `artists` and `appliesToAllArtists`, so we filter client-side.
+  const applicable = useMemo(
+    () =>
+      allAddons.filter(
+        (a) =>
+          a.appliesToAllArtists ||
+          (!!primaryArtistId &&
+            a.artists.some((p) => p.personId === primaryArtistId)),
+      ),
+    [allAddons, primaryArtistId],
+  );
+
   return (
     <>
+      {applicable.map((a) => (
+        <UpsellTile
+          key={a.id}
+          icon={Gift}
+          title={a.name}
+          subtitle={
+            <span data-testid={`text-custom-addon-applies-${a.id}`}>
+              {a.orgName} · {dollars(a.priceCents)}
+              {a.active ? "" : " · inactive"}
+            </span>
+          }
+          active={editing?.id === a.id}
+          onClick={() => {
+            if (!canCreate) {
+              toast({
+                title: "Super-admin only",
+                description:
+                  "Custom non-profit add-ons can only be edited by a super-admin. Ask one to change it for you.",
+              });
+              return;
+            }
+            setEditing(a);
+          }}
+          testId={`button-edit-custom-addon-${a.id}`}
+        />
+      ))}
       <UpsellTile
         icon={Gift}
         title="Custom"
@@ -7248,6 +7300,20 @@ function CustomAddonInlineTile({
         }}
         testId="button-toggle-custom-addon-tile"
       />
+      {/* Task #1002 — when no primary artist is linked, a "just this
+          artist" add-on has nothing to attach to, so only all-artists
+          add-ons can ever surface here. Spell that out so the operator
+          isn't left wondering why a per-artist add-on never appears. */}
+      {!primaryArtistId ? (
+        <p
+          className="sm:col-span-3 text-xs text-slate-400 leading-relaxed"
+          data-testid="note-custom-addon-no-artist"
+        >
+          This release has no primary artist linked, so a “just this artist”
+          add-on can’t be scoped here — only add-ons set to apply to all
+          artists will show. Link a primary artist to attach one to them.
+        </p>
+      ) : null}
       {canCreate && (
         <AddonDialog
           mode="create"
@@ -7258,6 +7324,14 @@ function CustomAddonInlineTile({
             personId: primaryArtistId ?? null,
             name: artistName ?? "this artist",
           }}
+        />
+      )}
+      {canCreate && (
+        <AddonDialog
+          mode="edit"
+          addon={editing}
+          open={!!editing}
+          onOpenChange={(o) => !o && setEditing(null)}
         />
       )}
     </>

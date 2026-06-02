@@ -30,7 +30,7 @@ type AddonArtist = {
   photoUrl: string | null;
 };
 
-type CustomAddon = {
+export type CustomAddon = {
   id: string;
   organizationId: string;
   orgName: string;
