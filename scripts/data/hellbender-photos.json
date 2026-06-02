@@ -1,0 +1,215 @@
+{
+  "source": "https://hellbendervinyl.com/products.json?limit=250",
+  "colors": [
+    {
+      "name": "Black",
+      "shopifyTitle": "Custom Vinyl Records - Black",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/solid-black-vinyl-record-buscrates.jpg?v=1774533860&width=600",
+      "publicUrl": "/objects/uploads/29a4d230-db1d-4953-9910-037a72806ffc.jpg"
+    },
+    {
+      "name": "Blue",
+      "shopifyTitle": "Custom Vinyl Records - Blue",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/opaque-blue-vinyl-record.png?v=1774536275&width=600",
+      "publicUrl": "/objects/uploads/3df2a1c5-b331-4e4e-91e0-d3d32f0ccc0a.png"
+    },
+    {
+      "name": "Brown",
+      "shopifyTitle": "Custom Vinyl Records - Brown",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/opaque-brown-vinyl-record-grey-background.png?v=1774534811&width=600",
+      "publicUrl": "/objects/uploads/bfa66d94-ce41-4f61-8b72-af1932cbeae8.png"
+    },
+    {
+      "name": "Clear Blue",
+      "shopifyTitle": "Custom Vinyl Records - Clear Blue",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/clear_blue_vinyl_record.png?v=1774531181&width=600",
+      "publicUrl": "/objects/uploads/7ab2ccac-c2f1-4192-863e-75fe73f1450a.png"
+    },
+    {
+      "name": "Clear Green",
+      "shopifyTitle": "Custom Vinyl Records - Clear Green",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/clear_green_vinyl_record.png?v=1774531276&width=600",
+      "publicUrl": "/objects/uploads/672adf59-748d-4be4-b259-c7489dae0585.png"
+    },
+    {
+      "name": "Clear Orange",
+      "shopifyTitle": "Custom Vinyl Records - Clear Orange",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/clear_orange_vinyl_record.png?v=1774531612&width=600",
+      "publicUrl": "/objects/uploads/49d577fd-13e7-4216-9173-b00ccc5bbe96.png"
+    },
+    {
+      "name": "Clear Pink",
+      "shopifyTitle": "Custom Vinyl Records - Clear Pink",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/clear_pink_vinyl_record.png?v=1774531755&width=600",
+      "publicUrl": "/objects/uploads/4f5f4764-7186-41fa-a626-f6f379a08596.png"
+    },
+    {
+      "name": "Clear Red",
+      "shopifyTitle": "Custom Vinyl Records - Clear Red",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/clear_red_vinyl_record.png?v=1774531685&width=600",
+      "publicUrl": "/objects/uploads/2abe980f-b4ae-4557-9f2a-23f17d3a19db.png"
+    },
+    {
+      "name": "Clear Yellow",
+      "shopifyTitle": "Custom Vinyl Records - Clear Yellow",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/clear_yellow_vinyl_record.png?v=1774531510&width=600",
+      "publicUrl": "/objects/uploads/38bf98a1-7410-479e-9e3b-51c6214bfd32.png"
+    },
+    {
+      "name": "Coke Bottle",
+      "shopifyTitle": "Custom Vinyl Records - Coke Bottle Clear",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/clear_coke_bottle_vinyl_record.png?v=1774531409&width=600",
+      "publicUrl": "/objects/uploads/3ab4cc05-c679-47f0-aad7-cbd3d731db07.png"
+    },
+    {
+      "name": "Dark Green",
+      "shopifyTitle": "Custom Vinyl Records - Dark Green",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/Opaque_Dark_Green_Vinyl_Record.png?v=1773932787&width=600",
+      "publicUrl": "/objects/uploads/a5bc022f-eec7-4e70-bb94-ae16238ea054.png"
+    },
+    {
+      "name": "Deep Purple",
+      "shopifyTitle": "Custom Vinyl Records - Deep Purple",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/deep-purple-vinyl-record.png?v=1774535170&width=600",
+      "publicUrl": "/objects/uploads/177abef4-0a75-4ee3-9d69-24e008437d6e.png"
+    },
+    {
+      "name": "Duckie Yellow",
+      "shopifyTitle": "Custom Vinyl Records - Duckie Yellow",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/opaqueduckieyellow-1.png?v=1774530243&width=600",
+      "publicUrl": "/objects/uploads/8be8a887-07c9-4af6-9883-e27040b2d607.png"
+    },
+    {
+      "name": "Gold",
+      "shopifyTitle": "Custom Vinyl Records - Gold",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/Hellbender-vinyl-mockup-metallic-gold.png?v=1774541682&width=600",
+      "publicUrl": "/objects/uploads/8141e684-a669-4a2d-b023-0b010817ffe2.png"
+    },
+    {
+      "name": "Green",
+      "shopifyTitle": "Custom Vinyl Records - Green",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/Opaque_Green_Vinyl_Record.png?v=1773932911&width=600",
+      "publicUrl": "/objects/uploads/1ad8cbe9-dda2-4ce4-8ae5-9b76a8d13a77.png"
+    },
+    {
+      "name": "Hazy Orange",
+      "shopifyTitle": "Custom Vinyl Records - Hazy Orange",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/translucent_orange_vinyl_record.png?v=1774532089&width=600",
+      "publicUrl": "/objects/uploads/e27d7472-276f-4058-9f30-cb499398d10d.png"
+    },
+    {
+      "name": "House Mix",
+      "shopifyTitle": "Custom Vinyl Records - Regrind Mix",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/IMG_3826.jpg?v=1770692254&width=600",
+      "publicUrl": "/objects/uploads/0eb7bd8a-252a-48fa-b50f-02b2f20d2281.jpg"
+    },
+    {
+      "name": "Jade",
+      "shopifyTitle": "Custom Vinyl Records - Jade",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/Opaque_Jade_Viny_Record.png?v=1773932603&width=600",
+      "publicUrl": "/objects/uploads/e4847186-8371-485e-b078-9db2742d1b3e.png"
+    },
+    {
+      "name": "Lime Green",
+      "shopifyTitle": "Custom Vinyl Records - Lime Green",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/Opaque_Lime_Green_Vinyl_Record.png?v=1773932975&width=600",
+      "publicUrl": "/objects/uploads/92bf4ce8-3644-40d0-b36c-468fa6eed04d.png"
+    },
+    {
+      "name": "Maroon",
+      "shopifyTitle": "Custom Vinyl Records - Maroon",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/opaque_maroon_vinyl_record.png?v=1774530962&width=600",
+      "publicUrl": "/objects/uploads/0c05be00-8f61-4273-a386-86387a38e354.png"
+    },
+    {
+      "name": "Natural",
+      "shopifyTitle": "Custom Vinyl Records - Natural",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/trans_natural_vinyl_record.png?v=1774531785&width=600",
+      "publicUrl": "/objects/uploads/8add8967-7fea-4887-84e1-7afd030cdfa3.png"
+    },
+    {
+      "name": "Orange",
+      "shopifyTitle": "Custom Vinyl Records - Orange",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/opaque_orange_vinyl_record.png?v=1774530553&width=600",
+      "publicUrl": "/objects/uploads/7f58ec87-0c5c-4ab2-8b31-ffaa86fe398a.png"
+    },
+    {
+      "name": "Peach",
+      "shopifyTitle": "Custom Vinyl Records - Peach",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/opaquepeach_vinyl_record.png?v=1774530436&width=600",
+      "publicUrl": "/objects/uploads/ee001522-fc49-42d3-ba0d-e7eb74721d3c.png"
+    },
+    {
+      "name": "Pink",
+      "shopifyTitle": "Custom Vinyl Records - Pink",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/opaque_pink_vinyl_record.png?v=1774531027&width=600",
+      "publicUrl": "/objects/uploads/d87969a0-5375-4ca7-b7f4-9fe23b42ec43.png"
+    },
+    {
+      "name": "Red",
+      "shopifyTitle": "Custom Vinyl Records - Red",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/opaque_red_vinyl_record.png?v=1774530695&width=600",
+      "publicUrl": "/objects/uploads/727b555d-7c05-4e37-85ef-45f564f45c3e.png"
+    },
+    {
+      "name": "Seaglass Blue",
+      "shopifyTitle": "Custom Vinyl Records - Seaglass Blue",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/translucent_seaglass_blue_vinyl_record.png?v=1774531914&width=600",
+      "publicUrl": "/objects/uploads/0b51db18-ae79-47bd-8c36-e356e150d0f1.png"
+    },
+    {
+      "name": "Silver",
+      "shopifyTitle": "Custom Vinyl Records - Silver",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/Hellbender_vinyl-mockupgrey.png?v=1772295264&width=600",
+      "publicUrl": "/objects/uploads/da80db1f-d607-444a-aef2-80559d469593.png"
+    },
+    {
+      "name": "Sky Blue",
+      "shopifyTitle": "Custom Vinyl Records - Sky Blue",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/Opaque_Sky_Blue_Vinyl_Record.png?v=1773932332&width=600",
+      "publicUrl": "/objects/uploads/d15854d4-0b3d-4108-b810-f2c78c8734cf.png"
+    },
+    {
+      "name": "Smokey Clear",
+      "shopifyTitle": "Custom Vinyl Records - Smokey Clear",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/clear_smokey_vinyl_record.png?v=1774531095&width=600",
+      "publicUrl": "/objects/uploads/d37eb300-473d-49a1-9b10-a8a3563c56d5.png"
+    },
+    {
+      "name": "Tan",
+      "shopifyTitle": "Custom Vinyl Records - Tan",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/opaque-tan-vinyl-record.png?v=1774535143&width=600",
+      "publicUrl": "/objects/uploads/6ceb224e-f8de-48af-8000-fbc54237a5ab.png"
+    },
+    {
+      "name": "Turquoise",
+      "shopifyTitle": "Custom Vinyl Records - Turquoise",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/Opaque_Turquoise_Vinyl_Record.png?v=1773932232&width=600",
+      "publicUrl": "/objects/uploads/4ca9abe1-80bf-4c93-aec8-ca448cb380f7.png"
+    },
+    {
+      "name": "Ultra Clear",
+      "shopifyTitle": "Custom Vinyl Records - Ultra Clear",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/Hellbender_vinyl-mockup_clear.webp?v=1759456156&width=600",
+      "publicUrl": "/objects/uploads/0a55c143-3d2d-406f-9612-bbffe005cad2.jpg"
+    },
+    {
+      "name": "Violet",
+      "shopifyTitle": "Custom Vinyl Records - Violet",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/translucent_violet_vinyl_record.png?v=1774532010&width=600",
+      "publicUrl": "/objects/uploads/403bde6f-6884-419f-b9c3-359137107b33.png"
+    },
+    {
+      "name": "White",
+      "shopifyTitle": "Custom Vinyl Records - White",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/solid-white-vinyl-record.png?v=1774534872&width=600",
+      "publicUrl": "/objects/uploads/3184d13e-cb04-490f-a0b3-08774e042fb8.png"
+    },
+    {
+      "name": "Yellow",
+      "shopifyTitle": "Custom Vinyl Records - Yellow",
+      "importSourceUrl": "https://cdn.shopify.com/s/files/1/0593/3137/9286/files/opaque-yellow-vinyl-record.png?v=1774541615&width=600",
+      "publicUrl": "/objects/uploads/6519d64f-cff5-4222-9d02-de8ffbdb6fe2.png"
+    }
+  ]
+}
