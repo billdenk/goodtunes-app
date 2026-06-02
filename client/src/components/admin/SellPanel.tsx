@@ -8253,6 +8253,10 @@ function GoodDeedOptionCard({
 }) {
   const certCount = Math.max(0, Math.round(optionQty * ratio));
   const pct = Math.round(ratio * 100);
+  // Task #1023 — collapsed by default, matching the vinyl PROFIT
+  // disclosure and the GoodDeedPill below. Expanding reveals the
+  // per-cert cost breakdown.
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
   // Per-option cost preview, keyed to THIS option's cert-run size so a
   // 100-cert run and a 200-cert run resolve their own tier rung.
   const { data: preview } = useQuery<any>({
@@ -8286,6 +8290,9 @@ function GoodDeedOptionCard({
   // CC fee matches GoodDeedPill: Stripe's flat US rate (2.9% + 30¢) on
   // the cert retail.
   const ccFeeCents = Math.round(priceCents * 0.029) + 30;
+  // Task #1023 — Cost/unit subtotal for the cost-breakdown disclosure:
+  // per-cert wholesale (Manufacturing & Shipping) + the CC fee.
+  const costPerUnitCents = costCents !== null ? costCents + ccFeeCents : null;
   const canComputeNet = costCents !== null;
   // Task #985 — present profit the way the vinyl block does: a per-unit
   // profit (per-cert net = retail − GoodDeed cost − CC fee) and a total
@@ -8342,22 +8349,99 @@ function GoodDeedOptionCard({
         >
           {pct}% · {certCount.toLocaleString()} of {optionQty.toLocaleString()}
         </div>
-        <div className="flex items-center justify-between gap-3 text-xs">
-          <span className="text-slate-600">
-            Profit{" "}
-            <span className="text-slate-400 text-[11px]">Per unit sold</span>
-          </span>
-          <span
-            className={[
-              "tabular-nums font-medium",
-              perUnitIsLoss
-                ? "text-[color:var(--brand-pink)]"
-                : "text-slate-900",
-            ].join(" ")}
-            data-testid={`text-gooddeed-option-perunit-${idSuffix}`}
+        {/* Task #1023 — PROFIT · Per unit sold is now a chevron
+            disclosure (collapsed by default), matching the vinyl SkuRow
+            and GoodDeedPill primitives. Expanding reveals the per-cert
+            cost breakdown built from the values this card already
+            derives: the Manufacturing & Shipping wholesale, the CC fee,
+            and a Cost/unit subtotal. */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setBreakdownOpen((o) => !o)}
+            className="w-full flex items-center justify-between gap-3 text-xs text-left -mx-1 px-1 py-0.5 rounded hover:bg-slate-100/70 transition-colors"
+            aria-expanded={breakdownOpen}
+            data-testid={`button-toggle-gooddeed-option-profit-${idSuffix}`}
           >
-            {perUnitLabel}
-          </span>
+            <span className="flex items-center gap-1.5 min-w-0">
+              <span className="text-slate-600">
+                Profit{" "}
+                <span className="text-slate-400">Per unit sold</span>
+              </span>
+              <ChevronDown
+                className={[
+                  "w-3 h-3 text-slate-400 transition-transform flex-shrink-0",
+                  breakdownOpen ? "rotate-180" : "",
+                ].join(" ")}
+              />
+            </span>
+            <span
+              className={[
+                "tabular-nums font-medium flex-shrink-0",
+                perUnitIsLoss
+                  ? "text-[color:var(--brand-pink)]"
+                  : "text-slate-900",
+              ].join(" ")}
+              data-testid={`text-gooddeed-option-perunit-${idSuffix}`}
+            >
+              {perUnitLabel}
+            </span>
+          </button>
+          {breakdownOpen && (
+            <div
+              className="mt-1 ml-1 pl-3 border-l border-slate-200 space-y-1.5 py-1"
+              data-testid={`block-gooddeed-option-cost-breakdown-${idSuffix}`}
+            >
+              {costCents !== null ? (
+                <>
+                  <div className="flex items-center justify-between text-xs tabular-nums">
+                    <span className="flex items-center gap-1.5 text-slate-600">
+                      Manufacturing &amp; Shipping
+                      <InfoTip
+                        label="What Manufacturing & Shipping covers"
+                        testId={`info-gooddeed-option-manufacturing-${idSuffix}`}
+                        text="Per-cert wholesale on the tiered ladder ($13 → $12 → $9 → $7 → $6 as the run grows). It covers print + hologram + shrinkwrap + insertion into the jacket and all three shipping legs (Hoover → artist for signing → Spinney for insertion → fulfillment). CC fee on the cert retail is the only other line."
+                      />
+                    </span>
+                    <span
+                      className="text-slate-900"
+                      data-testid={`text-gooddeed-option-wholesale-${idSuffix}`}
+                    >
+                      {dollars(costCents)}
+                    </span>
+                  </div>
+                  <div
+                    className="flex items-center justify-between text-xs tabular-nums"
+                    data-testid={`row-gooddeed-option-cc-fee-${idSuffix}`}
+                  >
+                    <span className="text-slate-600">CC fee</span>
+                    <span
+                      className="text-slate-900"
+                      data-testid={`text-gooddeed-option-cc-fee-${idSuffix}`}
+                    >
+                      {dollars(ccFeeCents)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs font-semibold border-t border-slate-200 pt-1.5 mt-1 tabular-nums">
+                    <span className="text-slate-700">Cost / unit</span>
+                    <span
+                      className="text-slate-900"
+                      data-testid={`text-gooddeed-option-cost-per-unit-${idSuffix}`}
+                    >
+                      {dollars(costPerUnitCents!)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div
+                  className="text-xs text-slate-400 italic"
+                  data-testid={`text-gooddeed-option-cost-unavailable-${idSuffix}`}
+                >
+                  Cost preview unavailable.
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center justify-between gap-3 text-xs">
           <span className="text-slate-600">Total</span>
@@ -9013,11 +9097,11 @@ function GoodDeedPill({
                       <>
                         <div className="flex items-center justify-between text-xs tabular-nums">
                           <span className="flex items-center gap-1.5 text-slate-600">
-                            Quickprinter (rung)
+                            Manufacturing &amp; Shipping
                             <InfoTip
-                              label="What the Quickprinter rung covers"
+                              label="What Manufacturing & Shipping covers"
                               testId="info-gooddeed-quickprinter"
-                              text="Per-cert wholesale on the tiered ladder ($13 → $12 → $9 → $7 → $6 as the run grows). The rung covers print + hologram + shrinkwrap + insertion into the jacket and all three shipping legs (Hoover → artist for signing → Spinney for insertion → fulfillment). CC fee on the cert retail is the only other line."
+                              text="Per-cert wholesale on the tiered ladder ($13 → $12 → $9 → $7 → $6 as the run grows). It covers print + hologram + shrinkwrap + insertion into the jacket and all three shipping legs (Hoover → artist for signing → Spinney for insertion → fulfillment). CC fee on the cert retail is the only other line."
                             />
                           </span>
                           <span
