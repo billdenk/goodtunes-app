@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Gift, Loader2, Plus, Search, Upload, X } from "lucide-react";
+import { Gift, Loader2, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
@@ -309,8 +309,8 @@ export function AddonDialog({
   // applies to every eligible album regardless of attachments.
   const [scope, setScope] = useState<"specific" | "all">("specific");
   const [formError, setFormError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [imageEditorOpen, setImageEditorOpen] = useState(false);
 
   // When opened inline from an album with no primary artist linked, the
   // "Just this artist" scope has nothing to attach to, so force/offer
@@ -420,6 +420,7 @@ export function AddonDialog({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(o) => !save.isPending && onOpenChange(o)}>
       <DialogContent
         className="max-w-lg bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4 max-h-[90vh] overflow-y-auto"
@@ -439,30 +440,32 @@ export function AddonDialog({
           <div className="flex items-start gap-4">
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="relative w-20 h-20 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0 bg-slate-50 ring-1 ring-slate-200"
-              data-testid="button-upload-custom-addon-image"
-              aria-label="Upload image"
+              onClick={() => setImageEditorOpen(true)}
+              className="group relative w-20 h-20 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 bg-slate-50 ring-1 ring-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2"
+              data-testid="button-edit-custom-addon-image"
+              aria-label="Edit add-on image"
             >
               {imageUrl ? (
-                <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+                <img
+                  src={imageUrl}
+                  alt=""
+                  className="w-full h-full object-cover transition-transform group-hover:scale-[1.03]"
+                />
               ) : (
-                <Upload className="w-6 h-6 text-slate-300" />
+                <Gift className="w-7 h-7 text-slate-300" />
               )}
+              <span className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 [@media(hover:none)]:bg-black/30 transition-colors" />
+              <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
+                <span className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
+                  <Pencil className="w-4 h-4" />
+                </span>
+              </span>
               {uploading && (
                 <span className="absolute inset-0 bg-white/70 flex items-center justify-center">
                   <Loader2 className="w-5 h-5 animate-spin text-slate-500" />
                 </span>
               )}
             </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => onPickFile(e.target.files?.[0])}
-              data-testid="input-custom-addon-image-file"
-            />
             <div className="flex-1 min-w-0 space-y-1">
               <label className="text-xs font-semibold text-slate-600">Name</label>
               <input
@@ -659,6 +662,141 @@ export function AddonDialog({
             page.
           </p>
         )}
+      </DialogContent>
+    </Dialog>
+    <AddonImageEditorDialog
+      open={imageEditorOpen}
+      onOpenChange={setImageEditorOpen}
+      imageUrl={imageUrl}
+      uploading={uploading}
+      onPickFile={onPickFile}
+      onRemove={() => setImageUrl(null)}
+    />
+    </>
+  );
+}
+
+/* ─── Image editor (staged into the form's imageUrl) ───────────────────
+ * Mirrors the shared pencil-on-thumbnail + drag-and-drop pattern used by
+ * person photos / vendor logos, but stays in-form: the upload stages into
+ * the parent's `imageUrl` state and is persisted with the add-on on submit
+ * (so it works before the add-on row exists), rather than PUT-ing to an
+ * entity endpoint the way PressLogoEditorDialog does. */
+function AddonImageEditorDialog({
+  open,
+  onOpenChange,
+  imageUrl,
+  uploading,
+  onPickFile,
+  onRemove,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  imageUrl: string | null;
+  uploading: boolean;
+  onPickFile: (file: File | undefined | null) => void;
+  onRemove: () => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !uploading && onOpenChange(v)}>
+      <DialogContent
+        className="max-w-md bg-white rounded-2xl border-slate-200 shadow-xl p-6 gap-5"
+        data-testid="dialog-edit-custom-addon-image"
+      >
+        <DialogHeader className="flex-row items-center justify-between space-y-0">
+          <DialogTitle className="text-slate-900 text-sm font-bold">Image</DialogTitle>
+          <DialogDescription className="sr-only">
+            Replace the image shown for this add-on.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div
+          className="relative rounded-full overflow-hidden aspect-square w-32 mx-auto bg-slate-50 ring-1 ring-slate-200"
+          data-testid="panel-custom-addon-image-current"
+        >
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              data-testid="img-custom-addon-image-current"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-slate-300">
+              <Gift className="w-12 h-12" strokeWidth={1.5} />
+            </div>
+          )}
+          {uploading && (
+            <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
+              <Loader2 className="w-6 h-6 animate-spin text-[color:var(--brand-blue)]" />
+              <span className="text-xs text-slate-700 font-semibold">Uploading…</span>
+            </div>
+          )}
+        </div>
+
+        {imageUrl && !uploading && (
+          <div className="flex justify-center -mt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onRemove}
+              className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-8 px-2 text-xs"
+              data-testid="button-remove-custom-addon-image"
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" />
+              Remove
+            </Button>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => !uploading && fileInputRef.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!uploading) setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            if (uploading) return;
+            onPickFile(e.dataTransfer.files?.[0]);
+          }}
+          disabled={uploading}
+          data-testid="dropzone-custom-addon-image"
+          className={[
+            "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors px-6 py-10 text-center",
+            dragging
+              ? "border-[color:var(--brand-blue)] bg-[var(--brand-blue)]/5"
+              : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
+            uploading && "opacity-60 cursor-not-allowed",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          <Upload
+            className={["w-7 h-7", dragging ? "text-[color:var(--brand-blue)]" : "text-slate-400"].join(" ")}
+          />
+          <div className="text-slate-700 text-sm font-semibold">
+            {dragging ? "Drop to upload" : "Drag an image here, or click to pick"}
+          </div>
+          <div className="text-slate-400 text-xs">JPG, PNG, or WebP</div>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            onPickFile(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+          data-testid="input-custom-addon-image-file"
+        />
       </DialogContent>
     </Dialog>
   );
