@@ -94,8 +94,9 @@ type ApiAlbumPhoto = {
  * The DesktopAlbumView primitive is shared with the admin album preview
  * so editors see the same surface fans see, pixel-for-pixel.
  */
-export function AlbumDetailDesktop() {
-  const { id } = useParams<{ id: string }>();
+export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
+  const params = useParams<{ id: string }>();
+  const id = albumId ?? params.id;
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const player = usePlayer();

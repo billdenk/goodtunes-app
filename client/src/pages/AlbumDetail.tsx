@@ -112,19 +112,23 @@ import { AlbumDetailDesktop } from "@/pages/AlbumDetailDesktop";
  * Both branches consume the same `/api/albums/:id` cache so there's no
  * double fetch on resize.
  */
-export function AlbumDetail() {
+export function AlbumDetail({ albumId }: { albumId?: string } = {}) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   // iOS native (including iPad — the app ships universal,
   // TARGETED_DEVICE_FAMILY="1,2") must always render the mobile shell.
   // The desktop surface is preview-first for non-owners and surfaces
   // Buy CTAs; both violate App Review 3.1.1 if shown in the iOS app.
   // The mobile shell already respects `buyEnabled` everywhere.
-  if (isDesktop && buyEnabled) return <AlbumDetailDesktop />;
-  return <AlbumDetailMobile />;
+  if (isDesktop && buyEnabled) return <AlbumDetailDesktop albumId={albumId} />;
+  return <AlbumDetailMobile albumId={albumId} />;
 }
 
-function AlbumDetailMobile() {
-  const { id } = useParams<{ id: string }>();
+// `albumId` lets a host-aware caller (the store launch storefront) render a
+// specific release without the id living in the URL; deep links via
+// /album/:id keep flowing through useParams.
+function AlbumDetailMobile({ albumId }: { albumId?: string }) {
+  const params = useParams<{ id: string }>();
+  const id = albumId ?? params.id;
   const _recordRecent = useRecordRecent();
   const [, navigate] = useLocation();
   const { playSong, currentSong, isPlaying, togglePlay, playNext, playLast, addToQueue, queue, currentIndex, previewMode, setPreviewMode, currentTime } = usePlayer();

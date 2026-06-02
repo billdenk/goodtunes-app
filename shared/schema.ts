@@ -34,6 +34,11 @@ export const TERMS_VERSION = "2026-05-31";
 export const TERMS_URL = "https://goodtunes.music/terms";
 export const PRIVACY_POLICY_URL = "https://goodtunes.music/privacy";
 
+// Task #936 — the album the store.goodtunes.music launch storefront drops fans
+// into (Nightbirde "Hope", June 8 launch). Prod-only row; dev DBs can point the
+// storefront at a local album via VITE_LAUNCH_ALBUM_ID for testing.
+export const STOREFRONT_LAUNCH_ALBUM_ID = "54d46505-2d23-4066-88f3-0337bb2e8b79";
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),

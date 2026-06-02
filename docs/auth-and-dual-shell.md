@@ -105,9 +105,16 @@ Endpoints (all customer-side, behind `requireAuth`):
 
 - `admin.goodtunes.music` → admin shell
 - `my.goodtunes.music` → customer shell
+- `store.goodtunes.music` → customer shell, landing on the launch storefront (Task #936)
 - `*.replit.app` works as dev with both shells reachable
 
-CNAMEs at the user's DNS provider point both subdomains at the deployment. Apple's domain-association file is served at `/.well-known/apple-developer-domain-association.txt` on both hosts. Two ways to provide it: (1) commit the verification file Apple gives you to `public/.well-known/apple-developer-domain-association.txt` (preferred — survives redeploy, no secret-manager fiddling), or (2) set `APPLE_DOMAIN_ASSOCIATION` in the env. The route prefers the file when present and falls back to the env var.
+### Store launch host (Task #936)
+
+`store.goodtunes.music` is a first-class fan-facing host that behaves **exactly** like `my.goodtunes.music` — it resolves to the `customer` auth kind (`kindFromRequest`/`detectAuthKind`), is exempt from the canonical-host 301 redirect, and shares every fan route. The only difference is the bare root: on the store host `/` redirects to `/store`, which renders the launch release through the existing preview-first album surface (`AlbumDetail`, reused with an `albumId` prop so the id stays out of the URL). The launch album is `STOREFRONT_LAUNCH_ALBUM_ID` in `shared/schema.ts` (Nightbirde "Hope", prod-only row); dev DBs can point it at a local album via `VITE_LAUNCH_ALBUM_ID`. `/store` is also reachable on any host for deep links + dev testing; deep links to `/album/:id` are unchanged. The whole purchase path (sign-in gate → `?buy=1` bounce-back → embedded Stripe checkout → `/welcome`) flows through the same components, so it works identically from either host.
+
+**OAuth must round-trip to the originating host.** The session cookie is host-only (`sameSite=none`, no `domain`), so OAuth state stored on the session would be dropped on a cross-subdomain callback. `callbackOrigin` therefore returns the *exact* customer-family host the fan started on (`store` vs. `my`) when building the provider `redirect_uri`, instead of always collapsing to the canonical customer host. **This means `https://store.goodtunes.music/api/auth/google/callback` and `…/apple/callback` must be registered as allowed redirect URIs with Google and Apple alongside the existing `my.goodtunes.music` ones** — without that IdP-console registration, Google/Apple sign-in from the store host will fail at the provider. Email-code sign-in and the `?buy=1` bounce-back stay same-origin and need no IdP change.
+
+CNAMEs at the user's DNS provider point all three subdomains at the deployment. Apple's domain-association file is served at `/.well-known/apple-developer-domain-association.txt` on both hosts. Two ways to provide it: (1) commit the verification file Apple gives you to `public/.well-known/apple-developer-domain-association.txt` (preferred — survives redeploy, no secret-manager fiddling), or (2) set `APPLE_DOMAIN_ASSOCIATION` in the env. The route prefers the file when present and falls back to the env var.
 
 ### Self-heal on boot failure (Task #921)
 

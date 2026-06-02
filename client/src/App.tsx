@@ -11,7 +11,8 @@ import { TopChromeFrostProvider } from "@/hooks/useTopChromeFrost";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 import { markBootSucceeded } from "@/lib/bootHeal";
 import { useAuth } from "@/hooks/useAuth";
-import { useAuthKind } from "@/hooks/useAuthKind";
+import { useAuthKind, isStoreHost } from "@/hooks/useAuthKind";
+import { STOREFRONT_LAUNCH_ALBUM_ID } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { AccessNotAuthorizedDialog } from "@/components/AccessNotAuthorizedDialog";
@@ -150,6 +151,17 @@ function PlayerOverlay() {
       {showPlayer && <Player key="now-playing" />}
     </AnimatePresence>
   );
+}
+
+// Task #936 — the store.goodtunes.music launch storefront. Reuses the existing
+// preview-first album surface (hero art, Preview & Purchase CTA, embedded
+// Stripe Buy flow) by rendering the launch release directly — no id in the URL.
+// Dev DBs can override the prod launch row via VITE_LAUNCH_ALBUM_ID.
+function Storefront() {
+  const launchAlbumId =
+    (import.meta.env.VITE_LAUNCH_ALBUM_ID as string | undefined) ||
+    STOREFRONT_LAUNCH_ALBUM_ID;
+  return <AlbumDetail albumId={launchAlbumId} />;
 }
 
 function Router() {
@@ -394,7 +406,13 @@ function Router() {
         <Route path="/collection">
           <ProtectedRoute component={Collection} />
         </Route>
-        <Route path="/album/:id" component={AlbumDetail} />
+        <Route path="/album/:id">
+          <AlbumDetail />
+        </Route>
+        {/* Task #936 — the launch storefront. Reachable directly at /store on
+            any host (dev testing + deep links) and served at the bare root on
+            store.goodtunes.music (see the "/" route below). */}
+        <Route path="/store" component={Storefront} />
         <Route path="/instrument/:id">
           <ProtectedRoute component={InstrumentDetail} />
         </Route>
@@ -582,7 +600,13 @@ function Router() {
           <Redirect to="/admin/dashboard" />
         </Route>
         <Route path="/">
-          {user ? <Redirect to="/admin" /> : <Redirect to="/login" />}
+          {isStoreHost() ? (
+            <Redirect to="/store" />
+          ) : user ? (
+            <Redirect to="/admin" />
+          ) : (
+            <Redirect to="/login" />
+          )}
         </Route>
         <Route>
           {user ? <Redirect to="/admin" /> : <Redirect to="/login" />}
