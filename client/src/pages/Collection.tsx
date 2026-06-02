@@ -273,6 +273,11 @@ export function Collection() {
   // per frame.
   const titleRef = useRef<HTMLHeadingElement>(null);
   const avatarRef = useRef<HTMLButtonElement>(null);
+  // Task #925 — the compact "Collection" title that crossfades into the
+  // docked scope bar once the large header title has scrolled away, mirroring
+  // Apple Music's library nav-title behavior. Driven off the same `stuck`
+  // signal as the bar's glass chrome so it appears exactly when the bar docks.
+  const dockTitleRef = useRef<HTMLDivElement>(null);
   // Task #792 — the pinned filter/tabs scope bar + its glass layer. We
   // measure the sticky bar's offset to decide when it has stuck to the
   // top (content scrolling behind it) and only then fade in the scrim,
@@ -323,6 +328,15 @@ export function Collection() {
         g.background = stuck ? "rgba(0,6,43,0.72)" : "rgba(0,6,43,0)";
         g.borderBottomColor = stuck ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0)";
         g.boxShadow = stuck ? "0 1px 16px rgba(0,0,0,0.28)" : "0 1px 16px rgba(0,0,0,0)";
+        // Task #925 — crossfade the compact title in/out in lock-step with the
+        // glass chrome. It collapses its own height (max-height → 0) when not
+        // stuck so it adds zero vertical space to the bar at rest.
+        if (dockTitleRef.current) {
+          const t = dockTitleRef.current.style;
+          t.opacity = stuck ? "1" : "0";
+          t.maxHeight = stuck ? "28px" : "0px";
+          t.transform = stuck ? "translateY(0)" : "translateY(6px)";
+        }
       }
       ticking = false;
     };
@@ -559,7 +573,30 @@ export function Collection() {
                 transition: "background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease",
               }}
             />
-            <div className="relative px-5 py-3 flex items-center gap-2">
+            <div className="relative">
+            {/* Task #925 — compact title that crossfades into the docked bar
+                as the large header title scrolls away (Apple-Music library
+                nav-title). Collapses to zero height at rest so it never adds
+                space above the controls until the bar is stuck. */}
+            <div
+              ref={dockTitleRef}
+              aria-hidden
+              className="px-5 overflow-hidden text-center will-change-[max-height,opacity,transform]"
+              style={{
+                maxHeight: 0,
+                opacity: 0,
+                transform: "translateY(6px)",
+                transition: "max-height 0.25s ease, opacity 0.2s ease, transform 0.25s ease",
+              }}
+            >
+              <span
+                className="block pt-2.5 text-white text-base font-semibold leading-none tracking-tight"
+                data-testid="text-docked-title"
+              >
+                Collection
+              </span>
+            </div>
+            <div className="px-5 py-3 flex items-center gap-2">
               {/* Task #530 — Filter sits to the LEFT of the segmented
                   control, matching Apple Music's "filter then category"
                   reading order on the library screen. */}
@@ -656,6 +693,7 @@ export function Collection() {
                 </button>
               ))}
               </div>
+            </div>
             </div>
           </div>
 
