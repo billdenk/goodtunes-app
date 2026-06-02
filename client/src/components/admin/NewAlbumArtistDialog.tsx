@@ -679,73 +679,16 @@ export function NewAlbumArtistDialog({
         {/* ------------ INTRO ------------ */}
         {stage === "intro" && (
           <div className="flex-1 flex flex-col p-5 overflow-hidden">
-            {/* Apple-Music-style segmented tabs (admin slate-100 chrome).
-                Search is the default; Paste holds the URL prefill; Credits
-                (person mode only) holds the creative-credits picker and
-                shows a count badge so selections are visible without
-                switching to it. Active tab resets to Search on reopen. */}
-            <div
-              className="inline-flex items-center self-start rounded-md bg-slate-100 p-0.5 mb-4"
-              role="tablist"
-              aria-label="Add person input method"
-              data-testid="tabs-add-person"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={introTab === "search"}
-                onClick={() => setIntroTab("search")}
-                className={[
-                  "h-8 px-3 rounded text-xs font-semibold transition-colors inline-flex items-center gap-1.5",
-                  introTab === "search"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-800",
-                ].join(" ")}
-                data-testid="tab-add-person-search"
-              >
-                Search
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={introTab === "paste"}
-                onClick={() => setIntroTab("paste")}
-                className={[
-                  "h-8 px-3 rounded text-xs font-semibold transition-colors inline-flex items-center gap-1.5",
-                  introTab === "paste"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-800",
-                ].join(" ")}
-                data-testid="tab-add-person-paste"
-              >
-                Paste
-              </button>
-              {mode === "person" && (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={introTab === "credits"}
-                  onClick={() => setIntroTab("credits")}
-                  className={[
-                    "h-8 px-3 rounded text-xs font-semibold transition-colors inline-flex items-center gap-1.5",
-                    introTab === "credits"
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-500 hover:text-slate-800",
-                  ].join(" ")}
-                  data-testid="tab-add-person-credits"
-                >
-                  Credits
-                  {creativeRoles.length > 0 && (
-                    <span
-                      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--brand-blue)] text-white text-xs font-bold leading-none"
-                      data-testid="badge-credits-count"
-                    >
-                      {creativeRoles.length}
-                    </span>
-                  )}
-                </button>
-              )}
-            </div>
+            {/* Add-a-person is Search-only (Task #976). The Paste + Credits
+                tabs are intentionally hidden: Paste mostly duplicates the
+                streaming-confirm flow and Credits read as track credits with
+                no Add action. The segmented tab row is dropped so Search
+                doesn't look like a one-item toggle. `introTab` stays pinned to
+                its "search" default (set on open) and the Paste/Credits panels
+                below remain in the tree but never render, so re-enabling the
+                tabs later is a small change, not a rebuild. The Artist +
+                Producer default roles still ride along on save via
+                `creativeRoles`, independent of the now-hidden Credits UI. */}
 
             <div className="flex-1 overflow-y-auto">
               {/* ---- SEARCH TAB ---- */}
