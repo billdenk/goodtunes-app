@@ -697,6 +697,14 @@ type CertShapeSpec = {
 const BLEED_SCRIM =
   "linear-gradient(180deg, rgba(0,6,43,0.18) 0%, rgba(0,6,43,0.40) 40%, rgba(0,6,43,0.86) 72%, rgba(0,6,43,1) 100%)";
 
+// Story + Portrait anchor the WHOLE square cover to the inside-top of the orange
+// frame at its natural square height (full width between the orange edges, no
+// object-cover zoom/crop), then dissolve the cover's OWN bottom edge into
+// transparent over a long ramp so it melts into the navy below instead of
+// stopping on a hard pixel line. Matches the approved canvas bleed mockup.
+const COVER_BOTTOM_MASK =
+  "linear-gradient(180deg, #000 0%, #000 55%, rgba(0,0,0,0) 100%)";
+
 const CERT_SHAPE_SPECS: Record<CardShape, CertShapeSpec> = {
   square: {
     radiusU: 0,
@@ -768,16 +776,35 @@ const CertCard = forwardRef(function CertCard(
         boxShadow: "0 30px 80px rgba(0,0,0,0.7)",
       }}
     >
-      {/* Approved "D" treatment: the sharp album cover fills the WHOLE card behind
-          a translucent darker-navy scrim that ramps to solid navy at the bottom,
-          so the cover reads top-to-bottom while the text block stays legible. */}
-      <img
-        src={album.artwork}
-        alt={album.title}
-        className="absolute inset-0 w-full h-full object-cover object-top block"
-        style={{ zIndex: 0 }}
-        data-testid="img-cert-art"
-      />
+      {/* Album cover layer. SQUARE keeps the approved full-bleed "D" treatment —
+          the sharp cover fills the WHOLE card behind a navy scrim. STORY +
+          PORTRAIT instead anchor the WHOLE square cover to the inside-top of the
+          orange frame at its natural square height (full width between the orange
+          edges, no object-cover zoom/crop), with the cover's own bottom edge
+          dissolving into transparent so it melts into the navy below. Both ride
+          under the same BLEED_SCRIM that ramps to solid navy at the bottom. */}
+      {shape === "square" ? (
+        <img
+          src={album.artwork}
+          alt={album.title}
+          className="absolute inset-0 w-full h-full object-cover object-top block"
+          style={{ zIndex: 0 }}
+          data-testid="img-cert-art"
+        />
+      ) : (
+        <img
+          src={album.artwork}
+          alt={album.title}
+          className="absolute top-0 left-0 w-full block"
+          style={{
+            zIndex: 0,
+            height: "auto",
+            WebkitMaskImage: COVER_BOTTOM_MASK,
+            maskImage: COVER_BOTTOM_MASK,
+          }}
+          data-testid="img-cert-art"
+        />
+      )}
       <div className="absolute inset-0" style={{ zIndex: 0, background: BLEED_SCRIM }} />
 
       {/* Transparent top spacer — holds the avatar/text vertical rhythm (the avatar
