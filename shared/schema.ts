@@ -3584,7 +3584,7 @@ export const insertAdminInviteSchema = createInsertSchema(adminInvites).omit({
   // artist's row + a parent-chain back to the NPO via the ambassador's
   // own referredByOrgId, so the NPO's roll-up still sees every artist
   // their ambassadors brought in.
-  referrerKind: z.enum(["artist", "non_profit", "manufacturer", "ambassador"]).optional().nullable(),
+  referrerKind: z.enum(["artist", "label", "non_profit", "manufacturer", "ambassador"]).optional().nullable(),
   referrerScopeId: z.string().optional().nullable(),
   welcomeNote: z.string().max(1000).optional().nullable(),
   inviteRole: z.enum(["identity", "manager", "team", "npo_ambassador", "npo_staff", "press_staff"]).optional().nullable(),

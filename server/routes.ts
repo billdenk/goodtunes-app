@@ -18649,7 +18649,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // inviteRole set = not a teammate invite), we let role=artist +
     // a fresh roleScopeId through unchanged and stamp the referrer to
     // the caller's artist Person below.
+    // Task #952 — the same artist path now also lets an artist invite a
+    // brand-new LABEL; and a new label-inviter path lets a label with
+    // invite_subusers invite a fresh artist OR label. Both pin the
+    // referrer to the caller's own scope below.
     let artistInviterScopeId: string | null = null;
+    let labelInviterScopeId: string | null = null;
     if (callerRole.role !== "super_admin") {
       if (!PARTNER_SCOPE_KINDS.includes(callerRole.role as any) || !callerRole.roleScopeId) {
         return res.status(403).json({ message: "Only super-admins and scoped partners can invite" });
@@ -18665,16 +18670,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // unchanged and stamp the referrer to this press; in every
       // other case we keep the original force-to-own-scope rule.
       const isTeammateInvite = !!req.body?.inviteRole;
-      if (callerRole.role === "manufacturer" && (role === "artist" || role === "label")) {
+      const invitingArtistOrLabel = role === "artist" || role === "label";
+      if (callerRole.role === "manufacturer" && invitingArtistOrLabel) {
         pressInviterScopeId = callerRole.roleScopeId;
         // keep client-provided role + roleScopeId
-      } else if (callerRole.role === "artist" && role === "artist" && !isTeammateInvite) {
-        // Task #546 — fresh artist→artist invite. Caller is forwarding
-        // from the artist-portal wrapper which has already minted a
-        // placeholder Person for the invitee and set roleScopeId to
-        // that person id. Pin the referrer to the caller's artist
-        // Person below; everything else falls through unchanged.
+      } else if (callerRole.role === "artist" && invitingArtistOrLabel && !isTeammateInvite) {
+        // Task #546 / #952 — fresh artist→artist OR artist→label invite.
+        // Caller is forwarding from an artist-portal wrapper which has
+        // already minted a placeholder Person/Label for the invitee and
+        // set roleScopeId to that id. Pin the referrer to the caller's
+        // artist Person below; everything else falls through unchanged.
         artistInviterScopeId = callerRole.roleScopeId;
+      } else if (callerRole.role === "label" && invitingArtistOrLabel && !isTeammateInvite) {
+        // Task #952 — fresh label→artist OR label→label invite. Caller
+        // forwards from the label-portal wrapper which has minted the
+        // placeholder Person/Label. Pin the referrer to the caller's
+        // own label below.
+        labelInviterScopeId = callerRole.roleScopeId;
       } else {
         role = callerRole.role;
         roleScopeId = callerRole.roleScopeId;
@@ -18750,7 +18762,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const referrerKindRaw = req.body?.referrerKind ? String(req.body.referrerKind) : null;
     let referrerScopeId = req.body?.referrerScopeId ? String(req.body.referrerScopeId) : null;
     const welcomeNote = req.body?.welcomeNote ? String(req.body.welcomeNote).slice(0, 1000) : null;
-    let referrerKind: "artist" | "non_profit" | "manufacturer" | "ambassador" | null = null;
+    let referrerKind: "artist" | "label" | "non_profit" | "manufacturer" | "ambassador" | null = null;
     if (referrerKindRaw === "artist" || referrerKindRaw === "non_profit" || referrerKindRaw === "manufacturer" || referrerKindRaw === "ambassador") {
       if (!referrerScopeId) return res.status(400).json({ message: "Pick a referrer or clear the field" });
       let ok = false;
@@ -18841,17 +18853,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       referrerKind = "manufacturer";
       referrerScopeId = pressInviterScopeId;
     }
-    // Task #546 — artist→artist invite: pin referrer to the caller's
-    // own artist Person + enforce the outstanding-invite cap so a
-    // single artist can't blast out unbounded invites.
-    if (artistInviterScopeId) {
-      referrerKind = "artist";
-      referrerScopeId = artistInviterScopeId;
+    // Task #546 / #952 — partner self-serve invite: pin the referrer to
+    // the caller's own scope (artist Person or Label) + enforce the
+    // outstanding-invite cap so a single partner can't blast out
+    // unbounded invites. The cap is counted per referrer scope, so an
+    // artist and a label each get their own independent allowance.
+    const selfServeInviterKind: "artist" | "label" | null =
+      artistInviterScopeId ? "artist" : labelInviterScopeId ? "label" : null;
+    const selfServeInviterScopeId = artistInviterScopeId ?? labelInviterScopeId;
+    if (selfServeInviterKind && selfServeInviterScopeId) {
+      referrerKind = selfServeInviterKind;
+      referrerScopeId = selfServeInviterScopeId;
       const { ARTIST_INVITE_OUTSTANDING_LIMIT } = await import("@shared/schema");
       const outstanding = await db.execute<{ ct: number }>(sql`
         SELECT COUNT(*)::int AS ct FROM admin_invites
-        WHERE referrer_kind = 'artist'
-          AND referrer_scope_id = ${artistInviterScopeId}
+        WHERE referrer_kind = ${selfServeInviterKind}
+          AND referrer_scope_id = ${selfServeInviterScopeId}
           AND used_at IS NULL
           AND revoked_at IS NULL
           AND expires_at > NOW()
@@ -19138,22 +19155,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(403).json({ message: "Only artist partners can use this endpoint" });
     }
     const { ARTIST_INVITE_OUTSTANDING_LIMIT } = await import("@shared/schema");
+    // Task #952 — an artist can now invite a fresh LABEL as well as an
+    // artist, so join both scope tables and COALESCE the display name +
+    // thumbnail. `role` tells the UI which kind each row is.
     const rows = await db.execute<any>(sql`
-      SELECT ai.id, ai.email, ai.role, ai.role_scope_id AS "roleScopeId",
+      SELECT ai.id, ai.email, ai.role, ai.role_scope_id AS "roleScopeId", ai.token,
              ai.welcome_note AS "welcomeNote", ai.expires_at AS "expiresAt",
              ai.created_at AS "createdAt", ai.used_at AS "usedAt",
              ai.revoked_at AS "revokedAt", ai.resent_at AS "resentAt",
              ai.invite_role AS "inviteRole", ai.review_status AS "reviewStatus",
-             p.name AS "scopeName", p.photo_url AS "scopeThumbUrl"
+             COALESCE(p.name, l.name) AS "scopeName",
+             COALESCE(p.photo_url, l.logo_url) AS "scopeThumbUrl"
         FROM admin_invites ai
         LEFT JOIN people p ON p.id = ai.role_scope_id AND ai.role = 'artist'
+        LEFT JOIN labels l ON l.id = ai.role_scope_id AND ai.role = 'label'
        WHERE ai.referrer_kind = 'artist'
          AND ai.referrer_scope_id = ${role.roleScopeId}
          AND ai.invite_role IS NULL
        ORDER BY ai.created_at DESC
        LIMIT 100
     `);
-    const list = ((rows as any).rows ?? []) as any[];
+    const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const host = req.headers["x-forwarded-host"] || req.headers.host;
+    const list = (((rows as any).rows ?? []) as any[]).map((r) => {
+      const { token, ...rest } = r;
+      // Only expose the magic link for live, un-held invites — never for
+      // revoked / used / held-for-review rows (the token is the bearer).
+      const live = !r.usedAt && !r.revokedAt && r.reviewStatus === "not_required";
+      return { ...rest, acceptUrl: live && token ? `${proto}://${host}/invite/${token}` : null };
+    });
     const outstanding = list.filter((r) => !r.usedAt && !r.revokedAt && new Date(r.expiresAt) > new Date()).length;
     res.json({
       invites: list,
@@ -19211,6 +19241,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return (app as any)._router.handle({ ...req, url: "/api/admin/invites", method: "POST" }, res, () => {});
   });
 
+  // Task #952 — Send an artist→label invite. Mints a placeholder Label
+  // for the invitee (the central handler only auto-mints Persons), then
+  // forwards into /api/admin/invites where the artist carveout pins the
+  // referrer to this artist. Labels carry no per-unit referral column,
+  // so the chain is recorded on the invite row for provenance only.
+  app.post("/api/artist/invites/label", requireAdmin, async (req, res) => {
+    const role = await getUserRole(req.session.userId!);
+    if (!role || role.role !== "artist" || !role.roleScopeId) {
+      return res.status(403).json({ message: "Only artist partners can use this endpoint" });
+    }
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const name = String(req.body?.name || "").trim();
+    const welcomeNote = req.body?.welcomeNote ? String(req.body.welcomeNote).slice(0, 1000) : null;
+    if (!name) return res.status(400).json({ message: "Enter the label's name" });
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(email)) return res.status(400).json({ message: "Enter a valid email address" });
+
+    const dup = await db.execute<{ id: string }>(sql`
+      SELECT id FROM admin_invites
+       WHERE LOWER(email) = ${email}
+         AND referrer_kind = 'artist' AND referrer_scope_id = ${role.roleScopeId}
+         AND invite_role IS NULL
+         AND used_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()
+       LIMIT 1
+    `);
+    if (((dup as any).rows ?? []).length > 0) {
+      return res.status(409).json({ message: "You already have an outstanding invite to that email — resend it instead." });
+    }
+
+    const label = await storage.createLabel({ name } as any);
+
+    (req as any).body = {
+      email,
+      role: "label",
+      roleScopeId: label.id,
+      welcomeNote,
+    };
+    return (app as any)._router.handle({ ...req, url: "/api/admin/invites", method: "POST" }, res, () => {});
+  });
+
   // Resend an artist→artist invite the caller sent. Wrapper around the
   // super-admin resend endpoint, gated to invites with this artist as
   // the referrer.
@@ -19253,24 +19323,195 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(403).json({ message: "Not your invite" });
     }
     await storage.revokeAdminInvite(String(req.params.id));
-    // Best-effort placeholder cleanup — only if the Person row has no
+    // Best-effort placeholder cleanup — only if the scope row has no
     // releases, no other admin login, and no other invites pointing at
-    // it. Failures are non-fatal.
+    // it. Failures are non-fatal. An artist can now invite a fresh label
+    // (Task #952), so clean up the placeholder Label in that case too.
     if (existing.roleScopeId && !existing.usedAt) {
       try {
-        const guard = await db.execute<{ ct: number }>(sql`
-          SELECT (
-            (SELECT COUNT(*) FROM albums WHERE primary_artist_id = ${existing.roleScopeId}) +
-            (SELECT COUNT(*) FROM users WHERE role = 'artist' AND role_scope_id = ${existing.roleScopeId}) +
-            (SELECT COUNT(*) FROM admin_invites WHERE role_scope_id = ${existing.roleScopeId} AND id <> ${existing.id})
-          )::int AS ct
-        `);
-        const ct = ((guard as any).rows ?? [])[0]?.ct ?? 0;
-        if (ct === 0) {
-          await db.execute(sql`DELETE FROM people WHERE id = ${existing.roleScopeId}`);
+        if (existing.role === "label") {
+          const guard = await db.execute<{ ct: number }>(sql`
+            SELECT (
+              (SELECT COUNT(*) FROM albums WHERE label_id = ${existing.roleScopeId}) +
+              (SELECT COUNT(*) FROM users WHERE role = 'label' AND role_scope_id = ${existing.roleScopeId}) +
+              (SELECT COUNT(*) FROM admin_invites WHERE role_scope_id = ${existing.roleScopeId} AND id <> ${existing.id})
+            )::int AS ct
+          `);
+          if ((((guard as any).rows ?? [])[0]?.ct ?? 0) === 0) {
+            await db.execute(sql`DELETE FROM labels WHERE id = ${existing.roleScopeId}`);
+          }
+        } else {
+          const guard = await db.execute<{ ct: number }>(sql`
+            SELECT (
+              (SELECT COUNT(*) FROM albums WHERE primary_artist_id = ${existing.roleScopeId}) +
+              (SELECT COUNT(*) FROM users WHERE role = 'artist' AND role_scope_id = ${existing.roleScopeId}) +
+              (SELECT COUNT(*) FROM admin_invites WHERE role_scope_id = ${existing.roleScopeId} AND id <> ${existing.id})
+            )::int AS ct
+          `);
+          if ((((guard as any).rows ?? [])[0]?.ct ?? 0) === 0) {
+            await db.execute(sql`DELETE FROM people WHERE id = ${existing.roleScopeId}`);
+          }
         }
       } catch (e: any) {
         console.warn(`[invite] placeholder cleanup failed: ${e?.message}`);
+      }
+    }
+    res.json({ ok: true });
+  });
+
+  // ─── Task #952 — Label-portal self-serve invites ──────────────────
+  //
+  // A label partner with invite_subusers can invite a fresh ARTIST or
+  // LABEL onto GoodTunes from /label. Mirrors the artist→artist path:
+  // placeholder Person/Label minted here, then forwarded into the
+  // central /api/admin/invites POST where the label carveout pins
+  // referrer_kind='label' + referrer_scope_id=<this label>. Capped at
+  // ARTIST_INVITE_OUTSTANDING_LIMIT outstanding per label. Artists carry
+  // the existing per-unit referral chain; labels carry none, so the
+  // chain is stamped on the invite row for provenance.
+  const labelInviteGuard = async (req: any) => {
+    const role = await getUserRole(req.session.userId!);
+    if (!role || role.role !== "label" || !role.roleScopeId) return null;
+    return role;
+  };
+
+  // List the invites this label has sent (pending + accepted), newest
+  // first, with the X/cap counter.
+  app.get("/api/label/invites", requireAdmin, async (req, res) => {
+    const role = await labelInviteGuard(req);
+    if (!role) return res.status(403).json({ message: "Only label partners can use this endpoint" });
+    const { ARTIST_INVITE_OUTSTANDING_LIMIT } = await import("@shared/schema");
+    const rows = await db.execute<any>(sql`
+      SELECT ai.id, ai.email, ai.role, ai.role_scope_id AS "roleScopeId", ai.token,
+             ai.welcome_note AS "welcomeNote", ai.expires_at AS "expiresAt",
+             ai.created_at AS "createdAt", ai.used_at AS "usedAt",
+             ai.revoked_at AS "revokedAt", ai.resent_at AS "resentAt",
+             ai.invite_role AS "inviteRole", ai.review_status AS "reviewStatus",
+             COALESCE(p.name, l.name) AS "scopeName",
+             COALESCE(p.photo_url, l.logo_url) AS "scopeThumbUrl"
+        FROM admin_invites ai
+        LEFT JOIN people p ON p.id = ai.role_scope_id AND ai.role = 'artist'
+        LEFT JOIN labels l ON l.id = ai.role_scope_id AND ai.role = 'label'
+       WHERE ai.referrer_kind = 'label'
+         AND ai.referrer_scope_id = ${role.roleScopeId}
+         AND ai.invite_role IS NULL
+       ORDER BY ai.created_at DESC
+       LIMIT 100
+    `);
+    const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const host = req.headers["x-forwarded-host"] || req.headers.host;
+    const list = (((rows as any).rows ?? []) as any[]).map((r) => {
+      const { token, ...rest } = r;
+      const live = !r.usedAt && !r.revokedAt && r.reviewStatus === "not_required";
+      return { ...rest, acceptUrl: live && token ? `${proto}://${host}/invite/${token}` : null };
+    });
+    const outstanding = list.filter((r) => !r.usedAt && !r.revokedAt && new Date(r.expiresAt) > new Date()).length;
+    res.json({ invites: list, outstanding, cap: ARTIST_INVITE_OUTSTANDING_LIMIT });
+  });
+
+  // Send a label→artist OR label→label invite. Mints the placeholder
+  // scope (Person/Label) then forwards into /api/admin/invites.
+  app.post("/api/label/invites", requireAdmin, async (req, res) => {
+    const role = await labelInviteGuard(req);
+    if (!role) return res.status(403).json({ message: "Only label partners can use this endpoint" });
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const name = String(req.body?.name || "").trim();
+    const inviteeRole = String(req.body?.role || "").trim();
+    const welcomeNote = req.body?.welcomeNote ? String(req.body.welcomeNote).slice(0, 1000) : null;
+    if (inviteeRole !== "artist" && inviteeRole !== "label") {
+      return res.status(400).json({ message: "Pick artist or label" });
+    }
+    if (!name) return res.status(400).json({ message: `Enter the ${inviteeRole}'s name` });
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(email)) return res.status(400).json({ message: "Enter a valid email address" });
+
+    const dup = await db.execute<{ id: string }>(sql`
+      SELECT id FROM admin_invites
+       WHERE LOWER(email) = ${email}
+         AND referrer_kind = 'label' AND referrer_scope_id = ${role.roleScopeId}
+         AND invite_role IS NULL
+         AND used_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()
+       LIMIT 1
+    `);
+    if (((dup as any).rows ?? []).length > 0) {
+      return res.status(409).json({ message: "You already have an outstanding invite to that email — resend it instead." });
+    }
+
+    let roleScopeId: string;
+    if (inviteeRole === "artist") {
+      const person = await storage.createPerson({ name, isGroup: false } as any);
+      roleScopeId = person.id;
+    } else {
+      const label = await storage.createLabel({ name } as any);
+      roleScopeId = label.id;
+    }
+
+    (req as any).body = { email, role: inviteeRole, roleScopeId, welcomeNote };
+    return (app as any)._router.handle({ ...req, url: "/api/admin/invites", method: "POST" }, res, () => {});
+  });
+
+  // Resend a label invite the caller sent — gated to this label's chain.
+  app.post("/api/label/invites/:id/resend", requireAdmin, async (req, res) => {
+    const role = await labelInviteGuard(req);
+    if (!role) return res.status(403).json({ message: "Only label partners can use this endpoint" });
+    const existing = await storage.getAdminInviteById(String(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Invite not found" });
+    if ((existing as any).referrerKind !== "label" || (existing as any).referrerScopeId !== role.roleScopeId) {
+      return res.status(403).json({ message: "Not your invite" });
+    }
+    if (existing.usedAt) return res.status(410).json({ message: "Invite already accepted" });
+    if ((existing as any).revokedAt) return res.status(410).json({ message: "Invite was revoked — send a new one" });
+    const newToken = generateToken();
+    const newExpiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+    const updated = await storage.resendAdminInvite(existing.id, newToken, newExpiresAt);
+    if (!updated) return res.status(500).json({ message: "Resend failed" });
+    const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+    const host = req.headers["x-forwarded-host"] || req.headers.host;
+    const acceptUrl = `${proto}://${host}/invite/${newToken}`;
+    const inviter = await storage.getUser(req.session.userId!);
+    const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes label";
+    const result = await sendAdminInviteEmail(updated.email, acceptUrl, inviterName, ROLE_LABELS[updated.role] || updated.role, INVITE_TTL_DAYS);
+    res.json({ id: updated.id, acceptUrl, emailDelivered: result.ok });
+  });
+
+  // Revoke a label invite the caller sent. Soft-revoke + best-effort
+  // placeholder cleanup of the un-accepted Person/Label.
+  app.delete("/api/label/invites/:id", requireAdmin, async (req, res) => {
+    const role = await labelInviteGuard(req);
+    if (!role) return res.status(403).json({ message: "Only label partners can use this endpoint" });
+    const existing = await storage.getAdminInviteById(String(req.params.id));
+    if (!existing) return res.status(404).json({ message: "Invite not found" });
+    if ((existing as any).referrerKind !== "label" || (existing as any).referrerScopeId !== role.roleScopeId) {
+      return res.status(403).json({ message: "Not your invite" });
+    }
+    await storage.revokeAdminInvite(String(req.params.id));
+    if (existing.roleScopeId && !existing.usedAt) {
+      try {
+        if (existing.role === "artist") {
+          const guard = await db.execute<{ ct: number }>(sql`
+            SELECT (
+              (SELECT COUNT(*) FROM albums WHERE primary_artist_id = ${existing.roleScopeId}) +
+              (SELECT COUNT(*) FROM users WHERE role = 'artist' AND role_scope_id = ${existing.roleScopeId}) +
+              (SELECT COUNT(*) FROM admin_invites WHERE role_scope_id = ${existing.roleScopeId} AND id <> ${existing.id})
+            )::int AS ct
+          `);
+          if ((((guard as any).rows ?? [])[0]?.ct ?? 0) === 0) {
+            await db.execute(sql`DELETE FROM people WHERE id = ${existing.roleScopeId}`);
+          }
+        } else if (existing.role === "label") {
+          const guard = await db.execute<{ ct: number }>(sql`
+            SELECT (
+              (SELECT COUNT(*) FROM albums WHERE label_id = ${existing.roleScopeId}) +
+              (SELECT COUNT(*) FROM users WHERE role = 'label' AND role_scope_id = ${existing.roleScopeId}) +
+              (SELECT COUNT(*) FROM admin_invites WHERE role_scope_id = ${existing.roleScopeId} AND id <> ${existing.id})
+            )::int AS ct
+          `);
+          if ((((guard as any).rows ?? [])[0]?.ct ?? 0) === 0) {
+            await db.execute(sql`DELETE FROM labels WHERE id = ${existing.roleScopeId}`);
+          }
+        }
+      } catch (e: any) {
+        console.warn(`[invite] label placeholder cleanup failed: ${e?.message}`);
       }
     }
     res.json({ ok: true });

@@ -12,7 +12,9 @@
 
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
   Tooltip, CartesianGrid, ResponsiveContainer, Legend, Line,
@@ -319,7 +321,267 @@ function OverviewTab({ qs, labelId, labelName }: { qs: string; labelId: string |
       {labelId && (
         <LabelContactsPanel labelId={labelId} labelName={labelName} />
       )}
+
+      {/* Task #952 — Self-serve "Invite an artist or label" panel. A
+          label partner holding invite_subusers can onboard a fresh
+          artist OR a fresh label, mirroring the artist dashboard. The
+          server pins referrer_kind='label' so the chain is recorded for
+          provenance (labels carry no per-unit referral column). */}
+      <LabelInvitePanel />
     </>
+  );
+}
+
+type LabelInviteRow = {
+  id: string;
+  email: string;
+  role: string;
+  scopeName: string | null;
+  scopeThumbUrl: string | null;
+  expiresAt: string;
+  createdAt: string;
+  usedAt: string | null;
+  revokedAt: string | null;
+  resentAt: string | null;
+  acceptUrl: string | null;
+};
+
+function LabelInvitePanel() {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [welcomeNote, setWelcomeNote] = useState("");
+  const [inviteeRole, setInviteeRole] = useState<"artist" | "label">("artist");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const list = useQuery<{ invites: LabelInviteRow[]; outstanding: number; cap: number }>({
+    queryKey: ["/api/label/invites"],
+  });
+
+  const send = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", "/api/label/invites", {
+        email: email.trim(),
+        name: name.trim(),
+        role: inviteeRole,
+        welcomeNote: welcomeNote.trim() || undefined,
+      });
+      return r.json();
+    },
+    onSuccess: (data: any) => {
+      const kind = inviteeRole;
+      setEmail(""); setName(""); setWelcomeNote(""); setInviteeRole("artist"); setOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/label/invites"] });
+      toast({
+        title: data?.reviewStatus === "pending_review" ? "Held for review" : data?.emailDelivered ? "Invite sent" : "Invite created",
+        description: data?.reviewStatus === "pending_review"
+          ? "GoodTunes will review and notify you when approved."
+          : `Emailed ${data?.email ?? `the ${kind}`}.`,
+      });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't invite", description: e.message, variant: "destructive" }),
+  });
+
+  const resend = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await apiRequest("POST", `/api/label/invites/${id}/resend`);
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/label/invites"] });
+      toast({ title: "Invite re-sent" });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't resend", description: e.message, variant: "destructive" }),
+  });
+
+  const revoke = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/label/invites/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/label/invites"] });
+      toast({ title: "Invite revoked" });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't revoke", description: e.message, variant: "destructive" }),
+  });
+
+  const copyLink = async (iv: LabelInviteRow) => {
+    if (!iv.acceptUrl) return;
+    try {
+      await navigator.clipboard.writeText(iv.acceptUrl);
+      setCopiedId(iv.id);
+      setTimeout(() => setCopiedId((c) => (c === iv.id ? null : c)), 1500);
+      toast({ title: "Invite link copied" });
+    } catch {
+      toast({ title: "Couldn't copy link", variant: "destructive" });
+    }
+  };
+
+  const cap = list.data?.cap ?? 5;
+  const outstanding = list.data?.outstanding ?? 0;
+  const atCap = outstanding >= cap;
+  const invites = list.data?.invites ?? [];
+  const joinedCount = invites.filter((iv) => iv.usedAt).length;
+  const subtitle = `${outstanding}/${cap} outstanding · ${joinedCount} joined`;
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+  return (
+    <Card title="Invite an artist or label" subtitle={subtitle} testId="label-invite-panel">
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          disabled={atCap}
+          className="text-xs font-semibold text-white bg-[var(--brand-purple)] hover:opacity-90 rounded-md px-3 py-1.5 disabled:opacity-40"
+          data-testid="button-open-label-invite"
+        >
+          {atCap ? "Cap reached — revoke one to invite another" : "Invite an artist or label"}
+        </button>
+      ) : (
+        <form
+          onSubmit={(e) => { e.preventDefault(); if (email.trim() && name.trim() && !atCap) send.mutate(); }}
+          className="flex flex-col gap-2"
+          data-testid="form-label-invite"
+        >
+          <div className="flex gap-1.5" data-testid="toggle-label-invitee-role">
+            {(["artist", "label"] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setInviteeRole(r)}
+                className={`text-xs font-semibold rounded-md px-3 py-1.5 border ${inviteeRole === r ? "bg-[var(--brand-purple)] text-white border-transparent" : "bg-white/5 text-white/70 border-white/15 hover:text-white"}`}
+                data-testid={`button-label-invitee-role-${r}`}
+              >
+                {r === "artist" ? "Artist" : "Label"}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={inviteeRole === "label" ? "Label name" : "Artist name"}
+              required
+              className="flex-1 px-3 py-2 rounded-md bg-white/5 border border-white/15 text-white placeholder:text-white/30 text-sm"
+              data-testid="input-label-invite-name"
+            />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@example.com"
+              required
+              className="flex-1 px-3 py-2 rounded-md bg-white/5 border border-white/15 text-white placeholder:text-white/30 text-sm"
+              data-testid="input-label-invite-email"
+            />
+          </div>
+          <textarea
+            value={welcomeNote}
+            onChange={(e) => setWelcomeNote(e.target.value)}
+            placeholder="Optional personal note (1-2 sentences)"
+            maxLength={1000}
+            rows={2}
+            className="px-3 py-2 rounded-md bg-white/5 border border-white/15 text-white placeholder:text-white/30 text-sm"
+            data-testid="input-label-invite-welcome-note"
+          />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={send.isPending || atCap}
+              className="px-3 py-2 text-sm font-semibold text-white bg-[var(--brand-purple)] hover:opacity-90 rounded-md disabled:opacity-40"
+              data-testid="button-send-label-invite"
+            >
+              {send.isPending ? "Sending…" : "Send invite"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setOpen(false); setEmail(""); setName(""); setWelcomeNote(""); setInviteeRole("artist"); }}
+              className="px-3 py-2 text-sm text-white/70 hover:text-white"
+              data-testid="button-cancel-label-invite"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
+      {invites.length > 0 && (
+        <ul className="mt-4 divide-y divide-white/5" data-testid="list-label-invites">
+          {invites.map((iv) => {
+            const accepted = !!iv.usedAt;
+            const revoked = !!iv.revokedAt;
+            const expired = !accepted && !revoked && new Date(iv.expiresAt) <= new Date();
+            const status = accepted ? "Joined" : revoked ? "Revoked" : expired ? "Expired" : "Invited";
+            const tone = accepted
+              ? "text-[color:var(--brand-mint)]"
+              : revoked || expired ? "text-white/40"
+              : "text-[color:var(--brand-blue)]";
+            const metaBits: string[] = [`Invited ${fmtDate(iv.createdAt)}`];
+            if (accepted && iv.usedAt) metaBits.push(`Joined ${fmtDate(iv.usedAt)}`);
+            if (!accepted && !revoked && iv.resentAt) metaBits.push(`Resent ${fmtDate(iv.resentAt)}`);
+            if (!accepted && !revoked && expired) metaBits.push(`Expired ${fmtDate(iv.expiresAt)}`);
+            return (
+              <li key={iv.id} className="py-2.5" data-testid={`row-label-invite-${iv.id}`}>
+                <div className="flex items-center gap-3">
+                  {iv.scopeThumbUrl ? (
+                    <img src={iv.scopeThumbUrl} alt="" className="w-11 h-11 rounded-full object-cover bg-white/5" />
+                  ) : (
+                    <div className="w-11 h-11 rounded-full bg-white/5" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate text-sm flex items-center gap-1.5" data-testid={`text-label-invite-name-${iv.id}`}>
+                      <span className="truncate">{iv.scopeName ?? iv.email}</span>
+                      {iv.role === "label" && (
+                        <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-white/55 bg-white/10 rounded px-1.5 py-0.5" data-testid={`tag-label-invite-role-${iv.id}`}>Label</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-white/55 truncate">{iv.email}</p>
+                  </div>
+                  <span className={`text-xs font-semibold uppercase tracking-wider ${tone}`} data-testid={`text-label-invite-status-${iv.id}`}>{status}</span>
+                  {!accepted && !revoked && (
+                    <>
+                      {iv.acceptUrl && (
+                        <button
+                          type="button"
+                          onClick={() => copyLink(iv)}
+                          className="text-xs text-white/70 hover:text-white px-2 py-1"
+                          data-testid={`button-copy-label-invite-${iv.id}`}
+                        >
+                          {copiedId === iv.id ? "Copied" : "Copy link"}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => resend.mutate(iv.id)}
+                        disabled={resend.isPending}
+                        className="text-xs text-white/70 hover:text-white px-2 py-1 disabled:opacity-40"
+                        data-testid={`button-resend-label-invite-${iv.id}`}
+                      >
+                        Resend
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { if (confirm(`Revoke invite to ${iv.email}?`)) revoke.mutate(iv.id); }}
+                        disabled={revoke.isPending}
+                        className="text-xs text-[color:var(--brand-heart)]/80 hover:text-[color:var(--brand-heart)] px-2 py-1 disabled:opacity-40"
+                        data-testid={`button-revoke-label-invite-${iv.id}`}
+                      >
+                        Revoke
+                      </button>
+                    </>
+                  )}
+                </div>
+                <p className="mt-1.5 pl-14 text-xs text-white/55" data-testid={`text-label-invite-meta-${iv.id}`}>
+                  {metaBits.join(" · ")}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
   );
 }
 

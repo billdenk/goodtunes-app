@@ -710,6 +710,8 @@ function InviteTeammatePanel() {
 type ArtistInviteRow = {
   id: string;
   email: string;
+  role: string;
+  roleScopeId: string | null;
   scopeName: string | null;
   scopeThumbUrl: string | null;
   welcomeNote: string | null;
@@ -718,6 +720,7 @@ type ArtistInviteRow = {
   usedAt: string | null;
   revokedAt: string | null;
   resentAt: string | null;
+  acceptUrl: string | null;
 };
 type EarmarkedSuggestion = { id: string; name: string; email: string; notes: string | null };
 
@@ -727,6 +730,9 @@ function InviteArtistPanel() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [welcomeNote, setWelcomeNote] = useState("");
+  // Task #952 — an artist can invite a fresh artist OR a fresh label.
+  const [inviteeRole, setInviteeRole] = useState<"artist" | "label">("artist");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const list = useQuery<{ invites: ArtistInviteRow[]; outstanding: number; cap: number }>({
     queryKey: ["/api/artist/invites"],
@@ -746,7 +752,11 @@ function InviteArtistPanel() {
 
   const send = useMutation({
     mutationFn: async () => {
-      const r = await apiRequest("POST", "/api/artist/invites/artist", {
+      // Artist invites hit the per-unit-referral path; label invites
+      // (Task #952) hit the sibling endpoint that mints a placeholder
+      // Label instead of a Person.
+      const url = inviteeRole === "label" ? "/api/artist/invites/label" : "/api/artist/invites/artist";
+      const r = await apiRequest("POST", url, {
         email: email.trim(),
         name: name.trim(),
         welcomeNote: welcomeNote.trim() || undefined,
@@ -754,18 +764,31 @@ function InviteArtistPanel() {
       return r.json();
     },
     onSuccess: (data: any) => {
-      setEmail(""); setName(""); setWelcomeNote(""); setOpen(false);
+      const kind = inviteeRole;
+      setEmail(""); setName(""); setWelcomeNote(""); setInviteeRole("artist"); setOpen(false);
       queryClient.invalidateQueries({ queryKey: ["/api/artist/invites"] });
       queryClient.invalidateQueries({ queryKey: ["/api/artist/earmarked"] });
       toast({
         title: data?.reviewStatus === "pending_review" ? "Held for review" : data?.emailDelivered ? "Invite sent" : "Invite created",
         description: data?.reviewStatus === "pending_review"
           ? "GoodTunes will review and notify you when approved."
-          : `Emailed ${data?.email ?? "the artist"}.`,
+          : `Emailed ${data?.email ?? `the ${kind}`}.`,
       });
     },
     onError: (e: Error) => toast({ title: "Couldn't invite", description: e.message, variant: "destructive" }),
   });
+
+  const copyLink = async (iv: ArtistInviteRow) => {
+    if (!iv.acceptUrl) return;
+    try {
+      await navigator.clipboard.writeText(iv.acceptUrl);
+      setCopiedId(iv.id);
+      setTimeout(() => setCopiedId((c) => (c === iv.id ? null : c)), 1500);
+      toast({ title: "Invite link copied" });
+    } catch {
+      toast({ title: "Couldn't copy link", variant: "destructive" });
+    }
+  };
 
   const resend = useMutation({
     mutationFn: async (id: string) => {
@@ -818,7 +841,7 @@ function InviteArtistPanel() {
 
   return (
     <Card
-      title="Invite an artist"
+      title="Invite an artist or label"
       subtitle={subtitle}
       testId="invite-artist-panel"
     >
@@ -830,7 +853,7 @@ function InviteArtistPanel() {
           className="text-xs font-semibold text-white bg-[var(--brand-purple)] hover:opacity-90 rounded-md px-3 py-1.5 disabled:opacity-40"
           data-testid="button-open-invite-artist"
         >
-          {atCap ? "Cap reached — revoke one to invite another" : "Invite another artist"}
+          {atCap ? "Cap reached — revoke one to invite another" : "Invite an artist or label"}
         </button>
       ) : (
         <form
@@ -838,12 +861,25 @@ function InviteArtistPanel() {
           className="flex flex-col gap-2"
           data-testid="form-invite-artist"
         >
+          <div className="flex gap-1.5" data-testid="toggle-invitee-role">
+            {(["artist", "label"] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setInviteeRole(r)}
+                className={`text-xs font-semibold rounded-md px-3 py-1.5 border ${inviteeRole === r ? "bg-[var(--brand-purple)] text-white border-transparent" : "bg-white/5 text-white/70 border-white/15 hover:text-white"}`}
+                data-testid={`button-invitee-role-${r}`}
+              >
+                {r === "artist" ? "Artist" : "Label"}
+              </button>
+            ))}
+          </div>
           <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Artist name"
+              placeholder={inviteeRole === "label" ? "Label name" : "Artist name"}
               required
               className="flex-1 px-3 py-2 rounded-md bg-white/5 border border-white/15 text-white placeholder:text-white/30 text-sm"
               data-testid="input-artist-name"
@@ -941,12 +977,27 @@ function InviteArtistPanel() {
                     <div className="w-11 h-11 rounded-full bg-white/5" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold truncate text-sm" data-testid={`text-artist-invite-name-${iv.id}`}>{iv.scopeName ?? iv.email}</p>
+                    <p className="font-semibold truncate text-sm flex items-center gap-1.5" data-testid={`text-artist-invite-name-${iv.id}`}>
+                      <span className="truncate">{iv.scopeName ?? iv.email}</span>
+                      {iv.role === "label" && (
+                        <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-white/55 bg-white/10 rounded px-1.5 py-0.5" data-testid={`tag-artist-invite-role-${iv.id}`}>Label</span>
+                      )}
+                    </p>
                     <p className="text-xs text-white/55 truncate">{iv.email}</p>
                   </div>
                   <span className={`text-xs font-semibold uppercase tracking-wider ${tone}`} data-testid={`text-artist-invite-status-${iv.id}`}>{status}</span>
                   {!accepted && !revoked && (
                   <>
+                    {iv.acceptUrl && (
+                      <button
+                        type="button"
+                        onClick={() => copyLink(iv)}
+                        className="text-xs text-white/70 hover:text-white px-2 py-1"
+                        data-testid={`button-copy-artist-invite-${iv.id}`}
+                      >
+                        {copiedId === iv.id ? "Copied" : "Copy link"}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => resend.mutate(iv.id)}
