@@ -728,6 +728,70 @@ export function SellPanel({
     return m;
   }, [invitedPress]);
 
+  // Task #1012 — selected Printer chip (All-Presses mode). Owned here so
+  // the per-row vinyl color picker can re-point at the selected press's
+  // catalog when the operator clicks a different chip. In
+  // dedicated/locked mode there's only the single invited chip, so this
+  // stays pinned to it and the picker behaves exactly as before.
+  // NOTE: keep these hooks above the loading/error early-returns below
+  // (same rule as catalogByFormat) so the hook count never changes.
+  const pressChips = useMemo(
+    () =>
+      computePressChips(
+        invitedPress ?? null,
+        allPresses ?? null,
+        pressFormatsByPress,
+      ),
+    [invitedPress, allPresses, pressFormatsByPress],
+  );
+  const defaultPressChipId = pressChips[0]?.id ?? "";
+  const [selectedPressChipId, setSelectedPressChipId] =
+    useState<string>(defaultPressChipId);
+  // Re-sync when the chip list arrives / changes and the current pick is
+  // no longer valid (data loaded, press mode flipped, etc.).
+  useEffect(() => {
+    if (!pressChips.some((c) => c.id === selectedPressChipId)) {
+      setSelectedPressChipId(defaultPressChipId);
+    }
+  }, [pressChips, selectedPressChipId, defaultPressChipId]);
+  const selectedPressChip =
+    pressChips.find((c) => c.id === selectedPressChipId) ?? pressChips[0] ?? null;
+  const selectedPress = selectedPressChip?.press ?? null;
+
+  // The selected press's catalog. When the invited press is selected
+  // (the only option in dedicated mode) we already have its catalog
+  // inline; for any other press we lazily load it through the same
+  // /catalog endpoint the cross-press comparison cards use, so the query
+  // cache is shared. While a foreign catalog loads we fall back to the
+  // invited catalog to avoid flashing the legacy (non-catalog) picker.
+  const invitedPressId = invitedPress?.press?.id ?? null;
+  const selectedRealPressId = selectedPress?.id ?? null;
+  const isInvitedPressSelected =
+    !selectedRealPressId || selectedRealPressId === invitedPressId;
+  const { data: selectedPressCatalog } = useQuery<Catalog>({
+    queryKey: ["/api/admin/manufacturers", selectedRealPressId, "catalog"],
+    queryFn: async () => {
+      const r = await apiRequest(
+        "GET",
+        `/api/admin/manufacturers/${selectedRealPressId}/catalog`,
+      );
+      return r.json() as Promise<Catalog>;
+    },
+    enabled: !!selectedRealPressId && !isInvitedPressSelected,
+  });
+  const activeCatalog: Catalog | null = isInvitedPressSelected
+    ? invitedPress?.catalog ?? null
+    : selectedPressCatalog ?? invitedPress?.catalog ?? null;
+  // The per-row color picker reads from this map (the SELECTED press).
+  // The invited-press `catalogByFormat` above still drives format
+  // scoping + cost-default plumbing, so those stay stable across chip
+  // switches; only the swatches re-point.
+  const selectedCatalogByFormat = useMemo(() => {
+    const m = new Map<AlbumFormat, CatalogFormatRow>();
+    (activeCatalog?.formats ?? []).forEach((f) => m.set(f.format, f));
+    return m;
+  }, [activeCatalog]);
+
   // Task #454 — Listen for Path-to-press chip navigation. Chips dispatch
   // via `dispatchPathToPressNavigate`; AdminAlbum flips into the Sell
   // tab when needed (and stashes the key in the pending slot) so this
@@ -1016,6 +1080,8 @@ export function SellPanel({
           invited={invitedPress ?? null}
           allPresses={allPresses ?? null}
           pressFormatsByPress={pressFormatsByPress}
+          selectedId={selectedPressChipId}
+          onSelectId={setSelectedPressChipId}
         />
 
         {/* Task #533 — Gate #2 artist opt-in for pool-funded early cut. */}
@@ -1082,7 +1148,7 @@ export function SellPanel({
                           format={f}
                           existing={existing}
                           liveCost={costByFormat.get(f) ?? null}
-                          catalogFormat={catalogByFormat.get(f) ?? null}
+                          catalogFormat={selectedCatalogByFormat.get(f) ?? null}
                           artworkUrl={artworkUrl}
                           offeredFormats={offeredFormats}
                           onSwitchFormat={switchFormat(f, f)}
@@ -1135,7 +1201,7 @@ export function SellPanel({
                         format={f}
                         existing={null}
                         liveCost={costByFormat.get(f) ?? null}
-                        catalogFormat={catalogByFormat.get(f) ?? null}
+                        catalogFormat={selectedCatalogByFormat.get(f) ?? null}
                         artworkUrl={artworkUrl}
                         offeredFormats={offeredFormats}
                         onSwitchFormat={switchFormat(f, `draft-${f}`)}
@@ -1266,45 +1332,40 @@ export function SellPanel({
  * invited press, or only Hellbender live) the row is read-only with no
  * chips. The invited-press hard lock from task #199 still surfaces, as
  * a muted caption under the row.                                      */
-function PrinterAndPressPanel({
-  invited,
-  allPresses,
-  pressFormatsByPress,
-}: {
-  invited: InvitedPressResponse | null;
-  allPresses?: Manufacturer[] | null;
-  pressFormatsByPress?: Map<string, Set<string>>;
-}) {
+type PressChip = {
+  id: string;
+  label: string;
+  status: "live" | "coming-soon";
+  press: Manufacturer | null;
+};
+
+// Task #1012 — chip computation lifted out of PrinterAndPressPanel so
+// the parent SellPanel can resolve the operator-selected press and
+// re-point the per-row vinyl color picker at that press's catalog,
+// while the panel itself stays a thin controlled renderer (selection
+// now lives in SellPanel).
+//
+// Task #597 — MRP is hidden from the Printer chip row pre-meeting
+// (mirrors the Press-tab preflight hide); reference rates still drive
+// cost math under the hood, only the user-facing chip is suppressed.
+// Task #736 — in "all" mode the super-admin shops the live press
+// directory: every press that publishes at least one format becomes a
+// selectable chip (invited press first when present). Dedicated/locked
+// modes keep the pre-meeting single-press behavior. Works with no
+// invited stamp. No fabricated fallback: with nothing resolved the
+// chip list is empty and the panel renders nothing.
+function computePressChips(
+  invited: InvitedPressResponse | null,
+  allPresses?: Manufacturer[] | null,
+  pressFormatsByPress?: Map<string, Set<string>>,
+): PressChip[] {
   const invitedPress = invited?.press ?? null;
-  // Task #736 — in "all" mode the super-admin wants to shop every press,
-  // so the invited-press hard lock is lifted even though the provenance
-  // stamp is still present. "dedicated" (or inherit) keeps the lock.
   const allMode = (invited?.pressMode ?? "dedicated") === "all";
   const locked = !!invitedPress && !invited?.hasShippedFirst && !allMode;
-
-  // Hellbender is intentionally hidden from the Printer picker for
-  // now — MRP demo / pitch is in flight and we don't want partners
-  // landing on the Sell tab and seeing Hellbender presented as the
-  // default live plant. Reference rates still drive cost math under
-  // the hood; only the user-facing chip is suppressed. Restore by
-  // re-adding the Hellbender entry (and the /api/manufacturers
-  // query) once MRP signs.
-
-  type Chip = { id: string; label: string; status: "live" | "coming-soon"; press: Manufacturer | null };
-  // Task #597 — MRP hidden from the Printer chip row pre-meeting
-  // (mirrors the Press-tab preflight hide). With only PMP left as a
-  // coming-soon chip and the invited press as the live one, the
-  // default-selected label is never "MRP". Restore by re-adding the
-  // MRP entry above PMP.
-  // Task #736 — in all-mode the super-admin shops the live press
-  // directory: every press that publishes at least one format becomes a
-  // selectable chip (invited press first when present). This is the only
-  // path that surfaces real plants here; dedicated/locked modes keep the
-  // pre-meeting single-press behavior. Works with no invited stamp.
-  const liveDirectoryChips: Chip[] = (() => {
+  const liveDirectoryChips: PressChip[] = (() => {
     if (!allMode) return [];
     const seen = new Set<string>();
-    const out: Chip[] = [];
+    const out: PressChip[] = [];
     if (invitedPress) {
       seen.add(invitedPress.id);
       out.push({ id: invitedPress.id, label: invitedPress.name, status: "live", press: invitedPress });
@@ -1319,19 +1380,37 @@ function PrinterAndPressPanel({
     }
     return out;
   })();
+  return allMode && liveDirectoryChips.length > 0
+    ? liveDirectoryChips
+    : locked
+      ? [{ id: "invited", label: invitedPress!.name, status: "live", press: invitedPress }]
+      : [];
+}
 
-  // No fabricated fallback: when no press is resolved (no live directory
-  // chips, not locked to an inviting press), the chip list is empty and
-  // the panel renders nothing rather than a fake "PMP" coming-soon chip.
-  const chips: Chip[] =
-    allMode && liveDirectoryChips.length > 0
-      ? liveDirectoryChips
-      : locked
-        ? [{ id: "invited", label: invitedPress!.name, status: "live", press: invitedPress }]
-        : [];
+function PrinterAndPressPanel({
+  invited,
+  allPresses,
+  pressFormatsByPress,
+  selectedId,
+  onSelectId,
+}: {
+  invited: InvitedPressResponse | null;
+  allPresses?: Manufacturer[] | null;
+  pressFormatsByPress?: Map<string, Set<string>>;
+  // Task #1012 — selection is owned by SellPanel so the color picker
+  // can react to it. In dedicated/locked mode there's only the single
+  // invited chip, so this is effectively inert there.
+  selectedId: string;
+  onSelectId: (id: string) => void;
+}) {
+  const invitedPress = invited?.press ?? null;
+  // Task #736 — in "all" mode the super-admin wants to shop every press,
+  // so the invited-press hard lock is lifted even though the provenance
+  // stamp is still present. "dedicated" (or inherit) keeps the lock.
+  const allMode = (invited?.pressMode ?? "dedicated") === "all";
+  const locked = !!invitedPress && !invited?.hasShippedFirst && !allMode;
 
-  const defaultId = chips[0]?.id ?? "";
-  const [selectedId, setSelectedId] = useState<string>(defaultId);
+  const chips = computePressChips(invited, allPresses, pressFormatsByPress);
   const selectedChip = chips.find((c) => c.id === selectedId) ?? chips[0];
   const selectedPress = selectedChip?.press ?? null;
 
@@ -1367,7 +1446,7 @@ function PrinterAndPressPanel({
                 type="button"
                 aria-pressed={false}
                 data-testid={`printer-${c.id}`}
-                onClick={() => setSelectedId(c.id)}
+                onClick={() => onSelectId(c.id)}
                 className="rounded-full px-2 py-0.5 text-xs font-semibold border bg-white text-slate-700 border-slate-200 hover:border-slate-300 transition-colors"
                 title={c.label}
               >
@@ -2381,6 +2460,59 @@ function SkuRow({
     if (!stillThere) setPressColorId(pickedTier.colors[0]?.id ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickedTier?.id]);
+
+  // Task #1012 — when the operator switches the Printer chip in
+  // "All Presses" mode, SellPanel re-points `catalogFormat` at the
+  // newly-selected press's catalog (different tier/color ids). Re-resolve
+  // the picked tier + color by NAME against the new catalog so the
+  // operator's choice carries over when the press offers a match,
+  // falling back to that press's first tier/color otherwise — mirroring
+  // the cross-press comparison-row color matching. `pressTierId` /
+  // `pressColorId` are id-keyed, so they go stale on a catalog swap;
+  // this effect re-keys them. Declared AFTER the tier-change reset above
+  // so, in the single swap commit where both fire, this one's color
+  // write wins (the reset would otherwise snap to the first color).
+  const pickedColorName =
+    pickedTier?.colors.find((c) => c.id === pressColorId)?.name ?? null;
+  const pickedTierName = pickedTier?.name ?? null;
+  const catalogSig = useMemo(
+    () => (catalogFormat ? catalogFormat.tiers.map((t) => t.id).join("|") : ""),
+    [catalogFormat],
+  );
+  const lastCatalogPicksRef = useRef<{
+    sig: string;
+    tierName: string | null;
+    colorName: string | null;
+  }>({ sig: catalogSig, tierName: pickedTierName, colorName: pickedColorName });
+  // While the catalog identity is unchanged, keep the remembered picks
+  // current so a later swap re-maps from the operator's latest choice
+  // (not a stale snapshot). On a swap render `catalogSig` differs, so we
+  // intentionally skip the update and preserve the pre-swap names for the
+  // effect below to consume.
+  if (catalogSig === lastCatalogPicksRef.current.sig) {
+    lastCatalogPicksRef.current.tierName = pickedTierName;
+    lastCatalogPicksRef.current.colorName = pickedColorName;
+  }
+  useEffect(() => {
+    if (catalogSig === lastCatalogPicksRef.current.sig) return;
+    const tiersNow = catalogFormat?.tiers ?? [];
+    if (tiersNow.length > 0) {
+      const { tierName, colorName } = lastCatalogPicksRef.current;
+      const nextTier =
+        (tierName ? tiersNow.find((t) => t.name === tierName) : null) ??
+        tiersNow[0];
+      const nextColor =
+        (colorName
+          ? nextTier.colors.find((c) => c.name === colorName)
+          : null) ??
+        nextTier.colors[0] ??
+        null;
+      setPressTierId(nextTier.id);
+      setPressColorId(nextColor?.id ?? null);
+    }
+    lastCatalogPicksRef.current.sig = catalogSig;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogSig]);
 
   const usingCatalog = !!catalogFormat && !!pickedTier;
 
