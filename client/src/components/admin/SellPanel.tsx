@@ -8494,16 +8494,18 @@ function GoodDeedPill({
             </label>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5 items-start">
-            {/* LEFT — enlarged cert mock. Album art on top, navy
-                band (brand bg) with album title + artist + GoodDeed
-                mark, then the cert paragraph + founder signature
-                line. The QR code is per-fan and gets generated at
-                print time, so no placeholder shown here. The album-
-                art tile keeps the pencil-on-hover affordance that
-                opens the shared cover-art editor — single source of
-                truth on `albums.artwork`. */}
+            {/* LEFT — enlarged cert mock, framed in a proportionate
+                GoodTunes-orange mat so it reads like the cert sitting
+                inside a frame (matches the GoodDeed share-card framing
+                convention). Album art on top, navy band (brand bg)
+                with owner/serial bars + GoodDeed mark. The QR code is
+                per-fan and gets generated at print time, so no
+                placeholder shown here. The album-art tile keeps the
+                pencil-on-hover affordance that opens the shared
+                cover-art editor — single source of truth on
+                `albums.artwork`. */}
             <div
-              className="rounded-md border-2 border-[color:var(--brand-orange)] bg-white overflow-hidden shadow-sm"
+              className="rounded-md border-[10px] border-[color:var(--brand-orange)] bg-white overflow-hidden shadow-sm"
               data-testid="card-gooddeed-cert"
             >
               {onEditArtwork ? (
@@ -8561,16 +8563,14 @@ function GoodDeedPill({
                   a uniform muted slate-blue rounded rect set against
                   brand-navy. Top row = solid avatar disc + two short
                   bars (owner / serial) + GoodTunes wordmark top-right.
-                  Middle = three full-width body bars (cert body copy).
-                  Bottom-left = real Will signature overlaid on a wider
-                  bar; bottom-right = solid square QR placeholder. No
-                  founder caption, no mint, no QR finder pattern —
-                  reads as a pure wireframe template. */}
+                  Bottom-right = solid square QR placeholder. No founder
+                  caption, no mint, no QR finder pattern — reads as a
+                  pure wireframe template. */}
               {/* Compact archival-strip footer — art dominates ~80% of
                   the composition, the cert strip is a thin premium
-                  band carrying only owner/serial bars + signature + QR.
-                  Body-copy bars dropped to keep the strip dense and
-                  collectible, not panel-like. */}
+                  band carrying only owner/serial bars + QR. Body-copy
+                  bars dropped to keep the strip dense and collectible,
+                  not panel-like. */}
               <div
                 className="w-full text-white flex flex-col justify-between px-4 py-3 aspect-[4/1] gap-1.5"
                 style={{ backgroundColor: "var(--brand-bg)" }}
@@ -8608,11 +8608,10 @@ function GoodDeedPill({
                   />
                 </div>
 
-                {/* Bottom row — owner/serial bar (left), small square QR placeholder (right) */}
-                <div className="flex items-end justify-between gap-3">
-                  <div className="flex-1 min-w-0 relative" data-testid="signature-gooddeed">
-                    <div className="h-2 w-[60%] rounded-full" style={{ background: "rgba(255,255,255,0.32)" }} aria-hidden />
-                  </div>
+                {/* Bottom row — small square QR placeholder (right).
+                    Founder signature dropped per Bill (not needed in
+                    this preview); the bottom-left stays clean. */}
+                <div className="flex items-end justify-end gap-3">
                   <div
                     className="w-7 h-7 rounded-sm flex-shrink-0"
                     style={{ background: "rgba(255,255,255,0.32)" }}
