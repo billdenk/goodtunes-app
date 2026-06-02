@@ -136,6 +136,11 @@ export interface IStorage {
   // the fan side can render label name/logo without a second fetch.
   getAlbums(opts?: { includeHidden?: boolean }): Promise<AlbumWithLabel[]>;
   getAlbumById(id: string, opts?: { includeHidden?: boolean }): Promise<AlbumWithLabel | undefined>;
+  // Task #965 — resolve an album by its clean share slug. Same hidden /
+  // trashed / sunrise gating as getAlbumById unless opts override (the
+  // PUT uniqueness check passes includeHidden+includeTrashed so a slug
+  // can't silently collide with a hidden/trashed row).
+  getAlbumBySlug(slug: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean }): Promise<AlbumWithLabel | undefined>;
   // Returns the set of album IDs that have at least one explicit song.
   // Used by the /api/albums + /api/albums/:id routes to derive the
   // album-level "E" badge from per-song flags without a per-album
@@ -1012,6 +1017,26 @@ export class DbStorage implements IStorage {
     // Task #800 — sunrise gate, mirrored from getAlbums. A future-dated
     // album reads as not-found for fans (404) until its date arrives;
     // admin (includeHidden) reads keep returning it for the Staged tab.
+    if (
+      !opts?.includeHidden &&
+      row.albums.goodTunesReleaseDate &&
+      row.albums.goodTunesReleaseDate > todayISODate()
+    ) {
+      return undefined;
+    }
+    return { ...row.albums, label: row.labels ?? null };
+  }
+  async getAlbumBySlug(slug: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean }): Promise<AlbumWithLabel | undefined> {
+    const [row] = await db
+      .select()
+      .from(albums)
+      .leftJoin(labels, and(eq(albums.labelId, labels.id), isNull(labels.deletedAt)))
+      .where(eq(albums.shareSlug, slug));
+    if (!row) return undefined;
+    if (row.albums.deletedAt && !opts?.includeTrashed) return undefined;
+    if (row.albums.isHidden && !opts?.includeHidden) return undefined;
+    // Sunrise gate, mirrored from getAlbumById — a future-dated album
+    // reads as not-found for fans until its date arrives.
     if (
       !opts?.includeHidden &&
       row.albums.goodTunesReleaseDate &&

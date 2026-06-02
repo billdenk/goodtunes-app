@@ -7,6 +7,9 @@ const CUSTOMER_HOST = "my.goodtunes.music";
 // Task #936 — store.goodtunes.music fronts the launch storefront and behaves
 // like the customer host for auth purposes.
 const STORE_HOST = "store.goodtunes.music";
+// Task #965 — get.goodtunes.music fronts the clean per-release share links
+// (get.goodtunes.music/<slug>) and behaves like the customer host for auth.
+const GET_HOST = "get.goodtunes.music";
 
 // Derives the current auth kind from the browser host. In production the
 // canonical subdomain decides; in dev / *.replit.app we fall back to the
@@ -16,6 +19,7 @@ export function detectAuthKind(host: string, pathname: string): AuthKind {
   if (h === ADMIN_HOST) return "admin";
   if (h === CUSTOMER_HOST) return "customer";
   if (h === STORE_HOST) return "customer";
+  if (h === GET_HOST) return "customer";
   return pathname.startsWith("/admin") ? "admin" : "customer";
 }
 

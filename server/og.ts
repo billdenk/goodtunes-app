@@ -4,6 +4,7 @@ import { getAlbumMeta } from "../shared/albumMeta";
 import { db } from "./db";
 import { storage } from "./storage";
 import { people } from "../shared/schema";
+import { normalizeShareSlug, RESERVED_SLUGS } from "../shared/shareSlug";
 
 function escapeHtml(s: string): string {
   return s
@@ -131,6 +132,42 @@ export async function injectAlbumOg(
       type: "music.album",
       imageAlt: `${demo.title} album cover`,
     });
+  }
+  return null;
+}
+
+// Task #965 — clean per-release share link unfurl. get.goodtunes.music/<slug>
+// resolves the same buy-eligible release the public by-slug endpoint serves
+// (getAlbumBySlug already filters hidden/trashed/sunrise) and rich-unfurls it
+// with the album's own OG card so a pasted /<slug> looks like the release in
+// iMessage/Slack. Returns null on no-match so the dispatcher can fall back to
+// the branded default card.
+export async function injectAlbumOgBySlug(
+  template: string,
+  req: Request,
+  slug: string,
+): Promise<string | null> {
+  const base = getBaseUrl(req);
+  try {
+    const row = await storage.getAlbumBySlug(slug);
+    if (row && !row.isHidden && !row.isPrepping) {
+      const image =
+        absoluteUrl(base, row.artwork) ?? `${base}${DEFAULT_IMAGE_PATH}`;
+      const title = `${row.title} by ${row.artist} — GoodTunes®`;
+      const description =
+        (row.description && row.description.trim()) ||
+        `Own ${row.title} by ${row.artist} on GoodTunes.`;
+      return inject(template, {
+        title,
+        description,
+        image,
+        url: `${base}/${slug}`,
+        type: "music.album",
+        imageAlt: `${row.title} album cover`,
+      });
+    }
+  } catch {
+    // fall through to null
   }
   return null;
 }
@@ -309,6 +346,20 @@ export async function injectOgForUrl(
     const out = await injectInstrumentOg(template, req, instrumentMatch[1]);
     if (out) return out;
     return injectDefaultOg(template, req);
+  }
+
+  // Task #965 — clean per-release share link. A single-segment path that
+  // isn't a reserved word may be a release share slug. Normalize it the same
+  // way the resolver does, skip reserved words (real routes / infra paths),
+  // and try the by-slug album OG. On no-match fall through to the branded
+  // default card. Multi-segment paths never reach here.
+  const slugMatch = pathOnly.match(/^\/([^/]+)\/?$/);
+  if (slugMatch) {
+    const slug = normalizeShareSlug(decodeURIComponent(slugMatch[1]));
+    if (slug && !RESERVED_SLUGS.has(slug)) {
+      const out = await injectAlbumOgBySlug(template, req, slug);
+      if (out) return out;
+    }
   }
 
   if (isAuthWalledPath(pathOnly)) {

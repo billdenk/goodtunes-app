@@ -9,11 +9,16 @@ const CUSTOMER_HOST = "my.goodtunes.music";
 // (customer auth kind, never canonicalized away) but keeps its own origin so
 // the OAuth round-trip + ?buy=1 bounce-back land back on the store host.
 const STORE_HOST = "store.goodtunes.music";
+// Task #965 — get.goodtunes.music fronts the clean per-release share links
+// (get.goodtunes.music/<slug>). Same treatment as STORE_HOST: customer auth
+// kind, never canonicalized away, keeps its own origin so the OAuth
+// round-trip + ?buy=1 bounce-back land back on the get host.
+const GET_HOST = "get.goodtunes.music";
 // Hosts that resolve to the "customer" auth kind. OAuth callbacks must come
 // back to the *same* one of these the fan started on because the session
 // cookie is host-only (sameSite=none, no domain), so a cross-subdomain
 // callback would drop the `oauthState` and fail with a state mismatch.
-const CUSTOMER_HOSTS = new Set([CUSTOMER_HOST, STORE_HOST]);
+const CUSTOMER_HOSTS = new Set([CUSTOMER_HOST, STORE_HOST, GET_HOST]);
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -35,6 +40,7 @@ export function kindFromRequest(req: Request): { kind: AuthKind; hostKnown: bool
   if (host === ADMIN_HOST) return { kind: "admin", hostKnown: true };
   if (host === CUSTOMER_HOST) return { kind: "customer", hostKnown: true };
   if (host === STORE_HOST) return { kind: "customer", hostKnown: true };
+  if (host === GET_HOST) return { kind: "customer", hostKnown: true };
   // Dev / preview fallback — path-based.
   const path = req.path || "";
   const looksAdmin =
@@ -69,7 +75,7 @@ export function authKindMiddleware(req: Request, _res: Response, next: NextFunct
 export function canonicalHostRedirect(req: Request, res: Response, next: NextFunction) {
   if (process.env.NODE_ENV !== "production") return next();
   const host = (req.headers.host || "").toLowerCase().split(":")[0];
-  if (host === ADMIN_HOST || host === CUSTOMER_HOST || host === STORE_HOST) return next();
+  if (host === ADMIN_HOST || host === CUSTOMER_HOST || host === STORE_HOST || host === GET_HOST) return next();
   if (req.path.startsWith("/.well-known/")) return next();
   // Only redirect hosts we explicitly want to canonicalize: the bare
   // goodtunes.music apex, www.goodtunes.music, and any other non-canonical
@@ -85,7 +91,8 @@ export function canonicalHostRedirect(req: Request, res: Response, next: NextFun
     (host.endsWith(".goodtunes.music") &&
       host !== ADMIN_HOST &&
       host !== CUSTOMER_HOST &&
-      host !== STORE_HOST);
+      host !== STORE_HOST &&
+      host !== GET_HOST);
   if (!shouldCanonicalize) return next();
   const target =
     req.path.startsWith("/admin") || req.path.startsWith("/api/admin")
@@ -121,4 +128,4 @@ export function callbackOrigin(req: Request, kind: AuthKind): string {
   return `${proto}://${req.headers.host}`;
 }
 
-export const CANONICAL_HOSTS = { admin: ADMIN_HOST, customer: CUSTOMER_HOST, store: STORE_HOST };
+export const CANONICAL_HOSTS = { admin: ADMIN_HOST, customer: CUSTOMER_HOST, store: STORE_HOST, get: GET_HOST };

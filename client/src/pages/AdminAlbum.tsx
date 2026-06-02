@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeAudioUrl } from "@shared/audioUrl";
+import { normalizeShareSlug, validateShareSlug } from "@shared/shareSlug";
 import { createPortal } from "react-dom";
 import { Card } from "@/components/ui/card";
 import { Link, useLocation, useRoute, useSearch } from "wouter";
@@ -27,6 +28,7 @@ import {
   ImageIcon,
   ImagePlus,
   Link2,
+  Copy,
   X as XIcon,
   Circle,
   CheckCircle2,
@@ -166,6 +168,8 @@ interface AlbumFull {
   // Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only legacy)"
   // marker. No fan-facing effect.
   isSpinPromo?: boolean;
+  // Task #965 — clean per-release share slug (get.goodtunes.music/<slug>).
+  shareSlug?: string | null;
   genre?: string | null;
   labelId?: string | null;
   // Server-joined label row from AlbumWithLabel (storage.getAlbumById).
@@ -1794,6 +1798,161 @@ function SpinPromoPanel({
   );
 }
 
+// Task #965 — clean per-release share-link editor. Operator types a slug
+// (normalized live), auto-saves on blur, and copies the full
+// get.goodtunes.music/<slug> URL. Self-contained panel (EditablePanel has
+// no copy-button field type) mirroring SpinPromoPanel's shape. Saves ride
+// the standard PUT /api/admin/albums/:id edit_metadata gate + post-sale
+// lock (so `disabled` freezes the input when the album is locked).
+const SHARE_LINK_HOST = "get.goodtunes.music";
+function ShareLinkPanel({
+  album,
+  disabled,
+  disabledReason,
+}: {
+  album: AlbumFull;
+  disabled: boolean;
+  disabledReason?: string;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [draft, setDraft] = useState(album.shareSlug ?? "");
+  const [copied, setCopied] = useState(false);
+
+  // Keep the field in sync if the album reloads with a different slug
+  // (e.g. another tab saved it) — but only when not mid-edit.
+  useEffect(() => {
+    setDraft(album.shareSlug ?? "");
+  }, [album.shareSlug]);
+
+  const normalized = normalizeShareSlug(draft);
+  const savedSlug = album.shareSlug ?? "";
+  const isDirty = normalized !== savedSlug;
+  const validation = draft.trim() === "" ? null : validateShareSlug(draft);
+  const localError = validation && !validation.ok ? validation.reason : null;
+
+  const save = useMutation({
+    mutationFn: async (next: string | null) => {
+      const r = await apiRequest("PUT", `/api/admin/albums/${album.id}`, {
+        shareSlug: next,
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/albums"] });
+      toast({ title: "Share link saved." });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't save share link",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+      setDraft(savedSlug);
+    },
+  });
+
+  const commit = () => {
+    if (disabled || save.isPending) return;
+    const trimmed = draft.trim();
+    if (trimmed === "") {
+      if (savedSlug !== "") save.mutate(null);
+      return;
+    }
+    if (!validation?.ok) return;
+    if (validation.slug === savedSlug) {
+      setDraft(savedSlug);
+      return;
+    }
+    setDraft(validation.slug);
+    save.mutate(validation.slug);
+  };
+
+  const fullUrl = savedSlug ? `https://${SHARE_LINK_HOST}/${savedSlug}` : "";
+  const copy = async () => {
+    if (!fullUrl) return;
+    try {
+      await navigator.clipboard.writeText(fullUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast({ title: "Couldn't copy", variant: "destructive" });
+    }
+  };
+
+  return (
+    <div
+      className="rounded-xl border border-slate-200 bg-white p-4"
+      data-testid="panel-share-link"
+    >
+      <div className="flex items-center gap-1.5">
+        <Link2 className="w-4 h-4 text-[color:var(--brand-blue)]" />
+        <span className="text-sm font-semibold text-slate-900">
+          Share link
+        </span>
+      </div>
+      <p className="text-xs text-slate-500 mt-1 leading-snug">
+        A clean, shareable URL for this release. Saves on blur. Letters,
+        numbers, and hyphens only — must be unique and not a reserved word.
+      </p>
+      {disabled && disabledReason && (
+        <p className="text-xs text-amber-700 mt-1">{disabledReason}</p>
+      )}
+      <div className="mt-3 flex items-center gap-2">
+        <div className="flex flex-1 items-center rounded-md border border-slate-200 bg-slate-50 focus-within:border-[color:var(--brand-blue)] overflow-hidden">
+          <span className="pl-2.5 pr-1 text-xs text-slate-400 whitespace-nowrap select-none">
+            {SHARE_LINK_HOST}/
+          </span>
+          <Input
+            value={draft}
+            disabled={disabled || save.isPending}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            placeholder="nightbirde"
+            className="h-8 border-0 bg-transparent px-1 focus-visible:ring-0 shadow-none"
+            data-testid="input-share-slug"
+          />
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 shrink-0"
+          disabled={!fullUrl}
+          onClick={copy}
+          data-testid="button-copy-share-link"
+        >
+          {copied ? (
+            <Check className="w-4 h-4 text-emerald-600" />
+          ) : (
+            <Copy className="w-4 h-4" />
+          )}
+          <span className="ml-1.5">{copied ? "Copied" : "Copy"}</span>
+        </Button>
+      </div>
+      {localError ? (
+        <p className="text-xs text-rose-600 mt-1.5" data-testid="text-share-slug-error">
+          {localError}
+        </p>
+      ) : normalized && isDirty ? (
+        <p className="text-xs text-slate-500 mt-1.5">
+          Saves as <span className="font-medium text-slate-700">{normalized}</span>
+        </p>
+      ) : fullUrl ? (
+        <p className="text-xs text-slate-500 mt-1.5" data-testid="text-share-link-url">
+          {fullUrl}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 type ArtistLabelConflict = {
   personId: string;
   personName: string;
@@ -2124,6 +2283,12 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           delete this single component + its render here and the schema
           column. No fan-facing effect whatsoever. */}
       <SpinPromoPanel
+        album={album}
+        disabled={disabled}
+        disabledReason={disabledReason}
+      />
+      {/* Task #965 — clean per-release share link editor. */}
+      <ShareLinkPanel
         album={album}
         disabled={disabled}
         disabledReason={disabledReason}

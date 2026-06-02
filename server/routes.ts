@@ -6503,6 +6503,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const raw = req.body.sellQuoteLockedAt;
       updates.sellQuoteLockedAt = raw ? new Date() : null;
     }
+    // Task #965 — clean per-release share slug. Empty / null clears it.
+    // Otherwise normalize + validate (reserved-word + shape) via the shared
+    // helper, then enforce uniqueness against every OTHER album.
+    if (req.body?.shareSlug !== undefined) {
+      const raw = req.body.shareSlug;
+      if (raw === null || (typeof raw === "string" && raw.trim() === "")) {
+        updates.shareSlug = null;
+      } else {
+        const { validateShareSlug } = await import("@shared/shareSlug");
+        const result = validateShareSlug(String(raw));
+        if (!result.ok) {
+          return res.status(400).json({ message: result.reason });
+        }
+        const existing = await storage.getAlbumBySlug(result.slug, {
+          includeHidden: true,
+          includeTrashed: true,
+        });
+        if (existing && existing.id !== id) {
+          return res
+            .status(400)
+            .json({ message: `"${result.slug}" is already used by another release.` });
+        }
+        updates.shareSlug = result.slug;
+      }
+    }
     const updated = await storage.updateAlbum(id, updates);
     if (!updated) return res.status(404).json({ message: "Album not found" });
     // Task #857 — best-effort Spotify deep-link resolution after a save
@@ -15682,6 +15707,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
     return res.json(enriched);
+  });
+
+  // Task #965 — PUBLIC per-release resolver for clean share links
+  // (get.goodtunes.music/<slug>). No auth: the album page is public by
+  // design (the UUID URL was never access control), so a logged-out fan
+  // hitting a slug gets the same full album+songs payload the authed
+  // /api/albums/:id returns and the client primes its React Query cache
+  // with it. Slugs resolve ONLY for buy-eligible releases — not hidden,
+  // not prepping, not soft-deleted, past the sunrise gate (all enforced
+  // by getAlbumBySlug's default gating + the explicit isPrepping check) —
+  // so this exposes nothing the fan couldn't already reach by UUID.
+  app.get("/api/public/album-by-slug/:slug", async (req, res) => {
+    const { normalizeShareSlug } = await import("@shared/shareSlug");
+    const slug = normalizeShareSlug(String(req.params.slug));
+    if (!slug) return res.status(404).json({ message: "Not found" });
+    const album = await storage.getAlbumBySlug(slug);
+    // getAlbumBySlug already filters hidden / trashed / sunrise. Prepping
+    // (not-yet-released shells) must also 404 — a slug is only valid once
+    // the release is buy-eligible.
+    if (!album || album.isPrepping) {
+      return res.status(404).json({ message: "Not found" });
+    }
+    const songs = await storage.getSongsByAlbum(album.id);
+    const derivedExplicit =
+      album.isExplicit || songs.some((s) => (s as any).isExplicit === true);
+    return res.json({ ...album, isExplicit: derivedExplicit, songs });
   });
 
   app.get("/api/albums/:id", requireAuth, async (req, res) => {

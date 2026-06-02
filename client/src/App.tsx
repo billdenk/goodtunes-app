@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Switch, Route, useLocation, Redirect } from "wouter";
+import { Switch, Route, useLocation, useParams, Redirect } from "wouter";
 import { AnimatePresence } from "framer-motion";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -20,6 +20,7 @@ import { Player } from "@/pages/Player";
 import { Login } from "@/pages/Login";
 import { Collection } from "@/pages/Collection";
 import { AlbumDetail } from "@/pages/AlbumDetail";
+import { AlbumDetailMobileSkeleton, AlbumNotFound } from "@/components/ui/AlbumDetailSkeleton";
 import { InstrumentDetail } from "@/pages/InstrumentDetail";
 import { Playlists } from "@/pages/Playlists";
 import { Account } from "@/pages/Account";
@@ -162,6 +163,40 @@ function Storefront() {
     (import.meta.env.VITE_LAUNCH_ALBUM_ID as string | undefined) ||
     STOREFRONT_LAUNCH_ALBUM_ID;
   return <AlbumDetail albumId={launchAlbumId} />;
+}
+
+// Task #965 — clean per-release share link. get.goodtunes.music/<slug> (and
+// /<slug> on any host) resolves a release via the PUBLIC by-slug endpoint
+// (no login wall), primes the React Query cache under ["/api/albums", id]
+// so AlbumDetail renders the same preview-and-buy page it shows for
+// /album/:id without an authed refetch, then mounts AlbumDetail. A slug that
+// doesn't resolve to a buy-eligible release shows the standard not-found.
+function ShareSlug() {
+  const params = useParams<{ slug: string }>();
+  const slug = params.slug ?? "";
+  const { data, isLoading, isError } = useQuery<{ id: string } | null>({
+    queryKey: ["/api/public/album-by-slug", slug],
+    enabled: !!slug,
+    retry: false,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/public/album-by-slug/${encodeURIComponent(slug)}`,
+        { credentials: "include" },
+      );
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error(`Failed to load (${r.status})`);
+      const album = (await r.json()) as { id: string };
+      // Prime the same cache key AlbumDetail reads so it renders without an
+      // authed /api/albums/:id refetch (which would 401 when logged out).
+      queryClient.setQueryData(["/api/albums", album.id], album);
+      return album;
+    },
+  });
+
+  if (isLoading) return <AlbumDetailMobileSkeleton />;
+  if (isError || !data) return <AlbumNotFound variant="mobile" />;
+  return <AlbumDetail albumId={data.id} />;
 }
 
 function Router() {
@@ -599,6 +634,11 @@ function Router() {
         <Route path="/admin">
           <Redirect to="/admin/dashboard" />
         </Route>
+        {/* Task #965 — clean per-release share link. MUST stay below every
+            literal single-segment route above (server reserved-word list
+            mirrors these) so /collection, /store, /search, /artist, etc.
+            win; falls through to the public by-slug resolver otherwise. */}
+        <Route path="/:slug" component={ShareSlug} />
         <Route path="/">
           {isStoreHost() ? (
             <Redirect to="/store" />

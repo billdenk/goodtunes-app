@@ -201,6 +201,13 @@ export const albums = pgTable("albums", {
   // to be removed once tagging is done — drop this column + the one UI
   // block in AdminAlbum/AdminAlbums together.
   isSpinPromo: boolean("is_spin_promo").notNull().default(false),
+  // Task #965 — clean per-release share slug for get.goodtunes.music/<slug>.
+  // Optional; null means the album has no clean link (UUID still works).
+  // Unique on non-null. Normalized + validated (reserved-word check) at the
+  // PUT layer via shared/shareSlug.ts. The public resolver only returns an
+  // album for its slug when it's buy-eligible (non-hidden, non-prepping,
+  // non-soft-deleted), so a slug is no less secure than the UUID URL.
+  shareSlug: text("share_slug").unique(),
   // Streaming-service handoff. We host the album in-app for the first ~2 weeks
   // then surface "Listen on Apple Music / Spotify" buttons on the album page
   // that point fans at the canonical album URL on each service — same

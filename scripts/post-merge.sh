@@ -236,6 +236,30 @@ SQL
 migrate_albums_is_spin_promo dev  "${DATABASE_URL:-}"
 migrate_albums_is_spin_promo prod "${PROD_DATABASE_URL:-}"
 
+# Task #965 — clean per-release share slug (get.goodtunes.music/<slug>).
+# Nullable text + a UNIQUE index on non-null values so two albums can both
+# be null but no two share a slug. Pre-create on both DBs to keep the
+# publish dev->prod diff empty and so a freshly-cloned dev DB never 500s the
+# album select-all routes. Additive + idempotent; safe on every merge.
+migrate_albums_share_slug() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping albums.share_slug migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS share_slug text;
+CREATE UNIQUE INDEX IF NOT EXISTS albums_share_slug_unique ON albums (share_slug) WHERE share_slug IS NOT NULL;
+SQL
+  then
+    echo "post-merge: albums.share_slug migration ok on $label"
+  else
+    echo "post-merge: WARNING — albums.share_slug migration failed on $label (continuing)"
+  fi
+}
+migrate_albums_share_slug dev  "${DATABASE_URL:-}"
+migrate_albums_share_slug prod "${PROD_DATABASE_URL:-}"
+
 # Task #683 — Reconcile dev press roster with prod so a publish dev->prod
 # diff is a no-op over the manufacturers + press_* tables. The founding seed
 # only mints Memphis + Hellbender (fresh ids per clone); the real Physical
