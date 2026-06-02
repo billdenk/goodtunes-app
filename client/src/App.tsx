@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PlayerProvider, usePlayer } from "@/context/PlayerContext";
 import { NavVisibilityProvider } from "@/hooks/useNavVisibility";
+import { TopChromeFrostProvider } from "@/hooks/useTopChromeFrost";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthKind } from "@/hooks/useAuthKind";
@@ -611,8 +612,10 @@ function App() {
         <GlobalErrorBoundary>
           <PlayerProvider>
             <NavVisibilityProvider>
-              <Toaster />
-              <Router />
+              <TopChromeFrostProvider>
+                <Toaster />
+                <Router />
+              </TopChromeFrostProvider>
             </NavVisibilityProvider>
           </PlayerProvider>
         </GlobalErrorBoundary>

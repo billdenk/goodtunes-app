@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { useLocation } from "wouter";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { useTopChromeFrost } from "@/hooks/useTopChromeFrost";
 import { subscribeChats } from "@/lib/chatStore";
 import { useDesktopShell } from "@/hooks/useDesktopShell";
 import { useFanSearch } from "@/hooks/useFanSearch";
@@ -178,6 +179,24 @@ export function BottomNav() {
   useEffect(() => {
     if (!searchOpen) { setDraft(""); setShowAll(false); }
   }, [searchOpen, setDraft, setShowAll]);
+
+  // Task #913 — publish "bottom-nav search owns the top frosted layer" so the
+  // album chrome (top ChromeScrim band + share/⋯ capsule) drops its own
+  // backdrop-filter while search is open, leaving exactly one frosted surface
+  // in the top band (iOS-WebKit one-blur-per-region rule). The release is
+  // lifecycle-timed, not flag-timed: claim instantly on open, but hold the
+  // claim through the top search field's own opacity exit fade (220ms /
+  // ~80ms reduced) on close — otherwise the album chrome would re-blur while
+  // the search field is still fading out and the two briefly coexist.
+  const { setSearchOwnsTop } = useTopChromeFrost();
+  useEffect(() => {
+    if (searchOpen) {
+      setSearchOwnsTop(true);
+      return;
+    }
+    const t = setTimeout(() => setSearchOwnsTop(false), reduceMotion ? 80 : 240);
+    return () => clearTimeout(t);
+  }, [searchOpen, reduceMotion, setSearchOwnsTop]);
 
   if (isDesktop) return null;
 

@@ -12,6 +12,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import { IconButton } from "@/components/ui/IconButton";
 import { ChromeScrim } from "@/components/ui/ChromeScrim";
+import { useTopChromeFrost } from "@/hooks/useTopChromeFrost";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { popBounce } from "@/lib/motion";
 
@@ -159,6 +160,12 @@ export function AlbumDetailMobileSurface({
   onAddAlbumToPlaylist,
 }: AlbumDetailMobileSurfaceProps) {
   const [showMenu, setShowMenu] = useState(false);
+  // Task #913 — when the bottom-nav search owns the top frosted layer, the
+  // album chrome yields: it drops both its own top backdrop-filter surfaces
+  // (the ChromeScrim band + the share/⋯ capsule) so the top band never stacks
+  // two blurs (iOS-WebKit one-blur-per-region rule). Admin previews render
+  // without the provider, so this defaults to false (unchanged behaviour).
+  const { searchOwnsTop } = useTopChromeFrost();
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(
     null,
@@ -224,7 +231,7 @@ export function AlbumDetailMobileSurface({
   // the two backdrop-filters briefly stack over the hero (iOS-WebKit rule).
   const capsuleStyle: React.CSSProperties = {
     background: "rgba(255,255,255,0.17)",
-    ...(scrimBlurPresent
+    ...(scrimBlurPresent || searchOwnsTop
       ? {}
       : { backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }),
   };
@@ -237,7 +244,7 @@ export function AlbumDetailMobileSurface({
           options menu is open. Sits behind the chips (z-40 < z-50). */}
       <ChromeScrim
         edge="top"
-        active={showMenu}
+        active={showMenu && !searchOwnsTop}
         className="absolute inset-x-0 top-0 z-40"
         style={{ height: TOP_SCRIM_PX }}
       />

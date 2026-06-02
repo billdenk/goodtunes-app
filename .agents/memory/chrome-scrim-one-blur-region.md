@@ -48,9 +48,24 @@ iOS GPU-OOM hazard (stacked blur over an *actively scrolling image list*) is abs
   above everything and freezes scrolling of the search results while the menu (and
   thus the scrim blur) is active. No active scroll recompositing ⇒ no OOM.
 
-**Decision:** did NOT add cross-component blur-owner plumbing for this edge — the
-hazard the rule guards against doesn't occur. A "single top-blur-owner for the
-mobile fan shell" is a legitimate but optional hardening (filed as a follow-up).
+**Hardening shipped — single top-blur owner (`useTopChromeFrost`):** the optional
+"single top-blur-owner for the mobile fan shell" was implemented as a tiny context
+(`client/src/hooks/useTopChromeFrost.tsx`, mounted in App.tsx beside
+`NavVisibilityProvider`). BottomNav publishes `searchOwnsTop` (true while the inline
+search is open); `AlbumDetailMobileSurface` consumes it and, when true, drops BOTH
+its top backdrop-filter surfaces — the top `ChromeScrim` (`active={showMenu && !searchOwnsTop}`)
+AND the share/⋯ capsule (`scrimBlurPresent || searchOwnsTop` suppresses its blur).
+Net: while search owns the top, the search field is the region's *only* frost.
+- **Release is lifecycle-timed, same trap as `scrimBlurPresent`:** BottomNav holds
+  `searchOwnsTop` true through the top search field's own opacity exit fade
+  (240ms / 80ms reduced) after `searchOpen` flips false — releasing on the raw flag
+  would re-blur the album chrome mid-fade and the two coexist.
+- Admin previews render `AlbumDetailMobileSurface` with no provider; the context
+  default `searchOwnsTop:false` keeps their behaviour identical.
+- **Why search wins (not the album menu):** the only reachable overlap is search-open
+  → then album menu (the menu's z-60 click-catcher covers the dock, so search can't
+  open *after* the menu). Search is the foreground full-screen action, so it keeps the
+  frost and the background album chrome yields.
 
 # design-lint gotcha hit while doing this
 
