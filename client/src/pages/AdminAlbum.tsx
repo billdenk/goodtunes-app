@@ -287,7 +287,7 @@ function visibleTabsFor(album: {
 }): { key: Tab; label: string }[] {
   const base: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
-    { key: "sell", label: "Design" },
+    { key: "sell", label: "Package" },
     { key: "tracks", label: "Digital" },
     // Task #645 — Splits used to live on its own tab here; the per-track
     // Splits tile inside each Tracks row replaced the matrix entirely.

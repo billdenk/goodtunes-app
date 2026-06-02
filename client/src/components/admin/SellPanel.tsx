@@ -5237,6 +5237,7 @@ function SkuRow({
                   artworkUrl={artworkUrl}
                   color={previewColor}
                   jacketUpgrade={jacketUpgrade}
+                  format={format}
                   size="2xl"
                   jacketOverlay={(onEditArtwork || canChangeFormat) ? (
                     <>
@@ -8930,6 +8931,7 @@ function VinylPicksBlock({
           artworkUrl={artworkUrl}
           color={color}
           jacketUpgrade={jacketUpgrade}
+          format={format}
         />
       </div>
     </div>

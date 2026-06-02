@@ -19,6 +19,7 @@
 // coordinate system, the composition stays stable at any container
 // width and any size variant.
 import type { VinylColorOption, JacketUpgrade } from "@shared/pressing";
+import type { AlbumFormat } from "@shared/schema";
 
 export function VinylPreview({
   artworkUrl,
@@ -26,6 +27,7 @@ export function VinylPreview({
   jacketUpgrade,
   size = "md",
   jacketOverlay,
+  format,
 }: {
   artworkUrl: string | null | undefined;
   color: VinylColorOption;
@@ -36,7 +38,14 @@ export function VinylPreview({
   // card can sit on the jacket itself (top-right) without overlapping
   // the disc peek to the right.
   jacketOverlay?: React.ReactNode;
+  // Task #982 — the format being previewed. Real 7" singles ship with
+  // no inner sleeve, so when format is "7_inch" we omit the thin black
+  // innersleeve strip. Larger vinyl formats (12" LP etc.) keep it.
+  // Optional/undefined keeps the strip for back-compat call sites.
+  format?: AlbumFormat;
 }) {
+  // Task #982 — 7" singles have no inner sleeve in real life.
+  const showInnerSleeve = format !== "7_inch";
   // Height drives the scale. The width is derived from the aspect
   // ratio of (jacket footprint + disc peek), so the outer wrapper
   // reserves real layout space for the disc instead of letting it
@@ -177,16 +186,20 @@ export function VinylPreview({
         {/* Thin black innersleeve strip — sits just OUTSIDE the
             jacket's right edge (left: 100% of the stage) so it's
             visible against the disc instead of being covered by the
-            jacket. Rendered last so it stacks on top of the disc. */}
-        <div
-          className="absolute top-[2%] bottom-[2%] bg-black/90"
-          style={{
-            left: "100%",
-            width: "5px",
-            borderRadius: "1px",
-          }}
-          aria-hidden="true"
-        />
+            jacket. Rendered last so it stacks on top of the disc.
+            Task #982 — omitted for 7" singles, which ship without an
+            inner sleeve. */}
+        {showInnerSleeve && (
+          <div
+            className="absolute top-[2%] bottom-[2%] bg-black/90"
+            style={{
+              left: "100%",
+              width: "5px",
+              borderRadius: "1px",
+            }}
+            aria-hidden="true"
+          />
+        )}
       </div>
     </div>
   );
