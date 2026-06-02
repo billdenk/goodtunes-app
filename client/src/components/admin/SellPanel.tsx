@@ -409,7 +409,19 @@ export function SellPanel({
       onAnticipatedTrackCountChange?.(next);
     }
   };
-  const { data, isLoading, error } = useQuery<SellResponse>({ queryKey: ["/api/admin/albums", albumId, "skus"] });
+  // Task #1025 — the SKU snapshot + invited-press catalog can be edited
+  // by another admin (or re-imported by the press) while this panel is
+  // open. The default queryClient pins staleTime: Infinity with no
+  // remount/focus refetch, so a stale catalog silently mis-resolves a
+  // saved color. Opt these two into refetch-on-mount/focus so reopening
+  // or tabbing back always reconciles against the live catalog identity.
+  const { data, isLoading, error } = useQuery<SellResponse>({
+    queryKey: ["/api/admin/albums", albumId, "skus"],
+    // "always" (not `true`) — the app pins staleTime: Infinity, so a plain
+    // `true` would treat the data as fresh and skip the focus refetch.
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
+  });
   // Live platform-cost feed — used for the "You earn" readout the first
   // time an addon is configured (before a snapshot is written), and as
   // the source of truth for what re-saving will lock in.
@@ -429,6 +441,11 @@ export function SellPanel({
   // see a usable readout. Also drives the Presses panel hard-lock.
   const { data: invitedPress } = useQuery<InvitedPressResponse>({
     queryKey: ["/api/admin/albums", albumId, "invited-press"],
+    // Task #1025 — see the skus query above; the catalog this drives can
+    // drift under us, so reconcile on mount/focus. "always" (not `true`)
+    // because the app's staleTime: Infinity would otherwise skip focus.
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
   });
   // Task #635 — full press list powers the collapsed-header press-
   // switcher popover. Display-only: shows which presses are qualified
@@ -745,6 +762,31 @@ export function SellPanel({
     [invitedPress, allPresses, pressFormatsByPress],
   );
   const defaultPressChipId = pressChips[0]?.id ?? "";
+  // Task #1025 — the press a SAVED catalog SKU was pinned to (its
+  // `album_skus.press_id`). This is the source of truth for which press
+  // catalog a saved color must resolve against. The Printer-chip default
+  // below honors it so EVERY admin reconciles saved colors against the
+  // SAME press catalog on load/refresh — regardless of their own
+  // per-admin localStorage chip (Task #1012) or "All Presses" god-view
+  // state. Without this, two admins with different chips resolved the
+  // same saved SKU against different catalogs (the cross-admin drift Bill
+  // hit). Albums are single-press, so the first pinned SKU wins; we only
+  // honor a pin that maps to a live chip. Null ⇒ no saved catalog SKU yet
+  // (draft) ⇒ fall back to the invited/localStorage default.
+  const pinnedChipId = useMemo(() => {
+    for (const s of data?.skus ?? []) {
+      const pid = s.pressId ?? null;
+      if (!pid) continue;
+      const chip = pressChips.find((c) => c.press?.id === pid);
+      if (chip) return chip.id;
+    }
+    return null;
+  }, [data, pressChips]);
+  // Task #1025 — an explicit, in-session operator chip switch (god-view
+  // press comparison) wins over the pinned default until the next reload.
+  // On reload the ref resets, so load/refresh is always deterministic to
+  // the pinned press — exactly the cross-admin stability the fix needs.
+  const userSwitchedPressRef = useRef(false);
   // Task #1012 — persist the operator's Printer-chip pick per album so a
   // refresh restores the last-selected press instead of snapping back to
   // the invited default. Lazy-init from localStorage; validated against
@@ -777,6 +819,21 @@ export function SellPanel({
       // localStorage can throw under private-mode / SSR; ignore.
     }
   }, [pressSelectStorageKey, selectedPressChipId]);
+  // Task #1025 — once the saved SKUs + chip list have loaded, snap the
+  // Printer chip to the press the saved color was pinned to, unless the
+  // operator explicitly switched presses this session. This is what makes
+  // saved-color resolution deterministic across admins: the catalog the
+  // per-row picker reads (`selectedCatalogByFormat`) becomes the pinned
+  // press's catalog, so id-first (then name-within-this-press) resolution
+  // always reconciles against the same catalog the SKU was saved against —
+  // it no longer floats with each admin's localStorage chip. Runs after
+  // the validity-sync effect above so it wins over the invited default.
+  useEffect(() => {
+    if (userSwitchedPressRef.current) return;
+    if (!pinnedChipId) return;
+    if (selectedPressChipId === pinnedChipId) return;
+    setSelectedPressChipId(pinnedChipId);
+  }, [pinnedChipId, selectedPressChipId]);
   const selectedPressChip =
     pressChips.find((c) => c.id === selectedPressChipId) ?? pressChips[0] ?? null;
   const selectedPress = selectedPressChip?.press ?? null;
@@ -1104,7 +1161,12 @@ export function SellPanel({
           allPresses={allPresses ?? null}
           pressFormatsByPress={pressFormatsByPress}
           selectedId={selectedPressChipId}
-          onSelectId={setSelectedPressChipId}
+          onSelectId={(id) => {
+            // Task #1025 — an explicit operator press switch (god-view
+            // comparison) wins over the pinned default until reload.
+            userSwitchedPressRef.current = true;
+            setSelectedPressChipId(id);
+          }}
         />
 
         {/* Task #533 — Gate #2 artist opt-in for pool-funded early cut. */}
@@ -2490,19 +2552,73 @@ function SkuRow({
   // Same trick for color via `vinylColor` (snapshotted as the color's
   // display name on save).
   const tiers = catalogFormat?.tiers ?? [];
+  // Task #1025 — a color WAS saved on this row if either the exact
+  // catalog id (new snapshots) or the legacy display-name snapshot is
+  // present. Drives the "unresolved" state below so we never silently
+  // overwrite a saved-but-now-unmatchable color with the first swatch.
+  const hadSavedColor = !!(existing?.pressColorId || existing?.vinylColor);
+  // Task #1025 — resolve the saved tier id-first (exact catalog row),
+  // then by name for legacy rows, then the existing first-with-colors
+  // fallback so an empty grid never shows.
   const initialTier = useMemo(
-    () => resolveTierByName(tiers, existing?.vinylColorTier ?? null),
-    [tiers, existing?.vinylColorTier],
+    () => {
+      if (existing?.pressTierId) {
+        const byId = tiers.find((t) => t.id === existing.pressTierId);
+        if (byId) return byId;
+      }
+      return resolveTierByName(tiers, existing?.vinylColorTier ?? null);
+    },
+    [tiers, existing?.pressTierId, existing?.vinylColorTier],
   );
   const [pressTierId, setPressTierId] = useState<string | null>(initialTier?.id ?? null);
   const pickedTier = tiers.find((t) => t.id === pressTierId) ?? initialTier ?? null;
+  // Task #1025 — resolve the saved color id-first, then by display name
+  // (legacy rows). If a color WAS saved but resolves against neither the
+  // live catalog id nor name, leave it UNRESOLVED (null) instead of
+  // snapping to the first swatch — the bug Bill hit where reopening a row
+  // under a re-imported catalog silently overwrote his pick. Fresh draft
+  // rows (no saved color) still default to the first swatch.
   const initialColorId = useMemo(
-    () => resolveColorByName(pickedTier, existing?.vinylColor ?? null)?.id ?? null,
-    [pickedTier, existing?.vinylColor],
+    () => {
+      if (!pickedTier || pickedTier.colors.length === 0) return null;
+      if (existing?.pressColorId) {
+        const byId = pickedTier.colors.find((c) => c.id === existing.pressColorId);
+        if (byId) return byId.id;
+      }
+      if (existing?.vinylColor) {
+        const want = existing.vinylColor.toLowerCase().trim();
+        const byName = pickedTier.colors.find(
+          (c) => c.name.toLowerCase().trim() === want,
+        );
+        if (byName) return byName.id;
+      }
+      if (hadSavedColor) return null;
+      return pickedTier.colors[0]?.id ?? null;
+    },
+    [pickedTier, existing?.pressColorId, existing?.vinylColor, hadSavedColor],
   );
   const [pressColorId, setPressColorId] = useState<string | null>(initialColorId);
+  // Task #1025 — a saved color that no longer resolves against the live
+  // catalog. Surfaces an explicit "Previously X — choose a color" banner
+  // and suppresses autosave so the row can't silently re-snapshot a
+  // fallback color over the operator's intent.
+  const colorUnresolved =
+    !!catalogFormat &&
+    !!pickedTier &&
+    pickedTier.colors.length > 0 &&
+    hadSavedColor &&
+    pressColorId === null;
   // When tier changes, reset color to the first one in the new tier.
+  // Task #1025 — skip the first run (mount, or catalog arriving after
+  // mount) so the deliberate unresolved (null) initial color isn't
+  // immediately clobbered by the first-swatch fallback. Only genuine
+  // operator-driven tier changes after mount snap the color.
+  const tierResetMountRef = useRef(true);
   useEffect(() => {
+    if (tierResetMountRef.current) {
+      tierResetMountRef.current = false;
+      return;
+    }
     if (!pickedTier) {
       if (pressColorId !== null) setPressColorId(null);
       return;
@@ -2549,11 +2665,34 @@ function SkuRow({
     const tiersNow = catalogFormat?.tiers ?? [];
     if (tiersNow.length > 0) {
       const { tierName, colorName } = lastCatalogPicksRef.current;
-      const nextTier = resolveTierByName(tiersNow, tierName);
-      const nextColor = resolveColorByName(nextTier, colorName);
-      if (nextTier) {
-        setPressTierId(nextTier.id);
-        setPressColorId(nextColor?.id ?? null);
+      // Task #1025 — if this swap landed us on the press the SKU was
+      // SAVED against (its pinned tier id exists in this catalog), restore
+      // Bill's exact saved tier + color identity (id-first; leave the
+      // color unresolved if its id is gone) rather than re-matching by
+      // name. This is what makes the programmatic snap-to-pinned-press
+      // (and any admin whose chip differs from the pin) reconcile to the
+      // SAME saved color instead of a name collision or first-swatch
+      // fallback. For a deliberate switch to any OTHER press we keep
+      // Task #1012's name-based carry-over so the operator's pick follows
+      // them across presses in god-view.
+      const pinnedTier = existing?.pressTierId
+        ? tiersNow.find((t) => t.id === existing.pressTierId) ?? null
+        : null;
+      if (pinnedTier) {
+        setPressTierId(pinnedTier.id);
+        setPressColorId(
+          existing?.pressColorId
+            ? pinnedTier.colors.find((c) => c.id === existing.pressColorId)?.id ??
+                null
+            : resolveColorByName(pinnedTier, colorName)?.id ?? null,
+        );
+      } else {
+        const nextTier = resolveTierByName(tiersNow, tierName);
+        const nextColor = resolveColorByName(nextTier, colorName);
+        if (nextTier) {
+          setPressTierId(nextTier.id);
+          setPressColorId(nextColor?.id ?? null);
+        }
       }
     }
     lastCatalogPicksRef.current.sig = catalogSig;
@@ -3154,6 +3293,13 @@ function SkuRow({
     // dirty flag from a pre-lock edit can't sneak through and mutate
     // the snapshot the artist just finalised.
     if (isLocked) return;
+    // Task #1025 — a saved color that no longer resolves against the live
+    // catalog is in an explicit "choose a color" state. Suppress autosave
+    // so editing any other field (e.g. price) can't flush a submit with a
+    // null color, which the server would silently fall back to the
+    // placeholder cost — the exact overwrite this task removes. The
+    // operator must re-pick a color first; the banner tells them so.
+    if (colorUnresolved) return;
     const t = setTimeout(() => submit(), 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3168,6 +3314,7 @@ function SkuRow({
     active,
     pressTierId,
     pressColorId,
+    colorUnresolved,
     displayNameStr,
     // Task #430 — re-arm the debounce when only the effective track
     // count changes (e.g. anticipated tracks edited on a row that's
@@ -5372,49 +5519,14 @@ function SkuRow({
               tooltip (was a loop/recycle icon w/ aria-label only). */}
           <div className="sm:order-2">
           <div className="relative">
-            {/* Task #919 — ambient vendor-color backdrop. When the
-                selected catalog color carries a real swatch photo
-                (MRP per-color images; PMP/Hellbender are hex-only), it
-                blooms a soft, blurred copy of that photo behind the
-                disc/album preview so the Design page reads as "this is
-                YOUR stuff." A solid base fill (the color's hex) sits
-                under the image so the masked/transparent PNGs never
-                show a gap, and a white scrim on top keeps the foreground
-                disc, jacket, and hover controls legible on the light
-                admin surface. Hex-only colors get no image — just a
-                faint tint from the swatch — so we never render a broken
-                image box. The clip box reserves the preview's own
-                footprint (incl. the disc peek) and `overflow-hidden`
-                keeps the blur bloom from spilling past the card at
-                mobile widths. */}
+            {/* Task #1025 — the vinyl preview sits on the plain white
+                admin surface. The earlier ambient vendor-color backdrop
+                (a blurred swatch-photo bloom / faint hex tint behind the
+                disc) was removed because the tint read as a rendering
+                glitch behind the color picker; the disc + jacket carry
+                the selected color on their own. Wrapper kept for layout
+                (rounded clip box reserving the preview footprint). */}
             <div className="relative overflow-hidden rounded-xl">
-              {previewColor.thumbnailUrl ? (
-                <div
-                  className="pointer-events-none absolute inset-0"
-                  aria-hidden
-                  data-testid={`vinyl-preview-backdrop-${format}`}
-                >
-                  <div
-                    className="absolute inset-0"
-                    style={{ background: previewColor.swatch }}
-                  />
-                  <img
-                    src={previewColor.thumbnailUrl}
-                    alt=""
-                    className="w-full h-full object-cover blur-2xl opacity-60"
-                    style={{ transform: "scale(1.35)" }}
-                    draggable={false}
-                  />
-                  <div className="absolute inset-0 bg-white/45" />
-                </div>
-              ) : (
-                <div
-                  className="pointer-events-none absolute inset-0 opacity-15"
-                  aria-hidden
-                  data-testid={`vinyl-preview-backdrop-${format}`}
-                  style={{ background: previewColor.swatch }}
-                />
-              )}
             <div
               className="group relative w-full rounded-lg p-3 sm:p-4"
               data-testid={`vinyl-preview-group-${format}`}
@@ -5650,6 +5762,19 @@ function SkuRow({
                       </button>
                     );
                   })}
+                </div>
+              )}
+              {/* Task #1025 — a saved color that no longer resolves
+                  against the live catalog (the press re-imported / the
+                  row is viewed under a different press). Surface it
+                  explicitly instead of silently snapping to the first
+                  swatch, and hold autosave until the operator re-picks. */}
+              {colorUnresolved && (
+                <div
+                  className="text-xs text-amber-700 font-medium"
+                  data-testid={`text-vinyl-color-unresolved-${format}`}
+                >
+                  Previously {existing?.vinylColor ?? "a color no longer in this catalog"} — choose a color to save.
                 </div>
               )}
               {catalogPicked && (

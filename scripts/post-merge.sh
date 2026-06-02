@@ -260,6 +260,36 @@ SQL
 migrate_albums_share_slug dev  "${DATABASE_URL:-}"
 migrate_albums_share_slug prod "${PROD_DATABASE_URL:-}"
 
+# Task #1025 — album_skus exact catalog identity snapshot. The legacy
+# vinyl_color/vinyl_color_tier snapshots store only display NAMES, which
+# resolve to a different swatch for each admin once a press re-imports
+# its catalog (ids regenerate) or the row is viewed under a different
+# press. press_id/press_tier_id/press_color_id pin the saved pick to the
+# exact catalog rows so it resolves identically for everyone. Additive
+# nullable columns; pre-create on both DBs to keep the publish dev->prod
+# diff empty and so a freshly-cloned dev never 500s the SKU routes that
+# select-all this table. Idempotent; safe on every merge.
+migrate_album_skus_press_identity() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping album_skus press-identity migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE album_skus
+  ADD COLUMN IF NOT EXISTS press_id       varchar,
+  ADD COLUMN IF NOT EXISTS press_tier_id  varchar,
+  ADD COLUMN IF NOT EXISTS press_color_id varchar;
+SQL
+  then
+    echo "post-merge: album_skus press-identity migration ok on $label"
+  else
+    echo "post-merge: WARNING — album_skus press-identity migration failed on $label (continuing)"
+  fi
+}
+migrate_album_skus_press_identity dev  "${DATABASE_URL:-}"
+migrate_album_skus_press_identity prod "${PROD_DATABASE_URL:-}"
+
 # Task #683 — Reconcile dev press roster with prod so a publish dev->prod
 # diff is a no-op over the manufacturers + press_* tables. The founding seed
 # only mints Memphis + Hellbender (fresh ids per clone); the real Physical

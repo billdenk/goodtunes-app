@@ -251,6 +251,13 @@ async function upsertSku(input: {
   jacketUpgrade: JacketUpgrade | null;
   quantityTier: number | null;
   costSource: string;
+  // Task #1025 — exact catalog identity of the saved vinyl pick. Pins
+  // the snapshot to the press + tier + color ROWS so it resolves the
+  // same swatch for every admin (names alone drift on catalog re-import
+  // / cross-press views). Null on the placeholder / legacy vinyl path.
+  pressId: string | null;
+  pressTierId: string | null;
+  pressColorId: string | null;
   // Task #433 — per-row Lock. `undefined` = leave existing value alone
   // (no-op on conflict update); `Date` = lock; `null` = unlock.
   lockedAt?: Date | null;
@@ -273,6 +280,9 @@ async function upsertSku(input: {
     jacketUpgrade: input.jacketUpgrade,
     quantityTier: input.quantityTier,
     costSource: input.costSource,
+    pressId: input.pressId,
+    pressTierId: input.pressTierId,
+    pressColorId: input.pressColorId,
   };
   const insertValues: Record<string, unknown> = { ...input };
   if (input.lockedAt === undefined) {
@@ -983,6 +993,12 @@ export function registerCommerceRoutes(app: Express) {
     let vinylColorTier: string | null = null;
     let jacketUpgrade: JacketUpgrade | null = null;
     let quantityTier: number | null = null;
+    // Task #1025 — exact catalog identity snapshot. Captured only when
+    // the catalog lookup below actually resolves a tier, so a legacy /
+    // placeholder save never leaves stale ids behind.
+    let pressIdSnap: string | null = null;
+    let pressTierIdSnap: string | null = null;
+    let pressColorIdSnap: string | null = null;
     // Task #624 — broker discount snapshot. Resolved alongside the
     // press lookup below so downstream payout math can recompute the
     // discounted "what we actually pay the press" amount from the
@@ -1016,6 +1032,12 @@ export function registerCommerceRoutes(app: Express) {
           vinylColorTier = looked.tierName;
           vinylColorId = looked.colorName; // snapshot as display name
           quantityTier = looked.snappedQty;
+          // Task #1025 — pin the exact catalog rows alongside the names
+          // so the saved color resolves identically for every admin
+          // regardless of catalog re-imports or cross-press views.
+          pressIdSnap = pressId;
+          pressTierIdSnap = parsed.data.pressTierId;
+          pressColorIdSnap = parsed.data.pressColorId ?? null;
         }
         // Task #624 — capture the press's broker discount rate at save
         // time so finalised SKUs aren't retroactively repriced if Bill
@@ -1089,6 +1111,9 @@ export function registerCommerceRoutes(app: Express) {
       jacketUpgrade,
       quantityTier,
       costSource,
+      pressId: pressIdSnap,
+      pressTierId: pressTierIdSnap,
+      pressColorId: pressColorIdSnap,
       lockedAt,
     });
     res.json(row);

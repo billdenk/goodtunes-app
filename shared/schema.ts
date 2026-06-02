@@ -1786,6 +1786,17 @@ export const albumSkus = pgTable(
     jacketUpgrade: text("jacket_upgrade"),
     quantityTier: integer("quantity_tier"),
     costSource: text("cost_source"),
+    // Task #1025 — exact catalog identity of the saved vinyl pick. The
+    // legacy `vinylColor`/`vinylColorTier` snapshots store only display
+    // NAMES, which resolve differently for each admin once a press
+    // re-imports its catalog (color ids regenerate) or the operator
+    // views the row under a different press in "All Presses" mode. These
+    // three ids pin the snapshot to the exact press + tier + color row
+    // so a saved color resolves identically for everyone. Nullable for
+    // legacy rows + non-catalog (placeholder) vinyl saves.
+    pressId: varchar("press_id"),
+    pressTierId: varchar("press_tier_id"),
+    pressColorId: varchar("press_color_id"),
     // Task #433 — per-row Lock affordance. Same "finalized, reversible
     // until the run actually goes to press" semantics as the album-level
     // `sellQuoteLockedAt`. NULL = unlocked (editable); non-null = locked
