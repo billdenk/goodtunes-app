@@ -140,6 +140,14 @@ export function GoodDeedCertificate({
       ? stageW
       : Math.max(180, Math.min(stageW, Math.round((vh - 300) / previewRatio)));
 
+  // Reserved card-stage height, sized to the tallest format (Story, 9:16). The
+  // card preview area is locked to this height and the rendered card is
+  // vertically centered within it, so switching to the shorter Portrait/Square
+  // formats settles the card inside the same reserved space instead of changing
+  // the stage height and bouncing the controls/tabs above it.
+  const storyW = Math.max(180, Math.min(stageW, Math.round((vh - 300) / (16 / 9))));
+  const stageH = Math.round(storyW * (16 / 9));
+
   // When the card size changes (Story/Portrait/Square switch or a viewport
   // resize re-derives previewW), snap-mandatory can strand the scroll position
   // between two now-resized snap targets, leaving a card half-cut and frozen on
@@ -260,7 +268,7 @@ export function GoodDeedCertificate({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center"
+      className="fixed inset-0 z-[60]"
       role="dialog"
       aria-modal="true"
       aria-label="GoodDeed certificate"
@@ -288,9 +296,12 @@ export function GoodDeedCertificate({
         </div>
       )}
 
-      <div className="relative w-full z-10 animate-slide-up">
+      <div className="absolute inset-0 z-10 flex flex-col animate-slide-up">
         {/* Top controls: close + identity + share */}
-        <div className="flex items-center justify-between mb-5 px-5 gap-2">
+        <div
+          className="flex items-center justify-between mb-5 px-5 gap-2"
+          style={{ paddingTop: "calc(env(safe-area-inset-top) + 1rem)" }}
+        >
           <button
             type="button"
             onClick={onClose}
@@ -503,50 +514,66 @@ export function GoodDeedCertificate({
           </div>
         </div>
 
-        {/* Carousel */}
+        {/* Bottom-anchored card area. mt-auto pins it just above the nav/footer
+            so the controls + tabs above stay put. The carousel lives inside a
+            reserved-height stage (sized to the tallest Story format) and is
+            vertically centered, so switching to the shorter Portrait/Square
+            formats settles within the same space instead of bouncing the
+            layout. */}
         <div
-          ref={scrollerRef}
-          onScroll={handleScroll}
-          className="overflow-x-auto scrollbar-hide snap-x snap-mandatory"
-          style={{ WebkitOverflowScrolling: "touch" }}
+          className="mt-auto"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1.5rem)" }}
         >
-          <div className="flex gap-4 px-1" style={{ minWidth: "100%", justifyContent: "safe center" }}>
-            {certs.map((num, i) => (
-              <CertCard
-                key={num}
-                ref={(el) => { cardRefs.current[i] = el; }}
-                album={album}
-                ownerName={displayedName}
-                ownerPhotoUrl={user?.photoUrl ?? null}
-                num={num}
-                isPreview={isPreview}
-                shape={shape}
-                w={previewW}
-              />
-            ))}
+          {/* Carousel — reserved-height stage, card centered vertically */}
+          <div
+            className="flex flex-col justify-center"
+            style={{ height: stageH }}
+          >
+            <div
+              ref={scrollerRef}
+              onScroll={handleScroll}
+              className="overflow-x-auto scrollbar-hide snap-x snap-mandatory"
+              style={{ WebkitOverflowScrolling: "touch" }}
+            >
+              <div className="flex gap-4 px-1" style={{ minWidth: "100%", justifyContent: "safe center" }}>
+                {certs.map((num, i) => (
+                  <CertCard
+                    key={num}
+                    ref={(el) => { cardRefs.current[i] = el; }}
+                    album={album}
+                    ownerName={displayedName}
+                    ownerPhotoUrl={user?.photoUrl ?? null}
+                    num={num}
+                    isPreview={isPreview}
+                    shape={shape}
+                    w={previewW}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Dot indicators */}
-        {certs.length > 1 && (
-          <div className="flex items-center justify-center gap-1.5 mt-4">
-            {certs.map((_, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => goTo(i)}
-                aria-label={`Go to certificate ${i + 1}`}
-                className="rounded-full transition-all"
-                style={{
-                  width: i === safeIdx ? 18 : 6,
-                  height: 6,
-                  background: i === safeIdx ? "#fff" : "rgba(255,255,255,0.35)",
-                }}
-                data-testid={`dot-cert-${i}`}
-              />
-            ))}
-          </div>
-        )}
+          {/* Dot indicators */}
+          {certs.length > 1 && (
+            <div className="flex items-center justify-center gap-1.5 mt-4">
+              {certs.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => goTo(i)}
+                  aria-label={`Go to certificate ${i + 1}`}
+                  className="rounded-full transition-all"
+                  style={{
+                    width: i === safeIdx ? 18 : 6,
+                    height: 6,
+                    background: i === safeIdx ? "#fff" : "rgba(255,255,255,0.35)",
+                  }}
+                  data-testid={`dot-cert-${i}`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Hidden full-resolution capture stage. handleSaveImage snapshots this
             off-screen node so the exported PNG is always exactly 1080×1080
