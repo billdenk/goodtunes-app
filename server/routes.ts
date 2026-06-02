@@ -21925,6 +21925,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   );
 
+  // Task #969 — share-slug availability probe powering the "Suggest"
+  // affordance in AdminAlbum's ShareLinkPanel. Mirrors the PUT uniqueness
+  // rule exactly: validate shape/reserved-word via the shared helper, then
+  // check collisions against EVERY other album (incl. hidden + trashed) so
+  // the suggested slug the operator gets is truthfully free, not just free
+  // among published releases. Read-only; leaks no data the operator can't
+  // already infer when their save bounces with the same message.
+  app.get(
+    "/api/admin/albums/:id/share-slug-available",
+    requireAdmin,
+    async (req, res) => {
+      const { validateShareSlug } = await import("@shared/shareSlug");
+      const result = validateShareSlug(String(req.query.slug ?? ""));
+      if (!result.ok) {
+        return res.json({ available: false, reason: result.reason });
+      }
+      const existing = await storage.getAlbumBySlug(result.slug, {
+        includeHidden: true,
+        includeTrashed: true,
+      });
+      const taken = !!existing && existing.id !== String(req.params.id);
+      return res.json({
+        available: !taken,
+        slug: result.slug,
+        reason: taken
+          ? `"${result.slug}" is already used by another release.`
+          : undefined,
+      });
+    },
+  );
+
   // ─── Task #922 — Per-album NPO donation split ─────────────────────────
   // GET returns the album's current beneficiaries (or, when none are set
   // yet, a single default derived from the artist's referred_by_org_id),

@@ -1818,6 +1818,7 @@ function ShareLinkPanel({
   const { toast } = useToast();
   const [draft, setDraft] = useState(album.shareSlug ?? "");
   const [copied, setCopied] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
 
   // Keep the field in sync if the album reloads with a different slug
   // (e.g. another tab saved it) — but only when not mid-edit.
@@ -1852,6 +1853,67 @@ function ShareLinkPanel({
       setDraft(savedSlug);
     },
   });
+
+  // Task #969 — propose a clean, available slug from the album's primary
+  // artist / title. Build a short ordered list of candidates (artist,
+  // title, artist-title), then for each base probe the server uniqueness
+  // endpoint, falling back to `-2`, `-3` … suffixes when a base is taken.
+  // The first available candidate fills the field (operator can override
+  // and the save still re-validates). If everything probed is taken, we
+  // still fill the best-shaped base so the operator has a starting point.
+  const checkAvailable = async (slug: string): Promise<boolean> => {
+    try {
+      const r = await apiRequest(
+        "GET",
+        `/api/admin/albums/${album.id}/share-slug-available?slug=${encodeURIComponent(slug)}`,
+      );
+      const data = await r.json();
+      return !!data.available;
+    } catch {
+      return false;
+    }
+  };
+
+  const suggest = async () => {
+    if (disabled || save.isPending || suggesting) return;
+    const bases: string[] = [];
+    for (const raw of [album.artist, album.title, `${album.artist} ${album.title}`]) {
+      const v = validateShareSlug(raw ?? "");
+      if (v.ok && !bases.includes(v.slug)) bases.push(v.slug);
+    }
+    if (bases.length === 0) {
+      toast({
+        title: "Couldn't suggest a link",
+        description: "This release needs a title or artist to suggest from.",
+      });
+      return;
+    }
+    setSuggesting(true);
+    try {
+      let fallback = "";
+      for (const base of bases) {
+        if (!fallback) fallback = base;
+        for (let n = 1; n <= 9; n++) {
+          const candidate = n === 1 ? base : `${base}-${n}`;
+          const v = validateShareSlug(candidate);
+          if (!v.ok) continue;
+          if (await checkAvailable(v.slug)) {
+            setDraft(v.slug);
+            return;
+          }
+        }
+      }
+      // Nothing free in the small search space — still hand the operator a
+      // clean starting point rather than a blank field.
+      setDraft(fallback);
+      toast({
+        title: "Suggestion may be taken",
+        description: "Tweak it before saving — the closest clean slug is filled in.",
+      });
+    } finally {
+      setSuggesting(false);
+    }
+  };
 
   const commit = () => {
     if (disabled || save.isPending) return;
@@ -1891,6 +1953,20 @@ function ShareLinkPanel({
         <span className="text-sm font-semibold text-slate-900">
           Share link
         </span>
+        <button
+          type="button"
+          onClick={suggest}
+          disabled={disabled || save.isPending || suggesting}
+          className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-[color:var(--brand-blue)] hover:underline disabled:opacity-50 disabled:no-underline"
+          data-testid="button-suggest-share-slug"
+        >
+          {suggesting ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Sparkles className="w-3.5 h-3.5" />
+          )}
+          {suggesting ? "Checking…" : "Suggest"}
+        </button>
       </div>
       <p className="text-xs text-slate-500 mt-1 leading-snug">
         A clean, shareable URL for this release. Saves on blur. Letters,
