@@ -341,6 +341,16 @@ export function AdminInstruments() {
     },
     onSuccess: ({ instrument, scraped, makerVendor, resellerVendor, resellerAttached }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/instruments"] });
+      // A brand-new maker (or reseller) may have been minted via the
+      // findOrCreateVendor upsert above. Invalidate the vendor caches so
+      // the detail page we're about to navigate to recognizes it without
+      // a manual refresh. Predicate-based to catch every ?role= variant.
+      queryClient.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          typeof q.queryKey[0] === "string" &&
+          q.queryKey[0].startsWith("/api/vendors"),
+      });
       setAddOpen(false);
       setPasteUrl("");
       setPasteError(null);

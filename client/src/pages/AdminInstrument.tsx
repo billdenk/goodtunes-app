@@ -966,6 +966,7 @@ function AddMakerComposer({
   onCancel: () => void;
 }) {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const seeded = (seedName ?? "").trim();
   const [step, setStep] = useState<"url" | "manual">(seeded ? "manual" : "url");
   const [pasteUrl, setPasteUrl] = useState("");
@@ -1102,6 +1103,16 @@ function AddMakerComposer({
       if (scrapedName) {
         toast({ title: `Pulled "${scrapedName}"` });
       }
+      // Refresh the vendor caches so the freshly created maker shows up in
+      // the picker/maker panel immediately — no manual reload. Predicate
+      // matches every ?role= variant of /api/vendors, mirroring the maker
+      // update handler below.
+      qc.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          typeof q.queryKey[0] === "string" &&
+          q.queryKey[0].startsWith("/api/vendors"),
+      });
       onCreated(vendor.id);
     },
     onError: (err: any, vars) => {
