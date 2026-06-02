@@ -358,11 +358,13 @@ export function AdminAlbum() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // Task #1007 — smart-back target for the delete redirect, the breadcrumb,
-  // and the not-found "Back to albums" link. Precedence:
+  // Task #1007 / #1008 — smart-back target for the delete redirect, the
+  // breadcrumb, and the not-found "Back to albums" link. Precedence:
   //   1. `?from=person&personId=…` → back to that Person (Task #468).
-  //   2. `?from=albums&albumsTab=<tab>` → back to the Albums list on the tab
-  //      the operator opened the album from (Prepping/Staged/Released/Sunset).
+  //   2. `?from=albums&albumsReturn=<encoded list query>` → back to the Albums
+  //      list with the operator's full view restored (tab + grid/list view +
+  //      search + type/genre/date/explicit filters). `albumsTab=<tab>` is the
+  //      legacy form (#1007) still honored for any in-flight links.
   //   3. Otherwise the canonical Albums list (Released default).
   const backToAlbumsHref = useMemo(() => {
     try {
@@ -372,11 +374,14 @@ export function AdminAlbum() {
         if (personId) return `/admin/people/${personId}`;
       }
       if (sp.get("from") === "albums") {
+        const ret = sp.get("albumsReturn");
+        if (ret) return `/admin/albums?${ret}`;
         const t = sp.get("albumsTab");
         const valid = ["prepping", "staged", "live", "sunset"];
         if (t && valid.includes(t)) {
           return t === "live" ? "/admin/albums" : `/admin/albums?tab=${t}`;
         }
+        return "/admin/albums";
       }
     } catch {
       /* malformed query string — fall through to the default */

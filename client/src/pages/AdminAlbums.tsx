@@ -18,6 +18,7 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   ViewModeToggle,
   useViewMode,
+  type ViewMode,
 } from "@/components/admin/ViewModeToggle";
 import { Combobox } from "@/components/admin/Combobox";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
@@ -77,38 +78,78 @@ type TabKey = "prepping" | "staged" | "live" | "sunset";
 
 const TAB_KEYS: TabKey[] = ["prepping", "staged", "live", "sunset"];
 
-// Task #1007 — build the link into an album, carrying the originating tab so
-// the album page's delete redirect + "Back to albums" link can return the
-// operator to the tab they came from. The default Released tab is omitted to
-// keep links clean; the album page falls back to `/admin/albums` (Released)
-// when no tab rides along. The existing `from=person` smart-back is set by
-// the Person page instead and takes precedence on the album side.
-function albumHref(albumId: string, tab: TabKey): string {
-  if (tab === "live") return `/admin/albums/${albumId}`;
-  return `/admin/albums/${albumId}?from=albums&albumsTab=${tab}`;
+// Task #1007 / #1008 — build the link into an album, carrying the entire
+// originating list query (tab + view + search + filters) so the album page's
+// delete redirect + "Back to albums" link can drop the operator back exactly
+// where they left the list, not just on the right tab. The whole list query
+// string rides along url-encoded as `albumsReturn`; when it's empty (all
+// defaults) we still stamp `from=albums` so the back target stays the list.
+// The existing `from=person` smart-back is set by the Person page instead and
+// takes precedence on the album side.
+function albumHref(albumId: string, listQuery: string): string {
+  const base = `/admin/albums/${albumId}`;
+  if (!listQuery) return `${base}?from=albums`;
+  return `${base}?from=albums&albumsReturn=${encodeURIComponent(listQuery)}`;
 }
 
 export function AdminAlbums() {
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
   const urlSearch = useSearch();
-  // Task #1007 — restore the active tab from the URL (`?tab=`) so a refresh
-  // (or a return navigation after deleting/leaving an album) reopens the
-  // tab the operator was on instead of snapping back to Released. Read
-  // ONCE on mount; the mirror effect below keeps the URL in sync after.
-  const initialTab = useMemo<TabKey>(() => {
+  // Task #1007 / #1008 — restore the whole list view from the URL so a
+  // refresh (or a return navigation after deleting/leaving an album) drops
+  // the operator back exactly where they were: same lifecycle tab, grid/list
+  // view, search text, and type/genre/date/explicit filters. Parsed ONCE on
+  // mount; the mirror effect below keeps the URL in sync after every change.
+  const initial = useMemo(() => {
+    const out = {
+      tab: "live" as TabKey,
+      view: null as ViewMode | null,
+      search: "",
+      types: new Set<AlbumLite["type"]>(["LP", "EP", "Duo"]),
+      year: null as number | null,
+      genre: "",
+      explicit: "any" as "any" | "explicit" | "clean",
+    };
     try {
-      const t = new URLSearchParams(urlSearch).get("tab");
-      if (t && (TAB_KEYS as string[]).includes(t)) return t as TabKey;
+      const p = new URLSearchParams(urlSearch);
+      const t = p.get("tab");
+      if (t && (TAB_KEYS as string[]).includes(t)) out.tab = t as TabKey;
+      const v = p.get("view");
+      if (v === "grid" || v === "list") out.view = v;
+      const q = p.get("q");
+      if (q) out.search = q;
+      const types = p.get("types");
+      if (types) {
+        const valid: AlbumLite["type"][] = ["LP", "EP", "Duo"];
+        const chosen = types
+          .split(",")
+          .filter((x): x is AlbumLite["type"] =>
+            (valid as string[]).includes(x),
+          );
+        if (chosen.length) out.types = new Set(chosen);
+      }
+      const year = p.get("year");
+      if (year) {
+        const n = parseInt(year, 10);
+        if (Number.isFinite(n)) out.year = n;
+      }
+      const genre = p.get("genre");
+      if (genre) out.genre = genre;
+      const ex = p.get("explicit");
+      if (ex === "explicit" || ex === "clean") out.explicit = ex;
     } catch {
-      /* malformed query string — fall through to the default */
+      /* malformed query string — fall through to the defaults */
     }
-    return "live";
+    return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [tab, setTab] = useState<TabKey>(initialTab);
-  const [search, setSearch] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [tab, setTab] = useState<TabKey>(initial.tab);
+  const [search, setSearch] = useState(initial.search);
+  // Open the search box on mount when a query rode in on the URL, so the
+  // restored text is actually visible (and clearable) instead of filtering
+  // the grid from a collapsed control.
+  const [searchOpen, setSearchOpen] = useState(initial.search !== "");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useViewMode("albums");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -118,18 +159,20 @@ export function AdminAlbums() {
   // admin Albums tabs already exclude imports. The default set has all
   // three on so the unfiltered grid shows everything.
   const [typeFilter, setTypeFilter] = useState<Set<AlbumLite["type"]>>(
-    () => new Set<AlbumLite["type"]>(["LP", "EP", "Duo"]),
+    () => new Set<AlbumLite["type"]>(initial.types),
   );
   // "Date added" — single year picker (null = Any). Typeable via the
   // input; the datalist suggests years actually present in the catalog.
-  const [dateAddedYear, setDateAddedYear] = useState<number | null>(null);
+  const [dateAddedYear, setDateAddedYear] = useState<number | null>(
+    initial.year,
+  );
   // Genre filter — single-select via the shared admin Combobox so it
   // feels the same as the genre field on the album detail page. Empty
   // string = Any.
-  const [genreFilter, setGenreFilter] = useState<string>("");
+  const [genreFilter, setGenreFilter] = useState<string>(initial.genre);
   const [explicitFilter, setExplicitFilter] = useState<
     "any" | "explicit" | "clean"
-  >("any");
+  >(initial.explicit);
   // Task #445 — "+ Add Album" opens the "Who's the artist?" dialog first
   // so the new album lands with primaryArtistId already attached instead
   // of "Unknown artist". The dialog stays open (and its actions disabled)
@@ -201,29 +244,50 @@ export function AdminAlbums() {
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
 
-  // Task #1007 — mirror the active tab into the URL (`?tab=`) using `replace`
-  // so a refresh or a return navigation (e.g. after deleting an album) lands
-  // back on the same tab. The default Released tab keeps a clean URL (param
-  // removed); any non-default tab is written. Early-returns when the URL
-  // already matches so repeated clicks don't loop the navigate.
+  // Task #1008 — when a `view` rode in on the URL (a shared/bookmarked link or
+  // a return-from-album navigation), let it win over the localStorage default
+  // once on mount. After that `useViewMode` owns persistence as usual.
   useEffect(() => {
-    let params: URLSearchParams;
+    if (initial.view && initial.view !== view) setView(initial.view);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Task #1007 / #1008 — serialize the full list view (tab + grid/list view +
+  // search + type/genre/date/explicit filters) into a single query string.
+  // Defaults are omitted so the common case keeps a clean `/admin/albums` URL;
+  // this same string is mirrored into the URL below and carried into album
+  // links so a refresh or a return-from-album navigation restores everything.
+  const listQueryString = useMemo(() => {
+    const p = new URLSearchParams();
+    if (tab !== "live") p.set("tab", tab);
+    if (view !== "grid") p.set("view", view);
+    if (search) p.set("q", search);
+    if (typeFilter.size !== 3) {
+      const order: AlbumLite["type"][] = ["LP", "EP", "Duo"];
+      p.set("types", order.filter((t) => typeFilter.has(t)).join(","));
+    }
+    if (dateAddedYear !== null) p.set("year", String(dateAddedYear));
+    if (genreFilter.trim()) p.set("genre", genreFilter.trim());
+    if (explicitFilter !== "any") p.set("explicit", explicitFilter);
+    return p.toString();
+  }, [tab, view, search, typeFilter, dateAddedYear, genreFilter, explicitFilter]);
+
+  // Mirror the serialized list view into the URL with `replace` so refreshes
+  // and return navigations land back where the operator was. Early-returns
+  // when the URL already matches so repeated state writes don't loop navigate.
+  useEffect(() => {
+    let current = "";
     try {
-      params = new URLSearchParams(urlSearch);
+      current = new URLSearchParams(urlSearch).toString();
     } catch {
-      params = new URLSearchParams();
+      current = "";
     }
-    const current = params.get("tab");
-    if (tab === "live") {
-      if (current === null) return;
-      params.delete("tab");
-    } else {
-      if (current === tab) return;
-      params.set("tab", tab);
-    }
-    const qs = params.toString();
-    navigate(`/admin/albums${qs ? `?${qs}` : ""}`, { replace: true });
-  }, [tab, urlSearch, navigate]);
+    if (current === listQueryString) return;
+    navigate(
+      `/admin/albums${listQueryString ? `?${listQueryString}` : ""}`,
+      { replace: true },
+    );
+  }, [listQueryString, urlSearch, navigate]);
 
   const {
     data: albumsData,
@@ -720,7 +784,11 @@ export function AdminAlbums() {
             data-testid="grid-admin-albums"
           >
             {filtered.map((a) => (
-              <AlbumTile key={a.id} album={a} tab={tab} />
+              <AlbumTile
+                key={a.id}
+                album={a}
+                href={albumHref(a.id, listQueryString)}
+              />
             ))}
           </div>
         ) : (
@@ -729,7 +797,11 @@ export function AdminAlbums() {
             data-testid="list-admin-albums"
           >
             {filtered.map((a) => (
-              <AlbumRow key={a.id} album={a} tab={tab} />
+              <AlbumRow
+                key={a.id}
+                album={a}
+                href={albumHref(a.id, listQueryString)}
+              />
             ))}
           </div>
         )}
@@ -741,14 +813,14 @@ export function AdminAlbums() {
 
 /* ─── Pieces ────────────────────────────────────────────────────────── */
 
-function AlbumTile({ album, tab }: { album: AlbumLite; tab: TabKey }) {
+function AlbumTile({ album, href }: { album: AlbumLite; href: string }) {
   const countdown =
     albumStage(album) === "staged"
       ? sunriseCountdownLabel(album.goodTunesReleaseDate)
       : null;
   return (
     <Link
-      href={albumHref(album.id, tab)}
+      href={href}
       className="group block"
       data-testid={`tile-album-${album.id}`}
     >
@@ -813,14 +885,14 @@ function AlbumTile({ album, tab }: { album: AlbumLite; tab: TabKey }) {
   );
 }
 
-function AlbumRow({ album, tab }: { album: AlbumLite; tab: TabKey }) {
+function AlbumRow({ album, href }: { album: AlbumLite; href: string }) {
   const countdown =
     albumStage(album) === "staged"
       ? sunriseCountdownLabel(album.goodTunesReleaseDate)
       : null;
   return (
     <Link
-      href={albumHref(album.id, tab)}
+      href={href}
       className="group flex items-center gap-3 px-3 py-2 hover:bg-slate-50 transition-colors"
       data-testid={`row-album-${album.id}`}
     >
