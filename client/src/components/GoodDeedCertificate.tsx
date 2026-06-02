@@ -474,56 +474,13 @@ export function GoodDeedCertificate({
           </div>
         </div>
 
-        {/* Shape toggle: which share format to render + save */}
-        <div className="flex justify-center mb-4 px-5">
-          <div
-            className="inline-flex rounded-full p-1"
-            role="tablist"
-            aria-label="Card format"
-            style={{
-              background: "rgba(255,255,255,0.14)",
-              backdropFilter: "blur(20px)",
-              WebkitBackdropFilter: "blur(20px)",
-              border: "1px solid rgba(255,255,255,0.2)",
-            }}
-          >
-            {([
-              { key: "story", label: "Story" },
-              { key: "portrait", label: "Portrait" },
-              { key: "square", label: "Square" },
-            ] as const).map((opt) => {
-              const active = shape === opt.key;
-              return (
-                <button
-                  key={opt.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setShape(opt.key)}
-                  className="h-10 px-5 rounded-full text-sm font-semibold transition-colors"
-                  style={{
-                    background: active ? "#ffffff" : "transparent",
-                    color: active ? "var(--brand-bg)" : "rgba(255,255,255,0.78)",
-                  }}
-                  data-testid={`button-shape-${opt.key}`}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Bottom-anchored card area. mt-auto pins it just above the nav/footer
-            so the controls + tabs above stay put. The carousel lives inside a
-            reserved-height stage (sized to the tallest Story format) and is
-            vertically centered, so switching to the shorter Portrait/Square
-            formats settles within the same space instead of bouncing the
-            layout. */}
-        <div
-          className="mt-auto"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1.5rem)" }}
-        >
+        {/* Card area — vertically centered in the flexible space between the
+            top controls and the bottom-anchored segmented control. The
+            carousel lives inside a reserved-height stage (sized to the tallest
+            Story format) and is vertically centered within it, so switching to
+            the shorter Portrait/Square formats settles inside the same reserved
+            space instead of bouncing the controls above or the tabs below. */}
+        <div className="flex-1 min-h-0 flex flex-col justify-center">
           {/* Carousel — reserved-height stage, card centered vertically */}
           <div
             className="flex flex-col justify-center"
@@ -573,6 +530,51 @@ export function GoodDeedCertificate({
               ))}
             </div>
           )}
+        </div>
+
+        {/* Bottom-anchored shape toggle: which share format to render + save.
+            Pinned to the bottom (above the safe-area inset) so it stays put
+            while only the centered card above changes size. */}
+        <div
+          className="flex justify-center px-5 pt-4"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1.5rem)" }}
+        >
+          <div
+            className="inline-flex rounded-full p-1"
+            role="tablist"
+            aria-label="Card format"
+            style={{
+              background: "rgba(255,255,255,0.14)",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              border: "1px solid rgba(255,255,255,0.2)",
+            }}
+          >
+            {([
+              { key: "story", label: "Story" },
+              { key: "portrait", label: "Portrait" },
+              { key: "square", label: "Square" },
+            ] as const).map((opt) => {
+              const active = shape === opt.key;
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setShape(opt.key)}
+                  className="h-10 px-5 rounded-full text-sm font-semibold transition-colors"
+                  style={{
+                    background: active ? "#ffffff" : "transparent",
+                    color: active ? "var(--brand-bg)" : "rgba(255,255,255,0.78)",
+                  }}
+                  data-testid={`button-shape-${opt.key}`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Hidden full-resolution capture stage. handleSaveImage snapshots this
