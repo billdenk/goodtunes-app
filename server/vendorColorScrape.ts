@@ -41,34 +41,87 @@ export async function maskToVinylDisc(buf: Buffer): Promise<Buffer | null> {
   const data = ctx.getImageData(0, 0, w, h);
   const px = data.data;
 
-  // Sample the 1-px perimeter ring as background colors. Studio
-  // backdrops are uniform on the outer edge by design, so any pixel
-  // inside the frame that doesn't match any sampled edge color (within
-  // tolerance) is treated as foreground (vinyl + label).
-  const bgSamples: number[] = []; // packed r,g,b triples
-  const step = Math.max(1, Math.floor(Math.min(w, h) / 64));
-  const pushSample = (x: number, y: number) => {
+  // Classify every pixel as background or foreground. The naive
+  // "match any sampled edge color" test breaks on Hellbender mockups,
+  // which use a TWO-TONE studio backdrop (gray upper-left, light-gray/
+  // white lower-right) joined by a diagonal gradient seam plus a soft
+  // drop shadow — none of those intermediate gray/shadow pixels match a
+  // flat sampled tone, so they leaked into the foreground and the disc
+  // came out as a rough square. The key invariant: the whole backdrop
+  // (both tones + seam + shadow) is ACHROMATIC (gray→white), while the
+  // pressed disc is either chromatic (gold/blue/red/multicolor) or very
+  // dark (black vinyl). So we model the backdrop as "low-chroma pixels
+  // within a brightness band", which absorbs the seam and shadow without
+  // a flood-fill that could leak across anti-aliased disc edges. We
+  // still keep a flat-tone fallback for uniform/transparent backdrops
+  // (MRP) so those don't regress.
+  const CHROMA_TH = 30; // max-min channel spread at/below which a pixel reads as gray
+  const SHADOW_MARGIN = 60; // extend the gray band downward to swallow drop shadow
+  const TONE_TOL = 34; // per-channel tolerance for the flat-tone fallback
+
+  const step = Math.max(1, Math.floor(Math.min(w, h) / 128));
+  // Deduplicate perimeter tones (quantized), kept split by chroma. The
+  // flat-tone fallback stays a handful of comparisons per pixel instead
+  // of hundreds. Chromatic tones always count as background; achromatic
+  // (gray) tones are only used as flat background when there's NO light
+  // studio backdrop — when there IS one, the gray band below handles all
+  // grays (including the seam + shadow) and folding gray tones into the
+  // flat matcher would eat grayish translucent discs (coke bottle).
+  const chromaSeen = new Set<number>();
+  const achroSeen = new Set<number>();
+  const chromaTones: number[] = [];
+  const achroTones: number[] = [];
+  let periCount = 0;
+  let achroCount = 0;
+  let achroMin = 255;
+  let achroMax = 0;
+  const sampleEdge = (x: number, y: number) => {
     const i = (y * w + x) * 4;
-    if (px[i + 3] < 16) return; // already transparent
-    bgSamples.push(px[i], px[i + 1], px[i + 2]);
+    if (px[i + 3] < 16) return; // transparent edge -> not a studio tone
+    periCount++;
+    const r = px[i], g = px[i + 1], b = px[i + 2];
+    const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+    const v = Math.max(r, g, b);
+    const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+    if (chroma <= CHROMA_TH) {
+      achroCount++;
+      if (v < achroMin) achroMin = v;
+      if (v > achroMax) achroMax = v;
+      if (!achroSeen.has(key) && achroTones.length < 64 * 3) { achroSeen.add(key); achroTones.push(r, g, b); }
+    } else if (!chromaSeen.has(key) && chromaTones.length < 64 * 3) {
+      chromaSeen.add(key);
+      chromaTones.push(r, g, b);
+    }
   };
   for (let x = 0; x < w; x += step) {
-    pushSample(x, 0);
-    pushSample(x, h - 1);
+    sampleEdge(x, 0);
+    sampleEdge(x, h - 1);
   }
   for (let y = 0; y < h; y += step) {
-    pushSample(0, y);
-    pushSample(w - 1, y);
+    sampleEdge(0, y);
+    sampleEdge(w - 1, y);
   }
-  if (bgSamples.length === 0) return null;
+  if (periCount === 0) return null;
 
-  const THRESH = 38; // per-channel tolerance
+  // A "studio" backdrop is mostly light, achromatic gray/white on the
+  // perimeter. When present we treat the whole gray band as background;
+  // the band floor is capped so a true-black disc (or its label ring)
+  // stays foreground even if the shadow touches the frame edge.
+  const studio = achroCount / periCount >= 0.5 && achroMax >= 170;
+  const bandLo = studio ? Math.max(78, achroMin - SHADOW_MARGIN) : -1;
+  // Flat tones used by the fallback matcher: always the chromatic ones;
+  // add gray tones only for non-studio uniform opaque backdrops.
+  const tones = studio ? chromaTones : chromaTones.concat(achroTones);
+
   const isBg = (r: number, g: number, b: number): boolean => {
-    for (let k = 0; k < bgSamples.length; k += 3) {
+    const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+    const v = Math.max(r, g, b);
+    if (studio && chroma <= CHROMA_TH && v >= bandLo) return true;
+    for (let k = 0; k < tones.length; k += 3) {
       if (
-        Math.abs(r - bgSamples[k]) <= THRESH &&
-        Math.abs(g - bgSamples[k + 1]) <= THRESH &&
-        Math.abs(b - bgSamples[k + 2]) <= THRESH
+        Math.abs(r - tones[k]) <= TONE_TOL &&
+        Math.abs(g - tones[k + 1]) <= TONE_TOL &&
+        Math.abs(b - tones[k + 2]) <= TONE_TOL
       ) {
         return true;
       }
@@ -76,58 +129,97 @@ export async function maskToVinylDisc(buf: Buffer): Promise<Buffer | null> {
     return false;
   };
 
-  // Build foreground mask + bounding box
   const fg = new Uint8Array(w * h);
-  let minX = w, minY = h, maxX = -1, maxY = -1;
-  let fgCount = 0;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
       if (px[i + 3] < 16) continue;
-      if (!isBg(px[i], px[i + 1], px[i + 2])) {
-        fg[y * w + x] = 1;
-        fgCount++;
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
+      if (!isBg(px[i], px[i + 1], px[i + 2])) fg[y * w + x] = 1;
     }
   }
-  if (maxX < 0 || fgCount < (w * h) * 0.05) return null;
+
+  // Hole-fill: background reachable from the frame border is the real
+  // backdrop; any enclosed background pocket is an interior hole (the
+  // white label, or the reflective light grooves inside a black disc)
+  // and gets promoted to foreground so the disc reads as one solid blob.
+  const reach = new Uint8Array(w * h);
+  const fillStack: number[] = [];
+  const seedReach = (x: number, y: number) => {
+    const i = y * w + x;
+    if (!fg[i] && !reach[i]) {
+      reach[i] = 1;
+      fillStack.push(i);
+    }
+  };
+  for (let x = 0; x < w; x++) {
+    seedReach(x, 0);
+    seedReach(x, h - 1);
+  }
+  for (let y = 0; y < h; y++) {
+    seedReach(0, y);
+    seedReach(w - 1, y);
+  }
+  while (fillStack.length) {
+    const idx = fillStack.pop()!;
+    const x = idx % w;
+    const y = (idx / w) | 0;
+    if (x + 1 < w) seedReach(x + 1, y);
+    if (x - 1 >= 0) seedReach(x - 1, y);
+    if (y + 1 < h) seedReach(x, y + 1);
+    if (y - 1 >= 0) seedReach(x, y - 1);
+  }
+  for (let i = 0; i < w * h; i++) if (!fg[i] && !reach[i]) fg[i] = 1;
+
+  // Take the largest 4-connected foreground component as the disc
+  // candidate; stray seam fragments or specks drop out here.
+  const seen = new Uint8Array(w * h);
+  const compStack: number[] = [];
+  let count = 0, minX = w, minY = h, maxX = -1, maxY = -1;
+  for (let s = 0; s < w * h; s++) {
+    if (!fg[s] || seen[s]) continue;
+    let c = 0, aMinX = w, aMinY = h, aMaxX = -1, aMaxY = -1;
+    seen[s] = 1;
+    compStack.push(s);
+    while (compStack.length) {
+      const idx = compStack.pop()!;
+      const x = idx % w;
+      const y = (idx / w) | 0;
+      c++;
+      if (x < aMinX) aMinX = x;
+      if (x > aMaxX) aMaxX = x;
+      if (y < aMinY) aMinY = y;
+      if (y > aMaxY) aMaxY = y;
+      if (x + 1 < w && fg[idx + 1] && !seen[idx + 1]) { seen[idx + 1] = 1; compStack.push(idx + 1); }
+      if (x - 1 >= 0 && fg[idx - 1] && !seen[idx - 1]) { seen[idx - 1] = 1; compStack.push(idx - 1); }
+      if (y + 1 < h && fg[idx + w] && !seen[idx + w]) { seen[idx + w] = 1; compStack.push(idx + w); }
+      if (y - 1 >= 0 && fg[idx - w] && !seen[idx - w]) { seen[idx - w] = 1; compStack.push(idx - w); }
+    }
+    if (c > count) { count = c; minX = aMinX; minY = aMinY; maxX = aMaxX; maxY = aMaxY; }
+  }
+  if (maxX < 0) return null;
 
   const bw = maxX - minX + 1;
   const bh = maxY - minY + 1;
-  // Discs are roughly square; reject elongated regions
-  const aspect = bw / bh;
-  if (aspect < 0.75 || aspect > 1.35) return null;
-  if (bw < w * 0.25 || bh < h * 0.25) return null;
-
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
   const radius = Math.min(bw, bh) / 2;
 
-  // Confidence: most pixels inside the inscribed circle should be
-  // foreground. Bail if the bounding box is something other than a
-  // disc (e.g. a rectangular sleeve or text block).
-  let inside = 0;
-  let insideFg = 0;
-  const r2 = radius * radius;
-  const y0 = Math.max(0, Math.floor(cy - radius));
-  const y1 = Math.min(h - 1, Math.ceil(cy + radius));
-  const x0 = Math.max(0, Math.floor(cx - radius));
-  const x1 = Math.min(w - 1, Math.ceil(cx + radius));
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const dx = x - cx;
-      const dy = y - cy;
-      if (dx * dx + dy * dy <= r2) {
-        inside++;
-        if (fg[y * w + x]) insideFg++;
-      }
-    }
-  }
-  if (inside === 0 || insideFg / inside < 0.82) return null;
+  // Confidence checks — bail (caller keeps the original) unless the
+  // component looks like a centered disc:
+  //  - size: fills a meaningful fraction of the frame (rejects label-only
+  //    hits on white/clear discs we genuinely can't segment)
+  //  - aspect: near-square bounding box
+  //  - fillCircle: component ≈ its inscribed circle (rejects squares,
+  //    which over-fill at 4/π ≈ 1.27, and partial arcs, which under-fill)
+  //  - fillBbox: component fills enough of its bbox (rejects ragged/L shapes)
+  const minDim = Math.min(w, h);
+  const aspect = bw / bh;
+  const fillBbox = count / (bw * bh);
+  const fillCircle = count / (Math.PI * radius * radius);
+  if (bw < minDim * 0.33 || bh < minDim * 0.33) return null;
+  if (aspect < 0.85 || aspect > 1.18) return null;
+  if (fillCircle < 0.8 || fillCircle > 1.15) return null;
+  if (fillBbox < 0.62) return null;
 
   // Tight crop to the inscribed circle's bounding box and mask
   // everything outside the circle to alpha=0 with a 1-px AA fade so

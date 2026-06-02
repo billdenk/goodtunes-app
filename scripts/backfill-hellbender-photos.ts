@@ -25,14 +25,30 @@
  * Dev:   npx tsx scripts/backfill-hellbender-photos.ts
  * Prod:  DATABASE_URL="$PROD_DATABASE_URL" npx tsx scripts/backfill-hellbender-photos.ts
  * Dry run (no writes): add --dry
+ *
+ * Re-mask (square -> clean transparent disc): add --remask. mirrorImage now
+ * runs every mockup through maskToVinylDisc (colors whose backdrop can't be
+ * told from the disc — white/clear/black/silver — bail and keep their raw
+ * square), and --remask both (a) re-mirrors any color not yet masked and
+ * (b) re-points EXISTING rows at the new circle image instead of only filling
+ * NULLs. Run --remask on dev once to mint the circle images into the shared
+ * bucket + persist them to the manifest (masked=true), then run --remask on
+ * prod to point prod at those same URLs without re-mirroring:
+ *   npx tsx scripts/backfill-hellbender-photos.ts --remask
+ *   DATABASE_URL="$PROD_DATABASE_URL" npx tsx scripts/backfill-hellbender-photos.ts --remask
  */
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../server/db";
 import { objectStorageClient } from "../server/replit_integrations/object_storage/objectStorage";
 import { setObjectAclPolicy } from "../server/replit_integrations/object_storage/objectAcl";
+import { maskToVinylDisc } from "../server/vendorColorScrape";
 
 const DRY = process.argv.includes("--dry");
+// --remask: re-mirror every matched mockup through the (improved) disc mask
+// and re-point existing rows at the new circle-cropped image, even when they
+// already carry a square photo. Without it the script only fills NULL rows.
+const REMASK = process.argv.includes("--remask");
 const PRODUCTS_URL = "https://hellbendervinyl.com/products.json?limit=250";
 const MANIFEST = "scripts/data/hellbender-photos.json";
 
@@ -48,6 +64,7 @@ type Entry = {
   shopifyTitle: string;
   importSourceUrl: string;
   publicUrl?: string;
+  masked?: boolean; // true once mirrored through maskToVinylDisc (--remask)
 };
 type Manifest = { source: string; colors: Entry[] };
 
@@ -75,8 +92,17 @@ async function fetchShopifyMap(): Promise<Map<string, { title: string; url: stri
 async function mirrorImage(url: string): Promise<string> {
   const resp = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
   if (!resp.ok) throw new Error(`fetch ${url} -> ${resp.status}`);
-  const mime = resp.headers.get("content-type")?.split(";")[0]?.trim() || "image/png";
-  const buf = Buffer.from(await resp.arrayBuffer());
+  const upstreamMime = resp.headers.get("content-type")?.split(";")[0]?.trim() || "image/png";
+  const raw = Buffer.from(await resp.arrayBuffer());
+  // Crop the studio mockup to a clean transparent vinyl disc. Colors whose
+  // backdrop can't be told from the disc (white/clear/black/silver) bail and
+  // keep their raw square — the same graceful fallback the import route uses.
+  const masked = await maskToVinylDisc(raw).catch((e) => {
+    console.warn(`  ! disc mask failed for ${url}: ${(e as any)?.message || e}`);
+    return null;
+  });
+  const buf = masked ?? raw;
+  const mime = masked ? "image/png" : upstreamMime;
   const ext =
     mime === "image/png" ? ".png" : mime === "image/jpeg" ? ".jpg" : mime === "image/webp" ? ".webp" : ".png";
   const id = `${crypto.randomUUID()}${ext}`;
@@ -155,30 +181,40 @@ async function main() {
   if (unmatched.length) console.log(`No Shopify match (skipped): ${unmatched.join(", ")}`);
 
   // ---- Phase 1: mirror (idempotent via manifest publicUrl) ----
+  // Normal run: mirror only colors with no photo yet. --remask: also
+  // re-mirror any color not yet passed through the disc mask, so a single
+  // dev run mints the circle-cropped images once into the shared bucket and
+  // a later prod run reuses those same URLs (masked=true) instead of
+  // re-mirroring — keeping dev and prod pointed at one image.
   const targets = dbNames.map((n) => byName.get(norm(n))).filter((e): e is Entry => !!e);
-  const need = targets.filter((e) => !e.publicUrl);
-  console.log(`\nMatched ${targets.length}/${dbNames.length} colors · ${need.length} images to mirror.`);
+  const need = targets.filter((e) => !e.publicUrl || (REMASK && !e.masked));
+  console.log(
+    `\nMatched ${targets.length}/${dbNames.length} colors · ${need.length} images to ${REMASK ? "re-mask" : "mirror"}.`,
+  );
   if (!DRY) {
     let done = 0;
     for (const e of need) {
       e.publicUrl = await mirrorImage(e.importSourceUrl);
+      e.masked = true;
       done++;
       if (done % 6 === 0 || done === need.length) console.log(`  mirrored ${done}/${need.length}`);
       writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2));
     }
     if (!need.length) writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2));
   } else if (need.length) {
-    console.log(`  [DRY] would mirror ${need.length} images.`);
+    console.log(`  [DRY] would ${REMASK ? "re-mask" : "mirror"} ${need.length} images.`);
   }
 
   // ---- Phase 2: backfill swatch_image_url where NULL ----
   let updated = 0;
   if (DRY) {
     for (const e of targets) {
+      // --remask re-points every matched row; a normal run only fills NULLs.
+      const guard = REMASK ? sql`` : sql` AND c.swatch_image_url IS NULL`;
       const cnt = await db.execute<{ n: number }>(sql`
         SELECT COUNT(*)::int AS n FROM press_colors c
         JOIN press_color_tiers t ON t.id = c.tier_id
-        WHERE t.press_id = ${pressId} AND c.name = ${e.name} AND c.swatch_image_url IS NULL`);
+        WHERE t.press_id = ${pressId} AND c.name = ${e.name}${guard}`);
       const n = cnt.rows[0]?.n ?? 0;
       if (n) console.log(`  [DRY] ${e.name}: would set photo on ${n} row(s)`);
     }
@@ -189,12 +225,15 @@ async function main() {
   await db.transaction(async (tx) => {
     for (const e of targets) {
       if (!e.publicUrl) continue;
+      // --remask re-points every matched row at the new circle image; a
+      // normal run only fills rows that have no photo yet (operator-safe).
+      const guard = REMASK ? sql`` : sql` AND c.swatch_image_url IS NULL`;
       const res = await tx.execute(sql`
         UPDATE press_colors c
         SET swatch_image_url = ${e.publicUrl}, import_source_url = ${e.importSourceUrl}
         FROM press_color_tiers t
         WHERE c.tier_id = t.id AND t.press_id = ${pressId}
-          AND c.name = ${e.name} AND c.swatch_image_url IS NULL`);
+          AND c.name = ${e.name}${guard}`);
       updated += res.rowCount ?? 0;
     }
   });
