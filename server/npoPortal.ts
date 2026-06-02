@@ -156,6 +156,39 @@ export function registerNpoPortalRoutes(
     });
   });
 
+  // GET /api/non-profit/:id/buyers — Task #938 scoped buyer roster.
+  // Attribution = orders that minted a referral_credit crediting this
+  // NPO (referrer_kind='non_profit', referrer_org_id=<npoId>). Same
+  // join referral payouts use, so it never leaks cross-partner buyers.
+  // Defaults to all-time; ?from/?to narrow it.
+  app.get("/api/non-profit/:id/buyers", requireAdmin, requireNpoScope, async (req, res) => {
+    const npoId = String(req.params.id);
+    const to = req.query.to ? new Date(String(req.query.to)) : new Date();
+    const from = req.query.from ? new Date(String(req.query.from)) : new Date(0);
+    const { buyerRoster } = await import("./reports/buyers");
+    const filter = sql`o.id IN (
+      SELECT rc.order_id FROM referral_credits rc
+      WHERE rc.referrer_kind = 'non_profit' AND rc.referrer_org_id = ${npoId}
+    )`;
+    const buyers = await buyerRoster(filter, from, to);
+    res.json({ buyers });
+  });
+
+  // GET /api/non-profit/:id/buyer-map — Fan-Map-style city map for the
+  // same NPO-attributed orders.
+  app.get("/api/non-profit/:id/buyer-map", requireAdmin, requireNpoScope, async (req, res) => {
+    const npoId = String(req.params.id);
+    const to = req.query.to ? new Date(String(req.query.to)) : new Date();
+    const from = req.query.from ? new Date(String(req.query.from)) : new Date(0);
+    const { buyerMap } = await import("./reports/buyers");
+    const filter = sql`o.id IN (
+      SELECT rc.order_id FROM referral_credits rc
+      WHERE rc.referrer_kind = 'non_profit' AND rc.referrer_org_id = ${npoId}
+    )`;
+    const map = await buyerMap(filter, from, to);
+    res.json(map);
+  });
+
   // POST /api/non-profit/:id/invites — mint an ambassador/staff/artist
   // invite. Body shape:
   //   { email, kind: 'ambassador'|'staff'|'artist', name?, welcomeNote? }

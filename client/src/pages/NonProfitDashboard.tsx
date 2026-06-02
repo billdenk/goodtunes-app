@@ -6,6 +6,7 @@ import { DashboardPanel } from "@/components/partner/dashboard-controls";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
 import { NpoAlbumLedger } from "@/components/NpoAlbumLedger";
+import { BuyerReport } from "@/components/partner/BuyerReport";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -82,8 +83,8 @@ type Tree = {
 
 const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
 
-const BASE_NPO_TABS = modulesForRole("non_profit") as ReadonlyArray<{ id: "dashboard" | "artists" | "invites"; label: string }>;
-type NpoTabId = "dashboard" | "artists" | "invites" | "ledger" | "tree";
+const BASE_NPO_TABS = modulesForRole("non_profit") as ReadonlyArray<{ id: "dashboard" | "artists" | "buyers" | "invites"; label: string }>;
+type NpoTabId = "dashboard" | "artists" | "buyers" | "invites" | "ledger" | "tree";
 
 
 export function NonProfitDashboard() {
@@ -146,6 +147,13 @@ export function NonProfitDashboard() {
         />
       )}
       {tab === "artists" && <ArtistsTab />}
+      {tab === "buyers" && npoId && (
+        <BuyerReport
+          buyersUrl={`/api/non-profit/${npoId}/buyers`}
+          mapUrl={`/api/non-profit/${npoId}/buyer-map`}
+          emptyHint="No buyers have credited your foundation yet."
+        />
+      )}
       {tab === "invites" && <InvitesTab npoId={npoId} caps={caps ?? null} />}
       {tab === "ledger" && npoId && <NpoAlbumLedger npoId={npoId} />}
       {tab === "tree" && npoId && caps?.canViewTree && <TreeTab npoId={npoId} />}

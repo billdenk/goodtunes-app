@@ -551,6 +551,31 @@ async function ordersHandler(req: Request, res: Response) {
   return res.json({ range, orders });
 }
 
+// Task #938 — scoped buyer roster + map. Reuses resolveArtistScope so
+// an artist only ever sees buyers of their own releases (label callers
+// are narrowed to this-label albums by the same resolver).
+async function buyersHandler(req: Request, res: Response) {
+  const scope = await resolveArtistScope(req);
+  if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
+  const { range } = parseRange(req);
+  if (!scope.albumIds.length) return res.json({ range, buyers: [] });
+  const { buyerRoster } = await import("./reports/buyers");
+  const filter = sql`o.album_id = ANY(${pgArray(scope.albumIds)})`;
+  const buyers = await buyerRoster(filter, range.from, range.to);
+  return res.json({ range, buyers });
+}
+
+async function buyerMapHandler(req: Request, res: Response) {
+  const scope = await resolveArtistScope(req);
+  if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
+  const { range } = parseRange(req);
+  if (!scope.albumIds.length) return res.json({ range, points: [], totalCities: 0, geocoded: 0 });
+  const { buyerMap } = await import("./reports/buyers");
+  const filter = sql`o.album_id = ANY(${pgArray(scope.albumIds)})`;
+  const map = await buyerMap(filter, range.from, range.to);
+  return res.json({ range, ...map });
+}
+
 async function audienceHandler(req: Request, res: Response) {
   const scope = await resolveArtistScope(req);
   if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
@@ -670,5 +695,7 @@ export async function registerArtistReportRoutes(app: Express): Promise<void> {
   app.get("/api/artist/top-tracks", gate, topTracksHandler);
   app.get("/api/artist/top-albums", gate, topAlbumsHandler);
   app.get("/api/artist/orders", gate, ordersHandler);
+  app.get("/api/artist/buyers", gate, buyersHandler);
+  app.get("/api/artist/buyer-map", gate, buyerMapHandler);
   app.get("/api/artist/audience", gate, audienceHandler);
 }

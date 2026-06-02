@@ -49,6 +49,7 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "audience",  label: "Audience",  roles: ["artist"] },
   { id: "catalog",   label: "Catalog",   roles: ["artist"] },
   { id: "orders",    label: "Orders",    roles: ["artist"] },
+  { id: "buyers",    label: "Buyers",    roles: ["artist"] },
   { id: "referrals", label: "Referrals", roles: ["artist"] },
 
   // Label shell — `/label` (LabelDashboard.tsx)
@@ -61,6 +62,7 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // Non-profit shell — `/non-profit` (NonProfitDashboard.tsx)
   { id: "dashboard", label: "Dashboard",     roles: ["non_profit"] },
   { id: "artists",   label: "Your artists",  roles: ["non_profit"] },
+  { id: "buyers",    label: "Buyers",        roles: ["non_profit"] },
   { id: "invites",   label: "Invites",       roles: ["non_profit"] },
 
   // Vendor + reseller + fulfillment shell — `/vendor` (VendorPortal.tsx)

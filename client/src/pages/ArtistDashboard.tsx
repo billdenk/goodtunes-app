@@ -23,6 +23,7 @@ import { RangePicker, CompareToggle } from "@/components/partner/dashboard-contr
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
 import { CertRunsSection } from "@/components/partner/cert-runs-section";
+import { BuyerReport } from "@/components/partner/BuyerReport";
 import { BRAND, SKU_COLORS, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 
 type Range = { from: string; to: string };
@@ -81,7 +82,7 @@ function rangeFor(preset: PresetId): Range {
 export function ArtistDashboard() {
   const [preset, setPreset] = useState<PresetId>("30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"overview" | "audience" | "catalog" | "orders" | "referrals">("overview");
+  const [tab, setTab] = useState<"overview" | "audience" | "catalog" | "orders" | "buyers" | "referrals">("overview");
   const range = useMemo(() => rangeFor(preset), [preset]);
   const qs = useMemo(() => {
     const u = new URLSearchParams({ from: range.from, to: range.to });
@@ -147,6 +148,7 @@ export function ArtistDashboard() {
       {tab === "audience" && <AudienceTab qs={qs} />}
       {tab === "catalog" && <CatalogTab qs={qs} />}
       {tab === "orders" && <OrdersTab qs={qs} />}
+      {tab === "buyers" && <BuyersTab qs={qs} />}
       {tab === "referrals" && <ReferralsTab />}
     </OperatorShell>
   );
@@ -192,7 +194,7 @@ function InvitedByPressRow({ press, hasShippedFirst }: {
 }
 
 const ARTIST_TABS = modulesForRole("artist") as ReadonlyArray<{
-  id: "overview" | "audience" | "catalog" | "orders" | "referrals";
+  id: "overview" | "audience" | "catalog" | "orders" | "buyers" | "referrals";
   label: string;
 }>;
 type ArtistTabId = (typeof ARTIST_TABS)[number]["id"];
@@ -984,6 +986,17 @@ function InviteArtistPanel() {
         </ul>
       )}
     </Card>
+  );
+}
+
+// Task #938 — scoped buyer roster + "where they live" map, range-aware.
+function BuyersTab({ qs }: { qs: string }) {
+  return (
+    <BuyerReport
+      buyersUrl={`/api/artist/buyers?${qs}`}
+      mapUrl={`/api/artist/buyer-map?${qs}`}
+      emptyHint="No buyers of your releases in this range yet."
+    />
   );
 }
 
