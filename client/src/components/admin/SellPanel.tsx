@@ -745,15 +745,38 @@ export function SellPanel({
     [invitedPress, allPresses, pressFormatsByPress],
   );
   const defaultPressChipId = pressChips[0]?.id ?? "";
-  const [selectedPressChipId, setSelectedPressChipId] =
-    useState<string>(defaultPressChipId);
+  // Task #1012 — persist the operator's Printer-chip pick per album so a
+  // refresh restores the last-selected press instead of snapping back to
+  // the invited default. Lazy-init from localStorage; validated against
+  // the live chip list once it loads by the sync effect below.
+  const pressSelectStorageKey = `gt:sellpanel:press:${albumId}`;
+  const [selectedPressChipId, setSelectedPressChipId] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem(pressSelectStorageKey) ?? "";
+    } catch {
+      return "";
+    }
+  });
   // Re-sync when the chip list arrives / changes and the current pick is
-  // no longer valid (data loaded, press mode flipped, etc.).
+  // no longer valid (data loaded, press mode flipped, etc.). Guard on a
+  // non-empty chip list so we don't clobber a restored pick to the
+  // default during the brief window before chips load.
   useEffect(() => {
+    if (pressChips.length === 0) return;
     if (!pressChips.some((c) => c.id === selectedPressChipId)) {
       setSelectedPressChipId(defaultPressChipId);
     }
   }, [pressChips, selectedPressChipId, defaultPressChipId]);
+  // Persist a valid, non-empty pick. Skip the empty loading-window value
+  // so we never erase a previously-saved selection.
+  useEffect(() => {
+    if (!selectedPressChipId) return;
+    try {
+      window.localStorage.setItem(pressSelectStorageKey, selectedPressChipId);
+    } catch {
+      // localStorage can throw under private-mode / SSR; ignore.
+    }
+  }, [pressSelectStorageKey, selectedPressChipId]);
   const selectedPressChip =
     pressChips.find((c) => c.id === selectedPressChipId) ?? pressChips[0] ?? null;
   const selectedPress = selectedPressChip?.press ?? null;
@@ -1338,6 +1361,42 @@ type PressChip = {
   status: "live" | "coming-soon";
   press: Manufacturer | null;
 };
+
+// Task #1012 — cross-press tier/color re-resolution. Presses name the
+// same conceptual tier differently — Hellbender ships "Opaque Colors"
+// where Memphis ships "Opaque" — so an exact-name match drops the
+// operator onto the wrong (often empty "Black") tier when they switch
+// the Printer chip. Normalize a trailing " Color"/" Colors" word so the
+// equivalents line up, then fall back to the first tier that actually
+// HAS colors before the raw tiers[0], so a swap never lands on an empty
+// swatch grid.
+function normalizeTierName(s: string): string {
+  return s.toLowerCase().replace(/\s+colors?$/, "").trim();
+}
+function resolveTierByName(
+  tiers: CatalogTier[],
+  name: string | null,
+): CatalogTier | null {
+  if (tiers.length === 0) return null;
+  const want = name ? normalizeTierName(name) : "";
+  if (want) {
+    const exact = tiers.find((t) => normalizeTierName(t.name) === want);
+    if (exact) return exact;
+  }
+  return tiers.find((t) => t.colors.length > 0) ?? tiers[0];
+}
+function resolveColorByName(
+  tier: CatalogTier | null,
+  name: string | null,
+): CatalogColor | null {
+  if (!tier || tier.colors.length === 0) return null;
+  if (name) {
+    const want = name.toLowerCase().trim();
+    const hit = tier.colors.find((c) => c.name.toLowerCase().trim() === want);
+    if (hit) return hit;
+  }
+  return tier.colors[0] ?? null;
+}
 
 // Task #1012 — chip computation lifted out of PrinterAndPressPanel so
 // the parent SellPanel can resolve the operator-selected press and
@@ -2431,24 +2490,16 @@ function SkuRow({
   // Same trick for color via `vinylColor` (snapshotted as the color's
   // display name on save).
   const tiers = catalogFormat?.tiers ?? [];
-  const initialTier = useMemo(() => {
-    if (!tiers.length) return null;
-    if (existing?.vinylColorTier) {
-      const hit = tiers.find((t) => t.name === existing.vinylColorTier);
-      if (hit) return hit;
-    }
-    return tiers[0];
-  }, [tiers, existing?.vinylColorTier]);
+  const initialTier = useMemo(
+    () => resolveTierByName(tiers, existing?.vinylColorTier ?? null),
+    [tiers, existing?.vinylColorTier],
+  );
   const [pressTierId, setPressTierId] = useState<string | null>(initialTier?.id ?? null);
   const pickedTier = tiers.find((t) => t.id === pressTierId) ?? initialTier ?? null;
-  const initialColorId = useMemo(() => {
-    if (!pickedTier || pickedTier.colors.length === 0) return null;
-    if (existing?.vinylColor) {
-      const hit = pickedTier.colors.find((c) => c.name === existing.vinylColor);
-      if (hit) return hit.id;
-    }
-    return pickedTier.colors[0].id;
-  }, [pickedTier, existing?.vinylColor]);
+  const initialColorId = useMemo(
+    () => resolveColorByName(pickedTier, existing?.vinylColor ?? null)?.id ?? null,
+    [pickedTier, existing?.vinylColor],
+  );
   const [pressColorId, setPressColorId] = useState<string | null>(initialColorId);
   // When tier changes, reset color to the first one in the new tier.
   useEffect(() => {
@@ -2498,17 +2549,12 @@ function SkuRow({
     const tiersNow = catalogFormat?.tiers ?? [];
     if (tiersNow.length > 0) {
       const { tierName, colorName } = lastCatalogPicksRef.current;
-      const nextTier =
-        (tierName ? tiersNow.find((t) => t.name === tierName) : null) ??
-        tiersNow[0];
-      const nextColor =
-        (colorName
-          ? nextTier.colors.find((c) => c.name === colorName)
-          : null) ??
-        nextTier.colors[0] ??
-        null;
-      setPressTierId(nextTier.id);
-      setPressColorId(nextColor?.id ?? null);
+      const nextTier = resolveTierByName(tiersNow, tierName);
+      const nextColor = resolveColorByName(nextTier, colorName);
+      if (nextTier) {
+        setPressTierId(nextTier.id);
+        setPressColorId(nextColor?.id ?? null);
+      }
     }
     lastCatalogPicksRef.current.sig = catalogSig;
     // eslint-disable-next-line react-hooks/exhaustive-deps
