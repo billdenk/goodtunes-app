@@ -3034,3 +3034,132 @@ SQL
 }
 backfill_task_916_capability_flips dev  "${DATABASE_URL:-}"
 backfill_task_916_capability_flips prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #939 — App Store / Play Store review demo account + Sampler ───
+# Seeds a sealed reviewer fan account (appreview@goodtunes.music) that owns
+# one published "GoodTunes Sampler" EP with three fully-playable tracks
+# (real Mux masters + lyrics + song credits + a linked Person + a linked
+# Instrument). Ownership is granted via a real user_albums row (NO purchase)
+# so the album shows in Library and plays end-to-end with no Buy/Chat
+# surfaces. Idempotent + ID-preserving (ON CONFLICT (id) DO NOTHING) so it
+# is convergent and never clobbers later operator edits. Songs are copied
+# with INSERT…SELECT from static-seed source rows (album-1 / album-5) so
+# each environment inherits ITS OWN valid Mux ids + lyrics — Mux is a shared
+# account so the ids resolve in dev and prod regardless. The committed value
+# below is a scrypt PASSWORD HASH, never the plaintext; the plaintext is
+# surfaced to Bill out-of-band and rotated per submission via the admin
+# reset flow (rotation is never re-clobbered here because of DO NOTHING).
+seed_task_939_appreview_demo() {
+  local label="$1"; local url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-939 appreview-demo seed on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+BEGIN;
+
+INSERT INTO customer_users
+  (id, username, email, display_name, real_name, password, handle,
+   contact_email, email_verified_at, signup_completed_at, onboarded_at,
+   terms_accepted_at, terms_version, created_at)
+VALUES
+  ('cust-appreview-demo', 'appreview', 'appreview@goodtunes.music',
+   'App Review', 'App Review',
+   'bd6050acbefd1bf6df93220a84e76fc7cd376f30eb170621d717e62cf8d995c9869547c85aae04b7f4a64555ce12b856faade5395f24ffbb422cec42a9a44199.cc71c63e72c1bff523eeeff876899081',
+   'appreview', 'appreview@goodtunes.music',
+   now(), now(), now(), now(), '2026-05-31', now())
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO people (id, name, photo_url, bio)
+VALUES ('person-sampler-artist', 'GoodTunes Sampler',
+        '/figmaAssets/album-5-cover.jpg',
+        'Demo artist used for the GoodTunes Sampler — a compilation assembled for app-store review.')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO vendors (id, name, domain, is_maker, is_reseller, home_url, created_at)
+VALUES ('vendor-sampler-martin', 'Martin Guitar', 'sampler-martin.goodtunes.music',
+        true, true, 'https://www.martinguitar.com', now())
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO instruments (id, name, category, photo_url, about, maker_vendor_id, source_url)
+VALUES ('instrument-sampler-guitar', 'Martin D-28 Acoustic Guitar', 'Acoustic Guitar',
+        '/objects/uploads/6c2bfaab-5064-49a2-bad8-4dee17a7cc52.jpg',
+        'The dreadnought heard across the GoodTunes Sampler.',
+        'vendor-sampler-martin', 'https://www.martinguitar.com/guitars/standard/d-28/')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO instrument_vendors (id, instrument_id, vendor_id, affiliate_url, position, is_hidden, created_at)
+VALUES ('iv-sampler-1', 'instrument-sampler-guitar', 'vendor-sampler-martin',
+        'https://www.martinguitar.com/guitars/standard/d-28/', 0, false, now())
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO albums
+  (id, title, artist, artwork, year, type, description, genre,
+   good_tunes_release_date, is_goodtunes_release, is_prepping, is_hidden,
+   primary_artist_id)
+VALUES
+  ('album-sampler', 'GoodTunes Sampler', 'GoodTunes Sampler',
+   '/figmaAssets/album-5-cover.jpg', 2026, 'EP',
+   'A short sampler of fully-playable GoodTunes tracks, assembled for app-store review.',
+   'Indie', '2026-06-01', true, false, false, 'person-sampler-artist')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO songs
+  (id, album_id, title, track_number, duration, lyrics, synced_lyrics,
+   audio_url, mux_playback_id, mux_asset_id, mux_status)
+SELECT 'song-sampler-1', 'album-sampler', title, 1, duration, lyrics,
+       synced_lyrics, audio_url, mux_playback_id, mux_asset_id, mux_status
+FROM songs WHERE id = 'song-1-1'
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO songs
+  (id, album_id, title, track_number, duration, lyrics, synced_lyrics,
+   audio_url, mux_playback_id, mux_asset_id, mux_status)
+SELECT 'song-sampler-2', 'album-sampler', title, 2, duration, lyrics,
+       synced_lyrics, audio_url, mux_playback_id, mux_asset_id, mux_status
+FROM songs WHERE id = 'song-5-1'
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO songs
+  (id, album_id, title, track_number, duration, lyrics, synced_lyrics,
+   audio_url, mux_playback_id, mux_asset_id, mux_status)
+SELECT 'song-sampler-3', 'album-sampler', title, 3, duration, lyrics,
+       synced_lyrics, audio_url, mux_playback_id, mux_asset_id, mux_status
+FROM songs WHERE id = 'song-5-6'
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO track_performers (id, song_id, person_id, instrument_id, name, role, position) VALUES
+  ('tp-sampler-1a', 'song-sampler-1', 'person-sampler-artist', 'instrument-sampler-guitar', 'GoodTunes Sampler', 'Vocals · Acoustic Guitar', 0),
+  ('tp-sampler-1b', 'song-sampler-1', 'person-sampler-artist', NULL, 'GoodTunes Sampler', 'Lead Vocals', 1),
+  ('tp-sampler-2a', 'song-sampler-2', 'person-sampler-artist', 'instrument-sampler-guitar', 'GoodTunes Sampler', 'Acoustic Guitar', 0),
+  ('tp-sampler-3a', 'song-sampler-3', 'person-sampler-artist', NULL, 'GoodTunes Sampler', 'Lead Vocals', 0)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO track_writers (id, song_id, person_id, name, role, position) VALUES
+  ('tw-sampler-1a', 'song-sampler-1', 'person-sampler-artist', 'GoodTunes Sampler', 'Composer', 0),
+  ('tw-sampler-1b', 'song-sampler-1', 'person-sampler-artist', 'GoodTunes Sampler', 'Lyricist', 1),
+  ('tw-sampler-2a', 'song-sampler-2', 'person-sampler-artist', 'GoodTunes Sampler', 'Composer', 0),
+  ('tw-sampler-3a', 'song-sampler-3', 'person-sampler-artist', 'GoodTunes Sampler', 'Composer', 0)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO album_credits (id, album_id, person_id, name, role, position) VALUES
+  ('ac-sampler-1', 'album-sampler', 'person-sampler-artist', 'GoodTunes Sampler', 'Produced by', 0),
+  ('ac-sampler-2', 'album-sampler', 'person-sampler-artist', 'GoodTunes Sampler', 'Mixed by', 1)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO user_albums (id, user_id, album_id, is_preview)
+VALUES ('ua-appreview-sampler', 'cust-appreview-demo', 'album-sampler', false)
+ON CONFLICT (id) DO NOTHING;
+
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-939 appreview-demo seed ok on $label"
+  else
+    echo "post-merge: WARNING — task-939 appreview-demo seed failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+seed_task_939_appreview_demo dev  "${DATABASE_URL:-}"
+seed_task_939_appreview_demo prod "${PROD_DATABASE_URL:-}"

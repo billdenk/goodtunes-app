@@ -26,9 +26,14 @@ App Review will not approve an app that gates content behind login unless they c
 
 - Email: `appreview@goodtunes.music`
 - Password: rotated per submission, written into the **App Review Information → Sign-In Required** field, never committed to the repo or sent over email outside of App Store Connect / Play Console.
-- The account owns one published album end-to-end (the **GoodTunes Sampler**) so the reviewer can: play it, scrub it, open lyrics, open credits, tap through to a Person sheet and an Instrument sheet.
+- The account owns one published album end-to-end (the **GoodTunes Sampler** — a 3-track EP) so the reviewer can: play it, scrub it, open lyrics, open credits, tap through to a Person sheet and an Instrument sheet. The three tracks are *When The World Stops*, *Made for Us*, and *Never Break My Heart (Not Again)* — each backed by a real Mux master with lyrics (tracks 2 & 3 are time-synced), per-track writer/performer credits, a linked **Person** (GoodTunes Sampler) and a linked **Instrument** (Martin D-28 Acoustic Guitar).
+- Ownership is a real `user_albums` grant (no purchase), so the album lands in **Library** and plays full-length with **no Buy or Chat surfaces** anywhere in the flow.
 
-Recreate the password before each submission and update the App Review form. Do **not** reuse it across iOS + Android — different review pools.
+### How the account is provisioned
+
+The account, the Sampler album, its tracks, credits, Person, and Instrument are all seeded idempotently by `scripts/post-merge.sh` (`seed_task_939_appreview_demo`), which runs against **both** the dev and prod databases on every merge. It is ID-preserving and `ON CONFLICT (id) DO NOTHING`, so re-running never clobbers operator edits, and the songs are copied with `INSERT…SELECT` from static-seed source rows so each environment inherits its own valid Mux ids. The committed password value is a **scrypt hash**, never the plaintext.
+
+Rotating the password before a submission: ask the operator (Bill) to set a new password on the account via the admin reset flow, surface the new plaintext only into the App Review form, and update the App Review form. (Re-running post-merge will not overwrite an operator-rotated password.) Do **not** reuse the password across iOS + Android — different review pools.
 
 ---
 
