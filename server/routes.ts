@@ -11819,8 +11819,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (row?.has_role || row?.has_album || row?.has_disco) shape = "artist";
     }
     // Partner attachments — every entity this contact is attached to,
-    // so the contact-shape Overview can list them as deep links.
-    const attachments: Array<{ entityKind: string; entityId: string; entityName: string; role: string | null }> = [];
+    // so the contact-shape Overview can list them as deep links. Each
+    // attachment also carries a plain-language GoodTunes role (`gtRole`)
+    // derived from the entity kind (+ the ambassador-inviter flag for
+    // non-profits) so the contact page reads "Ambassador at KMHF" /
+    // "Press contact at Hellbender" instead of a blank "Type". The
+    // free-text `role` (e.g. "Director", "CEO") is the person's title at
+    // the org; `gtRole` is their platform role.
+    const canAmb = !!(p as any).canInviteAmbassadors;
+    const gtRoleFor = (kind: string): string => {
+      switch (kind) {
+        case "non_profit": return canAmb ? "Ambassador" : "Staff";
+        case "manufacturer": return "Press contact";
+        case "label": return "Label staff";
+        case "vendor": return "Vendor contact";
+        case "fulfillment_partner": return "Fulfillment contact";
+        default: return "Contact";
+      }
+    };
+    const attachments: Array<{ entityKind: string; entityId: string; entityName: string; role: string | null; gtRole: string }> = [];
     try {
       const npoRows = await db.execute<any>(sql`
         SELECT 'non_profit' AS kind, o.id, o.name, op.role
@@ -11828,7 +11845,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         WHERE op.person_id = ${id} AND o.kind = 'non_profit'
         ORDER BY o.name ASC
       `);
-      for (const r of ((npoRows as any).rows ?? [])) attachments.push({ entityKind: r.kind, entityId: r.id, entityName: r.name, role: r.role ?? null });
+      for (const r of ((npoRows as any).rows ?? [])) attachments.push({ entityKind: r.kind, entityId: r.id, entityName: r.name, role: r.role ?? null, gtRole: gtRoleFor(r.kind) });
       const ecRows = await db.execute<any>(sql`
         SELECT ec.entity_kind, ec.entity_id, ec.role,
                COALESCE(v.name, m.name, l.name, fp.name) AS name
@@ -11840,10 +11857,53 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         WHERE ec.person_id = ${id}
       `);
       for (const r of ((ecRows as any).rows ?? [])) {
-        if (r.name) attachments.push({ entityKind: r.entity_kind, entityId: r.entity_id, entityName: r.name, role: r.role ?? null });
+        if (r.name) attachments.push({ entityKind: r.entity_kind, entityId: r.entity_id, entityName: r.name, role: r.role ?? null, gtRole: gtRoleFor(r.entity_kind) });
       }
     } catch (e: any) {
       console.warn(`[person:${id}] attachments lookup failed: ${e?.message}`);
+    }
+    // Introductions — artists this person has invited / referred, with
+    // status, so a referrer contact (ambassador, press rep) reads like a
+    // recruiter record. Source: admin_invites where this person is the
+    // referrer (artist or NPO-ambassador kind). Status is derived from
+    // the invite lifecycle: used → signed, revoked → declined, past
+    // expiry → expired, otherwise invited. Referred People that have no
+    // surviving invite row (seeded / legacy) are folded in as `signed`.
+    const introductions: Array<{ id: string | null; name: string; photoUrl: string | null; status: "signed" | "invited" | "expired" | "declined"; at: string | null }> = [];
+    try {
+      const inv = await db.execute<any>(sql`
+        SELECT ai.role_scope_id AS person_id, COALESCE(p.name, ai.email) AS name,
+               p.photo_url, ai.used_at, ai.revoked_at, ai.expires_at, ai.created_at
+        FROM admin_invites ai
+        LEFT JOIN people p ON p.id = ai.role_scope_id
+        WHERE ai.role = 'artist'
+          AND ai.referrer_kind IN ('artist', 'ambassador')
+          AND ai.referrer_scope_id = ${id}
+        ORDER BY ai.created_at DESC
+      `);
+      const seen = new Set<string>();
+      const now = Date.now();
+      for (const r of ((inv as any).rows ?? [])) {
+        const status: "signed" | "invited" | "expired" | "declined" =
+          r.used_at ? "signed"
+            : r.revoked_at ? "declined"
+            : (r.expires_at && new Date(r.expires_at).getTime() < now) ? "expired"
+            : "invited";
+        if (r.person_id) seen.add(r.person_id);
+        introductions.push({ id: r.person_id ?? null, name: r.name, photoUrl: r.photo_url ?? null, status, at: r.used_at ?? r.created_at ?? null });
+      }
+      const ref = await db.execute<any>(sql`
+        SELECT id, name, photo_url FROM people
+        WHERE referred_by_person_id = ${id}
+        ORDER BY name ASC
+      `);
+      for (const r of ((ref as any).rows ?? [])) {
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        introductions.push({ id: r.id, name: r.name, photoUrl: r.photo_url ?? null, status: "signed", at: null });
+      }
+    } catch (e: any) {
+      console.warn(`[person:${id}] introductions lookup failed: ${e?.message}`);
     }
     // Task #824 — roles rolled up from the person's ACTUAL credits, so a
     // guitar/producer/writer credit on any song or album surfaces on the
@@ -11886,6 +11946,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       contactEmail: (p as any).contactEmail ?? null,
       contactPhone: (p as any).contactPhone ?? null,
       attachments,
+      // Task #923 — artists this contact has invited / referred + status.
+      introductions,
     });
   });
 

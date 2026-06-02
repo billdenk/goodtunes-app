@@ -174,6 +174,18 @@ interface PersonFull {
     entityId: string;
     entityName: string;
     role: string | null;
+    // Task #923 — plain-language GoodTunes role at this org
+    // (Ambassador / Staff / Press contact / Label staff / …).
+    gtRole?: string | null;
+  }>;
+  // Task #923 — artists this contact has invited / referred + status,
+  // so a referrer contact reads like a recruiter record.
+  introductions?: Array<{
+    id: string | null;
+    name: string;
+    photoUrl: string | null;
+    status: "signed" | "invited" | "expired" | "declined";
+    at: string | null;
   }>;
 }
 
@@ -498,7 +510,7 @@ export function AdminPerson() {
                   lists the full set). */}
               {person.shape === "contact"
                 ? (person.attachments && person.attachments.length > 0
-                    ? `Contact at ${person.attachments[0].entityName}`
+                    ? `${person.attachments[0].role || person.attachments[0].gtRole || "Contact"} at ${person.attachments[0].entityName}`
                     : "Contact")
                 : (labelName ? `Signed to ${labelName}` : "Independent")}
             </div>
@@ -751,35 +763,48 @@ function ContactOverviewPanel({ person }: { person: PersonFull }) {
         ]}
       />
 
-      <RolesPanel person={person} />
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-overview-attachments">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-overview-affiliation">
         <div>
-          <h2 className="text-sm font-bold text-slate-900">Attached to</h2>
-          <p className="text-xs text-slate-500">Partners where this person is listed as a contact.</p>
+          <h2 className="text-sm font-bold text-slate-900">Affiliation</h2>
+          <p className="text-xs text-slate-500">Where this person fits on GoodTunes and the partner they represent.</p>
         </div>
         {attachments.length === 0 ? (
-          <p className="text-xs text-slate-500" data-testid="text-overview-no-attachments">Not attached to any partner yet.</p>
+          <p className="text-xs text-slate-500" data-testid="text-overview-no-attachments">Not affiliated with any partner yet.</p>
         ) : (
           <ul className="divide-y divide-slate-100 -mx-1">
             {attachments.map((a) => (
-              <li key={`${a.entityKind}-${a.entityId}`} className="flex items-center gap-3 px-1 py-2" data-testid={`row-overview-attachment-${a.entityId}`}>
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 w-28 flex-shrink-0">
-                  {CONTACT_ATTACHMENT_LABEL[a.entityKind]}
-                </span>
-                <Link
-                  href={CONTACT_ATTACHMENT_HREF[a.entityKind](a.entityId)}
-                  className="flex-1 text-sm font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 truncate"
-                  data-testid={`link-overview-attachment-${a.entityId}`}
-                >
-                  {a.entityName}
-                </Link>
-                {a.role && <span className="text-xs text-slate-500 truncate">{a.role}</span>}
+              <li key={`${a.entityKind}-${a.entityId}`} className="flex items-center gap-3 px-1 py-2.5" data-testid={`row-overview-attachment-${a.entityId}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-slate-900 truncate" data-testid={`text-affiliation-role-${a.entityId}`}>
+                    {a.role || a.gtRole || "Contact"}
+                    <span className="font-normal text-slate-400"> at </span>
+                    <Link
+                      href={CONTACT_ATTACHMENT_HREF[a.entityKind](a.entityId)}
+                      className="font-semibold text-slate-900 hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+                      data-testid={`link-overview-attachment-${a.entityId}`}
+                    >
+                      {a.entityName}
+                    </Link>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">{CONTACT_ATTACHMENT_LABEL[a.entityKind]}</p>
+                </div>
+                {a.gtRole && (
+                  <span
+                    className="text-xs font-semibold uppercase tracking-wide text-[color:var(--brand-purple)] bg-[color:var(--brand-purple)]/10 rounded-full px-2.5 py-1 flex-shrink-0"
+                    data-testid={`badge-gtrole-${a.entityId}`}
+                  >
+                    {a.gtRole}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
         )}
       </section>
+
+      <RolesPanel person={person} />
+
+      <IntroductionsPanel person={person} />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-overview-promote">
         <div>
@@ -798,6 +823,64 @@ function ContactOverviewPanel({ person }: { person: PersonFull }) {
         </Button>
       </section>
     </div>
+  );
+}
+
+/* ─── Task #923 — Introductions summary (contact-shape) ──────────────
+   A referrer contact (NPO ambassador, press rep, artist-as-recruiter)
+   reads like a recruiter record: the artists they've invited / referred
+   plus where each one is in the funnel (invited / signed / declined /
+   expired). Hidden entirely when the person hasn't introduced anyone, so
+   the Overview stays clean for plain contacts. */
+const INTRO_STATUS_STYLE: Record<NonNullable<PersonFull["introductions"]>[number]["status"], { label: string; cls: string }> = {
+  signed: { label: "Signed", cls: "text-[color:var(--brand-blue)] bg-[color:var(--brand-blue)]/10" },
+  invited: { label: "Invited", cls: "text-amber-600 bg-amber-50" },
+  expired: { label: "Expired", cls: "text-slate-500 bg-slate-100" },
+  declined: { label: "Declined", cls: "text-rose-600 bg-rose-50" },
+};
+
+function IntroductionsPanel({ person }: { person: PersonFull }) {
+  const intros = person.introductions ?? [];
+  if (intros.length === 0) return null;
+  const signed = intros.filter((i) => i.status === "signed").length;
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3" data-testid="panel-overview-introductions">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900">Introductions</h2>
+          <p className="text-xs text-slate-500">Artists this person has invited or referred to GoodTunes.</p>
+        </div>
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 flex-shrink-0" data-testid="text-intro-count">
+          {signed} signed · {intros.length} total
+        </span>
+      </div>
+      <ul className="divide-y divide-slate-100 -mx-1">
+        {intros.map((i, idx) => {
+          const style = INTRO_STATUS_STYLE[i.status];
+          return (
+            <li key={i.id ?? `${i.name}-${idx}`} className="flex items-center gap-3 px-1 py-2" data-testid={`row-introduction-${i.id ?? idx}`}>
+              <PersonAvatar name={i.name} photoUrl={i.photoUrl} size={32} />
+              {i.id ? (
+                <Link
+                  href={`/admin/people/${i.id}`}
+                  className="flex-1 min-w-0 text-sm font-medium text-slate-900 truncate hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+                  data-testid={`link-introduction-${i.id}`}
+                >
+                  {i.name}
+                </Link>
+              ) : (
+                <span className="flex-1 min-w-0 text-sm font-medium text-slate-700 truncate" data-testid={`text-introduction-${idx}`}>
+                  {i.name}
+                </span>
+              )}
+              <span className={`text-xs font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 flex-shrink-0 ${style.cls}`} data-testid={`status-introduction-${i.id ?? idx}`}>
+                {style.label}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
