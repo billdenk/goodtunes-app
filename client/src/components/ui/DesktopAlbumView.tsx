@@ -289,28 +289,27 @@ export function DesktopAlbumView({
       <div
         className={[cls.column, showLyrics ? "lg:mx-0 lg:ml-auto" : ""].join(" ")}
       >
-        {/* Back-carat pill — matches the mobile album surface's glass
-            IconButton + chevron-left treatment so the two surfaces are
-            consistent. Returns the viewer to where they came from
-            (collection by default, or the originating context if a host
-            passes `onBack`). The album title lives in the hero below. */}
-        <IconButton
-          variant="glass"
-          label="Back to collection"
-          onClick={handleBack}
-          data-testid="button-back-album"
-        >
-          <ChevronLeft strokeWidth={2.5} className="-translate-x-[1px]" />
-        </IconButton>
+        {/* Top chrome row. Back-carat pill on the left, Share + More grouped
+            on the right, both sitting on the same baseline so they read as one
+            row (matching the mobile album surface + Apple Music). The back
+            caret matches the mobile glass IconButton + chevron-left treatment
+            and returns the viewer to where they came from (collection by
+            default, or the originating context if a host passes `onBack`). The
+            album title lives in the hero below. */}
+        <div className="flex items-start justify-between gap-2">
+          <IconButton
+            variant="glass"
+            label="Back to collection"
+            onClick={handleBack}
+            data-testid="button-back-album"
+          >
+            <ChevronLeft strokeWidth={2.5} className="-translate-x-[1px]" />
+          </IconButton>
 
-        {/* Hero. Cover shrinks to 220px at md (portrait tablets) so the
-            artist/title block keeps a comfortable reading measure next
-            to it; at lg we restore the full 280px Apple-Music density. */}
-        <section className={`relative ${cls.heroSection}`} data-testid="album-hero">
-          {/* Apple-Music top-right chrome: Share + More sit together in the
-              top-right corner of the album header, away from the transport
-              controls (Task #1055). */}
-          <div className="absolute top-0 right-0 flex items-center gap-1">
+          {/* Apple-Music top-right chrome: Share + More sit together at the
+              right edge of the album header, away from the transport controls
+              (Task #1055). */}
+          <div className="flex items-center gap-1">
             <IconButton
               variant="glass"
               size="md"
@@ -331,6 +330,12 @@ export function DesktopAlbumView({
               <MoreHorizontal strokeWidth={2} />
             </IconButton>
           </div>
+        </div>
+
+        {/* Hero. Cover shrinks to 220px at md (portrait tablets) so the
+            artist/title block keeps a comfortable reading measure next
+            to it; at lg we restore the full 280px Apple-Music density. */}
+        <section className={`relative ${cls.heroSection}`} data-testid="album-hero">
           <div
             className={cls.cover}
             style={{
