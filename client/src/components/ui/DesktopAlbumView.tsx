@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { ChevronLeft, Play, Pause, Shuffle, MoreHorizontal, Lock, X, Share, Info, Maximize2 } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
@@ -225,6 +226,7 @@ export function DesktopAlbumView({
   onExpandLyrics,
   compact = false,
 }: DesktopAlbumViewProps) {
+  const reduceMotion = useReducedMotion();
   /* Tailwind class buckets. When `compact` is true (admin tablet
      preview) we force the md sizing irrespective of viewport, because
      the preview renders inside a transform-scaled canvas where
@@ -495,10 +497,10 @@ export function DesktopAlbumView({
           </div>
         </section>
 
-        {/* Tabs */}
-        <div className="mt-10 border-b border-white/8 pb-1">
+        {/* Tabs — Apple-Music segmented control */}
+        <div className="mt-10 flex items-center justify-center">
           <div
-            className="w-full flex items-center justify-center gap-10"
+            className="inline-flex items-center gap-1 rounded-full bg-white/8 p-1"
             role="tablist"
             data-testid="hero-tabs"
           >
@@ -518,20 +520,27 @@ export function DesktopAlbumView({
                   aria-selected={on}
                   data-testid={`tab-${it.key}`}
                   onClick={() => onTabChange(it.key)}
-                  className="relative h-11 px-2 inline-flex items-center gap-1.5 text-[15px] font-semibold transition-colors"
-                  style={{ color: on ? "#fff" : "rgba(255,255,255,0.5)" }}
+                  className="relative h-9 px-5 inline-flex items-center justify-center gap-1.5 rounded-full text-sm font-semibold transition-colors"
+                  style={{ color: on ? "#fff" : "rgba(255,255,255,0.55)" }}
                 >
-                  {it.label}
+                  {on && (
+                    <motion.span
+                      aria-hidden
+                      layoutId="album-tab-pill"
+                      className="absolute inset-0 rounded-full bg-white/15 shadow-[0_1px_3px_rgba(0,0,0,0.25)] ring-1 ring-white/10"
+                      transition={
+                        reduceMotion
+                          ? { duration: 0 }
+                          : { type: "spring", stiffness: 520, damping: 38, mass: 0.8 }
+                      }
+                    />
+                  )}
+                  <span className="relative z-10">{it.label}</span>
                   {it.key !== "music" && it.count > 0 && (
-                    <span className="text-[12px] text-white/45 font-medium">
+                    <span className="relative z-10 text-xs text-white/50 font-medium">
                       ({it.count})
                     </span>
                   )}
-                  <span
-                    aria-hidden
-                    className="absolute left-1/2 -translate-x-1/2 bottom-1 w-7 h-[2.5px] rounded-full transition-opacity"
-                    style={{ background: BRAND_BLUE, opacity: on ? 1 : 0 }}
-                  />
                 </button>
               );
             })}
@@ -541,7 +550,7 @@ export function DesktopAlbumView({
         {/* Tab content */}
         <div className="mt-6">
           {tab === "music" && (
-            <div className="flex flex-col" data-testid="track-list">
+            <div className="flex flex-col border-t border-white/8 pt-1" data-testid="track-list">
               {songs.map((s) => {
                 const state: "locked" | "preview" | "full" = isOwned
                   ? "full"
