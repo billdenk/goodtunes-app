@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { usePlayer } from "@/context/PlayerContext";
@@ -39,11 +39,19 @@ type LibraryTab = "albums" | "songs" | "artists";
 
 export function Collection() {
   const [, navigate] = useLocation();
+  const searchStr = useSearch();
   const { user } = useAuth();
   const favArtists = useFavoriteArtists();
   const { playSong, currentSong, setShowPlayer } = usePlayer();
   const [certAlbum, setCertAlbum] = useState<Album | null>(null);
-  const [tab, setTab] = useState<LibraryTab>("albums");
+  // Task #1074 — Collection's active tab is driven by the URL (`?tab=`)
+  // so the desktop fan rail can deep-link to Songs/Artists and browser
+  // back/forward works. `setTab` just navigates; `tab` is derived.
+  const tabParam = new URLSearchParams(searchStr).get("tab");
+  const tab: LibraryTab =
+    tabParam === "songs" ? "songs" : tabParam === "artists" ? "artists" : "albums";
+  const setTab = (t: LibraryTab) =>
+    navigate(t === "albums" ? "/collection" : `/collection?tab=${t}`);
   // Task #530 — inline library search retired in favour of the global
   // /search destination on the right of the bottom nav. We keep the
   // `search` constant as an empty string so the existing filter

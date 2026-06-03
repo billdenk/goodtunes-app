@@ -481,7 +481,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
               }
             : null
         }
-        activeKey={searchMode ? "search" : "discover"}
+        searchActive={searchMode}
         onSearch={() => setSearchMode(true)}
       />
 

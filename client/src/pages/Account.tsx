@@ -329,8 +329,8 @@ export function Account() {
   }, []);
 
   return (
-    <main className="relative h-screen w-full flex justify-center overflow-hidden">
-      <section className="relative w-full max-w-[390px] md:max-w-[640px] lg:max-w-[760px] lg:mx-auto h-screen text-white flex flex-col">
+    <main className="relative h-screen w-full flex justify-center overflow-hidden lg:pl-[260px]">
+      <section className="relative w-full max-w-[390px] md:max-w-[640px] lg:max-w-[820px] lg:mx-auto h-screen text-white flex flex-col">
 
         <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
           {/* Title + profile header now live INSIDE the scroll container so

@@ -1,8 +1,9 @@
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Settings, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { FanRailNav, type FanRailActive, type CollectionTab } from "@/components/ui/FanRailNav";
 import {
   useDesktopShell,
   STOREFRONT_SIDEBAR_WIDTH,
@@ -53,48 +54,9 @@ export function shouldRenderStorefrontSidebar(location: string): boolean {
   );
 }
 
-function NavLink({
-  active,
-  onClick,
-  icon,
-  label,
-  badge,
-  testId,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-  badge?: number;
-  testId?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-testid={testId}
-      className={`relative w-full flex items-center gap-3 px-3 h-10 rounded-lg text-sm font-medium transition-colors ${
-        active
-          ? "text-[color:var(--brand-blue)] bg-[rgba(49,158,216,0.14)]"
-          : "text-white/70 hover:text-white hover:bg-white/[0.06]"
-      }`}
-    >
-      <span className="w-6 flex items-center justify-center">{icon}</span>
-      <span className="flex-1 text-left truncate">{label}</span>
-      {badge !== undefined && badge > 0 && (
-        <span
-          className="text-xs font-bold px-1.5 min-w-[18px] h-[18px] rounded-full flex items-center justify-center text-white"
-          style={{ background: "var(--brand-pink)" }}
-        >
-          {badge > 99 ? "99+" : badge}
-        </span>
-      )}
-    </button>
-  );
-}
-
 export function StorefrontSidebar() {
   const [location, navigate] = useLocation();
+  const searchStr = useSearch();
   const { user, logout } = useAuth();
   const isDesktop = useDesktopShell();
   const [, setTick] = useState(0);
@@ -112,13 +74,20 @@ export function StorefrontSidebar() {
   const unread = chatEnabled ? totalUnread() : 0;
   const playlists = (playlistsRaw ?? []).slice(0, 12);
 
-  const isLibrary =
-    location === "/collection" || location === "/" || location.startsWith("/album");
-  const isPlaylists =
-    location === "/playlists" || location.startsWith("/playlist");
-  const isRecents = location.startsWith("/recents");
-  const isSearch = location.startsWith("/search");
   const isAccount = location.startsWith("/account");
+
+  const tabParam = new URLSearchParams(searchStr).get("tab");
+  const collectionTab: CollectionTab =
+    tabParam === "songs" ? "songs" : tabParam === "artists" ? "artists" : "albums";
+  const railActive: FanRailActive = location.startsWith("/search")
+    ? { kind: "search" }
+    : location === "/collection"
+      ? { kind: "collection", tab: collectionTab }
+      : location === "/playlists" || location.startsWith("/playlist")
+        ? { kind: "playlists" }
+        : location.startsWith("/recents")
+          ? { kind: "recents" }
+          : null;
 
   const avatarInitials = (user?.displayName || user?.username || "?")
     .split(" ")
@@ -193,83 +162,7 @@ export function StorefrontSidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 pb-6 scrollbar-hide">
-        <div className="space-y-1">
-          <NavLink
-            active={isLibrary}
-            onClick={() => navigate("/collection")}
-            testId="sidebar-collection"
-            label="Library"
-            icon={
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="3" y="3" width="4" height="18" rx="1" />
-                <rect x="9" y="3" width="3" height="18" rx="1" />
-                <rect x="14" y="3" width="7" height="11" rx="1" />
-                <rect x="14" y="16" width="7" height="5" rx="1" />
-              </svg>
-            }
-          />
-          <NavLink
-            active={isSearch}
-            onClick={() => navigate("/search")}
-            testId="sidebar-search"
-            label="Search"
-            icon={
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              >
-                <circle cx="11" cy="11" r="7" />
-                <path d="M20 20l-3.5-3.5" />
-              </svg>
-            }
-          />
-          <NavLink
-            active={isRecents}
-            onClick={() => navigate("/recents")}
-            testId="sidebar-recents"
-            label="Recents"
-            icon={
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3 2" />
-              </svg>
-            }
-          />
-          <NavLink
-            active={isPlaylists}
-            onClick={() => navigate("/playlists")}
-            testId="sidebar-playlists"
-            label="Playlists"
-            icon={
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              >
-                <path d="M3 6h18M3 10h14M3 14h8" />
-                <path d="M17 14v6M14 17h6" />
-              </svg>
-            }
-          />
-        </div>
+        <FanRailNav active={railActive} />
 
         {playlists.length > 0 && (
           <>
