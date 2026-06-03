@@ -36,7 +36,7 @@ import { toast } from "@/hooks/use-toast";
 import { IconButton } from "@/components/ui/IconButton";
 import { ChromeScrim } from "@/components/ui/ChromeScrim";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
-import { ChevronLeft, Share, MoreHorizontal } from "lucide-react";
+import { ChevronLeft, Share, MoreHorizontal, Lock } from "lucide-react";
 import { buyEnabled, nativeDownloadsEnabled } from "@/lib/platform";
 import { downloadSong, removeDownload, listDownloadedSongs } from "@/lib/nativeDownloads";
 import { track } from "@/lib/analytics";
@@ -782,7 +782,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
             if (full) handleStreamSong(full);
           }}
           onStreamAlbum={handleStreamAlbum}
-          bonusSlot={<AlbumBonusContent albumId={album.id} />}
+          bonusSlot={<AlbumBonusContent albumId={album.id} locked={!isOwned} />}
           lineupSlot={<AlbumLineupRail albumId={album.id} onPickMember={(name) => navigate(`/artist/${encodeURIComponent(name)}`)} />}
           onBack={() => goBack(navigate)}
           onShare={handleShare}
@@ -3473,8 +3473,38 @@ interface BonusPhoto { id: string; albumId: string; photoUrl: string; caption: s
 // object, etc.), we hide the <video>, keep the poster as a still
 // background, and overlay a small "Couldn't play this video" line so
 // the shelf doesn't go visually blank.
-function BonusVideoPlayer({ video }: { video: BonusVideo }) {
+function BonusVideoPlayer({ video, locked = false }: { video: BonusVideo; locked?: boolean }) {
   const [errored, setErrored] = useState(false);
+  if (locked) {
+    return (
+      <div
+        className="relative rounded-lg overflow-hidden bg-black/40"
+        style={{ aspectRatio: "16 / 9" }}
+        data-locked="true"
+        data-testid={`video-album-bonus-locked-${video.id}`}
+      >
+        {video.posterUrl ? (
+          <img
+            src={video.posterUrl}
+            alt=""
+            className="w-full h-full object-cover"
+            draggable={false}
+            style={{
+              filter: "brightness(0.55) saturate(0.85) blur(16px)",
+              transform: "scale(1.2)",
+            }}
+          />
+        ) : (
+          <div className="w-full h-full bg-black/60" />
+        )}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-full bg-black/55 flex items-center justify-center">
+            <Lock className="w-4 h-4 text-fan-primary" strokeWidth={2.2} />
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div
       className="relative rounded-lg overflow-hidden bg-black/40"
@@ -3635,7 +3665,7 @@ function LightboxSlide({
   );
 }
 
-export function AlbumBonusContent({ albumId }: { albumId: string }) {
+export function AlbumBonusContent({ albumId, locked = false }: { albumId: string; locked?: boolean }) {
   const { data: videos = [] } = useQuery<BonusVideo[]>({
     queryKey: ["/api/albums", albumId, "videos"],
   });
@@ -3697,7 +3727,7 @@ export function AlbumBonusContent({ albumId }: { albumId: string }) {
                   className="w-[260px] flex-shrink-0"
                   data-testid={`tile-album-video-${v.id}`}
                 >
-                  <BonusVideoPlayer video={v} />
+                  <BonusVideoPlayer video={v} locked={locked} />
                   <p className="mt-2 text-[14px] text-fan-primary font-medium truncate">{v.title}</p>
                 </div>
               ))}
@@ -3729,7 +3759,7 @@ export function AlbumBonusContent({ albumId }: { albumId: string }) {
             <div className="flex flex-col gap-5">
               {videos.map((v) => (
                 <div key={v.id} data-testid={`tile-all-album-video-${v.id}`}>
-                  <BonusVideoPlayer video={v} />
+                  <BonusVideoPlayer video={v} locked={locked} />
                   <p className="mt-2 text-[15px] text-fan-primary font-medium">{v.title}</p>
                 </div>
               ))}
@@ -3748,12 +3778,36 @@ export function AlbumBonusContent({ albumId }: { albumId: string }) {
               <button
                 key={p.id}
                 type="button"
-                onClick={() => setActivePhotoIndex(i)}
+                onClick={() => {
+                  if (locked) return;
+                  setActivePhotoIndex(i);
+                }}
                 className="relative rounded-md overflow-hidden bg-white/5 active:opacity-80"
-                style={{ aspectRatio: "1 / 1" }}
+                style={{ aspectRatio: "1 / 1", cursor: locked ? "default" : "pointer" }}
+                data-locked={locked ? "true" : "false"}
                 data-testid={`button-album-photo-${p.id}`}
               >
-                <img src={p.photoUrl} alt={p.caption ?? ""} className="w-full h-full object-cover" loading="lazy" />
+                <img
+                  src={p.photoUrl}
+                  alt={p.caption ?? ""}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                  style={
+                    locked
+                      ? {
+                          filter: "brightness(0.55) saturate(0.85) blur(14px)",
+                          transform: "scale(1.2)",
+                        }
+                      : undefined
+                  }
+                />
+                {locked && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-black/55 flex items-center justify-center">
+                      <Lock className="w-3.5 h-3.5 text-fan-primary" strokeWidth={2.2} />
+                    </div>
+                  </div>
+                )}
               </button>
             ))}
           </div>

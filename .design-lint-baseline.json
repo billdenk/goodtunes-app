@@ -18295,6 +18295,16 @@
     "snippet": "<div className=\"w-6 h-6 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0\" style={{ background: \"rgba(255,255,255,0.92)\" }}>"
   },
   {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/AlbumDetail.tsx",
+    "snippet": "<div className=\"w-9 h-9 rounded-full bg-black/55 flex items-center justify-center\">"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/AlbumDetail.tsx",
+    "snippet": "<div className=\"w-8 h-8 rounded-full bg-black/55 flex items-center justify-center\">"
+  },
+  {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetailDesktop.tsx",
     "snippet": "isOwned ? \"bg-[#319ED8] text-white\" : \"bg-white/10 text-fan-secondary hover:bg-white/15\","

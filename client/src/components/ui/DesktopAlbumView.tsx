@@ -964,7 +964,14 @@ function BonusGrid({
             src={it.thumb}
             alt=""
             className="w-full h-full object-cover"
-            style={{ filter: locked ? "brightness(0.55) saturate(0.85)" : undefined }}
+            style={
+              locked
+                ? {
+                    filter: "brightness(0.55) saturate(0.85) blur(16px)",
+                    transform: "scale(1.2)",
+                  }
+                : undefined
+            }
             draggable={false}
           />
           {locked && (
