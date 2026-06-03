@@ -705,7 +705,7 @@ export function AdminAlbum() {
   const modeChangeBlockedReason = !modeChangeBlocked
     ? undefined
     : albumEditAccess?.missingPermissions.includes("out_of_scope")
-      ? "Out of scope for your team"
+      ? "This album isn't managed by your team"
       : "Your team doesn't have edit access on this album";
 
   // Task #335 — sell-mode + format + lock toggle live on the album
@@ -1727,7 +1727,7 @@ function AlbumEditAccessChip({ albumId }: { albumId: string }) {
       : data.missingPermissions.includes("edit_metadata")
         ? "Read-only for your team"
         : data.missingPermissions.includes("out_of_scope")
-          ? "Out of scope"
+          ? "View only"
           : "Read-only"
     : "Edits go to GoodTunes for review";
   return (
@@ -2203,7 +2203,7 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
       : editAccess.missingPermissions.includes("edit_metadata")
         ? "Read-only for your team"
         : editAccess.missingPermissions.includes("out_of_scope")
-          ? "Out of scope"
+          ? "This album isn't managed by your team"
           : undefined;
   // Build the dropdown options. Most-used label names first would be
   // nicer but the list is short — alphabetical is fine.
