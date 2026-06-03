@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Link, useLocation } from "wouter";
-import { ChevronLeft, Play, Pause, Shuffle, MoreHorizontal, Lock, X, Share, Info } from "lucide-react";
+import { ChevronLeft, Play, Pause, Shuffle, MoreHorizontal, Lock, Share, Info } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { IconButton } from "@/components/ui/IconButton";
 import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
@@ -685,21 +685,6 @@ export function DesktopAlbumView({
                   border: "1px solid rgba(255,255,255,0.08)",
                 }}
               >
-                <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
-                  <span className="text-fan-primary text-[14px] font-semibold tracking-[-0.005em]">
-                    Lyrics
-                  </span>
-                  <IconButton
-                    variant="ghost"
-                    size="md"
-                    label="Close lyrics"
-                    onClick={onCloseLyrics}
-                    data-testid="button-close-lyrics"
-                    className="w-8 h-8 [&>svg]:w-4 [&>svg]:h-4 text-white/65 hover:text-white"
-                  >
-                    <X strokeWidth={2.2} />
-                  </IconButton>
-                </div>
                 <div className="flex-1 min-h-0 flex flex-col">{lyrics}</div>
               </div>
             </div>
