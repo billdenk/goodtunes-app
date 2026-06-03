@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { Compass, Music2, Users, LifeBuoy, Bell, LogOut } from "lucide-react";
+import { Search, Compass, Music2, Users, LifeBuoy, Bell, LogOut } from "lucide-react";
 
 /* Brand tokens — kept inline so the primitive is self-contained and can
    live in the mockup sandbox via re-export (the sandbox alias can't
@@ -8,7 +8,7 @@ import { Compass, Music2, Users, LifeBuoy, Bell, LogOut } from "lucide-react";
 export const BRAND_BG = "#00062B";
 export const BRAND_BLUE = "#319ED8";
 
-type NavKey = "discover" | "songs" | "artists";
+type NavKey = "search" | "discover" | "songs" | "artists";
 
 function NavRow({
   icon,
@@ -82,13 +82,20 @@ export type AlbumDesktopSidebarUser = {
 export function AlbumDesktopSidebar({
   user,
   activeKey = "discover",
+  onSearch,
   onSignOut,
 }: {
   user?: AlbumDesktopSidebarUser | null;
   activeKey?: NavKey;
+  /** Selecting the top "Search" entry. The host swaps the main content
+   *  area into search mode (the sidebar just highlights). */
+  onSearch?: () => void;
   onSignOut?: () => void;
 }) {
   const [active, setActive] = useState<NavKey>(activeKey);
+  // Stay in sync with the host-controlled key so toggling search mode
+  // (or landing back on the album) re-highlights the right row.
+  useEffect(() => setActive(activeKey), [activeKey]);
   return (
     <aside
       className="flex flex-col flex-shrink-0 h-full text-white"
@@ -110,6 +117,15 @@ export function AlbumDesktopSidebar({
       </div>
 
       <nav className="px-2 flex flex-col gap-0.5">
+        <NavRow
+          icon={<Search strokeWidth={1.9} />}
+          label="Search"
+          active={active === "search"}
+          onClick={() => {
+            setActive("search");
+            onSearch?.();
+          }}
+        />
         <NavRow
           icon={<Compass strokeWidth={1.9} />}
           label="Discover"

@@ -33,7 +33,7 @@ import {
   AlbumDetailDesktopSkeleton,
   AlbumNotFound,
 } from "@/components/ui/AlbumDetailSkeleton";
-import { AlbumTopNowPlayingStrip } from "@/components/ui/AlbumTopNowPlayingStrip";
+import { DesktopSearchView } from "@/components/search/DesktopSearchView";
 import { PlayerDock } from "@/components/ui/PlayerDock";
 import {
   DesktopAlbumView,
@@ -107,10 +107,14 @@ type ApiAlbumPhoto = {
  * panel mounted only at lg where its 360px width still leaves room.
  *
  * This page composes:
- *   • AlbumDesktopSidebar          (left nav)
- *   • AlbumTopNowPlayingStrip      (header strip)
+ *   • AlbumDesktopSidebar          (left nav, incl. top "Search" entry)
  *   • DesktopAlbumView             (hero + tabs + tracklist + bonus + lyrics panel)
+ *   • DesktopSearchView            (shown in place of the hero in search mode)
  *   • PlayerDock density="compact" (Apple-Music-density bottom chrome)
+ *
+ * Task #1054 retired the old AlbumTopNowPlayingStrip header (its
+ * magnifying-glass search was a dead control). Now-playing is fully
+ * covered by the bottom PlayerDock; search moved into the sidebar.
  *
  * The DesktopAlbumView primitive is shared with the admin album preview
  * so editors see the same surface fans see, pixel-for-pixel.
@@ -122,6 +126,11 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const { user, updateProfile } = useAuth();
   const player = usePlayer();
   const [tab, setTab] = useState<DesktopAlbumTab>("music");
+  // Task #1054 — sidebar "Search" swaps the main content area into an
+  // Apple-Music-style search view (box at top, ranked results below)
+  // instead of the album hero. Picking a result navigates + drops back
+  // out of search mode (onNavigate), so it lands on the chosen album.
+  const [searchMode, setSearchMode] = useState(false);
   // Task #1049 — streaming-service handoff for sunset albums. Mirrors the
   // mobile surface: prefer the fan's saved service, else pop the picker.
   const [streamPicker, setStreamPicker] = useState<{
@@ -464,13 +473,15 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
               }
             : null
         }
-        activeKey="discover"
+        activeKey={searchMode ? "search" : "discover"}
+        onSearch={() => setSearchMode(true)}
       />
 
       <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden">
-        <AlbumTopNowPlayingStrip />
-
         <main className="flex-1 overflow-y-auto">
+          {searchMode ? (
+            <DesktopSearchView onNavigate={() => setSearchMode(false)} />
+          ) : (
           <DesktopAlbumView
             album={album}
             songs={songs}
@@ -501,6 +512,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             lyrics={lyricsBody}
             onCloseLyrics={() => player.setShowLyrics(false)}
           />
+          )}
         </main>
       </div>
 
