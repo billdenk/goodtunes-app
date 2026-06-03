@@ -37,8 +37,31 @@ pill and only expands when the track key CHANGES. In a test, click
 `button-show-player` first to reveal the full dock (and `button-lyrics`),
 or the transport controls aren't mounted.
 
+**Testing a context-driven page (e.g. mobile `Player.tsx`):** it reads
+everything from `usePlayer()`, not props. Render it inside a
+`PlayerContext.Provider` (now exported from `PlayerContext.tsx`) with a
+stateful host that supplies a full controlled value — mirrors the desktop
+harness's "one showLyrics flag both surfaces read" approach. Stub all the
+fns; only the toggled flag (`setShowLyrics`) and `currentSong` (with
+`lyrics`) need to be real.
+
+**Two gotchas unique to importing `Player.tsx`:**
+- It transitively imports `client/src/data/musicData.ts`, which `import`s
+  binary `@assets/...jpg|png` files. tsx has no Vite asset pipeline and
+  errors `Cannot find package '@assets/...'`. Fix in `tsconfig.test.json`:
+  add `"@assets/*": ["./client/src/__stubs__/asset"]` (a one-line
+  `export default ""`). `paths` REPLACES the base paths on extend, so
+  re-list `@/*` and `@shared/*` too.
+- On mount it fires `analytics.track()`, which lazily arms a 15s
+  `setInterval` flush loop — an open handle that hangs the WHOLE
+  `tsx --test` run (no output, never exits). In test setup wrap
+  `globalThis.setInterval` to `.unref()` the returned timer. Also set
+  `globalThis.localStorage = window.localStorage` (track writes there).
+
 **Baseline:** `server/auth/identityLink.db.test.ts` ("same-email fan IS
 linked…") fails with 500 in throwaway task DBs — pre-existing, DB-state
 dependent, not caused by client test work.
 
-Reference implementation: `client/src/components/ui/desktopLyricsPanel.test.ts`.
+Reference implementations: `client/src/components/ui/desktopLyricsPanel.test.ts`
+(prop-driven components) and `client/src/pages/playerLyricsPanel.test.ts`
+(context-driven page).

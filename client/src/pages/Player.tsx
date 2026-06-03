@@ -547,8 +547,10 @@ export function Player() {
               <button
                 type="button"
                 onClick={() => setShowLyrics(false)}
+                aria-label="Close lyrics"
                 className="w-8 h-8 flex items-center justify-center rounded-full flex-shrink-0"
                 style={{ background: "rgba(0,0,0,0.35)" }}
+                data-testid="button-close-lyrics"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
                   <path d="M19 9l-7 7-7-7" />

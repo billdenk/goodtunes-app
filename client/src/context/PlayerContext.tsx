@@ -77,7 +77,11 @@ interface PlayerContextValue extends PlayerState {
  *  can't substitute it for the purchase. */
 export const PREVIEW_CAP_SECONDS = 30;
 
-const PlayerContext = createContext<PlayerContextValue | null>(null);
+// Exported so component/integration tests can supply a controlled context
+// value (the mobile Player consumes this via usePlayer rather than props —
+// see client/src/pages/playerLyricsPanel.test.ts). App code should keep
+// using usePlayer()/PlayerProvider, not this raw context.
+export const PlayerContext = createContext<PlayerContextValue | null>(null);
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const [queue, setQueue] = useState<PlayerSong[]>([]);
