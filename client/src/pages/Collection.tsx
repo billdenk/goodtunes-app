@@ -13,6 +13,7 @@ import { AlbumCard } from "@/components/ui/AlbumCard";
 import { track } from "@/lib/analytics";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
+import { useDesktopShell } from "@/hooks/useDesktopShell";
 import { useRecordRecent, useFanRecents } from "@/hooks/useRecents";
 import { chatEnabled } from "@/lib/platform";
 import { deriveCollectionTab, collectionTabHref } from "@/lib/fanRail";
@@ -42,6 +43,11 @@ export function Collection() {
   const { user } = useAuth();
   const favArtists = useFavoriteArtists();
   const { playSong, currentSong, setShowPlayer } = usePlayer();
+  // Task #1074 — on the desktop shell the left fan rail already lists
+  // Albums/Songs/Artists, so the center scope-bar pills are redundant.
+  // Hide them at lg+ (keeping only the Filter button); mobile/tablet have
+  // no sidebar, so the pills stay there as the only way to switch scope.
+  const isDesktop = useDesktopShell();
   // Task #1074 — Collection's active tab is driven by the URL (`?tab=`)
   // so the desktop fan rail can deep-link to Songs/Artists and browser
   // back/forward works. `setTab` just navigates; `tab` is derived. The
@@ -634,6 +640,7 @@ export function Collection() {
                 + scroll within the flex parent so the Filter button stays put.
                 `transition` (not `all`) covers both the color + press-scale
                 without a framer transform conflict. */}
+            {!isDesktop && (
             <div className="flex flex-1 min-w-0 items-center gap-2 overflow-x-auto scrollbar-hide">
               {(["albums", "songs", "artists"] as LibraryTab[]).map((t) => (
                 <button
@@ -653,6 +660,7 @@ export function Collection() {
                 </button>
               ))}
               </div>
+            )}
             </div>
             </div>
           </div>
