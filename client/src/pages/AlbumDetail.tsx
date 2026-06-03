@@ -97,6 +97,7 @@ function normalizeInstrument(i: ApiInstrument): Instrument {
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { AlbumDetailDesktop } from "@/pages/AlbumDetailDesktop";
 import { shareUrlForSlug } from "@shared/shareSlug";
+import { goBack } from "@/lib/navHistory";
 import { hasReachedSunset } from "@shared/albumStage";
 
 /**
@@ -777,7 +778,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
           onStreamAlbum={handleStreamAlbum}
           bonusSlot={<AlbumBonusContent albumId={album.id} />}
           lineupSlot={<AlbumLineupRail albumId={album.id} onPickMember={(name) => navigate(`/artist/${encodeURIComponent(name)}`)} />}
-          onBack={() => navigate("/collection")}
+          onBack={() => goBack(navigate)}
           onShare={handleShare}
           onOpenAlbumMenu={() => setSongMenuFor(null)}
           onPlayAll={handlePlayAll}

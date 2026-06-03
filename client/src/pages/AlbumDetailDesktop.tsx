@@ -44,6 +44,7 @@ import {
 import type { PlayerSong } from "@/context/PlayerContext";
 import type { Album as PlayerAlbum, Person } from "@/data/musicData";
 import { PersonDetailSheet } from "@/pages/AlbumDetail";
+import { goBack } from "@/lib/navHistory";
 
 type ApiSong = {
   id: string;
@@ -510,6 +511,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             favoriteSongIds={favSongs.set}
             hasAlbumCredits={productionCredits.length > 0}
             onOpenAlbumCredits={() => setShowAlbumCredits(true)}
+            onBack={() => goBack(navigate)}
             onBuyBundle={buyEnabled ? handleBuyBundle : undefined}
             signedCertPriceCents={buyEnabled ? signedCertPriceCents : null}
             signedCertSoldOut={signedCertSoldOut}

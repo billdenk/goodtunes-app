@@ -10,6 +10,7 @@ import { NavVisibilityProvider } from "@/hooks/useNavVisibility";
 import { TopChromeFrostProvider } from "@/hooks/useTopChromeFrost";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 import { markBootSucceeded } from "@/lib/bootHeal";
+import { useTrackInAppNavigation } from "@/lib/navHistory";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthKind, isStoreHost } from "@/hooks/useAuthKind";
 import { STOREFRONT_LAUNCH_ALBUM_ID } from "@shared/schema";
@@ -204,6 +205,9 @@ function Router() {
   const { user, isLoading } = useAuth();
   const [location] = useLocation();
   const kind = useAuthKind();
+  // Track in-app navigation so back-aware surfaces (e.g. the album back
+  // pill) can return the fan to the exact page they came from.
+  useTrackInAppNavigation();
   // Task #859 — an `artist` partner is scoped to a quote sandbox. We read
   // their role so the deep-link guard below can bounce any /admin/* URL
   // that isn't their releases list or an album detail. The server is the
