@@ -98,5 +98,6 @@ timeoutMs = 120000
 [userenv]
 
 [userenv.shared]
-MAIL_FROM = "GoodTunes <noreply@send.goodtunes.music>"
+MAIL_FROM = "GoodTunes <invites@invites.goodtunes.music>"
 OPS_ALERT_EMAIL = "bill@gogoods.com"
+MAIL_REPLY_TO = "admin@goodtunes.music"

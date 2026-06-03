@@ -704,23 +704,37 @@ export function buildAdminInviteEmail(opts: {
   inviterName: string;
   roleLabel: string;
   ttlDays: number;
+  inviterPhotoUrl?: string | null;
 }): { subject: string; text: string; html: string } {
-  const { acceptUrl, inviterName, roleLabel, ttlDays } = opts;
+  const { acceptUrl, inviterName, roleLabel, ttlDays, inviterPhotoUrl } = opts;
+  const esc = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const safeName = esc(inviterName);
   const subject = `${inviterName} invited you to GoodTunes`;
   const text = [
-    `${inviterName} invited you to join GoodTunes as a ${roleLabel}.`,
+    `${inviterName} is inviting you to join GoodTunes as a ${roleLabel}.`,
     ``,
     `Accept the invite (expires in ${ttlDays} days):`,
     acceptUrl,
     ``,
     `If you weren't expecting this email, you can ignore it.`,
   ].join("\n");
+  // Only render the avatar for our own http(s) image URLs.
+  const photoOk = typeof inviterPhotoUrl === "string" && /^https?:\/\//i.test(inviterPhotoUrl);
+  const avatarCell = photoOk
+    ? `<td style="vertical-align: middle; padding-right: 14px;"><img src="${esc(inviterPhotoUrl as string)}" width="52" height="52" alt="${safeName}" style="width: 52px; height: 52px; border-radius: 50%; object-fit: cover; display: block; border: 1px solid #e6e6e6;" /></td>`
+    : "";
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
       ${emailLogoImg("color")}
       <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Invitation</div>
-      <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700;">You're invited</h1>
-      <p style="font-size: 16px; line-height: 1.5; color: #333;"><strong>${inviterName}</strong> invited you to join GoodTunes as a <strong>${roleLabel}</strong>.</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 12px 0 16px;">
+        <tr>
+          ${avatarCell}
+          <td style="vertical-align: middle;"><h1 style="font-size: 24px; margin: 0; font-weight: 700; line-height: 1.25;">${safeName} is inviting you to GoodTunes!</h1></td>
+        </tr>
+      </table>
+      <p style="font-size: 16px; line-height: 1.5; color: #333;">You've been invited to join GoodTunes as a <strong>${roleLabel}</strong>.</p>
       <p style="margin: 28px 0;">
         <a href="${acceptUrl}" style="display: inline-block; background: #319ED8; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 15px;">Accept invitation</a>
       </p>
@@ -737,8 +751,9 @@ export async function sendAdminInviteEmail(
   inviterName: string,
   roleLabel: string,
   ttlDays: number,
+  inviterPhotoUrl?: string | null,
 ): Promise<SendResult> {
-  const { subject, text, html } = buildAdminInviteEmail({ acceptUrl, inviterName, roleLabel, ttlDays });
+  const { subject, text, html } = buildAdminInviteEmail({ acceptUrl, inviterName, roleLabel, ttlDays, inviterPhotoUrl });
   return sendViaResend("admin-invite", toEmail, subject, html, text);
 }
 
