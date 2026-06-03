@@ -19324,7 +19324,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           FROM admin_invites ai
           LEFT JOIN people p ON p.id = ai.role_scope_id AND ai.role = 'artist'
           WHERE LOWER(ai.email) = ${email}
-            AND ai.referrer_scope_id = ANY(${scopeIds}::varchar[])
+            AND ai.referrer_scope_id = ANY(${pgArray(scopeIds, "varchar")})
             AND ai.revoked_at IS NULL
           LIMIT 1
         `);
@@ -21144,7 +21144,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         SELECT id, email, role, referrer_scope_id, used_at, revoked_at,
                created_at, accepted_user_id
         FROM admin_invites
-        WHERE referrer_scope_id = ANY(${referrerIds}::varchar[])
+        WHERE referrer_scope_id = ANY(${pgArray(referrerIds, "varchar")})
         ORDER BY created_at ASC
       `);
       for (const inv of ((invitesRes as any).rows ?? [])) {
