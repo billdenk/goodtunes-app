@@ -14,6 +14,14 @@ import {
   DrawerTitle,
   DrawerDescription,
 } from "@/components/ui/drawer";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 import { ADMIN_CHROME, CUSTOMER_CHROME, type Mode } from "./authChrome";
 import { TERMS_URL, PRIVACY_POLICY_URL } from "@shared/schema";
@@ -69,6 +77,19 @@ function WelcomeBackPill() {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const isMobile = useIsMobile();
+
+  // Single close path so every dismiss (Not me, backdrop, ESC, and a
+  // successful submit) both hides the surface and clears the field —
+  // reopening should never show a stale email.
+  const closeWelcomeBack = () => {
+    setOpen(false);
+    setEmail("");
+  };
+  const handleOpenChange = (next: boolean) => {
+    if (next) setOpen(true);
+    else closeWelcomeBack();
+  };
 
   useEffect(() => {
     const params = new URL(window.location.href).searchParams;
@@ -94,8 +115,7 @@ function WelcomeBackPill() {
     } finally {
       setSubmitting(false);
       toast({ title: "Check your inbox", description: "If that email is on file, a sign-in link is on its way." });
-      setOpen(false);
-      setEmail("");
+      closeWelcomeBack();
     }
   };
 
@@ -140,51 +160,79 @@ function WelcomeBackPill() {
           </button>
         </div>
       </div>
-      <Drawer open={open} onOpenChange={setOpen}>
-        <DrawerContent className="bg-[var(--brand-bg)] border-white/10 text-white">
-          <div className="mx-auto w-full max-w-[440px] px-5 pb-8">
-            <DrawerHeader className="px-0 text-left">
-              <DrawerTitle className="text-white text-2xl font-bold tracking-tight">Welcome back.</DrawerTitle>
-              <DrawerDescription className="text-white/55 text-sm leading-relaxed">
-                If you bought music from gogoods.com before June 2026, your library moved over to GoodTunes. Enter the email you used and we'll send a one-tap sign-in link — no password needed.
-              </DrawerDescription>
-            </DrawerHeader>
-            <form onSubmit={sendLink} className="mt-2 flex flex-col gap-3">
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                autoComplete="email"
-                inputMode="email"
-                autoCapitalize="none"
-                spellCheck={false}
-                className="w-full border border-white/10 bg-white/[0.06] rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-base focus:outline-none focus:border-[var(--brand-blue)]"
-                required
-                autoFocus
-                data-testid="input-welcomeback-sheet-email"
-              />
-              <button
-                type="submit"
-                disabled={submitting || !email.trim()}
-                className="w-full py-3.5 rounded-2xl font-semibold text-white disabled:opacity-40"
-                style={{ background: "linear-gradient(135deg, #1D5E8F, var(--brand-blue))" }}
-                data-testid="button-welcomeback-sheet-send"
-              >
-                {submitting ? "Sending…" : "Email me a sign-in link"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="w-full py-3 text-white/55 hover:text-white/80 text-sm"
-                data-testid="button-welcomeback-sheet-cancel"
-              >
-                Not me
-              </button>
-            </form>
-          </div>
-        </DrawerContent>
-      </Drawer>
+      {/* The form body is identical across presentations — only the
+          surrounding surface differs (bottom-sheet on mobile, centered
+          card on desktop). Test IDs + handlers stay shared so nothing
+          downstream breaks. */}
+      {(() => {
+        const formBody = (
+          <form onSubmit={sendLink} className="mt-2 flex flex-col gap-3">
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              inputMode="email"
+              autoCapitalize="none"
+              spellCheck={false}
+              className="w-full border border-white/10 bg-white/[0.06] rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-base focus:outline-none focus:border-[var(--brand-blue)]"
+              required
+              autoFocus
+              data-testid="input-welcomeback-sheet-email"
+            />
+            <button
+              type="submit"
+              disabled={submitting || !email.trim()}
+              className="w-full py-3.5 rounded-2xl font-semibold text-white disabled:opacity-40"
+              style={{ background: "linear-gradient(135deg, #1D5E8F, var(--brand-blue))" }}
+              data-testid="button-welcomeback-sheet-send"
+            >
+              {submitting ? "Sending…" : "Email me a sign-in link"}
+            </button>
+            <button
+              type="button"
+              onClick={closeWelcomeBack}
+              className="w-full py-3 text-white/55 hover:text-white/80 text-sm"
+              data-testid="button-welcomeback-sheet-cancel"
+            >
+              Not me
+            </button>
+          </form>
+        );
+
+        if (isMobile) {
+          return (
+            <Drawer open={open} onOpenChange={handleOpenChange}>
+              <DrawerContent className="bg-[var(--brand-bg)] border-white/10 text-white">
+                <div className="mx-auto w-full max-w-[440px] px-5 pb-8">
+                  <DrawerHeader className="px-0 text-left">
+                    <DrawerTitle className="text-white text-2xl font-bold tracking-tight">Welcome back.</DrawerTitle>
+                    <DrawerDescription className="text-white/55 text-sm leading-relaxed">
+                      If you bought music from gogoods.com before June 2026, your library moved over to GoodTunes. Enter the email you used and we'll send a one-tap sign-in link — no password needed.
+                    </DrawerDescription>
+                  </DrawerHeader>
+                  {formBody}
+                </div>
+              </DrawerContent>
+            </Drawer>
+          );
+        }
+
+        return (
+          <Dialog open={open} onOpenChange={handleOpenChange}>
+            <DialogContent className="bg-[var(--brand-bg)] border-0 text-white max-w-[440px] rounded-2xl px-6 py-7">
+              <DialogHeader className="text-left space-y-1.5">
+                <DialogTitle className="text-white text-2xl font-bold tracking-tight">Welcome back.</DialogTitle>
+                <DialogDescription className="text-fan-secondary text-sm leading-relaxed">
+                  If you bought music from gogoods.com before June 2026, your library moved over to GoodTunes. Enter the email you used and we'll send a one-tap sign-in link — no password needed.
+                </DialogDescription>
+              </DialogHeader>
+              {formBody}
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </>
   );
 }
