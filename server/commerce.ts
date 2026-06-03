@@ -63,6 +63,7 @@ import {
   registerPressCatalogRoutes,
   getPressCatalog,
   lookupCatalogUnitCents,
+  resolveCatalogIdentity,
   seedHellbenderCatalog,
   seedMrpCatalog,
   seedPmpCatalog,
@@ -1007,18 +1008,24 @@ export function registerCommerceRoutes(app: Express) {
     let brokerDiscountPct: number | null = null;
 
     if (parsed.data.pressTierId) {
-      // Resolve the press for this album (artist invitedByPressId →
-      // label invitedByPressId), then look up the catalog row.
-      let pressId: string | null = null;
-      if (album.primaryArtistId) {
-        const p = await storage.getPersonById(album.primaryArtistId);
-        if (p && (p as any).invitedByPressId) pressId = String((p as any).invitedByPressId);
-      }
-      if (!pressId && album.labelId) {
-        const l = await storage.getLabelById(album.labelId);
-        if (l && (l as any).invitedByPressId) pressId = String((l as any).invitedByPressId);
-      }
-      if (pressId) {
+      // Task #1035 — resolve the press from the CHOSEN TIER itself (each
+      // tier row carries its `pressId`), NOT from the album's invited
+      // press. The old artist→label `invitedByPressId` resolution broke
+      // two ways: (a) an album with no invited press got no `pressId`, so
+      // the catalog lookup was skipped and the deliberate pick fell
+      // through to the placeholder default color; (b) when the operator
+      // picked a color from a press selected via the Printer chip
+      // (god-view / "All Presses") that differs from the invited press,
+      // the `(pressId, tierId, format)` lookup missed and returned null.
+      // Pricing against the tier's own press makes the pick stick
+      // regardless of invited-press state.
+      const identity = await resolveCatalogIdentity({
+        tierId: parsed.data.pressTierId,
+        colorId: parsed.data.pressColorId ?? null,
+        format: parsed.data.format,
+      });
+      if (identity) {
+        const pressId = identity.pressId;
         const looked = await lookupCatalogUnitCents({
           pressId,
           format: parsed.data.format,
@@ -1032,18 +1039,36 @@ export function registerCommerceRoutes(app: Express) {
           vinylColorTier = looked.tierName;
           vinylColorId = looked.colorName; // snapshot as display name
           quantityTier = looked.snappedQty;
-          // Task #1025 — pin the exact catalog rows alongside the names
-          // so the saved color resolves identically for every admin
-          // regardless of catalog re-imports or cross-press views.
-          pressIdSnap = pressId;
-          pressTierIdSnap = parsed.data.pressTierId;
-          pressColorIdSnap = parsed.data.pressColorId ?? null;
+        } else {
+          // Task #1035 — the pick is a deliberate catalog choice but has
+          // no priced ladder rung for this press/tier/format/qty. Do NOT
+          // fall through to the placeholder branch and overwrite the
+          // operator's color with a default — keep the chosen tier/color
+          // identity (so reload restores it) and leave manufacturing on
+          // the platform placeholder cost. costSource stays "placeholder"
+          // (the cost genuinely is the placeholder), but the pinned
+          // identity below means the row reloads as the operator's pick.
+          vinylColorTier = identity.tierName;
+          vinylColorId = identity.colorName;
+          if (vinyl) {
+            quantityTier = snapToQuantityTier(
+              parsed.data.plannedQuantity ?? DEFAULT_VINYL_QUANTITY,
+            ).tier;
+          }
         }
+        // Task #1025/#1035 — pin the exact catalog rows (resolved press +
+        // chosen tier + chosen color) alongside the names so the saved
+        // color resolves identically for every admin regardless of
+        // catalog re-imports or cross-press views — and so an unpriceable
+        // pick still round-trips to the operator's intent on reload.
+        pressIdSnap = pressId;
+        pressTierIdSnap = parsed.data.pressTierId;
+        pressColorIdSnap = parsed.data.pressColorId ?? null;
         // Task #624 — capture the press's broker discount rate at save
         // time so finalised SKUs aren't retroactively repriced if Bill
-        // tunes the rate later. Always snapshot — even when the
-        // catalog lookup miss falls through to the platform placeholder
-        // above — so reporting can still attribute the press correctly.
+        // tunes the rate later. Tied to the SAME resolved press as the
+        // catalog lookup, snapshotted even on a lookup miss so reporting
+        // can still attribute the press correctly.
         const press = await storage.getManufacturerById(pressId);
         const pct = (press as any)?.brokerDiscountPct;
         if (typeof pct === "number" && pct >= 0 && pct <= 100) {
@@ -1052,7 +1077,12 @@ export function registerCommerceRoutes(app: Express) {
       }
     }
 
-    if (costSource === "placeholder" && vinyl) {
+    // Task #1035 — only the legacy / non-catalog vinyl path (no resolved
+    // catalog pick) defaults the color. A deliberate catalog pick that
+    // couldn't be priced sets `pressTierIdSnap` above, so it skips this
+    // branch and keeps the operator's chosen color instead of reverting
+    // to the EcoMix/ECO1 default.
+    if (costSource === "placeholder" && vinyl && !pressTierIdSnap) {
       // Task #624 — retire the legacy Hellbender matrix as a runtime
       // pricing source. Pre-T218 vinyl picks (no pressTierId) still
       // record the color/jacket/quantity for reporting, but

@@ -234,6 +234,45 @@ export function snapToCatalogQuantityTier(
   return { qty: top.qty, unitCents: top.unitCents, requiresQuote: true };
 }
 
+// Task #1035 — resolve which press a catalog pick belongs to FROM THE
+// CHOSEN TIER ITSELF (every `press_color_tiers` row carries its
+// `pressId`), plus the human-readable tier/color names. The SKU save
+// path uses this so a pick made against a press selected via the
+// Printer chip (god-view / "All Presses") prices against THAT press —
+// not the album's invited press, which may be unset or different. The
+// names come back even when no priced ladder rung exists, so a
+// genuinely unpriceable pick can still be snapshotted instead of being
+// silently overwritten with a default color.
+export async function resolveCatalogIdentity(args: {
+  tierId: string;
+  colorId: string | null;
+  format: AlbumFormat;
+}): Promise<{
+  pressId: string;
+  tierName: string;
+  colorName: string | null;
+} | null> {
+  const [tier] = await db
+    .select()
+    .from(pressColorTiers)
+    .where(
+      and(
+        eq(pressColorTiers.id, args.tierId),
+        eq(pressColorTiers.format, args.format),
+      ),
+    );
+  if (!tier) return null;
+  let colorName: string | null = null;
+  if (args.colorId) {
+    const [c] = await db
+      .select()
+      .from(pressColors)
+      .where(and(eq(pressColors.id, args.colorId), eq(pressColors.tierId, tier.id)));
+    colorName = c?.name ?? null;
+  }
+  return { pressId: tier.pressId, tierName: tier.name, colorName };
+}
+
 // Save-time lookup for a vinyl SKU. The SellPanel doesn't pick a jacket
 // today, so when `jacketId` is omitted we use the press's default
 // jacket (the seeded "Standard Full-Color Jacket" for Hellbender).
