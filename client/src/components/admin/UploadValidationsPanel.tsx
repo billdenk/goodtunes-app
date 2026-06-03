@@ -110,13 +110,12 @@ export function UploadValidationsPanel({
     [spec, templateId],
   );
 
+  // Use the default query fetcher (getQueryFn) so the admin bearer token
+  // is sent the same way as every other admin call. A bare credentials-only
+  // fetch 401s with "Bearer token required for admin writes" once the
+  // session cookie isn't enough (e.g. right after a re-probe).
   const validations = useQuery<UploadValidationResult[]>({
     queryKey: ["/api/admin/albums", albumId, "upload-validations"],
-    queryFn: async () => {
-      const r = await fetch(`/api/admin/albums/${albumId}/upload-validations`, { credentials: "include" });
-      if (!r.ok) throw new Error("Failed to load validations");
-      return r.json();
-    },
   });
 
   const upload = useMutation({

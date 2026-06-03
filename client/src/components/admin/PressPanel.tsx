@@ -255,8 +255,17 @@ export function PressPanel({
         variant: j.errored.length > 0 ? "destructive" : undefined,
       });
       // Refresh the album/song rows so the staleSpecs banner updates
-      // and the masters table shows the new format/rate/bit-depth.
-      await queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId] });
+      // and the masters table shows the new format/rate/bit-depth. The
+      // masters table + stale-specs banner are derived from album.songs,
+      // which load under the album-detail key (["/api/albums", albumId]) —
+      // NOT the admin-albums key — so that's the one that must refetch.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId] }),
+        queryClient.invalidateQueries({
+          queryKey: ["/api/admin/albums", albumId, "upload-validations"],
+        }),
+      ]);
       // Re-run preflight automatically — the spec says clicking the
       // affordance should kick the probe pipeline THEN re-run preflight.
       // Skip if there's nothing to validate (saves a noisy empty run).
