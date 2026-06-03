@@ -3562,9 +3562,11 @@ function SkuRow({
   // ladder. Picks `profitCents` (= price − manufacturing − publishing
   // − payment processing − goodtunes) per ladder rung and multiplies
   // by the rung's qty. Folds in a proportional slice of the GoodDeed
-  // cert's net per-cert when the signed_cert addon is live, so the
-  // header range reflects what the artist would actually take home at
-  // that pressing volume. Task #636 — uses the *rung-correct* cert
+  // cert's net per-cert when the signed_cert addon is live, so each
+  // rung reflects what the artist would actually take home at that
+  // pressing volume. Feeds both the collapsed-header single figure
+  // (the chosen quantity's rung, Task #1087) and the Estimates
+  // table. Task #636 — uses the *rung-correct* cert
   // cost (from the ladder via the preview endpoint), not the flat
   // platform default, so the per-rung range steps through the
   // wholesale ladder as the pressing run scales up.
@@ -3591,9 +3593,9 @@ function SkuRow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estimateRungs, breakdown, priceCents, signedAddon, attachRatio, certCostByQty, livePlatformCostCents]);
 
-  // Task #646 — artistNetRange definition lives further down (after
-  // the Quote-rows helpers it depends on) so its useMemo deps can
-  // reference quoteRows / catalogByPressId without a TDZ violation.
+  // Task #1087 — the collapsed-header Artist Net (artistNetLabel) is
+  // computed further down, after the Quote-rows helpers, by reading
+  // the chosen quantity's net out of perRungArtistNet.
 
   // Task #642 — Estimates table columns. Generalises the header
   // pill's per-rung Artist Net math to a broader column set the
@@ -3703,8 +3705,8 @@ function SkuRow({
 
   const signedDollars = (c: number) =>
     c < 0 ? `-${dollars(Math.abs(c))}` : dollars(c);
-  // Task #646 — artistNetLabel is computed further down, after
-  // artistNetRange (which depends on Quote-rows helpers below).
+  // Task #1087 — artistNetLabel is computed further down, after the
+  // Quote-rows helpers, from the chosen quantity's perRungArtistNet.
 
   // Color label for the collapsed header meta line. Catalog rows
   // resolve via the picked tier's color list; legacy rows fall back
@@ -4041,63 +4043,28 @@ function SkuRow({
       needsCatalog: false,
     };
   };
-  const quoteRowNetCents = (row: QuoteRow): number | null => {
-    if (priceCents === null || !breakdown) return null;
-    const r = resolveQuoteRow(row);
-    if (r.needsCatalog || !r.tier) return null;
-    const costPerUnit =
-      r.mfgCents +
-      breakdown.publishingCents +
-      breakdown.paymentProcessingCents +
-      breakdown.goodtunesCents;
-    const profitPerUnit = priceCents - costPerUnit;
-    let net = profitPerUnit * r.snappedQty;
-    if (signedAddon?.active && attachRatio > 0) {
-      const certCount = Math.max(0, Math.floor(r.snappedQty * attachRatio));
-      const certNet = certNetForCertCount(certCount);
-      if (certNet !== null && certCount > 0) net += certNet * certCount;
-    }
-    return net;
-  };
-  // Hold the latest computation in a ref so artistNetRange (defined
-  // earlier in this component) can read it without a forward
-  // reference. quoteRows + upstream deps trigger artistNetRange's
-  // re-run; the closure read is just a value snapshot.
-  const quoteRowNetCentsRef = useRef<(row: QuoteRow) => number | null>(
-    quoteRowNetCents,
-  );
-  quoteRowNetCentsRef.current = quoteRowNetCents;
-
-  // Task #646 — collapsed-header Artist Net range aggregates per-rung
-  // nets PLUS every operator-scoped quote row's resolved net, so the
-  // scan view reflects the whole comparison set, not just the
-  // picked-press ladder. Reads quoteRowNetCentsRef so the closure
-  // tracks the latest computation without forcing a forward ref.
-  const artistNetRange = useMemo<{ low: number; high: number } | null>(() => {
-    const nets: number[] = perRungArtistNet.map((r) => r.netCents);
-    for (const row of quoteRows) {
-      const n = quoteRowNetCentsRef.current?.(row);
-      if (n !== null && n !== undefined) nets.push(n);
-    }
-    if (nets.length === 0) return null;
-    return { low: Math.min(...nets), high: Math.max(...nets) };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    perRungArtistNet,
-    quoteRows,
-    priceCents,
-    breakdown,
-    catalogByPressId,
-    attachRatio,
-    certCostByQty,
-    signedAddon,
-    livePlatformCostCents,
-  ]);
-  const artistNetLabel = artistNetRange
-    ? artistNetRange.low === artistNetRange.high
-      ? signedDollars(artistNetRange.low)
-      : `${signedDollars(artistNetRange.low)} – ${signedDollars(artistNetRange.high)}`
-    : "—";
+  // Task #1087 — the collapsed-header Artist Net shows the single
+  // figure for the row's chosen quantity (the "… · N pcs" shown in
+  // the same header), not the old min-to-max span across the whole
+  // ladder + every comparison quote. We read the picked
+  // configuration's net for parsedQty straight out of
+  // perRungArtistNet, so the per-unit cost stack + signed-cert
+  // fold-in stay byte-identical to the per-rung / Estimates math, and
+  // the figure matches the parsedQty column the Estimates table
+  // highlights. perRungArtistNet only carries *confirmed* rungs, so a
+  // chosen quantity with no confirmed price rung has no match and
+  // falls through to the "—" not-priceable treatment. The full
+  // per-rung / comparison spread still lives in the expanded
+  // Estimates table (estimateTableRows) — unchanged.
+  const chosenQtyArtistNetCents = useMemo<number | null>(() => {
+    if (parsedQty <= 0) return null;
+    const match = perRungArtistNet.find((r) => r.qty === parsedQty);
+    return match ? match.netCents : null;
+  }, [perRungArtistNet, parsedQty]);
+  const artistNetLabel =
+    chosenQtyArtistNetCents !== null
+      ? signedDollars(chosenQtyArtistNetCents)
+      : "—";
 
   // Color distance for "Match across presses". Skips entries with no
   // swatchHex (catalogs only carry hex today; image-only swatches
