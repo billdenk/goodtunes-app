@@ -442,10 +442,10 @@ export function Collection() {
 
   return (
     <main className="h-screen w-full flex justify-center overflow-hidden lg:justify-start lg:pl-[260px]">
-      <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1200px] lg:mx-auto h-screen text-white flex flex-col">
+      <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1200px] lg:mx-auto h-screen text-fan-primary flex flex-col">
 
         <header className="absolute top-0 inset-x-0 z-20 flex items-end justify-between px-5 pt-14 pb-3 pointer-events-none">
-          <h1 ref={titleRef} className="text-white text-[34px] font-bold leading-none tracking-tight will-change-[opacity,transform]" data-testid="text-page-title">Collection</h1>
+          <h1 ref={titleRef} className="text-fan-primary text-[34px] font-bold leading-none tracking-tight will-change-[opacity,transform]" data-testid="text-page-title">Collection</h1>
           {/* Task #530 — account avatar lives top-right. Unread chat
               count (Chat tab was retired from the bottom nav) shows as
               a small red dot on the avatar so the inbox stays
@@ -462,7 +462,7 @@ export function Collection() {
             {user?.photoUrl ? (
               <img src={user.photoUrl} alt="" className="w-full h-full object-cover" />
             ) : (
-              <span className="text-white text-xs font-semibold">{avatarInitials}</span>
+              <span className="text-fan-primary text-xs font-semibold">{avatarInitials}</span>
             )}
             {unread > 0 && (
               <span
@@ -494,7 +494,7 @@ export function Collection() {
           {recentsLoading ? (
             <div className="mb-5" data-testid="rail-recent-loading">
               <div className="flex items-center justify-between px-5 mb-3">
-                <h2 className="text-white text-base font-bold">Recently Played</h2>
+                <h2 className="text-fan-primary text-base font-bold">Recently Played</h2>
               </div>
               <div className="flex gap-3 px-5 overflow-x-auto scrollbar-hide pt-2 pb-2" style={{ marginTop: -8 }}>
                 {Array.from({ length: 4 }).map((_, i) => (
@@ -512,7 +512,7 @@ export function Collection() {
           ) : recentAlbumRail.length > 0 ? (
             <div className="mb-5">
               <div className="flex items-center justify-between px-5 mb-3">
-                <h2 className="text-white text-base font-bold">Recently Played</h2>
+                <h2 className="text-fan-primary text-base font-bold">Recently Played</h2>
               </div>
               <div className="flex gap-3 px-5 overflow-x-auto scrollbar-hide pt-2 pb-2" style={{ marginTop: -8 }}>
                 {recentAlbumRail.map((album) => (
@@ -536,8 +536,8 @@ export function Collection() {
                     >
                       <img src={album.artwork} alt={album.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     </div>
-                    <p className="text-white text-[11px] font-semibold truncate leading-tight text-left">{album.title}</p>
-                    <p className="text-white/45 text-[10px] truncate leading-tight text-left mt-0.5">{album.artist}</p>
+                    <p className="text-fan-primary text-[11px] font-semibold truncate leading-tight text-left">{album.title}</p>
+                    <p className="text-fan-secondary text-[10px] truncate leading-tight text-left mt-0.5">{album.artist}</p>
                   </button>
                 ))}
               </div>
@@ -615,7 +615,7 @@ export function Collection() {
                     animate={{ opacity: 1, scale: 1, y: 0, transition: popBounce(!!reduceMotion) }}
                     exit={reduceMotion ? { opacity: 0, transition: { duration: 0.12 } } : { opacity: 0, scale: 0.92, y: -4, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }}
                   >
-                    <div className="px-3.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                    <div className="px-3.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-fan-faint">
                       Sort by
                     </div>
                     {sortOptions[tab].map((opt) => (
@@ -654,7 +654,7 @@ export function Collection() {
                   key={t}
                   type="button"
                   onClick={() => setTab(t)}
-                  className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold capitalize transition active:scale-[0.96] ${tab === t ? "" : "text-white/55"}`}
+                  className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold capitalize transition active:scale-[0.96] ${tab === t ? "" : "text-fan-secondary"}`}
                   style={{
                     background: tab === t ? "var(--brand-blue)" : "rgba(255,255,255,0.08)",
                     // Navy-on-blue for the selected pill: ~6.8:1 contrast (AA)
@@ -675,11 +675,11 @@ export function Collection() {
             <div className="px-5 pb-4">
               {filteredAlbums.length === 0 ? (
                 search ? (
-                  <p className="text-white/35 text-sm text-center mt-8" data-testid="text-empty-albums-search">No albums match "{search}"</p>
+                  <p className="text-fan-faint text-sm text-center mt-8" data-testid="text-empty-albums-search">No albums match "{search}"</p>
                 ) : (
                   <div className="text-center mt-16 px-6 flex flex-col items-center gap-3" data-testid="text-empty-albums">
-                    <Disc3 className="w-10 h-10 text-white/25" strokeWidth={1.5} />
-                    <p className="text-white/55 text-sm">No Albums yet</p>
+                    <Disc3 className="w-10 h-10 text-fan-faint" strokeWidth={1.5} />
+                    <p className="text-fan-secondary text-sm">No Albums yet</p>
                   </div>
                 )
               ) : (
@@ -716,11 +716,11 @@ export function Collection() {
             <div className="px-5 pb-4 flex flex-col">
               {filteredSongs.length === 0 && (
                 search ? (
-                  <p className="text-white/35 text-sm text-center mt-8" data-testid="text-empty-songs-search">No songs match "{search}"</p>
+                  <p className="text-fan-faint text-sm text-center mt-8" data-testid="text-empty-songs-search">No songs match "{search}"</p>
                 ) : (
                   <div className="text-center mt-16 px-6 flex flex-col items-center gap-3" data-testid="text-empty-songs">
-                    <Music2 className="w-10 h-10 text-white/25" strokeWidth={1.5} />
-                    <p className="text-white/55 text-sm">No Songs yet</p>
+                    <Music2 className="w-10 h-10 text-fan-faint" strokeWidth={1.5} />
+                    <p className="text-fan-secondary text-sm">No Songs yet</p>
                   </div>
                 )
               )}
@@ -746,8 +746,8 @@ export function Collection() {
                     >
                       <img src={song.album.artwork} alt={song.album.title} loading="lazy" decoding="async" className="w-11 h-11 rounded-md object-cover flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium truncate leading-tight ${isActive ? "text-[#319ED8]" : "text-white"}`}>{song.title}</p>
-                        <p className="text-white/45 text-xs truncate leading-tight mt-0.5">{song.album.artist}</p>
+                        <p className={`text-sm font-medium truncate leading-tight ${isActive ? "text-[#319ED8]" : "text-fan-primary"}`}>{song.title}</p>
+                        <p className="text-fan-secondary text-xs truncate leading-tight mt-0.5">{song.album.artist}</p>
                       </div>
                       {isActive && (
                         <div className="flex gap-[2px] items-end h-3.5 mr-1">
@@ -801,11 +801,11 @@ export function Collection() {
             <div className="px-5 pb-4 flex flex-col">
               {filteredArtists.length === 0 && (
                 search ? (
-                  <p className="text-white/35 text-sm text-center mt-8" data-testid="text-empty-artists-search">No artists match "{search}"</p>
+                  <p className="text-fan-faint text-sm text-center mt-8" data-testid="text-empty-artists-search">No artists match "{search}"</p>
                 ) : (
                   <div className="text-center mt-16 px-6 flex flex-col items-center gap-3" data-testid="text-empty-artists">
-                    <Mic2 className="w-10 h-10 text-white/25" strokeWidth={1.5} />
-                    <p className="text-white/55 text-sm">No Artists yet</p>
+                    <Mic2 className="w-10 h-10 text-fan-faint" strokeWidth={1.5} />
+                    <p className="text-fan-secondary text-sm">No Artists yet</p>
                   </div>
                 )
               )}
@@ -848,8 +848,8 @@ export function Collection() {
                       );
                     })()}
                     <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-semibold truncate leading-tight">{artist.name}</p>
-                      <p className="text-white/45 text-xs truncate leading-tight mt-0.5">
+                      <p className="text-fan-primary text-sm font-semibold truncate leading-tight">{artist.name}</p>
+                      <p className="text-fan-secondary text-xs truncate leading-tight mt-0.5">
                         {artist.albums.length} {artist.albums.length === 1 ? "album" : "albums"}
                       </p>
                     </div>
@@ -889,7 +889,7 @@ export function Collection() {
             <div className="relative w-full max-w-[390px] bg-[#0D1B4B] rounded-t-3xl pt-3 pb-6 z-10 flex flex-col" style={{ maxHeight: "78vh" }}>
               <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-3 flex-shrink-0" />
               <div className="flex items-center justify-between px-5 mb-3 flex-shrink-0">
-                <h3 className="text-white font-semibold text-base">Add to Playlist</h3>
+                <h3 className="text-fan-primary font-semibold text-base">Add to Playlist</h3>
                 <SheetClose
                   onClick={() => setAddToPlaylistSong(null)}
                   data-testid="button-close-add-to-playlist"
@@ -898,14 +898,14 @@ export function Collection() {
               <div className="flex items-center gap-3 px-5 pb-3 flex-shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                 <img src={addToPlaylistSong.album.artwork} alt={addToPlaylistSong.album.title} loading="lazy" decoding="async" className="w-10 h-10 rounded-md object-cover flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-medium truncate leading-tight">{addToPlaylistSong.title}</p>
-                  <p className="text-white/45 text-xs truncate leading-tight mt-0.5">{addToPlaylistSong.album.artist}</p>
+                  <p className="text-fan-primary text-sm font-medium truncate leading-tight">{addToPlaylistSong.title}</p>
+                  <p className="text-fan-secondary text-xs truncate leading-tight mt-0.5">{addToPlaylistSong.album.artist}</p>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto scrollbar-hide px-5">
                 {userPlaylists.length === 0 ? (
                   <div className="py-8 text-center">
-                    <p className="text-white/45 text-sm">No playlists yet</p>
+                    <p className="text-fan-secondary text-sm">No playlists yet</p>
                     <button
                       type="button"
                       onClick={() => { setAddToPlaylistSong(null); navigate("/playlists"); }}
@@ -936,8 +936,8 @@ export function Collection() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium truncate leading-tight">{pl.name}</p>
-                        <p className="text-white/45 text-xs truncate leading-tight mt-0.5">
+                        <p className="text-fan-primary text-sm font-medium truncate leading-tight">{pl.name}</p>
+                        <p className="text-fan-secondary text-xs truncate leading-tight mt-0.5">
                           {pl.songCount ?? 0} {(pl.songCount ?? 0) === 1 ? "song" : "songs"}
                         </p>
                       </div>
@@ -1093,7 +1093,7 @@ function AlbumCard({
             pushing the badge off the row. */}
         <div className="flex items-center gap-2.5 min-w-0">
           <p
-            className="flex-1 min-w-0 text-white text-[15px] font-semibold leading-tight truncate"
+            className="flex-1 min-w-0 text-fan-primary text-[15px] font-semibold leading-tight truncate"
             data-testid={`text-album-title-${album.id}`}
           >
             {album.title}

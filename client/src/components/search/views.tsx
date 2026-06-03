@@ -103,14 +103,14 @@ export function RecentSearchedList({
   if (rows.length === 0) {
     return (
       <div className="px-5 pt-6">
-        <p className="text-white/45 text-sm">Search albums, songs, gear, vendors and more.</p>
+        <p className="text-fan-secondary text-sm">Search albums, songs, gear, vendors and more.</p>
       </div>
     );
   }
   return (
     <div className="px-5 pt-2">
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-white text-[15px] font-bold">Recently Searched</h2>
+        <h2 className="text-fan-primary text-[15px] font-bold">Recently Searched</h2>
         <button
           type="button"
           onClick={onClear}
@@ -187,8 +187,8 @@ export function CompactPreview({
                 <circle cx="11" cy="11" r="7" />
                 <path d="M20 20l-3.5-3.5" />
               </svg>
-              <span className="text-white text-[14px] truncate">{s.title}</span>
-              {s.subtitle && <span className="text-white/40 text-[13px] truncate">— {s.subtitle}</span>}
+              <span className="text-fan-primary text-[14px] truncate">{s.title}</span>
+              {s.subtitle && <span className="text-fan-faint text-[13px] truncate">— {s.subtitle}</span>}
             </button>
           ))}
         </div>
@@ -284,12 +284,12 @@ export function FullResults({
       {category === "top" ? (
         <div className="px-5 space-y-4">
           {topSections.length === 0 ? (
-            <p className="text-white/45 text-sm text-center mt-6">No results.</p>
+            <p className="text-fan-secondary text-sm text-center mt-6">No results.</p>
           ) : (
             <>
               {topSections.map((s) => (
                 <section key={s.key} data-testid={`section-top-${s.key}`}>
-                  <h3 className="text-white text-base font-bold mb-1.5">{s.label}</h3>
+                  <h3 className="text-fan-primary text-base font-bold mb-1.5">{s.label}</h3>
                   {s.items.map((hit) => (
                     <ResultRow key={`top-${s.key}-${hit.kind}-${hit.id}`} hit={hit} onPick={onPick} />
                   ))}
@@ -297,7 +297,7 @@ export function FullResults({
               ))}
               {bonusItems.length > 0 && (
                 <section data-testid="section-top-bonus">
-                  <h3 className="text-white text-base font-bold mb-1.5">Bonus Content</h3>
+                  <h3 className="text-fan-primary text-base font-bold mb-1.5">Bonus Content</h3>
                   {bonusItems.map((hit) => (
                     <ResultRow key={`top-bonus-${hit.kind}-${hit.id}`} hit={hit} onPick={onPick} />
                   ))}
@@ -309,7 +309,7 @@ export function FullResults({
       ) : (
         <div className="px-5">
           {itemsForCategory(category).length === 0 ? (
-            <p className="text-white/45 text-sm text-center mt-6">Nothing in {CATEGORY_LABELS[category]}.</p>
+            <p className="text-fan-secondary text-sm text-center mt-6">Nothing in {CATEGORY_LABELS[category]}.</p>
           ) : (
             itemsForCategory(category).map((hit) => (
               <ResultRow key={`${category}-${hit.kind}-${hit.id}`} hit={hit} onPick={onPick} />
@@ -358,8 +358,8 @@ export function SearchEntityRow({
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-white text-sm font-semibold truncate leading-tight">{title}</p>
-        <p className="text-white/45 text-xs truncate leading-tight mt-0.5">{type}</p>
+        <p className="text-fan-primary text-sm font-semibold truncate leading-tight">{title}</p>
+        <p className="text-fan-secondary text-xs truncate leading-tight mt-0.5">{type}</p>
       </div>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.3">
         <path d="M9 18l6-6-6-6" strokeLinecap="round" />
@@ -396,8 +396,8 @@ export function ResultRow({ hit, onPick }: { hit: Hit; onPick: (h: Hit) => void 
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-white text-sm font-semibold truncate leading-tight">{hit.title}</p>
-        <p className="text-white/45 text-xs truncate leading-tight mt-0.5">{subtitle}</p>
+        <p className="text-fan-primary text-sm font-semibold truncate leading-tight">{hit.title}</p>
+        <p className="text-fan-secondary text-xs truncate leading-tight mt-0.5">{subtitle}</p>
       </div>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.3">
         <path d="M9 18l6-6-6-6" strokeLinecap="round" />

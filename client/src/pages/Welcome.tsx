@@ -209,10 +209,10 @@ export function Welcome() {
 
   if (error) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-[#00062B] text-white px-6">
+      <main className="min-h-screen flex items-center justify-center bg-[#00062B] text-fan-primary px-6">
         <div className="text-center">
           <div className="text-lg font-semibold mb-2">Something went sideways</div>
-          <div className="text-white/55 text-sm mb-4">{error}</div>
+          <div className="text-fan-secondary text-sm mb-4">{error}</div>
           <button
             onClick={() => navigate("/account")}
             className="px-4 py-2 rounded-xl bg-white/10 text-sm"
@@ -227,24 +227,24 @@ export function Welcome() {
 
   if (!data || !data.order) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-[#00062B] text-white px-6">
+      <main className="min-h-screen flex items-center justify-center bg-[#00062B] text-fan-primary px-6">
         <div className="text-center" data-testid="welcome-loading">
           <div className="w-10 h-10 rounded-full border-2 border-white/20 border-t-[#319ED8] animate-spin mx-auto mb-4" />
-          <div className="text-white/70 text-sm">Finishing up your order…</div>
+          <div className="text-fan-secondary text-sm">Finishing up your order…</div>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen flex justify-center bg-[#00062B] text-white px-6 py-12">
+    <main className="min-h-screen flex justify-center bg-[#00062B] text-fan-primary px-6 py-12">
       <div className="w-full max-w-[440px]" data-testid="welcome-page">
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-[#4AFFCA]/15 text-[#4AFFCA] mb-3">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
           </div>
           <h1 className="text-[26px] font-bold leading-tight">You're in.</h1>
-          <p className="text-white/55 text-[14px] mt-1">
+          <p className="text-fan-secondary text-[14px] mt-1">
             Your album is unlocked and your record is on its way.
           </p>
         </div>
@@ -260,24 +260,24 @@ export function Welcome() {
           if (showHero) {
             return (
               <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5 text-center" data-testid="welcome-gooddeed">
-                <div className="text-white/40 text-[11px] uppercase tracking-wider font-semibold">Your GoodDeed®</div>
+                <div className="text-fan-faint text-[11px] uppercase tracking-wider font-semibold">Your GoodDeed®</div>
                 <div className="text-[40px] font-bold mt-1 text-[#4AFFCA]" data-testid="text-gooddeed-number">
                   #{data.order!.goodDeedNumber}
                 </div>
-                <div className="text-white/55 text-[12px] mt-1">Numbered for life. Refundable up until shipping.</div>
+                <div className="text-fan-secondary text-[12px] mt-1">Numbered for life. Refundable up until shipping.</div>
               </div>
             );
           }
           if (certNumbers.length >= 2) {
             return (
               <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5 text-center" data-testid="welcome-gooddeed-multi">
-                <div className="text-white/40 text-[11px] uppercase tracking-wider font-semibold">Your GoodDeeds®</div>
+                <div className="text-fan-faint text-[11px] uppercase tracking-wider font-semibold">Your GoodDeeds®</div>
                 <div className="mt-1.5 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[28px] font-bold text-[#4AFFCA]">
                   {certNumbers.map((n) => (
                     <span key={n} data-testid={`text-gooddeed-number-${n}`}>#{n}</span>
                   ))}
                 </div>
-                <div className="text-white/55 text-[12px] mt-2">Numbered for life. Each copy is its own entitlement.</div>
+                <div className="text-fan-secondary text-[12px] mt-2">Numbered for life. Each copy is its own entitlement.</div>
               </div>
             );
           }
@@ -285,7 +285,7 @@ export function Welcome() {
         })()}
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5">
-          <div className="text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-3">Order</div>
+          <div className="text-fan-faint text-[11px] uppercase tracking-wider font-semibold mb-3">Order</div>
           {/* Task #201 — for each vinyl line item, render the colored
               <VinylPreview> the fan picked at checkout so the receipt
               matches what they'll unbox. Falls back to Black for any
@@ -308,7 +308,7 @@ export function Welcome() {
                     jacketUpgrade={it.jacketUpgrade ?? DEFAULT_JACKET_UPGRADE}
                     size="md"
                   />
-                  <div className="mt-2 text-[12px] text-white/65 leading-snug">
+                  <div className="mt-2 text-[12px] text-fan-secondary leading-snug">
                     {color.name} · {it.label}
                   </div>
                 </div>
@@ -325,7 +325,7 @@ export function Welcome() {
                   className="flex items-center justify-between text-[14px]"
                   data-testid={`welcome-copy-${c.position}`}
                 >
-                  <span className="text-white/85 truncate pr-2">
+                  <span className="text-fan-primary truncate pr-2">
                     Copy {c.position}
                     {c.signedCert && (
                       <span className="ml-2 text-[11px] text-[#FF5470] font-medium">
@@ -333,7 +333,7 @@ export function Welcome() {
                       </span>
                     )}
                   </span>
-                  <span className="text-white/55 whitespace-nowrap">
+                  <span className="text-fan-secondary whitespace-nowrap">
                     ${((c.formatPriceCents + c.addonPriceCents) / 100).toFixed(2)}
                   </span>
                 </div>
@@ -342,13 +342,13 @@ export function Welcome() {
           ) : (
             data.items.map((it) => (
               <div key={it.id} className="flex items-center justify-between text-[14px] mb-1" data-testid={`order-item-${it.kind}-${it.sku}`}>
-                <span className="text-white/85">{it.label}{it.quantity > 1 ? ` × ${it.quantity}` : ""}</span>
-                <span className="text-white/55">${((it.unitPriceCents * it.quantity) / 100).toFixed(2)}</span>
+                <span className="text-fan-primary">{it.label}{it.quantity > 1 ? ` × ${it.quantity}` : ""}</span>
+                <span className="text-fan-secondary">${((it.unitPriceCents * it.quantity) / 100).toFixed(2)}</span>
               </div>
             ))
           )}
           <div className="border-t border-white/10 mt-3 pt-3 flex items-center justify-between">
-            <span className="text-white/55 text-[13px]">Total</span>
+            <span className="text-fan-secondary text-[13px]">Total</span>
             <span className="font-semibold">${(data.order.totalCents / 100).toFixed(2)}</span>
           </div>
         </div>
@@ -397,7 +397,7 @@ export function Welcome() {
                       type="button"
                       onClick={() => { setGiftContactKind(k); setGiftContact(""); }}
                       className={`flex-1 py-1.5 rounded-lg text-[12px] font-medium capitalize ${
-                        giftContactKind === k ? "bg-white/15 text-white" : "text-white/50"
+                        giftContactKind === k ? "bg-white/15 text-white" : "text-fan-secondary"
                       }`}
                       data-testid={`toggle-gift-${k}`}
                     >
@@ -425,7 +425,7 @@ export function Welcome() {
                   data-testid="input-gift-message"
                 />
                 <div>
-                  <label className="text-white/55 text-xs uppercase tracking-wider font-semibold block mb-1.5">
+                  <label className="text-fan-secondary text-xs uppercase tracking-wider font-semibold block mb-1.5">
                     Deliver on (optional)
                   </label>
                   <input
@@ -439,7 +439,7 @@ export function Welcome() {
                     data-testid="input-gift-deliver-on"
                   />
                 </div>
-                <p className="text-white/40 text-[11px] leading-snug">
+                <p className="text-fan-faint text-[11px] leading-snug">
                   We'll generate a one-time claim link. {giftDeliverOn ? `It unlocks on ${giftDeliverOn}.` : "You can share it right away."}
                 </p>
                 <button
@@ -457,11 +457,11 @@ export function Welcome() {
         ) : (
           <div className="rounded-2xl border border-[#7F10A7]/40 bg-[#7F10A7]/10 p-5 mb-5" data-testid="welcome-gift-share">
             <div className="text-[#FF5470] text-[11px] uppercase tracking-wider font-semibold mb-2">🎁 Your gift is ready</div>
-            <div className="text-[13px] text-white/80 mb-3 leading-snug">
+            <div className="text-[13px] text-fan-primary mb-3 leading-snug">
               Send this link to {giftFirst} — when they open it and claim, the album + GoodDeed move to their account.
             </div>
             <div className="flex items-center gap-2 bg-white/[0.06] border border-white/10 rounded-xl px-3 py-2">
-              <code className="text-[11px] text-white/80 truncate flex-1" data-testid="text-gift-share-url">{giftShareUrl}</code>
+              <code className="text-[11px] text-fan-primary truncate flex-1" data-testid="text-gift-share-url">{giftShareUrl}</code>
               <button
                 type="button"
                 onClick={copyShareUrl}
@@ -475,11 +475,11 @@ export function Welcome() {
         )}
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5">
-          <label className="block text-white/40 text-[11px] uppercase tracking-wider font-semibold mb-1.5">
+          <label className="block text-fan-faint text-[11px] uppercase tracking-wider font-semibold mb-1.5">
             Pick your handle
           </label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none">@</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fan-faint text-sm pointer-events-none">@</span>
             <input
               type="text"
               value={usernameInput}
@@ -489,7 +489,7 @@ export function Welcome() {
               data-testid="input-welcome-username"
             />
           </div>
-          <p className="text-white/35 text-[11px] mt-1.5 ml-1">
+          <p className="text-fan-faint text-[11px] mt-1.5 ml-1">
             We picked this from your email — change it any time.
           </p>
         </div>

@@ -427,14 +427,14 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
     const cs = player.currentSong;
     if (!cs) {
       return (
-        <p className="text-white/55 italic">
+        <p className="text-fan-secondary italic">
           Pick a track to see its lyrics here.
         </p>
       );
     }
     if (!cs.lyrics || cs.lyrics.trim().length === 0) {
       return (
-        <p className="text-white/55 italic">
+        <p className="text-fan-secondary italic">
           No lyrics yet for "{cs.title}".
         </p>
       );
@@ -467,7 +467,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
 
   return (
     <div
-      className="flex w-full h-screen overflow-hidden text-white"
+      className="flex w-full h-screen overflow-hidden text-fan-primary"
       style={{
         background: BRAND_BG,
         fontFamily: "system-ui, -apple-system, 'SF Pro Text', sans-serif",
@@ -657,13 +657,13 @@ function DevOwnershipToggle({
       className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-full bg-black/65 backdrop-blur-md ring-1 ring-white/15 px-3 py-2 text-[11.5px] font-semibold text-white shadow-2xl"
       data-testid="dev-ownership-toggle"
     >
-      <span className="text-white/60 uppercase tracking-[0.1em] text-[10px]">DEV</span>
+      <span className="text-fan-secondary uppercase tracking-[0.1em] text-[10px]">DEV</span>
       <button
         type="button"
         onClick={() => setDevAlbumOwnership(albumId, !isOwned)}
         className={[
           "px-2.5 h-7 rounded-full transition-colors",
-          isOwned ? "bg-[#319ED8] text-white" : "bg-white/10 text-white/75 hover:bg-white/15",
+          isOwned ? "bg-[#319ED8] text-white" : "bg-white/10 text-fan-secondary hover:bg-white/15",
         ].join(" ")}
         data-testid="button-dev-ownership"
       >

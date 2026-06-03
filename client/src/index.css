@@ -192,6 +192,25 @@
      same indigo-to-navy fade without hardcoding `#0B1457` per file. */
   --brand-header-gradient-top: #0B1457;
 
+  /* Apple-style fan text-tone scale (Task #1089). ONE layered label
+     hierarchy for every fan-facing surface (mobile + desktop) so titles,
+     metadata, and faint captions read as a consistent quietness instead
+     of the old 35/45/55/70/72/slate-400 opacity spread. Reach these
+     through the Tailwind `text-fan-*` utilities (mapped in
+     tailwind.config.ts) rather than hardcoding `text-white/NN` per file.
+       • primary   — titles + emphasized text; softened OFF pure white so
+                     it stops reading harsh next to Apple Music.
+       • secondary — metadata: year, format, subtitles, list artist names,
+                     runtimes. Matches the dominant legacy `white/55`.
+       • faint     — tertiary/quaternary: faint counts, separators,
+                     disabled, timestamps. Matches the legacy `white/40`.
+     Brand accents (blue artist links, rose now-playing, mint, the
+     favorite-marker dimmed-white) are a SEPARATE axis — never fold them
+     onto this scale. Admin keeps its own slate tokens. */
+  --fan-text-primary: rgba(255, 255, 255, 0.90);
+  --fan-text-secondary: rgba(255, 255, 255, 0.55);
+  --fan-text-faint: rgba(255, 255, 255, 0.40);
+
   --background: 223 89% 8%;
   --foreground: 0 0% 100%;
   --card: 223 89% 12%;

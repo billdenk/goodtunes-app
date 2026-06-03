@@ -122,6 +122,27 @@ function lintFile(rel: string, src: string): Violation[] {
       }
     }
 
+    // R12: fan text-tone scale (Task #1089). On fan (non-admin) surfaces,
+    // raw `text-white/NN` and `text-slate-NNN` text tones must move onto the
+    // shared Apple-style scale: `text-fan-primary` / `text-fan-secondary` /
+    // `text-fan-faint` (see docs/design-system.md → Text tone). Pure
+    // `text-white` (on-accent button labels) is intentionally NOT flagged;
+    // `placeholder:text-white/NN` is skipped (placeholders, not body tone).
+    if (!isAdmin) {
+      const toneMatches = line.match(/(?<!placeholder:)\btext-white\/\d+\b|\btext-slate-(?:100|200|300|400|500|600)\b/g);
+      if (toneMatches) {
+        for (const m of toneMatches) {
+          out.push({
+            rule: "fan-text-tone",
+            file: rel,
+            line: lineNum,
+            message: `Raw fan text tone ${m} — use text-fan-primary / text-fan-secondary / text-fan-faint. See docs/design-system.md → Text tone.`,
+            snippet: line.trim().slice(0, 200),
+          });
+        }
+      }
+    }
+
     // R3: hard-coded font sizes — text-[Npx] is forbidden everywhere
     // except shadcn primitives. The shadcn type scale + Apple HIG sizes
     // already in docs cover the legit needs. NOTE: docs/design-system.md

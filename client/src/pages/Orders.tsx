@@ -126,7 +126,7 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   paid: { label: "Paid", cls: "bg-[#4AFFCA]/15 text-[#4AFFCA]" },
   shipped: { label: "Shipped", cls: "bg-[#319ED8]/15 text-[#319ED8]" },
   refunded: { label: "Refunded", cls: "bg-rose-500/15 text-rose-300" },
-  pending: { label: "Pending", cls: "bg-white/10 text-white/55" },
+  pending: { label: "Pending", cls: "bg-white/10 text-fan-secondary" },
 };
 
 // Customer-facing pill for the fulfillment lifecycle. The Stripe-side
@@ -134,7 +134,7 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
 // physical-leg secondary pill so the fan can see at a glance where their
 // vinyl actually is. Mirrors AdminOrders' palette but on the dark shell.
 const FULFILLMENT_PILL: Record<string, { label: string; cls: string }> = {
-  pending: { label: "Awaiting fulfillment", cls: "bg-white/10 text-white/65" },
+  pending: { label: "Awaiting fulfillment", cls: "bg-white/10 text-fan-secondary" },
   submitted: { label: "Submitted", cls: "bg-violet-500/20 text-violet-300" },
   in_fulfillment: { label: "In fulfillment", cls: "bg-indigo-500/20 text-indigo-200" },
   shipped: { label: "Shipped", cls: "bg-[#319ED8]/15 text-[#319ED8]" },
@@ -153,7 +153,7 @@ const CERT_STATUS_PILL: Record<
   CertInfo["nameStatus"],
   { label: string; cls: string; Icon: typeof Clock }
 > = {
-  awaiting: { label: "Awaiting your name", cls: "bg-white/10 text-white/70", Icon: Clock },
+  awaiting: { label: "Awaiting your name", cls: "bg-white/10 text-fan-secondary", Icon: Clock },
   confirmed: { label: "Queued for next print run", cls: "bg-violet-500/20 text-violet-200", Icon: Clock },
   locked_for_print: { label: "Locked for printing", cls: "bg-indigo-500/20 text-indigo-200", Icon: Lock },
   printed: { label: "Printed & on its way", cls: "bg-[#4AFFCA]/15 text-[#4AFFCA]", Icon: Printer },
@@ -257,16 +257,16 @@ export function Orders() {
   const openOrder = openOrderId ? orders?.find((o) => o.id === openOrderId) ?? null : null;
 
   return (
-    <main className="min-h-screen bg-[#00062B] text-white pb-24" data-testid="page-orders">
+    <main className="min-h-screen bg-[#00062B] text-fan-primary pb-24" data-testid="page-orders">
       <div className="max-w-[440px] mx-auto px-5 pt-8">
         <h1 className="text-[28px] font-bold mb-1">Your orders</h1>
-        <p className="text-white/55 text-[13px] mb-6">Records, certificates, and digital access you own.</p>
+        <p className="text-fan-secondary text-[13px] mb-6">Records, certificates, and digital access you own.</p>
 
-        {isLoading && <div className="text-white/55 text-sm" data-testid="orders-loading">Loading…</div>}
+        {isLoading && <div className="text-fan-secondary text-sm" data-testid="orders-loading">Loading…</div>}
         {!isLoading && orders && orders.length === 0 && (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center" data-testid="orders-empty">
-            <div className="text-white/85 font-medium">No orders yet</div>
-            <div className="text-white/55 text-[13px] mt-1 mb-4">
+            <div className="text-fan-primary font-medium">No orders yet</div>
+            <div className="text-fan-secondary text-[13px] mt-1 mb-4">
               {buyEnabled
                 ? "When you buy a record, it shows up here — with its tracking number once it ships."
                 : "Records you own will show up here — with a tracking number once one ships."}
@@ -355,22 +355,22 @@ export function Orders() {
                           </span>
                         )}
                         {o.goodDeedNumber !== null && (
-                          <span className="text-[11px] text-white/40">#{o.goodDeedNumber}</span>
+                          <span className="text-[11px] text-fan-faint">#{o.goodDeedNumber}</span>
                         )}
                       </div>
                       <div className="text-[15px] font-semibold truncate mt-1">{o.albumTitle}</div>
-                      <div className="text-[13px] text-white/55 truncate">{o.albumArtist}</div>
+                      <div className="text-[13px] text-fan-secondary truncate">{o.albumArtist}</div>
                     </div>
                     <div className="text-right">
                       <div className="text-[14px] font-semibold">{dollars(o.totalCents)}</div>
-                      <div className="text-[11px] text-white/40 mt-1">
+                      <div className="text-[11px] text-fan-faint mt-1">
                         {new Date(o.createdAt).toLocaleDateString()}
                       </div>
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {o.items.map((it) => (
-                      <span key={it.id} className="text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-white/70">
+                      <span key={it.id} className="text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-fan-secondary">
                         {it.label}
                       </span>
                     ))}
@@ -382,11 +382,11 @@ export function Orders() {
                     once the carrier has actually picked up. */}
                 {physical && o.trackingNumber && (
                   <div
-                    className="mt-3 pt-3 border-t border-white/10 flex items-center gap-2 text-[12px] text-white/75"
+                    className="mt-3 pt-3 border-t border-white/10 flex items-center gap-2 text-[12px] text-fan-secondary"
                     data-testid={`tracking-strip-${o.id}`}
                   >
                     <Truck className="w-4 h-4 text-[#319ED8]" />
-                    <span className="text-white/55">{o.carrier ?? "Carrier"}:</span>
+                    <span className="text-fan-secondary">{o.carrier ?? "Carrier"}:</span>
                     {o.trackingUrl ? (
                       <a
                         href={o.trackingUrl}
@@ -400,7 +400,7 @@ export function Orders() {
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     ) : (
-                      <span className="text-white font-medium" data-testid={`text-tracking-${o.id}`}>{o.trackingNumber}</span>
+                      <span className="text-fan-primary font-medium" data-testid={`text-tracking-${o.id}`}>{o.trackingNumber}</span>
                     )}
                   </div>
                 )}
@@ -408,11 +408,11 @@ export function Orders() {
                 <button
                   type="button"
                   onClick={() => setOpenOrderId(o.id)}
-                  className="mt-3 w-full text-left text-[12.5px] text-white/65 hover:text-white active:opacity-70 inline-flex items-center justify-between"
+                  className="mt-3 w-full text-left text-[12.5px] text-fan-secondary hover:text-white active:opacity-70 inline-flex items-center justify-between"
                   data-testid={`button-order-details-${o.id}`}
                 >
                   <span>View order details</span>
-                  <span aria-hidden className="text-white/35">›</span>
+                  <span aria-hidden className="text-fan-faint">›</span>
                 </button>
 
                 {o.cert && (
@@ -421,13 +421,13 @@ export function Orders() {
 
                 {g && g.isBuyer && (
                   <div className="mt-3 pt-3 border-t border-white/10" data-testid={`gift-controls-${o.id}`}>
-                    <div className="text-[12px] text-white/65 leading-snug">
+                    <div className="text-[12px] text-fan-secondary leading-snug">
                       Gift to{" "}
-                      <span className="text-white font-medium">
+                      <span className="text-fan-primary font-medium">
                         {g.recipientFirstName} {g.recipientLastName}
                       </span>
-                      {g.recipientEmail && <> · <span className="text-white/55">{g.recipientEmail}</span></>}
-                      {g.recipientPhone && <> · <span className="text-white/55">{g.recipientPhone}</span></>}
+                      {g.recipientEmail && <> · <span className="text-fan-secondary">{g.recipientEmail}</span></>}
+                      {g.recipientPhone && <> · <span className="text-fan-secondary">{g.recipientPhone}</span></>}
                     </div>
                     {!g.claimed && (
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -554,7 +554,7 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
         <Award className="w-5 h-5 text-[#4AFFCA] mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="text-[13px] font-semibold text-white">
+            <div className="text-[13px] font-semibold text-fan-primary">
               Printed GoodDeed certificate
             </div>
             <span
@@ -567,13 +567,13 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
           </div>
           {confirmed ? (
             <>
-              <div className="text-[12px] text-white/65 mt-1">
+              <div className="text-[12px] text-fan-secondary mt-1">
                 Name to print:{" "}
-                <span className="text-white font-medium" data-testid={`cert-name-${order.id}`}>
+                <span className="text-fan-primary font-medium" data-testid={`cert-name-${order.id}`}>
                   {cert.confirmedName}
                 </span>
               </div>
-              <div className="text-[11px] text-white/45 mt-0.5">
+              <div className="text-[11px] text-fan-secondary mt-0.5">
                 {cert.nameStatus === "printed"
                   ? "Your certificate has been printed and shipped."
                   : cert.nameStatus === "locked_for_print"
@@ -617,7 +617,7 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
             </>
           ) : (
             <>
-              <div className="text-[12px] text-white/65 mt-0.5">
+              <div className="text-[12px] text-fan-secondary mt-0.5">
                 Confirm the name to print on your certificate before it goes to print.
               </div>
               {!showPicker && (
@@ -667,7 +667,7 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
           />
           {showRealNameInput ? (
             <div className="flex flex-col gap-2 p-3 rounded-xl bg-white/5 border border-white/10">
-              <label className="text-[11px] text-white/55 uppercase tracking-wider">Your real name</label>
+              <label className="text-[11px] text-fan-secondary uppercase tracking-wider">Your real name</label>
               <input
                 type="text"
                 value={realNameDraft}
@@ -699,7 +699,7 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
           <button
             type="button"
             onClick={() => { setShowPicker(false); setShowRealNameInput(false); }}
-            className="text-[12px] text-white/45 self-start mt-1 active:opacity-70"
+            className="text-[12px] text-fan-secondary self-start mt-1 active:opacity-70"
             data-testid={`cert-picker-cancel-${order.id}`}
           >
             Cancel
@@ -732,8 +732,8 @@ function IdentityOption({
       data-testid={testId}
     >
       <div className="flex flex-col min-w-0">
-        <span className="text-[11px] uppercase tracking-wider text-white/45">{label}</span>
-        <span className={`text-[14px] font-medium truncate ${ghost ? "text-white/45 italic" : "text-white"}`}>
+        <span className="text-[11px] uppercase tracking-wider text-fan-secondary">{label}</span>
+        <span className={`text-[14px] font-medium truncate ${ghost ? "text-fan-secondary italic" : "text-fan-primary"}`}>
           {value}
         </span>
       </div>
@@ -758,8 +758,8 @@ function OrderDetailSheet({ order, onClose }: { order: OrderRow | null; onClose:
         {order && (
           <>
             <SheetHeader className="text-left">
-              <SheetTitle className="text-white text-[20px] font-bold">{order.albumTitle}</SheetTitle>
-              <p className="text-white/55 text-[13px]">{order.albumArtist}</p>
+              <SheetTitle className="text-fan-primary text-[20px] font-bold">{order.albumTitle}</SheetTitle>
+              <p className="text-fan-secondary text-[13px]">{order.albumArtist}</p>
             </SheetHeader>
 
             <div className="mt-4 flex items-center gap-2 flex-wrap text-[11px]">
@@ -767,16 +767,16 @@ function OrderDetailSheet({ order, onClose }: { order: OrderRow | null; onClose:
                 {(STATUS_LABEL[order.status] ?? STATUS_LABEL.pending).label}
               </span>
               {order.goodDeedNumber !== null && (
-                <span className="text-white/55">GoodDeed #{order.goodDeedNumber}</span>
+                <span className="text-fan-secondary">GoodDeed #{order.goodDeedNumber}</span>
               )}
-              <span className="text-white/40">· {new Date(order.createdAt).toLocaleString()}</span>
+              <span className="text-fan-faint">· {new Date(order.createdAt).toLocaleString()}</span>
             </div>
 
             <FulfillmentTimeline order={order} />
 
             {/* Line items — what was actually purchased. */}
             <section className="mt-5">
-              <h3 className="text-[11px] uppercase tracking-widest text-white/40 font-semibold mb-2">Items</h3>
+              <h3 className="text-[11px] uppercase tracking-widest text-fan-faint font-semibold mb-2">Items</h3>
               <div className="rounded-2xl bg-white/5 border border-white/10 divide-y divide-white/10">
                 {order.items.map((it) => {
                   // Task #201 — vinyl line items render the colored
@@ -800,22 +800,22 @@ function OrderDetailSheet({ order, onClose }: { order: OrderRow | null; onClose:
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="text-[14px] text-white">{it.label}</div>
+                        <div className="text-[14px] text-fan-primary">{it.label}</div>
                         {isVinyl && color && (
-                          <div className="text-[11.5px] text-white/55 mt-0.5">{color.name}</div>
+                          <div className="text-[11.5px] text-fan-secondary mt-0.5">{color.name}</div>
                         )}
                         {it.quantity > 1 && (
-                          <div className="text-[11px] text-white/45">Qty {it.quantity}</div>
+                          <div className="text-[11px] text-fan-secondary">Qty {it.quantity}</div>
                         )}
                       </div>
-                      <div className="text-[13px] tabular-nums text-white/85">
+                      <div className="text-[13px] tabular-nums text-fan-primary">
                         {dollars(it.unitPriceCents * it.quantity)}
                       </div>
                     </div>
                   );
                 })}
                 <div className="flex items-center justify-between px-4 py-3 bg-white/[0.03]">
-                  <div className="text-[12px] uppercase tracking-widest text-white/45 font-semibold">Total</div>
+                  <div className="text-[12px] uppercase tracking-widest text-fan-secondary font-semibold">Total</div>
                   <div className="text-[15px] font-semibold tabular-nums">{dollars(order.totalCents)}</div>
                 </div>
               </div>
@@ -824,11 +824,11 @@ function OrderDetailSheet({ order, onClose }: { order: OrderRow | null; onClose:
             {/* Shipping address — only on physical orders that have one. */}
             {isPhysical(order) && order.shippingAddress && (
               <section className="mt-5" data-testid="detail-shipping-address">
-                <h3 className="text-[11px] uppercase tracking-widest text-white/40 font-semibold mb-2 flex items-center gap-1.5">
+                <h3 className="text-[11px] uppercase tracking-widest text-fan-faint font-semibold mb-2 flex items-center gap-1.5">
                   <MapPin className="w-3 h-3" /> Shipping to
                 </h3>
-                <div className="rounded-2xl bg-white/5 border border-white/10 px-4 py-3 text-[13px] text-white/85 leading-snug">
-                  {order.shippingAddress.name && <div className="text-white font-medium">{order.shippingAddress.name}</div>}
+                <div className="rounded-2xl bg-white/5 border border-white/10 px-4 py-3 text-[13px] text-fan-primary leading-snug">
+                  {order.shippingAddress.name && <div className="text-fan-primary font-medium">{order.shippingAddress.name}</div>}
                   {order.shippingAddress.line1 && <div>{order.shippingAddress.line1}</div>}
                   {order.shippingAddress.line2 && <div>{order.shippingAddress.line2}</div>}
                   <div>
@@ -842,11 +842,11 @@ function OrderDetailSheet({ order, onClose }: { order: OrderRow | null; onClose:
             {/* Carrier + tracking, repeated here for the detail context. */}
             {isPhysical(order) && order.trackingNumber && (
               <section className="mt-5" data-testid="detail-tracking">
-                <h3 className="text-[11px] uppercase tracking-widest text-white/40 font-semibold mb-2 flex items-center gap-1.5">
+                <h3 className="text-[11px] uppercase tracking-widest text-fan-faint font-semibold mb-2 flex items-center gap-1.5">
                   <Truck className="w-3 h-3" /> Tracking
                 </h3>
                 <div className="rounded-2xl bg-white/5 border border-white/10 px-4 py-3 text-[13px]">
-                  <div className="text-white/55 mb-1">{order.carrier ?? "Carrier"}</div>
+                  <div className="text-fan-secondary mb-1">{order.carrier ?? "Carrier"}</div>
                   {order.trackingUrl ? (
                     <a
                       href={order.trackingUrl}
@@ -859,7 +859,7 @@ function OrderDetailSheet({ order, onClose }: { order: OrderRow | null; onClose:
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   ) : (
-                    <span className="text-white font-semibold">{order.trackingNumber}</span>
+                    <span className="text-fan-primary font-semibold">{order.trackingNumber}</span>
                   )}
                 </div>
               </section>
@@ -869,23 +869,23 @@ function OrderDetailSheet({ order, onClose }: { order: OrderRow | null; onClose:
                 appropriate framing for each side. */}
             {order.gift && (
               <section className="mt-5" data-testid="detail-gift">
-                <h3 className="text-[11px] uppercase tracking-widest text-white/40 font-semibold mb-2">
+                <h3 className="text-[11px] uppercase tracking-widest text-fan-faint font-semibold mb-2">
                   {order.gift.isBuyer ? "Gifted to" : "Sent to you by"}
                 </h3>
-                <div className="rounded-2xl bg-white/5 border border-white/10 px-4 py-3 text-[13px] text-white/85 leading-snug">
+                <div className="rounded-2xl bg-white/5 border border-white/10 px-4 py-3 text-[13px] text-fan-primary leading-snug">
                   {order.gift.isBuyer ? (
                     <>
-                      <div className="text-white font-medium">{order.gift.recipientFirstName} {order.gift.recipientLastName}</div>
-                      {order.gift.recipientEmail && <div className="text-white/55">{order.gift.recipientEmail}</div>}
-                      {order.gift.recipientPhone && <div className="text-white/55">{order.gift.recipientPhone}</div>}
-                      <div className="text-white/45 mt-1 text-[12px]">
+                      <div className="text-fan-primary font-medium">{order.gift.recipientFirstName} {order.gift.recipientLastName}</div>
+                      {order.gift.recipientEmail && <div className="text-fan-secondary">{order.gift.recipientEmail}</div>}
+                      {order.gift.recipientPhone && <div className="text-fan-secondary">{order.gift.recipientPhone}</div>}
+                      <div className="text-fan-secondary mt-1 text-[12px]">
                         {order.gift.claimed && order.gift.claimedAt
                           ? `Claimed ${new Date(order.gift.claimedAt).toLocaleDateString()}`
                           : `Awaiting claim · expires ${new Date(order.gift.expiresAt).toLocaleDateString()}`}
                       </div>
                     </>
                   ) : (
-                    <div className="text-white/75">A friend bought this record for you on GoodTunes. Enjoy.</div>
+                    <div className="text-fan-secondary">A friend bought this record for you on GoodTunes. Enjoy.</div>
                   )}
                 </div>
               </section>
@@ -918,7 +918,7 @@ function FulfillmentTimeline({ order: o }: { order: OrderRow }) {
 
   return (
     <section className="mt-5" data-testid="detail-timeline">
-      <h3 className="text-[11px] uppercase tracking-widest text-white/40 font-semibold mb-2">Status</h3>
+      <h3 className="text-[11px] uppercase tracking-widest text-fan-faint font-semibold mb-2">Status</h3>
       <ol className="rounded-2xl bg-white/5 border border-white/10 px-4 py-3 flex flex-col gap-2.5">
         {steps.map((s) => {
           const reached = !!s.at;
@@ -931,7 +931,7 @@ function FulfillmentTimeline({ order: o }: { order: OrderRow }) {
                     ? isRose
                       ? "bg-rose-500/25 text-rose-200"
                       : "bg-[#4AFFCA]/20 text-[#4AFFCA]"
-                    : "bg-white/5 text-white/30"
+                    : "bg-white/5 text-fan-faint"
                 }`}
               >
                 {reached ? (
@@ -945,11 +945,11 @@ function FulfillmentTimeline({ order: o }: { order: OrderRow }) {
                 )}
               </span>
               <div className="flex-1 min-w-0 flex items-baseline justify-between gap-2">
-                <span className={`text-[13.5px] ${reached ? (isRose ? "text-rose-200" : "text-white") : "text-white/45"}`}>
+                <span className={`text-[13.5px] ${reached ? (isRose ? "text-rose-200" : "text-fan-primary") : "text-fan-secondary"}`}>
                   {s.label}
                 </span>
                 {s.at && (
-                  <span className="text-[11px] text-white/40 tabular-nums">
+                  <span className="text-[11px] text-fan-faint tabular-nums">
                     {new Date(s.at).toLocaleDateString()}
                   </span>
                 )}

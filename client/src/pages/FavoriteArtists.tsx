@@ -28,7 +28,7 @@ function ArtistAvatar({
   if (!src) {
     return (
       <div
-        className="w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center text-white/70 font-bold"
+        className="w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center text-fan-secondary font-bold"
         style={{
           background: "linear-gradient(135deg, #1D5E8F, #4A1E8F)",
           border: "1px solid rgba(255,255,255,0.1)",
@@ -91,7 +91,7 @@ export function FavoriteArtists() {
 
   return (
     <main className="relative h-screen w-full flex justify-center overflow-hidden">
-      <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
+      <section className="relative w-full max-w-[390px] h-screen text-fan-primary flex flex-col">
         <header className="flex items-center px-4 pt-12 pb-3 flex-shrink-0">
           <IconButton
             size="md"
@@ -104,7 +104,7 @@ export function FavoriteArtists() {
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </IconButton>
-          <h1 className="ml-3 text-white text-[22px] font-bold leading-none tracking-tight" data-testid="text-page-title">
+          <h1 className="ml-3 text-fan-primary text-[22px] font-bold leading-none tracking-tight" data-testid="text-page-title">
             Favorite Artists
           </h1>
         </header>
@@ -117,8 +117,8 @@ export function FavoriteArtists() {
                   <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                 </svg>
               </div>
-              <p className="text-white/55 text-sm font-medium">No favorite artists yet</p>
-              <p className="text-white/30 text-xs mt-1 leading-relaxed">
+              <p className="text-fan-secondary text-sm font-medium">No favorite artists yet</p>
+              <p className="text-fan-faint text-xs mt-1 leading-relaxed">
                 Tap the star on an artist's page to add them here.
               </p>
             </div>
@@ -148,8 +148,8 @@ export function FavoriteArtists() {
                   >
                     <ArtistAvatar name={artist.name} photo={photo} fallback={fallback} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-semibold truncate leading-tight">{artist.name}</p>
-                      <p className="text-white/45 text-xs truncate leading-tight mt-0.5">
+                      <p className="text-fan-primary text-sm font-semibold truncate leading-tight">{artist.name}</p>
+                      <p className="text-fan-secondary text-xs truncate leading-tight mt-0.5">
                         {artist.albums.length === 0
                           ? "Artist"
                           : `${artist.albums.length} ${artist.albums.length === 1 ? "album" : "albums"}`}

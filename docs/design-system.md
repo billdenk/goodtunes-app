@@ -10,6 +10,27 @@
 - Apple-Music-style large headers, 44×44 minimum touch targets
 - Songs use **heart** icon; artists use **star** icon. **Favorite markers (favorited-song hearts + favorited-artist stars) render in dimmed-white `rgba(255,255,255,0.55)`** — the shared quiet secondary-indicator value, *not* heart-pink `#FF5470` — so they read for color-blind users and match the `white/55` secondary text treatment. Favorited = filled dimmed-white, not-favorited = hollow outline. On a light surface (e.g. the album-detail track action popover) use the contrast-appropriate equivalent `rgba(0,0,0,0.55)` instead. `#FF5470` stays a brand color for non-favorite roles (now-playing rose accent, unread badges, preview tags).
 
+## Text tone — Apple-style label hierarchy (fan surfaces)
+
+The fan player uses **one layered text-tone scale** on the navy bg, modeled on Apple Music's quiet label hierarchy. **Fan titles are NOT pure `text-white` (100%)** — pure white reads harsh next to Apple Music. There are exactly **three tones**; reach them through the Tailwind `text-fan-*` utilities (backed by CSS vars in `client/src/index.css`, mapped in `tailwind.config.ts`) — never re-derive an ad-hoc `text-white/NN` per file.
+
+| Token | Class | Value | Use for |
+| --- | --- | --- | --- |
+| **Primary** | `text-fan-primary` | `rgba(255,255,255,0.90)` | Titles + emphasized text: album / song / artist names, page `<h1>`, section headers, list item titles, totals. Softened off pure white. |
+| **Secondary** | `text-fan-secondary` | `rgba(255,255,255,0.55)` | Metadata: year, "Single" / "LP", subtitles, artist names in lists, runtimes, body copy, labels. The single consolidation target for the old 45/50/60/65/70/72/75 spread. Matches the dominant legacy `white/55`. |
+| **Faint** | `text-fan-faint` | `rgba(255,255,255,0.40)` | Tertiary/quaternary: faint counts, separators (`›`), disabled, timestamps, fine print. Absorbs the old 20/25/30/35 + `text-slate-400`. |
+
+Rules:
+
+- **Titles never sit at pure white.** Use `text-fan-primary`. The simplest way to soften a whole page is to set the fan page's root wrapper to `text-fan-primary` (instead of `text-white`) so un-classed descendant text inherits the softened primary; then only metadata/faint need explicit classes.
+- **One secondary value everywhere.** Don't reach for `white/45`, `white/70`, `white/72`, `text-slate-400`, etc. for metadata — they all collapse to `text-fan-secondary` (or `text-fan-faint` for the truly faint).
+- **Mobile and desktop match.** The same concept (e.g. a list artist subtitle) uses the same tone on both. `PlayerDock`'s old `slate-400` / `slate-100` collapse onto this scale too.
+- **Accents are a separate axis — leave them alone.** Brand-blue artist deep-links (`--brand-blue`), the now-playing rose accent (`--brand-pink`), mint (`--brand-mint`), and the favorite-marker dimmed-white `rgba(255,255,255,0.55)` are intentional accents, *not* body text. Never fold them onto the tone scale.
+- **On-accent text stays white.** Text sitting on a filled brand button / pill (`bg-[var(--brand-blue)] text-white`) keeps pure `text-white` — it's foreground-on-color, not a fan label.
+- **Out of scope:** admin/CMS surfaces (they keep their own slate tokens), and the GoodDeed share-card / certificate baked-in text (its own approved spec above).
+
+The `design:lint` `fan-text-tone` rule flags new raw `text-white/NN` / `text-slate-*` text tones on fan surfaces and steers them to these tokens; legacy surfaces migrate opportunistically (each time you touch the file).
+
 ## GoodDeed® share-card (social) — approved spec
 
 The GoodDeed share-card is **one orange-frame family** with three social formats plus a texting/link-preview image. All three social formats share the same signature — a solid GoodTunes-orange edge-to-edge frame (`--brand-orange`), an album-art band fading into navy, the owner avatar pulled UP to straddle the art→navy seam, then `This GoodDeed® certifies` → owner name → `[GoodTunes | #NN]` pill → album caption. All three are **shipped** in `client/src/components/GoodDeedCertificate.tsx` (the `square` / `portrait` / `story` shapes), each rendering at a 1080 base (`u = w/1080`) and exporting an exactly-sized PNG via `html-to-image` + `navigator.share`/download. Specs live in `CERT_SHAPE_SPECS` there; the source mockups are in `artifacts/mockup-sandbox/src/components/mockups/gooddeed-cert/`.

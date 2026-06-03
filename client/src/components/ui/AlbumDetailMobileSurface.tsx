@@ -264,7 +264,7 @@ export function AlbumDetailMobileSurface({
   };
 
   return (
-    <div className="relative w-full h-full flex flex-col text-white">
+    <div className="relative w-full h-full flex flex-col text-fan-primary">
       {/* Top chrome scrim — a soft navy gradient fade at rest so the hero art
           reads cleanly under the floating back/share/menu chips (no hard
           band), swapping in a single frosted blur band only while the album
@@ -478,7 +478,7 @@ export function AlbumDetailMobileSurface({
                     className="w-3.5 h-3.5"
                     style={{ color: "var(--brand-mint)" }}
                   />
-                  <span className="text-[11px] font-semibold tracking-tight text-white">
+                  <span className="text-[11px] font-semibold tracking-tight text-fan-primary">
                     SuperCredits™
                   </span>
                 </div>
@@ -488,7 +488,7 @@ export function AlbumDetailMobileSurface({
 
           <div className="relative pt-4 pb-3 px-5 text-center">
             <h1
-              className="text-white text-[22px] font-bold leading-tight tracking-tight flex items-center justify-center gap-2 flex-wrap"
+              className="text-fan-primary text-[22px] font-bold leading-tight tracking-tight flex items-center justify-center gap-2 flex-wrap"
               data-testid="text-album-title"
             >
               <span>{album.title}</span>
@@ -623,7 +623,7 @@ export function AlbumDetailMobileSurface({
               <button
                 type="button"
                 disabled
-                className="flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-[15px] text-white/45 flex-shrink-0 cursor-not-allowed"
+                className="flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-[15px] text-fan-secondary flex-shrink-0 cursor-not-allowed"
                 style={{ background: "rgba(255,255,255,0.06)" }}
                 data-testid="button-buy-sold-out"
               >
@@ -873,7 +873,7 @@ export function AlbumDetailMobileSurface({
                   </div>
                   <div className="flex-1 min-w-0 relative h-full flex items-center gap-2.5">
                     <p
-                      className={`text-[15px] font-semibold truncate ${isActive ? "text-[#319ED8]" : "text-white"}`}
+                      className={`text-[15px] font-semibold truncate ${isActive ? "text-[#319ED8]" : "text-fan-primary"}`}
                     >
                       {song.title}
                     </p>
@@ -947,7 +947,7 @@ export function AlbumDetailMobileSurface({
                   }}
                   aria-label="Song options"
                   aria-haspopup="menu"
-                  className="w-7 h-9 flex items-center justify-center text-white/40 flex-shrink-0"
+                  className="w-7 h-9 flex items-center justify-center text-fan-faint flex-shrink-0"
                   data-testid={`button-track-menu-${song.id}`}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -1071,7 +1071,7 @@ function ClampedDescription({
     return (
       <p
         ref={ref}
-        className="text-white/70 text-sm mt-3 leading-relaxed line-clamp-2"
+        className="text-fan-secondary text-sm mt-3 leading-relaxed line-clamp-2"
         data-testid="album-description"
       >
         {text}
@@ -1089,7 +1089,7 @@ function ClampedDescription({
       >
         <p
           ref={ref}
-          className="text-white/70 text-sm leading-relaxed line-clamp-2"
+          className="text-fan-secondary text-sm leading-relaxed line-clamp-2"
         >
           {text}
         </p>

@@ -77,7 +77,7 @@ export function DesktopSearchView({ onNavigate }: { onNavigate?: () => void }) {
         }}
       >
         <SearchIcon
-          className="ml-4 w-[18px] h-[18px] text-white/55 flex-shrink-0"
+          className="ml-4 w-[18px] h-[18px] text-fan-secondary flex-shrink-0"
           strokeWidth={2.2}
         />
         <input
@@ -105,7 +105,7 @@ export function DesktopSearchView({ onNavigate }: { onNavigate?: () => void }) {
             variant="ghost"
             size="md"
             label="Clear search"
-            className="mr-1.5 text-white/70 hover:text-white"
+            className="mr-1.5 text-fan-secondary hover:text-white"
             onClick={() => {
               setDraft("");
               setShowAll(false);
@@ -131,7 +131,7 @@ export function DesktopSearchView({ onNavigate }: { onNavigate?: () => void }) {
 
         {query && isFetching && !r && (
           <p
-            className="text-white/45 text-sm text-center mt-8"
+            className="text-fan-secondary text-sm text-center mt-8"
             data-testid="text-search-loading"
           >
             Searching…
@@ -140,7 +140,7 @@ export function DesktopSearchView({ onNavigate }: { onNavigate?: () => void }) {
 
         {query && r && counts.top === 0 && (
           <p
-            className="text-white/45 text-sm text-center mt-8"
+            className="text-fan-secondary text-sm text-center mt-8"
             data-testid="text-search-empty"
           >
             No results for "{query}"

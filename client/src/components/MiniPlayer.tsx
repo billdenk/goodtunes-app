@@ -75,8 +75,8 @@ export function MiniPlayer() {
               style={{ width: 32, height: 32, borderRadius: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}
             />
             <div className="flex-1 min-w-0">
-              <p className="text-white text-[13px] font-semibold truncate leading-tight">{currentSong.title}</p>
-              <p className="text-white/55 text-[11px] truncate leading-tight">{currentSong.album.artist}</p>
+              <p className="text-fan-primary text-[13px] font-semibold truncate leading-tight">{currentSong.title}</p>
+              <p className="text-fan-secondary text-[11px] truncate leading-tight">{currentSong.album.artist}</p>
             </div>
             <button
               type="button"
@@ -106,8 +106,8 @@ export function MiniPlayer() {
             />
 
             <div className="flex-1 min-w-0">
-              <p className="text-white text-[14px] font-semibold truncate leading-snug">{currentSong.title}</p>
-              <p className="text-white/55 text-[12px] truncate leading-snug">{currentSong.album.artist}</p>
+              <p className="text-fan-primary text-[14px] font-semibold truncate leading-snug">{currentSong.title}</p>
+              <p className="text-fan-secondary text-[12px] truncate leading-snug">{currentSong.album.artist}</p>
             </div>
 
             <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>

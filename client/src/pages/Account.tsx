@@ -71,9 +71,9 @@ function PrivateRelayBanner({ relayEmail }: { relayEmail: string }) {
   };
   return (
     <div className="rounded-2xl overflow-hidden mb-4 px-4 py-3.5" style={{ background: "rgba(255, 84, 112, 0.10)", border: "1px solid rgba(255,84,112,0.25)" }} data-testid="banner-privaterelay">
-      <p className="text-white text-sm font-semibold mb-1">Add a real email</p>
-      <p className="text-white/70 text-xs leading-snug mb-3">
-        You signed in with Apple's <strong>Hide my email</strong>. We can reach you at <span className="font-mono text-white/85">{relayEmail}</span> but deliverability can be flaky — give us a real address for order updates.
+      <p className="text-fan-primary text-sm font-semibold mb-1">Add a real email</p>
+      <p className="text-fan-secondary text-xs leading-snug mb-3">
+        You signed in with Apple's <strong>Hide my email</strong>. We can reach you at <span className="font-mono text-fan-primary">{relayEmail}</span> but deliverability can be flaky — give us a real address for order updates.
       </p>
       {!open ? (
         <button
@@ -109,12 +109,12 @@ function PrivateRelayBanner({ relayEmail }: { relayEmail: string }) {
                 >
                   {busy ? "Sending…" : "Send code"}
                 </button>
-                <button type="button" onClick={() => setOpen(false)} className="text-white/55 text-xs" data-testid="button-cancel-realemail">Cancel</button>
+                <button type="button" onClick={() => setOpen(false)} className="text-fan-secondary text-xs" data-testid="button-cancel-realemail">Cancel</button>
               </div>
             </>
           ) : (
             <>
-              <p className="text-white/65 text-xs">Code sent to <strong>{newEmail}</strong>.{devCode ? <> Dev code: <code className="font-mono text-white/85">{devCode}</code></> : null}</p>
+              <p className="text-fan-secondary text-xs">Code sent to <strong>{newEmail}</strong>.{devCode ? <> Dev code: <code className="font-mono text-fan-primary">{devCode}</code></> : null}</p>
               <input
                 type="text"
                 value={code}
@@ -136,7 +136,7 @@ function PrivateRelayBanner({ relayEmail }: { relayEmail: string }) {
                 >
                   {busy ? "Verifying…" : "Confirm"}
                 </button>
-                <button type="button" onClick={() => { setPhase("enter"); setCode(""); }} className="text-white/55 text-xs" data-testid="button-back-realemail">Back</button>
+                <button type="button" onClick={() => { setPhase("enter"); setCode(""); }} className="text-fan-secondary text-xs" data-testid="button-back-realemail">Back</button>
               </div>
             </>
           )}
@@ -162,17 +162,17 @@ function LinkedProvidersPanel() {
   const hasApple = identities.some((i) => i.provider === "apple");
   return (
     <>
-      <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-2 mt-4 ml-1">Linked Accounts</p>
+      <p className="text-fan-faint text-xs uppercase tracking-widest font-medium mb-2 mt-4 ml-1">Linked Accounts</p>
       <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
         {isLoading ? (
-          <p className="px-4 py-3 text-white/55 text-sm">Loading…</p>
+          <p className="px-4 py-3 text-fan-secondary text-sm">Loading…</p>
         ) : (
           <>
             {identities.map((id) => (
               <div key={id.id} className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }} data-testid={`row-identity-${id.provider}`}>
                 <div>
-                  <p className="text-white text-base capitalize">{id.provider}</p>
-                  {id.email && <p className="text-white/45 text-xs">{id.email}</p>}
+                  <p className="text-fan-primary text-base capitalize">{id.provider}</p>
+                  {id.email && <p className="text-fan-secondary text-xs">{id.email}</p>}
                 </div>
                 <button type="button" onClick={() => unlink.mutate(id.id)} disabled={unlink.isPending} className="text-red-400 text-sm" data-testid={`button-unlink-${id.provider}`}>Unlink</button>
               </div>
@@ -330,14 +330,14 @@ export function Account() {
 
   return (
     <main className="relative h-screen w-full flex justify-center overflow-hidden lg:pl-[260px]">
-      <section className="relative w-full max-w-[390px] md:max-w-[640px] lg:max-w-[820px] lg:mx-auto h-screen text-white flex flex-col">
+      <section className="relative w-full max-w-[390px] md:max-w-[640px] lg:max-w-[820px] lg:mx-auto h-screen text-fan-primary flex flex-col">
 
         <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
           {/* Title + profile header now live INSIDE the scroll container so
               the whole page scrolls as one — previously the avatar/name/Edit
               block was fixed above the scroll area and content slid under it. */}
           <header className="flex items-end justify-between px-5 pt-14 pb-3">
-            <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Account</h1>
+            <h1 className="text-fan-primary text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Account</h1>
           </header>
 
           <div className="flex flex-col items-center pt-6 pb-4 px-5">
@@ -369,11 +369,11 @@ export function Account() {
                 className="absolute -bottom-0.5 -right-0.5 w-7 h-7 rounded-full flex items-center justify-center"
                 style={{ background: "#319ED8", boxShadow: "0 0 0 2px #00062B" }}
               >
-                <Pencil className="w-3.5 h-3.5 text-white" strokeWidth={2.4} />
+                <Pencil className="w-3.5 h-3.5 text-fan-primary" strokeWidth={2.4} />
               </span>
             </button>
-            <p className="text-white text-xl font-bold">{user?.displayName}</p>
-            <p className="text-white/50 text-sm mt-1">@{user?.username}</p>
+            <p className="text-fan-primary text-xl font-bold">{user?.displayName}</p>
+            <p className="text-fan-secondary text-sm mt-1">@{user?.username}</p>
           </div>
 
           <div className="px-5">
@@ -388,7 +388,7 @@ export function Account() {
               placed an order so a brand-new profile stays clean. */}
           {orderCount > 0 && (
             <>
-              <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">My Orders</p>
+              <p className="text-fan-faint text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">My Orders</p>
               <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
                 <button
                   type="button"
@@ -403,12 +403,12 @@ export function Account() {
                     </svg>
                   </span>
                   <span className="flex-1 min-w-0">
-                    <span className="block text-white text-base">Orders &amp; tracking</span>
+                    <span className="block text-fan-primary text-base">Orders &amp; tracking</span>
                     {latestStatusLine && (
-                      <span className="block text-white/45 text-xs truncate" data-testid="text-orders-latest">{latestStatusLine}</span>
+                      <span className="block text-fan-secondary text-xs truncate" data-testid="text-orders-latest">{latestStatusLine}</span>
                     )}
                   </span>
-                  <span className="text-white/40 text-sm tabular-nums" data-testid="row-orders-count">{orderCount}</span>
+                  <span className="text-fan-faint text-sm tabular-nums" data-testid="row-orders-count">{orderCount}</span>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
                     <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
@@ -417,7 +417,7 @@ export function Account() {
             </>
           )}
 
-          <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Your Collections</p>
+          <p className="text-fan-faint text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Your Collections</p>
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
             {([
               {
@@ -452,8 +452,8 @@ export function Account() {
                 data-testid={testId}
               >
                 <span className="w-5 flex items-center justify-center flex-shrink-0">{icon}</span>
-                <span className="flex-1 text-white text-base">{label}</span>
-                <span className="text-white/40 text-sm tabular-nums" data-testid={`${testId}-count`}>{count}</span>
+                <span className="flex-1 text-fan-primary text-base">{label}</span>
+                <span className="text-fan-faint text-sm tabular-nums" data-testid={`${testId}-count`}>{count}</span>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
                   <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -467,7 +467,7 @@ export function Account() {
               now lives INSIDE Privacy (Apple-style: tap Privacy → push a
               sub-screen that groups everything privacy-related — listening
               history + the public Privacy Policy link). */}
-          <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Settings</p>
+          <p className="text-fan-faint text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Settings</p>
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
             {/* Task #734 — favorite streaming service. Tapping pushes a
                 sub-screen to pick/clear the service GoodTunes hands off to
@@ -479,9 +479,9 @@ export function Account() {
               style={{ borderColor: "rgba(255,255,255,0.07)" }}
               data-testid="row-streaming-service"
             >
-              <span className="text-white text-base">Streaming Service</span>
+              <span className="text-fan-primary text-base">Streaming Service</span>
               <span className="flex items-center gap-1.5">
-                <span className="text-white/45 text-base" data-testid="text-streaming-service-current">
+                <span className="text-fan-secondary text-base" data-testid="text-streaming-service-current">
                   {favService ? serviceLabel(favService) : "Not set"}
                 </span>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
@@ -502,7 +502,7 @@ export function Account() {
                 style={i < arr.length - 1 ? { borderColor: "rgba(255,255,255,0.07)" } : undefined}
                 data-testid={`row-${label.toLowerCase().replace(/[^a-z]/g, "-")}`}
               >
-                <span className="text-white text-base">{label}</span>
+                <span className="text-fan-primary text-base">{label}</span>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
                   <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -541,7 +541,7 @@ export function Account() {
           {/* Hidden admin shortcut — looks like plain version text, but
               tapping it routes to /admin. IYKYK; lets the team get in
               without burning a visible nav slot. */}
-          <p className="text-center text-white/45 text-xs pb-4">
+          <p className="text-center text-fan-secondary text-xs pb-4">
             <a
               href="/admin"
               target="_blank"
@@ -653,8 +653,8 @@ function AccountMergePanel() {
           data-testid="button-account-merge-open"
         >
           <div>
-            <div className="text-white text-base">These two accounts are me</div>
-            <div className="text-white/45 text-xs mt-0.5">Pull a second email's library onto this account.</div>
+            <div className="text-fan-primary text-base">These two accounts are me</div>
+            <div className="text-fan-secondary text-xs mt-0.5">Pull a second email's library onto this account.</div>
           </div>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
             <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
@@ -664,15 +664,15 @@ function AccountMergePanel() {
         <div className="px-4 py-4">
           {sent ? (
             <div data-testid="merge-start-sent">
-              <div className="text-white text-sm font-semibold mb-1">Link sent.</div>
-              <p className="text-white/55 text-xs leading-relaxed">
+              <div className="text-fan-primary text-sm font-semibold mb-1">Link sent.</div>
+              <p className="text-fan-secondary text-xs leading-relaxed">
                 Open the inbox for that other email and tap the confirmation link to move everything onto this account.
                 The link expires in 24 hours.
               </p>
             </div>
           ) : (
             <form onSubmit={start}>
-              <p className="text-white/55 text-xs mb-3 leading-relaxed">
+              <p className="text-fan-secondary text-xs mb-3 leading-relaxed">
                 Enter the email on your other GoodTunes account. We'll send a confirmation link there — once you tap it,
                 we'll move that account's orders and library onto this one.
               </p>
@@ -693,7 +693,7 @@ function AccountMergePanel() {
                 <button
                   type="button"
                   onClick={() => { setOpen(false); setEmail(""); }}
-                  className="px-3 py-2 rounded-xl text-white/70 text-sm border border-white/10"
+                  className="px-3 py-2 rounded-xl text-fan-secondary text-sm border border-white/10"
                   data-testid="button-account-merge-cancel"
                 >
                   Cancel
@@ -756,8 +756,8 @@ function PasswordPanel() {
           data-testid="button-password-open"
         >
           <div>
-            <div className="text-white text-base">{hasPassword ? "Change your password" : "Set a password"}</div>
-            <div className="text-white/45 text-xs mt-0.5">
+            <div className="text-fan-primary text-base">{hasPassword ? "Change your password" : "Set a password"}</div>
+            <div className="text-fan-secondary text-xs mt-0.5">
               {hasPassword
                 ? "Prefer a password? We'll email you a secure link to change it."
                 : "You sign in with an email link. Prefer a password? You can add one."}
@@ -771,15 +771,15 @@ function PasswordPanel() {
         <div className="px-4 py-4">
           {sent ? (
             <div data-testid="password-link-sent">
-              <div className="text-white text-sm font-semibold mb-1">Link sent.</div>
-              <p className="text-white/55 text-xs leading-relaxed">
+              <div className="text-fan-primary text-sm font-semibold mb-1">Link sent.</div>
+              <p className="text-fan-secondary text-xs leading-relaxed">
                 Open your inbox and tap the link to {hasPassword ? "choose a new password" : "set your password"}.
                 The link expires in 30 minutes. Email sign-in still works either way.
               </p>
             </div>
           ) : (
             <div>
-              <p className="text-white/55 text-xs mb-3 leading-relaxed">
+              <p className="text-fan-secondary text-xs mb-3 leading-relaxed">
                 Magic-link sign-in is staying on — this just adds a password as another way in.
                 We'll email you a secure link to {hasPassword ? "change it" : "choose one"}.
               </p>
@@ -787,7 +787,7 @@ function PasswordPanel() {
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="px-3 py-2 rounded-xl text-white/70 text-sm border border-white/10"
+                  className="px-3 py-2 rounded-xl text-fan-secondary text-sm border border-white/10"
                   data-testid="button-password-cancel"
                 >
                   Cancel
@@ -844,15 +844,15 @@ function PrivacySheet({
           style={{ background: "rgba(255,255,255,0.10)" }}
           data-testid="button-privacy-back"
         >
-          <ChevronLeft className="w-[22px] h-[22px] text-white" style={{ transform: "translateX(-1px)" }} strokeWidth={2.2} />
+          <ChevronLeft className="w-[22px] h-[22px] text-fan-primary" style={{ transform: "translateX(-1px)" }} strokeWidth={2.2} />
         </button>
-        <h1 className="text-white text-[17px] font-semibold">Privacy</h1>
+        <h1 className="text-fan-primary text-[17px] font-semibold">Privacy</h1>
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-hide px-5 pb-10">
-        <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Listening History</p>
+        <p className="text-fan-faint text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Listening History</p>
         <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
-          <p className="px-4 pt-3 pb-2 text-white/55 text-xs leading-snug">
+          <p className="px-4 pt-3 pb-2 text-fan-secondary text-xs leading-snug">
             We record what you listen to so artists can see which songs resonate. You can wipe your history any time.
           </p>
           {!confirmClear ? (
@@ -867,12 +867,12 @@ function PrivacySheet({
             </button>
           ) : (
             <div className="px-4 py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
-              <p className="text-white text-sm mb-3">Permanently delete every play, skip, and favorite event tied to this account?</p>
+              <p className="text-fan-primary text-sm mb-3">Permanently delete every play, skip, and favorite event tied to this account?</p>
               <div className="flex gap-3">
                 <button
                   type="button"
                   onClick={() => setConfirmClear(false)}
-                  className="flex-1 py-3 rounded-2xl border border-white/20 text-white/60 text-sm font-medium"
+                  className="flex-1 py-3 rounded-2xl border border-white/20 text-fan-secondary text-sm font-medium"
                 >
                   Cancel
                 </button>
@@ -899,7 +899,7 @@ function PrivacySheet({
           </div>
         )}
 
-        <p className="text-white/40 text-xs uppercase tracking-widest font-medium mb-2 mt-4 ml-1">Policy</p>
+        <p className="text-fan-faint text-xs uppercase tracking-widest font-medium mb-2 mt-4 ml-1">Policy</p>
         <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
           <a
             href={PRIVACY_POLICY_URL}
@@ -908,7 +908,7 @@ function PrivacySheet({
             className="w-full flex items-center justify-between px-4 py-3.5 text-left active:bg-white/[0.06]"
             data-testid="link-privacy-policy"
           >
-            <span className="text-white text-base">Privacy Policy</span>
+            <span className="text-fan-primary text-base">Privacy Policy</span>
             {/* Apple's external-link glyph (top-right arrow out of box) —
                 signals this leaves the app, not just a deeper screen. */}
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.45" strokeLinecap="round" strokeLinejoin="round">
@@ -918,7 +918,7 @@ function PrivacySheet({
             </svg>
           </a>
         </div>
-        <p className="text-white/35 text-xs leading-relaxed px-1">
+        <p className="text-fan-faint text-xs leading-relaxed px-1">
           Opens goodtunes.music/privacy in your browser.
         </p>
       </div>
@@ -961,13 +961,13 @@ function StreamingServiceSheet({
           style={{ background: "rgba(255,255,255,0.10)" }}
           data-testid="button-streaming-back"
         >
-          <ChevronLeft className="w-[22px] h-[22px] text-white" style={{ transform: "translateX(-1px)" }} strokeWidth={2.2} />
+          <ChevronLeft className="w-[22px] h-[22px] text-fan-primary" style={{ transform: "translateX(-1px)" }} strokeWidth={2.2} />
         </button>
-        <h1 className="text-white text-[17px] font-semibold">Streaming Service</h1>
+        <h1 className="text-fan-primary text-[17px] font-semibold">Streaming Service</h1>
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-hide px-5 pb-10">
-        <p className="text-white/55 text-xs leading-relaxed mb-4 px-1">
+        <p className="text-fan-secondary text-xs leading-relaxed mb-4 px-1">
           Some tracks on GoodTunes are credited here but stream on another service. Pick where you'd like to listen — we'll send you straight there.
         </p>
         <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
@@ -983,7 +983,7 @@ function StreamingServiceSheet({
                 data-testid={`row-streaming-pick-${svc.id}`}
               >
                 <ServiceGlyphBadge id={svc.id} />
-                <span className="flex-1 text-white text-base">{svc.label}</span>
+                <span className="flex-1 text-fan-primary text-base">{svc.label}</span>
                 {active && (
                   <svg
                     width="18"
@@ -1003,7 +1003,7 @@ function StreamingServiceSheet({
             );
           })}
         </div>
-        <p className="text-white/35 text-xs leading-relaxed px-1">
+        <p className="text-fan-faint text-xs leading-relaxed px-1">
           {current
             ? `Tap ${serviceLabel(current)} again to clear it — we'll ask each time instead.`
             : "Until you pick one, we'll ask which service to use the first time you stream."}

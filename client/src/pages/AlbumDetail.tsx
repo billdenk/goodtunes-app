@@ -707,8 +707,8 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
             className="flex items-center gap-1 px-5 mb-3 active:opacity-70"
             data-testid="link-more-by-artist"
           >
-            <h2 className="text-white text-xl font-bold tracking-tight">More By {album.artist}</h2>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="text-white/55">
+            <h2 className="text-fan-primary text-xl font-bold tracking-tight">More By {album.artist}</h2>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="text-fan-secondary">
               <path d="M9 18l6-6-6-6" />
             </svg>
           </button>
@@ -725,8 +725,8 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
                 <div className="w-full aspect-square rounded-2xl overflow-hidden" style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
                   <img src={a.artwork} alt={a.title} className="w-full h-full object-cover" />
                 </div>
-                <p className="text-white text-xs font-semibold leading-tight truncate mt-2">{a.title}</p>
-                <p className="text-white/45 text-[11px] truncate mt-0.5">{a.year}</p>
+                <p className="text-fan-primary text-xs font-semibold leading-tight truncate mt-2">{a.title}</p>
+                <p className="text-fan-secondary text-[11px] truncate mt-0.5">{a.year}</p>
               </button>
             ))}
           </div>
@@ -737,7 +737,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
 
   return (
     <main className="h-screen w-full flex justify-center overflow-hidden relative">
-      <section className="relative w-full h-screen text-white flex flex-col">
+      <section className="relative w-full h-screen text-fan-primary flex flex-col">
         <AlbumDetailMobileSurface
           scrollRef={scrollRef}
           album={{
@@ -1064,8 +1064,8 @@ function ProvenanceSheet({ album, ownerName, certNum, onClose, onViewGoodDeed }:
     <SheetShell ariaLabel={`Provenance for ${album.title} certificate ${certNum}`} testId="sheet-provenance" onClose={onClose}>
         <div className="flex items-center justify-between px-5 mb-4 flex-shrink-0">
           <div>
-            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Digital Provenance</p>
-            <h3 className="text-white font-semibold text-base mt-0.5">{album.title}</h3>
+            <p className="text-fan-faint text-[10px] font-bold uppercase tracking-widest">Digital Provenance</p>
+            <h3 className="text-fan-primary font-semibold text-base mt-0.5">{album.title}</h3>
           </div>
           <SheetClose data-testid="button-close-provenance" />
         </div>
@@ -1074,8 +1074,8 @@ function ProvenanceSheet({ album, ownerName, certNum, onClose, onViewGoodDeed }:
           <div className="flex items-center gap-3 p-3 rounded-2xl" style={{ background: "rgba(74,255,202,0.08)", border: "1px solid rgba(74,255,202,0.2)" }}>
             <img src={album.artwork} alt={album.title} className="w-12 h-12 rounded-xl object-cover" />
             <div className="flex-1 min-w-0">
-              <p className="text-white text-sm font-semibold truncate">Certificate #{certNum}</p>
-              <p className="text-white/50 text-xs mt-0.5 truncate">Currently held by {ownerName}</p>
+              <p className="text-fan-primary text-sm font-semibold truncate">Certificate #{certNum}</p>
+              <p className="text-fan-secondary text-xs mt-0.5 truncate">Currently held by {ownerName}</p>
             </div>
             <span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ background: "rgba(74,255,202,0.18)", color: "#4AFFCA" }}>VERIFIED</span>
           </div>
@@ -1096,15 +1096,15 @@ function ProvenanceSheet({ album, ownerName, certNum, onClose, onViewGoodDeed }:
         </div>
 
         <div className="flex-1 overflow-y-auto scrollbar-hide px-5">
-          <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-3">Ownership chain</p>
+          <p className="text-fan-faint text-[10px] font-bold uppercase tracking-widest mb-3">Ownership chain</p>
           <div className="relative pl-5">
             <div className="absolute left-[7px] top-2 bottom-2 w-px bg-white/10" />
             {events.map((e, i) => (
               <div key={i} className="relative pb-5 last:pb-0">
                 <div className="absolute -left-[18px] top-1 w-3 h-3 rounded-full" style={{ background: e.color, boxShadow: `0 0 0 3px rgba(0,6,43,1), 0 0 12px ${e.color}55` }} />
-                <p className="text-white/40 text-[11px]">{e.date}</p>
-                <p className="text-white text-sm font-semibold mt-0.5">{e.actor}</p>
-                <p className="text-white/55 text-xs mt-0.5">{e.action}</p>
+                <p className="text-fan-faint text-[11px]">{e.date}</p>
+                <p className="text-fan-primary text-sm font-semibold mt-0.5">{e.actor}</p>
+                <p className="text-fan-secondary text-xs mt-0.5">{e.action}</p>
               </div>
             ))}
           </div>
@@ -1130,14 +1130,14 @@ function OwnershipSheet({
     <SheetShell ariaLabel="Ownership" testId="sheet-ownership" onClose={onClose}>
         <div className="flex items-center justify-between px-5 mb-1 flex-shrink-0">
           <div>
-            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Ownership</p>
-            <h3 className="text-white font-semibold text-base mt-0.5">{album.title}</h3>
+            <p className="text-fan-faint text-[10px] font-bold uppercase tracking-widest">Ownership</p>
+            <h3 className="text-fan-primary font-semibold text-base mt-0.5">{album.title}</h3>
           </div>
           <SheetClose data-testid="button-close-ownership" />
         </div>
-        <p className="px-5 text-white/50 text-xs mb-4">Held by {ownerName} · {owned.length} cop{owned.length === 1 ? "y" : "ies"}</p>
+        <p className="px-5 text-fan-secondary text-xs mb-4">Held by {ownerName} · {owned.length} cop{owned.length === 1 ? "y" : "ies"}</p>
 
-        <div className="px-5 mb-2 flex items-center text-[10px] font-bold uppercase tracking-widest text-white/40">
+        <div className="px-5 mb-2 flex items-center text-[10px] font-bold uppercase tracking-widest text-fan-faint">
           <div className="w-16">No.</div>
           <div className="flex-1">Price</div>
           <div className="w-24 text-right">Date</div>
@@ -1156,10 +1156,10 @@ function OwnershipSheet({
                 style={{ background: i % 2 === 0 ? "rgba(49,158,216,0.07)" : "transparent" }}
                 data-testid={`row-cert-${num}`}
               >
-                <div className="w-16 text-white text-sm font-semibold">#{num}</div>
-                <div className="flex-1 text-white/80 text-sm">{p ? `$${p.price.toFixed(2)}` : "—"}</div>
-                <div className="w-24 text-right text-white/55 text-xs">{p?.date ?? "—"}</div>
-                <div className="w-5 flex justify-end text-white/35">
+                <div className="w-16 text-fan-primary text-sm font-semibold">#{num}</div>
+                <div className="flex-1 text-fan-primary text-sm">{p ? `$${p.price.toFixed(2)}` : "—"}</div>
+                <div className="w-24 text-right text-fan-secondary text-xs">{p?.date ?? "—"}</div>
+                <div className="w-5 flex justify-end text-fan-faint">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                     <path d="M9 18l6-6-6-6" />
                   </svg>
@@ -1169,7 +1169,7 @@ function OwnershipSheet({
           })}
         </div>
 
-        <p className="px-5 mt-3 text-white/35 text-[11px] text-center">Tap a row to view that copy's provenance.</p>
+        <p className="px-5 mt-3 text-fan-faint text-[11px] text-center">Tap a row to view that copy's provenance.</p>
     </SheetShell>
   );
 }
@@ -1494,7 +1494,7 @@ function ClampedDescription({ text, onExpand }: { text: string; onExpand: () => 
     return (
       <p
         ref={ref}
-        className="text-white/70 text-sm mt-3 leading-relaxed line-clamp-2"
+        className="text-fan-secondary text-sm mt-3 leading-relaxed line-clamp-2"
         data-testid="album-description"
       >
         {text}
@@ -1512,7 +1512,7 @@ function ClampedDescription({ text, onExpand }: { text: string; onExpand: () => 
       >
         <p
           ref={ref}
-          className="text-white/70 text-sm leading-relaxed line-clamp-2"
+          className="text-fan-secondary text-sm leading-relaxed line-clamp-2"
         >
           {text}
         </p>
@@ -1544,7 +1544,7 @@ function AlbumDescriptionSheet({ album, onClose }: { album: Album; onClose: () =
     <SheetShell ariaLabel={`${album.title} — about`} testId="sheet-album-description" onClose={onClose}>
       <SheetHeader eyebrow="About" title={album.title} subtitle={album.artist} onClose={onClose} />
       <div className="px-5 pb-2">
-        <p className="text-white/85 text-[15px] leading-relaxed whitespace-pre-wrap" data-testid="text-album-description-full">
+        <p className="text-fan-primary text-[15px] leading-relaxed whitespace-pre-wrap" data-testid="text-album-description-full">
           {album.description}
         </p>
       </div>
@@ -1664,7 +1664,7 @@ export function SheetHeader({ eyebrow, title, subtitle, onClose }: { eyebrow?: s
     <div className="flex items-start gap-3 px-5 pt-1 pb-4">
       <div className="flex-1 min-w-0">
         {eyebrow && <p className="text-[color:var(--brand-blue)] text-xs font-semibold uppercase tracking-wider mb-1">{eyebrow}</p>}
-        <h2 className="text-white text-[22px] font-bold leading-tight tracking-tight">{title}</h2>
+        <h2 className="text-fan-primary text-[22px] font-bold leading-tight tracking-tight">{title}</h2>
         {subtitle && <p className="text-[15px] mt-1 leading-snug" style={{ color: "rgba(235,235,245,0.55)" }}>{subtitle}</p>}
       </div>
       <SheetClose
@@ -1705,13 +1705,13 @@ function CreditsSheet({
       />
 
       {!credits ? (
-        <div className="px-5 pb-4 text-white/55 text-sm">
+        <div className="px-5 pb-4 text-fan-secondary text-sm">
           Detailed credits for this track haven't been published yet. Check back soon — every song will eventually show writers, performers, and the exact gear they used.
         </div>
       ) : (
         <>
           {/* Writers — tappable rows with avatars (same pattern as performers below) */}
-          <h3 className="px-5 pt-3 pb-2 text-white text-[22px] font-bold leading-tight tracking-tight">Written by</h3>
+          <h3 className="px-5 pt-3 pb-2 text-fan-primary text-[22px] font-bold leading-tight tracking-tight">Written by</h3>
           <div className="pb-2">
             {credits.writers.map((w, i) => {
               // If this writer is also in our PEOPLE roster, make the row tappable
@@ -1728,9 +1728,9 @@ function CreditsSheet({
                   >
                     <PersonAvatar person={person} size={36} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-white text-[15px] font-medium truncate">{w.name}</p>
+                      <p className="text-fan-primary text-[15px] font-medium truncate">{w.name}</p>
                     </div>
-                    <span className="text-white/45 text-[12px]">{w.role}</span>
+                    <span className="text-fan-secondary text-[12px]">{w.role}</span>
                   </button>
                 );
               }
@@ -1743,9 +1743,9 @@ function CreditsSheet({
                 >
                   <PersonAvatar person={{ id: `w-${i}`, name: w.name }} size={36} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-white text-[15px] font-medium truncate">{w.name}</p>
+                    <p className="text-fan-primary text-[15px] font-medium truncate">{w.name}</p>
                   </div>
-                  <span className="text-white/45 text-[12px]">{w.role}</span>
+                  <span className="text-fan-secondary text-[12px]">{w.role}</span>
                 </div>
               );
             })}
@@ -1755,7 +1755,7 @@ function CreditsSheet({
 
           {/* Performers — Apple-style: name + role on left, instrument category text on right with chevron.
               Tap left → performer sheet. Tap right → instrument sheet. */}
-          <h3 className="px-5 pt-3 pb-2 text-white text-[22px] font-bold leading-tight tracking-tight">Performed by</h3>
+          <h3 className="px-5 pt-3 pb-2 text-fan-primary text-[22px] font-bold leading-tight tracking-tight">Performed by</h3>
           <div className="pb-2">
             {credits.performers.map((perf, idx) => {
               // Prefer the live Person row; fall back to a synthesized one
@@ -1782,7 +1782,7 @@ function CreditsSheet({
                   >
                     <PersonAvatar person={person} size={44} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-white text-[15px] font-semibold truncate">{person.name}</p>
+                      <p className="text-fan-primary text-[15px] font-semibold truncate">{person.name}</p>
                       <p className="text-[12px] truncate" style={{ color: "rgba(235,235,245,0.45)" }}>{perf.role}</p>
                     </div>
                   </button>
@@ -1794,8 +1794,8 @@ function CreditsSheet({
                       data-testid={`button-instrument-${instrument.id}`}
                       aria-label={`Gear: ${instrument.name}`}
                     >
-                      <span className="text-white/70 text-[14px]">{shortLabel}</span>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/35" aria-hidden="true">
+                      <span className="text-fan-secondary text-[14px]">{shortLabel}</span>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-fan-faint" aria-hidden="true">
                         <path d="M9 6l6 6-6 6" />
                       </svg>
                     </button>
@@ -1996,9 +1996,9 @@ function PerformerSheet({
         />
         <div className="flex flex-col items-center text-center px-5 pt-3 pb-5">
           <PersonAvatar person={person} size={120} />
-          <h2 className="text-white text-[26px] font-bold leading-tight tracking-tight mt-4" data-testid="text-performer-name">{person.name}</h2>
+          <h2 className="text-fan-primary text-[26px] font-bold leading-tight tracking-tight mt-4" data-testid="text-performer-name">{person.name}</h2>
           {(song || contextLabel) && (
-            <p className="text-white/55 text-[13px] mt-1.5 truncate max-w-full" data-testid="text-performer-context">
+            <p className="text-fan-secondary text-[13px] mt-1.5 truncate max-w-full" data-testid="text-performer-context">
               {song ? <>On &ldquo;{song.title}&rdquo;</> : contextLabel}
             </p>
           )}
@@ -2057,11 +2057,11 @@ function PerformerSheet({
       {tab === "about" && (
         <div>
           {(profile?.person.bio ?? person.bio) ? (
-            <p className="px-5 pt-4 text-white/80 text-[15px] leading-[1.55] whitespace-pre-line" data-testid="text-performer-bio">
+            <p className="px-5 pt-4 text-fan-primary text-[15px] leading-[1.55] whitespace-pre-line" data-testid="text-performer-bio">
               {profile?.person.bio ?? person.bio}
             </p>
           ) : (
-            <p className="px-5 pt-4 text-white/45 text-[14px]">No bio yet for {person.name}.</p>
+            <p className="px-5 pt-4 text-fan-secondary text-[14px]">No bio yet for {person.name}.</p>
           )}
 
           {/* Artist Profile link — Apple-Music-style cell. Placeholder for
@@ -2076,8 +2076,8 @@ function PerformerSheet({
               style={{ background: "rgba(255,255,255,0.06)" }}
               data-testid="button-artist-profile"
             >
-              <span className="text-white text-[15px] font-medium">View artist profile</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" className="text-white/40" aria-hidden="true">
+              <span className="text-fan-primary text-[15px] font-medium">View artist profile</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" className="text-fan-faint" aria-hidden="true">
                 <path d="M9 6l6 6-6 6" />
               </svg>
             </button>
@@ -2090,13 +2090,13 @@ function PerformerSheet({
         <div className="pb-4">
           {onThisSong.length > 0 && (
             <>
-              <h3 className="px-5 pt-4 pb-2 text-white text-[18px] font-bold leading-tight tracking-tight">Played on this song</h3>
+              <h3 className="px-5 pt-4 pb-2 text-fan-primary text-[18px] font-bold leading-tight tracking-tight">Played on this song</h3>
               <div className="pb-1">
                 {onThisSong.map((perf, i) => {
                   const inst = resolveInstrument(perf.instrumentId);
                   if (!inst) {
                     return (
-                      <div key={`role-${i}`} className="px-5 py-2.5 text-white/80 text-[14px]">{perf.role}</div>
+                      <div key={`role-${i}`} className="px-5 py-2.5 text-fan-primary text-[14px]">{perf.role}</div>
                     );
                   }
                   return (
@@ -2116,12 +2116,12 @@ function PerformerSheet({
                         ) : null}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-white text-[15px] font-medium truncate">{inst.name}</p>
-                        <p className="text-white/55 text-[12px] truncate">
+                        <p className="text-fan-primary text-[15px] font-medium truncate">{inst.name}</p>
+                        <p className="text-fan-secondary text-[12px] truncate">
                           {perf.role}{perf.tuningNotes ? ` · ${perf.tuningNotes}` : ""}
                         </p>
                       </div>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/35" aria-hidden="true">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-fan-faint" aria-hidden="true">
                         <path d="M9 6l6 6-6 6" />
                       </svg>
                     </button>
@@ -2133,7 +2133,7 @@ function PerformerSheet({
 
           {otherTracks.length > 0 && (
             <>
-              <h3 className="px-5 pt-5 pb-2 text-white text-[18px] font-bold leading-tight tracking-tight">Also on {album.title}</h3>
+              <h3 className="px-5 pt-5 pb-2 text-fan-primary text-[18px] font-bold leading-tight tracking-tight">Also on {album.title}</h3>
               <div className="pb-2">
                 {otherTracks.map(({ song: s, performer }) => {
                   const instrument = resolveInstrument(performer.instrumentId);
@@ -2145,7 +2145,7 @@ function PerformerSheet({
                     >
                       {/* Track number color matches the album track-list (rgba(255,255,255,0.32)) */}
                       <span className="w-6 text-[15px] tabular-nums text-right flex-shrink-0" style={{ color: "rgba(255,255,255,0.32)" }}>{s.trackNumber}</span>
-                      <p className="flex-1 min-w-0 text-white text-[15px] truncate">{s.title}</p>
+                      <p className="flex-1 min-w-0 text-fan-primary text-[15px] truncate">{s.title}</p>
                       {instrument && (
                         <button
                           type="button"
@@ -2153,8 +2153,8 @@ function PerformerSheet({
                           className="flex items-center gap-1 pl-2 -mr-1 active:opacity-70 flex-shrink-0"
                           data-testid={`button-performer-track-instrument-${s.id}`}
                         >
-                          <span className="text-white/65 text-[14px]">{instrument.shortCategory ?? instrument.category}</span>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/35" aria-hidden="true">
+                          <span className="text-fan-secondary text-[14px]">{instrument.shortCategory ?? instrument.category}</span>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-fan-faint" aria-hidden="true">
                             <path d="M9 6l6 6-6 6" />
                           </svg>
                         </button>
@@ -2178,8 +2178,8 @@ function PerformerSheet({
                   ) : null}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-white text-[15px] font-semibold truncate">{alb.albumTitle}</p>
-                  <p className="text-white/45 text-[12px] truncate">
+                  <p className="text-fan-primary text-[15px] font-semibold truncate">{alb.albumTitle}</p>
+                  <p className="text-fan-secondary text-[12px] truncate">
                     {alb.albumYear ? `${alb.albumYear} · ` : ""}{alb.tracks.length} track{alb.tracks.length === 1 ? "" : "s"}
                   </p>
                 </div>
@@ -2191,7 +2191,7 @@ function PerformerSheet({
                   data-testid={`row-performer-other-track-${t.performerId}`}
                 >
                   <span className="w-6 text-[15px] tabular-nums text-right flex-shrink-0" style={{ color: "rgba(255,255,255,0.32)" }}>{t.trackNumber}</span>
-                  <p className="flex-1 min-w-0 text-white text-[15px] truncate">{t.songTitle}</p>
+                  <p className="flex-1 min-w-0 text-fan-primary text-[15px] truncate">{t.songTitle}</p>
                   {t.instrumentId && (
                     <button
                       type="button"
@@ -2204,8 +2204,8 @@ function PerformerSheet({
                       className="flex items-center gap-1 pl-2 -mr-1 active:opacity-70 flex-shrink-0"
                       data-testid={`button-performer-other-track-instrument-${t.performerId}`}
                     >
-                      <span className="text-white/65 text-[14px]">{t.instrumentShortCategory ?? t.instrumentCategory}</span>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/35" aria-hidden="true">
+                      <span className="text-fan-secondary text-[14px]">{t.instrumentShortCategory ?? t.instrumentCategory}</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-fan-faint" aria-hidden="true">
                         <path d="M9 6l6 6-6 6" />
                       </svg>
                     </button>
@@ -2216,7 +2216,7 @@ function PerformerSheet({
           ))}
 
           {onThisSong.length === 0 && otherTracks.length === 0 && otherAlbums.length === 0 && (
-            <p className="px-5 py-6 text-white/55 text-sm">No detailed credits yet for {person.name}.</p>
+            <p className="px-5 py-6 text-fan-secondary text-sm">No detailed credits yet for {person.name}.</p>
           )}
         </div>
       )}
@@ -2226,7 +2226,7 @@ function PerformerSheet({
       {tab === "gear" && (
         <div className="pb-4 pt-2">
           {gear.length === 0 ? (
-            <p className="px-5 py-6 text-white/55 text-sm">No gear credited to {person.name} yet.</p>
+            <p className="px-5 py-6 text-fan-secondary text-sm">No gear credited to {person.name} yet.</p>
           ) : (
             gear.map((g) => (
               <button
@@ -2250,12 +2250,12 @@ function PerformerSheet({
                   ) : null}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-white text-[15px] font-medium truncate">{g.name}</p>
-                  <p className="text-white/55 text-[12px] truncate">
+                  <p className="text-fan-primary text-[15px] font-medium truncate">{g.name}</p>
+                  <p className="text-fan-secondary text-[12px] truncate">
                     {g.shortCategory ?? g.category ?? "Gear"} · {g.trackCount} track{g.trackCount === 1 ? "" : "s"}
                   </p>
                 </div>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/35" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-fan-faint" aria-hidden="true">
                   <path d="M9 6l6 6-6 6" />
                 </svg>
               </button>
@@ -2439,7 +2439,7 @@ function InstrumentAboutSection({ category, about }: { category: string; about: 
   if (!hasSpecs) {
     return (
       <section className="px-5 pt-3 pb-5">
-        <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-2">About this {category.toLowerCase()}</h3>
+        <h3 className="text-fan-primary text-[22px] font-bold leading-tight tracking-tight mb-2">About this {category.toLowerCase()}</h3>
         <p className="text-[16px] leading-relaxed whitespace-pre-line" style={{ color: "rgba(235,235,245,0.72)" }}>{prose || about}</p>
       </section>
     );
@@ -2468,7 +2468,7 @@ function InstrumentAboutSection({ category, about }: { category: string; about: 
   return (
     <section className="px-5 pt-3 pb-5">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight">About this {category.toLowerCase()}</h3>
+        <h3 className="text-fan-primary text-[22px] font-bold leading-tight tracking-tight">About this {category.toLowerCase()}</h3>
       </div>
 
       {showBoth && (
@@ -2501,7 +2501,7 @@ function InstrumentAboutSection({ category, about }: { category: string; about: 
               style={{ borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,0.06)" }}
             >
               <dt style={{ color: "rgba(235,235,245,0.55)" }}>{s.label}</dt>
-              <dd className="text-white">{s.value}</dd>
+              <dd className="text-fan-primary">{s.value}</dd>
             </div>
           ))}
         </dl>
@@ -2663,7 +2663,7 @@ function InstrumentSheet({
         {instrument.photoUrl ? (
           <img src={instrument.photoUrl} alt={instrument.name} className="w-full h-full object-cover" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-white/35">
+          <div className="w-full h-full flex items-center justify-center text-fan-faint">
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M9 18V5l12-2v13" />
               <circle cx="6" cy="18" r="3" />
@@ -2676,7 +2676,7 @@ function InstrumentSheet({
       {/* Title block — Apple Music "About Neil Diamond" pattern: small grey eyebrow, big bold title */}
       <div className="px-5 pb-4">
         <p className="text-[12px] font-medium mb-1" style={{ color: "rgba(235,235,245,0.55)" }}>{instrument.category}</p>
-        <h2 className="text-white text-[26px] font-bold leading-tight tracking-tight">{instrument.name}</h2>
+        <h2 className="text-fan-primary text-[26px] font-bold leading-tight tracking-tight">{instrument.name}</h2>
         {tuningNotes && (
           <p className="text-[15px] mt-1.5" style={{ color: "rgba(235,235,245,0.55)" }}>Tuning · {tuningNotes}</p>
         )}
@@ -2729,7 +2729,7 @@ function InstrumentSheet({
           Vintage listings. */}
       {instrumentTab === "specs" && hasSpecs && (
         <section className="px-5 pt-4 pb-5">
-          <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-2">Specs</h3>
+          <h3 className="text-fan-primary text-[22px] font-bold leading-tight tracking-tight mb-2">Specs</h3>
           <dl className="text-[15px] leading-snug" data-testid="list-instrument-specs">
             {aboutSpecs.map((s, i) => (
               <div
@@ -2738,7 +2738,7 @@ function InstrumentSheet({
                 style={{ borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,0.06)" }}
               >
                 <dt style={{ color: "rgba(235,235,245,0.55)" }}>{s.label}</dt>
-                <dd className="text-white">{s.value}</dd>
+                <dd className="text-fan-primary">{s.value}</dd>
               </div>
             ))}
           </dl>
@@ -2750,7 +2750,7 @@ function InstrumentSheet({
           the "story" of this instrument; Specs is the dry data view. */}
       {instrumentTab === "about" && hasProse && (
         <section className="px-5 pt-4 pb-3">
-          <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-2">About this {instrument.category.toLowerCase()}</h3>
+          <h3 className="text-fan-primary text-[22px] font-bold leading-tight tracking-tight mb-2">About this {instrument.category.toLowerCase()}</h3>
           <p className="text-[16px] leading-relaxed whitespace-pre-line" style={{ color: "rgba(235,235,245,0.72)" }} data-testid="text-instrument-about">
             {aboutProse}
           </p>
@@ -2760,13 +2760,13 @@ function InstrumentSheet({
       {/* Notes from the artist — attributed (so the note still makes sense after bookmarking) */}
       {instrumentTab === "about" && instrument.artistNote && (
         <section className="px-5 pt-3 pb-5">
-          <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-2">Notes from the artist</h3>
+          <h3 className="text-fan-primary text-[22px] font-bold leading-tight tracking-tight mb-2">Notes from the artist</h3>
           <p className="pb-3 text-[16px] leading-relaxed italic" style={{ color: "rgba(235,235,245,0.78)" }}>"{instrument.artistNote}"</p>
           {noteFromPerson && (
             <div className="flex items-center gap-2.5">
               <PersonAvatar person={noteFromPerson} size={28} />
               <div className="min-w-0 flex-1">
-                <p className="text-white text-[14px] font-medium truncate">{noteFromPerson.name}</p>
+                <p className="text-fan-primary text-[14px] font-medium truncate">{noteFromPerson.name}</p>
                 {noteFromSong && (
                   <p className="text-[13px] truncate" style={{ color: "rgba(235,235,245,0.55)" }}>on "{noteFromSong.title}"</p>
                 )}
@@ -2779,7 +2779,7 @@ function InstrumentSheet({
       {/* Where to buy — vendor list. Tap row → direct buy link. Tap logo → vendor about page. */}
       {instrumentTab === "about" && instrument.vendors && instrument.vendors.length > 0 && (
         <section className="pt-3 pb-2">
-          <h3 className="px-5 text-white text-[22px] font-bold leading-tight tracking-tight mb-3">Where to buy</h3>
+          <h3 className="px-5 text-fan-primary text-[22px] font-bold leading-tight tracking-tight mb-3">Where to buy</h3>
           <div className="pb-1">
             {instrument.vendors.map((v, i) => (
               <div
@@ -2810,7 +2810,7 @@ function InstrumentSheet({
                   data-testid={`button-vendor-buy-${i}`}
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="text-white text-[15px] font-medium truncate">{v.name}</p>
+                    <p className="text-fan-primary text-[15px] font-medium truncate">{v.name}</p>
                   </div>
                 </button>
                 {/* The direct-to-gear link — opens THIS instrument's own
@@ -2850,7 +2850,7 @@ function InstrumentSheet({
             {instrumentArtists.map((person) => (
               <div key={person.id} className="flex flex-col items-center" data-testid={`instrument-artist-${person.id}`}>
                 <PersonAvatar person={person} size={88} />
-                <p className="text-white text-[13px] font-medium mt-2 text-center leading-tight line-clamp-2">{person.name}</p>
+                <p className="text-fan-primary text-[13px] font-medium mt-2 text-center leading-tight line-clamp-2">{person.name}</p>
               </div>
             ))}
           </div>
@@ -3105,7 +3105,7 @@ function VendorSheet({
             </div>
           </div>
           <div className="min-w-0 flex-1 pb-1">
-            <h2 className="text-white text-[24px] font-bold leading-tight tracking-tight truncate" data-testid="text-vendor-name">{vendor.name}</h2>
+            <h2 className="text-fan-primary text-[24px] font-bold leading-tight tracking-tight truncate" data-testid="text-vendor-name">{vendor.name}</h2>
             {/* Task #237 — sub-brand attribution. Shown under the vendor
                 name so fans browsing an Epiphone gear page see "Owned by
                 Gibson" without leaving the sheet. */}
@@ -3182,7 +3182,7 @@ function VendorSheet({
         {tab === "about" && (
           <>
             <section className="px-5 pt-5 pb-2">
-              <h3 className="text-white text-[22px] font-bold leading-tight tracking-tight mb-2">About {vendor.name}</h3>
+              <h3 className="text-fan-primary text-[22px] font-bold leading-tight tracking-tight mb-2">About {vendor.name}</h3>
               <p className="text-[16px] leading-relaxed" style={{ color: "rgba(235,235,245,0.72)" }}>{bio}</p>
             </section>
 
@@ -3190,7 +3190,7 @@ function VendorSheet({
               {vendor.location && (
                 <div>
                   <p className="text-[13px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>Location</p>
-                  <p className="text-white text-[16px]">{vendor.location}</p>
+                  <p className="text-fan-primary text-[16px]">{vendor.location}</p>
                 </div>
               )}
               {domain && (
@@ -3209,7 +3209,7 @@ function VendorSheet({
               )}
               <div>
                 <p className="text-[13px] mb-0.5" style={{ color: "rgba(235,235,245,0.55)" }}>Featured instrument</p>
-                <p className="text-white text-[16px]">{instrument.name}</p>
+                <p className="text-fan-primary text-[16px]">{instrument.name}</p>
                 <p className="text-[12px] mt-0.5" style={{ color: "rgba(235,235,245,0.45)" }}>The instrument that opened this page — tap the Gear tab to see the rest.</p>
               </div>
             </section>
@@ -3262,16 +3262,16 @@ function VendorSheet({
                         {inst.photoUrl ? (
                           <img src={inst.photoUrl} alt="" className="w-full h-full object-cover" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-white/40 text-[20px]">♪</div>
+                          <div className="w-full h-full flex items-center justify-center text-fan-faint text-[20px]">♪</div>
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-white text-[15px] font-medium leading-tight truncate">{inst.name}</p>
+                        <p className="text-fan-primary text-[15px] font-medium leading-tight truncate">{inst.name}</p>
                         <p className="text-[13px] mt-0.5 truncate" style={{ color: "rgba(235,235,245,0.55)" }}>{inst.shortCategory ?? inst.category}</p>
                       </div>
                     </button>
                     {/* Chevron — Apple-style "this row is tappable" indicator. */}
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/35 flex-shrink-0" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-fan-faint flex-shrink-0" aria-hidden="true">
                       <path d="M9 6l6 6-6 6" />
                     </svg>
                   </li>
@@ -3294,7 +3294,7 @@ function VendorSheet({
                 {usedBy.map((person) => (
                   <div key={person.id} className="flex flex-col items-center" data-testid={`vendor-artist-${person.id}`}>
                     <PersonAvatar person={person} size={88} />
-                    <p className="text-white text-[13px] font-medium mt-2 text-center leading-tight line-clamp-2">{person.name}</p>
+                    <p className="text-fan-primary text-[13px] font-medium mt-2 text-center leading-tight line-clamp-2">{person.name}</p>
                   </div>
                 ))}
               </div>
@@ -3362,8 +3362,8 @@ function InAppBrowserSheet({
             </div>
           )}
           <div className="min-w-0">
-            <p className="text-white text-[14px] font-semibold truncate leading-tight">{title}</p>
-            <p className="text-white/50 text-[11px] truncate leading-tight">{domain}</p>
+            <p className="text-fan-primary text-[14px] font-semibold truncate leading-tight">{title}</p>
+            <p className="text-fan-secondary text-[11px] truncate leading-tight">{domain}</p>
           </div>
         </div>
 
@@ -3423,8 +3423,8 @@ function InAppBrowserSheet({
                   </svg>
                 </div>
               )}
-              <p className="text-white text-[22px] font-bold mb-1 tracking-tight">{title}</p>
-              <p className="text-white/55 text-[13px] mb-7">{domain}</p>
+              <p className="text-fan-primary text-[22px] font-bold mb-1 tracking-tight">{title}</p>
+              <p className="text-fan-secondary text-[13px] mb-7">{domain}</p>
 
               <button
                 type="button"
@@ -3441,15 +3441,15 @@ function InAppBrowserSheet({
                 </svg>
               </button>
 
-              <p className="mt-6 text-white/40 text-[11px] leading-relaxed max-w-[280px]">
+              <p className="mt-6 text-fan-faint text-[11px] leading-relaxed max-w-[280px]">
                 Most shops don't allow being shown inside another app. You'll land directly on the page above.
               </p>
             </div>
           </>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
-            <p className="text-white text-[15px] font-semibold mb-1">Can't open this link</p>
-            <p className="text-white/55 text-[13px] break-all">{url}</p>
+            <p className="text-fan-primary text-[15px] font-semibold mb-1">Can't open this link</p>
+            <p className="text-fan-secondary text-[13px] break-all">{url}</p>
           </div>
         )}
       </div>
@@ -3505,7 +3505,7 @@ function BonusVideoPlayer({ video }: { video: BonusVideo }) {
             <div className="w-full h-full bg-black/60" />
           )}
           <div
-            className="absolute inset-x-0 bottom-0 flex items-center justify-center px-3 py-2 text-xs font-medium text-white/90 bg-black/55 backdrop-blur-sm"
+            className="absolute inset-x-0 bottom-0 flex items-center justify-center px-3 py-2 text-xs font-medium text-fan-primary bg-black/55 backdrop-blur-sm"
             data-testid={`text-album-bonus-video-unplayable-${video.id}`}
           >
             Couldn't play this video
@@ -3545,7 +3545,7 @@ export function AlbumLineupRail({
   if (lineup.length === 0) return null;
   return (
     <div className="px-5 mt-7" data-testid="section-album-lineup">
-      <h2 className="text-white text-xl font-bold tracking-tight mb-3">Lineup</h2>
+      <h2 className="text-fan-primary text-xl font-bold tracking-tight mb-3">Lineup</h2>
       <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
         {lineup
           .filter((m) => m.person)
@@ -3567,11 +3567,11 @@ export function AlbumLineupRail({
                   />
                 )}
               </div>
-              <p className="text-white text-[12px] font-semibold mt-2 leading-tight line-clamp-2">
+              <p className="text-fan-primary text-[12px] font-semibold mt-2 leading-tight line-clamp-2">
                 {m.person!.name}
               </p>
               {m.roles && m.roles.length > 0 && (
-                <p className="text-white/55 text-[10.5px] leading-tight mt-0.5 line-clamp-2">
+                <p className="text-fan-secondary text-[10.5px] leading-tight mt-0.5 line-clamp-2">
                   {m.roles.join(", ")}
                 </p>
               )}
@@ -3679,15 +3679,15 @@ export function AlbumBonusContent({ albumId }: { albumId: string }) {
               className="flex items-center gap-1 mb-3 active:opacity-70"
               data-testid="link-all-album-videos"
             >
-              <h3 className="text-white text-[22px] font-bold tracking-tight" data-testid="heading-album-videos">
+              <h3 className="text-fan-primary text-[22px] font-bold tracking-tight" data-testid="heading-album-videos">
                 Videos
               </h3>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="text-white/55">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="text-fan-secondary">
                 <path d="M9 18l6-6-6-6" />
               </svg>
             </button>
           ) : (
-            <h3 className="text-white text-[22px] font-bold tracking-tight mb-3" data-testid="heading-album-videos">
+            <h3 className="text-fan-primary text-[22px] font-bold tracking-tight mb-3" data-testid="heading-album-videos">
               Videos
             </h3>
           )}
@@ -3700,7 +3700,7 @@ export function AlbumBonusContent({ albumId }: { albumId: string }) {
                   data-testid={`tile-album-video-${v.id}`}
                 >
                   <BonusVideoPlayer video={v} />
-                  <p className="mt-2 text-[14px] text-white font-medium truncate">{v.title}</p>
+                  <p className="mt-2 text-[14px] text-fan-primary font-medium truncate">{v.title}</p>
                 </div>
               ))}
             </div>
@@ -3721,7 +3721,7 @@ export function AlbumBonusContent({ albumId }: { albumId: string }) {
           data-testid="overlay-all-album-videos"
         >
           <div className="flex items-center justify-between px-4 pt-12 pb-3">
-            <h3 className="text-white text-[22px] font-bold tracking-tight">Videos</h3>
+            <h3 className="text-fan-primary text-[22px] font-bold tracking-tight">Videos</h3>
             <SheetClose
               onClick={() => setShowAllVideos(false)}
               data-testid="button-close-all-album-videos"
@@ -3732,7 +3732,7 @@ export function AlbumBonusContent({ albumId }: { albumId: string }) {
               {videos.map((v) => (
                 <div key={v.id} data-testid={`tile-all-album-video-${v.id}`}>
                   <BonusVideoPlayer video={v} />
-                  <p className="mt-2 text-[15px] text-white font-medium">{v.title}</p>
+                  <p className="mt-2 text-[15px] text-fan-primary font-medium">{v.title}</p>
                 </div>
               ))}
             </div>
@@ -3742,7 +3742,7 @@ export function AlbumBonusContent({ albumId }: { albumId: string }) {
 
       {photos.length > 0 && (
         <div className="mt-8 px-5">
-          <h3 className="text-white text-[22px] font-bold tracking-tight mb-3" data-testid="heading-album-photos">
+          <h3 className="text-fan-primary text-[22px] font-bold tracking-tight mb-3" data-testid="heading-album-photos">
             Photos
           </h3>
           <div className="grid grid-cols-3 gap-1.5">
@@ -3891,7 +3891,7 @@ function PhotoLightbox({
     >
       <div className="flex items-center justify-between p-4">
         <span
-          className="text-white/70 text-xs font-medium tabular-nums"
+          className="text-fan-secondary text-xs font-medium tabular-nums"
           data-testid="text-album-photo-position"
         >
           {index + 1} of {count}
@@ -3964,7 +3964,7 @@ function PhotoLightbox({
       </div>
 
       {current?.caption && (
-        <p className="text-center text-white/70 text-xs px-6 pt-4">{current.caption}</p>
+        <p className="text-center text-fan-secondary text-xs px-6 pt-4">{current.caption}</p>
       )}
 
       {count > 1 && (

@@ -241,7 +241,7 @@ export function DesktopAlbumView({
         column: "max-w-[720px] mx-auto px-6 py-6 transition-[max-width,margin] duration-200 flex-1 min-w-0",
         heroSection: "mt-7 flex gap-6",
         cover: "rounded-2xl overflow-hidden flex-shrink-0 w-[220px] h-[220px]",
-        title: "text-white font-bold tracking-[-0.015em] leading-[1.05] text-[32px]",
+        title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[32px]",
         lyricsAside: "hidden",
       }
     : {
@@ -254,7 +254,7 @@ export function DesktopAlbumView({
         column: "max-w-[720px] mx-auto lg:max-w-none lg:mx-0 2xl:max-w-[1600px] 2xl:mx-auto px-6 lg:px-12 py-6 lg:py-8 transition-[max-width,margin] duration-200 flex-1 min-w-0",
         heroSection: "mt-7 flex gap-6 lg:gap-8",
         cover: "rounded-2xl overflow-hidden flex-shrink-0 w-[220px] h-[220px] lg:w-[280px] lg:h-[280px]",
-        title: "text-white font-bold tracking-[-0.015em] leading-[1.05] text-[32px] lg:text-[40px]",
+        title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[32px] lg:text-[40px]",
         lyricsAside: "hidden lg:flex flex-col flex-shrink-0 w-[360px] sticky top-0 self-start h-screen py-8 pr-10 pl-2",
       };
   const { toast } = useToast();
@@ -319,7 +319,7 @@ export function DesktopAlbumView({
               size="md"
               label="Share album"
               onClick={handleCopyShareLink}
-              className="text-white/80 hover:text-white"
+              className="text-fan-primary hover:text-white"
               data-testid="button-share-album"
             >
               <Share strokeWidth={2} />
@@ -328,7 +328,7 @@ export function DesktopAlbumView({
               variant="ghost"
               size="md"
               label="More options"
-              className="text-white/70 hover:text-white"
+              className="text-fan-secondary hover:text-white"
               data-testid="button-album-more"
             >
               <MoreHorizontal strokeWidth={2} />
@@ -376,7 +376,7 @@ export function DesktopAlbumView({
 
             {meta && (
               <div
-                className="mt-3 text-white/55 text-[11.5px] font-semibold uppercase tracking-[0.14em]"
+                className="mt-3 text-fan-secondary text-[11.5px] font-semibold uppercase tracking-[0.14em]"
                 data-testid="album-meta"
               >
                 {meta}
@@ -385,7 +385,7 @@ export function DesktopAlbumView({
 
             {album.description && (
               <p
-                className="mt-4 text-white/72 text-[14px] leading-[1.55] max-w-[640px] line-clamp-3"
+                className="mt-4 text-fan-secondary text-[14px] leading-[1.55] max-w-[640px] line-clamp-3"
                 data-testid="album-description"
               >
                 {album.description}
@@ -452,7 +452,7 @@ export function DesktopAlbumView({
                       <button
                         type="button"
                         disabled
-                        className="h-11 px-6 rounded-full inline-flex items-center justify-center font-semibold text-[14px] text-white/45 cursor-not-allowed"
+                        className="h-11 px-6 rounded-full inline-flex items-center justify-center font-semibold text-[14px] text-fan-secondary cursor-not-allowed"
                         style={{ background: "rgba(255,255,255,0.06)" }}
                         data-testid="button-buy-sold-out"
                       >
@@ -538,7 +538,7 @@ export function DesktopAlbumView({
                   )}
                   <span className="relative z-10">{it.label}</span>
                   {it.key !== "music" && it.count > 0 && (
-                    <span className="relative z-10 text-xs text-white/50 font-medium">
+                    <span className="relative z-10 text-xs text-fan-secondary font-medium">
                       ({it.count})
                     </span>
                   )}
@@ -673,7 +673,7 @@ export function DesktopAlbumView({
             }}
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
-              <span className="text-white text-[14px] font-semibold tracking-[-0.005em]">
+              <span className="text-fan-primary text-[14px] font-semibold tracking-[-0.005em]">
                 Lyrics
               </span>
               <div className="flex items-center gap-1">
@@ -694,13 +694,13 @@ export function DesktopAlbumView({
                   onClick={onCloseLyrics}
                   aria-label="Close lyrics"
                   data-testid="button-close-lyrics"
-                  className="w-8 h-8 rounded-full inline-flex items-center justify-center text-white/65 hover:text-white hover:bg-white/8 transition-colors"
+                  className="w-8 h-8 rounded-full inline-flex items-center justify-center text-fan-secondary hover:text-white hover:bg-white/8 transition-colors"
                 >
                   <X className="w-4 h-4" strokeWidth={2.2} />
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto px-5 py-4 text-white/82 text-[14px] leading-[1.7]">
+            <div className="flex-1 overflow-y-auto px-5 py-4 text-fan-primary text-[14px] leading-[1.7]">
               {lyrics}
             </div>
           </div>
@@ -752,7 +752,7 @@ function PreviewPlayPill({
       className={[
         "h-11 pl-4 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[14px] transition-colors",
         disabled
-          ? "border border-white/20 text-white/35 cursor-not-allowed"
+          ? "border border-white/20 text-fan-faint cursor-not-allowed"
           : "border-2 border-[#FF5470] text-[#FF5470] hover:bg-[#FF5470]/12 active:scale-[0.97]",
       ].join(" ")}
     >
@@ -857,10 +857,10 @@ function BuyPricePill({
             className={[
               "inline-flex items-center gap-2 rounded-full h-8 px-3 text-xs font-semibold whitespace-nowrap transition-colors",
               signedCertSoldOut
-                ? "border border-white/15 text-white/35 cursor-not-allowed"
+                ? "border border-white/15 text-fan-faint cursor-not-allowed"
                 : signedCert
                   ? "border-2 border-[color:var(--brand-pink)] bg-[color:var(--brand-pink)]/15 text-white"
-                  : "border border-white/30 bg-black/30 text-white/85 hover:border-white/70 hover:bg-black/45",
+                  : "border border-white/30 bg-black/30 text-fan-primary hover:border-white/70 hover:bg-black/45",
             ].join(" ")}
           >
             <span
@@ -875,7 +875,7 @@ function BuyPricePill({
               {signedCert && (
                 <svg
                   viewBox="0 0 12 12"
-                  className="w-full h-full text-white"
+                  className="w-full h-full text-fan-primary"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2.4"
@@ -910,7 +910,7 @@ function BonusGrid({
   if (items.length === 0) {
     return (
       <div
-        className="w-full rounded-2xl flex items-center justify-center text-white/45 text-[14px]"
+        className="w-full rounded-2xl flex items-center justify-center text-fan-secondary text-[14px]"
         style={{
           background: "rgba(255,255,255,0.04)",
           border: "1px dashed rgba(255,255,255,0.12)",
@@ -945,12 +945,12 @@ function BonusGrid({
           {locked && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-9 h-9 rounded-full bg-black/55 flex items-center justify-center">
-                <Lock className="w-4 h-4 text-white" strokeWidth={2.2} />
+                <Lock className="w-4 h-4 text-fan-primary" strokeWidth={2.2} />
               </div>
             </div>
           )}
           {it.label && (
-            <div className="absolute left-3 right-3 bottom-3 text-white text-[12.5px] font-semibold truncate">
+            <div className="absolute left-3 right-3 bottom-3 text-fan-primary text-[12.5px] font-semibold truncate">
               {it.label}
             </div>
           )}

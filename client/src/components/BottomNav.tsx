@@ -106,7 +106,7 @@ const NavItem = ({
             change with no scale. Lives on the no-translate inner div so it
             never clobbers the contentShift transform on the parent. */}
         <motion.div
-          className={`transition-colors duration-150 ${active ? "text-[color:var(--brand-blue)]" : "text-white/35"}`}
+          className={`transition-colors duration-150 ${active ? "text-[color:var(--brand-blue)]" : "text-fan-faint"}`}
           animate={reduceMotion ? { scale: 1 } : { scale: active ? [1, 1.22, 0.97, 1] : 1 }}
           transition={
             reduceMotion
@@ -118,7 +118,7 @@ const NavItem = ({
         </motion.div>
       </div>
       <span
-        className={`relative text-[10px] font-medium transition-colors duration-150 ${contentShift} ${active ? "text-[color:var(--brand-blue)]" : "text-white/35"}`}
+        className={`relative text-[10px] font-medium transition-colors duration-150 ${contentShift} ${active ? "text-[color:var(--brand-blue)]" : "text-fan-faint"}`}
       >
         {label}
       </span>
@@ -325,10 +325,10 @@ export function BottomNav() {
                 />
               )}
               {search.query && search.isFetching && !search.r && (
-                <p className="text-white/45 text-sm text-center mt-8" data-testid="text-search-loading">Searching…</p>
+                <p className="text-fan-secondary text-sm text-center mt-8" data-testid="text-search-loading">Searching…</p>
               )}
               {search.query && search.r && search.counts.top === 0 && (
-                <p className="text-white/45 text-sm text-center mt-8" data-testid="text-search-empty">No results for "{search.query}"</p>
+                <p className="text-fan-secondary text-sm text-center mt-8" data-testid="text-search-empty">No results for "{search.query}"</p>
               )}
               {search.query && search.r && search.counts.top > 0 && !search.showAll && (
                 <CompactPreview
@@ -439,7 +439,7 @@ export function BottomNav() {
           type="button"
           onClick={onToggleSearch}
           aria-label={searchOpen ? "Close search" : "Search"}
-          className={`pointer-events-auto absolute right-3 flex items-center justify-center rounded-full ${searchOpen ? "text-[color:var(--brand-blue)]" : "text-white/80"}`}
+          className={`pointer-events-auto absolute right-3 flex items-center justify-center rounded-full ${searchOpen ? "text-[color:var(--brand-blue)]" : "text-fan-primary"}`}
           style={{
             // Top-anchored field (Task #770) — the toggle no longer needs
             // to dodge the keyboard, so it rests at the bottom dock.
@@ -500,7 +500,7 @@ export function BottomNav() {
             transition: "transform 300ms cubic-bezier(0.32, 0.72, 0, 1), opacity 220ms ease",
           }}
         >
-          <span className="pl-4 pr-2 text-white/55 flex-shrink-0">{searchIcon}</span>
+          <span className="pl-4 pr-2 text-fan-secondary flex-shrink-0">{searchIcon}</span>
           <input
             ref={inputRef}
             type="search"

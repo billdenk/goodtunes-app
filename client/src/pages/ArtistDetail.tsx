@@ -352,7 +352,7 @@ export function ArtistDetail() {
   if (artistAlbums.length === 0 && streamingAll.length === 0) {
     return (
       <main className="min-h-screen flex items-center justify-center">
-        <div className="text-white text-center">
+        <div className="text-fan-primary text-center">
           <p>Artist not found</p>
           <button onClick={() => navigate("/collection")} className="mt-4 text-[#319ED8]">Back to Collection</button>
         </div>
@@ -372,7 +372,7 @@ export function ArtistDetail() {
 
   return (
     <main className="h-screen w-full flex justify-center overflow-hidden relative lg:justify-start lg:pl-[260px]">
-      <section className="relative w-full max-w-[390px] md:max-w-[820px] lg:max-w-[1200px] lg:mx-auto h-screen text-white flex flex-col">
+      <section className="relative w-full max-w-[390px] md:max-w-[820px] lg:max-w-[1200px] lg:mx-auto h-screen text-fan-primary flex flex-col">
         <IconButton
           size="md"
           variant="dimmed"
@@ -480,9 +480,9 @@ export function ArtistDetail() {
                 className="mt-5 -mb-4 inline-flex items-center justify-center min-h-[44px] px-2 active:opacity-70"
                 data-testid={`link-artist-label-${artistPerson.label.id}`}
               >
-                <span className="text-white/55 text-xs uppercase tracking-[0.14em] font-semibold">
+                <span className="text-fan-secondary text-xs uppercase tracking-[0.14em] font-semibold">
                   Signed to{" "}
-                  <span className="text-white/80">{artistPerson.label.name}</span>
+                  <span className="text-fan-primary">{artistPerson.label.name}</span>
                 </span>
               </button>
             )}
@@ -493,18 +493,18 @@ export function ArtistDetail() {
                 className="mt-5 flex items-center gap-1 active:opacity-70"
                 data-testid="button-artist-name"
               >
-                <h1 className="text-white text-[28px] font-bold leading-tight tracking-tight text-center" data-testid="text-artist-name">{artistName}</h1>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="text-white/55 mt-1">
+                <h1 className="text-fan-primary text-[28px] font-bold leading-tight tracking-tight text-center" data-testid="text-artist-name">{artistName}</h1>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="text-fan-secondary mt-1">
                   <path d="M9 18l6-6-6-6" />
                 </svg>
               </button>
             ) : (
-              <h1 className="mt-5 text-white text-[28px] font-bold leading-tight tracking-tight text-center" data-testid="text-artist-name">
+              <h1 className="mt-5 text-fan-primary text-[28px] font-bold leading-tight tracking-tight text-center" data-testid="text-artist-name">
                 {artistName}
               </h1>
             )}
             {hasGtReleases && (
-              <p className="text-white/45 text-xs mt-1.5">
+              <p className="text-fan-secondary text-xs mt-1.5">
                 {releaseCount} {releaseCount === 1 ? "release" : "releases"} · {songCount} songs
               </p>
             )}
@@ -515,7 +515,7 @@ export function ArtistDetail() {
 
           {hasGtReleases && (
             <div className="px-5 mt-9">
-              <h2 className="text-white text-xl font-bold tracking-tight mb-3">GoodTunes&reg; Releases</h2>
+              <h2 className="text-fan-primary text-xl font-bold tracking-tight mb-3">GoodTunes&reg; Releases</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                 {artistAlbums.map((album) => (
                   <button
@@ -528,8 +528,8 @@ export function ArtistDetail() {
                     <div className="aspect-square rounded-2xl overflow-hidden" style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}>
                       <img src={album.artwork} alt={album.title} className="w-full h-full object-cover" />
                     </div>
-                    <p className="text-white text-sm font-semibold leading-tight truncate mt-2">{album.title}</p>
-                    <p className="text-white/50 text-xs truncate mt-0.5">{[Number.isFinite(album.year) ? album.year : null, album.type].filter(Boolean).join(" · ")}</p>
+                    <p className="text-fan-primary text-sm font-semibold leading-tight truncate mt-2">{album.title}</p>
+                    <p className="text-fan-secondary text-xs truncate mt-0.5">{[Number.isFinite(album.year) ? album.year : null, album.type].filter(Boolean).join(" · ")}</p>
                   </button>
                 ))}
               </div>
@@ -539,7 +539,7 @@ export function ArtistDetail() {
           {streamingBuckets.length > 0 && (
             <div className="mt-9" data-testid="section-streaming">
               <div className="px-5 mb-3">
-                <p className="text-white/45 text-[11px] uppercase tracking-[0.14em] font-semibold">
+                <p className="text-fan-secondary text-[11px] uppercase tracking-[0.14em] font-semibold">
                   Music available on streaming
                 </p>
               </div>
@@ -560,14 +560,14 @@ export function ArtistDetail() {
                         className="flex items-center px-5 mb-3 text-left active:opacity-70"
                         data-testid={`button-bucket-${bucket.label.toLowerCase().replace(/\s+/g, "-")}`}
                       >
-                        <h2 className="text-white text-xl font-bold tracking-tight flex items-center gap-1.5">
+                        <h2 className="text-fan-primary text-xl font-bold tracking-tight flex items-center gap-1.5">
                           {bucket.label}
-                          <ChevronRight className="w-5 h-5 text-white/40" />
+                          <ChevronRight className="w-5 h-5 text-fan-faint" />
                         </h2>
                       </button>
                     ) : (
                       <h2
-                        className="text-white text-xl font-bold tracking-tight px-5 mb-3"
+                        className="text-fan-primary text-xl font-bold tracking-tight px-5 mb-3"
                         data-testid={`heading-bucket-${bucket.label.toLowerCase().replace(/\s+/g, "-")}`}
                       >
                         {bucket.label}
@@ -595,10 +595,10 @@ export function ArtistDetail() {
                               />
                             )}
                           </div>
-                          <p className="text-white text-sm font-semibold leading-tight truncate mt-2">
+                          <p className="text-fan-primary text-sm font-semibold leading-tight truncate mt-2">
                             {release.name}
                           </p>
-                          <p className="text-white/50 text-xs truncate mt-0.5">
+                          <p className="text-fan-secondary text-xs truncate mt-0.5">
                             {[release.year, bucket.label === "Singles" ? "Single" : release.type === "album" ? "LP" : release.type]
                               .filter(Boolean)
                               .join(" · ")}
@@ -613,8 +613,8 @@ export function ArtistDetail() {
                           style={{ width: 160, height: 160 }}
                           data-testid={`button-bucket-more-${bucket.label.toLowerCase().replace(/\s+/g, "-")}`}
                         >
-                          <ChevronRight className="w-6 h-6 text-white/60" />
-                          <span className="text-white/60 text-[12px] font-semibold mt-1">
+                          <ChevronRight className="w-6 h-6 text-fan-secondary" />
+                          <span className="text-fan-secondary text-[12px] font-semibold mt-1">
                             See all {bucket.items.length}
                           </span>
                         </button>
@@ -627,8 +627,8 @@ export function ArtistDetail() {
           )}
 
           <div className="px-5 mt-9">
-            <h2 className="text-white text-xl font-bold tracking-tight mb-3">About</h2>
-            <p className="text-white/60 text-sm leading-relaxed whitespace-pre-line">
+            <h2 className="text-fan-primary text-xl font-bold tracking-tight mb-3">About</h2>
+            <p className="text-fan-secondary text-sm leading-relaxed whitespace-pre-line">
               {artistPerson?.bio?.trim() ||
                 artistAlbums[0]?.description ||
                 `Music by ${artistName} on GoodTunes®.`}
@@ -640,7 +640,7 @@ export function ArtistDetail() {
               display name, same as everywhere else in the app). */}
           {isGroupArtist && currentMembers.length > 0 && (
             <div className="px-5 mt-9" data-testid="section-band-members">
-              <h2 className="text-white text-xl font-bold tracking-tight mb-3">
+              <h2 className="text-fan-primary text-xl font-bold tracking-tight mb-3">
                 Members
               </h2>
               <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-2">
@@ -662,11 +662,11 @@ export function ArtistDetail() {
                         />
                       ) : null}
                     </div>
-                    <p className="text-white text-[12px] font-semibold mt-2 leading-tight line-clamp-2">
+                    <p className="text-fan-primary text-[12px] font-semibold mt-2 leading-tight line-clamp-2">
                       {m.memberName}
                     </p>
                     {m.roles && m.roles.length > 0 && (
-                      <p className="text-white/55 text-[10.5px] leading-tight mt-0.5 line-clamp-2">
+                      <p className="text-fan-secondary text-[10.5px] leading-tight mt-0.5 line-clamp-2">
                         {m.roles.join(", ")}
                       </p>
                     )}
@@ -674,9 +674,9 @@ export function ArtistDetail() {
                 ))}
               </div>
               {formerMembers.length > 0 && (
-                <details className="mt-3 text-white/55 text-[12px]">
+                <details className="mt-3 text-fan-secondary text-[12px]">
                   <summary
-                    className="cursor-pointer text-white/65 font-semibold"
+                    className="cursor-pointer text-fan-secondary font-semibold"
                     data-testid="toggle-former-members"
                   >
                     Former members
@@ -689,12 +689,12 @@ export function ArtistDetail() {
                           onClick={() => navigate(`/artist/${encodeURIComponent(m.memberName)}`)}
                           className="text-left active:opacity-70"
                         >
-                          <span className="text-white/85">{m.memberName}</span>
+                          <span className="text-fan-primary">{m.memberName}</span>
                           {m.roles && m.roles.length > 0 && (
-                            <span className="text-white/45"> — {m.roles.join(", ")}</span>
+                            <span className="text-fan-secondary"> — {m.roles.join(", ")}</span>
                           )}
                           {(m.joinedYear || m.leftYear) && (
-                            <span className="text-white/40">
+                            <span className="text-fan-faint">
                               {" "}({m.joinedYear ?? "?"}–{m.leftYear ?? ""})
                             </span>
                           )}
@@ -714,7 +714,7 @@ export function ArtistDetail() {
               returned). Tapping a band routes to its ArtistDetail page. */}
           {memberOfBands.length > 0 && (
             <div className="px-5 mt-9" data-testid="section-member-of-bands">
-              <h2 className="text-white text-xl font-bold tracking-tight mb-3">
+              <h2 className="text-fan-primary text-xl font-bold tracking-tight mb-3">
                 Member of
               </h2>
               {currentBands.length > 0 && (
@@ -737,11 +737,11 @@ export function ArtistDetail() {
                         />
                       ) : null}
                     </div>
-                    <p className="text-white text-xs font-semibold mt-2 leading-tight line-clamp-2">
+                    <p className="text-fan-primary text-xs font-semibold mt-2 leading-tight line-clamp-2">
                       {b.memberName}
                     </p>
                     {b.roles && b.roles.length > 0 && (
-                      <p className="text-white/55 text-xs leading-tight mt-0.5 line-clamp-2">
+                      <p className="text-fan-secondary text-xs leading-tight mt-0.5 line-clamp-2">
                         {b.roles.join(", ")}
                       </p>
                     )}
@@ -750,9 +750,9 @@ export function ArtistDetail() {
               </div>
               )}
               {formerBands.length > 0 && (
-                <details className="mt-3 text-white/55 text-xs">
+                <details className="mt-3 text-fan-secondary text-xs">
                   <summary
-                    className="cursor-pointer text-white/65 font-semibold"
+                    className="cursor-pointer text-fan-secondary font-semibold"
                     data-testid="toggle-formerly-with"
                   >
                     Formerly with
@@ -765,12 +765,12 @@ export function ArtistDetail() {
                           onClick={() => navigate(`/artist/${encodeURIComponent(b.memberName)}`)}
                           className="text-left active:opacity-70"
                         >
-                          <span className="text-white/85">{b.memberName}</span>
+                          <span className="text-fan-primary">{b.memberName}</span>
                           {b.roles && b.roles.length > 0 && (
-                            <span className="text-white/45"> — {b.roles.join(", ")}</span>
+                            <span className="text-fan-secondary"> — {b.roles.join(", ")}</span>
                           )}
                           {(b.joinedYear || b.leftYear) && (
-                            <span className="text-white/40">
+                            <span className="text-fan-faint">
                               {" "}({b.joinedYear ?? "?"}–{b.leftYear ?? ""})
                             </span>
                           )}
@@ -875,14 +875,14 @@ function BucketGridSheet({
         </IconButton>
         <h2
           id={headingId}
-          className="text-white text-[17px] font-semibold tracking-tight flex-1 text-center pr-10"
+          className="text-fan-primary text-[17px] font-semibold tracking-tight flex-1 text-center pr-10"
         >
           {label}
         </h2>
       </div>
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-[440px] mx-auto w-full px-5 pb-10">
-          <p className="text-white/45 text-[12px] mb-4">
+          <p className="text-fan-secondary text-[12px] mb-4">
             {artistName} · {items.length} {items.length === 1 ? "release" : "releases"}
           </p>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -906,10 +906,10 @@ function BucketGridSheet({
                     />
                   )}
                 </div>
-                <p className="text-white text-sm font-semibold leading-tight truncate mt-2">
+                <p className="text-fan-primary text-sm font-semibold leading-tight truncate mt-2">
                   {release.name}
                 </p>
-                <p className="text-white/50 text-xs truncate mt-0.5">
+                <p className="text-fan-secondary text-xs truncate mt-0.5">
                   {[release.year, label === "Singles" ? "Single" : release.type === "album" ? "LP" : release.type]
                     .filter(Boolean)
                     .join(" · ")}

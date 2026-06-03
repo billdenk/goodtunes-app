@@ -47,7 +47,7 @@ export function AlbumDesktopSidebar({
   };
   return (
     <aside
-      className="flex flex-col flex-shrink-0 h-full text-white"
+      className="flex flex-col flex-shrink-0 h-full text-fan-primary"
       style={{ width: 220, background: BRAND_BG }}
       data-testid="desktop-sidebar"
     >
@@ -89,17 +89,17 @@ export function AlbumDesktopSidebar({
               {user?.avatarUrl ? (
                 <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-white/70 text-[13px] font-semibold">
+                <div className="w-full h-full flex items-center justify-center text-fan-secondary text-[13px] font-semibold">
                   {(user?.displayName || user?.email || "?").slice(0, 1).toUpperCase()}
                 </div>
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-white text-[13px] font-semibold truncate">
+              <div className="text-fan-primary text-[13px] font-semibold truncate">
                 {user?.displayName || "Guest"}
               </div>
               {user?.email && (
-                <div className="text-white/45 text-[11.5px] truncate">{user.email}</div>
+                <div className="text-fan-secondary text-[11.5px] truncate">{user.email}</div>
               )}
             </div>
           </button>
@@ -107,7 +107,7 @@ export function AlbumDesktopSidebar({
             type="button"
             aria-label="Sign out"
             data-testid="button-signout"
-            className="w-11 h-11 -mr-2 flex items-center justify-center rounded-full text-white/60 hover:text-white hover:bg-white/8 transition-colors flex-shrink-0"
+            className="w-11 h-11 -mr-2 flex items-center justify-center rounded-full text-fan-secondary hover:text-white hover:bg-white/8 transition-colors flex-shrink-0"
             onClick={handleSignOut}
           >
             <LogOut className="w-[18px] h-[18px]" strokeWidth={1.9} />

@@ -110,7 +110,7 @@ export function AlbumDesktopTrackRow({
         <span
           className={[
             "text-[13px] tabular-nums transition-opacity",
-            state === "locked" ? "text-white/30" : "text-white/[0.32]",
+            state === "locked" ? "text-fan-faint" : "text-fan-primary/[0.32]",
             showPlayGlyph || isCurrent ? "opacity-0" : "opacity-100",
           ].join(" ")}
         >
@@ -155,7 +155,7 @@ export function AlbumDesktopTrackRow({
         <span
           className={[
             "truncate text-[14px]",
-            state === "locked" ? "text-white/45 font-medium" : "text-white",
+            state === "locked" ? "text-fan-secondary font-medium" : "text-fan-primary",
             state === "preview" ? "font-semibold" : state === "full" ? "font-medium" : "",
             isCurrent ? "font-semibold" : "",
           ].join(" ")}
@@ -167,7 +167,7 @@ export function AlbumDesktopTrackRow({
         {isExplicit && <ExplicitBadge tone="slate" />}
         {state === "locked" && (
           <Lock
-            className="w-3 h-3 text-white/35 flex-shrink-0"
+            className="w-3 h-3 text-fan-faint flex-shrink-0"
             strokeWidth={2.2}
             aria-hidden
           />
@@ -177,7 +177,7 @@ export function AlbumDesktopTrackRow({
       {/* "Preview · 30s" hint — preview rows only, fades in on hover. */}
       {state === "preview" && !isCurrent && (
         <div
-          className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-white/55 transition-opacity"
+          className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-fan-secondary transition-opacity"
           style={{ opacity: hover ? 1 : 0 }}
           aria-hidden
         >
@@ -195,7 +195,7 @@ export function AlbumDesktopTrackRow({
             e.stopPropagation();
             onAdd?.();
           }}
-          className="w-7 h-7 -mr-1 inline-flex items-center justify-center rounded-full text-white/70 hover:text-white hover:bg-white/10 transition-opacity"
+          className="w-7 h-7 -mr-1 inline-flex items-center justify-center rounded-full text-fan-secondary hover:text-white hover:bg-white/10 transition-opacity"
           style={{ opacity: hover && !isCurrent ? 1 : 0, pointerEvents: hover && !isCurrent ? "auto" : "none" }}
         >
           <Plus className="w-[15px] h-[15px]" strokeWidth={2.2} />
@@ -205,7 +205,7 @@ export function AlbumDesktopTrackRow({
       {/* Runtime — hidden on locked rows (Apple's pre-release pattern). */}
       <div className="w-12 text-right">
         {state !== "locked" && (
-          <span className="text-white/55 text-[13px] tabular-nums">{duration}</span>
+          <span className="text-fan-secondary text-[13px] tabular-nums">{duration}</span>
         )}
       </div>
 
@@ -219,7 +219,7 @@ export function AlbumDesktopTrackRow({
             e.stopPropagation();
             onMore?.();
           }}
-          className="w-11 h-11 -mr-2 inline-flex items-center justify-center rounded-full text-white/60 hover:text-white hover:bg-white/8 transition-colors active:scale-[0.94]"
+          className="w-11 h-11 -mr-2 inline-flex items-center justify-center rounded-full text-fan-secondary hover:text-white hover:bg-white/8 transition-colors active:scale-[0.94]"
         >
           <MoreHorizontal className="w-[18px] h-[18px]" strokeWidth={2} />
         </button>

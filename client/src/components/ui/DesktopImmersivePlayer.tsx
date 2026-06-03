@@ -86,7 +86,7 @@ export function DesktopImmersivePlayer({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-[70] text-white overflow-hidden"
+      className="fixed inset-0 z-[70] text-fan-primary overflow-hidden"
       style={{ background: BRAND_BG }}
       role="dialog"
       aria-modal="true"
@@ -176,7 +176,7 @@ export function DesktopImmersivePlayer({ onClose }: { onClose: () => void }) {
                 {currentSong.title}
               </div>
               <div
-                className="text-white/60 truncate mt-1"
+                className="text-fan-secondary truncate mt-1"
                 style={{ fontSize: 17 }}
                 data-testid="text-immersive-artist"
               >
@@ -211,10 +211,10 @@ export function DesktopImmersivePlayer({ onClose }: { onClose: () => void }) {
                 />
               </div>
               <div className="flex justify-between mt-2">
-                <span className="text-white/55 tabular-nums" style={{ fontSize: 12 }}>
+                <span className="text-fan-secondary tabular-nums" style={{ fontSize: 12 }}>
                   {formatDuration(currentTime)}
                 </span>
-                <span className="text-white/55 tabular-nums" style={{ fontSize: 12 }}>
+                <span className="text-fan-secondary tabular-nums" style={{ fontSize: 12 }}>
                   -{formatDuration(remaining)}
                 </span>
               </div>

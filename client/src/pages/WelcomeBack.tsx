@@ -134,10 +134,10 @@ export function WelcomeBack() {
 
   if (error) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-[var(--brand-bg)] text-white px-6" data-testid="welcomeback-error">
+      <main className="min-h-screen flex items-center justify-center bg-[var(--brand-bg)] text-fan-primary px-6" data-testid="welcomeback-error">
         <div className="text-center">
           <div className="text-lg font-semibold mb-2">Something went sideways</div>
-          <div className="text-white/55 text-sm mb-4">{error}</div>
+          <div className="text-fan-secondary text-sm mb-4">{error}</div>
           <button onClick={() => navigate("/account")} className="px-4 py-2 rounded-xl bg-white/10 text-sm" data-testid="button-welcomeback-back">Back to your account</button>
         </div>
       </main>
@@ -145,17 +145,17 @@ export function WelcomeBack() {
   }
   if (!state) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-[var(--brand-bg)] text-white px-6">
+      <main className="min-h-screen flex items-center justify-center bg-[var(--brand-bg)] text-fan-primary px-6">
         <div className="text-center" data-testid="welcomeback-loading">
           <div className="w-12 h-12 rounded-full border-2 border-white/20 border-t-[var(--brand-blue)] animate-spin mx-auto mb-4" />
-          <div className="text-white/70 text-sm">Loading your library…</div>
+          <div className="text-fan-secondary text-sm">Loading your library…</div>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen flex justify-center bg-[var(--brand-bg)] text-white px-6 py-12" data-testid="page-welcome-back">
+    <main className="min-h-screen flex justify-center bg-[var(--brand-bg)] text-fan-primary px-6 py-12" data-testid="page-welcome-back">
       <div className="w-full max-w-[440px]">
         {/* Step dots */}
         <div className="flex items-center justify-center gap-2 mb-8">
@@ -172,13 +172,13 @@ export function WelcomeBack() {
           <section data-testid="welcomeback-step-handle">
             <p className="text-[var(--brand-mint)] text-xs uppercase tracking-widest font-semibold mb-2">Welcome back</p>
             <h1 className="text-3xl font-bold leading-tight mb-2">Pick your @handle.</h1>
-            <p className="text-white/55 text-sm mb-6 leading-relaxed">
+            <p className="text-fan-secondary text-sm mb-6 leading-relaxed">
               Your old gogoods.com account moved over. Pick the handle other GoodTunes fans will see when you share a playlist.
             </p>
             <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5 mb-5">
-              <label className="block text-white/40 text-xs uppercase tracking-wider font-semibold mb-1.5">Handle</label>
+              <label className="block text-fan-faint text-xs uppercase tracking-wider font-semibold mb-1.5">Handle</label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none">@</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-fan-faint text-sm pointer-events-none">@</span>
                 <input
                   type="text"
                   value={handle}
@@ -193,7 +193,7 @@ export function WelcomeBack() {
                   handleStatus === "ok" ? "text-[var(--brand-mint)]" :
                   handleStatus === "taken" ? "text-[var(--brand-pink)]" :
                   handleStatus === "format" ? "text-[var(--brand-pink)]" :
-                  "text-white/35"
+                  "text-fan-faint"
                 }`}
                 data-testid="text-welcomeback-handle-status"
               >
@@ -220,11 +220,11 @@ export function WelcomeBack() {
           <section data-testid="welcomeback-step-name">
             <p className="text-[var(--brand-mint)] text-xs uppercase tracking-widest font-semibold mb-2">Step 2 of 3</p>
             <h1 className="text-3xl font-bold leading-tight mb-2">How should we say hi?</h1>
-            <p className="text-white/55 text-sm mb-6 leading-relaxed">
+            <p className="text-fan-secondary text-sm mb-6 leading-relaxed">
               Display name shows up on your profile and playlists. Real name stays private — only labels and pressing partners see it on orders.
             </p>
             <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5 mb-3">
-              <label className="block text-white/40 text-xs uppercase tracking-wider font-semibold mb-1.5">Display name</label>
+              <label className="block text-fan-faint text-xs uppercase tracking-wider font-semibold mb-1.5">Display name</label>
               <input
                 type="text"
                 value={displayName}
@@ -235,7 +235,7 @@ export function WelcomeBack() {
               />
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5 mb-5">
-              <label className="block text-white/40 text-xs uppercase tracking-wider font-semibold mb-1.5">Real name (private)</label>
+              <label className="block text-fan-faint text-xs uppercase tracking-wider font-semibold mb-1.5">Real name (private)</label>
               <input
                 type="text"
                 value={realName}
@@ -244,12 +244,12 @@ export function WelcomeBack() {
                 className="w-full border border-white/10 rounded-2xl px-4 py-3 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[var(--brand-blue)] bg-white/[0.06]"
                 data-testid="input-welcomeback-real"
               />
-              <p className="text-white/35 text-xs mt-2 ml-1">Optional — leave blank to keep this off your orders.</p>
+              <p className="text-fan-faint text-xs mt-2 ml-1">Optional — leave blank to keep this off your orders.</p>
             </div>
             <div className="flex gap-3">
               <button
                 onClick={() => setStep(1)}
-                className="px-5 py-4 rounded-2xl text-white/70 text-sm border border-white/10 active:bg-white/[0.06]"
+                className="px-5 py-4 rounded-2xl text-fan-secondary text-sm border border-white/10 active:bg-white/[0.06]"
                 data-testid="button-welcomeback-back-2"
               >
                 Back
@@ -271,17 +271,17 @@ export function WelcomeBack() {
           <section data-testid="welcomeback-step-reveal">
             <p className="text-[var(--brand-mint)] text-xs uppercase tracking-widest font-semibold mb-2">Last step</p>
             <h1 className="text-3xl font-bold leading-tight mb-2">Your library moved with you.</h1>
-            <p className="text-white/55 text-sm mb-6 leading-relaxed">
+            <p className="text-fan-secondary text-sm mb-6 leading-relaxed">
               Every album you bought on gogoods.com is already in your account — ready to stream and to download.
             </p>
             <div className="grid grid-cols-2 gap-3 mb-6">
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5 text-center" data-testid="welcomeback-stat-albums">
                 <div className="text-[var(--brand-mint)] text-5xl font-bold leading-none">{state.libraryStats?.albums ?? 0}</div>
-                <div className="text-white/55 text-xs mt-2 uppercase tracking-wider font-semibold">Albums</div>
+                <div className="text-fan-secondary text-xs mt-2 uppercase tracking-wider font-semibold">Albums</div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5 text-center" data-testid="welcomeback-stat-orders">
                 <div className="text-[var(--brand-blue)] text-5xl font-bold leading-none">{state.libraryStats?.orders ?? 0}</div>
-                <div className="text-white/55 text-xs mt-2 uppercase tracking-wider font-semibold">Orders</div>
+                <div className="text-fan-secondary text-xs mt-2 uppercase tracking-wider font-semibold">Orders</div>
               </div>
             </div>
 
@@ -291,7 +291,7 @@ export function WelcomeBack() {
                 on GoodTunes" bullets instead of an empty grid. */}
             {state.recentItems.length > 0 ? (
               <div className="mb-6" data-testid="welcomeback-reveal-list">
-                <p className="text-white/40 text-xs uppercase tracking-wider font-semibold mb-3">
+                <p className="text-fan-faint text-xs uppercase tracking-wider font-semibold mb-3">
                   Already in your library
                 </p>
                 <ul className="space-y-2.5">
@@ -308,13 +308,13 @@ export function WelcomeBack() {
                         loading="lazy"
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold text-white truncate" data-testid={`welcomeback-record-title-${it.albumId}`}>
+                        <div className="text-sm font-semibold text-fan-primary truncate" data-testid={`welcomeback-record-title-${it.albumId}`}>
                           {it.title}
                         </div>
-                        <div className="text-xs text-white/55 truncate">{it.artist}</div>
+                        <div className="text-xs text-fan-secondary truncate">{it.artist}</div>
                         {formatPurchased(it.acquiredAt) && (
                           <div
-                            className="text-xs text-white/40 mt-0.5"
+                            className="text-xs text-fan-faint mt-0.5"
                             data-testid={`welcomeback-record-date-${it.albumId}`}
                           >
                             Purchased {formatPurchased(it.acquiredAt)}
@@ -335,7 +335,7 @@ export function WelcomeBack() {
               </div>
             ) : (
               <div className="mb-6" data-testid="welcomeback-whats-new">
-                <p className="text-white/40 text-xs uppercase tracking-wider font-semibold mb-3">
+                <p className="text-fan-faint text-xs uppercase tracking-wider font-semibold mb-3">
                   While you were away
                 </p>
                 <ul className="space-y-2.5">
@@ -345,14 +345,14 @@ export function WelcomeBack() {
                       className="rounded-2xl border border-white/10 bg-white/[0.05] p-4"
                       data-testid={`welcomeback-whatsnew-${b.title.replace(/\W+/g, "-").toLowerCase()}`}
                     >
-                      <div className="text-sm font-semibold text-white">{b.title}</div>
-                      <div className="text-xs text-white/55 mt-1 leading-relaxed">{b.body}</div>
+                      <div className="text-sm font-semibold text-fan-primary">{b.title}</div>
+                      <div className="text-xs text-fan-secondary mt-1 leading-relaxed">{b.body}</div>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
-            <p className="text-white/45 text-xs leading-relaxed mb-4" data-testid="welcomeback-reassurance">
+            <p className="text-fan-secondary text-xs leading-relaxed mb-4" data-testid="welcomeback-reassurance">
               Is something missing or not quite right? You can fix it or reach
               out anytime from{" "}
               <button
@@ -368,7 +368,7 @@ export function WelcomeBack() {
             <div className="flex gap-3">
               <button
                 onClick={() => setStep(2)}
-                className="px-5 py-4 rounded-2xl text-white/70 text-sm border border-white/10 active:bg-white/[0.06]"
+                className="px-5 py-4 rounded-2xl text-fan-secondary text-sm border border-white/10 active:bg-white/[0.06]"
                 data-testid="button-welcomeback-back-3"
                 disabled={saving}
               >

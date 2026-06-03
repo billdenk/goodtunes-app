@@ -392,10 +392,10 @@ export function PlayerDock({
             className="h-10 pl-3 pr-3 rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 inline-flex items-center gap-2 hover:bg-slate-800/95 transition-colors"
           >
             <Music2 className="w-[18px] h-[18px] text-[#319ED8]" />
-            <span className="text-[12.5px] font-semibold tracking-[0.01em] text-slate-100">
+            <span className="text-[12.5px] font-semibold tracking-[0.01em] text-fan-primary">
               Player
             </span>
-            <ChevronUp className="w-4 h-4 text-slate-400 -mr-0.5" />
+            <ChevronUp className="w-4 h-4 text-fan-secondary -mr-0.5" />
           </button>
         </div>
       );
@@ -422,7 +422,7 @@ export function PlayerDock({
               "w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors",
               playable
                 ? "text-white hover:bg-white/10"
-                : "text-slate-500 cursor-not-allowed",
+                : "text-fan-faint cursor-not-allowed",
             ].join(" ")}
           >
             {playing ? (
@@ -437,7 +437,7 @@ export function PlayerDock({
             title="Show player"
             onClick={() => setDockHidden(false)}
             data-testid="button-show-player"
-            className="w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
+            className="w-9 h-9 rounded-full inline-flex items-center justify-center text-fan-primary hover:text-white hover:bg-white/10"
           >
             <ChevronUp className="w-5 h-5" />
           </button>
@@ -488,7 +488,7 @@ export function PlayerDock({
           // stays near-opaque. Single backdrop-filter surface only —
           // never stack a second blur layer here (WebKit hazard).
           isCompactDensity ? "bg-slate-900/70" : "bg-slate-900/95",
-          "relative backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 overflow-hidden rounded-full",
+          "relative backdrop-blur-md text-fan-primary shadow-2xl ring-1 ring-white/10 overflow-hidden rounded-full",
         ].join(" ")}
       >
         <div className={`flex items-center gap-1.5 px-3 ${D.pillPy}`}>
@@ -504,10 +504,10 @@ export function PlayerDock({
               className={[
                 `${D.transportBtn} rounded-full inline-flex items-center justify-center transition-colors`,
                 !hasSelection
-                  ? "text-slate-500 cursor-default"
+                  ? "text-fan-faint cursor-default"
                   : shuffleOn
                   ? "text-[#319ED8] bg-[#319ED8]/15 hover:bg-[#319ED8]/20"
-                  : "text-slate-300 hover:text-white hover:bg-white/10",
+                  : "text-fan-primary hover:text-white hover:bg-white/10",
               ].join(" ")}
             >
               <Shuffle className={D.smallIcon} />
@@ -520,8 +520,8 @@ export function PlayerDock({
               className={[
                 `${D.transportBtn} rounded-full inline-flex items-center justify-center transition-colors`,
                 hasSelection
-                  ? "text-slate-300 hover:text-white hover:bg-white/10"
-                  : "text-slate-500 cursor-default",
+                  ? "text-fan-primary hover:text-white hover:bg-white/10"
+                  : "text-fan-faint cursor-default",
               ].join(" ")}
             >
               <SkipBack className={`${D.prevNextIcon} fill-current`} />
@@ -536,7 +536,7 @@ export function PlayerDock({
                 `${D.playBtn} rounded-full inline-flex items-center justify-center transition-colors`,
                 playable
                   ? "text-white hover:bg-white/10"
-                  : "text-slate-500 cursor-not-allowed",
+                  : "text-fan-faint cursor-not-allowed",
               ].join(" ")}
             >
               {playing ? (
@@ -556,8 +556,8 @@ export function PlayerDock({
               className={[
                 `${D.transportBtn} rounded-full inline-flex items-center justify-center transition-colors`,
                 hasSelection
-                  ? "text-slate-300 hover:text-white hover:bg-white/10"
-                  : "text-slate-500 cursor-default",
+                  ? "text-fan-primary hover:text-white hover:bg-white/10"
+                  : "text-fan-faint cursor-default",
               ].join(" ")}
             >
               <SkipForward className={`${D.prevNextIcon} fill-current`} />
@@ -583,9 +583,9 @@ export function PlayerDock({
               className={[
                 `${D.transportBtn} rounded-full inline-flex items-center justify-center transition-colors`,
                 !hasSelection
-                  ? "text-slate-500 cursor-default"
+                  ? "text-fan-faint cursor-default"
                   : repeatMode === "off"
-                  ? "text-slate-300 hover:text-white hover:bg-white/10"
+                  ? "text-fan-primary hover:text-white hover:bg-white/10"
                   : "text-[#319ED8] bg-[#319ED8]/15 hover:bg-[#319ED8]/20",
               ].join(" ")}
             >
@@ -628,7 +628,7 @@ export function PlayerDock({
                 {track.subtitle && (
                   <div
                     className={`${D.subtitleSize} ${
-                      isCompactDensity ? "text-white/55" : "text-slate-400"
+                      isCompactDensity ? "text-fan-secondary" : "text-fan-secondary"
                     } truncate leading-tight mt-0.5 flex items-center gap-1.5`}
                     data-testid="text-track-subtitle"
                   >
@@ -690,8 +690,8 @@ export function PlayerDock({
               className={[
                 `${D.utilityBtn} rounded-full inline-flex items-center justify-center transition-colors`,
                 onLyrics && hasSelection
-                  ? "text-slate-300 hover:text-white hover:bg-white/10"
-                  : "text-slate-500 cursor-default",
+                  ? "text-fan-primary hover:text-white hover:bg-white/10"
+                  : "text-fan-faint cursor-default",
               ].join(" ")}
             >
               <LyricsIcon size={D.utilityIcon} />
@@ -734,8 +734,8 @@ export function PlayerDock({
                   className={[
                     `${D.utilityBtn} rounded-full inline-flex items-center justify-center transition-colors`,
                     hasSelection
-                      ? "text-slate-300 hover:text-white hover:bg-white/10"
-                      : "text-slate-500",
+                      ? "text-fan-primary hover:text-white hover:bg-white/10"
+                      : "text-fan-faint",
                   ].join(" ")}
                 >
                   <VolumeGlyph className={isCompactDensity ? "w-[18px] h-[18px]" : "w-5 h-5"} />
@@ -757,7 +757,7 @@ export function PlayerDock({
                 title="Minimize player"
                 onClick={() => setDockHidden(true)}
                 data-testid="button-minimize-player"
-                className={`${D.utilityBtn} rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10`}
+                className={`${D.utilityBtn} rounded-full inline-flex items-center justify-center text-fan-primary hover:text-white hover:bg-white/10`}
               >
                 <ChevronDown className="w-5 h-5" />
               </button>
@@ -803,13 +803,13 @@ export function PlayerDock({
               ].join(" ")}
             >
               <span
-                className={`${D.titleSize} tabular-nums text-slate-300 whitespace-nowrap`}
+                className={`${D.titleSize} tabular-nums text-fan-faint whitespace-nowrap`}
                 data-testid="text-elapsed"
               >
                 {fmt(elapsedSeconds)}
               </span>
               <span
-                className={`${D.titleSize} tabular-nums text-slate-300 whitespace-nowrap`}
+                className={`${D.titleSize} tabular-nums text-fan-faint whitespace-nowrap`}
                 data-testid="text-remaining"
               >
                 −{fmt(remainingSeconds)}
