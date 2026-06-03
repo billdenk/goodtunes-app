@@ -4066,6 +4066,96 @@ function SkuRow({
       ? signedDollars(chosenQtyArtistNetCents)
       : "—";
 
+  // Task #1091 — the full min–max spread (every confirmed ladder rung
+  // PLUS every operator-scoped comparison quote) is no longer the
+  // PRIMARY Artist Net readout (Task #1087 made that the selected run's
+  // single figure). It survives as a clearly-labeled SECONDARY subtitle
+  // so the operator can still see "where this run sits across the whole
+  // ladder" without mistaking the ~77× spread for the run he picked.
+  // Net-per-quote math is byte-identical to perRungArtistNet (same
+  // cost stack + signed-cert fold-in), so a quote sitting on the chosen
+  // qty/tier matches the primary figure exactly.
+  const quoteRowNetCents = (row: QuoteRow): number | null => {
+    if (priceCents === null || !breakdown) return null;
+    const r = resolveQuoteRow(row);
+    if (r.needsCatalog || !r.tier) return null;
+    const costPerUnit =
+      r.mfgCents +
+      breakdown.publishingCents +
+      breakdown.paymentProcessingCents +
+      breakdown.goodtunesCents;
+    const profitPerUnit = priceCents - costPerUnit;
+    let net = profitPerUnit * r.snappedQty;
+    if (signedAddon?.active && attachRatio > 0) {
+      const certCount = Math.max(0, Math.floor(r.snappedQty * attachRatio));
+      const certNet = certNetForCertCount(certCount);
+      if (certNet !== null && certCount > 0) net += certNet * certCount;
+    }
+    return net;
+  };
+  // Aggregate per-rung nets + every comparison quote's net, plus the
+  // quantity span the rungs cover, so the subtitle can read either
+  // "if 100–500 units" (pure ladder span, no quotes) or "across all
+  // tiers & quotes" (when scratchpad comparisons widen the set).
+  const artistNetSpread = useMemo<{
+    low: number;
+    high: number;
+    minQty: number;
+    maxQty: number;
+    hasQuotes: boolean;
+  } | null>(() => {
+    const nets: number[] = [];
+    const qtys: number[] = [];
+    for (const r of perRungArtistNet) {
+      nets.push(r.netCents);
+      qtys.push(r.qty);
+    }
+    let hasQuotes = false;
+    for (const row of quoteRows) {
+      const n = quoteRowNetCents(row);
+      if (n !== null) {
+        nets.push(n);
+        hasQuotes = true;
+      }
+    }
+    if (nets.length === 0) return null;
+    return {
+      low: Math.min(...nets),
+      high: Math.max(...nets),
+      minQty: qtys.length ? Math.min(...qtys) : 0,
+      maxQty: qtys.length ? Math.max(...qtys) : 0,
+      hasQuotes,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    perRungArtistNet,
+    quoteRows,
+    priceCents,
+    breakdown,
+    catalogByPressId,
+    attachRatio,
+    certCostByQty,
+    signedAddon,
+    livePlatformCostCents,
+  ]);
+  // Only surface the subtitle when there's a REAL spread (≥2 distinct
+  // nets). A single tier/quote collapses to just the primary figure so
+  // we never show a misleading "$X – $X" range. The qty-span phrasing
+  // only applies when the spread is purely from the ladder; once a
+  // comparison quote is mixed in (possibly a different press) the qtys
+  // no longer cleanly bracket the range, so we label it generically.
+  const artistNetRangeLabel = useMemo<string | null>(() => {
+    if (!artistNetSpread) return null;
+    const { low, high, minQty, maxQty, hasQuotes } = artistNetSpread;
+    if (low === high) return null;
+    const span = `${signedDollars(low)} – ${signedDollars(high)}`;
+    if (!hasQuotes && minQty > 0 && maxQty > minQty) {
+      return `${span} if ${minQty.toLocaleString()}–${maxQty.toLocaleString()} units`;
+    }
+    return `${span} across all tiers & quotes`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artistNetSpread]);
+
   // Color distance for "Match across presses". Skips entries with no
   // swatchHex (catalogs only carry hex today; image-only swatches
   // can't be compared without sampling).
@@ -4729,8 +4819,23 @@ function SkuRow({
                 </Popover>
               )}
               <div className="text-xs text-slate-700 tabular-nums">
-                <span className="text-slate-500 mr-1">Artist Net</span>
-                <span className="font-semibold">{artistNetLabel}</span>
+                <div>
+                  <span className="text-slate-500 mr-1">Artist Net</span>
+                  <span className="font-semibold">{artistNetLabel}</span>
+                </div>
+                {/* Task #1091 — secondary, clearly-labeled spread. Demoted
+                    well below the primary selected-run figure (lighter
+                    slate-400, no bold) and only shown when there's a real
+                    range, so the ladder-wide span can never be misread as
+                    the chosen run's net. */}
+                {artistNetRangeLabel && (
+                  <div
+                    className="text-slate-400 leading-tight"
+                    data-testid={`text-artist-net-range-${format}`}
+                  >
+                    {artistNetRangeLabel}
+                  </div>
+                )}
               </div>
               {/* Task #859 — the deductions popover is the per-copy vendor
                   cost stack (manufacturing/publishing/processing/GoodTunes
