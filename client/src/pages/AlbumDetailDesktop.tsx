@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { AlbumCreditsModal, type AlbumCreditsRow } from "@/components/ui/AlbumCreditsSheet";
 import { StreamServicePickerSheet } from "@/components/StreamServicePickerSheet";
+import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import {
   getFavoriteStreamingService,
   setFavoriteStreamingService,
@@ -213,6 +214,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const effectiveOwned = isOwned || fullPlaybackAccess;
   const favSongs = useFavoriteSongs();
   const [showAlbumCredits, setShowAlbumCredits] = useState(false);
+  const [playlistPickerSong, setPlaylistPickerSong] = useState<{ id: string; title: string } | null>(null);
 
   // Person opened from the album-credits sheet. The desktop view has no
   // SuperCredits sheet stack of its own, so PersonDetailSheet brings its own
@@ -335,8 +337,19 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
     }
     player.playSong(playable, playableSongs);
   };
-  const handleAddTrack = () => {
-    toast({ title: "Added to playlist (coming next)" });
+  const handleAddTrack = (song: DesktopAlbumSong) => {
+    setPlaylistPickerSong({ id: song.id, title: song.title });
+  };
+  const handlePlayNextTrack = (song: DesktopAlbumSong) => {
+    const playable = playableSongs.find((p) => p.id === song.id);
+    if (playable) player.playNext(playable);
+  };
+  const handlePlayLastTrack = (song: DesktopAlbumSong) => {
+    const playable = playableSongs.find((p) => p.id === song.id);
+    if (playable) player.playLast(playable);
+  };
+  const handleToggleFavoriteTrack = (song: DesktopAlbumSong) => {
+    player.toggleFavorite(song.id);
   };
   const handleBuyBundle = (opts?: { signedCert?: boolean }) => {
     setBuyAddons({ signedCert: !!opts?.signedCert });
@@ -575,8 +588,10 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             onPlayPreview={handlePlayPreview}
             previewActive={previewActive}
             onPlayTrack={handlePlayTrack}
-            onMoreTrack={() => toast({ title: "Track menu coming next" })}
             onAddTrack={handleAddTrack}
+            onPlayNextTrack={handlePlayNextTrack}
+            onPlayLastTrack={handlePlayLastTrack}
+            onToggleFavoriteTrack={handleToggleFavoriteTrack}
             favoriteSongIds={favSongs.set}
             hasAlbumCredits={productionCredits.length > 0}
             onOpenAlbumCredits={() => setShowAlbumCredits(true)}
@@ -716,6 +731,16 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
       {import.meta.env.DEV && id && (
         <DevOwnershipToggle albumId={id} isOwned={isOwned} />
       )}
+
+      <AnimatePresence>
+        {playlistPickerSong && (
+          <PlaylistPickerSheet
+            songId={playlistPickerSong.id}
+            songTitle={playlistPickerSong.title}
+            onClose={() => setPlaylistPickerSong(null)}
+          />
+        )}
+      </AnimatePresence>
 
       {showBuySheet && album && (
         <BuySheet

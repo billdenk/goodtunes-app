@@ -114,8 +114,10 @@ export type DesktopAlbumViewProps = {
   // Per-row CTAs. `state` is computed inside; the row handlers receive the
   // raw song so callers can dispatch into PlayerContext / toast / etc.
   onPlayTrack?: (song: DesktopAlbumSong) => void;
-  onMoreTrack?: (song: DesktopAlbumSong) => void;
   onAddTrack?: (song: DesktopAlbumSong) => void;
+  onPlayNextTrack?: (song: DesktopAlbumSong) => void;
+  onPlayLastTrack?: (song: DesktopAlbumSong) => void;
+  onToggleFavoriteTrack?: (song: DesktopAlbumSong) => void;
 
   /** Songs the current viewer has favorited. The track row renders a
    *  small neutral-white heart (quiet status marker) to the left of the
@@ -211,8 +213,10 @@ export function DesktopAlbumView({
   onPlayPreview,
   previewActive = false,
   onPlayTrack,
-  onMoreTrack,
   onAddTrack,
+  onPlayNextTrack,
+  onPlayLastTrack,
+  onToggleFavoriteTrack,
   favoriteSongIds,
   hasAlbumCredits = false,
   onOpenAlbumCredits,
@@ -571,15 +575,25 @@ export function DesktopAlbumView({
                         ? undefined
                         : () => onPlayTrack(s)
                     }
-                    onMore={
-                      state === "locked" || !onMoreTrack
-                        ? undefined
-                        : () => onMoreTrack(s)
-                    }
                     onAdd={
                       state === "locked" || !onAddTrack
                         ? undefined
                         : () => onAddTrack(s)
+                    }
+                    onPlayNext={
+                      state === "locked" || !onPlayNextTrack
+                        ? undefined
+                        : () => onPlayNextTrack(s)
+                    }
+                    onPlayLast={
+                      state === "locked" || !onPlayLastTrack
+                        ? undefined
+                        : () => onPlayLastTrack(s)
+                    }
+                    onToggleFavorite={
+                      state === "locked" || !onToggleFavoriteTrack
+                        ? undefined
+                        : () => onToggleFavoriteTrack(s)
                     }
                   />
                 );

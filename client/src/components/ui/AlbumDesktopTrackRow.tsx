@@ -1,6 +1,14 @@
 import { useState } from "react";
-import { MoreHorizontal, Play, Pause, Lock, Plus } from "lucide-react";
+import { MoreHorizontal, Play, Pause, Lock, Plus, ListStart, ListEnd, ListPlus, Heart } from "lucide-react";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
+import { IconButton } from "@/components/ui/IconButton";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 /* Rose accent — currently-playing row + hover play-affordance.
    Task #70 calls for "rose" play triangle / equalizer / paused glyph
@@ -22,10 +30,15 @@ export type AlbumDesktopTrackRowProps = {
   isFavorite?: boolean;
   state: "locked" | "preview" | "full";
   onPlay?: () => void;
-  onMore?: () => void;
   /** Optional "add to playlist" affordance — fades in on hover next to
-   *  the runtime. Omit to hide the `+` chip entirely. */
+   *  the runtime, and also drives the ⋯ menu's "Add to Playlist" item.
+   *  Omit to hide both the `+` chip and the menu item. */
   onAdd?: () => void;
+  /** ⋯ track-menu actions (Apple-Music context menu). Omit any to hide
+   *  that one item; the ⋯ trigger renders whenever the row isn't locked. */
+  onPlayNext?: () => void;
+  onPlayLast?: () => void;
+  onToggleFavorite?: () => void;
 };
 
 /**
@@ -49,8 +62,10 @@ export function AlbumDesktopTrackRow({
   isFavorite = false,
   state,
   onPlay,
-  onMore,
   onAdd,
+  onPlayNext,
+  onPlayLast,
+  onToggleFavorite,
 }: AlbumDesktopTrackRowProps) {
   const [hover, setHover] = useState(false);
   const interactive = state !== "locked";
@@ -209,20 +224,76 @@ export function AlbumDesktopTrackRow({
         )}
       </div>
 
-      {/* ⋯ menu — hidden on locked rows. */}
+      {/* ⋯ menu — hidden on locked rows. Apple-Music track context menu:
+          Play Next / Play Last / Add to Playlist / Favorite. */}
       {state !== "locked" && (
-        <button
-          type="button"
-          aria-label={`More options for ${title}`}
-          data-testid={`button-track-more-${trackNumber}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onMore?.();
-          }}
-          className="w-11 h-11 -mr-2 inline-flex items-center justify-center rounded-full text-fan-secondary hover:text-white hover:bg-white/8 transition-colors active:scale-[0.94]"
-        >
-          <MoreHorizontal className="w-[18px] h-[18px]" strokeWidth={2} />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton
+              variant="ghost"
+              size="md"
+              label={`More options for ${title}`}
+              data-testid={`button-track-more-${trackNumber}`}
+              onClick={(e) => e.stopPropagation()}
+              className="-mr-2 text-fan-secondary hover:text-white"
+            >
+              <MoreHorizontal strokeWidth={2} />
+            </IconButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            onClick={(e) => e.stopPropagation()}
+            className="min-w-[208px] text-white backdrop-blur-xl"
+            style={{
+              background: "rgba(11,19,54,0.95)",
+              border: "1px solid rgba(255,255,255,0.1)",
+            }}
+          >
+            {onPlayNext && (
+              <DropdownMenuItem
+                data-testid={`menu-track-play-next-${trackNumber}`}
+                onSelect={() => onPlayNext()}
+                className="gap-3 text-white focus:bg-white/10 focus:text-white"
+              >
+                <ListStart className="w-4 h-4" /> Play Next
+              </DropdownMenuItem>
+            )}
+            {onPlayLast && (
+              <DropdownMenuItem
+                data-testid={`menu-track-play-last-${trackNumber}`}
+                onSelect={() => onPlayLast()}
+                className="gap-3 text-white focus:bg-white/10 focus:text-white"
+              >
+                <ListEnd className="w-4 h-4" /> Play Last
+              </DropdownMenuItem>
+            )}
+            {(onPlayNext || onPlayLast) && (onAdd || onToggleFavorite) && (
+              <DropdownMenuSeparator className="bg-white/10" />
+            )}
+            {onAdd && (
+              <DropdownMenuItem
+                data-testid={`menu-track-add-playlist-${trackNumber}`}
+                onSelect={() => onAdd()}
+                className="gap-3 text-white focus:bg-white/10 focus:text-white"
+              >
+                <ListPlus className="w-4 h-4" /> Add to Playlist…
+              </DropdownMenuItem>
+            )}
+            {onToggleFavorite && (
+              <DropdownMenuItem
+                data-testid={`menu-track-favorite-${trackNumber}`}
+                onSelect={() => onToggleFavorite()}
+                className="gap-3 text-white focus:bg-white/10 focus:text-white"
+              >
+                <Heart
+                  className="w-4 h-4"
+                  style={isFavorite ? { color: ROSE, fill: ROSE } : undefined}
+                />
+                {isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
       {state === "locked" && <div className="w-11 -mr-2" aria-hidden />}
     </div>
