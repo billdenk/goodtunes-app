@@ -16,6 +16,7 @@ import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { useRecordRecent, useFanRecents } from "@/hooks/useRecents";
 import { chatEnabled } from "@/lib/platform";
+import { deriveCollectionTab, collectionTabHref } from "@/lib/fanRail";
 import { subscribeChats, totalUnread } from "@/lib/chatStore";
 import { ARTIST_PHOTOS, type Album, type Song } from "@/data/musicData";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
@@ -46,12 +47,11 @@ export function Collection() {
   const [certAlbum, setCertAlbum] = useState<Album | null>(null);
   // Task #1074 — Collection's active tab is driven by the URL (`?tab=`)
   // so the desktop fan rail can deep-link to Songs/Artists and browser
-  // back/forward works. `setTab` just navigates; `tab` is derived.
-  const tabParam = new URLSearchParams(searchStr).get("tab");
-  const tab: LibraryTab =
-    tabParam === "songs" ? "songs" : tabParam === "artists" ? "artists" : "albums";
-  const setTab = (t: LibraryTab) =>
-    navigate(t === "albums" ? "/collection" : `/collection?tab=${t}`);
+  // back/forward works. `setTab` just navigates; `tab` is derived. The
+  // URL→tab + tab→URL mapping lives in `@/lib/fanRail` so the rail and
+  // this page can't drift (Task #1081).
+  const tab: LibraryTab = deriveCollectionTab(searchStr);
+  const setTab = (t: LibraryTab) => navigate(collectionTabHref(t));
   // Task #530 — inline library search retired in favour of the global
   // /search destination on the right of the bottom nav. We keep the
   // `search` constant as an empty string so the existing filter

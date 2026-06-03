@@ -9,6 +9,7 @@ import {
   Clock,
   type LucideIcon,
 } from "lucide-react";
+import { collectionTabHref, type FanRailActive } from "@/lib/fanRail";
 
 // Task #1074 — single source of truth for the desktop fan rail's nav
 // items so the album-page rail (AlbumDesktopSidebar) and the storefront
@@ -18,14 +19,10 @@ import {
 //
 // Order: Search · Collection (Albums/Songs/Artists) · Playlists · Recents.
 
-export type CollectionTab = "albums" | "songs" | "artists";
-
-export type FanRailActive =
-  | { kind: "search" }
-  | { kind: "collection"; tab: CollectionTab }
-  | { kind: "playlists" }
-  | { kind: "recents" }
-  | null;
+// Task #1081 — the URL→active-state logic + tab types now live in
+// `@/lib/fanRail` (pure, testable). Re-export the types so existing
+// `from "@/components/ui/FanRailNav"` imports keep working.
+export type { CollectionTab, FanRailActive } from "@/lib/fanRail";
 
 function Row({
   active,
@@ -94,7 +91,7 @@ export function FanRailNav({
         icon={Library}
         label="Collection"
         active={false}
-        onClick={() => navigate("/collection?tab=albums")}
+        onClick={() => navigate(collectionTabHref("albums"))}
       />
       <div className="space-y-0.5">
         <Row
@@ -103,7 +100,7 @@ export function FanRailNav({
           icon={Disc3}
           label="Albums"
           active={isCollection && active.tab === "albums"}
-          onClick={() => navigate("/collection?tab=albums")}
+          onClick={() => navigate(collectionTabHref("albums"))}
         />
         <Row
           indent
@@ -111,7 +108,7 @@ export function FanRailNav({
           icon={Music2}
           label="Songs"
           active={isCollection && active.tab === "songs"}
-          onClick={() => navigate("/collection?tab=songs")}
+          onClick={() => navigate(collectionTabHref("songs"))}
         />
         <Row
           indent
@@ -119,7 +116,7 @@ export function FanRailNav({
           icon={Users}
           label="Artists"
           active={isCollection && active.tab === "artists"}
-          onClick={() => navigate("/collection?tab=artists")}
+          onClick={() => navigate(collectionTabHref("artists"))}
         />
       </div>
 

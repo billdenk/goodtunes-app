@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Settings, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { FanRailNav, type FanRailActive, type CollectionTab } from "@/components/ui/FanRailNav";
+import { FanRailNav } from "@/components/ui/FanRailNav";
+import { computeRailActive } from "@/lib/fanRail";
 import {
   useDesktopShell,
   STOREFRONT_SIDEBAR_WIDTH,
@@ -76,18 +77,7 @@ export function StorefrontSidebar() {
 
   const isAccount = location.startsWith("/account");
 
-  const tabParam = new URLSearchParams(searchStr).get("tab");
-  const collectionTab: CollectionTab =
-    tabParam === "songs" ? "songs" : tabParam === "artists" ? "artists" : "albums";
-  const railActive: FanRailActive = location.startsWith("/search")
-    ? { kind: "search" }
-    : location === "/collection"
-      ? { kind: "collection", tab: collectionTab }
-      : location === "/playlists" || location.startsWith("/playlist")
-        ? { kind: "playlists" }
-        : location.startsWith("/recents")
-          ? { kind: "recents" }
-          : null;
+  const railActive = computeRailActive(location, searchStr);
 
   const avatarInitials = (user?.displayName || user?.username || "?")
     .split(" ")
