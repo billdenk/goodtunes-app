@@ -58,10 +58,41 @@ fns; only the toggled flag (`setShowLyrics`) and `currentSong` (with
   `globalThis.setInterval` to `.unref()` the returned timer. Also set
   `globalThis.localStorage = window.localStorage` (track writes there).
 
+**Lingering-handle hangs (CRITICAL — the whole suite shares ONE process via the
+find-glob, and there's no `--test-force-exit`):** if your test leaves ANY live
+timer, the process never exits and the buffered TAP output never flushes — it
+looks like an infinite hang even though the tests passed. Two sources when you
+render the real page / providers:
+- `@/lib/analytics` lazily starts a module-level `setInterval` flush loop the
+  first time `track()`/`identifyAnalyticsUser` fires (it does once you mount a
+  page that plays a song or mounts `useAuth`); never cleared. Capture intervals
+  by wrapping `globalThis.setInterval` (push ids to a Set) and `clearInterval`
+  them in a `node:test` `after()` hook.
+- TanStack Query schedules a 5-minute gc `setTimeout` PER cached query when it
+  goes inactive on unmount (~11 timers for a seeded page). Set `gcTime: Infinity`
+  on the test QueryClient (Infinity ⇒ no timer scheduled) in addition to
+  `staleTime: Infinity`.
+  Diagnose lingering timers with `process.getActiveResourcesInfo()` (lists
+  `"Timeout"` entries); `process._getActiveHandles()` does NOT show timers on
+  Node 20.
+
+**import.meta.env (Vite-only) under tsx:** the page reads `import.meta.env.DEV`
+etc.; tsx doesn't provide it. Use a `node:module` ESM loader to (a) stub static
+asset imports (`.svg/.png/...`) and (b) rewrite `import.meta.env` →
+`globalThis.__VITE_ENV__`, then set
+`globalThis.__VITE_ENV__ = {DEV,PROD,MODE,SSR}` before importing the page. See
+`client/src/pages/assetStubLoader.mjs`.
+
+**Whole-page render vs PlayerDock note:** when you render `AlbumDetailDesktop`
+inside a real `PlayerProvider`, the dock auto-expands once the track key changes
+(after Play), so `button-lyrics` appears after clicking `button-play-album`
+without first clicking `button-show-player`.
+
 **Baseline:** `server/auth/identityLink.db.test.ts` ("same-email fan IS
 linked…") fails with 500 in throwaway task DBs — pre-existing, DB-state
 dependent, not caused by client test work.
 
 Reference implementations: `client/src/components/ui/desktopLyricsPanel.test.ts`
-(prop-driven components) and `client/src/pages/playerLyricsPanel.test.ts`
-(context-driven page).
+(prop-driven components), `client/src/pages/playerLyricsPanel.test.ts`
+(context-driven page), and `client/src/pages/albumDetailLyricsBreakpoints.test.ts`
+(full-page, md vs lg lyrics surfaces).
