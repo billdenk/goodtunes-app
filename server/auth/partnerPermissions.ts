@@ -36,7 +36,12 @@ import {
   type PartnerPermissionVerb,
   type PartnerScopeKind,
 } from "@shared/schema";
-import { getUserRole, type UserRoleInfo } from "./roles";
+import {
+  getUserRole,
+  findMembershipForScope,
+  rebuildMembershipOverrides,
+  type UserRoleInfo,
+} from "./roles";
 
 export type PartnerVerb = PartnerPermissionVerb;
 
@@ -227,6 +232,9 @@ export async function applyPressTeammateOverrides(
       DO UPDATE SET granted = EXCLUDED.granted, updated_by_user_id = EXCLUDED.updated_by_user_id, updated_at = NOW()
     `);
   }
+  // Task #1036 — mirror the new override state into the user's
+  // membership for this press scope (no-op when the table is absent).
+  await rebuildMembershipOverrides(userId, "manufacturer", pressId);
 }
 
 // Task #699 — can this user edit the given press (settings, masters,
@@ -241,6 +249,13 @@ export async function pressUserCanEdit(userId: string, pressId: string): Promise
   const role = await getUserRole(userId);
   if (!role) return false;
   if (role.role === "super_admin" || role.role === "admin") return true;
+  // Task #1036 — the account must actually hold a manufacturer membership
+  // for THIS press, resolved from the membership SET rather than the
+  // primary hat, so a multi-hat user is judged on the right scope. For a
+  // single-membership press admin this is identical to the old implicit
+  // (role===manufacturer && roleScopeId===pressId) that requirePressScope
+  // already proved upstream.
+  if (!(await findMembershipForScope(userId, "manufacturer", pressId))) return false;
   const ov = await getUserPermissionOverride("manufacturer", pressId, userId, "edit_metadata");
   return ov !== false;
 }
@@ -392,12 +407,16 @@ export function requirePartnerPermission(
       return next();
     }
 
-    // Partner role from here on. Must match the target's scope row.
-    if (
-      !target.scope ||
-      (role.role !== target.scope.kind) ||
-      role.roleScopeId !== target.scope.id
-    ) {
+    // Partner role from here on. Must hold a membership matching the
+    // target's scope row (Task #1036 — resolved against the membership
+    // SET, not the single users.role_scope_id). Identical yes/no to the
+    // legacy `!target.scope || role.role !== kind || roleScopeId !== id`
+    // check for single-membership users.
+    if (!target.scope) {
+      return res.status(403).json({ message: "Out of scope" });
+    }
+    const match = await findMembershipForScope(userId, target.scope.kind, target.scope.id);
+    if (!match) {
       return res.status(403).json({ message: "Out of scope" });
     }
 
@@ -437,8 +456,8 @@ export function requirePartnerPermission(
       // Override consumed → fall through (apply the edit directly).
     } else if (verb === "edit_metadata" && needsApproval) {
       req.partnerGate = {
-        role: role.role,
-        roleScopeId: role.roleScopeId,
+        role: match.role,
+        roleScopeId: match.scopeId,
         targetScope: target.scope,
         albumId: target.albumId,
         divert: true,
@@ -448,8 +467,8 @@ export function requirePartnerPermission(
     }
 
     req.partnerGate = {
-      role: role.role,
-      roleScopeId: role.roleScopeId,
+      role: match.role,
+      roleScopeId: match.scopeId,
       targetScope: target.scope,
       albumId: target.albumId,
       divert: false,
@@ -561,7 +580,10 @@ export async function partnerEditGate(
   }
   if (role.role === "super_admin" || role.role === "admin") return "allow";
 
-  if (role.role !== scope.kind || role.roleScopeId !== scope.id) {
+  // Task #1036 — match against the membership SET (identical to the
+  // legacy single-role check for single-membership users).
+  const match = await findMembershipForScope(userId, scope.kind, scope.id);
+  if (!match) {
     res.status(403).json({ message: "Out of scope" });
     return "deny";
   }
@@ -624,7 +646,10 @@ export async function checkPartnerVerbForScope(
   if (!role) return { status: 403, body: { message: "No role" } };
   if (role.role === "super_admin" || role.role === "admin") return null;
 
-  if (role.role !== scope.kind || role.roleScopeId !== scope.id) {
+  // Task #1036 — match against the membership SET (identical to the
+  // legacy single-role check for single-membership users).
+  const match = await findMembershipForScope(userId, scope.kind, scope.id);
+  if (!match) {
     return { status: 403, body: { message: "Out of scope" } };
   }
 
@@ -694,7 +719,10 @@ export async function getAlbumEditAccess(userId: string, albumId: string) {
     };
   }
 
-  const inScope = scope && role.role === scope.kind && role.roleScopeId === scope.id;
+  // Task #1036 — match against the membership SET (identical yes/no to
+  // the legacy single-role check for single-membership users).
+  const match = scope ? await findMembershipForScope(userId, scope.kind, scope.id) : null;
+  const inScope = !!match;
   if (!inScope) {
     return {
       role: role.role,

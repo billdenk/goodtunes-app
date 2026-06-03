@@ -3970,6 +3970,87 @@ export type PartnerPermissionOverride = typeof partnerPermissionOverrides.$infer
 export type PartnerPermissions = typeof partnerPermissions.$inferSelect;
 export type InsertPartnerPermissions = typeof partnerPermissions.$inferInsert;
 
+// ─── Task #1036 — Unified identity P1: memberships ───────────────────
+// One account → many scopes. Each membership is one "hat" a user wears
+// (an artist Person, a label, an NPO/organization, a press/manufacturer,
+// a vendor, a fulfillment partner), carrying the same role + sub-role +
+// per-(scope, verb) permission state a user has today — but as a SET so
+// one person can hold more than one (e.g. NPO staff AND manager of an
+// artist). The hat-switcher UI that exposes this is Phase 3; this phase
+// is intentionally INVISIBLE.
+//
+// Backfill (scripts/post-merge.sh) gives every existing partner exactly
+// ONE membership reproducing their current users.role / role_scope_id +
+// partner_permissions + partner_permission_overrides, and server-side
+// resolution (server/auth/roles.ts + partnerPermissions.ts) reads the
+// membership SET while producing byte-for-byte identical results for
+// single-membership users. The legacy users.role / role_scope_id columns
+// and the partner_permissions(+overrides) tables stay the canonical READ
+// source this phase and are DUAL-WRITTEN in lock-step; dropping them is
+// deferred (see docs/roadmap.md + docs/roles-and-permissions.md).
+//
+//   • role        — an ADMIN_ROLES value. super_admin / admin are the
+//                   god roles and hold NO scope (scopeKind/scopeId NULL).
+//   • scopeKind   — a MEMBERSHIP_SCOPE_KINDS value for partner hats; the
+//                   role name doubles as the scope kind (label→label,
+//                   artist→artist, …, non_profit→non_profit).
+//   • scopeId     — the scope row id (people.id for artist, labels.id,
+//                   organizations.id for non_profit, vendors.id, …).
+//   • subRole     — reuses the existing invite sub-role vocabulary
+//                   (identity/manager/team, npo_ambassador/npo_staff,
+//                   press_staff); NULL for a plain owner-level hat.
+//   • permissionOverrides — mirrors THIS user's
+//                   partner_permission_overrides rows for the scope as
+//                   `{ verb: granted }`. An empty object means "inherit
+//                   the scope-wide partner_permissions default", exactly
+//                   like a user with no override rows today. The
+//                   scope-wide defaults stay shared in partner_permissions
+//                   (one row per scope) — never duplicated per membership.
+//
+// DEV→PROD DRIFT: like the role columns, the canonical DDL (table + the
+// two partial unique indexes) is hand-applied to BOTH dev and prod via
+// scripts/post-merge.sh so the publish dev→prod diff stays empty. This
+// drizzle definition exists for types + query building; do NOT rely on
+// drizzle-kit push to create it (see .agents/memory/MEMORY.md).
+export const MEMBERSHIP_SCOPE_KINDS = [
+  "label",
+  "artist",
+  "manufacturer",
+  "fulfillment",
+  "vendor",
+  "non_profit",
+] as const;
+export type MembershipScopeKind = (typeof MEMBERSHIP_SCOPE_KINDS)[number];
+
+export const memberships = pgTable("memberships", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  role: text("role").notNull(),
+  scopeKind: text("scope_kind"),
+  scopeId: varchar("scope_id"),
+  subRole: text("sub_role"),
+  permissionOverrides: jsonb("permission_overrides")
+    .$type<Record<string, boolean>>()
+    .notNull()
+    .default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  // One god membership per user (scope_id IS NULL) + one membership per
+  // (user, scope) otherwise. Two PARTIAL uniques because a plain unique
+  // treats NULL scope_id as distinct and would let god dupes through.
+  godUniq: uniqueIndex("memberships_user_god_uniq")
+    .on(t.userId)
+    .where(sql`scope_id IS NULL`),
+  scopedUniq: uniqueIndex("memberships_user_scope_uniq")
+    .on(t.userId, t.scopeKind, t.scopeId)
+    .where(sql`scope_id IS NOT NULL`),
+  byUser: index("memberships_user_idx").on(t.userId),
+}));
+
+export type Membership = typeof memberships.$inferSelect;
+export type InsertMembership = typeof memberships.$inferInsert;
+
 // ─── Task #79 — Pending changes queue ────────────────────────────────
 // When a partner with `metadataEditsRequireApproval = true` (or a
 // partner editing a post-sale-locked album) submits a mutation, the

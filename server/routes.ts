@@ -4103,14 +4103,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(400).json({ message: "This importer only runs on Hellbender." });
       return null;
     }
-    const { getUserRole } = await import("./auth/roles");
+    const { getUserRole, findMembershipForScope } = await import("./auth/roles");
     const info = await getUserRole(userId);
     if (!info) {
       res.status(403).json({ message: "Forbidden" });
       return null;
     }
     if (info.role === "super_admin" || info.role === "admin") return { pressId };
-    if (info.role === "manufacturer" && info.roleScopeId === pressId) return { pressId };
+    // Task #1036 — match against the membership SET, not the primary hat.
+    if (await findMembershipForScope(userId, "manufacturer", pressId)) return { pressId };
     res.status(403).json({ message: "Forbidden" });
     return null;
   }
@@ -5456,11 +5457,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // caller is a global admin / super_admin).
     const userId = req.session.userId;
     if (!userId) { res.status(401).json({ message: "Unauthorized" }); return false; }
-    const { getUserRole } = await import("./auth/roles");
+    const { getUserRole, findMembershipForScope } = await import("./auth/roles");
     const role = await getUserRole(userId);
     if (!role) { res.status(403).json({ message: "Forbidden" }); return false; }
     if (role.role === "super_admin" || role.role === "admin") return true;
-    if (role.role === "manufacturer" && role.roleScopeId === pressId) return true;
+    // Task #1036 — match against the membership SET, not the primary hat.
+    if (await findMembershipForScope(userId, "manufacturer", pressId)) return true;
     res.status(403).json({ message: "Forbidden" }); return false;
   }
 
@@ -17515,7 +17517,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // via raw SQL (those columns live outside the pgTable definition —
   // see server/auth/roles.ts).
   const { sendAdminInviteEmail, sendAdminAccessRequestEmail } = await import("./mail");
-  const { setUserRole, requireRole, getUserRole } = await import("./auth/roles");
+  const { setUserRole, requireRole, getUserRole, findMembershipForScope } = await import("./auth/roles");
   const { adminInvites: _adminInvites, ADMIN_ROLES } = await import("@shared/schema");
 
   // Task #78 — extended to 14d per spec; was 7 in Task #69.
@@ -17642,7 +17644,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
     const callerRole = await getUserRole(req.session.userId!);
     let canSeeInvite = callerRole?.role === "super_admin";
-    if (!canSeeInvite && callerRole?.role === "non_profit" && callerRole.roleScopeId === req.params.id) {
+    // Task #1036 — match against the membership SET, not the primary hat.
+    if (!canSeeInvite && (await findMembershipForScope(req.session.userId!, "non_profit", req.params.id))) {
       const verbErr = await checkPartnerVerbForScope(
         req.session.userId!,
         "invite_subusers",
@@ -18470,7 +18473,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         vendor: "vendor",
       };
       let canSeeInvite = callerRole?.role === "super_admin";
-      if (!canSeeInvite && callerRole?.role === inviteRole && callerRole.roleScopeId === req.params.id) {
+      // Task #1036 — match against the membership SET, not the primary hat.
+      if (!canSeeInvite && (await findMembershipForScope(req.session.userId!, inviteRole as any, req.params.id))) {
         const verbErr = await checkPartnerVerbForScope(
           req.session.userId!,
           "invite_subusers",
@@ -18928,7 +18932,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const amb = ((a as any).rows ?? [])[0];
         ok = !!amb;
         if (ok && callerRole.role !== "super_admin") {
-          if (callerRole.role !== "non_profit" || callerRole.roleScopeId !== amb.org) {
+          // Task #1036 — match against the membership SET, not the primary hat.
+          if (!amb.org || !(await findMembershipForScope(req.session.userId!, "non_profit", amb.org))) {
             return res.status(403).json({ message: "Ambassadors can only be credited by the non-profit they belong to" });
           }
         }
@@ -19687,11 +19692,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const granted = req.body?.granted; // true | false | null (clear)
     const validVerbs = ["edit_metadata","upload_masters","map_shopify","manage_payouts","invite_subusers","edit_credits_and_gear"];
     if (!validVerbs.includes(verb)) return res.status(400).json({ message: "Invalid verb" });
+    const { rebuildMembershipOverrides } = await import("./auth/roles");
     if (granted === null || granted === undefined) {
       await db.execute(sql`
         DELETE FROM partner_permission_overrides
         WHERE scope_kind = 'artist' AND scope_id = ${id} AND user_id = ${userId} AND verb = ${verb}
       `);
+      // Task #1036 — keep the membership override mirror in sync.
+      await rebuildMembershipOverrides(userId, "artist", id);
       return res.json({ ok: true, cleared: true });
     }
     const g = !!granted;
@@ -19701,6 +19709,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       ON CONFLICT (scope_kind, scope_id, user_id, verb)
       DO UPDATE SET granted = EXCLUDED.granted, updated_by_user_id = EXCLUDED.updated_by_user_id, updated_at = NOW()
     `);
+    // Task #1036 — keep the membership override mirror in sync.
+    await rebuildMembershipOverrides(userId, "artist", id);
     res.json({ ok: true, granted: g });
   });
 
@@ -19974,7 +19984,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return false;
     }
     if (callerRole.role === "super_admin") return true;
-    if (callerRole.role === "vendor" && callerRole.roleScopeId === vendorId) return true;
+    // Task #1036 — match against the membership SET, not the primary hat.
+    if (await findMembershipForScope(req.session.userId!, "vendor", vendorId)) return true;
     res.status(403).json({ message: "Not your vendor" });
     return false;
   }
@@ -20434,6 +20445,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           ON CONFLICT (scope_kind, scope_id, user_id, verb) DO NOTHING
         `);
       }
+      if (verbsToGrant.length > 0) {
+        // Task #1036 — mirror the granted overrides into the membership.
+        const { rebuildMembershipOverrides } = await import("./auth/roles");
+        await rebuildMembershipOverrides(user.id, "artist", invite.roleScopeId);
+      }
     }
 
     // Task #699 — press (manufacturer) teammate tier. Owner/Admin invites
@@ -20713,8 +20729,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     // Authorize: super_admin sees anything; partners only their own scope.
     if (info.role !== "super_admin") {
-      const partnerKindMap: Record<string, string> = { artist: "artist", non_profit: "non_profit", manufacturer: "manufacturer" };
-      if (partnerKindMap[scopeKind] !== info.role || info.roleScopeId !== scopeId) {
+      // Task #1036 — match against the membership SET, not the primary hat.
+      if (!(await findMembershipForScope(req.session.userId!, scopeKind as any, scopeId))) {
         return res.status(403).json({ message: "Out of scope" });
       }
     }
@@ -20861,7 +20877,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const row = ((p as any).rows ?? [])[0];
     if (!row) return res.status(404).json({ message: "Person not found" });
     if (info.role !== "super_admin") {
-      if (info.role !== "non_profit" || info.roleScopeId !== row.org) {
+      // Task #1036 — match against the membership SET, not the primary hat.
+      if (!row.org || !(await findMembershipForScope(req.session.userId!, "non_profit", row.org))) {
         return res.status(403).json({ message: "Only the non-profit this person belongs to can promote them" });
       }
     }
@@ -20914,10 +20931,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!callerRole) return res.status(401).json({ message: "Unauthorized" });
     if (callerRole.role !== "super_admin") {
       const scopeKind = KIND_TO_VERB_SCOPE[entityKind];
-      if (
-        callerRole.role !== targetRole ||
-        callerRole.roleScopeId !== entityId
-      ) {
+      // Task #1036 — match against the membership SET, not the primary hat.
+      if (!(await findMembershipForScope(req.session.userId!, scopeKind, entityId))) {
         return res.status(403).json({ message: "You can only add admins to your own partner scope." });
       }
       const verbErr = await checkPartnerVerbForScope(
@@ -21120,7 +21135,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const callerRole = await getUserRole(req.session.userId!);
     if (!callerRole) return res.status(401).json({ message: "Unauthorized" });
     if (callerRole.role === "super_admin") return res.json({ ok: true, canAddAdmins: true });
-    if (callerRole.role !== targetRole || callerRole.roleScopeId !== entityId) return res.json({ ok: false, canAddAdmins: false });
+    // Task #1036 — match against the membership SET, not the primary hat.
+    if (!(await findMembershipForScope(req.session.userId!, KIND_TO_VERB_SCOPE[entityKind], entityId))) return res.json({ ok: false, canAddAdmins: false });
     const { checkPartnerVerbForScope, pressUserCanEdit } = await import("./auth/partnerPermissions");
     const verbErr = await checkPartnerVerbForScope(
       req.session.userId!,
@@ -23367,16 +23383,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const userId = (req.session as any)?.userId;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
       const { resolveAlbumScope } = await import("./auth/partnerPermissions");
-      const { getUserRole } = await import("./auth/roles");
+      const { getUserRole, findMembershipForScope } = await import("./auth/roles");
       const resolved = await resolveAlbumScope(String(req.params.id));
       if (!resolved) return res.status(404).json({ message: "Album not found" });
       const role = await getUserRole(userId);
       if (!role) return res.status(403).json({ message: "No role" });
       const isAdmin = role.role === "super_admin" || role.role === "admin";
-      const scopedMatch =
-        resolved.scope &&
-        role.role === resolved.scope.kind &&
-        role.roleScopeId === resolved.scope.id;
+      // Task #1036 — match against the membership SET, not the primary hat.
+      const scopedMatch = resolved.scope
+        ? !!(await findMembershipForScope(userId, resolved.scope.kind, resolved.scope.id))
+        : false;
       if (!isAdmin && !scopedMatch) {
         return res.status(403).json({ message: "Out of scope" });
       }

@@ -16,7 +16,12 @@ import type { Request, Response, NextFunction } from "express";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../db";
 import { storage } from "../storage";
-import { ADMIN_ROLES, type AdminRole } from "@shared/schema";
+import {
+  ADMIN_ROLES,
+  MEMBERSHIP_SCOPE_KINDS,
+  type AdminRole,
+  type MembershipScopeKind,
+} from "@shared/schema";
 
 export type { AdminRole };
 
@@ -25,20 +30,189 @@ export interface UserRoleInfo {
   roleScopeId: string | null;
 }
 
-export async function getUserRole(userId: string): Promise<UserRoleInfo | null> {
+// Task #1036 — one resolved "hat" a user wears. `role` is always a
+// normalized ADMIN_ROLES value; god roles (super_admin/admin) carry
+// scopeKind/scopeId null. For single-membership users this set has
+// exactly one element and reproduces the legacy users.role /
+// role_scope_id byte-for-byte.
+export interface ResolvedMembership {
+  role: AdminRole;
+  scopeKind: MembershipScopeKind | null;
+  scopeId: string | null;
+  subRole: string | null;
+}
+
+// Normalize a raw users.role value into the closed ADMIN_ROLES enum.
+// Task #78 — `org` is the historical alias for `non_profit`; unknown
+// values fall back to super_admin (matches the original getUserRole).
+function normalizeRole(raw: string | null): AdminRole {
+  const normalized = raw === "org" ? "non_profit" : raw;
+  return ADMIN_ROLES.includes(normalized as AdminRole)
+    ? (normalized as AdminRole)
+    : "super_admin";
+}
+
+// The scope kind a role implies. Partner roles double as their scope
+// kind (label→label, artist→artist, …, non_profit→non_profit); the god
+// roles imply no scope.
+function roleToScopeKind(role: AdminRole): MembershipScopeKind | null {
+  return (MEMBERSHIP_SCOPE_KINDS as readonly string[]).includes(role)
+    ? (role as MembershipScopeKind)
+    : null;
+}
+
+// Read the legacy users.role / role_scope_id pair exactly as the
+// original getUserRole did. Returns null when there's no users row.
+// This is the byte-for-byte safety net: when the memberships table is
+// missing (dev clones before post-merge) or a user somehow has no
+// membership row, resolution synthesizes a single membership from here.
+async function readLegacyUserRole(userId: string): Promise<UserRoleInfo | null> {
   const r = await db.execute<{ role: string; role_scope_id: string | null }>(
     sql`SELECT role, role_scope_id FROM users WHERE id = ${userId} LIMIT 1`,
   );
   const row = (r as any).rows?.[0];
   if (!row) return null;
-  // Task #78 — `org` is the historical name for the non-profit partner
-  // role used by reports code. Fold it into `non_profit` so the closed
-  // ADMIN_ROLES enum stays the single source of truth.
-  const normalized = row.role === "org" ? "non_profit" : row.role;
-  const role = ADMIN_ROLES.includes(normalized as AdminRole)
-    ? (normalized as AdminRole)
-    : "super_admin";
-  return { role, roleScopeId: row.role_scope_id ?? null };
+  return { role: normalizeRole(row.role), roleScopeId: row.role_scope_id ?? null };
+}
+
+let membershipsTableKnownToExist: boolean | null = null;
+
+async function detectMembershipsTable(): Promise<boolean> {
+  if (membershipsTableKnownToExist !== null) return membershipsTableKnownToExist;
+  try {
+    const r = await pool.query(
+      `SELECT 1 FROM information_schema.tables WHERE table_name = 'memberships'`,
+    );
+    membershipsTableKnownToExist = (r.rowCount ?? 0) > 0;
+  } catch {
+    membershipsTableKnownToExist = false;
+  }
+  return membershipsTableKnownToExist;
+}
+
+// Task #1036 — resolve the SET of memberships (hats) for an account.
+// Reads the memberships table when present; otherwise — or when a user
+// has no rows yet — synthesizes exactly ONE membership from the legacy
+// users.role / role_scope_id columns so behavior is identical to the
+// pre-memberships code. Returns [] only when there's no users row.
+export async function getUserMemberships(userId: string): Promise<ResolvedMembership[]> {
+  if (await detectMembershipsTable()) {
+    const r = await db.execute<{
+      role: string;
+      scope_kind: string | null;
+      scope_id: string | null;
+      sub_role: string | null;
+    }>(sql`
+      SELECT role, scope_kind, scope_id, sub_role
+      FROM memberships WHERE user_id = ${userId}
+    `);
+    const rows = ((r as any).rows ?? []) as any[];
+    if (rows.length > 0) {
+      return rows.map((row) => ({
+        role: normalizeRole(row.role),
+        scopeKind: (row.scope_kind as MembershipScopeKind | null) ?? null,
+        scopeId: row.scope_id ?? null,
+        subRole: row.sub_role ?? null,
+      }));
+    }
+  }
+  // Fallback / safety net: one synthetic membership from legacy columns.
+  const legacy = await readLegacyUserRole(userId);
+  if (!legacy) return [];
+  return [
+    {
+      role: legacy.role,
+      scopeKind: roleToScopeKind(legacy.role),
+      scopeId: legacy.roleScopeId,
+      subRole: null,
+    },
+  ];
+}
+
+// Pick the "primary" hat for legacy single-value callers. God roles win
+// (super_admin > admin), then any scoped hat. For single-membership
+// users (this phase) there's exactly one, so the choice is moot; the
+// ordering only matters once Phase 3 lets a user hold several.
+function pickPrimaryMembership(ms: ResolvedMembership[]): ResolvedMembership | null {
+  if (ms.length === 0) return null;
+  const rank = (m: ResolvedMembership) =>
+    m.role === "super_admin" ? 0 : m.role === "admin" ? 1 : 2;
+  return [...ms].sort((a, b) => {
+    const ra = rank(a);
+    const rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    return `${a.scopeKind ?? ""}:${a.scopeId ?? ""}`.localeCompare(
+      `${b.scopeKind ?? ""}:${b.scopeId ?? ""}`,
+    );
+  })[0];
+}
+
+// Task #1036 — the matching hat for a given target scope, or null when
+// the account holds no membership for it. This is what the partner gates
+// use instead of comparing the single users.role_scope_id, so a future
+// multi-hat user matches the RIGHT scope. For single-membership users it
+// returns the same yes/no as `role.role === kind && role.roleScopeId === id`.
+export async function findMembershipForScope(
+  userId: string,
+  kind: MembershipScopeKind,
+  id: string,
+): Promise<ResolvedMembership | null> {
+  const ms = await getUserMemberships(userId);
+  return ms.find((m) => m.scopeKind === kind && m.scopeId === id) ?? null;
+}
+
+export async function getUserRole(userId: string): Promise<UserRoleInfo | null> {
+  const ms = await getUserMemberships(userId);
+  const primary = pickPrimaryMembership(ms);
+  if (!primary) return null;
+  return { role: primary.role, roleScopeId: primary.scopeId };
+}
+
+// Task #1036 — keep the user's membership SET in lock-step with the
+// legacy users.role / role_scope_id columns. This phase is
+// single-membership: the user's set becomes exactly { the legacy hat }.
+// Stale hats from a previous role are removed; an existing row for the
+// same scope is updated in place so its mirrored permission_overrides
+// survive a same-scope re-grant. No-op when the table doesn't exist yet
+// (dev clones before post-merge) — the synth fallback keeps reads correct.
+export async function syncUserMembership(userId: string): Promise<void> {
+  if (!(await detectMembershipsTable())) return;
+  const legacy = await readLegacyUserRole(userId);
+  if (!legacy) return;
+  const scopeKind = roleToScopeKind(legacy.role);
+  // Preserve role_scope_id verbatim (don't null it for god roles) so the
+  // DB path matches the synth fallback + the original getUserRole exactly.
+  // In practice god roles always carry a null scope id anyway.
+  const scopeId = legacy.roleScopeId;
+  await db.transaction(async (tx) => {
+    // Drop any membership that isn't this exact hat.
+    await tx.execute(sql`
+      DELETE FROM memberships
+      WHERE user_id = ${userId}
+        AND (scope_kind IS DISTINCT FROM ${scopeKind} OR scope_id IS DISTINCT FROM ${scopeId})
+    `);
+    // Upsert the surviving / new hat. Preserve permission_overrides if a
+    // same-scope row already exists.
+    const ex = await tx.execute<{ id: string }>(sql`
+      SELECT id FROM memberships
+      WHERE user_id = ${userId}
+        AND scope_kind IS NOT DISTINCT FROM ${scopeKind}
+        AND scope_id IS NOT DISTINCT FROM ${scopeId}
+      LIMIT 1
+    `);
+    const existingId = ((ex as any).rows ?? [])[0]?.id as string | undefined;
+    if (existingId) {
+      await tx.execute(sql`
+        UPDATE memberships SET role = ${legacy.role}, updated_at = NOW()
+        WHERE id = ${existingId}
+      `);
+    } else {
+      await tx.execute(sql`
+        INSERT INTO memberships (user_id, role, scope_kind, scope_id)
+        VALUES (${userId}, ${legacy.role}, ${scopeKind}, ${scopeId})
+      `);
+    }
+  });
 }
 
 export async function setUserRole(
@@ -49,6 +223,33 @@ export async function setUserRole(
   await db.execute(
     sql`UPDATE users SET role = ${role}, role_scope_id = ${roleScopeId} WHERE id = ${userId}`,
   );
+  // Task #1036 — dual-write the membership SET so the two never drift.
+  await syncUserMembership(userId);
+}
+
+// Task #1036 — refresh a membership's mirrored permission_overrides JSONB
+// from the canonical partner_permission_overrides rows for (user, scope).
+// Called after any override mutation so the membership stays in sync.
+// The override table remains the READ source this phase; this mirror is
+// for the Phase 3 hat-switcher. UPDATE-only: if no membership row exists
+// yet it's a no-op (the canonical table still governs).
+export async function rebuildMembershipOverrides(
+  userId: string,
+  scopeKind: string,
+  scopeId: string,
+): Promise<void> {
+  if (!(await detectMembershipsTable())) return;
+  const r = await db.execute<{ verb: string; granted: boolean }>(sql`
+    SELECT verb, granted FROM partner_permission_overrides
+    WHERE scope_kind = ${scopeKind} AND scope_id = ${scopeId} AND user_id = ${userId}
+  `);
+  const map: Record<string, boolean> = {};
+  for (const row of ((r as any).rows ?? []) as any[]) map[row.verb] = !!row.granted;
+  await db.execute(sql`
+    UPDATE memberships
+    SET permission_overrides = ${JSON.stringify(map)}::jsonb, updated_at = NOW()
+    WHERE user_id = ${userId} AND scope_kind = ${scopeKind} AND scope_id = ${scopeId}
+  `);
 }
 
 // Express middleware: only allow the listed roles. Requires an

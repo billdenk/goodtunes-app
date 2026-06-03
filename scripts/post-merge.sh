@@ -80,6 +80,134 @@ SQL
 migrate_auth_tokens dev  "${DATABASE_URL:-}"
 migrate_auth_tokens prod "${PROD_DATABASE_URL:-}"
 
+# Task #1036 — Unified identity P1: memberships table (one account → many
+# scopes). shared/schema.ts declares it + two PARTIAL unique indexes
+# (drizzle-kit push has been unreliable on additive DDL — see
+# albums-schema-drift.md), so we hand-apply the canonical DDL on BOTH dev
+# and prod to keep the publish dev→prod diff empty. Idempotent.
+migrate_memberships() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping memberships migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS memberships (
+  id                   varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id              varchar NOT NULL,
+  role                 text    NOT NULL,
+  scope_kind           text,
+  scope_id             varchar,
+  sub_role             text,
+  permission_overrides jsonb   NOT NULL DEFAULT '{}'::jsonb,
+  created_at           timestamp NOT NULL DEFAULT now(),
+  updated_at           timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS memberships_user_god_uniq
+  ON memberships (user_id) WHERE scope_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS memberships_user_scope_uniq
+  ON memberships (user_id, scope_kind, scope_id) WHERE scope_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS memberships_user_idx ON memberships (user_id);
+COMMIT;
+SQL
+  then
+    echo "post-merge: memberships migration ok on $label"
+  else
+    echo "post-merge: WARNING — memberships migration failed on $label (continuing)"
+  fi
+}
+migrate_memberships dev  "${DATABASE_URL:-}"
+migrate_memberships prod "${PROD_DATABASE_URL:-}"
+
+# Task #1036 — TRUE ONE-TIME backfill: give every existing account exactly
+# ONE membership reproducing its current users.role / role_scope_id +
+# folded partner_permission_overrides. Marker-guarded in
+# post_merge_data_backfills so later membership writes (setUserRole's
+# dual-write, override mirrors) are never clobbered on a subsequent merge.
+# Role normalization mirrors server/auth/roles.ts#normalizeRole EXACTLY
+# (org→non_profit; unknown→super_admin) so the DB read path matches the
+# synth fallback byte-for-byte. role_scope_id is preserved verbatim.
+backfill_task_1036_memberships() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1036 memberships backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_1036_memberships'
+  ) THEN
+    WITH resolved AS (
+      SELECT
+        u.id AS user_id,
+        u.role_scope_id,
+        CASE
+          WHEN u.role = 'org' THEN 'non_profit'
+          WHEN u.role IN ('super_admin','admin','label','artist','manufacturer','fulfillment','non_profit','vendor') THEN u.role
+          ELSE 'super_admin'
+        END AS role_norm
+      FROM users u
+    ),
+    scoped AS (
+      SELECT
+        r.user_id,
+        r.role_norm,
+        r.role_scope_id,
+        CASE
+          WHEN r.role_norm IN ('label','artist','manufacturer','fulfillment','non_profit','vendor') THEN r.role_norm
+          ELSE NULL
+        END AS scope_kind
+      FROM resolved r
+    ),
+    overrides AS (
+      SELECT user_id, scope_kind, scope_id, jsonb_object_agg(verb, granted) AS map
+      FROM partner_permission_overrides
+      GROUP BY user_id, scope_kind, scope_id
+    )
+    INSERT INTO memberships (user_id, role, scope_kind, scope_id, permission_overrides)
+    SELECT
+      s.user_id, s.role_norm, s.scope_kind, s.role_scope_id,
+      COALESCE(o.map, '{}'::jsonb)
+    FROM scoped s
+    LEFT JOIN overrides o
+      ON o.user_id = s.user_id
+     AND o.scope_kind = s.scope_kind
+     AND o.scope_id = s.role_scope_id
+    ON CONFLICT DO NOTHING;
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_1036_memberships');
+
+    RAISE NOTICE 'task-1036 backfill applied: % memberships seeded', v_count;
+  ELSE
+    RAISE NOTICE 'task-1036 backfill already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1036 memberships backfill ok on $label"
+    echo "$out" | grep -i 'task-1036' || true
+  else
+    echo "post-merge: WARNING — task-1036 memberships backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_1036_memberships dev  "${DATABASE_URL:-}"
+backfill_task_1036_memberships prod "${PROD_DATABASE_URL:-}"
+
 # Task #364 — songs.mux_last_error captures the human-readable reason
 # from a failed Mux ingest (e.g. "invalid_input · could not download
 # the asset"). Schema declares it; drizzle-kit push has been unreliable

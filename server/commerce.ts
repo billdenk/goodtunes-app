@@ -1213,12 +1213,13 @@ export function registerCommerceRoutes(app: Express) {
   const requirePressScope = async (req: Request, res: Response, next: () => void) => {
     const userId = (req as any).adminUserId as string | undefined;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
-    const { getUserRole } = await import("./auth/roles");
+    const { getUserRole, findMembershipForScope } = await import("./auth/roles");
     const info = await getUserRole(userId);
     const pressId = String(req.params.id);
     if (!info) return res.status(403).json({ message: "Forbidden" });
     if (info.role === "super_admin" || info.role === "admin") return next();
-    if (info.role === "manufacturer" && info.roleScopeId === pressId) return next();
+    // Task #1036 — match against the membership SET, not the primary hat.
+    if (await findMembershipForScope(userId, "manufacturer", pressId)) return next();
     return res.status(403).json({ message: "Forbidden" });
   };
 

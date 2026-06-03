@@ -57,6 +57,16 @@ Artist-scope invites carry a sub-role (`admin_invites.invite_role`) that grants 
 
 Overrides land in `partner_permission_overrides (scope_kind, scope_id, user_id, verb, granted)`. NULL row = inherit scope. Explicit `granted=false` row hard-denies the verb for that user even when the scope-wide row would have allowed it.
 
+## Membership SET — how a role resolves (Task #1036, unified-identity P1)
+
+Historically an account *was* its single `users.role` + `users.role_scope_id`. P1 introduces the `memberships` table so one account can hold many scopes (one fan login that is also an artist on one label and a teammate on another) without changing today's behavior. **It is additive and dual-written — the legacy columns are still the source of truth that ships, and nothing has been dropped.**
+
+- **Table:** `memberships (id, user_id, role, scope_kind, scope_id, sub_role, permission_overrides jsonb, created_at, updated_at)`. Two **partial** unique indexes: at most one *god* membership per account (`WHERE scope_id IS NULL`) and at most one membership per `(user_id, scope_kind, scope_id)` (`WHERE scope_id IS NOT NULL`).
+- **Resolution (`server/auth/roles.ts`):** `getUserRole` now derives the account's *primary* hat from its membership SET (`getUserMemberships` → `pickPrimaryMembership`). For a single-membership account this is **byte-for-byte identical** to reading `users.role` / `users.role_scope_id`. Scope matching for partner gates goes through `findMembershipForScope(userId, kind, id)` instead of comparing the one `role_scope_id`.
+- **Synth fallback:** when the `memberships` table doesn't exist yet (freshly-cloned dev before post-merge runs) or an account has no membership rows, resolution **synthesizes** a single membership from the legacy columns — so dev and prod read identically. The DB-backed path only takes over once `scripts/post-merge.sh` has created the table and run the one-time backfill (`task_1036_memberships` marker in `post_merge_data_backfills`). Role normalization in that backfill mirrors `normalizeRole` exactly (`org`→`non_profit`, anything unknown→`super_admin`) and preserves `role_scope_id` verbatim.
+- **Dual-write, never drift:** every legacy write keeps the membership SET in lock-step — `setUserRole` calls `syncUserMembership`; the founder bootstrap re-syncs Bill; team-override and invite-accept grants call `rebuildMembershipOverrides` after touching `partner_permission_overrides`. **Verb GRANT reads stay on the canonical `partner_permissions` / `partner_permission_overrides` tables** (the gates have not moved); `memberships.permission_overrides` is a dual-written *mirror* of the per-(scope, user) overrides only, reserved for the P3 hat-switcher UI. Scope-wide `partner_permissions` rows are intentionally **not** mirrored per-membership (would invite drift) — `upsertPartnerPermissions` writes no membership.
+- **Out of scope for P1:** login unification (P2) and the hat-switcher UI (P3) — see [`docs/roadmap.md`](./roadmap.md).
+
 ## Per-role detail
 
 ### `super_admin`

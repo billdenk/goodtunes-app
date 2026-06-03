@@ -288,10 +288,18 @@ async function bootstrapAccessGuard() {
       `UPDATE users SET role = 'super_admin'
         WHERE lower(email) = 'bill@gogoods.com'
           AND (role IS NULL OR role <> 'super_admin')
-        RETURNING email`,
+        RETURNING id, email`,
     );
     if (r.rowCount && r.rowCount > 0) {
       log(`promoted ${r.rows[0].email} to super_admin (founder safety net)`, "auth");
+      // Task #1036 — keep the membership SET in lock-step with the
+      // raw role write above (no-op until the table is backfilled).
+      try {
+        const { syncUserMembership } = await import("./auth/roles");
+        await syncUserMembership(r.rows[0].id);
+      } catch (e: any) {
+        log(`founder membership sync skipped: ${e?.message ?? e}`, "auth");
+      }
     }
   } catch (e: any) {
     log(`founder super_admin seed skipped: ${e?.message ?? e}`, "auth");

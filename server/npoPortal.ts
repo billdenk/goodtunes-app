@@ -27,7 +27,7 @@ import crypto from "crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db";
 import { storage } from "./storage";
-import { getUserRole } from "./auth/roles";
+import { getUserRole, findMembershipForScope } from "./auth/roles";
 import { sqlNpoAlbumLedger } from "./adminAlbumQueries";
 
 const INVITE_TTL_DAYS = 14;
@@ -71,7 +71,8 @@ export async function npoInviteCapabilities(
       canInviteArtists: true, canViewTree: true,
     };
   }
-  if (info.role !== "non_profit" || info.roleScopeId !== npoId) return null;
+  // Task #1036 — match against the membership SET, not the primary hat.
+  if (!(await findMembershipForScope(userId, "non_profit", npoId))) return null;
   const subRole = await getNpoSubRole(userId);
   if (subRole) {
     return {
@@ -107,7 +108,8 @@ export function registerNpoPortalRoutes(
     if (!info) return res.status(403).json({ message: "Forbidden" });
     const npoId = String(req.params.id);
     if (info.role === "super_admin" || info.role === "admin") return next();
-    if (info.role === "non_profit" && info.roleScopeId === npoId) return next();
+    // Task #1036 — match against the membership SET, not the primary hat.
+    if (await findMembershipForScope(userId, "non_profit", npoId)) return next();
     return res.status(403).json({ message: "Not your non-profit" });
   };
 

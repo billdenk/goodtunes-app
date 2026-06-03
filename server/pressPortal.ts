@@ -1267,10 +1267,11 @@ export function registerPressPortalRoutes(
     if (!row) return res.status(404).json({ message: "Album not found" });
     let canApprove = false;
     if (me) {
-      const { getUserRole } = await import("./auth/roles");
+      const { getUserRole, findMembershipForScope } = await import("./auth/roles");
       const role = await getUserRole(me);
+      // Task #1036 — match against the membership SET, not the primary hat.
       canApprove = role?.role === "super_admin"
-        || (role?.role === "artist" && role?.roleScopeId === row.primary_artist_id);
+        || !!(await findMembershipForScope(me, "artist", row.primary_artist_id));
     }
     res.json({
       mastersTriggeredAt: row.masters_triggered_at,
@@ -1299,10 +1300,11 @@ export function registerPressPortalRoutes(
     }
     // Authorize: super_admin OR an artist-role user whose scope is the
     // album's primary artist. Resellers/labels/etc. can't approve.
-    const { getUserRole } = await import("./auth/roles");
+    const { getUserRole, findMembershipForScope } = await import("./auth/roles");
     const role = await getUserRole(me);
+    // Task #1036 — match against the membership SET, not the primary hat.
     const allowed = role?.role === "super_admin"
-      || (role?.role === "artist" && role?.roleScopeId === row.primary_artist_id);
+      || !!(await findMembershipForScope(me, "artist", row.primary_artist_id));
     if (!allowed) return res.status(403).json({ message: "Only the artist may approve early-start cutting" });
     await db
       .update(albums)
