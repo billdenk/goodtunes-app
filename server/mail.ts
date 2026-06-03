@@ -26,6 +26,26 @@ function getReplyTo(): string | null {
   return v.length > 0 ? v : null;
 }
 
+// --- Branded email header logo -------------------------------------------
+// Email clients strip SVG and won't load relative paths, so we render the
+// GoodTunes WORDMARK as an absolutely-addressed PNG. The files live in
+// client/public/ (served at the app root); PUBLIC_ORIGIN matches the rest
+// of the server's absolute-link construction. To host the logo somewhere
+// republish-independent (e.g. object storage) without a code change, set
+// MAIL_LOGO_URL (color, light backgrounds) and/or MAIL_LOGO_URL_WHITE
+// (white, dark navy backgrounds) to a full https URL.
+const MAIL_LOGO_W = 96;
+const MAIL_LOGO_H = 58;
+function mailAssetBase(): string {
+  return (process.env.PUBLIC_ORIGIN || "https://admin.goodtunes.music").replace(/\/+$/, "");
+}
+function emailLogoImg(variant: "color" | "white"): string {
+  const fallback = `${mailAssetBase()}/goodtunes-logo-${variant === "white" ? "white" : "color"}.png`;
+  const override = (variant === "white" ? process.env.MAIL_LOGO_URL_WHITE : process.env.MAIL_LOGO_URL) || "";
+  const src = override.trim() || fallback;
+  return `<img src="${src}" alt="GoodTunes" width="${MAIL_LOGO_W}" height="${MAIL_LOGO_H}" style="display:block;width:${MAIL_LOGO_W}px;height:${MAIL_LOGO_H}px;border:0;outline:none;text-decoration:none;margin:0 0 18px;" />`;
+}
+
 type SendResult = { ok: true } | { ok: false; reason: string };
 
 // Synthetic recipient guard — Task #380.
@@ -160,7 +180,8 @@ export async function sendAdminOtpEmail(toEmail: string, code: string, ttlMinute
   ].join("\n");
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
-      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">GoodTunes admin</div>
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Admin</div>
       <h1 style="font-size: 28px; margin: 12px 0 24px; font-weight: 700;">Your sign-in code</h1>
       <div style="font-size: 36px; font-weight: 700; letter-spacing: 8px; padding: 20px 24px; background: #f4f4f7; border-radius: 12px; text-align: center; font-family: 'SF Mono', Menlo, Consolas, monospace;">${code}</div>
       <p style="font-size: 15px; color: #444; margin-top: 24px; line-height: 1.5;">Enter this code in the GoodTunes admin sign-in screen. It expires in <strong>${ttlMinutes} minutes</strong>.</p>
@@ -187,7 +208,8 @@ export async function sendCustomerSignupCodeEmail(toEmail: string, code: string,
   ].join("\n");
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
-      <div style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">Welcome to GoodTunes</div>
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">Welcome</div>
       <h1 style="font-size: 28px; margin: 12px 0 24px; font-weight: 700;">Your sign-in code</h1>
       <div style="font-size: 36px; font-weight: 700; letter-spacing: 8px; padding: 20px 24px; background: #f4f4f7; border-radius: 12px; text-align: center; font-family: 'SF Mono', Menlo, Consolas, monospace; color: #00062B;">${code}</div>
       <p style="font-size: 15px; color: #444; margin-top: 24px; line-height: 1.5;">Pop this code back into the sign-in screen to finish creating your account. It expires in <strong>${ttlMinutes} minutes</strong>.</p>
@@ -241,7 +263,8 @@ export async function sendWelcomeBackEmail(toEmail: string, displayName: string 
 
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
-      <div style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">GoodTunes · Welcome back</div>
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">Welcome back</div>
       <h1 style="font-size: 26px; margin: 12px 0 16px; font-weight: 700; line-height: 1.2;">Hi ${escapeHtml(friendly)}, your player is ready.</h1>
       <p style="font-size: 15px; color: #333; line-height: 1.55; margin: 0 0 20px;">
         Your gogoods.com purchases just moved into the new <strong>GoodTunes</strong> player — every album you ever bought is waiting, ready to stream.
@@ -312,7 +335,8 @@ export async function sendAdminAccessRequestEmail(
   ].join("\n");
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
-      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">GoodTunes admin</div>
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Admin</div>
       <h1 style="font-size: 22px; margin: 12px 0 12px; font-weight: 700;">Access requested</h1>
       <p style="font-size: 15px; line-height: 1.5; color: #333;">
         <strong>${requester.displayName}</strong> &lt;${requester.email}&gt; tried to open the admin shell while signed in as a fan.
@@ -348,7 +372,8 @@ export async function sendAdminPasswordResetEmail(
   ].join("\n");
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
-      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">GoodTunes admin</div>
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Admin</div>
       <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700;">Reset your password</h1>
       <p style="font-size: 15px; line-height: 1.5; color: #333;">Someone (hopefully you) asked to reset the password for your GoodTunes admin account.</p>
       <p style="margin: 28px 0;">
@@ -382,7 +407,8 @@ export async function sendAdminPasswordResetConfirmationEmail(
   ].join("\n");
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
-      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">GoodTunes admin</div>
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Admin</div>
       <h1 style="font-size: 24px; margin: 12px 0 16px; font-weight: 700;">Your password was just reset</h1>
       <p style="font-size: 15px; line-height: 1.5; color: #333;">Your GoodTunes admin password was reset on <strong>${opts.whenIso}</strong>${locText ? ` <span style="color:#888;">${locText}</span>` : ""}.</p>
       <p style="font-size: 15px; line-height: 1.5; color: #333;">If this was you, you can ignore this email — just sign in with your new password.</p>
@@ -423,7 +449,8 @@ export async function sendCustomerPasswordResetEmail(
   ].join("\n");
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #00062B; color: #ffffff; border-radius: 16px;">
-      <div style="font-size: 14px; color: #4AFFCA; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">GoodTunes</div>
+      ${emailLogoImg("white")}
+      <div style="font-size: 14px; color: #4AFFCA; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">Account</div>
       <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700; color: #ffffff;">${heading}</h1>
       <p style="font-size: 15px; line-height: 1.5; color: rgba(255,255,255,0.75);">${lead}</p>
       <p style="margin: 28px 0;">
@@ -550,7 +577,8 @@ export async function sendOrderReceiptEmail(
 
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #00062B; color: #ffffff; border-radius: 16px;">
-      <div style="font-size: 14px; color: #4AFFCA; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">GoodTunes · Receipt</div>
+      ${emailLogoImg("white")}
+      <div style="font-size: 14px; color: #4AFFCA; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">Receipt</div>
       <h1 style="font-size: 28px; margin: 12px 0 8px; font-weight: 700; color: #ffffff;">You're in.</h1>
       <p style="font-size: 15px; line-height: 1.5; color: rgba(255,255,255,0.75); margin: 0 0 20px;">Your album is unlocked and your record is on its way.</p>
       <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 0 4px;">
@@ -666,16 +694,18 @@ export async function sendErrorReportEmail(
   return sendViaResend("error-report", toEmail, subject, html, text, replyTo);
 }
 
-// Send an admin-invite link. The link points at the public /invite/:token
-// page where the recipient sets a username + password; on submit we
-// provision their users row with the role + scope baked into the invite.
-export async function sendAdminInviteEmail(
-  toEmail: string,
-  acceptUrl: string,
-  inviterName: string,
-  roleLabel: string,
-  ttlDays: number,
-): Promise<SendResult> {
+// Build the admin-invite email (subject/text/html). Split out from the
+// sender so the exact HTML artists/presses receive can be previewed
+// without sending. The link points at the public /invite/:token page
+// where the recipient sets a username + password; on submit we provision
+// their users row with the role + scope baked into the invite.
+export function buildAdminInviteEmail(opts: {
+  acceptUrl: string;
+  inviterName: string;
+  roleLabel: string;
+  ttlDays: number;
+}): { subject: string; text: string; html: string } {
+  const { acceptUrl, inviterName, roleLabel, ttlDays } = opts;
   const subject = `${inviterName} invited you to GoodTunes`;
   const text = [
     `${inviterName} invited you to join GoodTunes as a ${roleLabel}.`,
@@ -687,7 +717,8 @@ export async function sendAdminInviteEmail(
   ].join("\n");
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
-      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">GoodTunes</div>
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Invitation</div>
       <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700;">You're invited</h1>
       <p style="font-size: 16px; line-height: 1.5; color: #333;"><strong>${inviterName}</strong> invited you to join GoodTunes as a <strong>${roleLabel}</strong>.</p>
       <p style="margin: 28px 0;">
@@ -697,6 +728,17 @@ export async function sendAdminInviteEmail(
       <p style="font-size: 13px; color: #888; margin-top: 24px;">This link expires in <strong>${ttlDays} days</strong>. If you weren't expecting this email, you can ignore it.</p>
     </div>
   `;
+  return { subject, text, html };
+}
+
+export async function sendAdminInviteEmail(
+  toEmail: string,
+  acceptUrl: string,
+  inviterName: string,
+  roleLabel: string,
+  ttlDays: number,
+): Promise<SendResult> {
+  const { subject, text, html } = buildAdminInviteEmail({ acceptUrl, inviterName, roleLabel, ttlDays });
   return sendViaResend("admin-invite", toEmail, subject, html, text);
 }
 
@@ -752,7 +794,8 @@ export async function sendMastersReadyEmail(
   ].join("\n");
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
-      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">GoodTunes</div>
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Press update</div>
       <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700;">Start cutting early?</h1>
       <p style="font-size: 16px; line-height: 1.5; color: #333;"><strong>${escapeHtml(pressName)}</strong> has earmarked enough revenue from <strong>${escapeHtml(albumTitle)}</strong> to cover the masters-prep cost. Approve to let them begin cutting now.</p>
       <p style="margin: 28px 0;">
@@ -814,7 +857,8 @@ export async function sendFulfillmentHeadsUpEmail(
     : "";
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
-      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">GoodTunes</div>
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Fulfillment</div>
       <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700;">${verb}</h1>
       <p style="font-size: 16px; line-height: 1.5; color: #333;"><strong>${quantity}</strong> units of <strong>${escapeHtml(albumTitle)}</strong>, pressed by <strong>${escapeHtml(pressName)}</strong>.</p>
       <p style="font-size: 14px; color: #555; line-height: 1.5;">${escapeHtml(shipLine)}</p>
