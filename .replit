@@ -80,12 +80,12 @@ isValidation = true
 name = "test"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "npx tsx --test $(find shared server -name '*.test.ts' -not -path '*/node_modules/*')"
-
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "TSX_TSCONFIG_PATH=tsconfig.test.json npx tsx --test $(find client shared server -name '*.test.ts' -not -path '*/node_modules/*')"
 
 [agent]
 stack = "FULLSTACK_JS"
