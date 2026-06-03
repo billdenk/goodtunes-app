@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { ChevronRight, Play, Pause, Shuffle, MoreHorizontal, Lock, X, Link2, Info } from "lucide-react";
+import { ChevronRight, Play, Pause, Shuffle, MoreHorizontal, Lock, X, Share, Info } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { IconButton } from "@/components/ui/IconButton";
 import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
@@ -286,7 +286,31 @@ export function DesktopAlbumView({
         {/* Hero. Cover shrinks to 220px at md (portrait tablets) so the
             artist/title block keeps a comfortable reading measure next
             to it; at lg we restore the full 280px Apple-Music density. */}
-        <section className={cls.heroSection} data-testid="album-hero">
+        <section className={`relative ${cls.heroSection}`} data-testid="album-hero">
+          {/* Apple-Music top-right chrome: Share + More sit together in the
+              top-right corner of the album header, away from the transport
+              controls (Task #1055). */}
+          <div className="absolute top-0 right-0 flex items-center gap-1">
+            <IconButton
+              variant="ghost"
+              size="md"
+              label="Share album"
+              onClick={handleCopyShareLink}
+              className="text-white/80 hover:text-white"
+              data-testid="button-share-album"
+            >
+              <Share strokeWidth={2} />
+            </IconButton>
+            <IconButton
+              variant="ghost"
+              size="md"
+              label="More options"
+              className="text-white/70 hover:text-white"
+              data-testid="button-album-more"
+            >
+              <MoreHorizontal strokeWidth={2} />
+            </IconButton>
+          </div>
           <div
             className={cls.cover}
             style={{
@@ -444,27 +468,6 @@ export function DesktopAlbumView({
                   )}
                 </>
               )}
-
-              <button
-                type="button"
-                onClick={handleCopyShareLink}
-                data-testid="button-share-album"
-                aria-label="Copy share link"
-                className="h-11 w-11 rounded-full inline-flex items-center justify-center text-white/80 border border-white/30 hover:text-white hover:border-white/85 hover:bg-white/10 transition-colors active:scale-[0.94]"
-              >
-                <Link2 className="w-4 h-4" strokeWidth={2} />
-              </button>
-
-              <div className="flex-1" />
-
-              <button
-                type="button"
-                aria-label="More options"
-                data-testid="button-album-more"
-                className="w-11 h-11 rounded-full inline-flex items-center justify-center text-white/70 hover:text-white hover:bg-white/8 transition-colors active:scale-[0.94]"
-              >
-                <MoreHorizontal className="w-5 h-5" strokeWidth={2} />
-              </button>
             </div>
           </div>
         </section>
