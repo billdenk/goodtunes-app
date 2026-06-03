@@ -499,6 +499,36 @@ SQL
 migrate_albums_is_spin_promo dev  "${DATABASE_URL:-}"
 migrate_albums_is_spin_promo prod "${PROD_DATABASE_URL:-}"
 
+# Task #1078 / #1112 — Apple-Music-style album footer fields. Task #1078
+# added albums.copyright_line + albums.original_release_date to
+# shared/schema.ts but never shipped a post-merge migrate_* block, so BOTH
+# dev and prod drifted behind the schema (post-merge intentionally does NOT
+# run db:push — see top of file). The published code SELECTs these columns
+# on every Albums list load and UPDATEs them on every metadata/streaming
+# save, so both 500 with "column does not exist" until the columns land.
+# Pre-create on both DBs to keep the publish dev→prod diff empty and stop
+# the 500s. Both nullable + additive — backwards-compatible, no rename. See
+# .agents/memory/migration-claims-vs-reality.md.
+migrate_albums_apple_footer_fields() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping albums apple-footer migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE albums
+  ADD COLUMN IF NOT EXISTS copyright_line        text,
+  ADD COLUMN IF NOT EXISTS original_release_date text;
+SQL
+  then
+    echo "post-merge: albums apple-footer migration ok on $label"
+  else
+    echo "post-merge: WARNING — albums apple-footer migration failed on $label (continuing)"
+  fi
+}
+migrate_albums_apple_footer_fields dev  "${DATABASE_URL:-}"
+migrate_albums_apple_footer_fields prod "${PROD_DATABASE_URL:-}"
+
 # Task #965 — clean per-release share slug (get.goodtunes.music/<slug>).
 # Nullable text + a UNIQUE index on non-null values so two albums can both
 # be null but no two share a slug. Pre-create on both DBs to keep the

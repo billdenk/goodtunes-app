@@ -2224,6 +2224,7 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
         disabledReason={disabledReason}
         values={{
           goodTunesReleaseDate: album.goodTunesReleaseDate,
+          streamingReleaseDate: album.streamingReleaseDate,
           originalReleaseDate: album.originalReleaseDate,
         }}
         invalidate={invalidate}
@@ -2233,6 +2234,17 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
             label: "GoodTunes release date",
             type: "date",
           },
+          // Task #1112 — the Sunset date (end of the GoodTunes exclusive
+          // window) lives next to the GoodTunes release date (its sunrise)
+          // so the start and end of the window sit together. Still stored on
+          // the legacy `streamingReleaseDate` column and saved through the
+          // same endpoint/gate/normalization as before — placement only.
+          {
+            key: "streamingReleaseDate",
+            label: "Sunset date",
+            type: "date",
+            placeholder: "When this leaves GoodTunes for streaming",
+          },
           {
             key: "originalReleaseDate",
             label: "Original release date",
@@ -2241,11 +2253,11 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           },
         ]}
       />
-      {/* Task #1049 — "Streaming" is its own panel. The Sunset date (stored
-          on the legacy `streamingReleaseDate` column) is the day the release
-          leaves its GoodTunes exclusive window: once it's set AND in the
-          past, fans see the "Listen on…" links and the album sells out. The
-          six service URLs feed those links; Refresh auto-fills them. */}
+      {/* Task #1049 — "Streaming" is its own panel. The six service URLs feed
+          the fan-facing "Listen on…" links; Refresh auto-fills them. Task
+          #1112 moved the Sunset date (the day the release leaves its GoodTunes
+          exclusive window) up into the Release panel so it sits next to the
+          GoodTunes release date (its sunrise). */}
       <EditablePanel
         title="Streaming"
         testId="panel-overview-streaming"
@@ -2255,7 +2267,6 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
         disabledReason={disabledReason}
         headerAction={<RefreshStreamingLinksButton album={album} />}
         values={{
-          streamingReleaseDate: album.streamingReleaseDate,
           appleMusicUrl: album.appleMusicUrl,
           spotifyUrl: album.spotifyUrl,
           tidalUrl: album.tidalUrl,
@@ -2265,12 +2276,6 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
         }}
         invalidate={invalidate}
         fields={[
-          {
-            key: "streamingReleaseDate",
-            label: "Sunset date",
-            type: "date",
-            placeholder: "When this leaves GoodTunes for streaming",
-          },
           {
             key: "appleMusicUrl",
             label: "Apple Music",
