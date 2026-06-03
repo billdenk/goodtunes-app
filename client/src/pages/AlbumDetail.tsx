@@ -763,9 +763,11 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
             streamOnly: s.streamOnly,
             spotifyTrackUrl: s.spotifyTrackUrl,
             appleMusicTrackUrl: s.appleMusicTrackUrl,
+            isPreviewable: (s as any).isPreviewable,
           }))}
           label={apiAlbum?.label ?? null}
           ownedNums={ownedNums}
+          isOwned={isOwned}
           currentSongId={currentSong?.id ?? null}
           isPlaying={isPlaying}
           downloadedSongIds={downloadedSongs}

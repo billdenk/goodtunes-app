@@ -7,7 +7,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, Share, MoreHorizontal, Info } from "lucide-react";
+import { ChevronLeft, Share, MoreHorizontal, Info, Lock } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import { IconButton } from "@/components/ui/IconButton";
@@ -59,6 +59,10 @@ export interface AlbumDetailMobileSurfaceSong {
   streamOnly?: boolean;
   spotifyTrackUrl?: string | null;
   appleMusicTrackUrl?: string | null;
+  // Fan-facing preview state (server-derived from `previewHidden`). When
+  // `false` on a not-owned album the row renders as a quiet "locked" row
+  // (greyed title + lock, no ⋯ menu, not tappable) mirroring desktop.
+  isPreviewable?: boolean | null;
 }
 
 export interface AlbumDetailMobileSurfaceLabel {
@@ -73,6 +77,9 @@ export interface AlbumDetailMobileSurfaceProps {
   songs: AlbumDetailMobileSurfaceSong[];
   label?: AlbumDetailMobileSurfaceLabel | null;
   ownedNums?: number[];
+  /** Fan owns the album (full playback). Owned albums never lock rows —
+   *  matches the desktop `isOwned ? "full"` branch. */
+  isOwned?: boolean;
   currentSongId?: string | null;
   isPlaying?: boolean;
   downloadedSongIds?: Set<string>;
@@ -145,6 +152,7 @@ export function AlbumDetailMobileSurface({
   songs,
   label,
   ownedNums = [],
+  isOwned = false,
   currentSongId,
   isPlaying = false,
   downloadedSongIds,
@@ -736,6 +744,51 @@ export function AlbumDetailMobileSurface({
             const isActive = currentSongId === song.id;
             const isDownloaded = !!downloadedSongIds?.has(song.id);
             const isFavorite = !!favoriteSongIds?.has(song.id);
+            // Quiet "locked" row: an operator hid this track's preview on a
+            // not-owned album. Mirrors the desktop `locked` state — greyed
+            // title + lock, nothing actionable on the right, not tappable.
+            const locked = !isOwned && song.isPreviewable === false;
+            if (locked) {
+              return (
+                <div
+                  key={song.id}
+                  className="flex items-center gap-3 h-16"
+                  data-testid={`row-track-${song.id}`}
+                >
+                  <div className="flex items-center gap-4 flex-1 min-w-0 h-full">
+                    <div className="flex-shrink-0 flex items-center gap-1.5">
+                      <div className="w-3" />
+                      <div className="w-6 flex items-center justify-end">
+                        <span
+                          className="text-[15px] tabular-nums"
+                          style={{ color: "rgba(255,255,255,0.22)" }}
+                        >
+                          {song.trackNumber}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0 relative h-full flex items-center gap-2.5">
+                      <p className="text-[15px] font-medium truncate text-white/45">
+                        {song.title}
+                      </p>
+                      {song.isExplicit && <ExplicitBadge />}
+                      <Lock
+                        className="w-3 h-3 text-white/35 flex-shrink-0"
+                        strokeWidth={2.2}
+                        aria-hidden
+                        data-testid={`icon-locked-${song.id}`}
+                      />
+                      {i > 0 && (
+                        <span
+                          className="absolute left-0 right-0 top-0 h-px pointer-events-none"
+                          style={{ background: "rgba(255,255,255,0.07)" }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
             return (
               <div
                 key={song.id}

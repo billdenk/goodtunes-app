@@ -8352,11 +8352,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumDesktopSidebar.tsx",
-    "snippet": "<span className=\"text-[14px] font-semibold tracking-[-0.005em]\">{label}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/AlbumDesktopSidebar.tsx",
     "snippet": "<div className=\"w-full h-full flex items-center justify-center text-white/70 text-[13px] font-semibold\">"
   },
   {
@@ -8527,6 +8522,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "<p className=\"text-[15px] font-medium truncate text-white/45\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
     "snippet": "className={`text-[15px] font-semibold truncate ${isActive ? \"text-[#319ED8]\" : \"text-white\"}`}"
   },
   {
@@ -8553,11 +8553,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
     "snippet": "title: \"text-white font-bold tracking-[-0.015em] leading-[1.05] text-[32px] lg:text-[40px]\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"flex items-center gap-2 text-[13px]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -8597,16 +8592,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"relative h-11 px-2 inline-flex items-center gap-1.5 text-[15px] font-semibold transition-colors\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "<span className=\"text-[12px] text-white/45 font-medium\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
     "snippet": "<span className=\"text-white text-[14px] font-semibold tracking-[-0.005em]\">"
   },
   {
@@ -8633,11 +8618,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
     "snippet": "<div className=\"absolute left-3 right-3 bottom-3 text-white text-[12.5px] font-semibold truncate\">"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"absolute left-1/2 -translate-x-1/2 bottom-1 w-7 h-[2.5px] rounded-full transition-opacity\""
   },
   {
     "rule": "player-touch-target-too-small",
