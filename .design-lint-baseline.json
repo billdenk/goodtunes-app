@@ -12270,6 +12270,11 @@
     "snippet": ": \"border-2 border-[#FF5470] text-[#FF5470] hover:bg-[#FF5470]/12 active:scale-[0.97]\","
   },
   {
+    "rule": "fan-text-tone",
+    "file": "client/src/components/ui/DesktopAlbumView.tsx",
+    "snippet": "className=\"w-8 h-8 [&>svg]:w-4 [&>svg]:h-4 text-white/65 hover:text-white\""
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
     "snippet": "title: \"text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[32px]\","
@@ -12322,11 +12327,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "<div className=\"flex-1 overflow-y-auto px-5 py-4 text-fan-primary text-[14px] leading-[1.7]\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
     "snippet": "\"h-11 pl-4 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[14px] transition-colors\","
   },
   {
@@ -12343,11 +12343,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
     "snippet": "<div className=\"absolute left-3 right-3 bottom-3 text-fan-primary text-[12.5px] font-semibold truncate\">"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"w-8 h-8 rounded-full inline-flex items-center justify-center text-fan-secondary hover:text-white hover:bg-white/8 transition-colors\""
   },
   {
     "rule": "player-touch-target-too-small",
@@ -12462,7 +12457,7 @@
   {
     "rule": "naked-icon-button",
     "file": "client/src/components/ui/PlayerDock.tsx",
-    "snippet": "<button type=\"button\" aria-label=\"Show lyrics\" title={onLyrics ? \"Show lyrics\" : \"Lyrics (coming soon)\"} onClick={onLyrics} disabled={!onLyrics || !hasSelection} data-testid=\"button-lyrics\" className="
+    "snippet": "<button type=\"button\" aria-label={lyricsActive ? \"Hide lyrics\" : \"Show lyrics\"} aria-pressed={onLyrics ? lyricsActive : undefined} title={ onLyrics ? lyricsActive ? \"Hide lyrics\" : \"Show lyrics\" : \"Ly"
   },
   {
     "rule": "naked-icon-button",

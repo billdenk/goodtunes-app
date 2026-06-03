@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Link, useLocation } from "wouter";
-import { ChevronLeft, Play, Pause, Shuffle, MoreHorizontal, Lock, X, Share, Info, Maximize2 } from "lucide-react";
+import { ChevronLeft, Play, Pause, Shuffle, MoreHorizontal, Lock, X, Share, Info } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { IconButton } from "@/components/ui/IconButton";
 import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
@@ -134,19 +134,15 @@ export type DesktopAlbumViewProps = {
   onBack?: () => void;
 
   /** Optional right-side lyrics slide-in panel. When `lyrics` is supplied
-   *  AND `lyricsOpen=true`, a 360-wide panel slides in from the right;
-   *  the tracklist column stays at its natural width and the panel
-   *  layers next to it inside the scroll area. `onCloseLyrics` wires the
-   *  panel's `×` button — host owns the open/close state. */
+   *  AND `lyricsOpen=true`, a 360-wide panel animates in from the right
+   *  edge; the main content column smoothly reflows to make room and
+   *  stays visible beside it (Apple-Music behavior — no full-screen
+   *  takeover). The `lyrics` node owns its own scroll/karaoke surface
+   *  (the fan route passes the shared `SyncedLyrics`). `onCloseLyrics`
+   *  wires the panel's `×` button — host owns the open/close state. */
   lyricsOpen?: boolean;
   lyrics?: ReactNode;
   onCloseLyrics?: () => void;
-
-  /** When supplied, the lyrics panel reveals a hover/focus "expand" affordance
-   *  (Apple-Music diagonal double-arrow) that opens the full-screen immersive
-   *  player. Only the fan route passes this; the admin preview omits it so the
-   *  preview pane never grows a live expand control. */
-  onExpandLyrics?: () => void;
 
   /** When true, render the medium-breakpoint (portrait-tablet) sizing
    *  regardless of the actual viewport width. Used by the admin tablet
@@ -224,7 +220,6 @@ export function DesktopAlbumView({
   lyricsOpen,
   lyrics,
   onCloseLyrics,
-  onExpandLyrics,
   compact = false,
 }: DesktopAlbumViewProps) {
   const reduceMotion = useReducedMotion();
@@ -242,7 +237,6 @@ export function DesktopAlbumView({
         heroSection: "mt-7 flex gap-6",
         cover: "rounded-2xl overflow-hidden flex-shrink-0 w-[220px] h-[220px]",
         title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[32px]",
-        lyricsAside: "hidden",
       }
     : {
         // Apple parity: let the album content (hero + tracklist) breathe
@@ -255,7 +249,6 @@ export function DesktopAlbumView({
         heroSection: "mt-7 flex gap-6 lg:gap-8",
         cover: "rounded-2xl overflow-hidden flex-shrink-0 w-[220px] h-[220px] lg:w-[280px] lg:h-[280px]",
         title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[32px] lg:text-[40px]",
-        lyricsAside: "hidden lg:flex flex-col flex-shrink-0 w-[360px] sticky top-0 self-start h-screen py-8 pr-10 pl-2",
       };
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -654,61 +647,73 @@ export function DesktopAlbumView({
         <div className="h-16" aria-hidden />
       </div>
 
-      {/* Right-side lyrics slide-in. Mounted only when both `lyrics` content
-          and `lyricsOpen` flag are truthy. Caller owns the toggle (typically
-          PlayerContext.showLyrics + setShowLyrics). The panel is sticky-
-          height so it scrolls with the primary column and avoids dueling
-          scrollbars. */}
-      {showLyrics && (
-        <aside
-          className={cls.lyricsAside}
-          aria-label="Lyrics"
-          data-testid="panel-lyrics"
-        >
-          <div
-            className="group flex-1 min-h-0 rounded-2xl overflow-hidden flex flex-col"
-            style={{
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)",
-            }}
+      {/* Right-side lyrics slide-in (Apple-Music style). The width is the
+          animated property: the aside grows from 0 → 360px so the primary
+          column reflows smoothly to make room and stays fully visible —
+          no full-screen takeover. The inner card is fixed-width and
+          right-justified inside the overflow-hidden aside, so it reads as
+          a panel sliding in from the right edge. Caller owns the toggle
+          (PlayerContext.showLyrics + setShowLyrics). lg-only: the 360px
+          panel needs the room a wide desktop provides. The `lyrics` node
+          (the shared karaoke SyncedLyrics on the fan route) owns its own
+          scroll, so the body is a plain flex container — no extra
+          scrollbar. */}
+      <AnimatePresence initial={false}>
+        {showLyrics && !compact && (
+          <motion.aside
+            key="lyrics-panel"
+            className="hidden lg:flex justify-end flex-shrink-0 overflow-hidden sticky top-0 self-start h-screen"
+            initial={reduceMotion ? false : { width: 0 }}
+            animate={{ width: LYRICS_PANEL_WIDTH }}
+            exit={{ width: 0 }}
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : { type: "spring", stiffness: 420, damping: 44, mass: 0.9 }
+            }
+            aria-label="Lyrics"
+            data-testid="panel-lyrics"
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
-              <span className="text-fan-primary text-[14px] font-semibold tracking-[-0.005em]">
-                Lyrics
-              </span>
-              <div className="flex items-center gap-1">
-                {onExpandLyrics && (
+            <div
+              className="flex-shrink-0 h-full py-8 pr-8 pl-2 flex flex-col"
+              style={{ width: LYRICS_PANEL_WIDTH }}
+            >
+              <div
+                className="flex-1 min-h-0 rounded-2xl overflow-hidden flex flex-col"
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
+                  <span className="text-fan-primary text-[14px] font-semibold tracking-[-0.005em]">
+                    Lyrics
+                  </span>
                   <IconButton
                     variant="ghost"
                     size="md"
-                    label="Expand to full screen"
-                    onClick={onExpandLyrics}
-                    data-testid="button-expand-lyrics"
-                    className="w-8 h-8 [&>svg]:w-4 [&>svg]:h-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100"
+                    label="Close lyrics"
+                    onClick={onCloseLyrics}
+                    data-testid="button-close-lyrics"
+                    className="w-8 h-8 [&>svg]:w-4 [&>svg]:h-4 text-white/65 hover:text-white"
                   >
-                    <Maximize2 />
+                    <X strokeWidth={2.2} />
                   </IconButton>
-                )}
-                <button
-                  type="button"
-                  onClick={onCloseLyrics}
-                  aria-label="Close lyrics"
-                  data-testid="button-close-lyrics"
-                  className="w-8 h-8 rounded-full inline-flex items-center justify-center text-fan-secondary hover:text-white hover:bg-white/8 transition-colors"
-                >
-                  <X className="w-4 h-4" strokeWidth={2.2} />
-                </button>
+                </div>
+                <div className="flex-1 min-h-0 flex flex-col">{lyrics}</div>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto px-5 py-4 text-fan-primary text-[14px] leading-[1.7]">
-              {lyrics}
-            </div>
-          </div>
-        </aside>
-      )}
+          </motion.aside>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+
+/** Fixed pixel width of the desktop lyrics panel. The aside animates its
+ *  own width between 0 and this value; the inner card is pinned to it so
+ *  the slide reads as an edge reveal rather than a squash. */
+const LYRICS_PANEL_WIDTH = 360;
 
 /* Rose accent — matches the per-row triangle/equalizer in
    AlbumDesktopTrackRow so the album-level Play pill and the row-level

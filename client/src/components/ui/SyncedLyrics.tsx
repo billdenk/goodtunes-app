@@ -11,11 +11,12 @@ import { buildSyncedLines } from "@/lib/syncedLyrics";
  * credit rides the bottom fade.
  *
  * This is the single source of truth rendered by BOTH the mobile Now
- * Playing overlay (client/src/pages/Player.tsx) and the desktop immersive
- * player (client/src/components/ui/DesktopImmersivePlayer.tsx). The timing
- * engine lives in client/src/lib/syncedLyrics.ts. Mobile passes the
- * defaults below verbatim so its behaviour is unchanged; the desktop view
- * overrides sizing/padding for the wider column.
+ * Playing overlay (client/src/pages/Player.tsx) and the desktop right-side
+ * lyrics slide-in panel (driven by client/src/pages/AlbumDetailDesktop.tsx
+ * into the panel hosted by DesktopAlbumView). The timing engine lives in
+ * client/src/lib/syncedLyrics.ts. Mobile passes the defaults below verbatim
+ * so its behaviour is unchanged; the desktop panel overrides sizing/padding
+ * for its narrower column.
  *
  * Sizing is applied through inline `fontSize` (a number, in px) rather than
  * Tailwind `text-[Npx]` so the design linter stays happy while the visual

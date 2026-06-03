@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/AlbumDetailSkeleton";
 import { DesktopSearchView } from "@/components/search/DesktopSearchView";
 import { PlayerDock } from "@/components/ui/PlayerDock";
-import { DesktopImmersivePlayer } from "@/components/ui/DesktopImmersivePlayer";
+import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
 import {
   DesktopAlbumView,
   type DesktopAlbumSong,
@@ -168,10 +168,6 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const favSongs = useFavoriteSongs();
   const [showAlbumCredits, setShowAlbumCredits] = useState(false);
 
-  // Full-screen immersive player (Task #1056). Opened from the lyrics
-  // panel's hover "expand" affordance; reads playback straight off
-  // PlayerContext so opening/closing never touches the audio element.
-  const [showImmersive, setShowImmersive] = useState(false);
   // Person opened from the album-credits sheet. The desktop view has no
   // SuperCredits sheet stack of its own, so PersonDetailSheet brings its own
   // self-contained About/Music/Gear sheet (+ instrument/vendor sub-stack).
@@ -420,27 +416,50 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
 
   // Lyrics panel body — pulled from the currently-playing song. Falls
   // back to a placeholder so the panel still reads as intentional when
-  // the user opens it before picking a track. GoodSync (timed) lyrics
-  // get the karaoke pass in a follow-up — for now the panel renders the
-  // plain `lyrics` text line by line.
+  // the user opens it before picking a track. When the song has lyrics we
+  // render the SHARED karaoke `SyncedLyrics` surface (the same component
+  // the mobile player uses) driven entirely by props — active line sharp,
+  // neighbours blur/fade, auto-scroll, every line the same size. The
+  // sizing/padding are tuned down for the 360px side panel; we never edit
+  // SyncedLyrics internals.
   const lyricsBody = (() => {
     const cs = player.currentSong;
     if (!cs) {
       return (
-        <p className="text-fan-secondary italic">
-          Pick a track to see its lyrics here.
-        </p>
+        <div className="flex-1 min-h-0 flex items-center justify-center px-6">
+          <p className="text-fan-secondary italic text-sm text-center">
+            Pick a track to see its lyrics here.
+          </p>
+        </div>
       );
     }
-    if (!cs.lyrics || cs.lyrics.trim().length === 0) {
+    const hasPlain = !!cs.lyrics && cs.lyrics.trim().length > 0;
+    const hasSynced = !!cs.syncedLyrics && cs.syncedLyrics.length > 0;
+    if (!hasPlain && !hasSynced) {
       return (
-        <p className="text-fan-secondary italic">
-          No lyrics yet for "{cs.title}".
-        </p>
+        <div className="flex-1 min-h-0 flex items-center justify-center px-6">
+          <p className="text-fan-secondary italic text-sm text-center">
+            No lyrics yet for "{cs.title}".
+          </p>
+        </div>
       );
     }
     return (
-      <div className="whitespace-pre-line">{cs.lyrics}</div>
+      <SyncedLyrics
+        lyrics={cs.lyrics}
+        duration={player.duration}
+        syncedLyrics={cs.syncedLyrics}
+        currentTime={player.currentTime}
+        onSeek={player.seekTo}
+        writers={(cs as any).writers}
+        active={player.showLyrics}
+        fontSize={22}
+        gapClassName="gap-3"
+        scrollOffsetRatio={0.3}
+        paddingTop="12vh"
+        paddingBottom="24vh"
+        className="flex-1 min-h-0 px-4"
+      />
     );
   })();
 
@@ -524,9 +543,6 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             lyricsOpen={player.showLyrics}
             lyrics={lyricsBody}
             onCloseLyrics={() => player.setShowLyrics(false)}
-            onExpandLyrics={
-              player.currentSong ? () => setShowImmersive(true) : undefined
-            }
           />
           )}
         </main>
@@ -577,14 +593,11 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
               }
             }}
             onLyrics={() => player.setShowLyrics(!player.showLyrics)}
+            lyricsActive={player.showLyrics}
             coverNode={dockCover}
           />
         </div>
       </div>
-
-      {showImmersive && player.currentSong && (
-        <DesktopImmersivePlayer onClose={() => setShowImmersive(false)} />
-      )}
 
       {import.meta.env.DEV && id && (
         <DevOwnershipToggle albumId={id} isOwned={isOwned} />

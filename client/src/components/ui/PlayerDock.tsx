@@ -86,6 +86,10 @@ export interface PlayerDockProps {
   onSeek?: (seconds: number) => void;
   /** Lyrics button on the right cluster. Omit to hide the button entirely. */
   onLyrics?: () => void;
+  /** When true, the lyrics glyph renders in its active (brand-blue,
+   *  aria-pressed) state — used by the desktop surface to reflect that
+   *  the right-side lyrics panel is currently open. */
+  lyricsActive?: boolean;
 
   /** Fires when the user toggles shuffle (internal state). */
   onShuffleChange?: (next: boolean) => void;
@@ -140,6 +144,7 @@ export function PlayerDock({
   onNext,
   onSeek,
   onLyrics,
+  lyricsActive = false,
   onShuffleChange,
   onRepeatChange,
   onVolumeChange,
@@ -682,17 +687,31 @@ export function PlayerDock({
                 slot will fire the Lyrics overlay once it's wired. */}
             <button
               type="button"
-              aria-label="Show lyrics"
-              title={onLyrics ? "Show lyrics" : "Lyrics (coming soon)"}
+              aria-label={lyricsActive ? "Hide lyrics" : "Show lyrics"}
+              aria-pressed={onLyrics ? lyricsActive : undefined}
+              title={
+                onLyrics
+                  ? lyricsActive
+                    ? "Hide lyrics"
+                    : "Show lyrics"
+                  : "Lyrics (coming soon)"
+              }
               onClick={onLyrics}
               disabled={!onLyrics || !hasSelection}
               data-testid="button-lyrics"
               className={[
                 `${D.utilityBtn} rounded-full inline-flex items-center justify-center transition-colors`,
                 onLyrics && hasSelection
-                  ? "text-fan-primary hover:text-white hover:bg-white/10"
+                  ? lyricsActive
+                    ? "bg-white/10 hover:bg-white/15"
+                    : "text-fan-primary hover:text-white hover:bg-white/10"
                   : "text-fan-faint cursor-default",
               ].join(" ")}
+              style={
+                onLyrics && hasSelection && lyricsActive
+                  ? { color: "var(--brand-blue)" }
+                  : undefined
+              }
             >
               <LyricsIcon size={D.utilityIcon} />
             </button>
