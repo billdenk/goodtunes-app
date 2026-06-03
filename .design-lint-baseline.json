@@ -11495,26 +11495,6 @@
     "snippet": "<p className=\"text-white/45 text-[10px] font-semibold uppercase tracking-wider\">{label}</p>"
   },
   {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/MiniPlayer.tsx",
-    "snippet": "<p className=\"text-fan-primary text-[13px] font-semibold truncate leading-tight\">{currentSong.title}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/MiniPlayer.tsx",
-    "snippet": "<p className=\"text-fan-secondary text-[11px] truncate leading-tight\">{currentSong.album.artist}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/MiniPlayer.tsx",
-    "snippet": "<p className=\"text-fan-primary text-[14px] font-semibold truncate leading-snug\">{currentSong.title}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/MiniPlayer.tsx",
-    "snippet": "<p className=\"text-fan-secondary text-[12px] truncate leading-snug\">{currentSong.album.artist}</p>"
-  },
-  {
     "rule": "fan-text-tone",
     "file": "client/src/components/NpoAlbumLedger.tsx",
     "snippet": "<div className=\"text-sm text-white/55\" data-testid=\"npo-ledger-loading\">"
@@ -12107,7 +12087,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumDesktopSidebar.tsx",
-    "snippet": "<div className=\"w-full h-full flex items-center justify-center text-fan-secondary text-[13px] font-semibold\">"
+    "snippet": "<div className=\"w-full h-full flex items-center justify-center text-fan-primary text-[13px] font-semibold\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -12120,14 +12100,9 @@
     "snippet": "<div className=\"text-fan-secondary text-[11.5px] truncate\">{user.email}</div>"
   },
   {
-    "rule": "naked-icon-button",
-    "file": "client/src/components/ui/AlbumDesktopSidebar.tsx",
-    "snippet": "<button type=\"button\" aria-label=\"Sign out\" data-testid=\"button-signout\" className=\"w-11 h-11 -mr-2 flex items-center justify-center rounded-full text-fan-secondary hover:text-white hover:bg-white/8 t"
-  },
-  {
     "rule": "player-touch-target-too-small",
     "file": "client/src/components/ui/AlbumDesktopSidebar.tsx",
-    "snippet": "className=\"w-10 h-10 rounded-full flex-shrink-0 overflow-hidden bg-white/10\""
+    "snippet": "className=\"w-10 h-10 rounded-full flex-shrink-0 overflow-hidden bg-white/[0.18] ring-1 ring-white/30\""
   },
   {
     "rule": "brand-hex-literal",
@@ -12320,11 +12295,6 @@
     "snippet": ": \"border-2 border-[#FF5470] text-[#FF5470] hover:bg-[#FF5470]/12 active:scale-[0.97]\","
   },
   {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"w-8 h-8 [&>svg]:w-4 [&>svg]:h-4 text-white/65 hover:text-white\""
-  },
-  {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
     "snippet": "title: \"text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[32px]\","
@@ -12368,11 +12338,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
     "snippet": "className=\"h-11 px-6 rounded-full inline-flex items-center justify-center gap-2 text-white font-semibold text-[14px] transition-transform active:scale-[0.97]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "<span className=\"text-fan-primary text-[14px] font-semibold tracking-[-0.005em]\">"
   },
   {
     "rule": "hardcoded-font-size",

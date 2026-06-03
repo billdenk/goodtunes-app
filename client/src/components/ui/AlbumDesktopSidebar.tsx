@@ -1,6 +1,4 @@
 import { useLocation } from "wouter";
-import { LogOut } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
 import { FanRailNav } from "@/components/ui/FanRailNav";
 
 /* Brand tokens — kept inline so the primitive is self-contained and can
@@ -37,14 +35,6 @@ export function AlbumDesktopSidebar({
   onSearch?: () => void;
 }) {
   const [, navigate] = useLocation();
-  const { logout } = useAuth();
-  const handleSignOut = async () => {
-    try {
-      await logout();
-    } finally {
-      navigate("/login");
-    }
-  };
   return (
     <aside
       className="flex flex-col flex-shrink-0 h-full text-fan-primary"
@@ -83,13 +73,13 @@ export function AlbumDesktopSidebar({
             data-testid="button-open-account"
           >
             <div
-              className="w-10 h-10 rounded-full flex-shrink-0 overflow-hidden bg-white/10"
+              className="w-10 h-10 rounded-full flex-shrink-0 overflow-hidden bg-white/[0.18] ring-1 ring-white/30"
               aria-hidden
             >
               {user?.avatarUrl ? (
                 <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-fan-secondary text-[13px] font-semibold">
+                <div className="w-full h-full flex items-center justify-center text-fan-primary text-[13px] font-semibold">
                   {(user?.displayName || user?.email || "?").slice(0, 1).toUpperCase()}
                 </div>
               )}
@@ -102,15 +92,6 @@ export function AlbumDesktopSidebar({
                 <div className="text-fan-secondary text-[11.5px] truncate">{user.email}</div>
               )}
             </div>
-          </button>
-          <button
-            type="button"
-            aria-label="Sign out"
-            data-testid="button-signout"
-            className="w-11 h-11 -mr-2 flex items-center justify-center rounded-full text-fan-secondary hover:text-white hover:bg-white/8 transition-colors flex-shrink-0"
-            onClick={handleSignOut}
-          >
-            <LogOut className="w-[18px] h-[18px]" strokeWidth={1.9} />
           </button>
         </div>
       </div>
