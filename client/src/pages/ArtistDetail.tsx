@@ -409,7 +409,7 @@ export function ArtistDetail() {
               not a banner. */}
           {blurSrc && (
             <div
-              className="relative w-full overflow-hidden pointer-events-none"
+              className="relative w-full lg:max-w-[760px] lg:mx-auto overflow-hidden pointer-events-none"
               style={{ aspectRatio: hasCoverBanner ? "1 / 1.05" : "1 / 0.82" }}
               aria-hidden
             >
@@ -434,7 +434,7 @@ export function ArtistDetail() {
             </div>
           )}
           <div
-            className={`flex flex-col items-center px-5 relative ${
+            className={`flex flex-col items-center px-5 relative lg:max-w-[760px] lg:mx-auto ${
               blurSrc ? "-mt-28" : "pt-20"
             }`}
           >
