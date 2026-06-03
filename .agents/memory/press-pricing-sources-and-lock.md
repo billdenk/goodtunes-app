@@ -31,3 +31,17 @@ a catalog tier and fall into `tiersMissing` — the importer simply can't write
 them. Only **Black**, **House Mix**, and **12_lp Color** names line up, so those
 are the only tiers the Shopify sync (or the lock) actually affects today. If you
 ever want the importer to write color-group pricing, fix the name mapping first.
+
+**Demo/placeholder pricing for empty tiers.** A tier ladder of all
+`confirmed:false` rungs prices as *free* (snapToCatalogQuantityTier filters
+`confirmed===false` out). To make an empty tier demo quantity breaks, fill it
+with `{confirmed:true, estimated:true, source:'placeholder-estimate', syncedAt}`
+rungs — `confirmed:true` so it prices, `estimated:true` for the audit trail (and
+the admin editor renders it distinctly). **Only the DEFAULT jacket ladder
+matters** for the SellPanel/`/invited-press` demo, so fill that one and leave
+non-default jackets; derive numbers from the same-format priced baseline tier.
+**Why:** before this, Memphis had real quotes only on Color (all formats),
+Splatter (12″), and Black (12″LP); every other tier was zero → free. **How to
+apply:** never overwrite a tier that already has any `confirmed:true` rung (real
+quote); skip-if-confirmed makes the fill idempotent. Don't set `lockedFromSync`
+on placeholders so a future real MRP quote overwrites them freely.

@@ -1,0 +1,1142 @@
+{
+  "pressId": "ac3043ae-fbe5-4d9a-a18c-f3d149cca2e8",
+  "jacketId": "dfc592e2-4f8b-4da8-b21b-0745a4df75e4",
+  "jacketName": "Single Jacket",
+  "tiers": [
+    {
+      "id": "0546ce35-01fe-45e3-96bc-79723da9cade",
+      "format": "12_double",
+      "name": "Black",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "7a0077a4-c56d-4527-820d-b58f599381fb",
+      "format": "12_double",
+      "name": "Color",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": true,
+          "unitCents": 2391
+        },
+        {
+          "qty": 500,
+          "confirmed": true,
+          "unitCents": 1643
+        },
+        {
+          "qty": 1000,
+          "confirmed": true,
+          "unitCents": 1138
+        },
+        {
+          "qty": 2000,
+          "confirmed": true,
+          "unitCents": 914
+        },
+        {
+          "qty": 3000,
+          "confirmed": true,
+          "unitCents": 859
+        }
+      ]
+    },
+    {
+      "id": "847be965-b5f5-482c-9b54-e044079448f7",
+      "format": "12_double",
+      "name": "Splatter",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": true,
+          "unitCents": 2609
+        },
+        {
+          "qty": 500,
+          "confirmed": true,
+          "unitCents": 1793
+        },
+        {
+          "qty": 1000,
+          "confirmed": true,
+          "unitCents": 1267
+        },
+        {
+          "qty": 2000,
+          "confirmed": true,
+          "unitCents": 1019
+        },
+        {
+          "qty": 3000,
+          "confirmed": true,
+          "unitCents": 956
+        }
+      ]
+    },
+    {
+      "id": "80ae60f3-65cb-4d1c-8c84-cecc3bcf503e",
+      "format": "12_double",
+      "name": "EcoMix",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "cc5cb4a2-70f1-4a88-80d0-149df2e0fead",
+      "format": "12_double",
+      "name": "Translucent",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "ecaeba4a-36d4-499c-b8d0-0a9aa63e3eff",
+      "format": "12_double",
+      "name": "Opaque",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "49d4ee66-2b45-4b71-9d3d-d8bc81364850",
+      "format": "12_double",
+      "name": "Neon/Glow",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "1ed05aa4-b22f-40ee-9b0f-8f2b338c9ddc",
+      "format": "12_double",
+      "name": "Smoke Blends",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "10f0048f-89d1-429f-a8c3-6cd8617522bc",
+      "format": "12_double",
+      "name": "Cream Blends",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "b2214265-8f28-4103-b9f2-d358e3c589b8",
+      "format": "12_double",
+      "name": "Metallic Blends",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "50c80982-b60e-4380-9181-a32cb1e11b01",
+      "format": "12_lp",
+      "name": "Black",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": true,
+          "unitCents": 1350
+        },
+        {
+          "qty": 200,
+          "confirmed": true,
+          "unitCents": 875
+        },
+        {
+          "qty": 300,
+          "confirmed": true,
+          "unitCents": 695
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "0c954947-d7bd-4170-b3a0-d3f7b234fe98",
+      "format": "12_lp",
+      "name": "Color",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": true,
+          "unitCents": 1112
+        },
+        {
+          "qty": 500,
+          "confirmed": true,
+          "unitCents": 775
+        },
+        {
+          "qty": 1000,
+          "confirmed": true,
+          "unitCents": 543
+        },
+        {
+          "qty": 2000,
+          "confirmed": true,
+          "unitCents": 458
+        },
+        {
+          "qty": 3000,
+          "confirmed": true,
+          "unitCents": 434
+        }
+      ]
+    },
+    {
+      "id": "0e18791f-3d16-4e53-a91b-4d8b4a46cc42",
+      "format": "12_lp",
+      "name": "Splatter",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": true,
+          "unitCents": 1221
+        },
+        {
+          "qty": 500,
+          "confirmed": true,
+          "unitCents": 850
+        },
+        {
+          "qty": 1000,
+          "confirmed": true,
+          "unitCents": 608
+        },
+        {
+          "qty": 2000,
+          "confirmed": true,
+          "unitCents": 510
+        },
+        {
+          "qty": 3000,
+          "confirmed": true,
+          "unitCents": 482
+        }
+      ]
+    },
+    {
+      "id": "ab173025-cc1e-4f3e-8082-3be7dc6f18bf",
+      "format": "12_lp",
+      "name": "EcoMix",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "de6370f1-aeeb-45b5-b6fc-2ff9e38cf34f",
+      "format": "12_lp",
+      "name": "Translucent",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "3101c299-5c70-431a-b4c5-3fbae73ac133",
+      "format": "12_lp",
+      "name": "Opaque",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "b5ca866d-c311-4cea-b19c-2499163c7502",
+      "format": "12_lp",
+      "name": "Neon/Glow",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "9ed83432-ef60-4e38-92f6-11536cb95270",
+      "format": "12_lp",
+      "name": "Smoke Blends",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "eda97b24-ff8c-4383-ab1a-77a3f9e5b21f",
+      "format": "12_lp",
+      "name": "Cream Blends",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "71803f22-4c58-4887-98ee-937c415d152e",
+      "format": "12_lp",
+      "name": "Metallic Blends",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "113effb6-1554-43c9-9835-fa56a37b982e",
+      "format": "7_inch",
+      "name": "Black",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "6ed52d65-51ca-48b2-842b-90ba328159e4",
+      "format": "7_inch",
+      "name": "Color",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": true,
+          "unitCents": 753
+        },
+        {
+          "qty": 500,
+          "confirmed": true,
+          "unitCents": 568
+        },
+        {
+          "qty": 1000,
+          "confirmed": true,
+          "unitCents": 431
+        },
+        {
+          "qty": 2000,
+          "confirmed": true,
+          "unitCents": 385
+        },
+        {
+          "qty": 3000,
+          "confirmed": true,
+          "unitCents": 365
+        }
+      ]
+    },
+    {
+      "id": "eef844e1-4524-4cc1-a259-a4e45d454af4",
+      "format": "7_inch",
+      "name": "Splatter",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "c0014b92-9c42-49ea-a009-dd4e9da9879d",
+      "format": "7_inch",
+      "name": "EcoMix",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "705f25ad-62f3-493d-b054-b9e20d019af3",
+      "format": "7_inch",
+      "name": "Translucent",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "c9b5e309-d78a-4e92-86b6-a82163b408fe",
+      "format": "7_inch",
+      "name": "Opaque",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "669166a1-8ac4-46db-b89b-368d28208f39",
+      "format": "7_inch",
+      "name": "Neon/Glow",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "10b065ea-34b8-48b8-b879-bfa6c3799902",
+      "format": "7_inch",
+      "name": "Smoke Blends",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "77f6a2b3-92a6-46b2-b348-2f339e5d0463",
+      "format": "7_inch",
+      "name": "Cream Blends",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    },
+    {
+      "id": "afef3b41-4b0a-4722-9b4d-640a222e4dbe",
+      "format": "7_inch",
+      "name": "Metallic Blends",
+      "priceLadder": [
+        {
+          "qty": 100,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 200,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 300,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 500,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 1000,
+          "confirmed": false,
+          "unitCents": 0
+        },
+        {
+          "qty": 2000,
+          "confirmed": false,
+          "unitCents": 0
+        }
+      ]
+    }
+  ]
+}
