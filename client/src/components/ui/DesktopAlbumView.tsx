@@ -278,6 +278,28 @@ export function DesktopAlbumView({
     .join(" · ");
   const showLyrics = !!lyricsOpen && !!lyrics;
 
+  // Task #1118 — fans never see empty bonus tabs (no dashed-line
+  // placeholders). Build the visible tab list from content: Music is
+  // always present; Videos/Photos only when populated. When neither
+  // bonus kind exists, the strip is hidden entirely (a lone "Music" tab
+  // is pointless) and the tracklist renders directly below the hero.
+  const visibleTabs = [
+    { key: "music", label: "Music", count: songs.length },
+    ...(videos.length > 0
+      ? [{ key: "videos", label: "Videos", count: videos.length }]
+      : []),
+    ...(photos.length > 0
+      ? [{ key: "photos", label: "Photos", count: photos.length }]
+      : []),
+  ] as { key: DesktopAlbumTab; label: string; count: number }[];
+  const showTabStrip = visibleTabs.length > 1;
+  // If the host's selected tab is no longer visible (content removed, or
+  // the strip is hidden), fall back to Music so content never vanishes.
+  const effectiveTab = visibleTabs.some((t) => t.key === tab) ? tab : "music";
+  useEffect(() => {
+    if (tab !== effectiveTab) onTabChange(effectiveTab);
+  }, [tab, effectiveTab, onTabChange]);
+
   return (
     <div className="flex gap-6 w-full" data-testid="desktop-album-view">
       {/* Primary column. Max-width matches the prior AlbumDetailDesktop
@@ -500,21 +522,18 @@ export function DesktopAlbumView({
           </div>
         </section>
 
-        {/* Tabs — Apple-Music segmented control */}
+        {/* Tabs — Apple-Music segmented control. Hidden entirely when the
+            album has no bonus video/photo content (Task #1118), so fans
+            never see a lone "Music" tab or empty dashed placeholders. */}
+        {showTabStrip && (
         <div className="mt-10 flex items-center justify-center">
           <div
             className="inline-flex items-center gap-1 rounded-full bg-white/8 p-1"
             role="tablist"
             data-testid="hero-tabs"
           >
-            {(
-              [
-                { key: "music", label: "Music", count: songs.length },
-                { key: "videos", label: "Videos", count: videos.length },
-                { key: "photos", label: "Photos", count: photos.length },
-              ] as { key: DesktopAlbumTab; label: string; count: number }[]
-            ).map((it) => {
-              const on = it.key === tab;
+            {visibleTabs.map((it) => {
+              const on = it.key === effectiveTab;
               return (
                 <button
                   key={it.key}
@@ -549,10 +568,11 @@ export function DesktopAlbumView({
             })}
           </div>
         </div>
+        )}
 
         {/* Tab content */}
         <div className="mt-6">
-          {tab === "music" && (
+          {effectiveTab === "music" && (
             <div className="flex flex-col pt-1" data-testid="track-list">
               {/* Apple-style top hairline — inset + same weight as the
                   per-row separators so the list reads as one uniform set of
@@ -642,7 +662,7 @@ export function DesktopAlbumView({
             </div>
           )}
 
-          {tab === "videos" && (
+          {effectiveTab === "videos" && (
             <BonusGrid
               items={videos.map((v) => ({
                 id: v.id,
@@ -654,7 +674,7 @@ export function DesktopAlbumView({
             />
           )}
 
-          {tab === "photos" && (
+          {effectiveTab === "photos" && (
             <BonusGrid
               items={photos.map((p) => ({
                 id: p.id,
@@ -920,20 +940,12 @@ function BonusGrid({
   locked: boolean;
   kind: "video" | "photo";
 }) {
+  // Task #1118 — fans never see the dashed-border "No {kind}s yet"
+  // placeholder. Empty bonus tabs are hidden upstream so this branch
+  // should be unreachable on the fan surface; render nothing rather than
+  // a dotted-line empty state if it ever is reached.
   if (items.length === 0) {
-    return (
-      <div
-        className="w-full rounded-2xl flex items-center justify-center text-fan-secondary text-[14px]"
-        style={{
-          background: "rgba(255,255,255,0.04)",
-          border: "1px dashed rgba(255,255,255,0.12)",
-          minHeight: 220,
-        }}
-        data-testid={`empty-${kind}s`}
-      >
-        No {kind}s yet
-      </div>
-    );
+    return null;
   }
   return (
     <div
