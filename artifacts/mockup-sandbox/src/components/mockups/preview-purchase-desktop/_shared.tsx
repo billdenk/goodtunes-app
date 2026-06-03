@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import {
   Compass,
   Music2,
@@ -14,8 +14,6 @@ import {
   Repeat,
   Repeat1,
   ChevronRight,
-  ChevronDown,
-  ChevronUp,
   MoreHorizontal,
   Mic2,
   Volume,
@@ -493,8 +491,12 @@ export function TabPlaceholder({ kind }: { kind: "video" | "photos" }) {
      placeholder, since this surface already knows what's playing.
    • Demo viewport (Wide/Compact) override removed — Bill asked for a
      copy "as-is" in feel, not the developer-only viewport toggle.
-   • Dock starts EXPANDED (`dockHidden = false`) because on the fan page
-     the dock IS the player; hiding it by default doesn't make sense.
+   • The fan dock NEVER collapses — it behaves like Apple Music's
+     persistent mini-player: always the full rounded bar, dropping to a
+     dormant/idle state when nothing is playing, never a corner pill.
+     The caret / collapse-to-corner + minimize chevron are admin-only,
+     so there is no `dockHidden` branch here (matches the real
+     PlayerDock's `density="compact"`).
    ───────────────────────────────────────────────────────────────── */
 
 export function FloatingPlayerDock() {
@@ -512,14 +514,6 @@ export function FloatingPlayerDock() {
   const [repeatMode, setRepeatMode] = useState<"off" | "all" | "one">("off");
 
   const [scrubHover, setScrubHover] = useState(false);
-  const [dockHidden, setDockHidden] = useState(false);
-
-  const initialTrackRef = useRef<number>(current.n);
-  useEffect(() => {
-    if (current.n === initialTrackRef.current) return;
-    initialTrackRef.current = current.n;
-    setDockHidden(false);
-  }, [current.n]);
 
   const [windowWidth, setWindowWidth] = useState<number>(
     typeof window !== "undefined" ? window.innerWidth : 1280,
@@ -563,39 +557,6 @@ export function FloatingPlayerDock() {
     `calc(${Math.max(0, Math.min(100, pct))}% - 5px)`;
 
   const onTogglePlay = () => setPlaying((p) => !p);
-
-  if (dockHidden) {
-    return (
-      <div className="fixed right-4 bottom-4 z-30">
-        <div className="rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 flex items-center gap-1 pl-3 pr-2 py-2">
-          <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0">
-            <img src={ALBUM_COVER} alt="" className="w-full h-full object-cover" />
-          </div>
-          <button
-            type="button"
-            onClick={onTogglePlay}
-            aria-label={playing ? "Pause" : "Play"}
-            className="w-9 h-9 rounded-full inline-flex items-center justify-center text-white hover:bg-white/10 transition-colors"
-          >
-            {playing ? (
-              <Pause className="w-[18px] h-[18px] fill-current" />
-            ) : (
-              <Play className="w-[18px] h-[18px] ml-0.5 fill-current" />
-            )}
-          </button>
-          <button
-            type="button"
-            aria-label="Show player"
-            title="Show player"
-            onClick={() => setDockHidden(false)}
-            className="w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
-          >
-            <ChevronUp className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div
@@ -767,16 +728,6 @@ export function FloatingPlayerDock() {
                 </button>
               </div>
             )}
-
-            <button
-              type="button"
-              aria-label="Minimize player"
-              title="Minimize player"
-              onClick={() => setDockHidden(true)}
-              className="w-10 h-10 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10"
-            >
-              <ChevronDown className="w-5 h-5" />
-            </button>
           </div>
         </div>
 

@@ -162,10 +162,12 @@ export function PlayerDock({
   // fan-facing desktop (compact). Keeps the JSX downstream readable.
   const D = isCompactDensity
     ? {
-        // Extra bottom padding (vs symmetric py) lifts the art/title row
-        // off the inset scrubber so the fan dock gets Apple's breathing
-        // room between the now-playing block and the progress line.
-        pillPy: "pt-2.5 pb-5",
+        // Symmetric vertical padding optically centers the transport row
+        // within the pill (Apple parity). The inset scrubber overlays the
+        // bottom padding zone (absolute, bottom-1.5) so it doesn't push
+        // the row up — and in responsive-compact, where the scrubber is
+        // absent entirely, the row still reads dead-centered.
+        pillPy: "py-3.5",
         transportBtn: "w-8 h-8",
         playBtn: "w-9 h-9",
         playIcon: "w-[22px] h-[22px]",
@@ -379,7 +381,12 @@ export function PlayerDock({
   // play/pause (the one control that might still matter while minimized),
   // and chevron-up to restore. Title omitted — a tooltip on the cover or
   // a dedicated Now Playing sheet can answer that without bloating the pill.
-  if (dockHidden) {
+  // Compact (fan) density NEVER collapses to a corner pill — the fan
+  // dock behaves like Apple Music's persistent mini-player: always the
+  // full rounded bar, sitting in a dormant/idle state when nothing is
+  // playing. The caret / collapse-to-corner is admin-only (default
+  // density), so this whole minimized branch is gated off for fans.
+  if (dockHidden && !isCompactDensity) {
     // Idle (no selection): one button — a wider tab-shaped pill with
     // a music glyph + "Player" label. Reads unambiguously as the music
     // dock instead of a chat-bubble FAB (the prior single-chevron
@@ -481,10 +488,12 @@ export function PlayerDock({
       style={wrapperStyle}
       data-testid="player-dock"
     >
-      {/* Symmetric py-4 keeps every transport button + the album cover
-          vertically centered on the tallest element (44px Play). At py-4
-          the pill is 76px tall — matches Apple's mini-player proportions
-          and leaves room for the inset scrubber along the bottom edge. */}
+      {/* Symmetric vertical padding (`D.pillPy`) keeps every transport
+          button + the album cover optically centered on the tallest
+          element (Play). Admin uses py-4 (~76px pill); the fan/compact
+          dock uses py-3.5 for a tighter Apple-mini-player pill. Either
+          way the row is centered and the inset scrubber lives in the
+          bottom padding zone (absolute, bottom-1.5). */}
       <div
         className={[
           // Compact (fan) lowers the surface opacity so the existing
