@@ -14,6 +14,7 @@ import {
   Truck,
   Radar,
   Users,
+  UserPlus,
   ArrowLeft,
   BarChart3,
   Activity,
@@ -80,6 +81,7 @@ const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   customers: "audience",
   "platform-pricing": "system",
   "payouts-release": "system",
+  invites: "system",
   trash: "system",
 };
 
@@ -129,6 +131,7 @@ export type EntityKey =
   | "jobs"
   | "platform-pricing"
   | "gooddeed-pricing"
+  | "invites"
   | "trash"
   | "none";
 
@@ -775,6 +778,17 @@ export function AdminFrame({
                   active={active === "payouts-release"}
                   onClick={() => navigate("/admin/payouts-release")}
                   testId="nav-payouts-release"
+                />
+                {/* Admin team invites — send admin / super-admin (and
+                    partner) invite links. Super-admin-only surface, so it
+                    lives in System next to the referral Invite tree. */}
+                <SidebarLink
+                  icon={UserPlus}
+                  label="Invites"
+                  count={-1}
+                  active={active === "invites"}
+                  onClick={() => navigate("/admin/invites")}
+                  testId="nav-invites"
                 />
                 {/* Task #350 — Invite tree (multi-level referrals). */}
                 <SidebarLink
