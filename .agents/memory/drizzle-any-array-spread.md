@@ -23,9 +23,11 @@ the house convention.) Keep the `length > 0` guard — `ARRAY[]::t[]` is valid b
 roundtrip is pointless.
 
 **How to apply:** grep `rg 'ANY\(\$\{[^}]+\}::(varchar|text|uuid)\[\]\)' server`
-before trusting any raw-array query. As of this writing the invite-send dup-guard and
-`GET /api/admin/invite-tree/...` overlay were fixed, but several un-migrated landmine
-sites remained: `server/storage.ts` (kinds::text[]), `server/payoutEarmarks.ts`
-(ids::varchar[] ×2), `server/referralPayouts.ts` (creditIds/claimedIds ×4), and one
-NPO org lookup in `server/routes.ts`. They will 500 the moment their array goes
-non-empty — migrate to pgArray when touching those flows.
+before trusting any raw-array query. As of this writing the invite-send dup-guard,
+`GET /api/admin/invite-tree/...` overlay, and the admin invites *Pending-list* NPO
+org lookup (`SELECT … FROM organizations WHERE id = ANY(…)` — 500'd the whole
+pending panel the moment any pending invite had an NPO referrer/scope) were fixed.
+Still-un-migrated landmine sites remain: `server/storage.ts` (kinds::text[]),
+`server/payoutEarmarks.ts` (ids::varchar[] ×2), and `server/referralPayouts.ts`
+(creditIds/claimedIds ×4). They will 500 the moment their array goes non-empty —
+migrate to pgArray when touching those flows.

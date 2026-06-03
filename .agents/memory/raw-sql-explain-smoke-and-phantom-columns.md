@@ -29,9 +29,13 @@ schema.ts, dev, or real prod (verified against prod with 264 real albums):
 
 - `albums.cover_url`  → the cover image column is **`artwork`** (NOT NULL).
 - `albums.format`     → use **`physical_format`** (press/physical) or `type` (release type LP/EP).
-- `albums.created_at` → **albums has NO creation timestamp at all.** No created_at/
-  updated_at/inserted_at. For "recency"/"latest album" ordering, substitute an
-  existing lifecycle timestamp (e.g. `sell_quote_locked_at` for press flows).
+- `albums.created_at` / `albums.updated_at` → **albums has NO generic creation OR
+  update timestamp at all.** No created_at/updated_at/inserted_at. For
+  "recency"/"most-recently-touched album" ordering, order by the latest real
+  lifecycle timestamp via `GREATEST(sell_quote_locked_at, masters_triggered_at,
+  first_sold_at) DESC NULLS LAST` (GREATEST ignores NULLs) with `id DESC` as a
+  deterministic tiebreaker — and don't forget `deleted_at IS NULL`. The
+  invite-accept "land the invitee on the artist's latest album" picker hit this.
 - `people.email`      → **`contact_email`**.
 - `people.created_at` → **people has NO creation timestamp** (only `deleted_at`).
   `labels` DOES have `created_at`. In a people⋃labels UNION, the people branch's

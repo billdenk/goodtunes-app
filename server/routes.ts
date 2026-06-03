@@ -19066,7 +19066,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       mfgNeeded.length ? Promise.all(mfgNeeded.map((id) => storage.getManufacturerById(id))) : [],
       ffNeeded.length ? Promise.all(ffNeeded.map((id) => storage.getFulfillmentPartnerById(id))) : [],
       allNpoIds.length
-        ? db.execute<{ id: string; name: string; logo_url: string | null }>(sql`SELECT id, name, logo_url FROM organizations WHERE id = ANY(${allNpoIds}::varchar[])`).then((r: any) => r.rows ?? [])
+        ? db.execute<{ id: string; name: string; logo_url: string | null }>(sql`SELECT id, name, logo_url FROM organizations WHERE id = ANY(${pgArray(allNpoIds, "varchar")})`).then((r: any) => r.rows ?? [])
         : Promise.resolve([] as any[]),
       vendorNeeded.length ? Promise.all(vendorNeeded.map((id) => storage.getVendorById(id))) : [],
     ]);
@@ -20805,10 +20805,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Existing-album fallback — pick the most recent album owned by
       // the target artist (label scopes don't apply here since team
       // invites are person-scoped).
+      // albums has no created_at/updated_at; approximate "most recently
+      // touched" with the latest real lifecycle timestamp (GREATEST ignores
+      // NULLs), id as a deterministic tiebreaker. Skip soft-deleted albums.
       const a = await db.execute<{ id: string }>(sql`
         SELECT id FROM albums
-        WHERE primary_artist_id = ${invite.roleScopeId}
-        ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
+        WHERE primary_artist_id = ${invite.roleScopeId} AND deleted_at IS NULL
+        ORDER BY GREATEST(sell_quote_locked_at, masters_triggered_at, first_sold_at) DESC NULLS LAST, id DESC
         LIMIT 1
       `);
       const existing = ((a as any).rows ?? [])[0]?.id ?? null;
