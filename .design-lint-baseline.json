@@ -8330,6 +8330,16 @@
     "snippet": "className=\"w-10 h-1 rounded-full mx-auto mb-5\""
   },
   {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumCreditsSheet.tsx",
+    "snippet": "<h2 className=\"text-white text-[22px] font-bold leading-tight tracking-tight\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumCreditsSheet.tsx",
+    "snippet": "className=\"text-[15px] mt-1 leading-snug\""
+  },
+  {
     "rule": "brand-hex-literal",
     "file": "client/src/components/ui/AlbumDesktopSidebar.tsx",
     "snippet": "export const BRAND_BG = \"#00062B\";"
@@ -8527,16 +8537,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"text-white text-[13.5px] font-semibold tracking-[-0.005em] transition-colors group-hover:text-[#319ED8] group-hover:underline underline-offset-4\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"h-11 w-11 rounded-full inline-flex items-center justify-center text-white border border-white/85 hover:bg-white hover:text-[#00062B] transition-colors active:scale-[0.94]\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
     "snippet": "const ROSE = \"#FF5470\";"
   },
   {
@@ -8562,12 +8562,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"text-white text-[13.5px] font-semibold tracking-[-0.005em] transition-colors group-hover:text-[#319ED8] group-hover:underline underline-offset-4\""
+    "snippet": "className=\"self-start mt-2 text-[17px] font-semibold tracking-[-0.01em] transition-colors hover:underline underline-offset-4\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"inline-flex items-center gap-2 self-start mb-3 text-white text-[13.5px] font-semibold\""
+    "snippet": "className=\"self-start mt-2 text-[17px] font-semibold tracking-[-0.01em]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -8582,7 +8582,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"h-11 pl-5 pr-7 rounded-full inline-flex items-center gap-2 text-white font-semibold text-[14px] transition-colors active:scale-[0.97] hover:opacity-90\""
+    "snippet": "className=\"h-12 pl-6 pr-7 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -8633,21 +8633,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
     "snippet": "<div className=\"absolute left-3 right-3 bottom-3 text-white text-[12.5px] font-semibold truncate\">"
-  },
-  {
-    "rule": "naked-icon-button",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "<button type=\"button\" onClick={onShuffle} data-testid=\"button-shuffle-album\" className=\"h-11 w-11 rounded-full inline-flex items-center justify-center text-white border border-white/85 hover:bg-white "
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "<div className=\"w-7 h-7 rounded-full bg-white/10 flex-shrink-0\" />"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "<span className=\"w-7 h-7 rounded-full bg-white/10 flex-shrink-0\" />"
   },
   {
     "rule": "player-touch-target-too-small",

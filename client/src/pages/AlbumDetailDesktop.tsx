@@ -7,7 +7,7 @@ import { buyEnabled } from "@/lib/platform";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
-import { AlbumCreditsSheet, type AlbumCreditsRow } from "@/components/ui/AlbumCreditsSheet";
+import { AlbumCreditsModal, type AlbumCreditsRow } from "@/components/ui/AlbumCreditsSheet";
 import { StreamServicePickerSheet } from "@/components/StreamServicePickerSheet";
 import {
   getFavoriteStreamingService,
@@ -613,7 +613,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
           onClose={() => setCreditPerson(null)}
         />
       ) : showAlbumCredits && productionCredits.length > 0 && album ? (
-        <AlbumCreditsSheet
+        <AlbumCreditsModal
           albumTitle={album.title}
           artist={album.artist}
           rows={productionCredits}

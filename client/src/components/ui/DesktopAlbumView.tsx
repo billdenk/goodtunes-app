@@ -328,36 +328,35 @@ export function DesktopAlbumView({
           </div>
 
           <div className="flex-1 min-w-0 flex flex-col pt-2">
-            {album.primaryArtistId ? (
-              <Link
-                href={`/admin/people/${album.primaryArtistId}`}
-                data-testid="link-artist"
-                className="group inline-flex items-center gap-2 self-start mb-3"
-              >
-                <div className="w-7 h-7 rounded-full bg-white/10 flex-shrink-0" />
-                <span
-                  className="text-white text-[13.5px] font-semibold tracking-[-0.005em] transition-colors group-hover:text-[#319ED8] group-hover:underline underline-offset-4"
-                  style={{ textDecorationColor: BRAND_BLUE }}
-                >
-                  {album.artist}
-                </span>
-              </Link>
-            ) : (
-              <span
-                className="inline-flex items-center gap-2 self-start mb-3 text-white text-[13.5px] font-semibold"
-                data-testid="text-artist"
-              >
-                <span className="w-7 h-7 rounded-full bg-white/10 flex-shrink-0" />
-                {album.artist}
-              </span>
-            )}
-
+            {/* Apple tone: big bold white title first, then the artist line
+                directly beneath it flush-left in GoodTunes blue (no avatar
+                circle), then the genre · year meta, then the description —
+                mirroring the mobile album surface. */}
             <h1
               className={cls.title}
               data-testid="album-title"
             >
               {album.title}
             </h1>
+
+            {album.primaryArtistId ? (
+              <Link
+                href={`/admin/people/${album.primaryArtistId}`}
+                data-testid="link-artist"
+                className="self-start mt-2 text-[17px] font-semibold tracking-[-0.01em] transition-colors hover:underline underline-offset-4"
+                style={{ color: BRAND_BLUE, textDecorationColor: BRAND_BLUE }}
+              >
+                {album.artist}
+              </Link>
+            ) : (
+              <span
+                className="self-start mt-2 text-[17px] font-semibold tracking-[-0.01em]"
+                style={{ color: BRAND_BLUE }}
+                data-testid="text-artist"
+              >
+                {album.artist}
+              </span>
+            )}
 
             {meta && (
               <div
@@ -379,37 +378,41 @@ export function DesktopAlbumView({
 
             <div className="mt-6 flex items-center gap-3">
               {isOwned ? (
+                /* Apple-tone transport row, mirroring the mobile album
+                   surface: Shuffle (glass) · Play (white pill, primary) ·
+                   Info (glass). */
                 <>
+                  {canPlay && (
+                    <IconButton
+                      variant="glass"
+                      size="lg"
+                      label="Shuffle"
+                      onClick={onShuffle}
+                      style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
+                      data-testid="button-shuffle-album"
+                    >
+                      <Shuffle strokeWidth={2.2} />
+                    </IconButton>
+                  )}
                   {canPlay && (
                     <button
                       type="button"
                       onClick={onPlayAll}
                       data-testid="button-play-album"
-                      className="h-11 pl-5 pr-7 rounded-full inline-flex items-center gap-2 text-white font-semibold text-[14px] transition-colors active:scale-[0.97] hover:opacity-90"
-                      style={{ background: BRAND_BLUE }}
+                      className="h-12 pl-6 pr-7 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97]"
+                      style={{ background: "#fff", color: "var(--brand-bg)" }}
                     >
-                      <Play className="w-4 h-4 fill-current" strokeWidth={0} />
+                      <Play className="w-5 h-5 fill-current" strokeWidth={0} />
                       Play
-                    </button>
-                  )}
-                  {canPlay && (
-                    <button
-                      type="button"
-                      onClick={onShuffle}
-                      data-testid="button-shuffle-album"
-                      className="h-11 w-11 rounded-full inline-flex items-center justify-center text-white border border-white/85 hover:bg-white hover:text-[#00062B] transition-colors active:scale-[0.94]"
-                      aria-label="Shuffle"
-                    >
-                      <Shuffle className="w-4 h-4" strokeWidth={2} />
                     </button>
                   )}
                   {hasAlbumCredits && (
                     <IconButton
-                      variant="ghost"
-                      size="md"
+                      variant="glass"
+                      size="lg"
                       label="Album credits"
                       onClick={onOpenAlbumCredits}
-                      className="border border-white/30 text-white/80 hover:text-white hover:border-white/85"
+                      style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
                       data-testid="button-album-credits"
                     >
                       <Info strokeWidth={2} />
