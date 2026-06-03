@@ -4,7 +4,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAuthKind } from "@/hooks/useAuthKind";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient, setAuthToken } from "@/lib/queryClient";
-import { MobileChrome } from "@/components/MobileChrome";
+import { BottomNav } from "@/components/BottomNav";
+import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { clearLocalAnalytics } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
@@ -574,7 +575,8 @@ export function Account() {
           </div>
         </div>
 
-        <MobileChrome />
+        <MiniPlayer />
+        <BottomNav />
 
         {showPrivacy && (
           <PrivacySheet

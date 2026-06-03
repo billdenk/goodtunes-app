@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
-import { MobileChrome, NAV_CLEARANCE } from "@/components/MobileChrome";
+import { BottomNav, NAV_CLEARANCE } from "@/components/BottomNav";
 import { chatEnabled } from "@/lib/platform";
+import { MiniPlayer } from "@/components/MiniPlayer";
 import { IconButton } from "@/components/ui/IconButton";
 import {
   getMessages,
@@ -145,7 +146,8 @@ export function Chat() {
         Demo preview. Real product will route messages to verified vendor accounts with anti-spam and notifications.
       </p>
 
-      <MobileChrome />
+      <MiniPlayer />
+      <BottomNav />
     </main>
   );
 }

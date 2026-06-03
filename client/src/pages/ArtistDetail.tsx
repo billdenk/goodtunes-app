@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { usePlayer } from "@/context/PlayerContext";
-import { MobileChrome } from "@/components/MobileChrome";
+import { BottomNav } from "@/components/BottomNav";
+import { MiniPlayer } from "@/components/MiniPlayer";
 import { ALBUMS, SONGS, ARTIST_PHOTOS, type Album, type Song } from "@/data/musicData";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
@@ -761,7 +762,8 @@ export function ArtistDetail() {
 
         </div>
 
-        <MobileChrome />
+        <MiniPlayer />
+        <BottomNav />
       </section>
 
       <AnimatePresence>

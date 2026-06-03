@@ -8,7 +8,8 @@ import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
 import { useAlbumOwnership } from "@/hooks/useAlbumOwnership";
 import { useFullPlaybackAccess } from "@/hooks/useFullPlaybackAccess";
 import { useAuth } from "@/hooks/useAuth";
-import { MobileChrome } from "@/components/MobileChrome";
+import { BottomNav } from "@/components/BottomNav";
+import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { BuySheet } from "@/components/checkout/BuySheet";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
@@ -810,7 +811,8 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
         </AlbumDetailMobileSurface>
         {/* legacy chrome removed — see AlbumDetailMobileSurface above */}
 
-        <MobileChrome />
+        <MiniPlayer />
+        <BottomNav />
 
         {showBuySheet && (
           <BuySheet

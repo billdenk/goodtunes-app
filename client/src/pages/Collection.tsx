@@ -6,9 +6,10 @@ import { usePlayer } from "@/context/PlayerContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
-import { MobileChrome } from "@/components/MobileChrome";
+import { BottomNav } from "@/components/BottomNav";
 import { IconButton } from "@/components/ui/IconButton";
 import { SheetClose } from "@/components/ui/SheetChrome";
+import { MiniPlayer } from "@/components/MiniPlayer";
 import { AlbumCard } from "@/components/ui/AlbumCard";
 import { track } from "@/lib/analytics";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
@@ -868,7 +869,8 @@ export function Collection() {
           </div>
         </div>
 
-        <MobileChrome />
+        <MiniPlayer />
+        <BottomNav />
 
         {addToPlaylistSong && (
           <div className="fixed inset-0 z-50 flex items-end justify-center">

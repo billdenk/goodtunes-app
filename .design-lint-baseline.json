@@ -8087,12 +8087,12 @@
   {
     "rule": "fan-text-tone",
     "file": "artifacts/mockup-sandbox/src/components/mockups/preview-purchase-desktop/_shared.tsx",
-    "snippet": "className=\"w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10\""
+    "snippet": ": \"text-slate-300 hover:text-white hover:bg-white/10\","
   },
   {
     "rule": "fan-text-tone",
     "file": "artifacts/mockup-sandbox/src/components/mockups/preview-purchase-desktop/_shared.tsx",
-    "snippet": ": \"text-slate-300 hover:text-white hover:bg-white/10\","
+    "snippet": "className=\"w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10\""
   },
   {
     "rule": "fan-text-tone",
@@ -8247,17 +8247,12 @@
   {
     "rule": "player-touch-target-too-small",
     "file": "artifacts/mockup-sandbox/src/components/mockups/preview-purchase-desktop/_shared.tsx",
-    "snippet": "className=\"w-9 h-9 rounded-full inline-flex items-center justify-center text-white hover:bg-white/10 transition-colors\""
+    "snippet": "\"w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors\","
   },
   {
     "rule": "player-touch-target-too-small",
     "file": "artifacts/mockup-sandbox/src/components/mockups/preview-purchase-desktop/_shared.tsx",
     "snippet": "className=\"w-9 h-9 rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/preview-purchase-desktop/_shared.tsx",
-    "snippet": "\"w-9 h-9 rounded-full inline-flex items-center justify-center transition-colors\","
   },
   {
     "rule": "player-touch-target-too-small",
@@ -11102,17 +11097,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/BottomNav.tsx",
-    "snippet": "className={`relative z-10 text-[10px] font-semibold tracking-wide ${active ? \"text-[color:var(--brand-blue)]\" : \"text-fan-faint\"}`}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/BottomNav.tsx",
-    "snippet": "<p className=\"text-white text-[15px] font-bold tracking-tight truncate leading-tight\" data-testid=\"text-console-title\">{currentSong.title}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/BottomNav.tsx",
-    "snippet": "<p className=\"text-fan-secondary text-[13px] truncate leading-tight mt-[1px]\" data-testid=\"text-console-artist\">{currentSong.album.artist}</p>"
+    "snippet": "className={`relative text-[10px] font-medium transition-colors duration-150 ${contentShift} ${active ? \"text-[color:var(--brand-blue)]\" : \"text-fan-faint\"}`}"
   },
   {
     "rule": "hardcoded-font-size",
@@ -11493,6 +11478,26 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/GoodDeedCertificate.tsx",
     "snippet": "<p className=\"text-white/45 text-[10px] font-semibold uppercase tracking-wider\">{label}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/MiniPlayer.tsx",
+    "snippet": "<p className=\"text-fan-primary text-[13px] font-semibold truncate leading-tight\">{currentSong.title}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/MiniPlayer.tsx",
+    "snippet": "<p className=\"text-fan-secondary text-[11px] truncate leading-tight\">{currentSong.album.artist}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/MiniPlayer.tsx",
+    "snippet": "<p className=\"text-fan-primary text-[14px] font-semibold truncate leading-snug\">{currentSong.title}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/MiniPlayer.tsx",
+    "snippet": "<p className=\"text-fan-secondary text-[12px] truncate leading-snug\">{currentSong.album.artist}</p>"
   },
   {
     "rule": "fan-text-tone",
@@ -12348,11 +12353,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
     "snippet": "className=\"h-11 px-6 rounded-full inline-flex items-center justify-center text-white font-semibold text-[14px] transition-[background-color,box-shadow,transform] cursor-pointer active:scale-[0.97]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"w-full rounded-2xl flex items-center justify-center text-fan-secondary text-[14px]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -20097,12 +20097,12 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/pages/Login.tsx",
-    "snippet": "<DrawerDescription className=\"text-white/55 text-sm leading-relaxed\">"
+    "snippet": "className=\"w-full py-3 text-white/55 hover:text-white/80 text-sm\""
   },
   {
     "rule": "fan-text-tone",
     "file": "client/src/pages/Login.tsx",
-    "snippet": "className=\"w-full py-3 text-white/55 hover:text-white/80 text-sm\""
+    "snippet": "<DrawerDescription className=\"text-white/55 text-sm leading-relaxed\">"
   },
   {
     "rule": "fan-text-tone",

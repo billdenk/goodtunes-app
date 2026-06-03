@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { MobileChrome } from "@/components/MobileChrome";
+import { BottomNav } from "@/components/BottomNav";
+import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { INSTRUMENTS } from "@/data/musicData";
 import { IconButton } from "@/components/ui/IconButton";
@@ -115,7 +116,8 @@ export function Bookmarks() {
           )}
         </div>
 
-        <MobileChrome />
+        <MiniPlayer />
+        <BottomNav />
       </section>
     </main>
   );

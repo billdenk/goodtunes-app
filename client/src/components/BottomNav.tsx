@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
-import { motion, useReducedMotion } from "framer-motion";
-import { usePlayer } from "@/context/PlayerContext";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { useTopChromeFrost } from "@/hooks/useTopChromeFrost";
 import { subscribeChats } from "@/lib/chatStore";
 import { useDesktopShell } from "@/hooks/useDesktopShell";
@@ -15,44 +15,45 @@ import {
 import { ChromeScrim } from "@/components/ui/ChromeScrim";
 
 /**
- * Bottom offset of the unified console card — it rests at a flat 12px from
- * the screen bottom so it floats just above the browser/home-indicator
- * chrome. Exported so the few callers that mirror the dock geometry stay in
- * sync with the console.
+ * Bottom offset shared by all three floating dock elements (collapsed
+ * puck, three-tab pillow, search/close toggle). Rests at a flat 12px from
+ * the screen bottom so the dock sits tightly stacked under the mini-player
+ * (which floats at bottom: 79). Raising the dock with a safe-area inset
+ * (the old "+24px" attempt) pushed the tab bar up out of that stack and
+ * left it looking detached/crooked, so we keep it at the original 12px.
+ * Keeping all three on this single value keeps them on one baseline.
  */
 export const DOCK_BOTTOM = "12px";
 
 /**
  * Bottom padding every customer-shell scroll container must reserve so
- * content never slides under the floating console.
+ * content never slides under the floating nav + mini-player stack.
  *
- * The console rests at `DOCK_BOTTOM` (12px) and, with a now-playing row
- * (~68px) + hairline progress + 4-item nav row (~56px), tops out around
- * ~140px tall. We round to 170px for a safe gutter plus haptic breathing
- * room on devices with a chunky home indicator.
+ * The nav sits at `DOCK_BOTTOM` (12px), is ~64px tall (py-2 + pill), and
+ * the mini-player floats ~79px above the bar. Together they occupy ~155px
+ * of the viewport bottom — we round to 170px for a safe gutter plus haptic
+ * breathing room on devices with a chunky home indicator.
  */
 export const NAV_CLEARANCE = 170;
 
-// Task #1092 — the "Envisioned" unified bottom console. On mobile/tablet a
-// single rounded glass card pinned at the bottom replaces the old split
-// pieces (floating mini-player capsule + three-tab pillow + standalone
-// search circle). The card stacks:
-//   * a now-playing row (44px art · title/artist · heart/play-pause/skip)
-//   * a hairline blue progress bar (full width, soft glow)
-//   * a 4-item nav row (Collection · Playlists · Recents · Search)
-// Search is the 4th nav item — it raises the same inline search overlay the
-// old standalone circle did (we never navigate to a /search route on
-// mobile; the keyboard is raised synchronously inside the tap gesture).
-// Tapping the now-playing row (but not the transport buttons) opens the
-// full Player. When nothing is playing the card collapses to nav-only.
+// Task #530 — Apple-style split nav: a labeled three-tab pillow on the
+// left (Collection · Playlists · Recents) + a standalone search circle
+// on the right.
 //
-// Locked dimensions:
-//   * console corner radius = 28; nav icon = 24×24, label = 10px font.
-//   * the top-anchored search field height = FIELD_H (52px).
-// Desktop (lg+ web) keeps the StorefrontSidebar + bottom-right MiniPlayer —
-// this whole component returns null there.
-
-const FIELD_H = 52;
+// Task #713 — the right circle is now an *inline* search control. At
+// rest it's a circle the exact height of the pillow (flex-stretch +
+// measured `dockH`), separated by a clear 8px gap. Tapping it expands a
+// search field LEFTWARD in place (the pillow yields room) and raises a
+// solid results overlay with Recently-Searched / live ranked results.
+// Tapping again collapses back to the resting dock. We never navigate to
+// a /search route on mobile any more — the keyboard is raised inside the
+// tap gesture (the input stays mounted, just scaled to 0 at rest) which
+// is the only reliable way to bring up the iOS keyboard.
+//
+// Locked dimensions — these come from the live spec and must not move:
+//   * pillow height drives off py-2 + label/icon vertical stack (~64px)
+//   * tab icon = 25×25, label = 10px font-medium
+// If you change those, the visual rhythm in the dock breaks.
 
 const NavItem = ({
   label,
@@ -60,32 +61,50 @@ const NavItem = ({
   active,
   onClick,
   testId,
+  align = "left",
 }: {
   label: string;
   icon: (active: boolean) => ReactNode;
   active: boolean;
   onClick: () => void;
   testId?: string;
+  align?: "left" | "right" | "center";
 }) => {
   const reduceMotion = useReducedMotion();
+  const dir = align === "right" ? 1 : align === "left" ? -1 : 0;
+  // End tabs nudge the highlight 2px toward the dock's outer curve so the
+  // gap to the end curve matches the inner gap (Collection left, Recents
+  // right). Both edges shift by the same 2px, so the pill's width/radius
+  // stay identical to before — this is a pure horizontal offset.
+  const pillLeft = dir === -1 ? "-6px" : dir === 1 ? "6px" : "-2px";
+  const pillRight = dir === -1 ? "6px" : dir === 1 ? "-6px" : "-2px";
+  const contentShift =
+    dir === -1 ? "-translate-x-[6px]" : dir === 1 ? "translate-x-[6px]" : "";
   return (
     <button
       type="button"
       onClick={onClick}
-      className="relative flex flex-col items-center gap-[3px] flex-1 py-1"
+      className="relative flex flex-col items-center gap-[2px] min-w-[86px]"
       data-testid={testId}
     >
-      {active && (
-        <span
-          aria-hidden
-          className="absolute rounded-xl"
-          style={{ background: "rgba(49,158,216,0.15)", top: 0, bottom: 0, left: "12%", right: "12%" }}
-        />
-      )}
-      <div className="relative z-10 flex items-center justify-center h-7">
+      <span
+        aria-hidden
+        className="absolute rounded-full transition-colors duration-200"
+        style={{
+          background: active ? "rgba(49,158,216,0.18)" : "transparent",
+          left: pillLeft,
+          right: pillRight,
+          top: "-3px",
+          bottom: "-4px",
+        }}
+      />
+      <div className={`relative w-14 h-7 flex items-center justify-center ${contentShift}`}>
         {/* Tab-to-tab bounce — the glyph gives a quick Apple-Music pop when
-            its tab becomes active. Transform-only (GPU-cheap) and gated
-            behind prefers-reduced-motion. */}
+            its tab becomes active (the keyframe only re-fires when `active`
+            flips false→true). Transform-only (GPU-cheap) and gated behind
+            prefers-reduced-motion so reduced users get an instant color
+            change with no scale. Lives on the no-translate inner div so it
+            never clobbers the contentShift transform on the parent. */}
         <motion.div
           className={`transition-colors duration-150 ${active ? "text-[color:var(--brand-blue)]" : "text-fan-faint"}`}
           animate={reduceMotion ? { scale: 1 } : { scale: active ? [1, 1.22, 0.97, 1] : 1 }}
@@ -99,7 +118,7 @@ const NavItem = ({
         </motion.div>
       </div>
       <span
-        className={`relative z-10 text-[10px] font-semibold tracking-wide ${active ? "text-[color:var(--brand-blue)]" : "text-fan-faint"}`}
+        className={`relative text-[10px] font-medium transition-colors duration-150 ${contentShift} ${active ? "text-[color:var(--brand-blue)]" : "text-fan-faint"}`}
       >
         {label}
       </span>
@@ -109,18 +128,24 @@ const NavItem = ({
 
 export function BottomNav() {
   const [location, navigate] = useLocation();
-  const { currentSong, isPlaying, currentTime, duration, togglePlay, next, setShowPlayer, toggleFavorite, isFavorite } = usePlayer();
+  const { hidden, setHidden } = useNavVisibility();
   const reduceMotion = useReducedMotion();
-  // Task #547 — at lg+ on web the StorefrontSidebar + bottom-right
-  // MiniPlayer take over. Native shell (Capacitor) always renders the
-  // mobile console regardless of viewport.
+  // Task #547 — at lg+ on web the StorefrontSidebar takes over. Native
+  // shell (Capacitor) always renders the bottom-nav pill regardless of
+  // viewport.
   const isDesktop = useDesktopShell();
 
   // --- inline search state (Task #713) ---
   const [searchOpen, setSearchOpen] = useState(false);
+  // Measured pillow height — the search circle + expanded field key off
+  // this so they're pixel-identical to the tab pillow regardless of font
+  // rendering, and the tab-bar height itself never changes.
+  const [dockH, setDockH] = useState<number>();
+  const pillowRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // Randomized, non-credential field name so Safari/password managers
-  // don't surface a saved-value / typed-history chip above the keyboard.
+  // don't surface a saved-value / typed-history chip (e.g. the
+  // "my.goodtunes.music" autofill bar) above the keyboard.
   const searchFieldName = useRef("gt-omnisearch-" + Math.random().toString(36).slice(2)).current;
   const search = useFanSearch({ onNavigate: () => setSearchOpen(false) });
   const { setDraft, setShowAll } = search;
@@ -134,7 +159,22 @@ export function BottomNav() {
   // Collection avatar in Collection.tsx.
   useEffect(() => void subscribeChats(() => {}), []);
 
-  // When the search collapses, clear the draft so reopening is a fresh
+  // Measure the resting pillow once it's on screen. We lock onto the
+  // first real measurement, then only react to *meaningful* changes
+  // (orientation, font swap). Sub-pixel/±1px flips — which an active-tab
+  // stroke-weight change can introduce on re-measure — are ignored so
+  // the reserved right-side space (and thus the justify-around tab
+  // spacing) never oscillates as you switch tabs. Functional updater
+  // keeps this dependency-free without a render loop.
+  useLayoutEffect(() => {
+    if (!searchOpen && !hidden && pillowRef.current) {
+      const h = pillowRef.current.offsetHeight;
+      if (!h) return;
+      setDockH((prev) => (prev == null || Math.abs(h - prev) > 1 ? h : prev));
+    }
+  });
+
+  // When the dock collapses, clear the draft so reopening is a fresh
   // resting state. (setters are stable, safe deps.)
   useEffect(() => {
     if (!searchOpen) { setDraft(""); setShowAll(false); }
@@ -144,8 +184,10 @@ export function BottomNav() {
   // album chrome (top ChromeScrim band + share/⋯ capsule) drops its own
   // backdrop-filter while search is open, leaving exactly one frosted surface
   // in the top band (iOS-WebKit one-blur-per-region rule). The release is
-  // lifecycle-timed: claim instantly on open, but hold the claim through the
-  // top search field's own opacity exit fade on close.
+  // lifecycle-timed, not flag-timed: claim instantly on open, but hold the
+  // claim through the top search field's own opacity exit fade (220ms /
+  // ~80ms reduced) on close — otherwise the album chrome would re-blur while
+  // the search field is still fading out and the two briefly coexist.
   const { setSearchOwnsTop } = useTopChromeFrost();
   useEffect(() => {
     if (searchOpen) {
@@ -168,16 +210,17 @@ export function BottomNav() {
       setSearchOpen(false);
       inputRef.current?.blur();
     } else {
-      // Focus SYNCHRONOUSLY inside this tap gesture — the input is always
-      // mounted (hidden at rest), so iOS raises the keyboard. A deferred
-      // focus after a state flush would not.
+      // Expand the dock first, then focus SYNCHRONOUSLY inside this tap
+      // gesture — the input is already mounted (scaled to 0), so iOS
+      // raises the keyboard. A deferred focus after navigation would not.
+      setHidden(false);
       setSearchOpen(true);
       inputRef.current?.focus();
     }
   };
 
   const collectionIcon = (active: boolean) => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="currentColor">
       <rect x="3" y="3" width="4" height="18" rx="1" opacity={active ? 1 : 0.7} />
       <rect x="9" y="3" width="3" height="18" rx="1" opacity={active ? 1 : 0.7} />
       <rect x="14" y="3" width="7" height="11" rx="1" opacity={active ? 1 : 0.7} />
@@ -186,44 +229,37 @@ export function BottomNav() {
   );
 
   const playlistsIcon = (active: boolean) => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-      <path d="M3 6h18M3 10h14M3 14h8" stroke="currentColor" strokeWidth={active ? "2.4" : "2"} strokeLinecap="round" />
-      <path d="M17 14v6M14 17h6" stroke="currentColor" strokeWidth={active ? "2.4" : "2"} strokeLinecap="round" />
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="none">
+      <path d="M3 6h18M3 10h14M3 14h8" stroke="currentColor" strokeWidth={active ? "2.2" : "1.8"} strokeLinecap="round" />
+      <path d="M17 14v6M14 17h6" stroke="currentColor" strokeWidth={active ? "2.2" : "1.8"} strokeLinecap="round" />
     </svg>
   );
 
-  // Apple-style clock-face for Recents.
+  // Apple-style clock-face for Recents. Hollow when inactive, filled
+  // ring with a small hour-hand when active.
   const recentsIcon = (active: boolean) => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? "2.4" : "2"} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? "2.2" : "1.8"} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7v5l3 2" />
     </svg>
   );
 
-  const searchNavIcon = (active: boolean) => (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? "2.6" : "2.2"} strokeLinecap="round" aria-hidden="true">
-      <circle cx="11" cy="11" r="7" />
-      <path d="M20 20l-3.5-3.5" />
-    </svg>
-  );
-
-  // Close (×) glyph the Search tab swaps to while the overlay is open.
-  const closeNavIcon = (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
-      <path d="M6 6l12 12M18 6L6 18" />
-    </svg>
-  );
-
-  // Static search glyph for the top input's leading icon.
-  const searchFieldIcon = (
+  const searchIcon = (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
       <circle cx="11" cy="11" r="7" />
       <path d="M20 20l-3.5-3.5" />
     </svg>
   );
 
-  // Frosted glass — kept thin (blur 14px, no saturate) per the iOS-WebKit
-  // memo so it doesn't OOM the GPU on iPhone over a scrolling album grid.
+  const closeIcon = (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+
+  // Frosted glass — kept thin (blur 14px, no saturate) per the
+  // iOS-WebKit memo so stacking with MiniPlayer doesn't OOM the GPU
+  // on iPhone 14 Pro over a scrolling album grid.
   const glassStyle = {
     background: "rgba(20, 22, 38, 0.82)",
     backdropFilter: "blur(14px)",
@@ -232,9 +268,9 @@ export function BottomNav() {
     boxShadow: "0 8px 36px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.08) inset",
   } as const;
 
-  // Blur-free twin of glassStyle (opaque fill, no backdrop-filter). Used by
-  // the console while search is open: the bottom ChromeScrim then owns the
-  // region's single frosted layer, so the card must NOT add a second
+  // Blur-free twin of glassStyle (opaque fill, no backdrop-filter). Used by the
+  // search/close toggle while search is open: the bottom ChromeScrim then owns
+  // the region's single frosted layer, so the toggle must NOT add a second
   // backdrop-filter on top of it (iOS-WebKit stacked-blur rule).
   const solidDockStyle = {
     background: "rgba(20, 22, 38, 0.95)",
@@ -242,15 +278,23 @@ export function BottomNav() {
     boxShadow: "0 8px 36px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.08) inset",
   } as const;
 
-  const favorited = currentSong ? isFavorite(currentSong.id) : false;
-  const progressPct = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
+  const dockHVal = dockH ?? 56;
+  // Right search/close circle: matches the pillow height at rest /
+  // expanded; shrinks to the 48px scrolled-state puck only when the dock
+  // is hidden AND search isn't open.
+  const toggleSize = hidden && !searchOpen ? 48 : dockHVal;
+
+  let activeIcon: (a: boolean) => ReactNode = collectionIcon;
+  let activeLabel = "Collection";
+  if (isPlaylists) { activeIcon = playlistsIcon; activeLabel = "Playlists"; }
+  else if (isRecents) { activeIcon = recentsIcon; activeLabel = "Recents"; }
 
   return (
     <>
       {/* Results overlay — solid bg (NOT a second backdrop-blur, per the
           iOS-WebKit memo) so it sits cheaply over the scrolling page.
-          z-20 keeps it below the console (z-40), so the now-playing row +
-          search field stay visible above it. */}
+          z-20 keeps it below the MiniPlayer (z-30) and dock (z-40), so
+          the now-playing strip + field stay visible above it. */}
       {searchOpen && (
         <div
           className="fixed inset-0 z-20"
@@ -259,12 +303,16 @@ export function BottomNav() {
         >
           <div className="mx-auto h-full max-w-[390px] flex flex-col">
             {/* Scroll region flows DOWN from beneath the top-anchored
-                search field. Top padding clears the safe-area inset + the
-                field; bottom padding clears the keyboard inset. */}
+                search field (Task #770). Top padding clears the safe-area
+                inset + the field (its 12px top offset + height + a 12px
+                gap) so the first row sits just under the pill. Bottom
+                padding clears the keyboard inset so the last rows aren't
+                hidden behind the keyboard; falls back to a small gutter
+                when no keyboard is up. */}
             <div
               className="flex-1 overflow-y-auto scrollbar-hide"
               style={{
-                paddingTop: `calc(env(safe-area-inset-top, 0px) + ${FIELD_H + 24}px)`,
+                paddingTop: `calc(env(safe-area-inset-top, 0px) + ${dockHVal + 24}px)`,
                 paddingBottom: Math.max(24, kbInset + 24),
               }}
             >
@@ -306,135 +354,136 @@ export function BottomNav() {
         </div>
       )}
 
-      {/* ===== Unified bottom console ===== */}
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-40 px-3 pointer-events-none">
-        {/* Shared chrome scrim behind the console: a soft navy gradient fade
-            at rest so art scrolls cleanly under the card (no hard band),
-            swapping in a single frosted blur band only while search is open.
-            First child so it sits behind the card. */}
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-40 pointer-events-none">
+        {/* Shared chrome scrim behind the dock: a soft navy gradient fade at
+            rest so collection art scrolls cleanly under the floating pills
+            (no hard band), swapping in a single frosted blur band only while
+            search is open. First child so it sits behind every pill. */}
         <ChromeScrim
           edge="bottom"
           active={searchOpen}
           className="absolute inset-x-0 bottom-0 h-32"
         />
+        {/* LEFT — collapsed active-tab puck (scrolled), shown only when
+            the dock is hidden and search is closed. Springs in from the
+            pillow's left edge so it reads as the pillow collapsing into the
+            puck; whileTap replaces the old active:scale-95 (framer owns the
+            transform now, so a CSS active: scale would be clobbered). */}
+        <AnimatePresence>
+          {hidden && !searchOpen && (
+            <motion.button
+              key="nav-puck"
+              type="button"
+              onClick={() => setHidden(false)}
+              aria-label={`${activeLabel} (expand navigation)`}
+              className="pointer-events-auto absolute left-3 flex items-center justify-center w-12 h-12 rounded-full text-[color:var(--brand-blue)]"
+              style={{ bottom: DOCK_BOTTOM, ...glassStyle, transformOrigin: "left center" }}
+              initial={reduceMotion ? false : { scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={reduceMotion ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
+              transition={
+                reduceMotion
+                  ? { duration: 0.12 }
+                  : { scale: { type: "spring", stiffness: 520, damping: 26, mass: 0.8 }, opacity: { duration: 0.14 } }
+              }
+              whileTap={reduceMotion ? undefined : { scale: 0.92 }}
+              data-testid="nav-collapsed"
+            >
+              {activeIcon(true)}
+            </motion.button>
+          )}
+        </AnimatePresence>
 
-        <motion.div
-          className="pointer-events-auto overflow-hidden flex flex-col"
+        {/* LEFT — labeled three-tab pillow (resting). Drives the measured
+            dock height. Hidden while scrolled or while search is open.
+            Springs/settles in (small overshoot) when re-expanding; framer
+            owns scale/opacity, so the only CSS transition left is `right`
+            (which moves just on dockH re-measure, never per frame). */}
+        <AnimatePresence>
+          {!hidden && !searchOpen && (
+            <motion.nav
+              key="nav-pillow"
+              ref={pillowRef}
+              className="pointer-events-auto absolute left-3 flex items-center justify-around px-2 py-2 rounded-full"
+              style={{
+                bottom: DOCK_BOTTOM,
+                right: dockHVal + 20, // reserve the right circle + 8px gap
+                ...glassStyle,
+                transformOrigin: "left center",
+                transition: "right 260ms cubic-bezier(0.32, 0.72, 0, 1)",
+              }}
+              initial={reduceMotion ? false : { scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={reduceMotion ? { opacity: 0 } : { scale: 0.9, opacity: 0 }}
+              transition={
+                reduceMotion
+                  ? { duration: 0.12 }
+                  : { scale: { type: "spring", stiffness: 460, damping: 28, mass: 0.9 }, opacity: { duration: 0.14 } }
+              }
+            >
+              <NavItem label="Collection" active={isLibrary} onClick={() => navigate("/collection")} icon={collectionIcon} testId="nav-collection" />
+              <NavItem label="Playlists" active={isPlaylists} onClick={() => navigate("/playlists")} icon={playlistsIcon} testId="nav-playlists" align="center" />
+              <NavItem label="Recents" active={isRecents} onClick={() => navigate("/recents")} icon={recentsIcon} testId="nav-recents" align="right" />
+            </motion.nav>
+          )}
+        </AnimatePresence>
+
+        {/* RIGHT — the search/close toggle. Diameter == pillow height so
+            it reads as the same rhythm; tapping toggles the field.
+            Bounce: the size morph between the 48px scrolled puck and the
+            full-height dock circle now springs with a small overshoot
+            (matching the left pillow/puck) instead of snapping, and the
+            glyph pops when it swaps search↔close. framer owns the
+            transform, so whileTap replaces the old CSS active:scale-95. */}
+        <motion.button
+          type="button"
+          onClick={onToggleSearch}
+          aria-label={searchOpen ? "Close search" : "Search"}
+          className={`pointer-events-auto absolute right-3 flex items-center justify-center rounded-full ${searchOpen ? "text-[color:var(--brand-blue)]" : "text-fan-primary"}`}
           style={{
-            marginBottom: DOCK_BOTTOM,
-            borderRadius: 28,
+            // Top-anchored field (Task #770) — the toggle no longer needs
+            // to dodge the keyboard, so it rests at the bottom dock.
+            // Shares DOCK_BOTTOM with the puck + pillow so all three stay
+            // on the same raised baseline above the browser chrome.
+            bottom: DOCK_BOTTOM,
             // Glass (own blur) at rest; blur-free fill while search is open so
             // the active ChromeScrim is the bottom region's only blur surface.
             ...(searchOpen ? solidDockStyle : glassStyle),
           }}
-          initial={false}
-          data-testid="mobile-console"
+          animate={{ width: toggleSize, height: toggleSize }}
+          transition={
+            reduceMotion
+              ? { duration: 0 }
+              : { type: "spring", stiffness: 420, damping: 40, mass: 0.9 }
+          }
+          whileTap={reduceMotion ? undefined : { scale: 0.92 }}
+          data-testid="nav-search"
         >
-          {/* Now-playing row — tapping it (anywhere but the transport
-              cluster) opens the full Player. Only mounted when something is
-              playing; otherwise the console is nav-only. */}
-          {currentSong && (
-            <>
-              <div
-                className="flex items-center gap-3 px-3 pt-3 pb-3 cursor-pointer active:bg-white/[0.03] transition-colors"
-                onClick={() => setShowPlayer(true)}
-                data-testid="console-nowplaying"
-              >
-                <img
-                  src={currentSong.album.artwork}
-                  alt={currentSong.album.title}
-                  className="flex-shrink-0 object-cover"
-                  style={{ width: 44, height: 44, borderRadius: 10, boxShadow: "0 4px 12px rgba(0,0,0,0.4)" }}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-[15px] font-bold tracking-tight truncate leading-tight" data-testid="text-console-title">{currentSong.title}</p>
-                  <p className="text-fan-secondary text-[13px] truncate leading-tight mt-[1px]" data-testid="text-console-artist">{currentSong.album.artist}</p>
-                </div>
-                <div className="flex items-center gap-1 flex-shrink-0 text-white" onClick={(e) => e.stopPropagation()}>
-                  {/* Heart = favorite toggle. Per the design system, favorite
-                      markers render in dimmed-white (filled = favorited,
-                      hollow outline = not) — NOT heart-pink. */}
-                  <button
-                    type="button"
-                    onClick={() => toggleFavorite(currentSong.id)}
-                    aria-label={favorited ? "Unfavorite" : "Favorite"}
-                    aria-pressed={favorited}
-                    className="w-9 h-9 flex items-center justify-center mr-1 active:opacity-60 transition-opacity"
-                    data-testid="button-console-favorite"
-                  >
-                    {favorited ? (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="rgba(255,255,255,0.55)">
-                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                      </svg>
-                    ) : (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                      </svg>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={togglePlay}
-                    aria-label={isPlaying ? "Pause" : "Play"}
-                    className="w-11 h-11 flex items-center justify-center rounded-full bg-white/10 active:bg-white/20 transition-colors"
-                    data-testid="button-console-playpause"
-                  >
-                    {isPlaying ? (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <rect x="5" y="4" width="4" height="16" rx="1.5" />
-                        <rect x="15" y="4" width="4" height="16" rx="1.5" />
-                      </svg>
-                    ) : (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18a1 1 0 000-1.69L9.54 5.98A.998.998 0 008 6.82z" />
-                      </svg>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={next}
-                    aria-label="Next track"
-                    className="w-11 h-11 flex items-center justify-center rounded-full bg-transparent active:bg-white/10 transition-colors"
-                    data-testid="button-console-next"
-                  >
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M6 18l8.5-6L6 6v12z" />
-                      <rect x="16" y="6" width="2" height="12" rx="1" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              {/* Hairline progress — full width, soft blue glow. */}
-              <div className="relative w-full h-[1px] bg-white/10" data-testid="console-progress">
-                <div
-                  className="absolute left-0 top-0 bottom-0 rounded-r-full"
-                  style={{ width: `${progressPct}%`, background: "var(--brand-blue)", boxShadow: "0 0 8px rgba(49,158,216,0.6)" }}
-                />
-              </div>
-            </>
-          )}
-
-          {/* Nav row — Collection · Playlists · Recents · Search. */}
-          <nav
-            className="flex items-center justify-around px-1 py-2"
-            style={{ background: currentSong ? "rgba(255,255,255,0.02)" : "transparent" }}
+          <motion.span
+            key={searchOpen ? "close" : "search"}
+            className="flex items-center justify-center"
+            initial={reduceMotion ? false : { scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : { type: "spring", stiffness: 480, damping: 34, mass: 0.7 }
+            }
           >
-            <NavItem label="Collection" active={isLibrary && !searchOpen} onClick={() => { setSearchOpen(false); navigate("/collection"); }} icon={collectionIcon} testId="nav-collection" />
-            <NavItem label="Playlists" active={isPlaylists && !searchOpen} onClick={() => { setSearchOpen(false); navigate("/playlists"); }} icon={playlistsIcon} testId="nav-playlists" />
-            <NavItem label="Recents" active={isRecents && !searchOpen} onClick={() => { setSearchOpen(false); navigate("/recents"); }} icon={recentsIcon} testId="nav-recents" />
-            <NavItem label="Search" active={searchOpen} onClick={onToggleSearch} icon={searchOpen ? () => closeNavIcon : searchNavIcon} testId="nav-search" />
-          </nav>
-        </motion.div>
+            {searchOpen ? closeIcon : searchIcon}
+          </motion.span>
+        </motion.button>
       </div>
 
       {/* Top-anchored search field (Task #770) — sits under the
           status-bar / safe-area inset so the keyboard (which covers the
           bottom of the screen) never hides it. Always mounted so the
-          Search tab can focus it synchronously inside the tap gesture
+          dock toggle can focus it synchronously inside the tap gesture
           (iOS keyboard); hidden + non-interactive at rest, slides down +
-          fades in when search opens. z-40 keeps it above the results
-          overlay (z-20). */}
+          fades in when search opens. Keeps the same glass pill, search
+          icon, placeholder, and clear (×) button as before — only its
+          position changed from above-the-keyboard to the top. z-40 keeps
+          it above the results overlay (z-20). */}
       <div
         className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-40 px-3 pointer-events-none"
         style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
@@ -442,7 +491,7 @@ export function BottomNav() {
         <div
           className="flex items-center rounded-full overflow-hidden"
           style={{
-            height: FIELD_H,
+            height: dockHVal,
             ...glassStyle,
             transformOrigin: "top center",
             opacity: searchOpen ? 1 : 0,
@@ -451,7 +500,7 @@ export function BottomNav() {
             transition: "transform 300ms cubic-bezier(0.32, 0.72, 0, 1), opacity 220ms ease",
           }}
         >
-          <span className="pl-4 pr-2 text-fan-secondary flex-shrink-0">{searchFieldIcon}</span>
+          <span className="pl-4 pr-2 text-fan-secondary flex-shrink-0">{searchIcon}</span>
           <input
             ref={inputRef}
             type="search"
