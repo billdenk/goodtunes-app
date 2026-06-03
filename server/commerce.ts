@@ -535,14 +535,19 @@ export async function assignNextGoodDeedNumber(albumId: string): Promise<number>
   // without considering it here we could mint a duplicate GoodDeed
   // number on the next real sale. The order_copies leg matters from
   // Task #549 onward — multi-quantity orders mint one per signed copy.
-  const [row] = await db.execute(sql<{ max: number }>`
+  // `db.execute` (node-postgres) resolves to a QueryResult — the rows live on
+  // `.rows`, it is NOT array-iterable, so read the first row off `.rows` like
+  // every other db.execute caller in this file (Array.isArray guard keeps it
+  // correct should a future driver return the rows array directly).
+  const res: any = await db.execute(sql<{ max: number }>`
     SELECT GREATEST(
       COALESCE((SELECT MAX(${orders.goodDeedNumber}) FROM ${orders} WHERE ${orders.albumId} = ${albumId}), 0),
       COALESCE((SELECT MAX(${orderCopies.goodDeedNumber}) FROM ${orderCopies} WHERE ${orderCopies.albumId} = ${albumId}), 0),
       COALESCE((SELECT MAX(${userAlbums.certificateNumber}) FROM ${userAlbums} WHERE ${userAlbums.albumId} = ${albumId}), 0)
     ) AS max
   `);
-  return Number((row as any)?.max ?? 0) + 1;
+  const row = Array.isArray(res) ? res[0] : res?.rows?.[0];
+  return Number(row?.max ?? 0) + 1;
 }
 
 // ─── Stripe Customer / address backfill ───────────────────────────────

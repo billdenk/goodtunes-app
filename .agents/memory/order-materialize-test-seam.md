@@ -30,3 +30,21 @@ the format line item's `gt_sku` (must equal a real format like `12_lp`);
 path still populates them — a dropped `items.push({...})` field would ship a
 silently-broken receipt. The test (`server/commerce.orderSnapshots.db.test.ts`)
 pins that.
+
+**PAID path (order_copies per-copy snapshots):** to pin the per-copy
+`order_copies` snapshots (`vinylColor`/`jacketUpgrade`/`booklet`/`formatPriceCents`/
+`addonPriceCents`) you MUST use `payment_status: "paid"` so the copy-write +
+numbering branch fires; multi-quantity needs `gt_quantity` + `gt_copies` mask
+("101" = copies 1&3 signed) + `gt_signed_cert_price` + `gt_booklet_bundle`.
+`formatPriceCents` = line-item `amount_total / quantity` (set the format line's
+amount_total to unit×qty). The PAID path also inserts a `user_albums`
+entitlement row whose `album_id` FK is **NO ACTION** — delete it before the
+album in teardown or the album DELETE fails. Pinned by
+`server/commerce.orderCopiesSnapshots.db.test.ts`.
+
+**db.execute is NOT array-iterable:** the paid path was the only caller of
+`assignNextGoodDeedNumber`, and it crashed on `const [row] = await db.execute(...)`
+("intermediate value is not iterable") because drizzle node-postgres `db.execute`
+resolves to a pg `QueryResult` (`.rows`), never an array — every other caller in
+commerce.ts reads `.rows`. No test exercised the paid path so it went unnoticed.
+Lesson: read `.rows?.[0]` off `db.execute`, never destructure as an array.
