@@ -226,9 +226,9 @@ export function AdminInvites() {
     (!!referrerKind && !referrerScopeId);
 
   return (
-    <AdminFrame active="invites">
-      <div className="max-w-2xl">
-        <h1 className="text-2xl font-bold text-slate-900 mb-1" data-testid="text-page-title">Invites</h1>
+    <AdminFrame active="invites" contentWidth="narrow">
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-900 mb-1" data-testid="text-page-title">Invites</h1>
         <p className="text-sm text-slate-600 mb-6">
           Invite a partner to join GoodTunes. Pick the kind of partner, tell us who they are, and we'll email them a
           one-time link to set their password and land on their own dashboard.
