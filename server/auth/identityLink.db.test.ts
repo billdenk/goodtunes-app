@@ -16,11 +16,16 @@
 //   npx tsx --test server/auth/identityLink.db.test.ts
 //
 // Every row seeded here is tracked and torn down in the `after` hook.
-import { test, after } from "node:test";
+import { test, after, before } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { createServer, type Server as HttpServer } from "node:http";
 import { sql } from "drizzle-orm";
+import express from "express";
 import { db, pool } from "../db";
+import { storage } from "../storage";
+import { authKindMiddleware } from "./host";
+import { registerRoutes } from "../routes";
 import {
   linkAdminToCustomer,
   mirrorAdminIdentitiesToCustomer,
@@ -37,7 +42,51 @@ const rows = (r: any): any[] => (r as any)?.rows ?? [];
 const created = {
   users: new Set<string>(),
   customers: new Set<string>(),
+  invites: new Set<string>(),
 };
+
+// ─── In-process HTTP harness ────────────────────────────────────────────
+// The register no-link rule is a ROUTE-level invariant (the absence of any
+// link call in the customer branch of /api/register), so a faithful guard
+// must drive the real Express handler, not a re-implementation of it. We
+// mount the full route tree exactly as server/index.ts does — authKind
+// middleware + JSON body parser + registerRoutes — and exercise it over a
+// real loopback socket. A future refactor that re-introduces an auto-link
+// inside /api/register would then fail this test instead of slipping past.
+let baseUrl = "";
+let httpServer: HttpServer | undefined;
+
+before(async () => {
+  const app = express();
+  app.set("trust proxy", 1);
+  app.use(authKindMiddleware);
+  app.use(express.json({ limit: "10mb" }));
+  app.use(express.urlencoded({ extended: false }));
+  httpServer = createServer(app);
+  await registerRoutes(httpServer, app);
+  await new Promise<void>((resolve) => httpServer!.listen(0, "127.0.0.1", resolve));
+  const addr = httpServer!.address();
+  const port = typeof addr === "object" && addr ? addr.port : 0;
+  // 127.0.0.1 is an unknown host → authKindMiddleware falls back to the
+  // path-based rule, so /api/register resolves as the CUSTOMER shell
+  // (exactly the self-serve fan path this test is about).
+  baseUrl = `http://127.0.0.1:${port}`;
+});
+
+async function postJson(path: string, body: unknown): Promise<{ status: number; json: any }> {
+  const res = await fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  let json: any = null;
+  try {
+    json = await res.json();
+  } catch {
+    json = null;
+  }
+  return { status: res.status, json };
+}
 
 async function seedCustomer(opts: { password?: string | null } = {}): Promise<string> {
   const id = randomUUID();
@@ -50,12 +99,13 @@ async function seedCustomer(opts: { password?: string | null } = {}): Promise<st
   return id;
 }
 
-async function seedAdmin(opts: { password: string }): Promise<string> {
+async function seedAdmin(opts: { password: string; email?: string }): Promise<string> {
   const id = randomUUID();
   const tag = id.slice(0, 8);
+  const email = opts.email ?? "adm_" + tag + "@example.test";
   await exec(sql`
     INSERT INTO users (id, username, email, display_name, password, is_admin)
-    VALUES (${id}, ${"adm_" + tag}, ${"adm_" + tag + "@example.test"}, ${"Adm " + tag}, ${opts.password}, true)
+    VALUES (${id}, ${"adm_" + tag}, ${email}, ${"Adm " + tag}, ${opts.password}, true)
   `);
   created.users.add(id);
   return id;
@@ -352,9 +402,104 @@ test("isLinkableEmail: relay + @oauth.local placeholders are excluded from email
   assert.equal(isLinkableEmail("   "), false);
 });
 
+// ─── Route-boundary: the self-serve register no-link invariant ──────────
+//
+// Task #1037 deliberately does NOT auto-link a brand-new self-serve fan
+// signup to an existing admin that happens to share the same email. The
+// reason is security: /api/register only proves control of a chosen
+// password, NOT ownership of the email address. Because admin login now
+// accepts the linked fan password as a valid first factor, auto-linking
+// here would let anyone register a fan with a known admin's email and
+// thereby seed an admin first-factor for an email they don't own. The
+// invariant is enforced by the ABSENCE of any link call in the customer
+// branch of /api/register — only a code comment guarded it until now.
+//
+// This hits the REAL /api/register route over the loopback socket (so a
+// route refactor that re-adds an auto-link can't slip past) and asserts the
+// same-email admin's `customer_user_id` stays NULL: registration created no
+// link, and therefore could not seed an admin first-factor.
+test("register route: a self-serve fan with the SAME email as an existing admin is NOT linked", async () => {
+  const sharedEmail = "shared_" + randomUUID().slice(0, 8) + "@example.test";
+  const adminId = await seedAdmin({ password: "$2b$10$" + "x".repeat(53), email: sharedEmail });
+
+  const res = await postJson("/api/register", {
+    username: "reg_" + randomUUID().slice(0, 8),
+    email: sharedEmail,
+    displayName: "Reg Fan",
+    password: "fan-password-123",
+  });
+  assert.equal(res.status, 201, "self-serve fan registration should succeed");
+  if (res.json?.id) created.customers.add(res.json.id);
+
+  // Sanity: the fan row really was created on the customer side with the
+  // shared email (so this isn't a vacuous pass on a no-op request).
+  const fan = await storage.getCustomerByEmail(sharedEmail);
+  assert.ok(fan, "the register route must have created a customer row for the shared email");
+
+  assert.equal(
+    await adminLink(adminId),
+    null,
+    "self-serve register must NEVER link a same-email admin — unverified email can't seed an admin first-factor",
+  );
+});
+
+// ─── Positive control: the trusted invite-accept route DOES link ────────
+//
+// The other side of the boundary, also driven through the REAL route: an
+// operator-issued invite is a trusted path (the operator typed the real
+// address), so accepting it links the freshly-minted admin to a same-email
+// fan. This documents that the no-link rule above is specific to the
+// UNTRUSTED self-serve path, not a blanket "never link" rule — and that a
+// refactor dropping the trusted-path link would also be caught.
+test("invite-accept route: a same-email fan IS linked to the new admin (trusted path)", async () => {
+  const sharedEmail = "invite_" + randomUUID().slice(0, 8) + "@example.test";
+  // NOTE: no admin pre-exists for this email — the accept route mints a new
+  // admin row, then links it to the same-email fan. (A pre-existing admin
+  // would take the separate "existingAccount" branch instead.)
+  const custId = await seedCustomer({ password: "$2b$10$" + "y".repeat(53) });
+  await exec(sql`UPDATE customer_users SET email = ${sharedEmail} WHERE id = ${custId}`);
+
+  // Mint a trusted operator invite for an admin-role hat (no scope needed).
+  const creatorId = await seedAdmin({ password: "$2b$10$" + "c".repeat(53) });
+  const token = "invtok-" + randomUUID().replace(/-/g, "");
+  const invite = await storage.createAdminInvite({
+    email: sharedEmail,
+    role: "admin",
+    roleScopeId: null,
+    token,
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    createdByUserId: creatorId,
+  } as any);
+  created.invites.add(invite.id);
+
+  const res = await postJson(`/api/invites/${encodeURIComponent(token)}/accept`, {
+    username: "inv_" + randomUUID().slice(0, 8),
+    displayName: "Invited Admin",
+    password: "invite-password-123",
+  });
+  assert.equal(res.status, 200, "accepting a valid invite should succeed");
+  const newAdminId = res.json?.id as string | undefined;
+  assert.ok(newAdminId, "the accept route should return the new admin id");
+  created.users.add(newAdminId!);
+
+  assert.equal(
+    await adminLink(newAdminId!),
+    custId,
+    "invite-accept (trusted) DOES link the new admin to the same-email fan",
+  );
+});
+
 after(async () => {
+  if (httpServer) await new Promise<void>((resolve) => httpServer!.close(() => resolve()));
+  for (const id of created.invites) {
+    await exec(sql`DELETE FROM admin_invites WHERE id = ${id}`);
+  }
+  // auth_tokens rows cascade off the admin/customer FKs (onDelete: cascade),
+  // so deleting the owning rows below clears any minted tokens too.
   for (const id of created.users) {
+    await exec(sql`DELETE FROM memberships WHERE user_id = ${id}`);
     await exec(sql`DELETE FROM admin_identities WHERE user_id = ${id}`);
+    await exec(sql`UPDATE users SET customer_user_id = NULL WHERE id = ${id}`);
     await exec(sql`DELETE FROM users WHERE id = ${id}`);
   }
   for (const id of created.customers) {
