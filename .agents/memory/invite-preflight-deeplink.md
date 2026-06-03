@@ -18,3 +18,13 @@ both `roleScopeId` and `targetPersonId`. Identity invites for *claimed* People
 (login / Spotify artist / group / shipped GoodTunes release) come back with
 `acceptUrl: null` + `reviewStatus: 'pending_review'` — surface a "held for review"
 state instead of a copyable link. Fresh/placeholder artists return the URL inline.
+
+**AdminInvites form (the operator UI):** when `role==='artist'` the target Person
+IS the artist already picked in the role-scope field — reuse `scopeId` as the
+target instead of a second redundant People search (a separate empty "Target
+person" box that the operator never filled caused the backend's "Team invites
+require a target Person" 400). The form computes `effectiveTargetPersonId =
+inviteRole ? (role==='artist' ? scopeId : targetPersonId) : null`, sends it on
+both the normal and duplicate-confirm submit paths, gates `submitDisabled` on it,
+and clears `preFlightedAlbumId` whenever the resolved target changes so a draft
+picked for a prior target can't ride along.

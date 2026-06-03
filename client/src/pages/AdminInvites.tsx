@@ -70,6 +70,7 @@ export function AdminInvites() {
   // (any role + referrer attribution + team sub-roles).
   const [inviteMode, setInviteMode] = useState<"quick" | "advanced">("quick");
   const [scopeId, setScopeId] = useState<string | null>(null);
+  const [scopeName, setScopeName] = useState<string>("");
   const [referrerKind, setReferrerKind] = useState<"" | "artist" | "non_profit" | "manufacturer" | "ambassador">("");
   const [duplicateConfirm, setDuplicateConfirm] = useState<{ name: string } | null>(null);
   const [referrerScopeId, setReferrerScopeId] = useState<string | null>(null);
@@ -92,23 +93,36 @@ export function AdminInvites() {
     },
     enabled: !!inviteRole && personSearch.trim().length >= 2 && !targetPersonId,
   });
+  // Task #351 — for an Artist-role team invite the target Person IS the
+  // artist already picked in the role-scope field above, so reuse it
+  // instead of demanding a redundant second People search. Other roles
+  // still resolve the target from the explicit Target Person picker.
+  const effectiveTargetPersonId = inviteRole ? (role === "artist" ? scopeId : targetPersonId) : null;
+  const effectiveTargetPersonName = inviteRole ? (role === "artist" ? scopeName : targetPersonName) : "";
   const targetAlbums = useQuery<Array<{ id: string; title: string }>>({
-    queryKey: ["/api/admin/albums", { artist: targetPersonId }],
+    queryKey: ["/api/admin/albums", { artist: effectiveTargetPersonId }],
     queryFn: async () => {
-      const r = await apiRequest("GET", `/api/admin/albums?artistId=${targetPersonId}`);
+      const r = await apiRequest("GET", `/api/admin/albums?artistId=${effectiveTargetPersonId}`);
       return r.json();
     },
-    enabled: !!targetPersonId,
+    enabled: !!effectiveTargetPersonId,
   });
 
   const needsScope = !!SCOPE_CONFIG[role];
 
   useEffect(() => {
     setScopeId(null);
+    setScopeName("");
   }, [role]);
   useEffect(() => {
     setReferrerScopeId(null);
   }, [referrerKind]);
+  // Drop a pre-flighted album draft whenever the resolved target Person
+  // changes (e.g. operator swaps the artist scope) so a draft picked for
+  // a prior target can't ride along to a different one.
+  useEffect(() => {
+    setPreFlightedAlbumId(null);
+  }, [effectiveTargetPersonId]);
 
   const {
     data: invites = [],
@@ -238,7 +252,8 @@ export function AdminInvites() {
 
   const submitDisabled =
     createMutation.isPending || !email.trim() || !role || (needsScope && !scopeId) ||
-    (!!referrerKind && !referrerScopeId);
+    (!!referrerKind && !referrerScopeId) ||
+    (!!inviteRole && !effectiveTargetPersonId);
 
   return (
     <AdminFrame active="invites" contentWidth="narrow">
@@ -263,7 +278,7 @@ export function AdminInvites() {
               referrerScopeId: referrerKind ? referrerScopeId : null,
               welcomeNote: welcomeNote.trim() || null,
               inviteRole: inviteRole || null,
-              targetPersonId: inviteRole ? targetPersonId : null,
+              targetPersonId: effectiveTargetPersonId,
               preFlightedAlbumId: inviteRole ? preFlightedAlbumId : null,
             } as any);
           }}
@@ -386,7 +401,7 @@ export function AdminInvites() {
             <ScopePicker
               cfg={SCOPE_CONFIG[role]}
               value={scopeId}
-              onChange={(id) => setScopeId(id)}
+              onChange={(id, name) => { setScopeId(id); setScopeName(name || ""); }}
             />
           )}
 
@@ -405,7 +420,19 @@ export function AdminInvites() {
           {inviteMode === "advanced" && inviteRole && (
             <div className="mt-3">
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Target person</label>
-              {targetPersonId ? (
+              {role === "artist" ? (
+                // Artist-role invites already name the Person in the Artist
+                // field above — reuse it as the target instead of a second
+                // redundant search that left the invite stuck on a 400.
+                scopeId ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2" data-testid="text-target-person">
+                    <span className="text-sm text-slate-800 flex-1 truncate">{effectiveTargetPersonName || "Selected artist"}</span>
+                    <span className="text-xs text-slate-400">from Artist above</span>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500" data-testid="text-target-person-hint">Pick the artist above first — they'll be the target.</p>
+                )
+              ) : targetPersonId ? (
                 <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2">
                   <span className="text-sm text-slate-800 flex-1 truncate" data-testid="text-target-person">{targetPersonName}</span>
                   <button type="button" onClick={() => { setTargetPersonId(null); setTargetPersonName(""); setPreFlightedAlbumId(null); }} className="text-slate-400 hover:text-rose-600" data-testid="button-clear-target-person">
@@ -441,7 +468,7 @@ export function AdminInvites() {
                   )}
                 </>
               )}
-              {targetPersonId && targetAlbums.data && targetAlbums.data.length > 0 && (
+              {effectiveTargetPersonId && targetAlbums.data && targetAlbums.data.length > 0 && (
                 <div className="mt-3">
                   <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Pre-flight an album draft (optional)</label>
                   <select
@@ -543,8 +570,11 @@ export function AdminInvites() {
                       referrerKind: referrerKind || null,
                       referrerScopeId: referrerKind ? referrerScopeId : null,
                       welcomeNote: welcomeNote.trim() || null,
+                      inviteRole: inviteRole || null,
+                      targetPersonId: effectiveTargetPersonId,
+                      preFlightedAlbumId: inviteRole ? preFlightedAlbumId : null,
                       confirmDuplicate: true,
-                    });
+                    } as any);
                   }}
                   className="px-3 py-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 rounded-md"
                   data-testid="button-duplicate-confirm"
