@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { X } from "lucide-react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { IconButton } from "@/components/ui/IconButton";
 import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
 import { BuySheet } from "@/components/checkout/BuySheet";
 import { buyEnabled } from "@/lib/platform";
@@ -130,6 +134,15 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const [, navigate] = useLocation();
   const { user, updateProfile } = useAuth();
   const player = usePlayer();
+  const reduceMotion = useReducedMotion();
+  // The lyrics side panel needs the room a wide desktop provides (its
+  // 360px aside would crush the hero/tracklist at md). At md (portrait
+  // tablets / split laptop windows, 768–1023) we render a full-bleed
+  // lyrics overlay over the content area instead, so the dock's lyrics
+  // button is never a no-op. Only one karaoke surface mounts at a time
+  // because `lyricsOpen` (lg panel) and the md overlay are mutually
+  // exclusive on this flag.
+  const isLgViewport = useMediaQuery("(min-width: 1024px)");
   const [tab, setTab] = useState<DesktopAlbumTab>("music");
   // Task #1054 — sidebar "Search" swaps the main content area into an
   // Apple-Music-style search view (box at top, ranked results below)
@@ -507,7 +520,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
         onSearch={() => setSearchMode(true)}
       />
 
-      <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden">
+      <div className="relative flex-1 min-w-0 flex flex-col h-full overflow-hidden">
         <main className="flex-1 overflow-y-auto">
           {searchMode ? (
             <DesktopSearchView onNavigate={() => setSearchMode(false)} />
@@ -540,12 +553,57 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             signedCertSoldOut={signedCertSoldOut}
             sunsetReached={sunsetReached}
             onStreamAlbum={handleStreamAlbum}
-            lyricsOpen={player.showLyrics}
+            lyricsOpen={player.showLyrics && isLgViewport}
             lyrics={lyricsBody}
             onCloseLyrics={() => player.setShowLyrics(false)}
           />
           )}
         </main>
+
+        {/* Medium-width (768–1023) lyrics overlay. The lg side panel is
+            mounted only at lg (lyricsOpen is gated on isLgViewport), so on
+            portrait tablets / narrow split windows we cover the content
+            area with a full-bleed lyrics sheet instead. It sits inside the
+            content column (right of the sidebar) and below the fixed
+            PlayerDock (z-40 > z-30), so the transport — including the
+            lyrics toggle — stays reachable while reading. Reuses the SAME
+            `lyricsBody` (shared SyncedLyrics, props only). */}
+        <AnimatePresence initial={false}>
+          {player.showLyrics && !isLgViewport && !searchMode && (
+            <motion.div
+              key="lyrics-overlay-md"
+              className="lg:hidden absolute inset-0 z-30 flex flex-col"
+              style={{ background: BRAND_BG }}
+              initial={reduceMotion ? false : { opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 24 }}
+              transition={
+                reduceMotion
+                  ? { duration: 0 }
+                  : { type: "spring", stiffness: 420, damping: 44, mass: 0.9 }
+              }
+              aria-label="Lyrics"
+              data-testid="overlay-lyrics-md"
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-white/8">
+                <span className="text-fan-primary text-sm font-semibold tracking-[-0.005em]">
+                  Lyrics
+                </span>
+                <IconButton
+                  variant="ghost"
+                  size="md"
+                  label="Close lyrics"
+                  onClick={() => player.setShowLyrics(false)}
+                  data-testid="button-close-lyrics-md"
+                  className="w-9 h-9 [&>svg]:w-4 [&>svg]:h-4 text-fan-secondary hover:text-fan-primary"
+                >
+                  <X strokeWidth={2.2} />
+                </IconButton>
+              </div>
+              <div className="flex-1 min-h-0 flex flex-col">{lyricsBody}</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Bottom-fixed compact PlayerDock. Centered above the content area

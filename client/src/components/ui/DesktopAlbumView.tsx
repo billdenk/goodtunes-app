@@ -283,7 +283,7 @@ export function DesktopAlbumView({
           720px max + tighter horizontal padding so the hero and
           tracklist still feel intentional rather than stretched. */}
       <div
-        className={[cls.column, showLyrics ? "mx-0 ml-auto" : ""].join(" ")}
+        className={[cls.column, showLyrics ? "lg:mx-0 lg:ml-auto" : ""].join(" ")}
       >
         {/* Back-carat pill — matches the mobile album surface's glass
             IconButton + chevron-left treatment so the two surfaces are
