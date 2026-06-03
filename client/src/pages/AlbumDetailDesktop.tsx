@@ -441,16 +441,17 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   })();
 
   // PlayerDock track adapter. Dock shows the artwork as the cover slot
-  // when something is playing; otherwise the dock's idle placeholder
-  // takes over. Title falls back to a friendly "Not playing" so the
-  // pill still reads cleanly while idle on the desktop surface.
+  // when something is playing; otherwise the dock's idle treatment (a
+  // centered gray "G", no title) takes over. We pass an empty title
+  // while idle so no "Not playing" label ever leaks through — the dock
+  // ignores the idle title anyway, but keeping it empty is honest.
   const dockTrack = player.currentSong
     ? {
         title: player.currentSong.title,
         subtitle: player.currentSong.album.artist,
         playable: true,
       }
-    : { title: "Not playing", subtitle: undefined, playable: false };
+    : { title: "", subtitle: undefined, playable: false };
   const dockCover = player.currentSong ? (
     <img
       src={player.currentSong.album.artwork}

@@ -499,6 +499,9 @@ export function TabPlaceholder({ kind }: { kind: "video" | "photos" }) {
 
 export function FloatingPlayerDock() {
   const current = TRACKS[1]; // Nothing Without Your Love
+  // Demo always has a selection; the idle branch below mirrors the real
+  // PlayerDock's centered gray "G" so future polish stays in lock-step.
+  const hasSelection = Boolean(current);
   const [playing, setPlaying] = useState(true);
   const progress = 42;
 
@@ -680,26 +683,41 @@ export function FloatingPlayerDock() {
 
           <span className="mx-2 h-6 w-px bg-white/10 flex-shrink-0" aria-hidden />
 
-          {/* CENTER · track info */}
-          <div
-            className={[
-              "flex items-center gap-3 min-w-0 flex-1 transition-[filter,opacity] duration-150",
-              scrubHover ? "blur-[6px] opacity-50" : "",
-            ].join(" ")}
-            aria-hidden={scrubHover}
-          >
-            <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0">
-              <img src={ALBUM_COVER} alt="" className="w-full h-full object-cover" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-semibold truncate leading-tight">
-                {current.title}
+          {/* CENTER · track info — mirrors PlayerDock. When idle (no
+              selection) the center collapses to a single centered, dimmed
+              gray GoodTunes "G" mark with NO title text (so "Not playing"
+              never appears), keeping the same flex-1 footprint so the pill
+              width doesn't jump between idle/playing. */}
+          {hasSelection ? (
+            <div
+              className={[
+                "flex items-center gap-3 min-w-0 flex-1 transition-[filter,opacity] duration-150",
+                scrubHover ? "blur-[6px] opacity-50" : "",
+              ].join(" ")}
+              aria-hidden={scrubHover}
+            >
+              <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0">
+                <img src={ALBUM_COVER} alt="" className="w-full h-full object-cover" />
               </div>
-              <div className="text-[11px] text-slate-400 truncate leading-tight mt-0.5">
-                Nick Carter — Love Life Tragedy
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-semibold truncate leading-tight">
+                  {current.title}
+                </div>
+                <div className="text-[11px] text-slate-400 truncate leading-tight mt-0.5">
+                  Nick Carter — Love Life Tragedy
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center justify-center flex-1" aria-hidden>
+              <img
+                src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/images/goodtunes-g-mark.png`}
+                alt=""
+                className="w-10 h-10 object-contain p-0.5 grayscale opacity-40"
+                draggable={false}
+              />
+            </div>
+          )}
 
           {/* RIGHT · utility cluster */}
           <div className="flex items-center gap-1.5 flex-shrink-0">

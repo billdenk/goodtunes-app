@@ -599,47 +599,67 @@ export function PlayerDock({
               Cover ~40px (one notch shorter than the 44px Play so
               Play drives the row height). Center cluster blurs out
               while the user is hovering the scrubber so the time
-              labels above the bar read cleanly. Rendered even when
-              idle — title slot just stays empty so the pill width
-              doesn't change between idle and playing states. */}
-          <div
-            className={[
-              "flex items-center gap-3 min-w-0 flex-1 transition-[filter,opacity] duration-150",
-              scrubHover ? "blur-[6px] opacity-50" : "",
-            ].join(" ")}
-            aria-hidden={scrubHover}
-          >
-            <div className={`${D.cover} flex-shrink-0 rounded-md overflow-hidden`}>
-              {coverNode ?? emptyCover}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div
-                className={`${D.titleSize} font-semibold truncate leading-tight`}
-                data-testid="text-track-title"
-              >
-                {track.title}
+              labels above the bar read cleanly.
+
+              Idle (no selection) collapses to a single centered, dimmed
+              gray GoodTunes "G" mark — no cover plate, no title text (so
+              a host-supplied "Not playing" never appears) — mirroring
+              Apple's calm idle dock where the whole pill reads as one
+              gray state. The center keeps its `flex-1` footprint either
+              way so the pill width doesn't jump between idle/playing. */}
+          {hasSelection ? (
+            <div
+              className={[
+                "flex items-center gap-3 min-w-0 flex-1 transition-[filter,opacity] duration-150",
+                scrubHover ? "blur-[6px] opacity-50" : "",
+              ].join(" ")}
+              aria-hidden={scrubHover}
+            >
+              <div className={`${D.cover} flex-shrink-0 rounded-md overflow-hidden`}>
+                {coverNode ?? emptyCover}
               </div>
-              {track.subtitle && hasSelection && (
+              <div className="min-w-0 flex-1">
                 <div
-                  className={`${D.subtitleSize} ${
-                    isCompactDensity ? "text-white/55" : "text-slate-400"
-                  } truncate leading-tight mt-0.5 flex items-center gap-1.5`}
-                  data-testid="text-track-subtitle"
+                  className={`${D.titleSize} font-semibold truncate leading-tight`}
+                  data-testid="text-track-title"
                 >
-                  {previewMode && (
-                    <span
-                      className="inline-flex items-center px-1.5 h-[14px] rounded-[3px] text-[9.5px] font-bold uppercase tracking-[0.08em] flex-shrink-0"
-                      style={{ background: "rgba(255,84,112,0.18)", color: "#FF5470" }}
-                      data-testid="badge-preview-mode"
-                    >
-                      Preview
-                    </span>
-                  )}
-                  <span className="truncate">{track.subtitle}</span>
+                  {track.title}
                 </div>
-              )}
+                {track.subtitle && (
+                  <div
+                    className={`${D.subtitleSize} ${
+                      isCompactDensity ? "text-white/55" : "text-slate-400"
+                    } truncate leading-tight mt-0.5 flex items-center gap-1.5`}
+                    data-testid="text-track-subtitle"
+                  >
+                    {previewMode && (
+                      <span
+                        className="inline-flex items-center px-1.5 h-[14px] rounded-[3px] text-[9.5px] font-bold uppercase tracking-[0.08em] flex-shrink-0"
+                        style={{ background: "rgba(255,84,112,0.18)", color: "#FF5470" }}
+                        data-testid="badge-preview-mode"
+                      >
+                        Preview
+                      </span>
+                    )}
+                    <span className="truncate">{track.subtitle}</span>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div
+              className="flex items-center justify-center flex-1"
+              data-testid="player-dock-idle"
+              aria-hidden
+            >
+              <img
+                src="/goodtunes-g-mark.png"
+                alt=""
+                className={`${D.cover} object-contain p-0.5 grayscale opacity-40`}
+                draggable={false}
+              />
+            </div>
+          )}
 
           {/* ── RIGHT · utility cluster ──────────────────────────
               Lyrics glyph + volume cluster + minimize chevron.
