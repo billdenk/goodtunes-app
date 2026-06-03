@@ -1253,18 +1253,27 @@ function AttachContactDialog(
             )}
             {/* Task #824 — one coherent role step: a locked card showing
                 the access being granted + an optional creative-credits
-                multi-select so an artist/producer can be tagged up front. */}
+                multi-select so an artist/producer can be tagged up front.
+                Task #1051 — the creative-credits chip rail is only relevant
+                when tagging artists up front (press "Add Admin"). For label
+                and other business-contact kinds it's noise, so we omit the
+                creative props entirely; RolePicker hides the whole section
+                when `onCreativeChange` is absent. */}
             <RolePicker
               testIdPrefix={`${props.testIdPrefix}-${props.kind}`}
               accessOptions={[accessRole]}
               accessValue={accessRole.value}
               accessLocked
               accessLabel="Grants access as"
-              creativeValue={creativeRoles}
-              onCreativeChange={setCreativeRoles}
-              creativeLabel="Also credit as (optional)"
-              creativeHint="Tag artists / producers up front"
-              derivedCreative={derivedRoles}
+              {...(isPressAdmin
+                ? {
+                    creativeValue: creativeRoles,
+                    onCreativeChange: setCreativeRoles,
+                    creativeLabel: "Also credit as (optional)",
+                    creativeHint: "Tag artists / producers up front",
+                    derivedCreative: derivedRoles,
+                  }
+                : {})}
             />
           </div>
         )}
