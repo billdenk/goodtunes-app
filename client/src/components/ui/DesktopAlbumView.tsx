@@ -544,7 +544,11 @@ export function DesktopAlbumView({
         {/* Tab content */}
         <div className="mt-6">
           {tab === "music" && (
-            <div className="flex flex-col border-t border-white/8 pt-1" data-testid="track-list">
+            <div className="flex flex-col pt-1" data-testid="track-list">
+              {/* Apple-style top hairline — inset + same weight as the
+                  per-row separators so the list reads as one uniform set of
+                  rules instead of a thick full-bleed bar above row 1. */}
+              <span aria-hidden className="mx-4 h-px bg-white/10" />
               {songs.map((s) => {
                 const state = trackPlaybackState({
                   isOwned,

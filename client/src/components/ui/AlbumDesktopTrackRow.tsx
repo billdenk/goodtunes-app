@@ -82,7 +82,7 @@ export function AlbumDesktopTrackRow({
           highlight. */}
       <span
         aria-hidden
-        className="absolute left-4 right-4 bottom-0 h-px bg-white/[0.07] transition-opacity"
+        className="absolute left-4 right-4 bottom-0 h-px bg-white/10 transition-opacity"
         style={{ opacity: elevated ? 0 : 1 }}
       />
       {/* Leading favorite heart — sits to the left of the number, reserves
