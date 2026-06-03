@@ -11,6 +11,7 @@ import { prewarmSpotifyToken } from "./lib/spotify";
 import { authKindMiddleware, canonicalHostRedirect } from "./auth/host";
 import { forwardToPostHog, geoFromRequest } from "./analytics";
 import { alertOps } from "./opsAlert";
+import { describeDbError, type DbErrorInfo } from "./db";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -175,12 +176,24 @@ app.use((req, res, next) => {
           (capturedJsonResponse && typeof capturedJsonResponse.message === "string"
             ? capturedJsonResponse.message
             : null) || "unknown error";
+        // Unwrap the real Postgres error (SQLSTATE + message + detail) the
+        // express error handler stashed on res.locals, so the log names the
+        // exact DB failure instead of drizzle's "Failed query:" wrapper.
+        const dbErr: DbErrorInfo | undefined = (res.locals as any)?.dbError;
         const logPayload = {
           route: path,
           method: req.method,
           status: res.statusCode,
           durationMs: duration,
           message: errorMessage,
+          ...(dbErr
+            ? {
+                dbCode: dbErr.code,
+                dbMessage: dbErr.message,
+                ...(dbErr.detail ? { dbDetail: dbErr.detail } : {}),
+                ...(dbErr.constraint ? { dbConstraint: dbErr.constraint } : {}),
+              }
+            : {}),
         };
         console.error("[admin-list-error]", JSON.stringify(logPayload));
 
@@ -209,6 +222,10 @@ app.use((req, res, next) => {
           (capturedJsonResponse && typeof capturedJsonResponse.message === "string"
             ? capturedJsonResponse.message
             : null) || "unknown error";
+        // Surface the real Postgres error the express error handler stashed
+        // on res.locals so the alert email names the exact failure (SQLSTATE
+        // + message + detail/constraint), not just drizzle's "Failed query:".
+        const dbErr: DbErrorInfo | undefined = (res.locals as any)?.dbError;
         const detail = [
           `When:    ${new Date().toISOString()}`,
           `Where:   ${req.method} ${path}`,
@@ -216,6 +233,14 @@ app.use((req, res, next) => {
           `Took:    ${duration}ms`,
           `Host:    ${req.headers.host ?? "(unknown)"}`,
           `Message: ${errMsg}`,
+          ...(dbErr
+            ? [
+                `DB code: ${dbErr.code ?? "(none)"}`,
+                `DB msg:  ${dbErr.message}`,
+                ...(dbErr.detail ? [`DB detail: ${dbErr.detail}`] : []),
+                ...(dbErr.constraint ? [`DB constraint: ${dbErr.constraint}`] : []),
+              ]
+            : []),
         ].join("\n");
         alertOps({
           signature: `${res.statusCode} ${req.method} ${path}`,
@@ -437,6 +462,15 @@ async function bootstrapAccessGuard() {
     const message = err.message || "Internal Server Error";
 
     console.error("Internal Server Error:", err);
+
+    // Unwrap drizzle's wrapper to the real Postgres error and stash it on
+    // res.locals so the request-logger's finish handler (the [admin-list-
+    // error] log + the ops-alert email) can name the exact SQLSTATE +
+    // message + detail/constraint instead of "Failed query: …".
+    const dbErr = describeDbError(err);
+    if (dbErr) {
+      (res.locals as any).dbError = dbErr;
+    }
 
     // Ship server-side faults to Sentry (no-op until SENTRY_DSN is set) so we
     // get the full stack trace, not just the email ping. We attach request
