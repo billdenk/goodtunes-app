@@ -56,7 +56,21 @@ const created = {
 let baseUrl = "";
 let httpServer: HttpServer | undefined;
 
+// The invite-accept test below drives the REAL route, which mints the new
+// admin via storage.createUser. That helper grants every new signup the seed
+// albums by doing `db.select().from(albums)` — i.e. a SELECT of every column
+// the Drizzle schema declares. Isolated/throwaway DB clones lag behind
+// shared/schema.ts, so the newest nullable album columns can be missing and
+// that full-row SELECT 500s (the rest of the file never calls createUser, so
+// it slips past). Bring the columns this path needs up to the schema before
+// the route runs — idempotent, so it's a no-op on an already-migrated DB.
+async function ensureAlbumColumnsForCreateUser() {
+  await exec(sql`ALTER TABLE albums ADD COLUMN IF NOT EXISTS original_release_date text`);
+  await exec(sql`ALTER TABLE albums ADD COLUMN IF NOT EXISTS copyright_line text`);
+}
+
 before(async () => {
+  await ensureAlbumColumnsForCreateUser();
   const app = express();
   app.set("trust proxy", 1);
   app.use(authKindMiddleware);
