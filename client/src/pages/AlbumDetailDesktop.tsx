@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/AlbumDetailSkeleton";
 import { DesktopSearchView } from "@/components/search/DesktopSearchView";
 import { PlayerDock } from "@/components/ui/PlayerDock";
+import { DesktopImmersivePlayer } from "@/components/ui/DesktopImmersivePlayer";
 import {
   DesktopAlbumView,
   type DesktopAlbumSong,
@@ -162,6 +163,11 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const effectiveOwned = isOwned || fullPlaybackAccess;
   const favSongs = useFavoriteSongs();
   const [showAlbumCredits, setShowAlbumCredits] = useState(false);
+
+  // Full-screen immersive player (Task #1056). Opened from the lyrics
+  // panel's hover "expand" affordance; reads playback straight off
+  // PlayerContext so opening/closing never touches the audio element.
+  const [showImmersive, setShowImmersive] = useState(false);
   // Person opened from the album-credits sheet. The desktop view has no
   // SuperCredits sheet stack of its own, so PersonDetailSheet brings its own
   // self-contained About/Music/Gear sheet (+ instrument/vendor sub-stack).
@@ -511,6 +517,9 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             lyricsOpen={player.showLyrics}
             lyrics={lyricsBody}
             onCloseLyrics={() => player.setShowLyrics(false)}
+            onExpandLyrics={
+              player.currentSong ? () => setShowImmersive(true) : undefined
+            }
           />
           )}
         </main>
@@ -565,6 +574,10 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
           />
         </div>
       </div>
+
+      {showImmersive && player.currentSong && (
+        <DesktopImmersivePlayer onClose={() => setShowImmersive(false)} />
+      )}
 
       {import.meta.env.DEV && id && (
         <DevOwnershipToggle albumId={id} isOwned={isOwned} />

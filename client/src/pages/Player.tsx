@@ -1,167 +1,13 @@
-import { useState, useRef, useMemo, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence, useReducedMotion, type Transition } from "framer-motion";
 import { useLocation } from "wouter";
 import { usePlayer } from "@/context/PlayerContext";
 import { formatDuration } from "@/data/musicData";
 import { LyricsIcon } from "@/components/ui/LyricsIcon";
 import { IconButton } from "@/components/ui/IconButton";
-import { LyricsGapDots } from "@/components/LyricsGapDots";
+import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { track } from "@/lib/analytics";
-
-// Build a line-level synced lyric track by evenly distributing each
-// non-header lyric line across the song's duration, with a small lead-in
-// and outro so the first line doesn't trigger at t=0 and the last line
-// doesn't trigger right at the end. Section headers ([Verse 1], [Chorus],
-// etc.) render as dimmed labels — they're not assigned a timestamp and
-// can't be tapped to seek. This is a placeholder until real per-song
-// timing arrives via the artist upload portal; at that point swap the
-// auto-distribution for a stored `syncedLyrics: { time, text }[]` array
-// and the rest of the rendering stays the same.
-type SyncedLine = {
-  text: string;
-  isHeader: boolean;
-  isEmpty: boolean;
-  time: number | null;
-  // Instrumental gap row — when true, the renderer draws LyricsGapDots
-  // instead of a lyric line. `time` is the gap start (when the dots
-  // become active) and `gapEnd` is the gap end (when the next cue
-  // starts, or duration for a trailing outro gap). Only emitted when
-  // we have real cue timing data (syncedLyrics with endMs); the plain-
-  // lyrics fallback never produces gap rows so those tracks render
-  // exactly as before.
-  isGap?: boolean;
-  gapEnd?: number;
-};
-
-function buildSyncedLines(
-  lyrics: string | undefined,
-  duration: number,
-  syncedLyrics?: { timeMs: number; endMs?: number; text: string }[] | null,
-): SyncedLine[] {
-  // Preferred path: real per-line timing from an uploaded .vtt file. Each
-  // cue becomes one rendered line with seconds-precision time (the overlay
-  // compares to currentTime in seconds). Section-header detection still
-  // runs so [Verse 1]-style cues render dimmed + un-tappable.
-  if (syncedLyrics && syncedLyrics.length > 0) {
-    const out: SyncedLine[] = [];
-    // Same gap-detection rule the admin GoodSync preview uses:
-    // measure silence AFTER the previous cue's endMs (not from its
-    // start), threshold ≥3s, and synthesize an estimated end when
-    // endMs is missing (older synced data without STT timing) so
-    // obvious instrumentals still get dots. Intro gap counts: prevEnd
-    // is 0 before the first cue. Trailing gap is handled after the
-    // loop using `duration`.
-    for (let i = 0; i < syncedLyrics.length; i++) {
-      const cue = syncedLyrics[i];
-      const cueTime = cue.timeMs / 1000;
-      const prevCue = i === 0 ? null : syncedLyrics[i - 1];
-      const prevEnd = !prevCue
-        ? 0
-        : prevCue.endMs != null
-          ? prevCue.endMs / 1000
-          : Math.min(cueTime - 0.3, prevCue.timeMs / 1000 + 3);
-      const silence = cueTime - prevEnd;
-      if (silence >= 3) {
-        out.push({
-          text: "",
-          isHeader: false,
-          isEmpty: false,
-          isGap: true,
-          time: prevEnd,
-          gapEnd: cueTime,
-        });
-      }
-      const text = cue.text;
-      const trimmed = text.trim();
-      const isHeader = /^\[.*\]$/.test(trimmed);
-      out.push({
-        text,
-        isHeader,
-        isEmpty: trimmed === "",
-        time: isHeader ? null : cueTime,
-      });
-    }
-    // Trailing outro gap — only if we know the song duration and the
-    // last cue's end (or our estimate of it).
-    if (duration > 0) {
-      const last = syncedLyrics[syncedLyrics.length - 1];
-      const lastEnd =
-        last.endMs != null
-          ? last.endMs / 1000
-          : Math.min(duration, last.timeMs / 1000 + 3);
-      const trailing = duration - lastEnd;
-      if (trailing >= 3) {
-        out.push({
-          text: "",
-          isHeader: false,
-          isEmpty: false,
-          isGap: true,
-          time: lastEnd,
-          gapEnd: duration,
-        });
-      }
-    }
-    return out;
-  }
-  // Fallback: distribute the plain-text lyrics evenly across duration.
-  if (!lyrics || !duration || duration <= 0) {
-    return (lyrics ?? "").split("\n").map((line) => ({
-      text: line,
-      isHeader: /^\s*\[.*\]\s*$/.test(line),
-      isEmpty: line.trim() === "",
-      time: null,
-    }));
-  }
-  const raw = lyrics.split("\n");
-  // Classify each line and assign it a "weight" representing roughly how
-  // long it occupies in the song:
-  //   • sung line  → weight 1
-  //   • blank line → weight 0.6 (represents a brief musical gap between
-  //                  stanzas; gives the verse below it a realistic delay
-  //                  instead of being mashed up against the previous one)
-  //   • header     → weight 0 (rendered dimmed, not timed)
-  // Previously blank lines were stripped entirely, so all the time that
-  // should have fallen on stanza gaps got re-spread back onto the sung
-  // lines — making every verse creep ahead of where it actually lands.
-  type Slot = { idx: number; weight: number; timeable: boolean };
-  const slots: Slot[] = raw.map((line, idx) => {
-    const t = line.trim();
-    if (!t) return { idx, weight: 0.6, timeable: false };
-    if (/^\[.*\]$/.test(t)) return { idx, weight: 0, timeable: false };
-    return { idx, weight: 1, timeable: true };
-  });
-  // Lead-in scales with song length so longer songs (which usually have
-  // longer instrumental intros) don't fire line 1 at 1.5s while the singer
-  // is still 15s away. ~4% of duration, clamped to [1.5s, 8s]. Tail stays
-  // tight so the last line still lands before the fade-out. A real .vtt
-  // upload overrides all of this — this is only the no-timing fallback.
-  const lead = Math.max(1.5, Math.min(8, duration * 0.04));
-  const tail = Math.max(2, duration * 0.02);
-  const usable = Math.max(1, duration - lead - tail);
-  const totalWeight = slots.reduce((s, sl) => s + sl.weight, 0) || 1;
-  // Walk slots cumulatively; each sung line's timestamp is the cumulative
-  // weight *up to and including* the previous slot, scaled into usable.
-  // That way the line lands at the START of its own slot, not the middle,
-  // and the blank-line weight pushes the next verse later. Float seconds
-  // (no Math.round) — adjacent lines no longer collide on the same second
-  // and the active-line transition feels continuous.
-  const timeMap: Record<number, number> = {};
-  let cumulative = 0;
-  for (const slot of slots) {
-    if (slot.timeable) {
-      const t = lead + (cumulative / totalWeight) * usable;
-      timeMap[slot.idx] = Math.min(Math.max(0, duration - 0.5), t);
-    }
-    cumulative += slot.weight;
-  }
-  return raw.map((line, i) => ({
-    text: line,
-    isHeader: /^\s*\[.*\]\s*$/.test(line),
-    isEmpty: line.trim() === "",
-    time: timeMap[i] ?? null,
-  }));
-}
 
 export function Player() {
   const {
@@ -202,37 +48,10 @@ export function Player() {
   const [, navigate] = useLocation();
   const reduceMotion = useReducedMotion();
 
-  // ── Synced lyrics (line-level, auto-distributed) ──
-  // All hooks must run before any early return to keep React's hook order
-  // stable across renders (currentSong starts null on app load, then becomes
-  // a real song once playback begins — the hook count must not change).
-  const syncedLines = useMemo(
-    () => buildSyncedLines(currentSong?.lyrics, duration, currentSong?.syncedLyrics),
-    [currentSong?.id, currentSong?.lyrics, currentSong?.syncedLyrics, duration]
-  );
-  const activeLineIdx = useMemo(() => {
-    let active = -1;
-    for (let i = 0; i < syncedLines.length; i++) {
-      const t = syncedLines[i].time;
-      if (t != null && currentTime >= t) active = i;
-    }
-    return active;
-  }, [syncedLines, currentTime]);
-  const lyricLineRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const lyricsScrollRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!showLyrics) return;
-    const el = lyricLineRefs.current[activeLineIdx];
-    const scroll = lyricsScrollRef.current;
-    if (!el || !scroll) return;
-    // Apple-style: land the active line ~28% down from the top of the
-    // scroll viewport (not flush with the top edge), so the line sits
-    // comfortably below the header fade-mask and there's room for the
-    // next 4-5 upcoming lines to be visible.
-    const targetOffset = scroll.clientHeight * 0.28;
-    const top = el.offsetTop - targetOffset;
-    scroll.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-  }, [activeLineIdx, showLyrics]);
+  // Synced-lyrics timing + rendering now live in the shared SyncedLyrics
+  // component (client/src/components/ui/SyncedLyrics.tsx), driven by the
+  // engine in client/src/lib/syncedLyrics.ts — the same surface the desktop
+  // immersive player renders, so karaoke behaviour stays identical.
 
   // Auto-hide the lyrics-overlay bottom controls after a few seconds of no
   // interaction, the way Apple does on its full-screen Now Playing surface.
@@ -858,168 +677,25 @@ export function Player() {
               </div>
             </div>
 
-            {/* Lyrics text — scrollable, line-level synced.
-                The mask-image gradient softly fades the very top and bottom
-                of the scroll viewport to transparent, so past lines dissolve
-                into the header (instead of slamming into it) and upcoming
-                lines fade into the controls. Matches Apple Music exactly. */}
-            <div
-              ref={lyricsScrollRef}
-              className="relative z-10 flex-1 overflow-y-auto scrollbar-hide px-6"
-              style={{
-                paddingTop: "18vh",
-                paddingBottom: "30vh",
-                WebkitMaskImage:
-                  "linear-gradient(to bottom, transparent 0, transparent 4%, rgba(0,0,0,0.4) 9%, #000 16%, #000 82%, rgba(0,0,0,0.4) 92%, transparent 100%)",
-                maskImage:
-                  "linear-gradient(to bottom, transparent 0, transparent 4%, rgba(0,0,0,0.4) 9%, #000 16%, #000 82%, rgba(0,0,0,0.4) 92%, transparent 100%)",
-              }}
-              data-testid="lyrics-scroll"
-            >
-              <div className="flex flex-col gap-3">
-                {syncedLines.map((line, i) => {
-                  if (line.isGap) {
-                    const gapStart = line.time as number;
-                    const gapEnd = line.gapEnd as number;
-                    const gapLen = Math.max(0.0001, gapEnd - gapStart);
-                    const dotState: "upcoming" | "active" | "past" =
-                      currentTime >= gapEnd
-                        ? "past"
-                        : currentTime >= gapStart
-                          ? "active"
-                          : "upcoming";
-                    const gapProgress =
-                      dotState === "active"
-                        ? Math.max(0, Math.min(1, (currentTime - gapStart) / gapLen))
-                        : 0;
-                    return (
-                      <div
-                        key={i}
-                        ref={(el) => { lyricLineRefs.current[i] = el; }}
-                        data-testid={`lyric-gap-${i}`}
-                      >
-                        <LyricsGapDots state={dotState} progress={gapProgress} />
-                      </div>
-                    );
-                  }
-                  if (line.isEmpty) {
-                    return <div key={i} className="h-2" aria-hidden />;
-                  }
-                  if (line.isHeader) {
-                    return (
-                      <div
-                        key={i}
-                        ref={(el) => { lyricLineRefs.current[i] = el; }}
-                        className="text-white/30 text-[10px] font-semibold tracking-[0.18em] uppercase pt-2"
-                        data-testid={`lyric-header-${i}`}
-                      >
-                        {line.text.replace(/^\s*\[|\]\s*$/g, "")}
-                      </div>
-                    );
-                  }
-                  const isActive = i === activeLineIdx;
-                  const isPast = activeLineIdx >= 0 && i < activeLineIdx;
-                  const seekable = line.time != null;
-                  // Apple-Music-style focus stack: the active line is sharp +
-                  // pure white + slightly larger, and every other line is
-                  // progressively blurred + faded as it moves away from the
-                  // active one. Past lines fade harder than upcoming lines
-                  // so the eye naturally tracks down the page. Distance is
-                  // measured in *lines* (ignoring empties/headers would be
-                  // nicer, but the visual gradient holds up fine with raw
-                  // index distance for typical lyric densities).
-                  const distance = activeLineIdx < 0 ? 0 : Math.abs(i - activeLineIdx);
-                  // Apple-Music GoodSync™ model: every line is the SAME
-                  // large size — differentiation comes entirely from blur
-                  // depth + opacity, never from font-size or scale. The
-                  // active line is sharp + full white; neighbors get a
-                  // soft 1px blur; lines further away pick up progressively
-                  // heavier blur. The eye "snaps" to the only sharp line
-                  // on screen without a size jump distracting from it.
-                  // Blur ramp MUST be monotonic — once a line gets blurry,
-                  // it stays at least that blurry the further it sits from
-                  // active. The previous version dropped blur to 0 past
-                  // distance 3 (as a GPU optimization), but that produced
-                  // an obvious "sharp → blurry → sharp again" stripe down
-                  // the lyric column (Bill caught this on iPhone). Apple
-                  // Music keeps the blur monotone all the way down. We cap
-                  // the ramp at 6px (matches replit.md spec) so distant
-                  // lines don't keep getting heavier indefinitely. Opacity
-                  // already drops them to 0.18–0.30 so the GPU cost is
-                  // small. willChange below still only promotes near lines.
-                  const blurPx = isActive
-                    ? 0
-                    : distance === 1
-                      ? 1.2
-                      : distance === 2
-                        ? 2.8
-                        : distance === 3
-                          ? 4.5
-                          : 6;
-                  // Opacity ramp — past lines fade faster than upcoming
-                  // ones so the eye naturally tracks down the page.
-                  const opacity = isActive
-                    ? 1
-                    : isPast
-                      ? Math.max(0.18, 0.50 - distance * 0.10)
-                      : Math.max(0.30, 0.72 - distance * 0.10);
-                  return (
-                    <div
-                      key={i}
-                      ref={(el) => { lyricLineRefs.current[i] = el; }}
-                      role={seekable ? "button" : undefined}
-                      tabIndex={seekable ? 0 : -1}
-                      aria-current={isActive ? "true" : undefined}
-                      onClick={seekable ? () => seekTo(line.time as number) : undefined}
-                      onKeyDown={seekable ? (e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          seekTo(line.time as number);
-                        }
-                      } : undefined}
-                      className={`select-none ${seekable ? "cursor-pointer" : "cursor-default"}`}
-                      style={{
-                        color: "#FFFFFF",
-                        opacity,
-                        // Uniform weight + size across every line. Active
-                        // gets a subtle weight bump only; no size change.
-                        fontWeight: isActive ? 800 : 700,
-                        fontSize: "28px",
-                        lineHeight: 1.22,
-                        filter: blurPx > 0 ? `blur(${blurPx}px)` : "none",
-                        transition:
-                          "opacity 400ms ease, filter 400ms ease, text-shadow 350ms ease",
-                        textShadow: isActive ? "0 1px 18px rgba(0,0,0,0.35)" : "none",
-                        letterSpacing: "-0.01em",
-                        // Only promote lines that are about to animate
-                        // (active ±2) to a composited layer. Always-on
-                        // willChange on every line stresses mobile GPU
-                        // memory for no visible gain.
-                        willChange: distance <= 2 ? "filter, opacity" : undefined,
-                      }}
-                      data-testid={`lyric-line-${i}`}
-                      data-active={isActive}
-                    >
-                      {line.text}
-                    </div>
-                  );
-                })}
-                {/* Task #616 — "Written by …" credit. Names only; never
-                    percentages, never PROs (those live in admin). Pulled
-                    from /api/songs/:id `writers` which the server derives
-                    from track_publishing_splits. We render it as one final
-                    line below the lyrics so it benefits from the same
-                    bottom mask fade and sits inside the scroll. */}
-                {Array.isArray((currentSong as any).writers) && (currentSong as any).writers.length > 0 && (
-                  <div
-                    className="text-white/45 text-[12px] italic pt-6"
-                    data-testid="text-written-by"
-                  >
-                    Written by {(currentSong as any).writers.join(", ")}
-                  </div>
-                )}
-              </div>
-            </div>
+            {/* Lyrics text — scrollable, line-level synced. The shared
+                SyncedLyrics surface owns the timing engine, the active-line
+                focus stack (sharp white active line, monotone blur/fade on
+                neighbours), the ~28%-down auto-scroll, instrumental gap dots,
+                the top/bottom mask fade, and the "Written by …" credit — the
+                same component the desktop immersive player renders, so the
+                two surfaces never drift. Task #616 writers come from
+                /api/songs/:id (server-derived from track_publishing_splits;
+                names only, never percentages/PROs). */}
+            <SyncedLyrics
+              lyrics={currentSong.lyrics}
+              duration={duration}
+              syncedLyrics={currentSong.syncedLyrics}
+              currentTime={currentTime}
+              onSeek={seekTo}
+              writers={(currentSong as any).writers}
+              active={showLyrics}
+              className="relative z-10 flex-1 px-6"
+            />
 
             {/* Bottom controls */}
             <div

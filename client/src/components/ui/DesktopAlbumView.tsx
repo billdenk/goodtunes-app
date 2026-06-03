@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { ChevronRight, Play, Pause, Shuffle, MoreHorizontal, Lock, X, Share, Info } from "lucide-react";
+import { ChevronRight, Play, Pause, Shuffle, MoreHorizontal, Lock, X, Share, Info, Maximize2 } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { IconButton } from "@/components/ui/IconButton";
 import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
@@ -131,6 +131,12 @@ export type DesktopAlbumViewProps = {
   lyrics?: ReactNode;
   onCloseLyrics?: () => void;
 
+  /** When supplied, the lyrics panel reveals a hover/focus "expand" affordance
+   *  (Apple-Music diagonal double-arrow) that opens the full-screen immersive
+   *  player. Only the fan route passes this; the admin preview omits it so the
+   *  preview pane never grows a live expand control. */
+  onExpandLyrics?: () => void;
+
   /** When true, render the medium-breakpoint (portrait-tablet) sizing
    *  regardless of the actual viewport width. Used by the admin tablet
    *  preview, which renders into a fixed virtual canvas that scales to
@@ -193,6 +199,7 @@ export function DesktopAlbumView({
   lyricsOpen,
   lyrics,
   onCloseLyrics,
+  onExpandLyrics,
   compact = false,
 }: DesktopAlbumViewProps) {
   /* Tailwind class buckets. When `compact` is true (admin tablet
@@ -598,7 +605,7 @@ export function DesktopAlbumView({
           data-testid="panel-lyrics"
         >
           <div
-            className="flex-1 min-h-0 rounded-2xl overflow-hidden flex flex-col"
+            className="group flex-1 min-h-0 rounded-2xl overflow-hidden flex flex-col"
             style={{
               background: "rgba(255,255,255,0.04)",
               border: "1px solid rgba(255,255,255,0.08)",
@@ -608,15 +615,29 @@ export function DesktopAlbumView({
               <span className="text-white text-[14px] font-semibold tracking-[-0.005em]">
                 Lyrics
               </span>
-              <button
-                type="button"
-                onClick={onCloseLyrics}
-                aria-label="Close lyrics"
-                data-testid="button-close-lyrics"
-                className="w-8 h-8 rounded-full inline-flex items-center justify-center text-white/65 hover:text-white hover:bg-white/8 transition-colors"
-              >
-                <X className="w-4 h-4" strokeWidth={2.2} />
-              </button>
+              <div className="flex items-center gap-1">
+                {onExpandLyrics && (
+                  <IconButton
+                    variant="ghost"
+                    size="md"
+                    label="Expand to full screen"
+                    onClick={onExpandLyrics}
+                    data-testid="button-expand-lyrics"
+                    className="w-8 h-8 [&>svg]:w-4 [&>svg]:h-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100"
+                  >
+                    <Maximize2 />
+                  </IconButton>
+                )}
+                <button
+                  type="button"
+                  onClick={onCloseLyrics}
+                  aria-label="Close lyrics"
+                  data-testid="button-close-lyrics"
+                  className="w-8 h-8 rounded-full inline-flex items-center justify-center text-white/65 hover:text-white hover:bg-white/8 transition-colors"
+                >
+                  <X className="w-4 h-4" strokeWidth={2.2} />
+                </button>
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4 text-white/82 text-[14px] leading-[1.7]">
               {lyrics}
