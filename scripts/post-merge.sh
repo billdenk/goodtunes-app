@@ -3669,3 +3669,69 @@ SQL
 }
 backfill_task_1088_memphis_color_names dev  "${DATABASE_URL:-}"
 backfill_task_1088_memphis_color_names prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #1113 — reconcile shared/schema.ts drift the schema-drift guard ───
+# found. These objects exist in shared/schema.ts but had never shipped a
+# matching migrate_* block, so neither dev nor prod ever got them — the exact
+# failure mode the schema-drift-smoke validation now catches (see
+# .agents/memory/albums-schema-drift.md). All statements are additive and
+# idempotent (ADD COLUMN IF NOT EXISTS / CREATE TABLE IF NOT EXISTS), safe to
+# run on every merge and on DBs that already have them. Runs on BOTH dev and
+# prod because the published app SELECTs/UPDATEs these columns directly.
+#
+# When the guard flags a NEW missing table.column pair, append the matching
+# ADD COLUMN IF NOT EXISTS / CREATE TABLE IF NOT EXISTS here (mirror the
+# shared/schema.ts definition) — that is the documented fix.
+migrate_task_1113_schema_drift() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1113 schema-drift migration on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+BEGIN;
+-- order_items.fulfiller (Task #844 custom-addon fulfiller snapshot)
+ALTER TABLE IF EXISTS order_items
+  ADD COLUMN IF NOT EXISTS fulfiller text;
+
+-- Soft-delete trio on the split tables (Task #616). deleted_at already
+-- shipped; the audit columns drifted.
+ALTER TABLE IF EXISTS track_mechanical_splits
+  ADD COLUMN IF NOT EXISTS deleted_by_user_id     varchar,
+  ADD COLUMN IF NOT EXISTS deleted_via_parent_id  varchar;
+ALTER TABLE IF EXISTS track_publishing_splits
+  ADD COLUMN IF NOT EXISTS deleted_by_user_id     varchar,
+  ADD COLUMN IF NOT EXISTS deleted_via_parent_id  varchar;
+
+-- vendor_gooddeed_services — per-vendor GoodDeed service pricing rows.
+CREATE TABLE IF NOT EXISTS vendor_gooddeed_services (
+  id                  varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  vendor_id           varchar NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+  service             text    NOT NULL,
+  active              boolean NOT NULL DEFAULT false,
+  tiers_json          jsonb,
+  size_ladders_json   jsonb,
+  flat_per_unit_cents integer,
+  setup_fee_cents     integer NOT NULL DEFAULT 0,
+  min_batch           integer NOT NULL DEFAULT 25,
+  lead_time_days      integer NOT NULL DEFAULT 14,
+  ship_to_default     text,
+  notes               text,
+  updated_by_user_id  varchar,
+  updated_at          timestamp NOT NULL DEFAULT now(),
+  created_at          timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS vendor_gooddeed_services_vendor_service_uniq
+  ON vendor_gooddeed_services (vendor_id, service);
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1113 schema-drift migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-1113 schema-drift migration failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+migrate_task_1113_schema_drift dev  "${DATABASE_URL:-}"
+migrate_task_1113_schema_drift prod "${PROD_DATABASE_URL:-}"

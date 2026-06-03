@@ -70,3 +70,4 @@
 - [Shared desktop fan rail nav](shared-fan-rail-nav.md) — desktop rail items live in one FanRailNav rendered by BOTH album-page + storefront rails (each keeps own header/footer); Collection lens is URL-driven via ?tab=.
 - [Shared album-card component](shared-album-card.md) — one AlbumCard renders Collection/ArtistDetail/Search album surfaces (grid|row); hover Play + "…" menu are pointer-only via useCanHover, touch = tap-to-navigate.
 - [createUser seed-albums full-row select](createuser-seed-albums-fullrow-select.md) — route tests that mint a user 500 on drifted clones (createUser SELECTs every albums column); guard with ADD COLUMN IF NOT EXISTS in before hook, never db:push.
+- [schema-drift guard](schema-drift-guard.md) — validation step reflects pgTables via getTableConfig vs information_schema, fails on missing table/column (dev+prod); fix = idempotent ADD COLUMN/CREATE TABLE in post-merge.sh; direction-only (DB-only cols ignored).
