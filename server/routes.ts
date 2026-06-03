@@ -19406,7 +19406,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     // Task #351 — Claimed-Person + anti-solicitation review gate.
-    // A Person is "claimed" when it carries a spotify_artist_id, is a
+    // A Person is "claimed" when it is linked to a Spotify artist
+    // (people.spotify_url — there is NO spotify_artist_id column), is a
     // group, has at least one GoodTunes release, or already has a
     // linked admin login pointing at it. Identity invites for a claimed
     // Person OR invites issued by a non-super-admin where the supplied
@@ -19442,12 +19443,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         WHERE primary_artist_id = ${targetPerson.id} AND COALESCE(is_goodtunes_release, false) = true
       `);
       const hasReleases = (((releases as any).rows ?? [])[0]?.ct ?? 0) > 0;
-      const isClaimed = !!targetPerson.spotifyArtistId || !!targetPerson.isGroup || hasLogin || hasReleases;
+      const isClaimed = !!targetPerson.spotifyUrl || !!targetPerson.isGroup || hasLogin || hasReleases;
       if (inviteRole === "identity" && isClaimed) {
         reviewStatus = "pending_review";
         claimedReason = hasLogin
           ? "This Person already has a linked admin login."
-          : targetPerson.spotifyArtistId
+          : targetPerson.spotifyUrl
             ? "This Person is linked to a Spotify artist (claimed)."
             : hasReleases
               ? "This Person has at least one GoodTunes release."
@@ -19575,7 +19576,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ai.created_by_user_id AS "createdByUserId",
         u.display_name AS "createdByName",
         p.name AS "targetPersonName", p.photo_url AS "targetPersonPhoto",
-        p.is_group AS "targetIsGroup", p.spotify_artist_id AS "targetSpotifyId"
+        p.is_group AS "targetIsGroup", p.spotify_url AS "targetSpotifyId"
       FROM admin_invites ai
       LEFT JOIN users u ON u.id = ai.created_by_user_id
       LEFT JOIN people p ON p.id = ai.target_person_id

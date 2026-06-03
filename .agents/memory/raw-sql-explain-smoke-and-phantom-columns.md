@@ -37,6 +37,12 @@ schema.ts, dev, or real prod (verified against prod with 264 real albums):
   deterministic tiebreaker — and don't forget `deleted_at IS NULL`. The
   invite-accept "land the invitee on the artist's latest album" picker hit this.
 - `people.email`      → **`contact_email`**.
+- `people.spotify_artist_id` → no such column. The Spotify link is
+  **`spotify_url`** (text, null until matched) + **`spotify_has_match`** (bool).
+  The Person object field is `spotifyUrl`. "Spotify-claimed" = `spotify_url` is
+  non-null. Both the invite review-LIST query (`p.spotify_artist_id`) and the
+  invite review-GATE isClaimed (`targetPerson.spotifyArtistId`, JS so it just
+  read undefined and silently never fired) referenced the phantom name.
 - `people.created_at` → **people has NO creation timestamp** (only `deleted_at`).
   `labels` DOES have `created_at`. In a people⋃labels UNION, the people branch's
   "joined_at" has to be `NULL::timestamp`.
