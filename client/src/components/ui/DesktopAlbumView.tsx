@@ -8,6 +8,7 @@ import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
 import { useToast } from "@/hooks/use-toast";
 import { shareUrlForSlug } from "@shared/shareSlug";
 import { formatReleaseDateLong } from "@shared/albumStage";
+import { trackPlaybackState } from "@shared/trackPlayback";
 
 /* Trimmed-down song/album/video/photo shapes — DesktopAlbumView consumes
    the SAME response shapes the fan route + admin preview do. We pin only
@@ -552,11 +553,10 @@ export function DesktopAlbumView({
           {tab === "music" && (
             <div className="flex flex-col border-t border-white/8 pt-1" data-testid="track-list">
               {songs.map((s) => {
-                const state: "locked" | "preview" | "full" = isOwned
-                  ? "full"
-                  : s.isPreviewable
-                    ? "preview"
-                    : "locked";
+                const state = trackPlaybackState({
+                  isOwned,
+                  isPreviewable: s.isPreviewable,
+                });
                 const isCurrent = currentSongId === s.id;
                 return (
                   <AlbumDesktopTrackRow

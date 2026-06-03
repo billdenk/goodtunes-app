@@ -16,6 +16,7 @@ import { useTopChromeFrost } from "@/hooks/useTopChromeFrost";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { popBounce } from "@/lib/motion";
 import { formatReleaseDateLong } from "@shared/albumStage";
+import { trackPlaybackState } from "@shared/trackPlayback";
 
 // Height (px) of the top ChromeScrim band. The scrim is rendered at this
 // height and the album-options menu is clamped to open strictly below it so
@@ -747,7 +748,11 @@ export function AlbumDetailMobileSurface({
             // Quiet "locked" row: an operator hid this track's preview on a
             // not-owned album. Mirrors the desktop `locked` state — greyed
             // title + lock, nothing actionable on the right, not tappable.
-            const locked = !isOwned && song.isPreviewable === false;
+            const locked =
+              trackPlaybackState({
+                isOwned,
+                isPreviewable: song.isPreviewable,
+              }) === "locked";
             if (locked) {
               return (
                 <div
