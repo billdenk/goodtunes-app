@@ -208,6 +208,141 @@ SQL
 backfill_task_1036_memberships dev  "${DATABASE_URL:-}"
 backfill_task_1036_memberships prod "${PROD_DATABASE_URL:-}"
 
+# Task #1037 — Unified identity P2: link column users.customer_user_id +
+# partial unique index. shared/schema.ts declares the column (no FK on
+# purpose — a relational FK reappears on every publish dev→prod diff, see
+# auth-tokens-fk-recurrence.md) and a partial unique index (drizzle-kit
+# push has been unreliable on additive DDL). Hand-apply on BOTH dev and
+# prod so the publish dev→prod diff stays empty and getUser (which now
+# SELECTs the column) never 500s on a freshly-cloned dev. Idempotent.
+migrate_users_customer_link() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping users.customer_user_id migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_user_id varchar;
+CREATE UNIQUE INDEX IF NOT EXISTS users_customer_user_id_uniq
+  ON users (customer_user_id) WHERE customer_user_id IS NOT NULL;
+SQL
+  then
+    echo "post-merge: users.customer_user_id migration ok on $label"
+  else
+    echo "post-merge: WARNING — users.customer_user_id migration failed on $label (continuing)"
+  fi
+}
+migrate_users_customer_link dev  "${DATABASE_URL:-}"
+migrate_users_customer_link prod "${PROD_DATABASE_URL:-}"
+
+# Task #1037 — TRUE ONE-TIME merge of duplicate humans: any (users,
+# customer_users) pair that shares a real email is the same person, so
+# link them (users.customer_user_id), fill the fan credential when it's
+# empty (never overwrite), and mirror the fan's OAuth identities onto the
+# admin row. After this the human signs into BOTH shells with one
+# password + one Google/Apple identity. Marker-guarded so a later
+# password change or relink is never clobbered on a subsequent merge.
+# Runs on BOTH dev and prod — unlike the press-roster reconcile this is
+# meant to mutate prod (that's the merge), and the marker makes it
+# one-shot. Apple private-relay + @oauth.local placeholders are excluded
+# (relay is keyed off provider sub, never email; placeholders aren't
+# real shared addresses). Only unambiguous 1:1 matches are linked.
+backfill_task_1037_link_humans() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1037 link backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_linked integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_1037_link_humans'
+  ) THEN
+    -- 1) Link each admin row to its matching fan row (real email, 1:1,
+    -- fan not already linked to a different admin, fan not merged away).
+    WITH cand AS (
+      SELECT u.id AS admin_id, c.id AS cust_id
+      FROM users u
+      JOIN customer_users c ON lower(c.email) = lower(u.email)
+      WHERE u.customer_user_id IS NULL
+        AND c.merged_into_id IS NULL
+        AND u.email !~* '@privaterelay\.appleid\.com$'
+        AND u.email !~* '@oauth\.local$'
+        AND c.email !~* '@privaterelay\.appleid\.com$'
+        AND c.email !~* '@oauth\.local$'
+    ),
+    safe AS (
+      SELECT DISTINCT ON (cust_id) admin_id, cust_id
+      FROM cand
+      WHERE NOT EXISTS (SELECT 1 FROM users u2 WHERE u2.customer_user_id = cand.cust_id)
+      ORDER BY cust_id, admin_id
+    )
+    UPDATE users u SET customer_user_id = s.cust_id
+    FROM safe s WHERE u.id = s.admin_id;
+    GET DIAGNOSTICS v_linked = ROW_COUNT;
+
+    -- 2) Fill an empty fan credential from the linked admin (never
+    -- overwrite a real fan password; skip OAuth-only placeholders).
+    UPDATE customer_users c
+       SET password = u.password
+      FROM users u
+     WHERE u.customer_user_id = c.id
+       AND c.password IS NULL
+       AND u.password IS NOT NULL
+       AND u.password NOT LIKE '!oauth-only:%';
+
+    -- 3) Mirror the fan's OAuth identities onto the admin row so
+    -- Google/Apple sign-in resolves on the admin shell too. The
+    -- admin_identities unique (provider, provider_user_id) skips a sub
+    -- already attached elsewhere — never re-points it.
+    INSERT INTO admin_identities (user_id, provider, provider_user_id, email, linked_at)
+    SELECT u.id, ci.provider, ci.provider_user_id, ci.email, NOW()
+      FROM users u
+      JOIN customer_identities ci ON ci.user_id = u.customer_user_id
+     WHERE u.customer_user_id IS NOT NULL
+    ON CONFLICT DO NOTHING;
+
+    -- 3b) Reverse mirror: copy the admin's OAuth identities onto the fan
+    -- row (canonical store) so convergence runs both ways — a provider
+    -- only ever attached on the admin shell still resolves on the player.
+    -- customer_identities unique (provider, provider_user_id) skips a sub
+    -- already attached elsewhere — never re-points it.
+    INSERT INTO customer_identities (user_id, provider, provider_user_id, email, linked_at)
+    SELECT u.customer_user_id, ai.provider, ai.provider_user_id, ai.email, NOW()
+      FROM users u
+      JOIN admin_identities ai ON ai.user_id = u.id
+     WHERE u.customer_user_id IS NOT NULL
+    ON CONFLICT DO NOTHING;
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_1037_link_humans');
+    RAISE NOTICE 'task-1037 link backfill applied: % humans linked', v_linked;
+  ELSE
+    RAISE NOTICE 'task-1037 link backfill already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1037 link backfill ok on $label"
+    echo "$out" | grep -i 'task-1037' || true
+  else
+    echo "post-merge: WARNING — task-1037 link backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_1037_link_humans dev  "${DATABASE_URL:-}"
+backfill_task_1037_link_humans prod "${PROD_DATABASE_URL:-}"
+
 # Task #364 — songs.mux_last_error captures the human-readable reason
 # from a failed Mux ingest (e.g. "invalid_input · could not download
 # the asset"). Schema declares it; drizzle-kit push has been unreliable

@@ -68,8 +68,21 @@ export const users = pgTable("users", {
   // moment a fresh row is provisioned via invite accept.
   termsAcceptedAt: timestamp("terms_accepted_at"),
   termsVersion: text("terms_version"),
+  // Task #1037 — Unified identity P2: link this admin row to the same
+  // human's canonical fan (customer_users) row. When set, the fan row is
+  // the source of truth for credentials + OAuth identities; users.password
+  // is kept in sync as a sign-in fallback so an admin is never locked out.
+  // No FK is declared on purpose — a relational FK here would reappear on
+  // every publish dev→prod diff (see .agents/memory/auth-tokens-fk-recurrence.md);
+  // link integrity is enforced in app code + the post-merge migration. The
+  // partial unique index guarantees at most one admin per fan.
+  customerUserId: varchar("customer_user_id"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (t) => ({
+  customerUserIdUniq: uniqueIndex("users_customer_user_id_uniq")
+    .on(t.customerUserId)
+    .where(sql`${t.customerUserId} IS NOT NULL`),
+}));
 
 // Record-label entity. One row per label (Atlantic, XL, Sub Pop, …) —
 // logo / bio / location / cover live here. Each album is released on at

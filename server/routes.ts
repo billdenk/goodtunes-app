@@ -502,6 +502,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         termsAcceptedAt: new Date(),
         termsVersion: TERMS_VERSION,
       } as any) ?? c;
+      // Task #1037 — deliberately do NOT auto-link a fresh fan signup to a
+      // same-email admin row here: self-serve registration does not prove
+      // ownership of that email, and the admin-login fallback accepts the
+      // linked fan password as a first factor — so auto-linking from this
+      // unverified path would let anyone seed an admin first-factor for an
+      // email they don't own. Linking only happens through trusted paths
+      // (authenticated promote, operator-issued invite-accept, provider-
+      // verified OAuth, and the one-time merge of existing real dupes).
       req.session.userId = c2.id;
       req.session.kind = "customer";
       const token = generateToken();
@@ -559,7 +567,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (kind === "admin") {
       const lookup = looksLikeEmail ? await storage.getUserByEmail(ident) : await storage.getUserByUsername(ident);
       const user = lookup ?? (looksLikeEmail ? undefined : await storage.getUserByEmail(ident));
-      if (!user || !(await comparePasswords(password, user.password))) {
+      // Task #1037 — Unified identity P2: accept users.password OR the
+      // linked fan's canonical password. Every password write keeps both
+      // in sync; the fallback only matters during the transition for
+      // pre-existing accounts whose two passwords still differ, so a
+      // linked admin is never locked out. Customer login is unchanged.
+      let credentialOk = !!user && (await comparePasswords(password, user.password));
+      if (!credentialOk && user?.customerUserId) {
+        const linkedFan = await storage.getCustomer(user.customerUserId);
+        if (linkedFan?.password) credentialOk = await comparePasswords(password, linkedFan.password);
+      }
+      if (!user || !credentialOk) {
         return res.status(401).json({ message: "Invalid username/email or password" });
       }
       // Admin sign-in requires TOTP. If the admin hasn't enrolled yet,
@@ -668,7 +686,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         : await storage.getCustomerByEmail(raw);
       if (user) {
         exists = true;
-        const ids = await storage.listIdentities(kind, user.id);
+        let ids = await storage.listIdentities(kind, user.id);
+        // Task #1037 — on the admin host the canonical OAuth identities
+        // live on the linked fan row; fold them in so the provider hint
+        // ("Continue with Google/Apple") is right for unified accounts.
+        if (kind === "admin" && (user as any).customerUserId) {
+          const fanIds = await storage.listIdentities("customer", (user as any).customerUserId);
+          ids = [...ids, ...fanIds];
+        }
         // Prefer the OAuth provider when present — that's the lockout
         // case (fan typed a password for an account that signs in with
         // Google/Apple). Falls back to "password" otherwise.
@@ -1135,6 +1160,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         providerUserId: identity.sub,
         email: identity.email,
       });
+      // Converge the new identity onto the linked counterpart shell so one
+      // Google/Apple sign-in keeps resolving on BOTH fan + admin.
+      const { mirrorIdentityToLinked } = await import("./auth/identityLink");
+      await mirrorIdentityToLinked(kind, stateBag.linkToUserId, {
+        provider,
+        providerUserId: identity.sub,
+        email: identity.email,
+      });
       return res.redirect(`${homePath}?link=ok`);
     }
 
@@ -1194,6 +1227,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // /api/invites/:token/accept handler so the two paths converge.
       await db.execute(sql`UPDATE users SET is_admin = true WHERE id = ${userIdInv}`);
       await setUserRole(userIdInv, invite.role as any, invite.roleScopeId ?? null);
+      // Task #1037 — link to the same human's fan row if one exists so a
+      // single login + OAuth identity serves both shells. Invite emails
+      // are operator-entered real addresses (never Apple relay).
+      if (invite.email && !/@privaterelay\.appleid\.com$/i.test(invite.email)) {
+        const fan = await storage.getCustomerByEmail(invite.email);
+        if (fan) {
+          const { linkAdminToCustomer } = await import("./auth/identityLink");
+          await linkAdminToCustomer(userIdInv, fan.id);
+        }
+      }
       const referrerKind = (invite as any).referrerKind as string | null;
       const referrerScopeId = (invite as any).referrerScopeId as string | null;
       if (invite.role === "artist" && invite.roleScopeId && referrerKind && referrerScopeId) {
@@ -1256,6 +1299,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const providerVerifiedEmail =
       kind === "customer" && !!identity.email && identity.emailVerified === true && !isRelayEmail;
 
+    if (!userId && kind === "admin") {
+      // Task #1037 — Unified identity P2: the canonical OAuth store is on
+      // the FAN side (customer_identities). A human who linked Google/Apple
+      // as a fan and is ALSO an admin (users.customer_user_id set) must be
+      // able to sign into the admin shell with that same identity even if
+      // admin_identities was never mirrored. Resolve the linked admin via
+      // the fan identity (keyed off the provider `sub`) and mirror it
+      // forward so the next sign-in is a direct admin_identities hit. This
+      // runs BEFORE the email-collision redirect below so a provider that
+      // returns an email (Google) doesn't get bounced to ?prompt=link
+      // when the human already has a valid linked admin account.
+      const custIdent = await storage.findIdentity("customer", provider, identity.sub);
+      if (custIdent) {
+        const { getAdminIdForCustomer, mirrorCustomerIdentitiesToAdmin } = await import("./auth/identityLink");
+        const linkedAdmin = await getAdminIdForCustomer(custIdent.userId);
+        if (linkedAdmin) {
+          userId = linkedAdmin;
+          await mirrorCustomerIdentitiesToAdmin(custIdent.userId, linkedAdmin);
+        }
+      }
+    }
+
     if (!userId && identity.email) {
       // Don't auto-merge — if an existing account with this email is on
       // this side, surface the email to the login UI so it can prompt
@@ -1292,6 +1357,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const existing = await storage.getCustomerByEmail(identity.email);
         if (existing && existing.legacyGogoodsId) {
           await storage.linkIdentity(kind, { userId: existing.id, provider, providerUserId: identity.sub, email: identity.email });
+          // Mirror onto a linked admin row (if any) so the reattached
+          // identity resolves on both shells.
+          const { mirrorIdentityToLinked } = await import("./auth/identityLink");
+          await mirrorIdentityToLinked(kind, existing.id, { provider, providerUserId: identity.sub, email: identity.email });
           userId = existing.id;
         }
       }
@@ -1841,7 +1910,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(401).json({ message: "Current password is incorrect" });
     }
     const hashed = await hashPassword(newPassword);
-    await db.execute(sql`UPDATE users SET password = ${hashed} WHERE id = ${user.id}`);
+    // Task #1037 — write to both linked rows so the fan credential and
+    // the admin fallback converge (no-op second write when unlinked).
+    const { writeLinkedPassword: _wlpChange } = await import("./auth/identityLink");
+    await _wlpChange({ adminUserId: user.id, hashed });
     return res.status(204).end();
   });
 
@@ -1984,7 +2056,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(410).json({ message: "This reset link is invalid or has expired." });
     }
     const hashed = await hashPassword(newPassword);
-    await db.execute(sql`UPDATE users SET password = ${hashed} WHERE id = ${user.id}`);
+    // Task #1037 — converge the credential across both linked rows.
+    {
+      const { writeLinkedPassword } = await import("./auth/identityLink");
+      await writeLinkedPassword({ adminUserId: user.id, hashed });
+    }
     // Invalidate any other outstanding reset tokens for this admin so
     // an old leaked mail can't follow a successful reset.
     await storage.invalidateAdminPasswordResetTokensForUser(user.id);
@@ -2118,7 +2194,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(410).json({ message: "This reset link is invalid or has expired." });
     }
     const hashed = await hashPassword(newPassword);
-    await db.execute(sql`UPDATE customer_users SET password = ${hashed} WHERE id = ${c.id}`);
+    // Task #1037 — converge the credential across both linked rows so a
+    // fan-side reset also updates the admin shell sign-in (and vice versa).
+    {
+      const { writeLinkedPassword } = await import("./auth/identityLink");
+      await writeLinkedPassword({ customerId: c.id, hashed });
+    }
     await storage.invalidateCustomerPasswordResetTokensForUser(c.id);
     return res.json({ ok: true });
   });
@@ -2169,7 +2250,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(list);
   });
   app.delete("/api/auth/identities/:id", requireAuth, async (req, res) => {
-    const ok = await storage.unlinkIdentity(req.session.kind!, req.session.userId!, req.params.id);
+    // Removing a provider must remove it on the linked counterpart too, or
+    // a "removed" identity could still sign you in via the other shell.
+    const { unlinkIdentityEverywhere } = await import("./auth/identityLink");
+    const ok = await unlinkIdentityEverywhere(req.session.kind!, req.session.userId!, req.params.id);
     if (!ok) return res.status(404).json({ message: "Not linked" });
     return res.json({ ok: true });
   });
@@ -20347,6 +20431,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // This row is always freshly created above, so it's never re-consent.
     await db.execute(sql`UPDATE users SET is_admin = true, terms_accepted_at = now(), terms_version = ${TERMS_VERSION} WHERE id = ${user.id}`);
     await setUserRole(user.id, invite.role as any, invite.roleScopeId ?? null);
+    // Task #1037 — link to the same human's fan row if one exists so a
+    // single login + OAuth identity serves both shells. Invite emails are
+    // operator-entered real addresses (never Apple relay).
+    if (invite.email && !/@privaterelay\.appleid\.com$/i.test(invite.email)) {
+      const fan = await storage.getCustomerByEmail(invite.email);
+      if (fan) {
+        const { linkAdminToCustomer } = await import("./auth/identityLink");
+        await linkAdminToCustomer(user.id, fan.id);
+      }
+    }
 
     // Task #78/#350 — Resolve the invite's referrer chain onto the new
     // artist's Person row (referred_by_person_id / referred_by_org_id +
@@ -21946,23 +22040,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           RETURNING id
         `);
         adminUserId = (ins as any).rows[0].id;
-
-        // Mirror linked OAuth identities (Google, Apple) to admin_identities
-        // so the customer can use "Sign in with Google/Apple" on the admin
-        // shell with the exact same provider account.
-        try {
-          await db.execute(sql`
-            INSERT INTO admin_identities (user_id, provider, provider_user_id, email, created_at)
-            SELECT ${adminUserId}, provider, provider_user_id, email, NOW()
-              FROM customer_identities
-             WHERE user_id = ${customerId}
-            ON CONFLICT DO NOTHING
-          `);
-        } catch (e) {
-          console.warn("[promote] copying identities failed", e);
-        }
       }
 
+      // Task #1037 — Unified identity P2: "promote" is now just "link this
+      // human's admin row to their canonical fan row + add a membership."
+      // linkAdminToCustomer sets users.customer_user_id, fills the fan
+      // credential only when it's empty, and mirrors the fan's OAuth
+      // identities onto the admin row — so one login + one OAuth identity
+      // serves both shells. No password copy needed beyond the seed above;
+      // the fan row stays the source of truth.
+      const { linkAdminToCustomer } = await import("./auth/identityLink");
+      await linkAdminToCustomer(adminUserId, customerId);
+
+      // setUserRole dual-writes the legacy role columns + the Phase-1
+      // membership SET (the access grant).
       await setUserRole(adminUserId, role as any, roleScopeId);
 
       // Resolve any pending access-request row so super_admins stop
@@ -21972,7 +22063,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
          WHERE customer_user_id = ${customerId} AND resolved_at IS NULL
       `);
 
-      res.json({ adminUserId, role, roleScopeId });
+      res.json({ adminUserId, role, roleScopeId, linkedCustomerId: customerId });
     },
   );
 
