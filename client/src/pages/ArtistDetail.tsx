@@ -371,7 +371,7 @@ export function ArtistDetail() {
   // now-playing controls.
 
   return (
-    <main className="h-screen w-full flex justify-center overflow-hidden relative">
+    <main className="h-screen w-full flex justify-center overflow-hidden relative lg:justify-start lg:pl-[260px]">
       <section className="relative w-full max-w-[390px] md:max-w-[820px] lg:max-w-[1200px] lg:mx-auto h-screen text-white flex flex-col">
         <IconButton
           size="md"
