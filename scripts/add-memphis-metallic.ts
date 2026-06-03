@@ -52,6 +52,14 @@ type Color = {
 };
 type Manifest = { tier: string; source: string; colors: Color[] };
 
+// Drop the leading "HB## " press code from a color name (e.g.
+// "HB01 Metallic Gold" -> "Metallic Gold"). The code reads as
+// "Hellbender" at a glance and is redundant — it stays recoverable
+// via each row's import_source_url and the manifest `code` field.
+// Defensive: even if a manifest entry still carries the prefix, a
+// fresh seed writes the clean name.
+const cleanColorName = (name: string) => name.replace(/^HB\d+\s+/, "");
+
 async function mirrorImage(url: string): Promise<string> {
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`fetch ${url} -> ${resp.status}`);
@@ -181,7 +189,7 @@ async function main() {
       for (const c of usable) {
         await tx.execute(sql`
           INSERT INTO press_colors (tier_id, name, swatch_hex, swatch_image_url, position, import_source_url)
-          VALUES (${tierId}, ${c.name}, NULL, ${c.publicUrl}, ${pos}, ${c.importSourceUrl})`);
+          VALUES (${tierId}, ${cleanColorName(c.name)}, NULL, ${c.publicUrl}, ${pos}, ${c.importSourceUrl})`);
         pos++;
         colorsAdded++;
       }

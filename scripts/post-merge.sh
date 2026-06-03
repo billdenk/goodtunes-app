@@ -3568,3 +3568,74 @@ SQL
 }
 seed_task_939_appreview_demo dev  "${DATABASE_URL:-}"
 seed_task_939_appreview_demo prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #1088 — drop the "HB##" code prefix from Memphis color NAMES ──────
+# Memphis Record Pressing's "Metallic Blends" colors were imported as
+# "HB01 Metallic Gold", "HB12 Go Tigers!", etc. The "HB" reads as
+# Hellbender at a glance and the code is redundant (it stays recoverable
+# via each row's import_source_url + the manifest `code` field). Strip a
+# leading "HB<digits><space(s)>" prefix from press_colors.name, scoped
+# STRICTLY to Memphis's "Metallic Blends" tier rows (joined press_colors →
+# press_color_tiers → manufacturers, matched by domain/name like the
+# task-916 flips, ID-drift safe). The regexp only removes the code prefix:
+# "HB12 Go Tigers!" → "Go Tigers!" (the "!" and the rest are untouched);
+# names with no prefix are left exactly as-is. TRUE ONE-TIME backfill gated
+# by a marker in post_merge_data_backfills so a later operator rename is
+# never clobbered on a subsequent merge. Runs on BOTH dev and prod (prod
+# SQL is read-only from tooling + task dev DBs are throwaway, so the reset
+# must run at merge time against both). Hellbender + every other press is
+# untouched. Idempotent + safe to re-run.
+backfill_task_1088_memphis_color_names() {
+  local label="$1"; local url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1088 Memphis color-name backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills
+    WHERE name = 'task_1088_memphis_color_names'
+  ) THEN
+    UPDATE press_colors c
+       SET name = regexp_replace(c.name, '^HB[0-9]+\s+', '')
+      FROM press_color_tiers t
+      JOIN manufacturers m ON m.id = t.press_id
+     WHERE c.tier_id = t.id
+       AND t.name = 'Metallic Blends'
+       AND (m.domain ILIKE '%memphisrecordpressing%'
+            OR m.name ILIKE '%memphis record pressing%'
+            OR m.name ILIKE '%MRP%')
+       AND c.name ~ '^HB[0-9]+\s+';
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+
+    INSERT INTO post_merge_data_backfills (name)
+    VALUES ('task_1088_memphis_color_names');
+
+    RAISE NOTICE 'task-1088 Memphis color-name backfill applied: % rows stripped', v_count;
+  ELSE
+    RAISE NOTICE 'task-1088 Memphis color-name backfill already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1088 Memphis color-name backfill ok on $label"
+    echo "$out" | grep -i 'task-1088' || true
+  else
+    echo "post-merge: WARNING — task-1088 Memphis color-name backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_1088_memphis_color_names dev  "${DATABASE_URL:-}"
+backfill_task_1088_memphis_color_names prod "${PROD_DATABASE_URL:-}"
