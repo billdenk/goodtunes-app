@@ -710,12 +710,20 @@ export function FloatingPlayerDock() {
             </div>
           ) : (
             <div className="flex items-center justify-center flex-1" aria-hidden>
-              <img
-                src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/images/goodtunes-g-mark.png`}
-                alt=""
-                className="w-10 h-10 object-contain p-0.5 grayscale opacity-40"
-                draggable={false}
-              />
+              {/* Compact has no inset scrubber, so the idle "G" centers
+                  within this slot. In wide mode the G renders as an
+                  overlay (below) so it can center over the progress
+                  line's horizontal span instead of this off-center
+                  cluster. The empty flex-1 footprint stays so the pill
+                  doesn't shift. */}
+              {compact && (
+                <img
+                  src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/images/goodtunes-g-mark.png`}
+                  alt=""
+                  className="w-10 h-10 object-contain p-0.5 grayscale opacity-40"
+                  draggable={false}
+                />
+              )}
             </div>
           )}
 
@@ -772,8 +780,26 @@ export function FloatingPlayerDock() {
           </div>
         </div>
 
-        {/* Inset progress bar (wide only) */}
-        {!compact && (
+        {/* Idle (no selection): center the GoodTunes "G" over the SAME
+            horizontal span the progress line occupies, so it reads as
+            deliberately centered in the pill rather than centered within
+            the off-center now-playing cluster. The inline progress line
+            is suppressed entirely in this state (gated below). */}
+        {!compact && !hasSelection && (
+          <div
+            className="absolute left-[228px] right-[164px] inset-y-0 flex items-center justify-center pointer-events-none"
+            aria-hidden
+          >
+            <img
+              src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/images/goodtunes-g-mark.png`}
+              alt=""
+              className="w-10 h-10 object-contain p-0.5 grayscale opacity-40"
+              draggable={false}
+            />
+          </div>
+        )}
+        {/* Inset progress bar (wide + a track selected only) */}
+        {!compact && hasSelection && (
           <>
             <div
               className={[

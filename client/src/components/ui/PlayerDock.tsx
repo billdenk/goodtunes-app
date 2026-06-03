@@ -652,12 +652,21 @@ export function PlayerDock({
               data-testid="player-dock-idle"
               aria-hidden
             >
-              <img
-                src="/goodtunes-g-mark.png"
-                alt=""
-                className={`${D.cover} object-contain p-0.5 grayscale opacity-40`}
-                draggable={false}
-              />
+              {/* Compact has no inset scrubber, so the idle "G" simply
+                  centers within this now-playing slot. In wide mode the
+                  G is rendered as an overlay (below) so it can center
+                  over the progress line's horizontal span instead of
+                  this slightly off-center cluster. The empty flex-1
+                  footprint stays so the right utility cluster keeps its
+                  position and the pill doesn't shift. */}
+              {compact && (
+                <img
+                  src="/goodtunes-g-mark.png"
+                  alt=""
+                  className={`${D.cover} object-contain p-0.5 grayscale opacity-40`}
+                  draggable={false}
+                />
+              )}
             </div>
           )}
 
@@ -764,7 +773,27 @@ export function PlayerDock({
             In compact mode the inline scrubber is dropped entirely —
             Apple's narrow mini-player does the same. Tap to expand for
             scrubbing (a separate Now Playing sheet, owned by the host). */}
-        {!compact && (
+        {/* Idle (no selection): center the GoodTunes "G" over the SAME
+            horizontal span the progress line occupies (the inset
+            scrubber bounds), so it reads as deliberately centered in
+            the pill rather than centered within the off-center
+            now-playing cluster. The inline progress line itself is
+            suppressed entirely in this state (gated below). */}
+        {!compact && !hasSelection && (
+          <div
+            className={`absolute ${D.scrubLeft} ${D.scrubRight} inset-y-0 flex items-center justify-center pointer-events-none`}
+            data-testid="player-dock-idle-mark"
+            aria-hidden
+          >
+            <img
+              src="/goodtunes-g-mark.png"
+              alt=""
+              className={`${D.cover} object-contain p-0.5 grayscale opacity-40`}
+              draggable={false}
+            />
+          </div>
+        )}
+        {!compact && hasSelection && (
           <>
             <div
               className={[

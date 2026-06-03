@@ -879,7 +879,7 @@ function BottomDock({
           : "left-1/2 -translate-x-1/2",
       ].join(" ")}
       style={
-        !compact && hasSelection
+        !compact
           ? { width: "min(760px, calc(100% - 32px))" }
           : forcedCompact === true
           ? { width: "min(640px, calc(100% - 32px))" }
@@ -1002,45 +1002,51 @@ function BottomDock({
             </button>
           </div>
 
-          {hasSelection && (
-            <>
-              <span className="mx-2 h-6 w-px bg-white/10 flex-shrink-0" aria-hidden />
+          <span className="mx-2 h-6 w-px bg-white/10 flex-shrink-0" aria-hidden />
 
-              {/* ── CENTER · track info ────────────────────────────
-                  Apple proportions: the album cover is ≈65% of the pill's
-                  content height, not full-bleed. 44px cover (w-11 h-11)
-                  with the title/subtitle stack vertically centered beside
-                  it leaves the breathing room above + below that the
-                  reference shot shows. The progress scrubber is NOT in
-                  this column anymore — it lives at the pill's bottom
-                  edge and runs UNDER everything (see below). */}
-              {/* Center cluster blurs out while the user is hovering the
-                  progress bar — Apple's hover treatment. Left/right icon
-                  clusters stay sharp; only the now-playing card recedes
-                  so the time labels above the bar have visual breathing
-                  room. Blur is moderate (6px) + 50% opacity — still
-                  faintly readable so context isn't lost. */}
-              <div
-                className={[
-                  "flex items-center gap-3 min-w-0 flex-1 transition-[filter,opacity] duration-150",
-                  scrubHover ? "blur-[6px] opacity-50" : "",
-                ].join(" ")}
-                aria-hidden={scrubHover}
-              >
-                {/* Cover at 40px (w-10) — intentionally one notch shorter
-                    than the 44px Play button so the Play button drives
-                    the row's intrinsic height. Stays clearly the
-                    largest visual anchor in the center cluster. */}
-                <div className="w-10 h-10 rounded-md bg-gradient-to-br from-[#319ED8] to-[#7F10A7] flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold truncate leading-tight">
-                    {current.title}
-                  </div>
-                  <div className="text-[11px] text-slate-400 truncate leading-tight mt-0.5">
-                    Nick Carter — Love Life Tragedy
-                  </div>
+          {/* ── CENTER · track info — cover+title when a track is
+              selected; a dimmed centered GoodTunes "G" when idle (mirrors
+              PlayerDock). The flex-1 footprint stays either way so the
+              right cluster keeps its position and the pill doesn't jump.
+              The inset scrubber blurs the cover+title on hover; idle has
+              no scrubber, so no blur. */}
+          {hasSelection ? (
+            <div
+              className={[
+                "flex items-center gap-3 min-w-0 flex-1 transition-[filter,opacity] duration-150",
+                scrubHover ? "blur-[6px] opacity-50" : "",
+              ].join(" ")}
+              aria-hidden={scrubHover}
+            >
+              {/* Cover at 40px (w-10) — intentionally one notch shorter
+                  than the 44px Play button so the Play button drives
+                  the row's intrinsic height. Stays clearly the
+                  largest visual anchor in the center cluster. */}
+              <div className="w-10 h-10 rounded-md bg-gradient-to-br from-[#319ED8] to-[#7F10A7] flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-semibold truncate leading-tight">
+                  {current.title}
+                </div>
+                <div className="text-[11px] text-slate-400 truncate leading-tight mt-0.5">
+                  Nick Carter — Love Life Tragedy
                 </div>
               </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center flex-1" aria-hidden>
+              {/* Compact has no inset scrubber, so the idle "G" centers
+                  within this slot. In wide mode the G renders as an overlay
+                  (below) so it can center over the progress line's span. */}
+              {compact && (
+                <img
+                  src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/images/goodtunes-g-mark.png`}
+                  alt=""
+                  className="w-10 h-10 object-contain p-0.5 grayscale opacity-40"
+                  draggable={false}
+                />
+              )}
+            </div>
+          )}
 
               {/* ── RIGHT · utility cluster ───────────────────────
                   Apple's ⋯ opens a song-options menu (Download, Add to
@@ -1136,8 +1142,6 @@ function BottomDock({
                   <ChevronDown className="w-5 h-5" />
                 </button>
               </div>
-            </>
-          )}
         </div>
 
         {/* ── Progress bar — Apple's mini-player anatomy ─────────────
@@ -1164,6 +1168,26 @@ function BottomDock({
             • End of the white fill IS the play head — no knob dot.
             Gated on !compact: in compact mode the scrubber moves up to
             the top hairline above and these labels + inset bar disappear. */}
+        {/* Idle (no selection): the inline scrubber + time labels are
+            suppressed (gated below on hasSelection). The dimmed GoodTunes
+            "G" centers over the SAME horizontal span the scrubber occupies
+            (matching left/right insets) so it reads as deliberately
+            centered rather than centered within the off-center transport
+            cluster. */}
+        {!compact && !hasSelection && (
+          <div
+            className="absolute left-[228px] right-[164px] inset-y-0 flex items-center justify-center pointer-events-none"
+            aria-hidden
+            data-testid="player-dock-idle-mark"
+          >
+            <img
+              src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/images/goodtunes-g-mark.png`}
+              alt=""
+              className="w-10 h-10 object-contain p-0.5 grayscale opacity-40"
+              draggable={false}
+            />
+          </div>
+        )}
         {!compact && hasSelection && (
           <>
             {/* Time labels — appear at the SAME vertical position as the
