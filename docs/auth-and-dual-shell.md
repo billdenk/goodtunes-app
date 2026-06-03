@@ -22,7 +22,15 @@ All cross-table writes go through one seam, `server/auth/identityLink.ts`, so th
 
 **One-time merge of existing duplicates.** `scripts/post-merge.sh` hand-applies the additive column + partial unique index on dev **and** prod (a relational FK would reappear on every publish dev→prod diff — see `auth-tokens-fk-recurrence.md`), then runs a marker-guarded (`post_merge_data_backfills` → `task_1037_link_humans`) one-shot merge: every unambiguous 1:1 `lower(email)` match (real emails only) gets linked, the empty fan credential filled, and the fan's identities mirrored onto the admin row. The marker makes it idempotent so a later password change is never clobbered.
 
-Out of scope (still in `docs/roadmap.md`): the P1 membership model details, the P3 hat-switcher / invite rework, and removing the legacy role columns.
+## Hat-switcher + additive grants (Task #1038, unified-identity P3)
+
+P3 builds on the linked account: one human can now hold many *hats* (super-admin, a label, an artist on another label, a press teammate) on that single login and switch between them, and every grant path ADDS a hat to the existing account instead of minting a parallel admin login or hard-blocking on "an admin with that email already exists."
+
+- **Active hat per request.** `server/auth/activeMembership.ts` carries the chosen hat through the request via `AsyncLocalStorage`; middleware mounted right after `session()` reads `req.session.activeMembershipKey`. When the key is set and still valid, role resolution (`getUserRole` / `findMembershipForScope` via `getUserMemberships` in `roles.ts`) narrows to that one hat, so the sidebar, album list, reports, and edit-permissions all scope to it; otherwise it falls back to the account's highest-privileged hat. **An account with fewer than two memberships sees no switcher and zero behavior change.**
+- **Switcher surface.** `GET /api/me/memberships` lists the hats (with `scopeName` + `isActive`); `POST /api/me/active-membership` sets/clears the active key after validating it against the account's real memberships. The picker lives in `AdminUserMenu`; default landing (`landingPathForUser`) resolves the highest-privileged hat.
+- **Grants are additive (the seam: `applyAdminInviteGrant`).** Invite-create, both invite-accept paths (password + OAuth), partner-contacts add-admin, grant-admin-role, and customer→admin promote all attach a membership to an existing account rather than creating a second `users` row. Critically, the **password invite-accept refuses to take a new password for an email that already has a login** (returns `{ existingAccount: true }` and tells them to sign in) — a leaked invite link must never overwrite an existing credential. Revoke (`/api/admin/admins/revoke`) drops only the god hat, leaving partner hats + the linked fan account intact. Full mechanics in [`docs/roles-and-permissions.md`](./roles-and-permissions.md#hat-switcher--additive-grants-task-1038-unified-identity-p3).
+
+Out of scope (still in `docs/roadmap.md`): removing the legacy role columns (the membership SET is additive + dual-written; legacy `users.role` stays the shipped source of truth and equals the primary hat).
 
 ## Admin sign-in
 

@@ -86,6 +86,13 @@ declare module "express-session" {
   interface SessionData {
     userId: string;
     kind?: "admin" | "customer";
+    // Task #1038 — Unified identity P3 hat-switcher. The membership "key"
+    // (role|scopeKind|scopeId) the operator has switched into for this
+    // browser session. Lifted into AsyncLocalStorage per-request by
+    // activeMembershipContext so role resolution scopes the whole request
+    // to that one hat. Unset (or a single-membership account) = the
+    // account's full membership SET / primary hat, i.e. legacy behavior.
+    activeMembershipKey?: string;
     // Temp marker for "password verified but second factor not yet
     // provided". Used for both TOTP and email-OTP flows — the session is
     // useless for everything else (requireAuth checks both userId+kind).
@@ -328,6 +335,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     })
   );
 
+  // Task #1038 — Unified identity P3. Lift the operator's chosen hat
+  // (req.session.activeMembershipKey) into AsyncLocalStorage so role
+  // resolution (server/auth/roles.ts getUserMemberships) can scope the
+  // whole request to that one membership. Mounted right after the session
+  // so every downstream guard + handler sees it. No session key (or a
+  // single-membership account) = unchanged legacy behavior.
+  {
+    const { activeMembershipContext } = await import("./auth/activeMembership");
+    app.use(activeMembershipContext);
+  }
+
   // Task #859 — Artist quote-sandbox scope guard. An `artist`-role user
   // is scoped to a single Person (roleScopeId = primary-artist id) and
   // may only read/build against releases where they are the primary
@@ -385,10 +403,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // partner shell (/non-profit, /artist, /label) instead of /admin.
   async function landingPathForUser(userId: string): Promise<string> {
     try {
-      const row = await db.execute<any>(sql`
-        SELECT role FROM users WHERE id = ${userId} LIMIT 1
-      `);
-      const role = ((row as any).rows ?? [])[0]?.role as string | undefined;
+      // Task #1038 — land on the account's HIGHEST-PRIVILEGED hat. At fresh
+      // login no active hat is chosen yet, so getUserRole resolves the
+      // primary membership (super_admin > admin > any partner hat) — the
+      // same default the hat-switcher starts on. Single-membership accounts
+      // resolve to their one role exactly as the old SELECT role did.
+      const { getUserRole } = await import("./auth/roles");
+      const role = (await getUserRole(userId))?.role as string | undefined;
       if (role === "non_profit") return "/non-profit";
       // Task #859 — an `artist` partner lands in their scoped quote
       // sandbox (their own releases + the package/quote builder), not
@@ -1188,6 +1209,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // create a fresh row with a placeholder password the recipient
       // will never use (they sign in via this OAuth identity forever).
       let userIdInv: string;
+      // Task #1038 — only a brand-new row gets the legacy primary written
+      // via setUserRole; reusing an existing account ADDS the hat instead.
+      let createdNewOauthUser = false;
       const byIdent = await storage.findIdentity("admin", provider, identity.sub);
       const byEmail = await storage.getUserByEmail(invite.email);
       if (byIdent) {
@@ -1213,6 +1237,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           password: placeholderPwd,
         });
         userIdInv = u.id;
+        createdNewOauthUser = true;
         // Task #860 — record Terms acceptance only for the freshly minted
         // row. The invitee consented via the inline microcopy under the
         // OAuth buttons on the invite-accept screen. Reused existing admin
@@ -1223,7 +1248,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Grant role+scope, mark used, wire referrer — same shape as the
       // /api/invites/:token/accept handler so the two paths converge.
       await db.execute(sql`UPDATE users SET is_admin = true WHERE id = ${userIdInv}`);
-      await setUserRole(userIdInv, invite.role as any, invite.roleScopeId ?? null);
+      // Task #1038 — new row → setUserRole (legacy primary + first hat);
+      // existing account → addMembership (additive, keeps its other hats).
+      {
+        const oauthIr = (invite as any).inviteRole as string | null;
+        const oauthSubRole = invite.role === "manufacturer"
+          ? (oauthIr === "press_staff" ? "staff" : "owner_admin")
+          : oauthIr;
+        if (createdNewOauthUser) {
+          await setUserRole(userIdInv, invite.role as any, invite.roleScopeId ?? null);
+        } else {
+          await addMembership(userIdInv, invite.role as any, invite.roleScopeId ?? null, oauthSubRole ?? null);
+        }
+      }
       // Task #1037 — link to the same human's fan row if one exists so a
       // single login + OAuth identity serves both shells. Invite emails
       // are operator-entered real addresses, but gate on isLinkableEmail
@@ -2272,6 +2309,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const count = await storage.countAdmins();
     if (count <= 1) return res.status(400).json({ message: "Can't revoke the last admin." });
     await storage.setUserAdmin(targetId, false);
+    // Task #1038 — also drop the god (super_admin/admin) hat from the
+    // membership SET so the hat-switcher no longer offers an access the
+    // account can't use, while leaving any partner hats and the fan
+    // account intact. removeMembership re-points the legacy primary if it
+    // removed that hat; a role the account doesn't hold is a no-op.
+    await removeMembership(targetId, "super_admin" as any, null);
+    await removeMembership(targetId, "admin" as any, null);
     return res.json({ ok: true });
   });
 
@@ -17599,8 +17643,122 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // via raw SQL (those columns live outside the pgTable definition —
   // see server/auth/roles.ts).
   const { sendAdminInviteEmail, sendAdminAccessRequestEmail } = await import("./mail");
-  const { setUserRole, requireRole, getUserRole, findMembershipForScope } = await import("./auth/roles");
+  const { setUserRole, requireRole, getUserRole, findMembershipForScope, addMembership, removeMembership } = await import("./auth/roles");
   const { adminInvites: _adminInvites, ADMIN_ROLES } = await import("@shared/schema");
+
+  // Task #1038 — apply an admin invite's grant onto a user row. Shared by
+  // the password invite-accept and the CREATE direct-grant-onto-existing
+  // path so both produce identical side effects. `isNewAccount=true` mints
+  // the FIRST hat via setUserRole (writes the legacy primary columns +
+  // stamps Terms); `false` ADDS a hat via addMembership — purely additive,
+  // never disturbing the account's other hats, its login, or its password.
+  async function applyAdminInviteGrant(
+    userId: string,
+    invite: {
+      role: string;
+      roleScopeId: string | null;
+      referrerKind?: string | null;
+      referrerScopeId?: string | null;
+      inviteRole?: string | null;
+      defaultPressId?: string | null;
+      createdByUserId?: string | null;
+      email?: string | null;
+      id?: string | null;
+    },
+    opts: { isNewAccount: boolean },
+  ): Promise<void> {
+    const ir = (invite.inviteRole ?? null) as string | null;
+    // Promote to admin. Stamp Terms only on a brand-new row — an existing
+    // account already consented when it was first provisioned.
+    if (opts.isNewAccount) {
+      await db.execute(sql`UPDATE users SET is_admin = true, terms_accepted_at = now(), terms_version = ${TERMS_VERSION} WHERE id = ${userId}`);
+    } else {
+      await db.execute(sql`UPDATE users SET is_admin = true WHERE id = ${userId} AND is_admin = false`);
+    }
+    // The hat itself. New account → setUserRole (legacy primary + first
+    // membership). Existing account → addMembership (additive upsert that
+    // leaves the account's other hats and legacy primary untouched).
+    const subRole = invite.role === "manufacturer"
+      ? (ir === "press_staff" ? "staff" : "owner_admin")
+      : ir;
+    if (opts.isNewAccount) {
+      await setUserRole(userId, invite.role as any, invite.roleScopeId ?? null);
+    } else {
+      await addMembership(userId, invite.role as any, invite.roleScopeId ?? null, subRole ?? null);
+    }
+    // Task #1037 — link to the same human's fan row if one exists so a
+    // single login + OAuth identity serves both shells. Invite emails are
+    // operator-entered real addresses (never Apple relay).
+    if (invite.email && !/@privaterelay\.appleid\.com$/i.test(invite.email)) {
+      const fan = await storage.getCustomerByEmail(invite.email);
+      if (fan) {
+        const { linkAdminToCustomer } = await import("./auth/identityLink");
+        await linkAdminToCustomer(userId, fan.id);
+      }
+    }
+    // Referrer chain (artist/non_profit/ambassador; label stamps nothing).
+    try {
+      await applyArtistAcceptReferral((q) => db.execute(q), invite as any);
+    } catch (e: any) {
+      console.warn(`[invite] referrer wiring failed for ${invite.id ?? "(direct)"}: ${e?.message}`);
+    }
+    // Press provenance — invited_by_press_id drives the Sell-panel lock.
+    const rk = invite.referrerKind ?? null;
+    const rsi = invite.referrerScopeId ?? null;
+    if (rk === "manufacturer" && rsi && invite.roleScopeId) {
+      try {
+        if (invite.role === "artist") {
+          await db.execute(sql`UPDATE people SET invited_by_press_id = ${rsi} WHERE id = ${invite.roleScopeId} AND invited_by_press_id IS NULL`);
+        } else if (invite.role === "label") {
+          await db.execute(sql`UPDATE labels SET invited_by_press_id = ${rsi} WHERE id = ${invite.roleScopeId} AND invited_by_press_id IS NULL`);
+        }
+      } catch (e: any) {
+        console.warn(`[invite] press wiring failed: ${e?.message}`);
+      }
+    }
+    // Mutable default press (NULL-guarded so a stale invite never resets it).
+    const dpid = invite.defaultPressId ?? null;
+    if (dpid && invite.roleScopeId) {
+      try {
+        if (invite.role === "artist") {
+          await db.execute(sql`UPDATE people SET default_press_id = ${dpid} WHERE id = ${invite.roleScopeId} AND default_press_id IS NULL`);
+        } else if (invite.role === "label") {
+          await db.execute(sql`UPDATE labels SET default_press_id = ${dpid} WHERE id = ${invite.roleScopeId} AND default_press_id IS NULL`);
+        }
+      } catch (e: any) {
+        console.warn(`[invite] default press stamp failed: ${e?.message}`);
+      }
+    }
+    // Task #351 — per-user override grants for artist team/manager tiers.
+    if (ir && invite.role === "artist" && invite.roleScopeId) {
+      const verbsToGrant = ir === "team"
+        ? ["edit_credits_and_gear"]
+        : ir === "manager"
+          ? ["edit_metadata", "edit_credits_and_gear", "upload_masters", "map_shopify", "manage_payouts", "invite_subusers"]
+          : [];
+      for (const verb of verbsToGrant) {
+        await db.execute(sql`
+          INSERT INTO partner_permission_overrides (scope_kind, scope_id, user_id, verb, granted, updated_by_user_id, updated_at)
+          VALUES ('artist', ${invite.roleScopeId}, ${userId}, ${verb}, true, ${invite.createdByUserId ?? null}, NOW())
+          ON CONFLICT (scope_kind, scope_id, user_id, verb) DO NOTHING
+        `);
+      }
+      if (verbsToGrant.length > 0) {
+        const { rebuildMembershipOverrides } = await import("./auth/roles");
+        await rebuildMembershipOverrides(userId, "artist", invite.roleScopeId);
+      }
+    }
+    // Task #699 — press (manufacturer) teammate tier overrides.
+    if (invite.role === "manufacturer" && invite.roleScopeId) {
+      const { applyPressTeammateOverrides } = await import("./auth/partnerPermissions");
+      await applyPressTeammateOverrides(
+        userId,
+        invite.roleScopeId,
+        ir === "press_staff" ? "staff" : "owner_admin",
+        invite.createdByUserId ?? null,
+      );
+    }
+  }
 
   // Task #78 — extended to 14d per spec; was 7 in Task #69.
   const INVITE_TTL_DAYS = 14;
@@ -18777,6 +18935,66 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ role, roleScopeId, scopeName, welcomeNote });
   });
 
+  // Task #1038 — Unified identity P3 hat-switcher. List EVERY hat this
+  // account holds (UNFILTERED — getAllUserMemberships), each with a stable
+  // key + a human label, and report which one is active for this browser
+  // session. The admin shell shows a switcher only when there are 2+;
+  // single-membership accounts get a one-item list and no switcher UI, so
+  // their experience is unchanged.
+  app.get("/api/me/memberships", requireAdmin, async (req, res) => {
+    const userId = req.session.userId!;
+    const { getAllUserMemberships, membershipKey } = await import("./auth/roles");
+    const all = await getAllUserMemberships(userId);
+    const resolveName = async (role: string, scopeId: string | null): Promise<string | null> => {
+      if (!scopeId) return null;
+      try {
+        if (role === "artist") return (await storage.getPersonById(scopeId))?.name ?? null;
+        if (role === "label") return (await storage.getLabelById(scopeId))?.name ?? null;
+        if (role === "manufacturer") return (await storage.getManufacturerById(scopeId))?.name ?? null;
+        if (role === "fulfillment") return (await storage.getFulfillmentPartnerById(scopeId))?.name ?? null;
+        if (role === "vendor") return (await storage.getVendorById(scopeId))?.name ?? null;
+        if (role === "non_profit") {
+          const r = await db.execute<{ name: string }>(sql`SELECT name FROM organizations WHERE id = ${scopeId} LIMIT 1`);
+          return ((r as any).rows ?? [])[0]?.name ?? null;
+        }
+      } catch {}
+      return null;
+    };
+    const activeKey = req.session.activeMembershipKey ?? null;
+    const memberships = await Promise.all(all.map(async (m) => ({
+      key: membershipKey(m),
+      role: m.role,
+      scopeKind: m.scopeKind,
+      scopeId: m.scopeId,
+      subRole: m.subRole,
+      scopeName: await resolveName(m.role, m.scopeId),
+      isActive: activeKey != null && membershipKey(m) === activeKey,
+    })));
+    res.json({ memberships, activeKey });
+  });
+
+  // Task #1038 — switch the active hat for this browser session. Validates
+  // the requested key against the account's REAL hats (getAllUserMemberships)
+  // so a stale or forged key can never grant a scope the account doesn't
+  // hold; `null`/empty clears the override and falls back to the primary
+  // (highest-privileged) hat. The next request's activeMembershipContext
+  // middleware picks up the stored key and scopes role resolution to it.
+  app.post("/api/me/active-membership", requireAdmin, async (req, res) => {
+    const userId = req.session.userId!;
+    const raw = req.body?.key;
+    const key = raw == null || raw === "" ? null : String(raw);
+    if (key === null) {
+      delete req.session.activeMembershipKey;
+      return res.json({ ok: true, activeKey: null });
+    }
+    const { getAllUserMemberships, membershipKey } = await import("./auth/roles");
+    const all = await getAllUserMemberships(userId);
+    const match = all.find((m) => membershipKey(m) === key);
+    if (!match) return res.status(400).json({ message: "You don't hold that membership." });
+    req.session.activeMembershipKey = key;
+    res.json({ ok: true, activeKey: key });
+  });
+
   // List pending invites (super-admin only). For scoped roles
   // (artist/label/manufacturer/fulfillment) we hydrate the scope
   // entity's name + thumbnail so the row can render "Artist · Garry
@@ -19111,8 +19329,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
 
+    // Task #1038 — an existing account is no longer a hard block. When the
+    // email already has a users row we ADD the requested hat to that one
+    // account (below, after the review gate) instead of refusing.
     const existing = await storage.getUserByEmail(email);
-    if (existing) return res.status(400).json({ message: "An admin with that email already exists" });
 
     // Task #351 — team-invite shape. inviteRole ∈ identity|manager|team,
     // targetPersonId is the Person the invitee will represent. Resolved
@@ -19177,6 +19397,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         reviewStatus = "pending_review";
         claimedReason = claimedReason || "Inviter is not a super-admin and the email isn't on file for this Person.";
       }
+    }
+
+    // Task #1038 — existing account + no review required → ADD the hat to
+    // that one account directly (no second admin login, no invite email).
+    // When review IS required (claimed Person / non-super-admin inviter) we
+    // fall through to mint a held invite; the existing account gets the hat
+    // attached when that invite is approved and accepted.
+    if (existing && reviewStatus === "not_required") {
+      await applyAdminInviteGrant(
+        existing.id,
+        {
+          role,
+          roleScopeId,
+          referrerKind,
+          referrerScopeId: referrerKind ? referrerScopeId : null,
+          inviteRole,
+          defaultPressId: req.body?.defaultPressId ? String(req.body.defaultPressId) : null,
+          createdByUserId: req.session.userId!,
+          email,
+        },
+        { isNewAccount: false },
+      );
+      return res.json({ added: true, userId: existing.id, role, roleScopeId });
     }
 
     const token = generateToken();
@@ -20355,22 +20598,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     const { username, displayName, password } = req.body || {};
-    if (!username || !displayName || !password) {
-      return res.status(400).json({ message: "Username, display name, and password are required" });
-    }
-    if (String(password).length < 8) {
-      return res.status(400).json({ message: "Password must be at least 8 characters" });
-    }
-    const usernameNorm = String(username).trim().replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, "");
-    if (usernameNorm.length < 3) {
-      return res.status(400).json({ message: "Username must be at least 3 characters (letters, numbers, underscore)" });
-    }
-    const [byUsername, byEmail] = await Promise.all([
-      storage.getUserByUsername(usernameNorm),
-      storage.getUserByEmail(invite.email),
-    ]);
-    if (byEmail) return res.status(400).json({ message: "An admin with that email already exists — sign in instead" });
-    if (byUsername) return res.status(400).json({ message: `Username "@${usernameNorm}" is already taken` });
+
+    // Task #1038 — does this invited email already have a GoodTunes login?
+    // If so we attach the hat to that one account below (after the scope +
+    // review gates) instead of minting a parallel admin or hard-blocking.
+    const byEmail = await storage.getUserByEmail(invite.email);
 
     // Re-validate the scoped entity still exists. We already checked at
     // invite-create time, but the operator could have deleted the
@@ -20414,6 +20646,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(410).json({ message: "This invite was rejected." });
       }
     }
+    // Task #1038 — the invited email already has a GoodTunes login. Don't
+    // mint a parallel admin account or accept a new password (a leaked
+    // invite link must never overwrite an existing login); instead ADD the
+    // invited hat to that one account and tell them to sign in with their
+    // existing credentials. applyAdminInviteGrant runs every side effect
+    // (referral, press provenance, default press, per-user overrides,
+    // press teammate tier) exactly as the new-account path does.
+    if (byEmail) {
+      await applyAdminInviteGrant(byEmail.id, invite as any, { isNewAccount: false });
+      try {
+        await storage.markAdminInviteUsed(invite.id, byEmail.id);
+      } catch (e: any) {
+        if (String(e?.message).includes("INVITE_ALREADY_USED")) {
+          return res.status(410).json({ message: "Invite already used" });
+        }
+        throw e;
+      }
+      return res.json({
+        existingAccount: true,
+        message: "This email already has a GoodTunes login — the new access was added to it. Sign in with your existing password to use it.",
+      });
+    }
+
+    // New account — the invitee picks a username + password.
+    if (!username || !displayName || !password) {
+      return res.status(400).json({ message: "Username, display name, and password are required" });
+    }
+    if (String(password).length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters" });
+    }
+    const usernameNorm = String(username).trim().replace(/^@/, "").toLowerCase().replace(/[^a-z0-9_]/g, "");
+    if (usernameNorm.length < 3) {
+      return res.status(400).json({ message: "Username must be at least 3 characters (letters, numbers, underscore)" });
+    }
+    const byUsername = await storage.getUserByUsername(usernameNorm);
+    if (byUsername) return res.status(400).json({ message: `Username "@${usernameNorm}" is already taken` });
+
     const hashed = await hashPassword(String(password));
     const user = await storage.createUser({
       username: usernameNorm,
@@ -20422,74 +20691,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       realName: null,
       password: hashed,
     });
-    // Promote to admin + write role/scope via raw SQL (the columns live
-    // outside the pgTable so we touch them through setUserRole + a
-    // direct is_admin update). Task #860 — fold in Terms acceptance: the
-    // invitee consented via the inline microcopy under the Accept button.
-    // This row is always freshly created above, so it's never re-consent.
-    await db.execute(sql`UPDATE users SET is_admin = true, terms_accepted_at = now(), terms_version = ${TERMS_VERSION} WHERE id = ${user.id}`);
-    await setUserRole(user.id, invite.role as any, invite.roleScopeId ?? null);
-    // Task #1037 — link to the same human's fan row if one exists so a
-    // single login + OAuth identity serves both shells. Invite emails are
-    // operator-entered real addresses, but gate on isLinkableEmail so a
-    // relay/@oauth.local placeholder can never drive the match.
-    if (isLinkableEmail(invite.email)) {
-      const fan = await storage.getCustomerByEmail(invite.email!);
-      if (fan) {
-        const { linkAdminToCustomer } = await import("./auth/identityLink");
-        await linkAdminToCustomer(user.id, fan.id);
-      }
-    }
-
-    // Task #78/#350 — Resolve the invite's referrer chain onto the new
-    // artist's Person row (referred_by_person_id / referred_by_org_id +
-    // an open artist_referrals row for the artist kind), so the existing
-    // referral-attribution machinery lights up immediately. The branch
-    // logic (artist vs non_profit vs ambassador; label stamps nothing)
-    // lives in applyArtistAcceptReferral so it stays integration-tested.
-    try {
-      await applyArtistAcceptReferral((q) => db.execute(q), invite as any);
-    } catch (e: any) {
-      console.warn(`[invite] referrer wiring failed for ${invite.id}: ${e?.message}`);
-    }
-
-    // Task #199 — when the inviting party is a press (manufacturer),
-    // stamp the artist or label's `invited_by_press_id`. This drives
-    // the hard lock on the Sell-panel Presses surface until the
-    // partner ships their first run (then the lock softens to the
-    // full directory). Super-admin can clear/switch later via the
-    // Identity panel override endpoint.
-    if (referrerKind === "manufacturer" && referrerScopeId && invite.roleScopeId) {
-      try {
-        if (invite.role === "artist") {
-          await db.execute(sql`UPDATE people SET invited_by_press_id = ${referrerScopeId} WHERE id = ${invite.roleScopeId} AND invited_by_press_id IS NULL`);
-        } else if (invite.role === "label") {
-          await db.execute(sql`UPDATE labels SET invited_by_press_id = ${referrerScopeId} WHERE id = ${invite.roleScopeId} AND invited_by_press_id IS NULL`);
-        }
-      } catch (e: any) {
-        console.warn(`[invite] press wiring failed for ${invite.id}: ${e?.message}`);
-      }
-    }
-
-    // Task #522 — Press-portal invite carries a mutable `defaultPressId`
-    // separate from the immutable `invited_by_press_id` provenance.
-    // Stamp it on accept so the artist/label's first album defaults
-    // to this press and they show up in the inviting press's
-    // Customers list and Pipeline tab immediately. NULL-guarded so a
-    // partner who's already picked a different default press isn't
-    // silently switched back on a stale invite.
-    const inviteDefaultPressId = (invite as any).defaultPressId as string | null;
-    if (inviteDefaultPressId && invite.roleScopeId) {
-      try {
-        if (invite.role === "artist") {
-          await db.execute(sql`UPDATE people SET default_press_id = ${inviteDefaultPressId} WHERE id = ${invite.roleScopeId} AND default_press_id IS NULL`);
-        } else if (invite.role === "label") {
-          await db.execute(sql`UPDATE labels SET default_press_id = ${inviteDefaultPressId} WHERE id = ${invite.roleScopeId} AND default_press_id IS NULL`);
-        }
-      } catch (e: any) {
-        console.warn(`[invite] default press stamp failed for ${invite.id}: ${e?.message}`);
-      }
-    }
+    // Promote to admin, write the legacy primary role/scope, link the fan
+    // row, and wire referral + press provenance + default press + per-user
+    // overrides + press teammate tier — all via the shared grant helper
+    // (isNewAccount=true also stamps Terms for this freshly-created row,
+    // consented via the inline microcopy under the Accept button).
+    await applyAdminInviteGrant(user.id, invite as any, { isNewAccount: true });
 
     try {
       await storage.markAdminInviteUsed(invite.id, user.id);
@@ -20510,56 +20717,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const token = generateToken();
     await storage.createAuthToken(token, user.id, "admin");
 
-    // Task #351 — Per-user override grants for Team/Manager invites.
-    // Identity invites get the scope-wide partner_permissions row as
-    // usual. Team invites override edit_credits_and_gear=true for THIS
-    // user only. Manager invites override edit_metadata + invite_subusers
-    // for this user only. Override rows live in partner_permission_overrides
-    // so the scope-wide row is never mutated by an invite accept.
-    // Task #351 — Per-user override grants by invite role.
-    //   • identity → no override rows; inherits the scope-wide
-    //     partner_permissions row (full scope by default).
-    //   • manager  → granted ALL six verbs as user overrides so the
-    //     manager defaults to full scope even when the scope-wide row
-    //     is restrictive or absent.
-    //   • team     → granted only edit_credits_and_gear as a user
-    //     override; everything else stays off for them.
+    // Invite role drives the landing path below (the grant helper already
+    // applied the matching per-user permission overrides + press tier).
     const ir = (invite as any).inviteRole as string | null;
-    if (ir && invite.role === "artist" && invite.roleScopeId) {
-      const verbsToGrant = ir === "team"
-        ? ["edit_credits_and_gear"]
-        : ir === "manager"
-          ? ["edit_metadata", "edit_credits_and_gear", "upload_masters", "map_shopify", "manage_payouts", "invite_subusers"]
-          : []; // identity → scope-wide row governs
-      for (const verb of verbsToGrant) {
-        await db.execute(sql`
-          INSERT INTO partner_permission_overrides (scope_kind, scope_id, user_id, verb, granted, updated_by_user_id, updated_at)
-          VALUES ('artist', ${invite.roleScopeId}, ${user.id}, ${verb}, true, ${(invite as any).createdByUserId}, NOW())
-          ON CONFLICT (scope_kind, scope_id, user_id, verb) DO NOTHING
-        `);
-      }
-      if (verbsToGrant.length > 0) {
-        // Task #1036 — mirror the granted overrides into the membership.
-        const { rebuildMembershipOverrides } = await import("./auth/roles");
-        await rebuildMembershipOverrides(user.id, "artist", invite.roleScopeId);
-      }
-    }
-
-    // Task #699 — press (manufacturer) teammate tier. Owner/Admin invites
-    // carry no inviteRole and get every verb granted; `press_staff`
-    // invites get invite_subusers granted + all editing verbs denied so
-    // the new account can view the press and invite artists but can't
-    // touch settings, masters, payouts, or catalog. Mirrors the
-    // direct-grant path in /api/admin/partner-contacts.
-    if (invite.role === "manufacturer" && invite.roleScopeId) {
-      const { applyPressTeammateOverrides } = await import("./auth/partnerPermissions");
-      await applyPressTeammateOverrides(
-        user.id,
-        invite.roleScopeId,
-        ir === "press_staff" ? "staff" : "owner_admin",
-        (invite as any).createdByUserId ?? null,
-      );
-    }
 
     // Task #351 — Landing path priority:
     //   1. Identity/Manager invites with a pre-flighted album → editor.
@@ -21144,7 +21304,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const adminUserId = ((u as any).rows ?? [])[0]?.id as string | undefined;
     if (adminUserId) {
       await db.execute(sql`UPDATE users SET is_admin = true WHERE id = ${adminUserId}`);
-      await setUserRole(adminUserId, targetRole as any, entityId);
+      // Task #1038 — the account already exists, so ADD the partner hat
+      // (additive) instead of setUserRole, which would delete the
+      // account's other memberships. Their existing hats + login stay put.
+      await addMembership(adminUserId, targetRole as any, entityId, entityKind === "manufacturer" ? level : null);
       // Task #699 — for a press (manufacturer) admin, stamp the
       // Owner/Admin vs Staff overrides immediately so the tier takes
       // effect the moment the role is granted to an existing account.
@@ -21309,7 +21472,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
       await db.execute(sql`UPDATE users SET is_admin = true WHERE id = ${adminUserId}`);
-      await setUserRole(adminUserId, role as any, roleScopeId);
+      // Task #1038 — existing account: ADD the hat (additive) so the
+      // account's other memberships and login survive. (setUserRole would
+      // nuke every non-matching membership.)
+      await addMembership(adminUserId, role as any, roleScopeId, null);
       res.json({ adminUserId, role, roleScopeId });
     },
   );
@@ -22051,9 +22217,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { linkAdminToCustomer } = await import("./auth/identityLink");
       await linkAdminToCustomer(adminUserId, customerId);
 
-      // setUserRole dual-writes the legacy role columns + the Phase-1
-      // membership SET (the access grant).
-      await setUserRole(adminUserId, role as any, roleScopeId);
+      // Task #1038 — when the matched users row already existed it may
+      // carry other hats, so ADD this one (additive). Only a freshly
+      // minted row gets setUserRole, which writes the legacy primary
+      // columns + the first membership for an account that had none.
+      if (existingId) {
+        await addMembership(adminUserId, role as any, roleScopeId, null);
+      } else {
+        await setUserRole(adminUserId, role as any, roleScopeId);
+      }
 
       // Resolve any pending access-request row so super_admins stop
       // seeing the "asking for access" reminder for this customer.

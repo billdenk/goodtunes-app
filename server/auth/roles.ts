@@ -22,8 +22,10 @@ import {
   type AdminRole,
   type MembershipScopeKind,
 } from "@shared/schema";
+import { getActiveMembershipKey, membershipKey } from "./activeMembership";
 
 export type { AdminRole };
+export { membershipKey };
 
 export interface UserRoleInfo {
   role: AdminRole;
@@ -90,12 +92,16 @@ async function detectMembershipsTable(): Promise<boolean> {
   return membershipsTableKnownToExist;
 }
 
-// Task #1036 — resolve the SET of memberships (hats) for an account.
+// Task #1036 — resolve the FULL SET of memberships (hats) for an account.
 // Reads the memberships table when present; otherwise — or when a user
 // has no rows yet — synthesizes exactly ONE membership from the legacy
 // users.role / role_scope_id columns so behavior is identical to the
 // pre-memberships code. Returns [] only when there's no users row.
-export async function getUserMemberships(userId: string): Promise<ResolvedMembership[]> {
+//
+// Task #1038 — this is the UNFILTERED set (every hat the account holds).
+// The hat-switcher UI lists from here. Role gating instead goes through
+// getUserMemberships() below, which narrows to the active hat.
+export async function getAllUserMemberships(userId: string): Promise<ResolvedMembership[]> {
   if (await detectMembershipsTable()) {
     const r = await db.execute<{
       role: string;
@@ -129,11 +135,29 @@ export async function getUserMemberships(userId: string): Promise<ResolvedMember
   ];
 }
 
+// Task #1038 — the EFFECTIVE membership set for the current request. When
+// the operator has switched into a specific hat (req.session
+// .activeMembershipKey, lifted into AsyncLocalStorage by
+// activeMembershipContext) AND the account actually holds more than one
+// hat, narrow the set to that single matching hat — so getUserRole,
+// findMembershipForScope, getPartnerScope and every gate downstream scope
+// to it. Single-membership accounts (or no active key, or a stale key
+// that no longer matches) fall straight through to the full set, keeping
+// behavior byte-for-byte identical to before the switcher existed.
+export async function getUserMemberships(userId: string): Promise<ResolvedMembership[]> {
+  const all = await getAllUserMemberships(userId);
+  if (all.length <= 1) return all;
+  const activeKey = getActiveMembershipKey();
+  if (!activeKey) return all;
+  const match = all.find((m) => membershipKey(m) === activeKey);
+  return match ? [match] : all;
+}
+
 // Pick the "primary" hat for legacy single-value callers. God roles win
 // (super_admin > admin), then any scoped hat. For single-membership
 // users (this phase) there's exactly one, so the choice is moot; the
 // ordering only matters once Phase 3 lets a user hold several.
-function pickPrimaryMembership(ms: ResolvedMembership[]): ResolvedMembership | null {
+export function pickPrimaryMembership(ms: ResolvedMembership[]): ResolvedMembership | null {
   if (ms.length === 0) return null;
   const rank = (m: ResolvedMembership) =>
     m.role === "super_admin" ? 0 : m.role === "admin" ? 1 : 2;
@@ -225,6 +249,112 @@ export async function setUserRole(
   );
   // Task #1036 — dual-write the membership SET so the two never drift.
   await syncUserMembership(userId);
+}
+
+// Task #1038 — ADD a hat to an account WITHOUT disturbing its other hats.
+// Unlike setUserRole (which rewrites the legacy users.role columns and,
+// via syncUserMembership, DELETES every membership that isn't the legacy
+// hat), this is a purely additive upsert on the memberships SET. Use it
+// whenever an EXISTING account gains an additional scope (a second/third
+// hat) — grant, invite-accept-onto-existing, promote-with-existing-hats.
+//
+// The legacy users.role / role_scope_id columns are left untouched so the
+// account's PRIMARY hat (and the single-membership synth fallback) stay
+// stable — UNLESS the account had no hat at all, in which case the added
+// hat is also its primary and we mirror it into the legacy columns so
+// getUserRole / landing resolve correctly even on the synth path.
+//
+// When the memberships table doesn't exist yet (dev clones before
+// post-merge) there's no SET to add to, so we degrade to setUserRole
+// (single-hat semantics) — matching every other resolver in this file.
+export async function addMembership(
+  userId: string,
+  role: AdminRole,
+  scopeId: string | null,
+  subRole: string | null = null,
+): Promise<void> {
+  if (!(await detectMembershipsTable())) {
+    await setUserRole(userId, role, scopeId);
+    return;
+  }
+  const scopeKind = roleToScopeKind(role);
+  const before = await db.execute<{ ct: number }>(
+    sql`SELECT COUNT(*)::int AS ct FROM memberships WHERE user_id = ${userId}`,
+  );
+  const hadNoHats = ((((before as any).rows ?? [])[0]?.ct ?? 0) as number) === 0;
+
+  if (scopeId === null) {
+    // God hat (super_admin/admin): one per user via the partial unique on
+    // (user_id) WHERE scope_id IS NULL.
+    await db.execute(sql`
+      INSERT INTO memberships (user_id, role, scope_kind, scope_id, sub_role)
+      VALUES (${userId}, ${role}, ${scopeKind}, NULL, ${subRole})
+      ON CONFLICT (user_id) WHERE scope_id IS NULL
+      DO UPDATE SET role = EXCLUDED.role,
+        sub_role = COALESCE(EXCLUDED.sub_role, memberships.sub_role),
+        updated_at = NOW()
+    `);
+  } else {
+    // Scoped (partner) hat: one per (user, scope) via the partial unique
+    // on (user_id, scope_kind, scope_id) WHERE scope_id IS NOT NULL.
+    await db.execute(sql`
+      INSERT INTO memberships (user_id, role, scope_kind, scope_id, sub_role)
+      VALUES (${userId}, ${role}, ${scopeKind}, ${scopeId}, ${subRole})
+      ON CONFLICT (user_id, scope_kind, scope_id) WHERE scope_id IS NOT NULL
+      DO UPDATE SET role = EXCLUDED.role,
+        sub_role = COALESCE(EXCLUDED.sub_role, memberships.sub_role),
+        updated_at = NOW()
+    `);
+  }
+
+  if (hadNoHats) {
+    await db.execute(
+      sql`UPDATE users SET role = ${role}, role_scope_id = ${scopeId} WHERE id = ${userId}`,
+    );
+  }
+}
+
+// Task #1038 — REMOVE one hat from an account, leaving its other hats (and
+// its fan/customer account) intact. Used by every revoke/un-grant path so
+// pulling a partner membership no longer nukes the whole login. When this
+// was the account's primary (legacy) hat, re-point the legacy columns at
+// whatever hat remains (highest-privileged) so getUserRole stays valid;
+// if it was the last hat, the legacy columns are left as-is (the account
+// keeps its login but resolves to that now-orphaned legacy role, exactly
+// as a never-granted users row would). No-op without the memberships table.
+export async function removeMembership(
+  userId: string,
+  role: AdminRole,
+  scopeId: string | null,
+): Promise<void> {
+  if (!(await detectMembershipsTable())) return;
+  const scopeKind = roleToScopeKind(role);
+  await db.execute(sql`
+    DELETE FROM memberships
+    WHERE user_id = ${userId}
+      AND role = ${role}
+      AND scope_kind IS NOT DISTINCT FROM ${scopeKind}
+      AND scope_id IS NOT DISTINCT FROM ${scopeId}
+  `);
+  // If the legacy columns still point at the hat we just removed, move
+  // them onto the highest-privileged remaining hat (or leave them when
+  // none remain — the row keeps its login, just no live scope).
+  const legacy = await readLegacyUserRole(userId);
+  const legacyScopeKind = legacy ? roleToScopeKind(legacy.role) : null;
+  const legacyWasRemoved =
+    !!legacy &&
+    legacy.role === role &&
+    legacyScopeKind === scopeKind &&
+    (legacy.roleScopeId ?? null) === (scopeId ?? null);
+  if (legacyWasRemoved) {
+    const remaining = await getAllUserMemberships(userId);
+    const primary = pickPrimaryMembership(remaining);
+    if (primary) {
+      await db.execute(
+        sql`UPDATE users SET role = ${primary.role}, role_scope_id = ${primary.scopeId} WHERE id = ${userId}`,
+      );
+    }
+  }
 }
 
 // Task #1036 — refresh a membership's mirrored permission_overrides JSONB
