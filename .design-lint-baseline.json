@@ -8452,7 +8452,7 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
-    "snippet": "className={`text-[15px] font-medium truncate ${isActive ? \"text-[#319ED8]\" : \"text-white\"}`}"
+    "snippet": "className={`text-[15px] font-semibold truncate ${isActive ? \"text-[#319ED8]\" : \"text-white\"}`}"
   },
   {
     "rule": "brand-hex-literal",
@@ -8517,37 +8517,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
-    "snippet": "className={`text-[15px] font-medium truncate ${isActive ? \"text-[#319ED8]\" : \"text-white\"}`}"
+    "snippet": "className={`text-[15px] font-semibold truncate ${isActive ? \"text-[#319ED8]\" : \"text-white\"}`}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
     "snippet": "className=\"text-[11px] leading-relaxed\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/AlbumTopNowPlayingStrip.tsx",
-    "snippet": "<div className=\"text-white text-[13px] font-semibold truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/AlbumTopNowPlayingStrip.tsx",
-    "snippet": "<div className=\"text-white/55 text-[11.5px] truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/AlbumTopNowPlayingStrip.tsx",
-    "snippet": "<div className=\"text-white/40 text-[12px]\">Nothing playing</div>"
-  },
-  {
-    "rule": "naked-icon-button",
-    "file": "client/src/components/ui/AlbumTopNowPlayingStrip.tsx",
-    "snippet": "<button type=\"button\" aria-label=\"Search\" data-testid=\"button-top-search\" className=\"w-10 h-10 rounded-full inline-flex items-center justify-center text-white/65 hover:text-white hover:bg-white/8 tran"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/components/ui/AlbumTopNowPlayingStrip.tsx",
-    "snippet": "className=\"w-10 h-10 rounded-full inline-flex items-center justify-center text-white/65 hover:text-white hover:bg-white/8 transition-colors\""
   },
   {
     "rule": "brand-hex-literal",
@@ -8663,21 +8638,6 @@
     "rule": "naked-icon-button",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
     "snippet": "<button type=\"button\" onClick={onShuffle} data-testid=\"button-shuffle-album\" className=\"h-11 w-11 rounded-full inline-flex items-center justify-center text-white border border-white/85 hover:bg-white "
-  },
-  {
-    "rule": "naked-icon-button",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "<button type=\"button\" onClick={handleCopyShareLink} data-testid=\"button-share-album\" aria-label=\"Copy share link\" className=\"h-11 w-11 rounded-full inline-flex items-center justify-center text-white/8"
-  },
-  {
-    "rule": "naked-icon-button",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "<button type=\"button\" aria-label=\"More options\" data-testid=\"button-album-more\" className=\"w-11 h-11 rounded-full inline-flex items-center justify-center text-white/70 hover:text-white hover:bg-white/"
-  },
-  {
-    "rule": "naked-icon-button",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "<button type=\"button\" onClick={onCloseLyrics} aria-label=\"Close lyrics\" data-testid=\"button-close-lyrics\" className=\"w-8 h-8 rounded-full inline-flex items-center justify-center text-white/65 hover:te"
   },
   {
     "rule": "player-touch-target-too-small",
@@ -10312,12 +10272,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"flex-1 min-w-0 pl-2 pr-2 -ml-2 py-0.5 rounded-md text-slate-900 text-[13.5px] font-medium bg-transparent border border-transparent hover:border-slate-200 focus:border-slate-300 focus:outlin"
+    "snippet": "className=\"flex-1 min-w-0 pl-2 pr-2 -ml-2 py-0.5 rounded-md text-slate-900 text-[13.5px] font-semibold bg-transparent border border-transparent hover:border-slate-200 focus:border-slate-300 focus:outl"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "\"text-[13.5px] font-medium truncate\","
+    "snippet": "\"text-[13.5px] font-semibold truncate\","
   },
   {
     "rule": "hardcoded-font-size",
@@ -15948,16 +15908,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Player.tsx",
     "snippet": "<p className=\"text-white/65 text-[13px] leading-tight truncate\">{currentSong.album.artist}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Player.tsx",
-    "snippet": "className=\"text-white/30 text-[10px] font-semibold tracking-[0.18em] uppercase pt-2\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Player.tsx",
-    "snippet": "className=\"text-white/45 text-[12px] italic pt-6\""
   },
   {
     "rule": "hardcoded-font-size",

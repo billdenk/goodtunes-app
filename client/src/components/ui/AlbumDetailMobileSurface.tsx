@@ -809,7 +809,7 @@ export function AlbumDetailMobileSurface({
                   </div>
                   <div className="flex-1 min-w-0 relative h-full flex items-center gap-2.5">
                     <p
-                      className={`text-[15px] font-medium truncate ${isActive ? "text-[#319ED8]" : "text-white"}`}
+                      className={`text-[15px] font-semibold truncate ${isActive ? "text-[#319ED8]" : "text-white"}`}
                     >
                       {song.title}
                     </p>

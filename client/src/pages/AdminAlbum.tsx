@@ -6649,7 +6649,7 @@ function TrackRow({
                   renameMut.mutate(next);
                 }}
                 disabled={renameMut.isPending}
-                className="flex-1 min-w-0 pl-2 pr-2 -ml-2 py-0.5 rounded-md text-slate-900 text-[13.5px] font-medium bg-transparent border border-transparent hover:border-slate-200 focus:border-slate-300 focus:outline-none disabled:opacity-60"
+                className="flex-1 min-w-0 pl-2 pr-2 -ml-2 py-0.5 rounded-md text-slate-900 text-[13.5px] font-semibold bg-transparent border border-transparent hover:border-slate-200 focus:border-slate-300 focus:outline-none disabled:opacity-60"
                 data-testid={`input-track-title-${song.id}`}
               />
               {song.isExplicit && <ExplicitBadge tone="slate" />}
@@ -6666,7 +6666,7 @@ function TrackRow({
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div
                     className={[
-                      "text-[13.5px] font-medium truncate",
+                      "text-[13.5px] font-semibold truncate",
                       isCurrent ? "text-[var(--brand-blue)]" : "text-slate-900",
                     ].join(" ")}
                     data-testid={`text-track-title-${song.id}`}
