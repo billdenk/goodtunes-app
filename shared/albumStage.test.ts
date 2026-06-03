@@ -10,7 +10,12 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { albumStage, isSunrisePending, todayISODate } from "./albumStage";
+import {
+  albumStage,
+  hasReachedSunset,
+  isSunrisePending,
+  todayISODate,
+} from "./albumStage";
 
 // A fixed "today" so the tests don't drift with the wall clock.
 const TODAY = "2026-06-01";
@@ -46,7 +51,37 @@ test("isSunrisePending: a future date is pending", () => {
 });
 
 // ---------------------------------------------------------------------------
-// albumStage — precedence: prepping > sunset(hidden) > staged/released(date).
+// hasReachedSunset — null/future stay inside the window (false); today/past
+// have sunset (true). Mirror image of isSunrisePending.
+// ---------------------------------------------------------------------------
+
+test("hasReachedSunset: null date has not sunset", () => {
+  assert.equal(hasReachedSunset(null, TODAY), false);
+});
+
+test("hasReachedSunset: undefined date has not sunset", () => {
+  assert.equal(hasReachedSunset(undefined, TODAY), false);
+});
+
+test("hasReachedSunset: empty-string date has not sunset", () => {
+  assert.equal(hasReachedSunset("", TODAY), false);
+});
+
+test("hasReachedSunset: today's date has sunset (sells out the moment it arrives)", () => {
+  assert.equal(hasReachedSunset(TODAY, TODAY), true);
+});
+
+test("hasReachedSunset: a past date has sunset", () => {
+  assert.equal(hasReachedSunset(YESTERDAY, TODAY), true);
+});
+
+test("hasReachedSunset: a future date has not sunset yet", () => {
+  assert.equal(hasReachedSunset(TOMORROW, TODAY), false);
+});
+
+// ---------------------------------------------------------------------------
+// albumStage — precedence: prepping > sunset(hidden) > staged > sunset(date)
+//   > released.
 // ---------------------------------------------------------------------------
 
 test("albumStage: isPrepping wins over everything (even a future date + hidden)", () => {
@@ -122,6 +157,52 @@ test("albumStage: a past date is released", () => {
 
 test("albumStage: empty input (all undefined) is released", () => {
   assert.equal(albumStage({}, TODAY), "released");
+});
+
+test("albumStage: a reached sunset date sunsets a live release", () => {
+  assert.equal(
+    albumStage(
+      {
+        isPrepping: false,
+        isHidden: false,
+        goodTunesReleaseDate: YESTERDAY,
+        streamingReleaseDate: TODAY,
+      },
+      TODAY,
+    ),
+    "sunset",
+  );
+});
+
+test("albumStage: a future sunset date is still released", () => {
+  assert.equal(
+    albumStage(
+      {
+        isPrepping: false,
+        isHidden: false,
+        goodTunesReleaseDate: YESTERDAY,
+        streamingReleaseDate: TOMORROW,
+      },
+      TODAY,
+    ),
+    "released",
+  );
+});
+
+test("albumStage: a pending sunrise beats a reached sunset (staged wins)", () => {
+  // Not live yet, so it can't already be sunsetting — staged takes precedence.
+  assert.equal(
+    albumStage(
+      {
+        isPrepping: false,
+        isHidden: false,
+        goodTunesReleaseDate: TOMORROW,
+        streamingReleaseDate: YESTERDAY,
+      },
+      TODAY,
+    ),
+    "staged",
+  );
 });
 
 // ---------------------------------------------------------------------------

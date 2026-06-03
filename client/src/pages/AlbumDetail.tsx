@@ -97,6 +97,7 @@ function normalizeInstrument(i: ApiInstrument): Instrument {
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { AlbumDetailDesktop } from "@/pages/AlbumDetailDesktop";
 import { shareUrlForSlug } from "@shared/shareSlug";
+import { hasReachedSunset } from "@shared/albumStage";
 
 /**
  * Fan-facing album route. Switches between the Apple-Music-style mobile
@@ -432,6 +433,12 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
   const isStreamOnlyAlbum =
     songs.length > 0 && songs.every((s) => !!s.streamOnly);
 
+  // Task #1049 — once the sunset date arrives the release has left its
+  // GoodTunes exclusive window for streaming: surface the "Listen on…"
+  // handoff and read the Buy CTA as "Sold Out". Same shared rule the server
+  // uses to seal the buy window, so every surface agrees.
+  const sunsetReached = hasReachedSunset(apiAlbum?.streamingReleaseDate);
+
   // Hand the fan off to their chosen streaming service. If they've picked a
   // favorite, open it straight away — the exact release when we have a deep
   // link for that service, otherwise a per-service search built from the
@@ -762,6 +769,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
           onOpenAlbumCredits={() => setShowAlbumCredits(true)}
           hasSuperCredits={albumHasSuperCredits}
           isStreamOnlyAlbum={isStreamOnlyAlbum}
+          sunsetReached={sunsetReached}
           onStreamSong={(s) => {
             const full = songs.find((x) => x.id === s.id);
             if (full) handleStreamSong(full);

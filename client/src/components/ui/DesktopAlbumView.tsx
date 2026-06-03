@@ -84,6 +84,15 @@ export type DesktopAlbumViewProps = {
   /** Whether the signed-cert add-on is sold out for this album. When
    *  true the chip renders disabled with "Sold out" copy. */
   signedCertSoldOut?: boolean;
+  /** Task #1049 — once an album reaches its Sunset date it has left the
+   *  GoodTunes exclusive window for streaming: the buy window closes
+   *  (a disabled "Sold Out" replaces the Buy pill) and a "Listen on…"
+   *  handoff is surfaced. Owners never see either (the isOwned branch
+   *  short-circuits the buy CTAs entirely). */
+  sunsetReached?: boolean;
+  /** Hand the fan off to their preferred streaming service for the whole
+   *  album. Wired by the host (opens the service picker / deep link). */
+  onStreamAlbum?: () => void;
   /** Owned=false only. Toggles a 30-sec-per-track preview session that
    *  walks the album. Host wires this into PlayerContext.setPreviewMode +
    *  playSong; the view just renders the rose outline pill. */
@@ -170,6 +179,8 @@ export function DesktopAlbumView({
   onBuyBundle,
   signedCertPriceCents = null,
   signedCertSoldOut = false,
+  sunsetReached = false,
+  onStreamAlbum,
   onPlayPreview,
   previewActive = false,
   onPlayTrack,
@@ -382,13 +393,54 @@ export function DesktopAlbumView({
                     isPlaying={!!isPlaying}
                     onClick={canPlay ? onPlayPreview : undefined}
                   />
-                  {album.priceCents != null && (
-                    <BuyPricePill
-                      priceLabel={formatPrice(album.priceCents)}
-                      signedCertPriceCents={signedCertPriceCents}
-                      signedCertSoldOut={signedCertSoldOut}
-                      onBuy={(opts) => onBuyBundle?.(opts)}
-                    />
+                  {/* Task #1049 — after sunset the album has moved to the
+                      streaming services, so the buy window is closed: a quiet,
+                      disabled "Sold Out" replaces the lit Buy pill, and a
+                      "Listen on…" handoff sits alongside it. */}
+                  {album.priceCents != null &&
+                    (sunsetReached ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="h-11 px-6 rounded-full inline-flex items-center justify-center font-semibold text-[14px] text-white/45 cursor-not-allowed"
+                        style={{ background: "rgba(255,255,255,0.06)" }}
+                        data-testid="button-buy-sold-out"
+                      >
+                        Sold Out
+                      </button>
+                    ) : (
+                      <BuyPricePill
+                        priceLabel={formatPrice(album.priceCents)}
+                        signedCertPriceCents={signedCertPriceCents}
+                        signedCertSoldOut={signedCertSoldOut}
+                        onBuy={(opts) => onBuyBundle?.(opts)}
+                      />
+                    ))}
+                  {sunsetReached && onStreamAlbum && (
+                    <button
+                      type="button"
+                      onClick={onStreamAlbum}
+                      data-testid="button-listen-on"
+                      className="h-11 px-6 rounded-full inline-flex items-center justify-center gap-2 text-white font-semibold text-[14px] transition-transform active:scale-[0.97]"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, var(--brand-purple), var(--brand-blue))",
+                      }}
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M7 17L17 7M9 7h8v8" />
+                      </svg>
+                      Listen on…
+                    </button>
                   )}
                 </>
               )}

@@ -70,6 +70,7 @@ import {
   MRP_DOMAIN,
 } from "./pressCatalog";
 import { registerPressPortalRoutes } from "./pressPortal";
+import { hasReachedSunset } from "@shared/albumStage";
 import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "./storage";
@@ -781,19 +782,26 @@ export function registerCommerceRoutes(app: Express) {
     // target this album's primary artist. Rendered as a single optional
     // checkbox (one per order) in the Buy sheet.
     const customAddonRows = await listCustomAddonsForAlbum(album.primaryArtistId);
+    // Task #1049 — once the album's sunset date arrives it leaves the
+    // GoodTunes exclusive window for streaming, so the buy window closes:
+    // every format reads sold out regardless of remaining stock. Computed
+    // from the shared rule so the BuySheet, album-page CTA, and checkout
+    // guard below all agree.
+    const sunsetReached = hasReachedSunset(album.streamingReleaseDate);
     res.json({
       albumId: album.id,
       title: album.title,
       artist: album.artist,
       artwork: album.artwork,
       currency: "usd",
+      sunsetReached,
       skus: skus.map((s) => ({
         id: s.id,
         format: s.format,
         label: ALBUM_FORMAT_LABEL[s.format as AlbumFormat] ?? s.format,
         priceCents: s.priceCents,
         stock: s.stock,
-        soldOut: s.stock !== null && s.stock <= 0,
+        soldOut: sunsetReached || (s.stock !== null && s.stock <= 0),
         // Task #201 — fan-side BuySheet renders <VinylPreview> against
         // these picks. Non-vinyl SKUs leave both fields null and the UI
         // falls back to the format label only.
@@ -1867,6 +1875,12 @@ export function registerCommerceRoutes(app: Express) {
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request" });
     const album = await storage.getAlbumById(parsed.data.albumId);
     if (!album) return res.status(404).json({ message: "Album not found" });
+    // Task #1049 — the buy window closes the moment the sunset date arrives
+    // (album moves to streaming). Reject before we touch SKUs/stock so no
+    // surface that skipped the sold-out buy-options can still check out.
+    if (hasReachedSunset(album.streamingReleaseDate)) {
+      return res.status(409).json({ message: "Sold out" });
+    }
     const skus = await listActiveSkus(album.id);
     const sku = skus.find((s) => s.format === parsed.data.skuFormat);
     if (!sku) return res.status(400).json({ message: "That format isn't available for this album" });

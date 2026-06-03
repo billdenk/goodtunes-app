@@ -8,6 +8,17 @@ import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { AlbumCreditsSheet, type AlbumCreditsRow } from "@/components/ui/AlbumCreditsSheet";
+import { StreamServicePickerSheet } from "@/components/StreamServicePickerSheet";
+import {
+  getFavoriteStreamingService,
+  setFavoriteStreamingService,
+  handoffUrlForService,
+  openStreamLink,
+  STREAMING_SERVICES,
+  type StreamingServiceId,
+  type StreamLinks,
+} from "@/lib/streamingService";
+import { hasReachedSunset } from "@shared/albumStage";
 import { toast } from "@/hooks/use-toast";
 import {
   useAlbumOwnership,
@@ -58,6 +69,15 @@ type ApiAlbum = {
   isExplicit: boolean;
   genre?: string | null;
   goodTunesReleaseDate?: string | null;
+  // Task #1049 — repurposed "Sunset date". When set AND <= today the album
+  // has left the GoodTunes exclusive window for streaming.
+  streamingReleaseDate?: string | null;
+  spotifyUrl?: string | null;
+  appleMusicUrl?: string | null;
+  tidalUrl?: string | null;
+  qobuzUrl?: string | null;
+  deezerUrl?: string | null;
+  pandoraUrl?: string | null;
   priceCents?: number | null;
   primaryArtistId?: string | null;
   shareSlug?: string | null;
@@ -99,9 +119,16 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const params = useParams<{ id: string }>();
   const id = albumId ?? params.id;
   const [, navigate] = useLocation();
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
   const player = usePlayer();
   const [tab, setTab] = useState<DesktopAlbumTab>("music");
+  // Task #1049 — streaming-service handoff for sunset albums. Mirrors the
+  // mobile surface: prefer the fan's saved service, else pop the picker.
+  const [streamPicker, setStreamPicker] = useState<{
+    links: StreamLinks;
+    searchQuery: string;
+    subtitle?: string;
+  } | null>(null);
   const [showBuySheet, setShowBuySheet] = useState(() => {
     if (typeof window === "undefined") return false;
     if (!buyEnabled) return false;
@@ -253,6 +280,51 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const handleBuyBundle = (opts?: { signedCert?: boolean }) => {
     setBuyAddons({ signedCert: !!opts?.signedCert });
     setShowBuySheet(true);
+  };
+
+  // Task #1049 — sunset handoff. When an album has reached its Sunset
+  // date it lives on the streaming services, so we hand the fan off to
+  // their preferred one (or pop the picker on first use). Mirrors the
+  // mobile surface's handleStreamAlbum.
+  const sunsetReached = hasReachedSunset(album?.streamingReleaseDate);
+  const handleStreamHandoff = (
+    links: StreamLinks,
+    searchQuery: string,
+    subtitle?: string,
+  ) => {
+    const fav =
+      (user?.favoriteStreamingService as StreamingServiceId | undefined) ??
+      getFavoriteStreamingService();
+    if (fav) {
+      openStreamLink(handoffUrlForService(fav, links, searchQuery));
+      return;
+    }
+    setStreamPicker({ links, searchQuery, subtitle });
+  };
+  const handleStreamAlbum = () => {
+    handleStreamHandoff(
+      {
+        spotify: album?.spotifyUrl ?? null,
+        apple: album?.appleMusicUrl ?? null,
+        tidal: album?.tidalUrl ?? null,
+        qobuz: album?.qobuzUrl ?? null,
+        deezer: album?.deezerUrl ?? null,
+        pandora: album?.pandoraUrl ?? null,
+      },
+      `${album?.artist ?? ""} ${album?.title ?? ""}`.trim(),
+      album?.title,
+    );
+  };
+  const handlePickStreamService = (svc: StreamingServiceId) => {
+    setFavoriteStreamingService(svc);
+    if (user?.kind === "customer") {
+      updateProfile({ favoriteStreamingService: svc }).catch(() => {});
+    }
+    const picker = streamPicker;
+    setStreamPicker(null);
+    if (picker) {
+      openStreamLink(handoffUrlForService(svc, picker.links, picker.searchQuery));
+    }
   };
 
   // Fetch buy-options up front so the hero can render the signed-cert
@@ -423,6 +495,8 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             onBuyBundle={buyEnabled ? handleBuyBundle : undefined}
             signedCertPriceCents={buyEnabled ? signedCertPriceCents : null}
             signedCertSoldOut={signedCertSoldOut}
+            sunsetReached={sunsetReached}
+            onStreamAlbum={handleStreamAlbum}
             lyricsOpen={player.showLyrics}
             lyrics={lyricsBody}
             onCloseLyrics={() => player.setShowLyrics(false)}
@@ -492,6 +566,16 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             setShowBuySheet(false);
             setBuyAddons({ signedCert: false });
           }}
+        />
+      )}
+
+      {/* Task #1049 — first-time sunset handoff: pick a streaming service. */}
+      {streamPicker && (
+        <StreamServicePickerSheet
+          available={STREAMING_SERVICES.map((s) => s.id)}
+          subtitle={streamPicker.subtitle}
+          onPick={handlePickStreamService}
+          onClose={() => setStreamPicker(null)}
         />
       )}
 

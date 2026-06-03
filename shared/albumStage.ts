@@ -20,6 +20,11 @@ export interface StageInput {
   isPrepping?: boolean | null;
   isHidden?: boolean | null;
   goodTunesReleaseDate?: string | null;
+  // "Sunset date" (stored on the legacy `streamingReleaseDate` column): the
+  // day the album leaves its GoodTunes exclusive window and goes to
+  // streaming. Reaching it surfaces the "Listen on…" links and ends the
+  // buy window (sold out).
+  streamingReleaseDate?: string | null;
 }
 
 // Current civil date as `YYYY-MM-DD`. Built from local date parts (not
@@ -92,16 +97,28 @@ export function sunriseCountdownLabel(
   return `Live ${when} · ${rel}`;
 }
 
-// Derive the lifecycle stage. Order matters: Prepping and Sunset are hard
-// flags that win over the date, and Staged/Released split purely on the
-// sunrise once an album is neither prepping nor hidden.
+// True when the album's sunset date is set and has arrived: a non-null
+// `streamingReleaseDate` that is today or in the past. Null/future return
+// false (still inside the GoodTunes exclusive window). Same local-civil /
+// lexicographic-string compare as `isSunrisePending`, just inverted.
+export function hasReachedSunset(
+  streamingReleaseDate: string | null | undefined,
+  today: string = todayISODate(),
+): boolean {
+  if (!streamingReleaseDate) return false;
+  return streamingReleaseDate <= today;
+}
+
+// Derive the lifecycle stage. Order matters: Prepping and (hidden) Sunset
+// are hard flags that win over the dates; a still-pending sunrise is Staged;
+// then a reached sunset date sunsets a live album; otherwise Released.
 export function albumStage(
   album: StageInput,
   today: string = todayISODate(),
 ): AlbumStage {
   if (album.isPrepping) return "prepping";
   if (album.isHidden) return "sunset";
-  return isSunrisePending(album.goodTunesReleaseDate, today)
-    ? "staged"
-    : "released";
+  if (isSunrisePending(album.goodTunesReleaseDate, today)) return "staged";
+  if (hasReachedSunset(album.streamingReleaseDate, today)) return "sunset";
+  return "released";
 }

@@ -2216,12 +2216,35 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
         title="Release"
         testId="panel-overview-release"
         endpoint={endpoint}
+        columns={2}
+        disabled={disabled}
+        disabledReason={disabledReason}
+        values={{
+          goodTunesReleaseDate: album.goodTunesReleaseDate,
+        }}
+        invalidate={invalidate}
+        fields={[
+          {
+            key: "goodTunesReleaseDate",
+            label: "GoodTunes release date",
+            type: "date",
+          },
+        ]}
+      />
+      {/* Task #1049 — "Streaming" is its own panel. The Sunset date (stored
+          on the legacy `streamingReleaseDate` column) is the day the release
+          leaves its GoodTunes exclusive window: once it's set AND in the
+          past, fans see the "Listen on…" links and the album sells out. The
+          six service URLs feed those links; Refresh auto-fills them. */}
+      <EditablePanel
+        title="Streaming"
+        testId="panel-overview-streaming"
+        endpoint={endpoint}
         columns={4}
         disabled={disabled}
         disabledReason={disabledReason}
         headerAction={<RefreshStreamingLinksButton album={album} />}
         values={{
-          goodTunesReleaseDate: album.goodTunesReleaseDate,
           streamingReleaseDate: album.streamingReleaseDate,
           appleMusicUrl: album.appleMusicUrl,
           spotifyUrl: album.spotifyUrl,
@@ -2233,14 +2256,10 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
         invalidate={invalidate}
         fields={[
           {
-            key: "goodTunesReleaseDate",
-            label: "GoodTunes release date",
-            type: "date",
-          },
-          {
             key: "streamingReleaseDate",
-            label: "Apple Music / Spotify release date",
+            label: "Sunset date",
             type: "date",
+            placeholder: "When this leaves GoodTunes for streaming",
           },
           {
             key: "appleMusicUrl",

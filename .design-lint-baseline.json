@@ -5197,11 +5197,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "artifacts/mockup-sandbox/src/components/mockups/preview-purchase-desktop/_shared.tsx",
-    "snippet": "<div className=\"text-[9px] uppercase tracking-[0.18em] text-white/45 mt-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "artifacts/mockup-sandbox/src/components/mockups/preview-purchase-desktop/_shared.tsx",
     "snippet": "<div className=\"text-white text-[13px] font-semibold truncate\">Lori Graf</div>"
   },
   {
@@ -8027,16 +8022,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "? \"border-[#319ED8] bg-[#319ED8]/10\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "? \"border-[#FF5470] bg-[#FF5470]/10\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/checkout/BuySheet.tsx",
     "snippet": "style={{ background: \"linear-gradient(135deg, #1D5E8F, #319ED8)\" }}"
   },
   {
@@ -8182,16 +8167,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "background: shared ? \"#4AFFCA\" : \"#ffffff\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "color: \"#00062B\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
     "snippet": "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#319ED8\" strokeWidth=\"3\" strokeLinecap=\"round\">"
   },
   {
@@ -8213,16 +8188,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/GoodDeedCertificate.tsx",
     "snippet": "<p className=\"text-white/45 text-[10px] font-semibold uppercase tracking-wider\">{label}</p>"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "className=\"w-10 h-10 rounded-full flex items-center justify-center active:opacity-70 shadow-lg flex-shrink-0\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/components/GoodDeedCertificate.tsx",
-    "snippet": "className=\"w-10 h-10 rounded-full flex items-center justify-center active:opacity-70 transition-opacity shadow-lg flex-shrink-0 disabled:opacity-60\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -8307,11 +8272,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/components/PlaylistPickerSheet.tsx",
-    "snippet": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill={allInFavorites ? \"#FF5470\" : \"none\"} stroke={allInFavorites ? \"#FF5470\" : \"rgba(255,255,255,0.6)\"} strokeWidth=\"1.8\" strokeLinecap=\"round\" strokeL"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/PlaylistPickerSheet.tsx",
     "snippet": "<svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#FF5470\" strokeWidth=\"2.5\" strokeLinecap=\"round\">"
   },
   {
@@ -8383,11 +8343,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumDesktopSidebar.tsx",
     "snippet": "<span className=\"text-[14px] font-semibold tracking-[-0.005em]\">{label}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/AlbumDesktopSidebar.tsx",
-    "snippet": "<div className=\"text-[9px] uppercase tracking-[0.18em] text-white/45 mt-1\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -8547,6 +8502,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
+    "snippet": "className=\"flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-[15px] text-white/45 flex-shrink-0 cursor-not-allowed\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
     "snippet": "className=\"flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-[15px] text-white active:scale-[0.98] transition-transform flex-shrink-0\""
   },
   {
@@ -8648,6 +8608,16 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
     "snippet": "className=\"h-11 pl-5 pr-7 rounded-full inline-flex items-center gap-2 text-white font-semibold text-[14px] transition-colors active:scale-[0.97] hover:opacity-90\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/DesktopAlbumView.tsx",
+    "snippet": "className=\"h-11 px-6 rounded-full inline-flex items-center justify-center font-semibold text-[14px] text-white/45 cursor-not-allowed\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/DesktopAlbumView.tsx",
+    "snippet": "className=\"h-11 px-6 rounded-full inline-flex items-center justify-center gap-2 text-white font-semibold text-[14px] transition-transform active:scale-[0.97]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -8762,22 +8732,7 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/components/ui/PlayerDock.tsx",
-    "snippet": "// (off → all → one → off). Active states use brand blue (#319ED8);"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/ui/PlayerDock.tsx",
-    "snippet": "// #FF5470 stays reserved for fan-side favorites per design system."
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/ui/PlayerDock.tsx",
     "snippet": "<Music2 className=\"w-[18px] h-[18px] text-[#319ED8]\" />"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/ui/PlayerDock.tsx",
-    "snippet": ": { background: \"linear-gradient(135deg, #319ED8 0%, #7F10A7 100%)\" }"
   },
   {
     "rule": "brand-hex-literal",
@@ -9793,11 +9748,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Admin.tsx",
     "snippet": "<span className=\"w-6 h-6 rounded bg-slate-200 shrink-0 grid place-items-center text-[10px] font-semibold text-slate-500\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "<span className=\"ml-auto text-[11px] uppercase tracking-widest text-slate-400 font-medium\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -11247,17 +11197,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomerDetail.tsx",
-    "snippet": "<span className={`inline-block mt-0.5 text-[10.5px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${cls}`}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminCustomerDetail.tsx",
     "snippet": "className=\"absolute top-2 right-2 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-900/70 text-white\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomerDetail.tsx",
     "snippet": "className=\"text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-100 text-slate-600\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCustomerDetail.tsx",
+    "snippet": "<span className={`inline-block mt-0.5 text-[10.5px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${cls}`}>"
   },
   {
     "rule": "naked-icon-button",
@@ -12128,11 +12078,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminInstruments.tsx",
     "snippet": "<p className=\"text-slate-400 text-[12.5px] mt-1 max-w-xs\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminInvites.tsx",
-    "snippet": "<Heart className=\"w-3.5 h-3.5 text-[#FF5470]\" /> Referrer (optional)"
   },
   {
     "rule": "brand-hex-literal",
@@ -13927,27 +13872,12 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<button type=\"button\" onClick={onClose} className=\"text-[#319ED8] text-sm font-semibold\" data-testid=\"button-close-provenance\">Done</button>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<span className=\"text-[10px] font-bold px-2 py-1 rounded-full\" style={{ background: \"rgba(74,255,202,0.18)\", color: \"#4AFFCA\" }}>VERIFIED</span>"
   },
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#319ED8\" strokeWidth=\"2.2\" strokeLinecap=\"round\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<button type=\"button\" onClick={onClose} className=\"text-[#319ED8] text-sm font-semibold\" data-testid=\"button-close-ownership\">Done</button>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill={isFavorite ? \"#FF5470\" : \"none\"} stroke={isFavorite ? \"#FF5470\" : \"#000\"} strokeWidth=\"1.8\" strokeLinecap=\"round\" strokeLinejoin=\"round\">"
   },
   {
     "rule": "brand-hex-literal",
@@ -13963,11 +13893,6 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "\"linear-gradient(to right, rgba(0,6,43,0) 0%, #00062B 40%, #00062B 100%)\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "{eyebrow && <p className=\"text-[#319ED8] text-[11px] font-semibold uppercase tracking-wider mb-1\">{eyebrow}</p>}"
   },
   {
     "rule": "brand-hex-literal",
@@ -14118,11 +14043,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<p className=\"text-white/85 text-[15px] leading-relaxed whitespace-pre-wrap\" data-testid=\"text-album-description-full\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "{eyebrow && <p className=\"text-[#319ED8] text-[11px] font-semibold uppercase tracking-wider mb-1\">{eyebrow}</p>}"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14580,16 +14500,6 @@
     "snippet": "<h3 className=\"text-white text-[22px] font-bold tracking-tight mb-3\" data-testid=\"heading-album-photos\">"
   },
   {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-center text-white/70 text-[13px] px-6 pb-8 pt-4\">{activePhoto.caption}</p>"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<div className=\"w-10 h-1 bg-white/20 rounded-full mx-auto mb-3 flex-shrink-0\" />"
-  },
-  {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<div className=\"absolute -left-[18px] top-1 w-3 h-3 rounded-full\" style={{ background: e.color, boxShadow: `0 0 0 3px rgba(0,6,43,1), 0 0 12px ${e.color}55` }} />"
@@ -14733,11 +14643,6 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/ArtistDetail.tsx",
     "snippet": "<button onClick={() => navigate(\"/collection\")} className=\"mt-4 text-[#319ED8]\">Back to Collection</button>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/ArtistDetail.tsx",
-    "snippet": "<svg viewBox=\"0 0 24 24\" fill={isFav ? \"#FF5470\" : \"none\"} stroke={isFav ? \"#FF5470\" : \"currentColor\"} strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\">"
   },
   {
     "rule": "brand-hex-literal",
@@ -15177,16 +15082,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Collection.tsx",
-    "snippet": "<svg width=\"11\" height=\"11\" viewBox=\"0 0 24 24\" fill=\"#FF5470\" aria-label=\"Favorited\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Collection.tsx",
-    "snippet": "className=\"text-[#319ED8] text-sm font-semibold\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Collection.tsx",
     "snippet": "className=\"text-[#319ED8] text-sm font-semibold mt-3\""
   },
   {
@@ -15232,17 +15127,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Collection.tsx",
+    "snippet": "className=\"text-[10px] font-semibold px-2 py-0.5 rounded-full\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Collection.tsx",
     "snippet": "className=\"flex-1 min-w-0 text-white text-[15px] font-semibold leading-tight truncate\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Collection.tsx",
     "snippet": "className=\"text-[13px] font-normal truncate mt-0.5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Collection.tsx",
-    "snippet": "className=\"text-[10px] font-semibold px-2 py-0.5 rounded-full\""
   },
   {
     "rule": "player-touch-target-too-small",
@@ -16017,17 +15912,7 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Player.tsx",
-    "snippet": "<svg viewBox=\"0 0 24 24\" fill=\"#FF5470\" stroke=\"#FF5470\" strokeWidth=\"1.5\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Player.tsx",
     "snippet": "<div className=\"fixed inset-0 flex justify-center bg-[#00062B]\" style={{ zIndex: 70 }} data-testid=\"overlay-queue\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Player.tsx",
-    "snippet": "<svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill={favorited ? \"#FF5470\" : \"none\"} stroke={favorited ? \"#FF5470\" : \"white\"} strokeWidth=\"1.8\" strokeLinecap=\"round\">"
   },
   {
     "rule": "brand-hex-literal",
@@ -16158,16 +16043,6 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Playlists.tsx",
     "snippet": "style={{ background: \"#fff\", color: \"#00062B\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Playlists.tsx",
-    "snippet": "<svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"#FF5470\" stroke=\"#FF5470\" strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Playlists.tsx",
-    "snippet": "className=\"text-[#319ED8] text-sm font-semibold\""
   },
   {
     "rule": "brand-hex-literal",

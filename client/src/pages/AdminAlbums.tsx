@@ -67,6 +67,10 @@ interface AlbumLite {
   // ISO `YYYY-MM-DD` sunrise date for finished GoodTunes releases. Drives
   // the Staged-tab "Live <date> · in N days" countdown. Null = no schedule.
   goodTunesReleaseDate: string | null;
+  // Task #1049 — "Sunset date" (stored on the legacy `streamingReleaseDate`
+  // column). Once reached the release moves to streaming + sells out, so the
+  // shared `albumStage` helper buckets it into the Sunset tab.
+  streamingReleaseDate: string | null;
   // Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only legacy)"
   // marker. Drives the small tile/row badge below. No fan-facing effect.
   isSpinPromo?: boolean;
