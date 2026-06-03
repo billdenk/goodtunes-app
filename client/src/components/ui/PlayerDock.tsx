@@ -157,7 +157,10 @@ export function PlayerDock({
   // fan-facing desktop (compact). Keeps the JSX downstream readable.
   const D = isCompactDensity
     ? {
-        pillPy: "py-2.5",
+        // Extra bottom padding (vs symmetric py) lifts the art/title row
+        // off the inset scrubber so the fan dock gets Apple's breathing
+        // room between the now-playing block and the progress line.
+        pillPy: "pt-2.5 pb-5",
         transportBtn: "w-8 h-8",
         playBtn: "w-9 h-9",
         playIcon: "w-[22px] h-[22px]",
@@ -477,7 +480,17 @@ export function PlayerDock({
           vertically centered on the tallest element (44px Play). At py-4
           the pill is 76px tall — matches Apple's mini-player proportions
           and leaves room for the inset scrubber along the bottom edge. */}
-      <div className="relative bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 overflow-hidden rounded-full">
+      <div
+        className={[
+          // Compact (fan) lowers the surface opacity so the existing
+          // backdrop-blur actually reads as frosted glass with content
+          // blurring behind it (Apple mini-player). Admin (default)
+          // stays near-opaque. Single backdrop-filter surface only —
+          // never stack a second blur layer here (WebKit hazard).
+          isCompactDensity ? "bg-slate-900/70" : "bg-slate-900/95",
+          "relative backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 overflow-hidden rounded-full",
+        ].join(" ")}
+      >
         <div className={`flex items-center gap-1.5 px-3 ${D.pillPy}`}>
           {/* ── LEFT · transport ───────────────────────────────────── */}
           <div className="flex items-center gap-0.5 flex-shrink-0">
@@ -608,7 +621,9 @@ export function PlayerDock({
               </div>
               {track.subtitle && hasSelection && (
                 <div
-                  className={`${D.subtitleSize} text-slate-400 truncate leading-tight mt-0.5 flex items-center gap-1.5`}
+                  className={`${D.subtitleSize} ${
+                    isCompactDensity ? "text-white/55" : "text-slate-400"
+                  } truncate leading-tight mt-0.5 flex items-center gap-1.5`}
                   data-testid="text-track-subtitle"
                 >
                   {previewMode && (
@@ -703,17 +718,21 @@ export function PlayerDock({
                 points toward where the mini-pill will land. Available
                 in both idle AND playing states so a host like the
                 admin Tracks tab can tuck the dock away while editing
-                without first having to pick a track. */}
-            <button
-              type="button"
-              aria-label="Minimize player"
-              title="Minimize player"
-              onClick={() => setDockHidden(true)}
-              data-testid="button-minimize-player"
-              className={`${D.utilityBtn} rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10`}
-            >
-              <ChevronDown className={isCompactDensity ? "w-[18px] h-[18px]" : "w-5 h-5"} />
-            </button>
+                without first having to pick a track. Omitted on the
+                fan-facing (compact) dock — fans don't tuck the player
+                away, matching Apple Music's persistent mini-player. */}
+            {!isCompactDensity && (
+              <button
+                type="button"
+                aria-label="Minimize player"
+                title="Minimize player"
+                onClick={() => setDockHidden(true)}
+                data-testid="button-minimize-player"
+                className={`${D.utilityBtn} rounded-full inline-flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10`}
+              >
+                <ChevronDown className="w-5 h-5" />
+              </button>
+            )}
           </div>
         </div>
 

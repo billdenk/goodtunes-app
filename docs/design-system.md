@@ -87,6 +87,8 @@ Any trash / delete / "remove forever" button must pop a confirmation sheet namin
 
 **Reuse for the consumer player**: this same primitive should drive the fan-facing player surface (Now Playing / mini-player) once we wire lyrics, queue, and shuffle/repeat state for fans. Plan to extend rather than fork: keep the dock as-is for admin (lyrics-disabled placeholder), and pass `onLyrics`, real shuffle/repeat handlers, and a queue when consumer mounts it. Any polish landing here should automatically benefit the consumer dock.
 
+**`density="compact"` is the fan variant** (admin uses the default density). Beyond the tighter sizing tokens, compact diverges from admin to read more like Apple Music's mini-player: extra bottom padding so the art/title row clears the inset scrubber, a lighter `white/55` subtitle, a frosted (lower-opacity `bg-slate-900/70`) surface so scrolling content blurs through, and **no minimize chevron** (fans don't tuck the dock away — only admin does). Keep these compact-only; admin (default) stays near-opaque with its chevron. Don't stack a second `backdrop-filter` layer on the dock — adjust the existing surface opacity (iOS-WebKit blur-stacking hazard).
+
 ## Motion — shared sheet & press animations
 
 `client/src/lib/motion.ts` is the single source of truth for the player's motion language so every overlay opens and closes the same way:
