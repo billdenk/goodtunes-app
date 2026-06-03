@@ -2701,7 +2701,14 @@ async function dispatchOrderReceipt(order: Order): Promise<void> {
 // `/welcome` page's just-in-case fetch. Safe to call twice — the unique
 // index on `stripe_checkout_session_id` prevents duplicates and we no-op
 // if the order is already paid.
-async function materializeOrderFromSession(session: Stripe.Checkout.Session): Promise<Order> {
+// `deps.stripe` is a test-only seam: production always passes nothing and we
+// build a fresh client via getStripe(). The order-snapshot test
+// (server/commerce.orderSnapshots.db.test.ts) injects a stub so it can drive
+// this exact path with a representative session without calling Stripe.
+export async function materializeOrderFromSession(
+  session: Stripe.Checkout.Session,
+  deps: { stripe?: Stripe } = {},
+): Promise<Order> {
   const existing = await getOrderBySessionId(session.id);
   // Track whether stock has already been decremented for this session.
   // If the order is already paid, all the side effects (stock, unlock,
@@ -2741,7 +2748,7 @@ async function materializeOrderFromSession(session: Stripe.Checkout.Session): Pr
   const artistSnapshotId = session.metadata?.gt_artist_id || albumRow?.primaryArtistId || null;
   const labelSnapshotId = session.metadata?.gt_label_id || albumRow?.labelId || null;
 
-  const stripe = await getStripe();
+  const stripe = deps.stripe ?? (await getStripe());
   // Re-fetch with expansion so addresses/phone are populated even if the
   // original event payload was thin.
   const full = await stripe.checkout.sessions.retrieve(session.id, {
