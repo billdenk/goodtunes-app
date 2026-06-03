@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import {
+  AnimatePresence,
+  motion,
+  useDragControls,
+  useReducedMotion,
+} from "framer-motion";
 import { X } from "lucide-react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -135,6 +140,11 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const { user, updateProfile } = useAuth();
   const player = usePlayer();
   const reduceMotion = useReducedMotion();
+  // Drag controls for the md lyrics overlay's swipe-to-dismiss. We start
+  // the drag from the header grab handle only (dragListener disabled on
+  // the sheet) so the swipe never steals pointer/touch events from the
+  // SyncedLyrics scroll region below it.
+  const lyricsDragControls = useDragControls();
   // The lyrics side panel needs the room a wide desktop provides (its
   // 360px aside would crush the hero/tracklist at md). At md (portrait
   // tablets / split laptop windows, 768–1023) we render a full-bleed
@@ -167,6 +177,29 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const [buyAddons, setBuyAddons] = useState<{ signedCert: boolean }>({
     signedCert: false,
   });
+
+  // While the md lyrics overlay is open, push a throwaway history entry so
+  // the browser/native Back gesture closes the sheet instead of leaving
+  // the album page. Closing the sheet any other way (header ×, dock
+  // button, swipe-down) pops our entry back off so Back still works
+  // normally afterwards. lg side-panel + <768 mobile never mount this
+  // overlay, so they're untouched.
+  const mdLyricsOpen = player.showLyrics && !isLgViewport && !searchMode;
+  useEffect(() => {
+    if (!mdLyricsOpen) return;
+    window.history.pushState({ gtLyricsOverlay: true }, "");
+    const onPop = () => player.setShowLyrics(false);
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      // If our entry is still the current one (sheet closed by × / dock /
+      // swipe rather than by Back), pop it so we don't strand a dead
+      // history entry that would swallow the next Back press.
+      if (window.history.state?.gtLyricsOverlay) {
+        window.history.back();
+      }
+    };
+  }, [mdLyricsOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isOwned = useAlbumOwnership(id);
   // Bill's own accounts (admin sessions + a small email allowlist) are
@@ -582,10 +615,32 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
                   ? { duration: 0 }
                   : { type: "spring", stiffness: 420, damping: 44, mass: 0.9 }
               }
+              // Swipe-to-dismiss. Drag is started manually from the header
+              // grab handle (dragListener disabled) so the gesture never
+              // competes with SyncedLyrics' own vertical scroll. Constrained
+              // to 0 with elastic only on the downward (bottom) edge so the
+              // sheet rubber-bands down and springs back if not flung far
+              // enough. framer owns the inline transform here — there are no
+              // Tailwind transform classes or `transition: all` on this el to
+              // fight it (see framer/Tailwind transform-conflict note).
+              drag="y"
+              dragControls={lyricsDragControls}
+              dragListener={false}
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={{ top: 0, bottom: 0.7 }}
+              onDragEnd={(_, info) => {
+                if (info.offset.y > 120 || info.velocity.y > 600) {
+                  player.setShowLyrics(false);
+                }
+              }}
               aria-label="Lyrics"
               data-testid="overlay-lyrics-md"
             >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-white/8">
+              <div
+                className="flex items-center justify-between px-6 py-4 border-b border-white/8 cursor-grab active:cursor-grabbing touch-none select-none"
+                onPointerDown={(e) => lyricsDragControls.start(e)}
+                data-testid="handle-lyrics-md-drag"
+              >
                 <span className="text-fan-primary text-sm font-semibold tracking-[-0.005em]">
                   Lyrics
                 </span>
@@ -594,6 +649,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
                   size="md"
                   label="Close lyrics"
                   onClick={() => player.setShowLyrics(false)}
+                  onPointerDown={(e) => e.stopPropagation()}
                   data-testid="button-close-lyrics-md"
                   className="w-9 h-9 [&>svg]:w-4 [&>svg]:h-4 text-fan-secondary hover:text-fan-primary"
                 >
