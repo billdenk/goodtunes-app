@@ -139,6 +139,10 @@ export function AdminInvites() {
         emailDelivered: boolean;
         reviewStatus?: string;
         claimedReason?: string | null;
+        // Task #1038 — when the email already has a GoodTunes login the
+        // role is granted to that account directly (no invite/email).
+        added?: boolean;
+        userId?: string;
       }>;
     },
     onSuccess: (data) => {
@@ -157,6 +161,17 @@ export function AdminInvites() {
       setCopied(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/invites"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/invites/review"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/customers"] });
+      // Task #1038 — the email already had a GoodTunes login, so the role
+      // was granted to that account directly. No invite, no email — say so
+      // plainly instead of falling through to the "email failed" branch.
+      if (data.added) {
+        toast({
+          title: "Role added to existing account",
+          description: `${data.email} already has a GoodTunes login, so the ${ROLE_LABEL[data.role] || data.role} role was added to it directly — no invite email needed.`,
+        });
+        return;
+      }
       toast({
         title: data.reviewStatus === "pending_review"
           ? "Held for review"
@@ -287,8 +302,8 @@ export function AdminInvites() {
             </div>
           )}
 
+          {/* Email — its own full-width row. */}
           {(inviteMode === "advanced" || !!role) && (
-          <div className={`grid grid-cols-1 gap-3 items-end ${inviteMode === "advanced" ? "sm:grid-cols-[1fr,200px,auto]" : "sm:grid-cols-[1fr,auto]"}`}>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Email</label>
               <input
@@ -301,7 +316,11 @@ export function AdminInvites() {
                 data-testid="input-invite-email"
               />
             </div>
-            {inviteMode === "advanced" && (
+          )}
+
+          {/* Role · Referrer · Team invite — the three dropdowns share one row. */}
+          {inviteMode === "advanced" && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Role</label>
                 <select
@@ -316,18 +335,53 @@ export function AdminInvites() {
                   ))}
                 </select>
               </div>
-            )}
-            <button
-              type="submit"
-              disabled={submitDisabled}
-              className="bg-[var(--brand-blue)] hover:bg-[#2789bd] disabled:bg-slate-300 text-white font-semibold rounded-lg px-4 py-2 transition-colors"
-              data-testid="button-send-invite"
-            >
-              {createMutation.isPending ? "Sending…" : "Send invite"}
-            </button>
-          </div>
+              {/* Optional referrer attribution. */}
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                  <span className="inline-flex items-center gap-1">
+                    <Heart className="w-3.5 h-3.5 text-[color:var(--brand-pink)]" /> Referrer (optional)
+                  </span>
+                </label>
+                <select
+                  value={referrerKind}
+                  onChange={(e) => setReferrerKind(e.target.value as any)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                  data-testid="select-referrer-kind"
+                >
+                  <option value="">— none —</option>
+                  <option value="artist">Artist</option>
+                  <option value="non_profit">Non-profit</option>
+                  <option value="manufacturer">Press (manufacturer)</option>
+                  {/* Task #350 — NPO partners promote contact people to
+                      ambassadors; ambassador-attributed invites give the
+                      ambassador the per-unit credit while still rolling up
+                      to their NPO. */}
+                  <option value="ambassador">Ambassador (non-profit contact)</option>
+                </select>
+              </div>
+              {/* Task #351 — Team invite (Identity / Manager / Team). When a
+                  role is picked, the invite is gated to a specific Person;
+                  super-admin can also pre-flight an album draft. */}
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                  Team invite (optional)
+                </label>
+                <select
+                  value={inviteRole}
+                  onChange={(e) => { setInviteRole(e.target.value as any); setTargetPersonId(null); setTargetPersonName(""); setPreFlightedAlbumId(null); setPersonSearch(""); }}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                  data-testid="select-invite-role-team"
+                >
+                  <option value="">— Not a team invite —</option>
+                  <option value="identity">Identity (this person IS the artist)</option>
+                  <option value="manager">Manager (manages the artist)</option>
+                  <option value="team">Team (band/team member — credits + gear only)</option>
+                </select>
+              </div>
+            </div>
           )}
 
+          {/* Role scope picker — applies to both quick and advanced modes. */}
           {needsScope && (
             <ScopePicker
               cfg={SCOPE_CONFIG[role]}
@@ -336,121 +390,75 @@ export function AdminInvites() {
             />
           )}
 
-          {inviteMode === "advanced" && (
-          <>
-          {/* Optional referrer attribution — collapsed unless a kind is chosen. */}
-          <div className="mt-4 pt-4 border-t border-slate-100">
-            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-              <span className="inline-flex items-center gap-1">
-                <Heart className="w-3.5 h-3.5 text-[#FF5470]" /> Referrer (optional)
-              </span>
-            </label>
-            <select
-              value={referrerKind}
-              onChange={(e) => setReferrerKind(e.target.value as any)}
-              className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
-              data-testid="select-referrer-kind"
-            >
-              <option value="">— none —</option>
-              <option value="artist">Artist</option>
-              <option value="non_profit">Non-profit</option>
-              <option value="manufacturer">Press (manufacturer)</option>
-              {/* Task #350 — NPO partners promote contact people to
-                  ambassadors; ambassador-attributed invites give the
-                  ambassador the per-unit credit while still rolling up
-                  to their NPO. */}
-              <option value="ambassador">Ambassador (non-profit contact)</option>
-            </select>
-            {referrerKind && (
-              <ScopePicker
-                cfg={REFERRER_CONFIG[referrerKind]}
-                value={referrerScopeId}
-                onChange={(id) => setReferrerScopeId(id)}
-                label={`Referring ${REFERRER_CONFIG[referrerKind].noun}`}
-                testId="referrer-scope"
-              />
-            )}
-          </div>
+          {/* Referrer detail — full-width beneath the dropdown row once a kind is chosen. */}
+          {inviteMode === "advanced" && referrerKind && (
+            <ScopePicker
+              cfg={REFERRER_CONFIG[referrerKind]}
+              value={referrerScopeId}
+              onChange={(id) => setReferrerScopeId(id)}
+              label={`Referring ${REFERRER_CONFIG[referrerKind].noun}`}
+              testId="referrer-scope"
+            />
+          )}
 
-          {/* Task #351 — Team invite (Identity / Manager / Team). When
-              a role is picked, the invite is gated to a specific
-              Person; super-admin can also pre-flight an album draft so
-              the invitee lands in the editor on first sign-in. */}
-          <div className="mt-4 pt-4 border-t border-slate-100">
-            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-              Team invite (optional)
-            </label>
-            <select
-              value={inviteRole}
-              onChange={(e) => { setInviteRole(e.target.value as any); setTargetPersonId(null); setTargetPersonName(""); setPreFlightedAlbumId(null); setPersonSearch(""); }}
-              className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
-              data-testid="select-invite-role-team"
-            >
-              <option value="">— Not a team invite —</option>
-              <option value="identity">Identity (this person IS the artist)</option>
-              <option value="manager">Manager (manages the artist)</option>
-              <option value="team">Team (band/team member — credits + gear only)</option>
-            </select>
-            {inviteRole && (
-              <div className="mt-3">
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Target person</label>
-                {targetPersonId ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2">
-                    <span className="text-sm text-slate-800 flex-1 truncate" data-testid="text-target-person">{targetPersonName}</span>
-                    <button type="button" onClick={() => { setTargetPersonId(null); setTargetPersonName(""); setPreFlightedAlbumId(null); }} className="text-slate-400 hover:text-rose-600" data-testid="button-clear-target-person">
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <input
-                      type="text"
-                      value={personSearch}
-                      onChange={(e) => setPersonSearch(e.target.value)}
-                      placeholder="Search People (local catalog) — 2+ chars"
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
-                      data-testid="input-target-person-search"
-                    />
-                    {personSearch.length >= 2 && personResults.data && personResults.data.length > 0 && (
-                      <ul className="mt-2 bg-white border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-56 overflow-y-auto" data-testid="list-person-results">
-                        {personResults.data.map((p) => (
-                          <li key={p.id}>
-                            <button
-                              type="button"
-                              onClick={() => { setTargetPersonId(p.id); setTargetPersonName(p.name); setPersonSearch(""); }}
-                              className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-slate-50"
-                              data-testid={`button-pick-person-${p.id}`}
-                            >
-                              {p.photoUrl ? <img src={p.photoUrl} alt="" className="w-6 h-6 rounded-full object-cover" /> : <div className="w-6 h-6 rounded-full bg-slate-200" />}
-                              <span className="text-sm text-slate-800">{p.name}</span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </>
-                )}
-                {targetPersonId && targetAlbums.data && targetAlbums.data.length > 0 && (
-                  <div className="mt-3">
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Pre-flight an album draft (optional)</label>
-                    <select
-                      value={preFlightedAlbumId || ""}
-                      onChange={(e) => setPreFlightedAlbumId(e.target.value || null)}
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
-                      data-testid="select-preflight-album"
-                    >
-                      <option value="">— None — invitee lands on welcome page —</option>
-                      {targetAlbums.data.map((a) => (
-                        <option key={a.id} value={a.id}>{a.title}</option>
+          {/* Team invite detail — gate to a specific Person + optional pre-flight. */}
+          {inviteMode === "advanced" && inviteRole && (
+            <div className="mt-3">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Target person</label>
+              {targetPersonId ? (
+                <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2">
+                  <span className="text-sm text-slate-800 flex-1 truncate" data-testid="text-target-person">{targetPersonName}</span>
+                  <button type="button" onClick={() => { setTargetPersonId(null); setTargetPersonName(""); setPreFlightedAlbumId(null); }} className="text-slate-400 hover:text-rose-600" data-testid="button-clear-target-person">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={personSearch}
+                    onChange={(e) => setPersonSearch(e.target.value)}
+                    placeholder="Search People (local catalog) — 2+ chars"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                    data-testid="input-target-person-search"
+                  />
+                  {personSearch.length >= 2 && personResults.data && personResults.data.length > 0 && (
+                    <ul className="mt-2 bg-white border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-56 overflow-y-auto" data-testid="list-person-results">
+                      {personResults.data.map((p) => (
+                        <li key={p.id}>
+                          <button
+                            type="button"
+                            onClick={() => { setTargetPersonId(p.id); setTargetPersonName(p.name); setPersonSearch(""); }}
+                            className="w-full text-left flex items-center gap-2 px-3 py-2 hover:bg-slate-50"
+                            data-testid={`button-pick-person-${p.id}`}
+                          >
+                            {p.photoUrl ? <img src={p.photoUrl} alt="" className="w-6 h-6 rounded-full object-cover" /> : <div className="w-6 h-6 rounded-full bg-slate-200" />}
+                            <span className="text-sm text-slate-800">{p.name}</span>
+                          </button>
+                        </li>
                       ))}
-                    </select>
-                    <p className="mt-1 text-xs text-slate-500">The invitee lands straight in the album editor after sign-up.</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          </>
+                    </ul>
+                  )}
+                </>
+              )}
+              {targetPersonId && targetAlbums.data && targetAlbums.data.length > 0 && (
+                <div className="mt-3">
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Pre-flight an album draft (optional)</label>
+                  <select
+                    value={preFlightedAlbumId || ""}
+                    onChange={(e) => setPreFlightedAlbumId(e.target.value || null)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                    data-testid="select-preflight-album"
+                  >
+                    <option value="">— None — invitee lands on welcome page —</option>
+                    {targetAlbums.data.map((a) => (
+                      <option key={a.id} value={a.id}>{a.title}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-slate-500">The invitee lands straight in the album editor after sign-up.</p>
+                </div>
+              )}
+            </div>
           )}
 
           {(inviteMode === "advanced" || !!role) && (
@@ -474,8 +482,9 @@ export function AdminInvites() {
           )}
 
           {/* Task #933 — power options live behind a disclosure so the
-              everyday partner invite stays a three-field flow. */}
-          <div className="mt-4 pt-4 border-t border-slate-100">
+              everyday partner invite stays a three-field flow. The Send
+              invite button anchors the bottom of the form. */}
+          <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
             {inviteMode === "quick" ? (
               <button
                 type="button"
@@ -493,6 +502,16 @@ export function AdminInvites() {
                 data-testid="button-quick-invite"
               >
                 <ArrowLeft className="w-3.5 h-3.5" /> Back to quick partner invite
+              </button>
+            )}
+            {(inviteMode === "advanced" || !!role) && (
+              <button
+                type="submit"
+                disabled={submitDisabled}
+                className="bg-[var(--brand-blue)] hover:bg-[#2789bd] disabled:bg-slate-300 text-white font-semibold rounded-lg px-4 py-2 transition-colors shrink-0"
+                data-testid="button-send-invite"
+              >
+                {createMutation.isPending ? "Sending…" : "Send invite"}
               </button>
             )}
           </div>

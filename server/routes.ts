@@ -19457,7 +19457,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         },
         { isNewAccount: false },
       );
-      return res.json({ added: true, userId: existing.id, role, roleScopeId });
+      return res.json({ added: true, userId: existing.id, email, role, roleScopeId });
     }
 
     const token = generateToken();
