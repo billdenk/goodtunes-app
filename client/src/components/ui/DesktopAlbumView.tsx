@@ -308,7 +308,7 @@ export function DesktopAlbumView({
               controls (Task #1055). */}
           <div className="absolute top-0 right-0 flex items-center gap-1">
             <IconButton
-              variant="ghost"
+              variant="glass"
               size="md"
               label="Share album"
               onClick={handleCopyShareLink}
@@ -318,7 +318,7 @@ export function DesktopAlbumView({
               <Share strokeWidth={2} />
             </IconButton>
             <IconButton
-              variant="ghost"
+              variant="glass"
               size="md"
               label="More options"
               className="text-fan-secondary hover:text-white"
