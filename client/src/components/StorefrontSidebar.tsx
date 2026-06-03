@@ -1,6 +1,7 @@
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { Settings, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   useDesktopShell,
@@ -8,6 +9,13 @@ import {
 } from "@/hooks/useDesktopShell";
 import { chatEnabled } from "@/lib/platform";
 import { subscribeChats, totalUnread } from "@/lib/chatStore";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 const goodTunesLogo = "/figmaAssets/--.svg";
 
 // Task #547 — Apple-Music-web-style fixed sidebar that takes over from
@@ -87,7 +95,7 @@ function NavLink({
 
 export function StorefrontSidebar() {
   const [location, navigate] = useLocation();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const isDesktop = useDesktopShell();
   const [, setTick] = useState(0);
   useEffect(() => subscribeChats(() => setTick((n) => n + 1)), []);
@@ -118,6 +126,48 @@ export function StorefrontSidebar() {
     .slice(0, 2)
     .join("")
     .toUpperCase();
+
+  const accountName = user?.displayName || user?.username || "Account";
+
+  const handleSignOut = async () => {
+    try {
+      await logout();
+    } finally {
+      navigate("/login");
+    }
+  };
+
+  // Shared avatar (used as the chip trigger and the menu header). The unread
+  // badge only rides the always-visible chip, not the menu header.
+  const Avatar = ({ showBadge = true }: { showBadge?: boolean }) => (
+    <div
+      className="relative w-11 h-11 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0"
+      style={{
+        background: "rgba(255,255,255,0.10)",
+        border: "1px solid rgba(255,255,255,0.12)",
+      }}
+    >
+      {user?.photoUrl ? (
+        <img src={user.photoUrl} alt="" className="w-full h-full object-cover" />
+      ) : (
+        <span className="text-white text-xs font-semibold">
+          {avatarInitials}
+        </span>
+      )}
+      {showBadge && unread > 0 && (
+        <span
+          aria-label={`${unread} unread messages`}
+          className="absolute top-0 right-0 w-2.5 h-2.5"
+          style={{
+            background: "var(--brand-pink)",
+            border: "1.5px solid var(--app-background)",
+            borderRadius: 9999,
+          }}
+          data-testid="badge-sidebar-unread"
+        />
+      )}
+    </div>
+  );
 
   return (
     <aside
@@ -260,53 +310,71 @@ export function StorefrontSidebar() {
         )}
       </nav>
 
-      {/* Account footer */}
-      <button
-        type="button"
-        onClick={() => navigate("/account")}
-        className={`flex items-center gap-3 mx-3 mb-4 px-3 py-2.5 rounded-xl transition-colors ${
-          isAccount ? "bg-[rgba(49,158,216,0.14)]" : "hover:bg-white/[0.06]"
-        }`}
-        data-testid="sidebar-account"
-      >
-        <div
-          className="relative w-11 h-11 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0"
+      {/* Account footer — Apple-Music-style identity chip that opens a menu */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={`flex items-center gap-3 mx-3 mb-4 px-3 py-2.5 rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)] ${
+              isAccount ? "bg-[rgba(49,158,216,0.14)]" : "hover:bg-white/[0.06]"
+            }`}
+            data-testid="sidebar-account"
+          >
+            <Avatar />
+            <div className="flex-1 min-w-0 text-left">
+              <div className="text-white text-sm font-semibold truncate">
+                {accountName}
+              </div>
+              <div className="text-white/45 text-xs truncate">View profile</div>
+            </div>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          side="top"
+          align="start"
+          sideOffset={8}
+          className="w-60 border-white/10 bg-[rgba(20,24,52,0.96)] text-white shadow-2xl backdrop-blur-xl"
           style={{
-            background: "rgba(255,255,255,0.10)",
-            border: "1px solid rgba(255,255,255,0.12)",
+            WebkitBackdropFilter: "blur(24px) saturate(180%)",
           }}
+          data-testid="menu-sidebar-account"
         >
-          {user?.photoUrl ? (
-            <img
-              src={user.photoUrl}
-              alt=""
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <span className="text-white text-xs font-semibold">
-              {avatarInitials}
-            </span>
-          )}
-          {unread > 0 && (
-            <span
-              aria-label={`${unread} unread messages`}
-              className="absolute top-0 right-0 w-2.5 h-2.5"
-              style={{
-                background: "var(--brand-pink)",
-                border: "1.5px solid var(--app-background)",
-                borderRadius: 9999,
-              }}
-              data-testid="badge-sidebar-unread"
-            />
-          )}
-        </div>
-        <div className="flex-1 min-w-0 text-left">
-          <div className="text-white text-sm font-semibold truncate">
-            {user?.displayName || user?.username || "Account"}
+          <div className="flex items-center gap-3 px-2 py-2">
+            <Avatar showBadge={false} />
+            <div className="min-w-0">
+              <div
+                className="text-white text-sm font-semibold truncate"
+                data-testid="text-account-name"
+              >
+                {accountName}
+              </div>
+              {user?.email && (
+                <div className="text-white/45 text-xs truncate">
+                  {user.email}
+                </div>
+              )}
+            </div>
           </div>
-          <div className="text-white/45 text-xs truncate">View profile</div>
-        </div>
-      </button>
+          <DropdownMenuSeparator className="bg-white/10" />
+          <DropdownMenuItem
+            onClick={() => navigate("/account")}
+            data-testid="menu-item-account-settings"
+            className="cursor-pointer text-white/90 focus:bg-white/10 focus:text-white"
+          >
+            <Settings className="w-4 h-4 mr-2 text-white/60" />
+            Account settings
+          </DropdownMenuItem>
+          <DropdownMenuSeparator className="bg-white/10" />
+          <DropdownMenuItem
+            onClick={handleSignOut}
+            data-testid="menu-item-sign-out"
+            className="cursor-pointer text-[color:var(--brand-pink)] focus:bg-[rgba(255,84,112,0.14)] focus:text-[color:var(--brand-pink)]"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Sign Out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </aside>
   );
 }
