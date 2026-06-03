@@ -346,17 +346,25 @@ export function PlayerDock({
     return `${Math.floor(abs / 60)}:${String(abs % 60).padStart(2, "0")}`;
   };
 
-  // Default cover when host doesn't supply one — neutral slate block.
-  // Apple's idle-dock placeholder is a flat gray square, not a branded
-  // gradient (the gradient reads as "real artwork is here" and lies about
-  // the empty state). Hosts that DO have artwork pass `coverNode`.
-  const cover =
-    coverNode ?? (
-      <div
-        className="w-10 h-10 rounded-md flex-shrink-0 bg-slate-700/60"
-        aria-hidden
+  // Empty/"nothing playing" cover — the white GoodTunes "G" mark on a
+  // faint plate instead of a flat gray block. Reads as the brand idle
+  // state on the dark dock. Used wherever the host hasn't supplied a
+  // `coverNode` (full dock idle + minimized empty cover slot). The G
+  // asset has its own internal margin, so a little padding keeps it
+  // optically centered without crowding the slot edges.
+  const emptyCover = (
+    <div
+      className="w-full h-full flex items-center justify-center bg-white/[0.06]"
+      aria-hidden
+    >
+      <img
+        src="/goodtunes-g-mark.png"
+        alt=""
+        className="w-full h-full object-contain p-1"
+        draggable={false}
       />
-    );
+    </div>
+  );
 
   // ── Minimized corner pill ──────────────────────────────────────────
   // Intentionally minimal: cover (so the user knows WHAT is playing),
@@ -398,13 +406,8 @@ export function PlayerDock({
             className="w-9 h-9 rounded-lg flex-shrink-0 overflow-hidden"
             aria-label={`${track.title} — now playing`}
             title={track.subtitle ? `${track.title} — ${track.subtitle}` : track.title}
-            style={
-              coverNode
-                ? undefined
-                : { background: "linear-gradient(135deg, #319ED8 0%, #7F10A7 100%)" }
-            }
           >
-            {coverNode}
+            {coverNode ?? emptyCover}
           </div>
           <button
             type="button"
@@ -594,9 +597,7 @@ export function PlayerDock({
             aria-hidden={scrubHover}
           >
             <div className={`${D.cover} flex-shrink-0 rounded-md overflow-hidden`}>
-              {coverNode ?? (
-                <div className="w-full h-full bg-slate-700/60" aria-hidden />
-              )}
+              {coverNode ?? emptyCover}
             </div>
             <div className="min-w-0 flex-1">
               <div

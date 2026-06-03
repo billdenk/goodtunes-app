@@ -96,17 +96,17 @@ export function AlbumDesktopSidebar({
       data-testid="desktop-sidebar"
     >
       <div className="px-5 pt-6 pb-8">
-        <div
-          className="text-white font-black leading-[0.95] tracking-tight"
-          style={{ fontSize: 22 }}
-        >
-          Good
-          <br />
-          Tunes
-        </div>
-        <div className="text-[9px] uppercase tracking-[0.18em] text-white/45 mt-1">
-          Powered by GoDeeds
-        </div>
+        {/* Real GoodTunes brand mark (white wordmark, "Powered by GoGoodr"
+            tagline baked into the asset) — replaces the prior stacked
+            "Good / Tunes" text so the rail reads as the actual brand. */}
+        <img
+          src="/goodtunes-logo-white-sm.png"
+          alt="GoodTunes®"
+          className="w-[124px] h-auto block"
+          decoding="async"
+          draggable={false}
+          data-testid="img-sidebar-logo"
+        />
       </div>
 
       <nav className="px-2 flex flex-col gap-0.5">

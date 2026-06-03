@@ -56,19 +56,16 @@ export function AlbumDesktopTrackRow({
   const interactive = state !== "locked";
   const showPlayGlyph = interactive && hover && !isCurrent;
 
-  // Background ladder: locked stays nearly flat; default is /04; hover
-  // and current-playing both lift to /08 so the eye picks them out from
-  // the surrounding rows.
-  const bg =
-    state === "locked"
-      ? "rgba(255,255,255,0.025)"
-      : hover || isCurrent
-        ? "rgba(255,255,255,0.08)"
-        : "rgba(255,255,255,0.04)";
+  // Apple parity: rows are FLUSH (transparent) at rest with a thin
+  // hairline separator between them — they should not all look pre-
+  // hovered. The soft elevated background lifts in only on the hovered
+  // row and the currently-playing row.
+  const elevated = hover || isCurrent;
+  const bg = elevated ? "rgba(255,255,255,0.08)" : "transparent";
 
   return (
     <div
-      className="group flex items-center gap-4 h-12 px-4 rounded-xl transition-colors"
+      className="group relative flex items-center gap-4 h-12 px-4 rounded-xl transition-colors"
       style={{ background: bg, cursor: interactive && onPlay ? "pointer" : "default" }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -79,6 +76,15 @@ export function AlbumDesktopTrackRow({
       data-row-state={state}
       data-row-current={isCurrent ? "true" : "false"}
     >
+      {/* Apple-style hairline separator between flush rows. Inset to the
+          row's horizontal padding and hidden whenever the row is elevated
+          (hover / current) so a separator line never shows under the soft
+          highlight. */}
+      <span
+        aria-hidden
+        className="absolute left-4 right-4 bottom-0 h-px bg-white/[0.06] transition-opacity"
+        style={{ opacity: elevated ? 0 : 1 }}
+      />
       {/* Leading favorite heart — sits to the left of the number, reserves
           its slot even when empty so titles stay aligned across rows. Reads
           as a quiet status marker (neutral white ~70%, like Apple's row

@@ -119,14 +119,16 @@ export function DesktopSidebar() {
       data-testid="desktop-sidebar"
     >
       <div className="px-5 pt-6 pb-8">
-        <div className="text-white font-black leading-[0.95] tracking-tight" style={{ fontSize: 22 }}>
-          Good
-          <br />
-          Tunes
-        </div>
-        <div className="text-[9px] uppercase tracking-[0.18em] text-white/45 mt-1">
-          Powered by GoDeeds
-        </div>
+        {/* Mirrors client AlbumDesktopSidebar — real GoodTunes brand mark
+            (white wordmark, "Powered by GoGoodr" baked into the asset). */}
+        <img
+          src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/images/goodtunes-logo-white-sm.png`}
+          alt="GoodTunes®"
+          className="w-[124px] h-auto block"
+          decoding="async"
+          draggable={false}
+          data-testid="img-sidebar-logo"
+        />
       </div>
 
       <nav className="px-2 flex flex-col gap-0.5">
@@ -418,12 +420,19 @@ export function TrackRow({ track }: { track: Track }) {
   const [hover, setHover] = useState(false);
   return (
     <div
-      className="group flex items-center gap-4 h-12 px-4 rounded-xl transition-colors"
-      style={{ background: hover ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)" }}
+      className="group relative flex items-center gap-4 h-12 px-4 rounded-xl transition-colors"
+      style={{ background: hover ? "rgba(255,255,255,0.08)" : "transparent" }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       data-testid={`row-track-${track.n}`}
     >
+      {/* Mirrors client AlbumDesktopTrackRow — flush rows with an Apple-style
+          hairline separator that hides under the hover highlight. */}
+      <span
+        aria-hidden
+        className="absolute left-4 right-4 bottom-0 h-px bg-white/[0.06] transition-opacity"
+        style={{ opacity: hover ? 0 : 1 }}
+      />
       <div className="w-6 text-white/50 text-[13px] text-right tabular-nums">
         {track.n}.
       </div>

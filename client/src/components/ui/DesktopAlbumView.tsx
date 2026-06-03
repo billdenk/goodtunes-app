@@ -201,7 +201,13 @@ export function DesktopAlbumView({
         lyricsAside: "hidden",
       }
     : {
-        column: "max-w-[720px] lg:max-w-[960px] mx-auto px-6 lg:px-10 py-6 lg:py-8 transition-[max-width,margin] duration-200 flex-1 min-w-0",
+        // Apple parity: let the album content (hero + tracklist) breathe
+        // the full available width next to the sidebar instead of capping
+        // at ~960px and leaving big side margins. We only re-introduce a
+        // generous cap on ultra-wide monitors (2xl) so rows don't stretch
+        // absurdly long. The description keeps its own reading measure via
+        // its max-w below.
+        column: "max-w-[720px] mx-auto lg:max-w-none lg:mx-0 2xl:max-w-[1600px] 2xl:mx-auto px-6 lg:px-12 py-6 lg:py-8 transition-[max-width,margin] duration-200 flex-1 min-w-0",
         heroSection: "mt-7 flex gap-6 lg:gap-8",
         cover: "rounded-2xl overflow-hidden flex-shrink-0 w-[220px] h-[220px] lg:w-[280px] lg:h-[280px]",
         title: "text-white font-bold tracking-[-0.015em] leading-[1.05] text-[32px] lg:text-[40px]",
@@ -457,7 +463,7 @@ export function DesktopAlbumView({
         {/* Tab content */}
         <div className="mt-6">
           {tab === "music" && (
-            <div className="flex flex-col gap-1.5" data-testid="track-list">
+            <div className="flex flex-col" data-testid="track-list">
               {songs.map((s) => {
                 const state: "locked" | "preview" | "full" = isOwned
                   ? "full"
