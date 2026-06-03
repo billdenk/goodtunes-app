@@ -94,7 +94,7 @@ function AdminAlbumEngagementInner() {
               <ol className="divide-y divide-slate-100">
                 {data.topSongs.map((s, i) => (
                   <li key={s.songId} className="flex items-center gap-3 py-2.5" data-testid={`top-song-${s.songId}`}>
-                    <div className="w-6 text-slate-400 text-[12px] font-mono text-right">{i + 1}.</div>
+                    <div className="w-6 text-slate-400 text-[12px] font-mono text-right">{i + 1}</div>
                     <div className="flex-1 truncate text-[14px] text-slate-900">{songTitle(s.songId)}</div>
                     <div className="text-[12px] text-slate-500 tabular-nums">{s.plays.toLocaleString()} plays</div>
                   </li>

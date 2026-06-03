@@ -114,7 +114,7 @@ export function AlbumDesktopTrackRow({
             showPlayGlyph || isCurrent ? "opacity-0" : "opacity-100",
           ].join(" ")}
         >
-          {trackNumber}.
+          {trackNumber}
         </span>
 
         {/* Hover play triangle — rose, replaces the number on hover. */}

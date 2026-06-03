@@ -10992,7 +10992,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbumEngagement.tsx",
-    "snippet": "<div className=\"w-6 text-slate-400 text-[12px] font-mono text-right\">{i + 1}.</div>"
+    "snippet": "<div className=\"w-6 text-slate-400 text-[12px] font-mono text-right\">{i + 1}</div>"
   },
   {
     "rule": "hardcoded-font-size",
