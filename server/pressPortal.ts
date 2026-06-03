@@ -915,6 +915,7 @@ export function registerPressPortalRoutes(
       inviterName,
       roleLabel,
       INVITE_TTL_DAYS,
+      press?.logoUrl ?? null,
     );
     res.json({ id: invite.id, email: invite.email, acceptUrl, emailDelivered: result.ok });
   });
@@ -954,6 +955,7 @@ export function registerPressPortalRoutes(
         inviterName,
         roleLabel,
         INVITE_TTL_DAYS,
+        press?.logoUrl ?? null,
       );
       res.json({ id: updated.id, acceptUrl, emailDelivered: result.ok });
     },

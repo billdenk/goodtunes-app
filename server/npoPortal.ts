@@ -290,7 +290,7 @@ export function registerNpoPortalRoutes(
     const { sendAdminInviteEmail } = await import("./mail");
     const inviter = await storage.getUser(userId);
     const npo = ((await db.execute<any>(
-      sql`SELECT name FROM organizations WHERE id = ${npoId} LIMIT 1`,
+      sql`SELECT name, logo_url FROM organizations WHERE id = ${npoId} LIMIT 1`,
     )) as any).rows?.[0];
     const inviterName =
       inviter?.displayName || inviter?.email || npo?.name || "Your non-profit partner";
@@ -300,6 +300,7 @@ export function registerNpoPortalRoutes(
         : "Artist";
     const mail = await sendAdminInviteEmail(
       email, acceptUrl, inviterName, roleLabel, INVITE_TTL_DAYS,
+      npo?.logo_url ?? null, npo?.name ?? null,
     );
 
     res.json({
@@ -344,7 +345,7 @@ export function registerNpoPortalRoutes(
       const acceptUrl = `${inviteAcceptBase(req)}/invite/${newToken}`;
       const inviter = await storage.getUser(userId);
       const npo = ((await db.execute<any>(
-        sql`SELECT name FROM organizations WHERE id = ${npoId} LIMIT 1`,
+        sql`SELECT name, logo_url FROM organizations WHERE id = ${npoId} LIMIT 1`,
       )) as any).rows?.[0];
       const inviterName =
         inviter?.displayName || inviter?.email || npo?.name || "Your non-profit partner";
@@ -356,6 +357,7 @@ export function registerNpoPortalRoutes(
           : "Non-profit";
       const mail = await sendAdminInviteEmail(
         updated.email, acceptUrl, inviterName, roleLabel, INVITE_TTL_DAYS,
+        npo?.logo_url ?? null, npo?.name ?? null,
       );
       res.json({ id: updated.id, acceptUrl, emailDelivered: mail.ok });
     },

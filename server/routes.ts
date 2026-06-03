@@ -307,6 +307,44 @@ async function syncPrimaryArtistLabel(album: {
   };
 }
 
+// Resolve the avatar + "on behalf of" line for a branded invite email from
+// the *inviter's* own role/scope: artist → their Person photo, label → the
+// label logo, non_profit → the org logo + name. Operators (admin /
+// super_admin) get no photo so their invites stay wordmark-only.
+// Best-effort: any failure falls back to a plain, name-only invite.
+async function resolveInviterBranding(
+  userId: string,
+): Promise<{ photoUrl: string | null; onBehalfOf: string | null }> {
+  try {
+    const { getUserRole } = await import("./auth/roles");
+    const role = await getUserRole(userId);
+    if (!role || !role.roleScopeId) return { photoUrl: null, onBehalfOf: null };
+    if (role.role === "artist") {
+      const r = await db.execute<any>(
+        sql`SELECT photo_url FROM people WHERE id = ${role.roleScopeId} LIMIT 1`,
+      );
+      return { photoUrl: (r as any).rows?.[0]?.photo_url ?? null, onBehalfOf: null };
+    }
+    if (role.role === "label") {
+      const r = await db.execute<any>(
+        sql`SELECT logo_url FROM labels WHERE id = ${role.roleScopeId} LIMIT 1`,
+      );
+      return { photoUrl: (r as any).rows?.[0]?.logo_url ?? null, onBehalfOf: null };
+    }
+    if (role.role === "non_profit") {
+      const r = await db.execute<any>(
+        sql`SELECT name, logo_url FROM organizations WHERE id = ${role.roleScopeId} LIMIT 1`,
+      );
+      const row = (r as any).rows?.[0];
+      return { photoUrl: row?.logo_url ?? null, onBehalfOf: row?.name ?? null };
+    }
+    return { photoUrl: null, onBehalfOf: null };
+  } catch (e: any) {
+    console.warn(`[invite] inviter branding lookup failed: ${e?.message}`);
+    return { photoUrl: null, onBehalfOf: null };
+  }
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   const PgSession = connectPgSimple(session);
   const sessionSecret = process.env.SESSION_SECRET;
@@ -19469,12 +19507,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // email + flips reviewStatus to 'approved'.
     let emailDelivered = false;
     if (reviewStatus === "not_required") {
+      const branding = await resolveInviterBranding(req.session.userId!);
       const result = await sendAdminInviteEmail(
         email,
         acceptUrl,
         inviterName,
         ROLE_LABELS[role] || role,
         INVITE_TTL_DAYS,
+        branding.photoUrl,
+        branding.onBehalfOf,
       );
       // Mail failures are logged centrally as `[mail-failure]` from server/mail.ts.
       emailDelivered = result.ok;
@@ -19536,7 +19577,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const acceptUrl = `${proto}://${host}/invite/${invite.token}`;
     const inviter = await storage.getUser((invite as any).createdByUserId);
     const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes admin";
-    const result = await sendAdminInviteEmail(invite.email, acceptUrl, inviterName, ROLE_LABELS[invite.role] || invite.role, INVITE_TTL_DAYS);
+    const branding = await resolveInviterBranding((invite as any).createdByUserId);
+    const result = await sendAdminInviteEmail(invite.email, acceptUrl, inviterName, ROLE_LABELS[invite.role] || invite.role, INVITE_TTL_DAYS, branding.photoUrl, branding.onBehalfOf);
     await db.execute(sql`
       UPDATE admin_invites
       SET review_status = 'approved', reviewed_by_user_id = ${req.session.userId!}, reviewed_at = NOW()
@@ -19744,7 +19786,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const acceptUrl = `${proto}://${host}/invite/${newToken}`;
     const inviter = await storage.getUser(req.session.userId!);
     const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes artist";
-    const result = await sendAdminInviteEmail(updated.email, acceptUrl, inviterName, ROLE_LABELS[updated.role] || updated.role, INVITE_TTL_DAYS);
+    const branding = await resolveInviterBranding(req.session.userId!);
+    const result = await sendAdminInviteEmail(updated.email, acceptUrl, inviterName, ROLE_LABELS[updated.role] || updated.role, INVITE_TTL_DAYS, branding.photoUrl, branding.onBehalfOf);
     res.json({ id: updated.id, acceptUrl, emailDelivered: result.ok });
   });
 
@@ -19871,7 +19914,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const acceptUrl = `${proto}://${host}/invite/${newToken}`;
     const inviter = await storage.getUser(req.session.userId!);
     const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes label";
-    const result = await sendAdminInviteEmail(updated.email, acceptUrl, inviterName, ROLE_LABELS[updated.role] || updated.role, INVITE_TTL_DAYS);
+    const branding = await resolveInviterBranding(req.session.userId!);
+    const result = await sendAdminInviteEmail(updated.email, acceptUrl, inviterName, ROLE_LABELS[updated.role] || updated.role, INVITE_TTL_DAYS, branding.photoUrl, branding.onBehalfOf);
     res.json({ id: updated.id, acceptUrl, emailDelivered: result.ok });
   });
 
@@ -20528,7 +20572,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const acceptUrl = `${proto}://${host}/invite/${newToken}`;
     const inviter = await storage.getUser(req.session.userId!);
     const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes admin";
-    const result = await sendAdminInviteEmail(updated.email, acceptUrl, inviterName, ROLE_LABELS[updated.role] || updated.role, INVITE_TTL_DAYS);
+    const branding = await resolveInviterBranding(req.session.userId!);
+    const result = await sendAdminInviteEmail(updated.email, acceptUrl, inviterName, ROLE_LABELS[updated.role] || updated.role, INVITE_TTL_DAYS, branding.photoUrl, branding.onBehalfOf);
     res.json({ id: updated.id, acceptUrl, emailDelivered: result.ok });
   });
 

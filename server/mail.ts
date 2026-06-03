@@ -705,14 +705,22 @@ export function buildAdminInviteEmail(opts: {
   roleLabel: string;
   ttlDays: number;
   inviterPhotoUrl?: string | null;
+  onBehalfOf?: string | null;
 }): { subject: string; text: string; html: string } {
-  const { acceptUrl, inviterName, roleLabel, ttlDays, inviterPhotoUrl } = opts;
+  const { acceptUrl, inviterName, roleLabel, ttlDays, inviterPhotoUrl, onBehalfOf } = opts;
   const esc = (s: string) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const safeName = esc(inviterName);
-  const subject = `${inviterName} invited you to GoodTunes`;
+  // Companies invite "on behalf of" their org, e.g. an NPO ambassador:
+  // "Joel Goldman is inviting you to GoodTunes on behalf of <org>!"
+  const orgTrimmed = typeof onBehalfOf === "string" ? onBehalfOf.trim() : "";
+  const behalfSuffix = orgTrimmed ? ` on behalf of ${orgTrimmed}` : "";
+  const safeBehalfSuffix = orgTrimmed ? ` on behalf of ${esc(orgTrimmed)}` : "";
+  const headline = `${safeName} is inviting you to GoodTunes${safeBehalfSuffix}!`;
+  // Strip CRLF so a stray newline in a name/org can't smuggle a header.
+  const subject = `${inviterName} invited you to GoodTunes${behalfSuffix}`.replace(/[\r\n]+/g, " ");
   const text = [
-    `${inviterName} is inviting you to join GoodTunes as a ${roleLabel}.`,
+    `${inviterName} is inviting you to join GoodTunes as a ${roleLabel}${behalfSuffix}.`,
     ``,
     `Accept the invite (expires in ${ttlDays} days):`,
     acceptUrl,
@@ -731,7 +739,7 @@ export function buildAdminInviteEmail(opts: {
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 12px 0 16px;">
         <tr>
           ${avatarCell}
-          <td style="vertical-align: middle;"><h1 style="font-size: 24px; margin: 0; font-weight: 700; line-height: 1.25;">${safeName} is inviting you to GoodTunes!</h1></td>
+          <td style="vertical-align: middle;"><h1 style="font-size: 24px; margin: 0; font-weight: 700; line-height: 1.25;">${headline}</h1></td>
         </tr>
       </table>
       <p style="font-size: 16px; line-height: 1.5; color: #333;">You've been invited to join GoodTunes as a <strong>${roleLabel}</strong>.</p>
@@ -752,8 +760,9 @@ export async function sendAdminInviteEmail(
   roleLabel: string,
   ttlDays: number,
   inviterPhotoUrl?: string | null,
+  onBehalfOf?: string | null,
 ): Promise<SendResult> {
-  const { subject, text, html } = buildAdminInviteEmail({ acceptUrl, inviterName, roleLabel, ttlDays, inviterPhotoUrl });
+  const { subject, text, html } = buildAdminInviteEmail({ acceptUrl, inviterName, roleLabel, ttlDays, inviterPhotoUrl, onBehalfOf });
   return sendViaResend("admin-invite", toEmail, subject, html, text);
 }
 
