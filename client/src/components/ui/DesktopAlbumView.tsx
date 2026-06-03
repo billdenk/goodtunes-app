@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link } from "wouter";
-import { ChevronRight, Play, Pause, Shuffle, MoreHorizontal, Lock, X, Share, Info, Maximize2 } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { ChevronLeft, Play, Pause, Shuffle, MoreHorizontal, Lock, X, Share, Info, Maximize2 } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { IconButton } from "@/components/ui/IconButton";
 import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
@@ -119,8 +119,9 @@ export type DesktopAlbumViewProps = {
   hasAlbumCredits?: boolean;
   onOpenAlbumCredits?: () => void;
 
-  /** Override breadcrumb back-link. Defaults to /collection · "Discover". */
-  breadcrumb?: ReactNode;
+  /** Override the back-pill destination. Defaults to navigating to
+   *  /collection (mirrors the mobile album surface's back carat). */
+  onBack?: () => void;
 
   /** Optional right-side lyrics slide-in panel. When `lyrics` is supplied
    *  AND `lyricsOpen=true`, a 360-wide panel slides in from the right;
@@ -195,7 +196,7 @@ export function DesktopAlbumView({
   favoriteSongIds,
   hasAlbumCredits = false,
   onOpenAlbumCredits,
-  breadcrumb,
+  onBack,
   lyricsOpen,
   lyrics,
   onCloseLyrics,
@@ -232,6 +233,8 @@ export function DesktopAlbumView({
         lyricsAside: "hidden lg:flex flex-col flex-shrink-0 w-[360px] sticky top-0 self-start h-screen py-8 pr-10 pl-2",
       };
   const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const handleBack = onBack ?? (() => navigate("/collection"));
   const handleCopyShareLink = async () => {
     // Task #970 — copy the clean per-release share link when the album has
     // a slug so what fans share matches what operators promote.
@@ -264,31 +267,19 @@ export function DesktopAlbumView({
       <div
         className={[cls.column, showLyrics ? "mx-0 ml-auto" : ""].join(" ")}
       >
-        {/* Breadcrumb */}
-        <nav
-          className="flex items-center gap-2 text-[13px]"
-          aria-label="Breadcrumb"
-          data-testid="breadcrumb"
+        {/* Back-carat pill — matches the mobile album surface's glass
+            IconButton + chevron-left treatment so the two surfaces are
+            consistent. Returns the viewer to where they came from
+            (collection by default, or the originating context if a host
+            passes `onBack`). The album title lives in the hero below. */}
+        <IconButton
+          variant="glass"
+          label="Back to collection"
+          onClick={handleBack}
+          data-testid="button-back-album"
         >
-          {breadcrumb ?? (
-            <>
-              <Link
-                href="/collection"
-                className="text-white/55 hover:text-white transition-colors"
-                data-testid="link-breadcrumb-discover"
-              >
-                Discover
-              </Link>
-              <ChevronRight className="w-3.5 h-3.5 text-white/35" strokeWidth={2.2} />
-            </>
-          )}
-          <span
-            className="text-white font-semibold truncate"
-            data-testid="text-breadcrumb-title"
-          >
-            {album.title}
-          </span>
-        </nav>
+          <ChevronLeft strokeWidth={2.5} className="-translate-x-[1px]" />
+        </IconButton>
 
         {/* Hero. Cover shrinks to 220px at md (portrait tablets) so the
             artist/title block keeps a comfortable reading measure next
