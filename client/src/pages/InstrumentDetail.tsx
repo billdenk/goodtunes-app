@@ -88,8 +88,7 @@ function liveToInstrument(i: ApiInstrument): Instrument {
     })),
   };
 }
-import { BottomNav } from "@/components/BottomNav";
-import { MiniPlayer } from "@/components/MiniPlayer";
+import { MobileChrome } from "@/components/MobileChrome";
 import { track } from "@/lib/analytics";
 import { useRecordRecent } from "@/hooks/useRecents";
 
@@ -367,8 +366,7 @@ export function InstrumentDetail() {
           )}
         </div>
 
-        <MiniPlayer />
-        <BottomNav />
+        <MobileChrome />
       </section>
     </main>
   );

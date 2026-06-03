@@ -7,8 +7,7 @@
 
 import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { BottomNav } from "@/components/BottomNav";
-import { MiniPlayer } from "@/components/MiniPlayer";
+import { MobileChrome } from "@/components/MobileChrome";
 import { IconButton } from "@/components/ui/IconButton";
 import type { Album as DbAlbum, Label } from "@shared/schema";
 
@@ -134,8 +133,7 @@ export function FanLabel() {
           </div>
         </div>
 
-        <MiniPlayer />
-        <BottomNav />
+        <MobileChrome />
       </section>
     </main>
   );

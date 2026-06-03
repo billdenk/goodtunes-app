@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { BottomNav } from "@/components/BottomNav";
-import { MiniPlayer } from "@/components/MiniPlayer";
+import { MobileChrome } from "@/components/MobileChrome";
 import { useAuth } from "@/hooks/useAuth";
 import { useFanSearch } from "@/hooks/useFanSearch";
 import {
@@ -162,8 +161,7 @@ export function SearchPage() {
           </div>
         </div>
 
-        <MiniPlayer />
-        <BottomNav />
+        <MobileChrome />
       </section>
     </main>
   );

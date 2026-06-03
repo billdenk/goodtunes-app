@@ -3,8 +3,7 @@ import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { usePlayer } from "@/context/PlayerContext";
-import { BottomNav } from "@/components/BottomNav";
-import { MiniPlayer } from "@/components/MiniPlayer";
+import { MobileChrome } from "@/components/MobileChrome";
 import { IconButton } from "@/components/ui/IconButton";
 import { SheetClose } from "@/components/ui/SheetChrome";
 import { type Song, type Album } from "@/data/musicData";
@@ -575,8 +574,7 @@ export function Playlists() {
           </div>
           </div>
 
-          <MiniPlayer />
-          <BottomNav />
+          <MobileChrome />
 
           {showAddSongs && (
             <div className="fixed inset-0 z-50 flex items-end justify-center">
@@ -784,8 +782,7 @@ export function Playlists() {
           )}
         </div>
 
-        <MiniPlayer />
-        <BottomNav />
+        <MobileChrome />
 
         {showCreate && (
           <div className="fixed inset-0 z-50 flex items-end justify-center">

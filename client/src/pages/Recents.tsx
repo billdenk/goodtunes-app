@@ -1,8 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Star } from "lucide-react";
-import { BottomNav } from "@/components/BottomNav";
-import { MiniPlayer } from "@/components/MiniPlayer";
+import { MobileChrome } from "@/components/MobileChrome";
 import { useFanRecents, useRemoveRecent, useClearRecents } from "@/hooks/useRecents";
 import type { FanRecent } from "@shared/schema";
 
@@ -165,8 +164,7 @@ export function RecentsPage() {
           </div>
         )}
 
-        <MiniPlayer />
-        <BottomNav />
+        <MobileChrome />
       </section>
     </main>
   );

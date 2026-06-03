@@ -2,13 +2,21 @@ import { usePlayer } from "@/context/PlayerContext";
 import { useLocation } from "wouter";
 import { useReducedMotion } from "framer-motion";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
+import { useDesktopShell } from "@/hooks/useDesktopShell";
 
+// Task #1092 — the mobile/tablet now-playing surface moved into the unified
+// bottom console (BottomNav). MiniPlayer now renders ONLY on the lg+ web
+// desktop shell, where it anchors as the bottom-right capsule beside the
+// StorefrontSidebar. On mobile/tablet/native it returns null (the console
+// owns now-playing there).
 export function MiniPlayer() {
   const { currentSong, isPlaying, togglePlay, next, setShowPlayer } = usePlayer();
   const [location] = useLocation();
   const { hidden } = useNavVisibility();
   const reduceMotion = useReducedMotion();
+  const isDesktop = useDesktopShell();
 
+  if (!isDesktop) return null;
   if (!currentSong || location === "/player") return null;
 
   // Apple-style: when scrolled (nav hidden), the mini-player shrinks into a

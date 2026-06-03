@@ -1,8 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { BottomNav } from "@/components/BottomNav";
-import { MiniPlayer } from "@/components/MiniPlayer";
+import { MobileChrome } from "@/components/MobileChrome";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { ALBUMS, ARTIST_PHOTOS, type Album } from "@/data/musicData";
@@ -165,8 +164,7 @@ export function FavoriteArtists() {
           )}
         </div>
 
-        <MiniPlayer />
-        <BottomNav />
+        <MobileChrome />
       </section>
     </main>
   );
