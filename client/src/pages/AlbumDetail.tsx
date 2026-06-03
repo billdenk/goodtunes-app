@@ -251,6 +251,9 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
     isExplicit: boolean;
     goodTunesReleaseDate: string | null;
     streamingReleaseDate: string | null;
+    // Task #1078 — Apple-style album footer fields.
+    originalReleaseDate: string | null;
+    copyrightLine: string | null;
     // Album-level streaming handoff links (Task #734 / #816).
     spotifyUrl: string | null;
     appleMusicUrl: string | null;
@@ -748,6 +751,8 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
             isExplicit: album.isExplicit,
             genre: album.genre,
             priceCents: (album as any).priceCents ?? null,
+            originalReleaseDate: apiAlbum?.originalReleaseDate ?? null,
+            copyrightLine: apiAlbum?.copyrightLine ?? null,
           }}
           songs={songs.map((s) => ({
             id: s.id,

@@ -15,6 +15,7 @@ import { ChromeScrim } from "@/components/ui/ChromeScrim";
 import { useTopChromeFrost } from "@/hooks/useTopChromeFrost";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { popBounce } from "@/lib/motion";
+import { formatReleaseDateLong } from "@shared/albumStage";
 
 // Height (px) of the top ChromeScrim band. The scrim is rendered at this
 // height and the album-options menu is clamped to open strictly below it so
@@ -38,6 +39,11 @@ export interface AlbumDetailMobileSurfaceAlbum {
   isExplicit?: boolean;
   genre?: string | null;
   priceCents?: number | null;
+  // Task #1078 — Apple-style album footer. Exact original release date
+  // (ISO YYYY-MM-DD) + free-text ℗ copyright credit. Both optional; the
+  // footer falls back to the year-only line when they're absent.
+  originalReleaseDate?: string | null;
+  copyrightLine?: string | null;
   // Album-level streaming handoff links (Task #734).
   spotifyUrl?: string | null;
   appleMusicUrl?: string | null;
@@ -910,8 +916,11 @@ export function AlbumDetailMobileSurface({
             className="text-[11px] leading-relaxed"
             style={{ color: "rgba(255,255,255,0.32)" }}
           >
+            {/* Task #1078 — Apple-style footer. Prefer the full original
+                release date ("February 16, 2010"); degrade to the bare year
+                when no exact date has been entered. */}
             <span className="block" data-testid="text-album-year-footer">
-              {album.year}
+              {formatReleaseDateLong(album.originalReleaseDate) ?? album.year}
             </span>
             <span className="block mt-0.5">
               {songs.length} {songs.length === 1 ? "song" : "songs"}, {runtime}
@@ -936,6 +945,14 @@ export function AlbumDetailMobileSurface({
                 {ownedNums.length === 1
                   ? `You own No. ${ownedNums[0].toString().padStart(2, "0")} of this ${album.type === "EP" ? "EP" : album.type === "Single" ? "single" : album.type === "Duo" ? "duo" : "LP"}.`
                   : `You own ${ownedNums.length} ${album.type === "EP" ? "EPs" : album.type === "Single" ? "singles" : album.type === "Duo" ? "duos" : "LPs"}.`}
+              </span>
+            )}
+            {/* Task #1078 — ℗ phonogram/copyright line. Operator stores the
+                bare credit ("2009 Brash Music"); the ℗ glyph is prepended
+                here. Hidden entirely when unset. */}
+            {album.copyrightLine && (
+              <span className="block mt-1" data-testid="text-album-copyright-footer">
+                ℗ {album.copyrightLine}
               </span>
             )}
           </p>

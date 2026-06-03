@@ -6,6 +6,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
 import { useToast } from "@/hooks/use-toast";
 import { shareUrlForSlug } from "@shared/shareSlug";
+import { formatReleaseDateLong } from "@shared/albumStage";
 
 /* Trimmed-down song/album/video/photo shapes — DesktopAlbumView consumes
    the SAME response shapes the fan route + admin preview do. We pin only
@@ -31,6 +32,11 @@ export type DesktopAlbumData = {
   genre?: string | null;
   priceCents?: number | null;
   primaryArtistId?: string | null;
+  // Task #1078 — Apple-style album footer. Exact original release date
+  // (ISO YYYY-MM-DD) + free-text ℗ copyright credit. Both optional; the
+  // footer degrades to the bare year when no exact date is set.
+  originalReleaseDate?: string | null;
+  copyrightLine?: string | null;
   // Task #970 — clean per-release share slug. When present, the copy-link
   // CTA copies https://get.goodtunes.music/<slug> instead of /album/:id.
   shareSlug?: string | null;
@@ -55,6 +61,8 @@ export type DesktopAlbumViewProps = {
   songs: DesktopAlbumSong[];
   videos: DesktopAlbumVideo[];
   photos: DesktopAlbumPhoto[];
+  // Task #1078 — denormalized record-label entity for the footer credit.
+  label?: { id: string; name: string; logoUrl?: string | null } | null;
 
   isOwned: boolean;
   /** When false, "Play" / "Shuffle" CTAs are suppressed (no previews + locked album). */
@@ -153,6 +161,19 @@ function formatDuration(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+// Task #1078 — total album runtime for the footer, in whole minutes
+// ("58 minutes"). Falls back to seconds for sub-minute runs so a single
+// 40-second track doesn't read "0 minutes".
+function formatRuntime(songs: { duration: number }[]): string {
+  const total = songs.reduce((acc, s) => acc + (s.duration || 0), 0);
+  const min = Math.round(total / 60);
+  if (min < 1) {
+    const sec = Math.round(total);
+    return `${sec} ${sec === 1 ? "second" : "seconds"}`;
+  }
+  return `${min} ${min === 1 ? "minute" : "minutes"}`;
+}
+
 function formatPrice(cents: number): string {
   const dollars = cents / 100;
   return dollars % 1 === 0 ? `$${dollars.toFixed(0)}` : `$${dollars.toFixed(2)}`;
@@ -175,6 +196,7 @@ export function DesktopAlbumView({
   songs,
   videos,
   photos,
+  label,
   isOwned,
   canPlay,
   tab,
@@ -556,6 +578,42 @@ export function DesktopAlbumView({
                   />
                 );
               })}
+              {/* Task #1078 — Apple-style album footer: full original
+                  release date (falls back to the bare year), song count +
+                  total runtime, label credit, then the ℗ copyright line. */}
+              <div
+                className="mt-7 text-xs leading-relaxed"
+                style={{ color: "rgba(255,255,255,0.34)" }}
+              >
+                <p data-testid="text-album-date-footer">
+                  {formatReleaseDateLong(album.originalReleaseDate) ?? album.year}
+                </p>
+                <p className="mt-0.5" data-testid="text-album-runtime-footer">
+                  {songs.length} {songs.length === 1 ? "song" : "songs"}
+                  {", "}
+                  {formatRuntime(songs)}
+                </p>
+                {label && label.name && (
+                  <p
+                    className="mt-1 inline-flex items-center gap-1.5"
+                    data-testid={`text-album-label-footer-${label.id}`}
+                  >
+                    {label.logoUrl && (
+                      <img
+                        src={label.logoUrl}
+                        alt=""
+                        className="w-3.5 h-3.5 rounded-sm object-contain bg-white/10"
+                      />
+                    )}
+                    <span>{label.name}</span>
+                  </p>
+                )}
+                {album.copyrightLine && (
+                  <p className="mt-1" data-testid="text-album-copyright-footer">
+                    ℗ {album.copyrightLine}
+                  </p>
+                )}
+              </div>
             </div>
           )}
 

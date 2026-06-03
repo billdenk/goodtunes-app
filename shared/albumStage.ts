@@ -83,6 +83,23 @@ export function formatSunriseDate(
   return ry === curYear ? base : `${base}, ${ry}`;
 }
 
+// Full, Apple-Music-style date label for an ISO `YYYY-MM-DD`, e.g.
+// "February 16, 2010". Built from the string parts (no Date parsing) to
+// avoid timezone day-shifts. Returns null for empty/malformed input so
+// callers can fall back to a year-only footer.
+export function formatReleaseDateLong(
+  iso: string | null | undefined,
+): string | null {
+  if (!iso) return null;
+  const MONTHS = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+  const [ry, rm, rd] = iso.split("-").map(Number);
+  if (!ry || !rm || !rd || rm < 1 || rm > 12) return null;
+  return `${MONTHS[rm - 1]} ${rd}, ${ry}`;
+}
+
 // Combined scannable countdown label for a staged release, e.g.
 // "Live Jun 14 · in 13 days" (or "· tomorrow" for a one-day countdown).
 // Returns null when the album has no pending sunrise.

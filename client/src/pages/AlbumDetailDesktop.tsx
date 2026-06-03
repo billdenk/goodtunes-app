@@ -74,6 +74,9 @@ type ApiAlbum = {
   // Task #1049 — repurposed "Sunset date". When set AND <= today the album
   // has left the GoodTunes exclusive window for streaming.
   streamingReleaseDate?: string | null;
+  // Task #1078 — Apple-style album footer fields.
+  originalReleaseDate?: string | null;
+  copyrightLine?: string | null;
   spotifyUrl?: string | null;
   appleMusicUrl?: string | null;
   tidalUrl?: string | null;
@@ -495,6 +498,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             songs={songs}
             videos={videos}
             photos={photos}
+            label={album?.label ?? null}
             isOwned={effectiveOwned}
             canPlay={canPlay}
             tab={tab}

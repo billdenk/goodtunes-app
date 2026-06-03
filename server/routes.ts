@@ -5892,6 +5892,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         genre: genre ? String(genre).trim() : null,
         goodTunesReleaseDate: normalizeReleaseDate(req.body?.goodTunesReleaseDate),
         streamingReleaseDate: normalizeReleaseDate(req.body?.streamingReleaseDate),
+        // Task #1078 — Apple-style footer fields.
+        originalReleaseDate: normalizeReleaseDate(req.body?.originalReleaseDate),
+        copyrightLine: req.body?.copyrightLine ? String(req.body.copyrightLine).trim() : null,
         primaryArtistId: await resolvePrimaryArtistId(req.body?.primaryArtistId),
         // Discography "+ Add" + Apple-URL seed paths leave this off; admin
         // flips it on once an album is actually being released by GoodTunes.
@@ -6575,6 +6578,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       updates.goodTunesReleaseDate = normalizeReleaseDate(req.body.goodTunesReleaseDate);
     if (req.body?.streamingReleaseDate !== undefined)
       updates.streamingReleaseDate = normalizeReleaseDate(req.body.streamingReleaseDate);
+    // Task #1078 — Apple-style album footer. Exact original release date
+    // (ISO YYYY-MM-DD, same normalization as the other date fields) and the
+    // free-text ℗ copyright line. Both ride the edit_metadata gate.
+    if (req.body?.originalReleaseDate !== undefined)
+      updates.originalReleaseDate = normalizeReleaseDate(req.body.originalReleaseDate);
+    if (req.body?.copyrightLine !== undefined)
+      updates.copyrightLine = req.body.copyrightLine ? String(req.body.copyrightLine).trim() : null;
     if (req.body?.primaryArtistId !== undefined)
       updates.primaryArtistId = await resolvePrimaryArtistId(req.body.primaryArtistId);
     if (req.body?.labelId !== undefined) {

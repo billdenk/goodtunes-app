@@ -167,6 +167,15 @@ export const albums = pgTable("albums", {
   // this date hits, the player surfaces a "Now on streaming — listen
   // anywhere" banner so we're not holding fans hostage.
   streamingReleaseDate: text("streaming_release_date"),
+  // Task #1078 — Apple-Music-style album footer. `originalReleaseDate`
+  // (ISO YYYY-MM-DD) is the canonical FIRST release date of the record —
+  // for reissues this is the original press, not the GoodTunes go-live —
+  // and renders as the full "February 16, 2010" line in the footer. Falls
+  // back to the year-only footer when null. `copyrightLine` is the free-
+  // text ℗ phonogram credit (operator enters "2009 Brash Music"; the UI
+  // prepends the ℗ glyph). Both nullable; neither is auto-imported.
+  originalReleaseDate: text("original_release_date"),
+  copyrightLine: text("copyright_line"),
   // The label this album was released on. SET NULL so deleting a label
   // doesn't take down its catalog; the album just loses its label credit
   // until reassigned. Album reads denormalize the joined label entity

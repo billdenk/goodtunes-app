@@ -176,6 +176,9 @@ interface AlbumFull {
   label?: { id: string; name: string } | null;
   goodTunesReleaseDate?: string | null;
   streamingReleaseDate?: string | null;
+  // Task #1078 — Apple-style album footer fields.
+  originalReleaseDate?: string | null;
+  copyrightLine?: string | null;
   appleMusicUrl?: string | null;
   spotifyUrl?: string | null;
   tidalUrl?: string | null;
@@ -2221,6 +2224,7 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
         disabledReason={disabledReason}
         values={{
           goodTunesReleaseDate: album.goodTunesReleaseDate,
+          originalReleaseDate: album.originalReleaseDate,
         }}
         invalidate={invalidate}
         fields={[
@@ -2228,6 +2232,12 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
             key: "goodTunesReleaseDate",
             label: "GoodTunes release date",
             type: "date",
+          },
+          {
+            key: "originalReleaseDate",
+            label: "Original release date",
+            type: "date",
+            placeholder: "First-ever release of this record",
           },
         ]}
       />
@@ -2318,6 +2328,7 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           year: album.year ? String(album.year) : "",
           genre: album.genre,
           labelId: album.labelId ?? "",
+          copyrightLine: album.copyrightLine,
           description: album.description,
           // Stored in cents on the wire, edited as dollars (e.g. "19.99")
           // in the admin form — dollars-to-cents normalization happens in
@@ -2372,6 +2383,12 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
             label: "Label",
             type: "select",
             options: labelOptions,
+          },
+          {
+            key: "copyrightLine",
+            label: "℗ Copyright line",
+            type: "text",
+            placeholder: "2009 Brash Music",
           },
           {
             key: "description",
