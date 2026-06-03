@@ -53,6 +53,7 @@ import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
 import { geoFromRequest, forwardToPostHog, isPostHogEnabled } from "./analytics";
 import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, fetchSpotifyTrackByUrl, searchTrackCandidates, resolveSpotifyAlbumUrl, resolveSpotifyAlbumUrlsForReleases, type SpotifyArtistCandidate } from "./lib/spotify";
 import { resolveStreamingLinksFromAppleCollectionId, resolveStreamingLinksForCollections, hasAnyResolvedLink, appleCollectionIdFromUrl, appleCountryFromUrl } from "./lib/streamingLinks";
+import { adminLoginPasswordOk, isLinkableEmail } from "./auth/identityLink";
 
 const scryptAsync = promisify(scrypt);
 
@@ -572,11 +573,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // in sync; the fallback only matters during the transition for
       // pre-existing accounts whose two passwords still differ, so a
       // linked admin is never locked out. Customer login is unchanged.
-      let credentialOk = !!user && (await comparePasswords(password, user.password));
-      if (!credentialOk && user?.customerUserId) {
-        const linkedFan = await storage.getCustomer(user.customerUserId);
-        if (linkedFan?.password) credentialOk = await comparePasswords(password, linkedFan.password);
-      }
+      const credentialOk = !!user && (await adminLoginPasswordOk(user, password, comparePasswords));
       if (!user || !credentialOk) {
         return res.status(401).json({ message: "Invalid username/email or password" });
       }
@@ -1229,9 +1226,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await setUserRole(userIdInv, invite.role as any, invite.roleScopeId ?? null);
       // Task #1037 — link to the same human's fan row if one exists so a
       // single login + OAuth identity serves both shells. Invite emails
-      // are operator-entered real addresses (never Apple relay).
-      if (invite.email && !/@privaterelay\.appleid\.com$/i.test(invite.email)) {
-        const fan = await storage.getCustomerByEmail(invite.email);
+      // are operator-entered real addresses, but gate on isLinkableEmail
+      // so a relay/@oauth.local placeholder can never drive the match.
+      if (isLinkableEmail(invite.email)) {
+        const fan = await storage.getCustomerByEmail(invite.email!);
         if (fan) {
           const { linkAdminToCustomer } = await import("./auth/identityLink");
           await linkAdminToCustomer(userIdInv, fan.id);
@@ -20433,9 +20431,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await setUserRole(user.id, invite.role as any, invite.roleScopeId ?? null);
     // Task #1037 — link to the same human's fan row if one exists so a
     // single login + OAuth identity serves both shells. Invite emails are
-    // operator-entered real addresses (never Apple relay).
-    if (invite.email && !/@privaterelay\.appleid\.com$/i.test(invite.email)) {
-      const fan = await storage.getCustomerByEmail(invite.email);
+    // operator-entered real addresses, but gate on isLinkableEmail so a
+    // relay/@oauth.local placeholder can never drive the match.
+    if (isLinkableEmail(invite.email)) {
+      const fan = await storage.getCustomerByEmail(invite.email!);
       if (fan) {
         const { linkAdminToCustomer } = await import("./auth/identityLink");
         await linkAdminToCustomer(user.id, fan.id);

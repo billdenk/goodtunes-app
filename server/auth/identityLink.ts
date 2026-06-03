@@ -209,3 +209,45 @@ export async function writeLinkedPassword(opts: {
     await db.execute(sql`UPDATE users SET password = ${hashed} WHERE id = ${adminId}`);
   }
 }
+
+// Email-based linking is only safe for a REAL, operator- or provider-
+// verified address. Apple "Hide my email" relay masks
+// (`@privaterelay.appleid.com`) and our synthetic OAuth-no-email
+// placeholders (`<handle>@oauth.local`) are NOT proof of a shared human,
+// so they must never drive a `getCustomerByEmail` → linkAdminToCustomer
+// match (that would let a relay/placeholder collision seed an admin
+// first-factor for an email nobody owns). Returns true only for an
+// address safe to link on. This is the single gate every email-based
+// auto-link path goes through.
+export function isLinkableEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const e = email.trim().toLowerCase();
+  if (!e) return false;
+  if (e.endsWith("@privaterelay.appleid.com")) return false;
+  if (e.endsWith("@oauth.local")) return false;
+  return true;
+}
+
+// No-lockout admin credential resolution: a linked admin can sign in
+// with EITHER users.password OR the canonical fan password. Every
+// explicit password write keeps both rows in sync via
+// writeLinkedPassword, so this fallback only matters for pre-existing
+// rows whose two hashes still differ during the transition — a linked
+// admin is therefore never locked out. The compare fn is injected so the
+// caller owns the hashing scheme (and so this stays unit-testable). The
+// fan password is read straight off the canonical store via the link.
+export async function adminLoginPasswordOk(
+  user: { password: string | null; customerUserId: string | null },
+  supplied: string,
+  compare: (supplied: string, stored: string) => Promise<boolean>,
+): Promise<boolean> {
+  if (user.password && (await compare(supplied, user.password))) return true;
+  if (user.customerUserId) {
+    const r = await db.execute<{ password: string | null }>(
+      sql`SELECT password FROM customer_users WHERE id = ${user.customerUserId} LIMIT 1`,
+    );
+    const fanPassword = ((r as any).rows?.[0]?.password as string | null) ?? null;
+    if (fanPassword && (await compare(supplied, fanPassword))) return true;
+  }
+  return false;
+}

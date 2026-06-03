@@ -26,6 +26,9 @@ import {
   mirrorAdminIdentitiesToCustomer,
   mirrorIdentityToLinked,
   unlinkIdentityEverywhere,
+  writeLinkedPassword,
+  adminLoginPasswordOk,
+  isLinkableEmail,
 } from "./identityLink";
 
 const exec = (q: any) => db.execute(q);
@@ -78,6 +81,21 @@ async function custPassword(custId: string): Promise<string | null> {
   const r = await exec(sql`SELECT password FROM customer_users WHERE id = ${custId}`);
   return (rows(r)[0]?.password as string | null) ?? null;
 }
+
+async function adminPassword(adminId: string): Promise<string | null> {
+  const r = await exec(sql`SELECT password FROM users WHERE id = ${adminId}`);
+  return (rows(r)[0]?.password as string | null) ?? null;
+}
+
+async function adminLink(adminId: string): Promise<string | null> {
+  const r = await exec(sql`SELECT customer_user_id FROM users WHERE id = ${adminId}`);
+  return (rows(r)[0]?.customer_user_id as string | null) ?? null;
+}
+
+// Plain-equality comparator injected into adminLoginPasswordOk so the
+// no-lockout *resolution* (own password OR linked-fan password) is what's
+// under test, independent of the scrypt hashing scheme.
+const eqCompare = async (supplied: string, stored: string) => supplied === stored;
 
 async function customerHasIdentity(custId: string, provider: string, sub: string): Promise<boolean> {
   const r = await exec(sql`
@@ -233,6 +251,105 @@ test("ongoing detach: a missing identity id reports not-found (404 parity) and t
   const adminId = await seedAdmin({ password: "$2b$10$" + "x".repeat(53) });
   const ok = await unlinkIdentityEverywhere("admin", adminId, randomUUID());
   assert.equal(ok, false);
+});
+
+test("link: sets the link only when null — an already-linked admin is never re-pointed", async () => {
+  const adminId = await seedAdmin({ password: "$2b$10$" + "x".repeat(53) });
+  const firstFan = await seedCustomer({ password: null });
+  const secondFan = await seedCustomer({ password: null });
+
+  await linkAdminToCustomer(adminId, firstFan);
+  assert.equal(await adminLink(adminId), firstFan, "first link should stick");
+
+  // A second link attempt with a DIFFERENT fan must be a no-op on the
+  // link column — re-pointing would silently steal the admin from the
+  // human it already belongs to.
+  await linkAdminToCustomer(adminId, secondFan);
+  assert.equal(
+    await adminLink(adminId),
+    firstFan,
+    "an already-linked admin must keep its original fan (link is set-once)",
+  );
+});
+
+test("writeLinkedPassword: given the admin id, writes BOTH linked rows", async () => {
+  const adminId = await seedAdmin({ password: "old-admin" });
+  const custId = await seedCustomer({ password: "old-fan" });
+  await linkAdminToCustomer(adminId, custId);
+
+  const next = "converged-" + randomUUID().slice(0, 8);
+  await writeLinkedPassword({ adminUserId: adminId, hashed: next });
+
+  assert.equal(await adminPassword(adminId), next, "admin row updated");
+  assert.equal(await custPassword(custId), next, "linked fan row updated via the link");
+});
+
+test("writeLinkedPassword: given the customer id, writes BOTH linked rows", async () => {
+  const adminId = await seedAdmin({ password: "old-admin" });
+  const custId = await seedCustomer({ password: "old-fan" });
+  await linkAdminToCustomer(adminId, custId);
+
+  const next = "converged-" + randomUUID().slice(0, 8);
+  await writeLinkedPassword({ customerId: custId, hashed: next });
+
+  assert.equal(await custPassword(custId), next, "fan row updated");
+  assert.equal(await adminPassword(adminId), next, "linked admin row updated via the link");
+});
+
+test("writeLinkedPassword: with no link, only the row you passed is written (missing side no-ops)", async () => {
+  const adminId = await seedAdmin({ password: "old-admin" });
+  const unlinkedFan = await seedCustomer({ password: "fan-untouched" });
+
+  const next = "admin-only-" + randomUUID().slice(0, 8);
+  await writeLinkedPassword({ adminUserId: adminId, hashed: next });
+
+  assert.equal(await adminPassword(adminId), next, "the passed admin row is written");
+  assert.equal(await adminLink(adminId), null, "no link exists");
+  assert.equal(
+    await custPassword(unlinkedFan),
+    "fan-untouched",
+    "an unrelated fan with no link is never touched",
+  );
+});
+
+test("login no-lockout: a linked admin signs in with EITHER its own password OR the fan password", async () => {
+  const adminId = await seedAdmin({ password: "admin-secret" });
+  const custId = await seedCustomer({ password: "fan-secret" });
+  await linkAdminToCustomer(adminId, custId);
+  const user = { password: "admin-secret", customerUserId: custId };
+
+  assert.equal(await adminLoginPasswordOk(user, "admin-secret", eqCompare), true, "own password works");
+  assert.equal(
+    await adminLoginPasswordOk(user, "fan-secret", eqCompare),
+    true,
+    "the linked fan's canonical password is accepted too (no lockout)",
+  );
+  assert.equal(await adminLoginPasswordOk(user, "neither", eqCompare), false, "a wrong password is rejected");
+});
+
+test("login no-lockout: an UNLINKED admin only accepts its own password (no phantom fallback)", async () => {
+  const user = { password: "admin-secret", customerUserId: null };
+  assert.equal(await adminLoginPasswordOk(user, "admin-secret", eqCompare), true);
+  assert.equal(
+    await adminLoginPasswordOk(user, "fan-secret", eqCompare),
+    false,
+    "with no link there is no fan password to fall back to",
+  );
+});
+
+test("isLinkableEmail: relay + @oauth.local placeholders are excluded from email-based linking", () => {
+  // Real, operator-/provider-verified addresses ARE linkable.
+  assert.equal(isLinkableEmail("real.person@example.com"), true);
+  assert.equal(isLinkableEmail("MixedCase@Example.COM"), true, "case-insensitive");
+  // Apple "Hide my email" relay masks are not proof of a shared human.
+  assert.equal(isLinkableEmail("abc123@privaterelay.appleid.com"), false);
+  assert.equal(isLinkableEmail("ABC@PrivateRelay.AppleID.com"), false, "relay match is case-insensitive");
+  // Synthetic OAuth-no-email placeholders are not real addresses.
+  assert.equal(isLinkableEmail("somehandle@oauth.local"), false);
+  // Empty / missing never links.
+  assert.equal(isLinkableEmail(null), false);
+  assert.equal(isLinkableEmail(undefined), false);
+  assert.equal(isLinkableEmail("   "), false);
 });
 
 after(async () => {
