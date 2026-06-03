@@ -36,6 +36,18 @@ schema.ts, dev, or real prod (verified against prod with 264 real albums):
 - `people.created_at` → **people has NO creation timestamp** (only `deleted_at`).
   `labels` DOES have `created_at`. In a people⋃labels UNION, the people branch's
   "joined_at" has to be `NULL::timestamp`.
+- `person_aliases.alias` → the column is **`name`**, and it stores artist NAMES
+  (+ muso/spotify source ids), NOT emails. To test "is this email on file for a
+  Person" match **`people.contact_email`**, not a person_aliases column.
+- `albums.is_good_tunes_release` → the boolean is **`is_goodtunes_release`** (no
+  underscore between good+tunes). Confusingly the DATE column next to it
+  **`good_tunes_release_date`** DOES keep the underscores. Don't pattern-match.
+
+**Masking gotcha:** when several phantom-column `db.execute` queries run in
+sequence in one block (e.g. the `POST /api/admin/invites` claimed-Person review
+gate: alias-on-file → linked-admin → goodtunes-releases), the FIRST bad column
+throws and hides the rest. Fixing one unmasks the next — re-verify every query in
+the block against the live catalog, don't stop at the one that was reported.
 
 **Why:** these reads predate a schema rename/cleanup and were never updated;
 they 500 only when the endpoint is actually hit. Known remaining offenders

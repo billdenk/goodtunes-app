@@ -19415,19 +19415,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     let reviewStatus: "not_required" | "pending_review" = "not_required";
     let claimedReason: string | null = null;
     if (targetPerson) {
-      const aliasMatch = await db.execute<{ id: string }>(sql`
-        SELECT 1 AS id FROM person_aliases
-        WHERE person_id = ${targetPerson.id} AND LOWER(alias) = ${email}
-        LIMIT 1
-      `);
-      const aliasHit = ((aliasMatch as any).rows ?? []).length > 0;
+      // "On file" = the invite email already belongs to this Person —
+      // their contact email or a stored alias name. This is only consulted
+      // for non-super-admin inviters by the anti-solicitation gate below,
+      // so skip the lookup entirely for super-admins. NB: person_aliases
+      // has a `name` column (NOT `alias`) and stores names, not emails;
+      // the old `LOWER(alias)` reference 500'd every targetPerson invite.
+      let aliasHit = true;
+      if (callerRole.role !== "super_admin") {
+        const onFile = await db.execute<{ id: string }>(sql`
+          SELECT 1 AS id FROM people
+          WHERE id = ${targetPerson.id} AND LOWER(contact_email) = ${email}
+          UNION ALL
+          SELECT 1 AS id FROM person_aliases
+          WHERE person_id = ${targetPerson.id} AND LOWER(name) = ${email}
+          LIMIT 1
+        `);
+        aliasHit = ((onFile as any).rows ?? []).length > 0;
+      }
       const linkedAdmin = await db.execute<{ id: string }>(sql`
         SELECT id FROM users WHERE role = 'artist' AND role_scope_id = ${targetPerson.id} LIMIT 1
       `);
       const hasLogin = ((linkedAdmin as any).rows ?? []).length > 0;
       const releases = await db.execute<{ ct: number }>(sql`
         SELECT COUNT(*)::int AS ct FROM albums
-        WHERE primary_artist_id = ${targetPerson.id} AND COALESCE(is_good_tunes_release, false) = true
+        WHERE primary_artist_id = ${targetPerson.id} AND COALESCE(is_goodtunes_release, false) = true
       `);
       const hasReleases = (((releases as any).rows ?? [])[0]?.ct ?? 0) > 0;
       const isClaimed = !!targetPerson.spotifyArtistId || !!targetPerson.isGroup || hasLogin || hasReleases;
