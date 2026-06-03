@@ -12026,6 +12026,46 @@
   },
   {
     "rule": "fan-text-tone",
+    "file": "client/src/components/ui/AlbumCard.tsx",
+    "snippet": "<p className=\"text-white/45 text-[10px] truncate leading-tight text-left mt-0.5\">{subtitle ?? album.artist}</p>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/components/ui/AlbumCard.tsx",
+    "snippet": "<p className=\"text-white/45 text-xs truncate leading-tight mt-0.5\">{subtitle ?? album.artist}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumCard.tsx",
+    "snippet": "className=\"text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumCard.tsx",
+    "snippet": "className=\"text-[10px] font-semibold px-2 py-0.5 rounded-full\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumCard.tsx",
+    "snippet": "<p className=\"text-white text-[11px] font-semibold truncate leading-tight text-left\" data-testid={`text-album-title-${album.id}`}>{album.title}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumCard.tsx",
+    "snippet": "<p className=\"text-white/45 text-[10px] truncate leading-tight text-left mt-0.5\">{subtitle ?? album.artist}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumCard.tsx",
+    "snippet": "<p className=\"flex-1 min-w-0 text-white text-[15px] font-semibold leading-tight truncate\" data-testid={`text-album-title-${album.id}`}>{album.title}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/AlbumCard.tsx",
+    "snippet": "<p className=\"text-[13px] font-normal truncate mt-0.5\" style={{ color: \"rgba(255,255,255,0.55)\" }}>{subtitle ?? album.artist}</p>"
+  },
+  {
+    "rule": "fan-text-tone",
     "file": "client/src/components/ui/AlbumCreditsSheet.tsx",
     "snippet": "<div className=\"px-5 pb-4 text-white/55 text-sm\">"
   },
@@ -19277,11 +19317,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Collection.tsx",
-    "snippet": "? \"0 0 0 2px #319ED8, 0 4px 16px rgba(0,0,0,0.5)\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Collection.tsx",
     "snippet": "<svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#319ED8\" strokeWidth=\"3\" strokeLinecap=\"round\">"
   },
   {
@@ -19310,21 +19345,6 @@
     "snippet": "className=\"text-[#319ED8] text-sm font-semibold mt-3\""
   },
   {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Collection.tsx",
-    "snippet": "? \"0 0 0 2px #319ED8, 0 4px 20px rgba(0,0,0,0.4)\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Collection.tsx",
-    "snippet": "style={{ background: \"rgba(74,255,202,0.2)\", color: \"#4AFFCA\", border: \"1px solid rgba(74,255,202,0.35)\", backdropFilter: \"blur(4px)\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Collection.tsx",
-    "snippet": "identical to the title on the dark `#00062B` background"
-  },
-  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Collection.tsx",
     "snippet": "<h1 ref={titleRef} className=\"text-fan-primary text-[34px] font-bold leading-none tracking-tight will-change-[opacity,transform]\" data-testid=\"text-page-title\">Collection</h1>"
@@ -19332,37 +19352,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Collection.tsx",
-    "snippet": "<p className=\"text-fan-primary text-[11px] font-semibold truncate leading-tight text-left\">{album.title}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Collection.tsx",
-    "snippet": "<p className=\"text-fan-secondary text-[10px] truncate leading-tight text-left mt-0.5\">{album.artist}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Collection.tsx",
     "snippet": "<div className=\"px-3.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-fan-faint\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Collection.tsx",
-    "snippet": "className=\"text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Collection.tsx",
-    "snippet": "className=\"text-[10px] font-semibold px-2 py-0.5 rounded-full\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Collection.tsx",
-    "snippet": "className=\"flex-1 min-w-0 text-fan-primary text-[15px] font-semibold leading-tight truncate\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Collection.tsx",
-    "snippet": "className=\"text-[13px] font-normal truncate mt-0.5\""
   },
   {
     "rule": "player-touch-target-too-small",

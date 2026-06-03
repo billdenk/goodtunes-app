@@ -7,6 +7,8 @@
 // wraps these views.
 
 import type { RecentSearchRow } from "@/hooks/useRecents";
+import type { Album } from "@/data/musicData";
+import { AlbumCard } from "@/components/ui/AlbumCard";
 
 export type Hit = {
   kind: string;
@@ -369,6 +371,25 @@ export function SearchEntityRow({
 }
 
 export function ResultRow({ hit, onPick }: { hit: Hit; onPick: (h: Hit) => void }) {
+  // Album hits route through the shared AlbumCard (row mode) so the
+  // pointer/desktop hover Play + "…" affordances match every other
+  // album surface (Task #1090). Touch keeps tap-to-navigate.
+  if (hit.kind === "album") {
+    const album = {
+      id: hit.albumId ?? hit.id,
+      title: hit.title,
+      artist: hit.subtitle ?? "",
+      artwork: hit.thumbUrl ?? "",
+    } as Album;
+    return (
+      <AlbumCard
+        album={album}
+        mode="row"
+        subtitle={hit.subtitle ? `${KIND_LABEL[hit.kind] ?? hit.kind} · ${hit.subtitle}` : (KIND_LABEL[hit.kind] ?? hit.kind)}
+        onNavigate={() => onPick(hit)}
+      />
+    );
+  }
   // Artist/person/vendor/label rows use a rounded thumb; everything
   // else uses a square 11×11 cover (Apple Music search-row rhythm).
   const isRound = hit.kind === "artist" || hit.kind === "person" || hit.kind === "vendor" || hit.kind === "label";

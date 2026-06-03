@@ -16,6 +16,7 @@ import {
 } from "@/lib/streamingService";
 import { X, ChevronRight, ChevronLeft } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
+import { AlbumCard } from "@/components/ui/AlbumCard";
 import { track } from "@/lib/analytics";
 import { useRecordRecent } from "@/hooks/useRecents";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
@@ -517,19 +518,13 @@ export function ArtistDetail() {
               <h2 className="text-fan-primary text-xl font-bold tracking-tight mb-3">GoodTunes&reg; Releases</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                 {artistAlbums.map((album) => (
-                  <button
-                    key={album.id}
-                    type="button"
-                    onClick={() => navigate(`/album/${album.id}`)}
-                    className="flex flex-col text-left active:scale-[0.97] transition-transform"
-                    data-testid={`artist-album-${album.id}`}
-                  >
-                    <div className="aspect-square rounded-2xl overflow-hidden" style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}>
-                      <img src={album.artwork} alt={album.title} className="w-full h-full object-cover" />
-                    </div>
-                    <p className="text-fan-primary text-sm font-semibold leading-tight truncate mt-2">{album.title}</p>
-                    <p className="text-fan-secondary text-xs truncate mt-0.5">{[Number.isFinite(album.year) ? album.year : null, album.type].filter(Boolean).join(" · ")}</p>
-                  </button>
+                  <div key={album.id} data-testid={`artist-album-${album.id}`}>
+                    <AlbumCard
+                      album={album}
+                      subtitle={[Number.isFinite(album.year) ? album.year : null, album.type].filter(Boolean).join(" · ")}
+                      onNavigate={() => navigate(`/album/${album.id}`)}
+                    />
+                  </div>
                 ))}
               </div>
             </div>
@@ -574,35 +569,17 @@ export function ArtistDetail() {
                     )}
                     <div className="flex gap-4 overflow-x-auto scrollbar-hide px-5 pb-1">
                       {preview.map((release) => (
-                        <button
-                          key={release.id}
-                          type="button"
-                          onClick={() => setHowToPlay(release)}
-                          className="flex-shrink-0 flex flex-col text-left active:scale-[0.97] transition-transform"
-                          style={{ width: 160 }}
-                          data-testid={`streaming-release-${release.id}`}
-                        >
-                          <div
-                            className="aspect-square rounded-2xl overflow-hidden bg-white/5"
-                            style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}
-                          >
-                            {release.artworkUrl && (
-                              <img
-                                src={release.artworkUrl}
-                                alt={release.name}
-                                className="w-full h-full object-cover"
-                              />
-                            )}
-                          </div>
-                          <p className="text-fan-primary text-sm font-semibold leading-tight truncate mt-2">
-                            {release.name}
-                          </p>
-                          <p className="text-fan-secondary text-xs truncate mt-0.5">
-                            {[release.year, bucket.label === "Singles" ? "Single" : release.type === "album" ? "LP" : release.type]
+                        <div key={release.id} className="flex-shrink-0" data-testid={`streaming-release-${release.id}`}>
+                          <AlbumCard
+                            album={{ id: release.id, title: release.name, artist: artistName, artwork: release.artworkUrl ?? "", year: release.year ?? 0, type: "LP" } as Album}
+                            width={160}
+                            playable={false}
+                            subtitle={[release.year, bucket.label === "Singles" ? "Single" : release.type === "album" ? "LP" : release.type]
                               .filter(Boolean)
                               .join(" · ")}
-                          </p>
-                        </button>
+                            onNavigate={() => setHowToPlay(release)}
+                          />
+                        </div>
                       ))}
                       {hasMore && (
                         <button
@@ -885,34 +862,16 @@ function BucketGridSheet({
           </p>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {items.map((release) => (
-              <button
-                key={release.id}
-                type="button"
-                onClick={() => onPick(release)}
-                className="flex flex-col text-left active:scale-[0.97] transition-transform"
-                data-testid={`bucket-release-${release.id}`}
-              >
-                <div
-                  className="aspect-square rounded-2xl overflow-hidden bg-white/5"
-                  style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.4)" }}
-                >
-                  {release.artworkUrl && (
-                    <img
-                      src={release.artworkUrl}
-                      alt={release.name}
-                      className="w-full h-full object-cover"
-                    />
-                  )}
-                </div>
-                <p className="text-fan-primary text-sm font-semibold leading-tight truncate mt-2">
-                  {release.name}
-                </p>
-                <p className="text-fan-secondary text-xs truncate mt-0.5">
-                  {[release.year, label === "Singles" ? "Single" : release.type === "album" ? "LP" : release.type]
+              <div key={release.id} data-testid={`bucket-release-${release.id}`}>
+                <AlbumCard
+                  album={{ id: release.id, title: release.name, artist: artistName, artwork: release.artworkUrl ?? "", year: release.year ?? 0, type: "LP" } as Album}
+                  playable={false}
+                  subtitle={[release.year, label === "Singles" ? "Single" : release.type === "album" ? "LP" : release.type]
                     .filter(Boolean)
                     .join(" · ")}
-                </p>
-              </button>
+                  onNavigate={() => onPick(release)}
+                />
+              </div>
             ))}
           </div>
         </div>

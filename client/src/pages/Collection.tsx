@@ -9,7 +9,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { MobileChrome } from "@/components/MobileChrome";
 import { IconButton } from "@/components/ui/IconButton";
 import { SheetClose } from "@/components/ui/SheetChrome";
-import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
+import { AlbumCard } from "@/components/ui/AlbumCard";
 import { track } from "@/lib/analytics";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
@@ -18,7 +18,6 @@ import { chatEnabled } from "@/lib/platform";
 import { deriveCollectionTab, collectionTabHref } from "@/lib/fanRail";
 import { subscribeChats, totalUnread } from "@/lib/chatStore";
 import { ARTIST_PHOTOS, type Album, type Song } from "@/data/musicData";
-import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { Disc3, Music2, Mic2 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { popBounce } from "@/lib/motion";
@@ -43,7 +42,6 @@ export function Collection() {
   const { user } = useAuth();
   const favArtists = useFavoriteArtists();
   const { playSong, currentSong, setShowPlayer } = usePlayer();
-  const [certAlbum, setCertAlbum] = useState<Album | null>(null);
   // Task #1074 — Collection's active tab is driven by the URL (`?tab=`)
   // so the desktop fan rail can deep-link to Songs/Artists and browser
   // back/forward works. `setTab` just navigates; `tab` is derived. The
@@ -514,31 +512,20 @@ export function Collection() {
                 <h2 className="text-fan-primary text-base font-bold">Recently Played</h2>
               </div>
               <div className="flex gap-3 px-5 overflow-x-auto scrollbar-hide pt-2 pb-2" style={{ marginTop: -8 }}>
-                {recentAlbumRail.map((album) => (
-                  <button
-                    key={album.id}
-                    type="button"
-                    onClick={() => (album.album ? openAlbum(album.album) : navigate(`/album/${album.id}`))}
-                    className="flex-shrink-0 flex flex-col active:scale-[0.95] transition-transform"
-                    style={{ width: 90 }}
-                    data-testid={`button-recent-album-${album.id}`}
-                  >
-                    <div
-                      className="rounded-2xl overflow-hidden mb-1.5"
-                      style={{
-                        width: 90,
-                        height: 90,
-                        boxShadow: currentSong?.albumId === album.id
-                          ? "0 0 0 2px #319ED8, 0 4px 16px rgba(0,0,0,0.5)"
-                          : "0 4px 16px rgba(0,0,0,0.4)",
-                      }}
-                    >
-                      <img src={album.artwork} alt={album.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                {recentAlbumRail.map((album) => {
+                  const full = album.album ?? ({ id: album.id, title: album.title, artist: album.artist, artwork: album.artwork } as Album);
+                  return (
+                    <div key={album.id} className="flex-shrink-0" data-testid={`button-recent-album-${album.id}`}>
+                      <AlbumCard
+                        album={full}
+                        compact
+                        width={90}
+                        playable={!!album.album}
+                        onNavigate={() => (album.album ? openAlbum(album.album) : navigate(`/album/${album.id}`))}
+                      />
                     </div>
-                    <p className="text-fan-primary text-[11px] font-semibold truncate leading-tight text-left">{album.title}</p>
-                    <p className="text-fan-secondary text-[10px] truncate leading-tight text-left mt-0.5">{album.artist}</p>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ) : null}
@@ -689,9 +676,7 @@ export function Collection() {
                         key={album.id}
                         album={album}
                         isPreview={previewAlbumIds.has(album.id)}
-                        isCurrentlyPlaying={currentSong?.albumId === album.id}
-                        onPress={() => openAlbum(album)}
-                        onCertPress={() => setCertAlbum(album)}
+                        onNavigate={() => openAlbum(album)}
                       />
                     ))}
                   </div>
@@ -947,164 +932,7 @@ export function Collection() {
           </div>
         )}
 
-        {certAlbum && (
-          <GoodDeedCertificate
-            album={certAlbum}
-            ownerName={user?.displayName || "GoodTunes Fan"}
-            identities={{
-              realName: user?.realName ?? null,
-              displayName: user?.displayName || "GoodTunes Fan",
-              username: user?.username || "you",
-            }}
-            certificateNumber={certAlbum.certificateNumber ?? 1}
-            certificateNumbers={certAlbum.ownedCertificates}
-            isPreview={previewAlbumIds.has(certAlbum.id)}
-            onClose={() => setCertAlbum(null)}
-          />
-        )}
       </section>
     </main>
-  );
-}
-
-function AlbumCard({
-  album,
-  isPreview = false,
-  isCurrentlyPlaying,
-  onPress,
-  onCertPress,
-}: {
-  album: Album;
-  isPreview?: boolean;
-  isCurrentlyPlaying: boolean;
-  onPress: () => void;
-  onCertPress: () => void;
-}) {
-  const ownedCount = album.ownedCertificates?.length ?? 1;
-  // A preview is never a purchase, so it never shows the owned/×N badge or
-  // the stacked-cards multi treatment — it gets the single "Demo" chip.
-  const isMulti = !isPreview && ownedCount > 1;
-  return (
-    <div className="flex flex-col">
-      <div className="relative aspect-square">
-        {isMulti && (
-          <>
-            <div
-              aria-hidden
-              className="absolute inset-0 rounded-2xl overflow-hidden"
-              style={{
-                transform: "rotate(-6deg) translate(-6px, -4px) scale(0.94)",
-                boxShadow: "0 4px 16px rgba(0,0,0,0.45)",
-                zIndex: 0,
-              }}
-            >
-              <img src={album.artwork} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover opacity-85" />
-            </div>
-            {ownedCount > 2 && (
-              <div
-                aria-hidden
-                className="absolute inset-0 rounded-2xl overflow-hidden"
-                style={{
-                  transform: "rotate(5deg) translate(6px, -3px) scale(0.96)",
-                  boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-                  zIndex: 1,
-                }}
-              >
-                <img src={album.artwork} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover opacity-90" />
-              </div>
-            )}
-          </>
-        )}
-        <button
-          type="button"
-          onClick={onPress}
-          className="relative z-10 w-full h-full rounded-2xl overflow-hidden active:scale-[0.97] transition-transform"
-          style={{
-            boxShadow: isCurrentlyPlaying
-              ? "0 0 0 2px #319ED8, 0 4px 20px rgba(0,0,0,0.4)"
-              : "0 4px 20px rgba(0,0,0,0.4)",
-          }}
-        >
-        <img src={album.artwork} alt={album.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
-        {isCurrentlyPlaying && (
-          <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,6,43,0.45)" }}>
-            <div className="flex gap-[3px] items-end h-5">
-              {[0.6, 1, 0.75].map((h, i) => (
-                <div
-                  key={i}
-                  className="w-[3px] rounded-full"
-                  style={{
-                    background: "white",
-                    height: `${h * 100}%`,
-                    animation: "equalizerBounce 0.8s ease-in-out infinite alternate",
-                    animationDelay: `${i * 0.2}s`,
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-          {/* LP/EP/Single chip hidden for now — the format wasn't earning
-              its place in the corner of the artwork (Bill: "we can hide
-              all of the LP/EP on the album covers for now"). Type still
-              lives on the album record and on the admin preview's
-              metadata line; we can bring it back to the cover later if
-              we ever need format-as-filter on the consumer surface. */}
-          {isMulti && (
-            <div className="absolute top-2 right-2">
-              <span
-                className="text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
-                style={{ background: "rgba(74,255,202,0.2)", color: "#4AFFCA", border: "1px solid rgba(74,255,202,0.35)", backdropFilter: "blur(4px)" }}
-                data-testid={`badge-owned-${album.id}`}
-              >
-                ×{ownedCount}
-              </span>
-            </div>
-          )}
-          {/* Task #909 — a previewed album shows a small, tasteful "Demo"
-              chip in place of the owned/×N badge. Neutral white glass (no
-              accent) so it reads as a temporary state, not a purchase. */}
-          {isPreview && (
-            <div className="absolute top-2 right-2">
-              <span
-                className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                style={{ background: "rgba(255,255,255,0.22)", color: "#ffffff", border: "1px solid rgba(255,255,255,0.4)", backdropFilter: "blur(4px)" }}
-                data-testid={`badge-demo-${album.id}`}
-              >
-                Demo
-              </span>
-            </div>
-          )}
-        </button>
-      </div>
-      <div className="mt-2 px-0.5">
-        {/* Apple Music album-card typography. Two-tier contrast:
-            - Title: 15px / semibold / 100% white
-            - Artist: 13px / regular / ~55% white so the secondary line
-              clearly reads as metadata. Earlier 65% looked nearly
-              identical to the title on the dark `#00062B` background
-              — Apple's secondary label color sits around 55–60% white
-              on dark, and the title's bold weight + size already does
-              part of the lifting, so we can go a bit dimmer here.
-            The "E" pill sits inline with the title; the title gets
-            `flex-1 min-w-0` so long titles ellipsize cleanly without
-            pushing the badge off the row. */}
-        <div className="flex items-center gap-2.5 min-w-0">
-          <p
-            className="flex-1 min-w-0 text-fan-primary text-[15px] font-semibold leading-tight truncate"
-            data-testid={`text-album-title-${album.id}`}
-          >
-            {album.title}
-          </p>
-          {album.isExplicit && <ExplicitBadge />}
-        </div>
-        <p
-          className="text-[13px] font-normal truncate mt-0.5"
-          style={{ color: "rgba(255,255,255,0.55)" }}
-        >
-          {album.artist}
-        </p>
-      </div>
-    </div>
   );
 }

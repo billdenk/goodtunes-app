@@ -1052,7 +1052,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
   );
 }
 
-function ProvenanceSheet({ album, ownerName, certNum, onClose, onViewGoodDeed }: { album: Album; ownerName: string; certNum: number; onClose: () => void; onViewGoodDeed?: (n: number) => void }) {
+export function ProvenanceSheet({ album, ownerName, certNum, onClose, onViewGoodDeed }: { album: Album; ownerName: string; certNum: number; onClose: () => void; onViewGoodDeed?: (n: number) => void }) {
   const events = [
     { date: "2025-11-21", actor: ownerName, action: "Acquired via secondary transfer", color: "#4AFFCA" },
     { date: "2024-08-04", actor: "Original Owner", action: `Purchased from ${album.artist}`, color: "#319ED8" },
@@ -1111,7 +1111,7 @@ function ProvenanceSheet({ album, ownerName, certNum, onClose, onViewGoodDeed }:
   );
 }
 
-function OwnershipSheet({
+export function OwnershipSheet({
   album,
   ownerName,
   onClose,
