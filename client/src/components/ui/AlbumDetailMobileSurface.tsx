@@ -786,7 +786,7 @@ export function AlbumDetailMobileSurface({
                       {i > 0 && (
                         <span
                           className="absolute left-0 right-0 top-0 h-px pointer-events-none"
-                          style={{ background: "rgba(255,255,255,0.07)" }}
+                          style={{ background: "rgba(255,255,255,0.10)" }}
                         />
                       )}
                     </div>
@@ -881,7 +881,7 @@ export function AlbumDetailMobileSurface({
                     {i > 0 && (
                       <span
                         className="absolute left-0 right-0 top-0 h-px pointer-events-none"
-                        style={{ background: "rgba(255,255,255,0.07)" }}
+                        style={{ background: "rgba(255,255,255,0.10)" }}
                       />
                     )}
                   </div>
