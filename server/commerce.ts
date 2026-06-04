@@ -738,13 +738,40 @@ export async function reresolveAlbumSkuSnapshots(albumId: string): Promise<{
   return { scanned: rows.length, healed };
 }
 
+// Admin-aware visibility for fan-facing reads. Mirrors routes.ts:isAdminUser
+// so an admin / god-view caller can preview the Buy sheet on a staged
+// (future-dated or hidden) release while a real fan still hits the sunrise
+// 404. Kept self-contained here — routes.ts dynamically imports commerce.ts,
+// so a static import back the other way would risk a module cycle.
+async function viewerIsAdmin(req: Request): Promise<boolean> {
+  let found: { userId: string; kind: "admin" | "customer" } | undefined;
+  if (req.session?.userId) {
+    found = {
+      userId: req.session.userId,
+      kind: (req.session.kind ?? "admin") as "admin" | "customer",
+    };
+  } else {
+    const auth = req.headers.authorization;
+    if (auth?.startsWith("Bearer ")) found = await storage.getAuthBy(auth.slice(7));
+  }
+  if (!found || found.kind !== "admin") return false;
+  // Same host/kind boundary getAuthFromRequest enforces: in prod an admin
+  // token on a customer host is rejected; dev (host unknown) trusts the kind.
+  if (req.hostKnown && found.kind !== req.authKind) return false;
+  const u = await storage.getUser(found.userId);
+  return !!u?.isAdmin;
+}
+
 export function registerCommerceRoutes(app: Express) {
   // ─── Public catalog reads ────────────────────────────────────────
   // GET /api/albums/:id/buy-options — what the fan-side Buy sheet renders.
   // Returns active SKUs and active add-ons. Hidden / inactive rows never
   // leak; the admin endpoint below returns the full list for editing.
   app.get("/api/albums/:id/buy-options", async (req, res) => {
-    const album = await storage.getAlbumById(req.params.id);
+    // Admin-aware: an admin previewing a staged release sees the Buy sheet
+    // (mirrors the /api/albums/:id detail route); real fans stay sunrise-gated.
+    const includeHidden = await viewerIsAdmin(req);
+    const album = await storage.getAlbumById(req.params.id, { includeHidden });
     if (!album) return res.status(404).json({ message: "Album not found" });
     const [skus, addons] = await Promise.all([
       listActiveSkus(album.id),

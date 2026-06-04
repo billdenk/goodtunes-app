@@ -120,6 +120,15 @@ export function FanRailNav({
         />
       </div>
 
+      {/* Apple-Music-style section break: closes the Collection (library)
+          group off from the fan's own Playlists / Recents below. Inset
+          hairline so it aligns with the row text rather than the rail edge. */}
+      <div
+        role="separator"
+        aria-hidden="true"
+        className="mx-3 my-1.5 border-t border-white/10"
+      />
+
       <Row
         testId="rail-playlists"
         icon={ListMusic}
