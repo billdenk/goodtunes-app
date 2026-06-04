@@ -460,7 +460,23 @@ export function DesktopAlbumView({
                   )}
                 </>
               ) : (
+                /* Apple-tone preview/buy transport row, mirroring the owned
+                   row (and the mobile album surface): Shuffle (glass) ·
+                   white Play/Preview pill · Buy / Sold Out / Listen on … ·
+                   Info (glass). */
                 <>
+                  {canPlay && (
+                    <IconButton
+                      variant="glass"
+                      size="lg"
+                      label="Shuffle"
+                      onClick={onShuffle}
+                      style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
+                      data-testid="button-shuffle-album"
+                    >
+                      <Shuffle strokeWidth={2.2} />
+                    </IconButton>
+                  )}
                   <PreviewPlayPill
                     canPlay={canPlay}
                     active={previewActive}
@@ -476,7 +492,7 @@ export function DesktopAlbumView({
                       <button
                         type="button"
                         disabled
-                        className="h-11 px-6 rounded-full inline-flex items-center justify-center font-semibold text-[14px] text-fan-secondary cursor-not-allowed"
+                        className="h-12 px-7 rounded-full inline-flex items-center justify-center font-semibold text-[15px] text-fan-secondary cursor-not-allowed"
                         style={{ background: "rgba(255,255,255,0.06)" }}
                         data-testid="button-buy-sold-out"
                       >
@@ -495,7 +511,7 @@ export function DesktopAlbumView({
                       type="button"
                       onClick={onStreamAlbum}
                       data-testid="button-listen-on"
-                      className="h-11 px-6 rounded-full inline-flex items-center justify-center gap-2 text-white font-semibold text-[14px] transition-transform active:scale-[0.97]"
+                      className="h-12 px-7 rounded-full inline-flex items-center justify-center gap-2 text-white font-semibold text-[15px] transition-transform active:scale-[0.97]"
                       style={{
                         background:
                           "linear-gradient(135deg, var(--brand-purple), var(--brand-blue))",
@@ -515,6 +531,18 @@ export function DesktopAlbumView({
                       </svg>
                       Listen on…
                     </button>
+                  )}
+                  {hasAlbumCredits && (
+                    <IconButton
+                      variant="glass"
+                      size="lg"
+                      label="Album credits"
+                      onClick={onOpenAlbumCredits}
+                      style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
+                      data-testid="button-album-credits"
+                    >
+                      <Info strokeWidth={2} />
+                    </IconButton>
                   )}
                 </>
               )}
@@ -743,17 +771,20 @@ export function DesktopAlbumView({
  *  the slide reads as an edge reveal rather than a squash. */
 const LYRICS_PANEL_WIDTH = 360;
 
-/* Rose accent — matches the per-row triangle/equalizer in
-   AlbumDesktopTrackRow so the album-level Play pill and the row-level
-   "now previewing" indicator speak the same color story. */
-const ROSE = "#FF5470";
+/* Buy CTA fill — the brand-blue gradient, matching the not-owned Buy
+   button on the mobile album surface (AlbumDetailMobileSurface) so the
+   purchase action reads with the same blue role across both surfaces. */
+const BUY_BLUE_GRADIENT =
+  "linear-gradient(135deg, #1D5E8F, var(--brand-blue))";
 
 /**
- * Rose-outline Play pill for the not-owned (Preview & Purchase) state.
- * • At rest with previews available → rose outline, rose triangle, "Play".
+ * White Play pill for the not-owned (Preview & Purchase) state — Apple-tone,
+ * matching the owned row's white Play pill in height/width/radius/press.
+ * • At rest with previews available → white pill, navy triangle, "Play".
  * • While a preview session is auditioning this album → swaps to a Pause
  *   glyph + "Pause" label (preserves the same button as the toggle).
- * • When no previews exist (`canPlay=false`) → disabled with a tooltip.
+ * • When no previews exist (`canPlay=false`) → dimmed-white, disabled,
+ *   with a tooltip.
  */
 function PreviewPlayPill({
   canPlay,
@@ -782,17 +813,16 @@ function PreviewPlayPill({
       }
       data-testid="button-play-preview"
       aria-label={showPause ? "Pause preview" : "Play preview"}
-      className={[
-        "h-11 pl-4 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[14px] transition-colors",
-        disabled
-          ? "border border-white/20 text-fan-faint cursor-not-allowed"
-          : "border-2 border-[#FF5470] text-[#FF5470] hover:bg-[#FF5470]/12 active:scale-[0.97]",
-      ].join(" ")}
+      className="h-12 pl-6 pr-7 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97] disabled:cursor-not-allowed"
+      style={{
+        background: disabled ? "rgba(255,255,255,0.35)" : "#fff",
+        color: "var(--brand-bg)",
+      }}
     >
       {showPause ? (
-        <Pause className="w-4 h-4 fill-current" strokeWidth={0} />
+        <Pause className="w-5 h-5 fill-current" strokeWidth={0} />
       ) : (
-        <Play className="w-4 h-4 fill-current" strokeWidth={0} />
+        <Play className="w-5 h-5 fill-current" strokeWidth={0} />
       )}
       <span>{showPause ? "Pause" : "Play"}</span>
     </button>
@@ -859,12 +889,12 @@ function BuyPricePill({
         onClick={() => onBuy?.(signedCert ? { signedCert: true } : undefined)}
         data-testid="button-buy-bundle"
         data-hover={hover ? "true" : "false"}
-        className="h-11 px-6 rounded-full inline-flex items-center justify-center text-white font-semibold text-[14px] transition-[background-color,box-shadow,transform] cursor-pointer active:scale-[0.97]"
+        className="h-12 px-7 rounded-full inline-flex items-center justify-center text-white font-semibold text-[15px] transition-[background-color,box-shadow,transform] cursor-pointer active:scale-[0.97]"
         style={{
-          background: ROSE,
+          background: BUY_BLUE_GRADIENT,
           boxShadow: hover
-            ? "0 8px 22px rgba(255,84,112,0.45)"
-            : "0 4px 12px rgba(255,84,112,0.25)",
+            ? "0 8px 22px rgba(49,158,216,0.45)"
+            : "0 4px 12px rgba(49,158,216,0.25)",
         }}
       >
         <span className="whitespace-nowrap" data-testid="text-buy-label">
