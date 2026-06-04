@@ -19,6 +19,11 @@ import { sendErrorReport } from "@/lib/errorReport";
  * it paints a visible, light-bg "Admin failed to load — reload"
  * card with the error message, so we never ship another silent blank
  * regression in the admin shell.
+ *
+ * Task #1217 — Added "Go to Albums" escape hatch alongside Reload/Try
+ * again so an operator who lands here after a /admin → /admin/dashboard
+ * redirect is never stranded: one click gets them to the working
+ * albums list without having to know to manually type the URL.
  */
 export class AdminShellErrorBoundary extends Component<
   { children: ReactNode },
@@ -76,7 +81,7 @@ export class AdminShellErrorBoundary extends Component<
             reloading; if it keeps happening, check the browser console and
             server logs for the trace below.
           </div>
-          <div className="mt-4 flex items-center gap-2">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => window.location.reload()}
@@ -93,6 +98,18 @@ export class AdminShellErrorBoundary extends Component<
             >
               Try again
             </button>
+            {/* Task #1217 — Let the operator jump directly to the
+                proven-working albums list without having to manually
+                type the URL. Uses a hard navigation (href, not wouter
+                Link) because the shell is broken and the React tree
+                may not be in a state where wouter push works. */}
+            <a
+              href="/admin/albums"
+              className="h-9 px-4 rounded-md border border-slate-300 text-slate-900 text-sm font-semibold hover:bg-slate-100 inline-flex items-center"
+              data-testid="link-admin-shell-go-to-albums"
+            >
+              Go to Albums
+            </a>
           </div>
           <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs">
             <div className="font-mono font-bold text-slate-900 mb-1 break-all">

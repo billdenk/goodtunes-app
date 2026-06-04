@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Component, useEffect, useMemo, useState, type ReactNode, type ErrorInfo } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -95,6 +95,88 @@ class SectionBoundary extends Component<
 Component stack:
 {comp}
           </pre>
+        )}
+      </div>
+    );
+  }
+}
+
+/**
+ * Task #1217 — Outer safety net for the entire dashboard content body.
+ *
+ * The per-`SectionBoundary` wrappers catch individual widget crashes and
+ * keep the rest of the page rendering. This boundary sits above ALL of
+ * them inside `<AdminFrame>` — if anything in the dashboard throws before
+ * a SectionBoundary can catch it (e.g. AdminPageHeader, a top-level hook
+ * evaluation, or a SectionBoundary itself failing), this still renders
+ * within the admin chrome (sidebar + top bar stay visible) and gives the
+ * operator a visible "Dashboard couldn't load" card with a Try again
+ * button AND a direct "Go to Albums" link.
+ *
+ * The "Go to Albums" link is the key addition: previously, any failure
+ * that bubbled past the per-section boundaries left Bill staring at an
+ * error card with no obvious next step — he had to know to manually type
+ * /admin/albums. Now one click gets him to the proven-working page.
+ */
+class DashboardContentBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null; info: string | null }
+> {
+  state = { error: null as Error | null, info: null as string | null };
+  static getDerivedStateFromError(error: Error) {
+    return { error, info: null };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[AdminDashboard:content]", error, info);
+    this.setState({ info: info?.componentStack ?? null });
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    const e = this.state.error;
+    const stack = (e.stack ?? "").split("\n").slice(0, 8).join("\n");
+    return (
+      <div
+        className="rounded-xl border border-rose-200 bg-rose-50/60 p-6"
+        data-testid="dashboard-content-error"
+      >
+        <div className="text-sm font-semibold text-rose-900 mb-1">
+          Dashboard couldn't load
+        </div>
+        <div className="text-sm text-rose-800/80 mb-4">
+          Something went wrong rendering the dashboard. You can try again or
+          go straight to Albums — everything else in the admin is working.
+        </div>
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <button
+            type="button"
+            onClick={() => this.setState({ error: null, info: null })}
+            className="h-9 px-4 rounded-md bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+            data-testid="button-dashboard-retry"
+          >
+            Try again
+          </button>
+          {/* Hard navigate — wouter push might be unreliable inside an
+              errored React subtree, and a hard navigation will also clear
+              any corrupt client state that contributed to the crash. */}
+          <a
+            href="/admin/albums"
+            className="h-9 px-4 rounded-md border border-slate-300 text-slate-900 text-sm font-semibold hover:bg-slate-100 inline-flex items-center"
+            data-testid="link-dashboard-go-to-albums"
+          >
+            Go to Albums
+          </a>
+        </div>
+        {stack && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-rose-800/60 hover:text-rose-800 font-medium">
+              Error details
+            </summary>
+            <pre className="mt-2 font-mono whitespace-pre-wrap break-all text-rose-800/70 rounded border border-rose-200 bg-white p-2">
+              {e.name || "Error"}: {e.message || "(no message)"}
+              {"\n"}
+              {stack}
+            </pre>
+          </details>
         )}
       </div>
     );
@@ -294,39 +376,52 @@ export function AdminDashboard() {
 
   return (
     <AdminFrame active="dashboard">
-      <div className="space-y-5">
-        <AdminPageHeader
-          title="Dashboard"
-          subtitle="How GoodTunes is doing right now."
-          testId="heading-admin-dashboard"
-          actions={<RangeSwitcher value={range} onChange={setRange} />}
-        />
+      {/* Task #1217 — DashboardContentBoundary wraps the entire content
+          body so ANY throw that escapes the per-SectionBoundary wrappers
+          (including AdminPageHeader or a SectionBoundary's own render)
+          still shows a visible recovery card WITH a "Go to Albums" link
+          inside the admin chrome — sidebar and header remain visible.
+          Without this, those throws would bubble to AdminErrorBoundary
+          (which shows a generic admin error card with no Albums escape)
+          or, if AdminFrame itself were involved, to AdminShellErrorBoundary
+          which removes the sidebar entirely. */}
+      <DashboardContentBoundary>
+        <div className="space-y-5">
+          <SectionBoundary section="page-header">
+            <AdminPageHeader
+              title="Dashboard"
+              subtitle="How GoodTunes is doing right now."
+              testId="heading-admin-dashboard"
+              actions={<RangeSwitcher value={range} onChange={setRange} />}
+            />
+          </SectionBoundary>
 
-        <SectionBoundary section="ops-health">
-          {ops && <OpsHealthStrip ops={ops} />}
-        </SectionBoundary>
+          <SectionBoundary section="ops-health">
+            {ops && <OpsHealthStrip ops={ops} />}
+          </SectionBoundary>
 
-        <SectionBoundary section="referral-payouts">
-          {isSuperAdmin && <ReferralPayoutsCard />}
-        </SectionBoundary>
+          <SectionBoundary section="referral-payouts">
+            {isSuperAdmin && <ReferralPayoutsCard />}
+          </SectionBoundary>
 
-        <SectionBoundary section="kpi-grid">
-          <KpiGrid kpis={kpis} loading={kpisLoading} qs={qs} />
-        </SectionBoundary>
+          <SectionBoundary section="kpi-grid">
+            <KpiGrid kpis={kpis} loading={kpisLoading} qs={qs} />
+          </SectionBoundary>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2">
-            <SectionBoundary section="primary-chart">
-              <PrimaryChart kpis={kpis} prior={priorKpis} loading={kpisLoading} />
-            </SectionBoundary>
-          </div>
-          <div>
-            <SectionBoundary section="activity-feed">
-              <ActivityFeed orders={recentOrders ?? []} customers={recentCustomers?.rows ?? []} />
-            </SectionBoundary>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div className="lg:col-span-2">
+              <SectionBoundary section="primary-chart">
+                <PrimaryChart kpis={kpis} prior={priorKpis} loading={kpisLoading} />
+              </SectionBoundary>
+            </div>
+            <div>
+              <SectionBoundary section="activity-feed">
+                <ActivityFeed orders={recentOrders ?? []} customers={recentCustomers?.rows ?? []} />
+              </SectionBoundary>
+            </div>
           </div>
         </div>
-      </div>
+      </DashboardContentBoundary>
     </AdminFrame>
   );
 }
