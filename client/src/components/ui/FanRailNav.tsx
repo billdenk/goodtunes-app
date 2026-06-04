@@ -65,7 +65,7 @@ function Row({
  *  headers read consistently. */
 function GroupHeader({ children }: { children: ReactNode }) {
   return (
-    <div className="px-3 pt-5 pb-1.5 text-xs font-semibold uppercase tracking-wider text-fan-faint">
+    <div className="px-3 pt-5 pb-1.5 text-xs font-medium uppercase tracking-wider text-fan-faint">
       {children}
     </div>
   );
