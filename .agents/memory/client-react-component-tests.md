@@ -92,7 +92,37 @@ without first clicking `button-show-player`.
 linked…") fails with 500 in throwaway task DBs — pre-existing, DB-state
 dependent, not caused by client test work.
 
+**Rendering a real Admin page (AdminFrame-wrapped, e.g. `AdminAlbum.tsx`):**
+- AdminFrame wraps ALL its content in ONE `AdminErrorBoundary`, so a crash in
+  ANY visible sub-panel (OverviewPanel's NPO split, TracksPanel credits, the
+  Mux/AutoSync banners) replaces the WHOLE page with the fallback — your tab
+  bar / delete chrome silently vanish. The default queryFn returning `[]` is
+  what triggers it: object-shaped reads do `data?.x.y` (only the top `?.`
+  guards), so `[].x` is undefined and `.y` throws. Seed every object-shaped
+  query the rendered tabs touch: `["/api/admin/mux-status"]`,
+  `["/api/admin/job-runs/alerts"]` (`.thresholds`),
+  `[...,"npo-beneficiaries"]` (`.beneficiaries.map`),
+  `["/api/albums",id,"credits"]` (`.bySongId[songId]`). Array-shaped reads are
+  fine with the `[]` default. Diagnose by listing `[data-testid]` after mount —
+  seeing `admin-error-boundary` + `button-reset-error-boundary` means a panel threw.
+- **Per-test URL reset:** wouter reads the GLOBAL location, which PERSISTS
+  across tests in the shared jsdom. A `tab-tracks` click in an early test
+  leaves `?tab=tracks` so a later mount starts on the wrong tab (operator
+  shows `button-delete-options` instead of `button-delete-album`). Call
+  `window.history.replaceState(null,"",cleanUrl)` at the top of every mount.
+- **Radix Dialog/Dropdown content** (any popup that opens on click) mounts a
+  `FocusScope` + `DismissableLayer` that reach for jsdom-absent globals:
+  `MutationObserver`, `ResizeObserver`, `NodeFilter`, `HTMLInputElement`/other
+  `HTML*Element` constructors, and `hasPointerCapture`/`set`/`release`. The
+  robust fix is to copy every window-only global onto globalThis once
+  (`for (const k of Object.getOwnPropertyNames(window)) if (!(k in g)) g[k]=window[k]`)
+  — but do it AFTER wrapping `setInterval`, since `"setInterval" in g` is true
+  natively so the wrapper survives. Without these the dialog throw is swallowed
+  by AdminErrorBoundary and looks like "the dialog just didn't open."
+
 Reference implementations: `client/src/components/ui/desktopLyricsPanel.test.ts`
 (prop-driven components), `client/src/pages/playerLyricsPanel.test.ts`
-(context-driven page), and `client/src/pages/albumDetailLyricsBreakpoints.test.ts`
-(full-page, md vs lg lyrics surfaces).
+(context-driven page), `client/src/pages/albumDetailLyricsBreakpoints.test.ts`
+(full-page, md vs lg lyrics surfaces), and
+`client/src/pages/adminAlbumDeleteGating.test.ts` (AdminFrame-wrapped admin
+page with seeded panels + Radix dialogs).
