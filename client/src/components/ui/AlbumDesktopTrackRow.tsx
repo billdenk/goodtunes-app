@@ -105,14 +105,6 @@ export function AlbumDesktopTrackRow({
       data-row-state={state}
       data-row-current={isCurrent ? "true" : "false"}
     >
-      {/* Apple-style hairline separator between flush rows. Visible, persistent
-          `white/20` line that stays visible on hover and on the currently-
-          playing row (matching Apple Music, where the dividers are always
-          present). See docs/design-system.md → "Track-row hairline". */}
-      <span
-        aria-hidden
-        className="absolute left-3 right-3 bottom-0 h-px bg-white/20"
-      />
       {/* Leading favorite heart — Apple-style, sits in the left gutter
           (absolute, just left of the number) so it never pushes the number
           or title inward. Quiet white ~55%, not the loud brand rose; not a

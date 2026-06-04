@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Link, useLocation } from "wouter";
@@ -721,11 +721,16 @@ export function DesktopAlbumView({
             Music, then Videos, then Photos read as one vertical scroll, the
             same way the mobile surface and Apple Music proper do. */}
         <div className="mt-5">
-          <div className="flex flex-col pt-1" data-testid="track-list">
-              {/* Apple-style top hairline — inset + same weight as the
-                  per-row separators so the list reads as one uniform set of
-                  rules instead of a thick full-bleed bar above row 1. */}
-              <span aria-hidden className="mx-3 h-px bg-white/20" />
+          {/* Hairlines live as in-flow block elements in the flex column — one
+              above the first row (top rule) and one below every row (between-
+              row + final bottom rule). Absolute-positioned spans inside the
+              rows were consistently invisible due to painting-order ambiguity
+              at the flush seam between adjacent flex items; in-flow spans have
+              no such issue. See docs/design-system.md → "Track-row hairline". */}
+          <div className="flex flex-col" data-testid="track-list">
+              {/* Top hairline — sits above row 1 and matches the per-row
+                  weight so the list reads as one uniform set of rules. */}
+              <span aria-hidden className="mx-3 h-px shrink-0 bg-white/20" />
               {songs.map((s) => {
                 const state = trackPlaybackState({
                   isOwned,
@@ -733,49 +738,53 @@ export function DesktopAlbumView({
                 });
                 const isCurrent = currentSongId === s.id;
                 return (
-                  <AlbumDesktopTrackRow
-                    key={s.id}
-                    trackNumber={s.trackNumber}
-                    title={s.title}
-                    duration={formatDuration(s.duration)}
-                    isCurrent={isCurrent}
-                    isPlaying={isCurrent && !!isPlaying}
-                    isExplicit={!!s.isExplicit}
-                    isFavorite={!!favoriteSongIds?.has(s.id)}
-                    state={state}
-                    onPlay={
-                      state === "locked" || !onPlayTrack
-                        ? undefined
-                        : () => onPlayTrack(s)
-                    }
-                    onAdd={
-                      state === "locked" || !onAddTrack
-                        ? undefined
-                        : () => onAddTrack(s)
-                    }
-                    onPlayNext={
-                      state === "locked" || !onPlayNextTrack
-                        ? undefined
-                        : () => onPlayNextTrack(s)
-                    }
-                    onPlayLast={
-                      state === "locked" || !onPlayLastTrack
-                        ? undefined
-                        : () => onPlayLastTrack(s)
-                    }
-                    onToggleFavorite={
-                      state === "locked" || !onToggleFavoriteTrack
-                        ? undefined
-                        : () => onToggleFavoriteTrack(s)
-                    }
-                    onViewCredits={
-                      state === "locked" || !onViewCreditsTrack
-                        ? undefined
-                        : () => onViewCreditsTrack(s)
-                    }
-                    hasCredits={songHasCredits?.(s) ?? false}
-                    showMenu={isOwned}
-                  />
+                  <Fragment key={s.id}>
+                    <AlbumDesktopTrackRow
+                      trackNumber={s.trackNumber}
+                      title={s.title}
+                      duration={formatDuration(s.duration)}
+                      isCurrent={isCurrent}
+                      isPlaying={isCurrent && !!isPlaying}
+                      isExplicit={!!s.isExplicit}
+                      isFavorite={!!favoriteSongIds?.has(s.id)}
+                      state={state}
+                      onPlay={
+                        state === "locked" || !onPlayTrack
+                          ? undefined
+                          : () => onPlayTrack(s)
+                      }
+                      onAdd={
+                        state === "locked" || !onAddTrack
+                          ? undefined
+                          : () => onAddTrack(s)
+                      }
+                      onPlayNext={
+                        state === "locked" || !onPlayNextTrack
+                          ? undefined
+                          : () => onPlayNextTrack(s)
+                      }
+                      onPlayLast={
+                        state === "locked" || !onPlayLastTrack
+                          ? undefined
+                          : () => onPlayLastTrack(s)
+                      }
+                      onToggleFavorite={
+                        state === "locked" || !onToggleFavoriteTrack
+                          ? undefined
+                          : () => onToggleFavoriteTrack(s)
+                      }
+                      onViewCredits={
+                        state === "locked" || !onViewCreditsTrack
+                          ? undefined
+                          : () => onViewCreditsTrack(s)
+                      }
+                      hasCredits={songHasCredits?.(s) ?? false}
+                      showMenu={isOwned}
+                    />
+                    {/* Per-row bottom hairline — renders as a genuine flex
+                        item so it always paints cleanly between rows. */}
+                    <span aria-hidden className="mx-3 h-px shrink-0 bg-white/20" />
+                  </Fragment>
                 );
               })}
               {/* Task #1182 — Apple-style album footer: exactly three lines —

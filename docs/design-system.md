@@ -87,7 +87,7 @@ Anywhere a piece of metadata in admin chrome (artist name on an album header, ve
 
 Track lists (fan album track list, admin Tracks tab) divide rows with **one light, persistent Apple-Music-style hairline**. It is **always visible** — it does **not** fade out on hover or on the currently-playing/active row (Apple Music keeps its dividers present on every row). Use one tone per surface family:
 
-- **Navy fan surfaces** (`#00062B` bg) — `white/20` (`rgba(255,255,255,0.20)`). Reference: `AlbumDesktopTrackRow.tsx` (per-row bottom hairline + `DesktopAlbumView.tsx` top hairline above the list) and `AlbumDetailMobileSurface.tsx` (per-row top hairline). Desktop and mobile use the **same** value so the two surfaces match.
+- **Navy fan surfaces** (`#00062B` bg) — `white/20` (`rgba(255,255,255,0.20)`). Reference: `DesktopAlbumView.tsx` (one top hairline span + one bottom hairline span per row, all as **in-flow flex items** in the `flex flex-col` track-list container — not absolute spans inside rows, which were consistently invisible due to painting-order ambiguity at the flush seam between adjacent flex items) and `AlbumDetailMobileSurface.tsx` (per-row top hairline). Desktop and mobile use the **same** value so the two surfaces match.
 - **Admin / white chrome** (`body.gt-admin`) — `border-slate-100` (or `divide-slate-100` for a flush list). Persistent on every row except the last. Reference: the Tracks tab row in `AdminAlbum.tsx` and the `admin-album-tracks` / `admin-tracks-mode` mockups.
 
 Rules:
