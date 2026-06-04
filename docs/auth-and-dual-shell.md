@@ -48,6 +48,8 @@ Apple + Google OAuth both live. `APPLE_CONFIGURED` gate in `server/auth/oauth.ts
 
 **Identity is keyed off the provider `sub`, never the email.** Apple "Hide my email" returns a per-(fan, app) `@privaterelay.appleid.com` forwarder; the OAuth callback's email-lookup branch (the "we found an account with this email" prompt) skips relay addresses entirely, because a relay row from a previous run would otherwise collide unrelated fans. Same fan re-signing in always matches via the stable `sub`.
 
+**Capturing the real name at sign-up.** Google returns the fan's name in the userinfo response, so `exchangeGoogleCode` carries it on `identity.name`. Apple is the exception: it sends the name **only** in the form_post callback body's `user` field (`{ "name": { "firstName", "lastName" }, … }`), and **only on the very first authorization** — never in the id_token, never on later sign-ins. `handleProviderCallback` parses that body for `provider === "apple"` and folds first+last into `identity.name`. When a customer account is minted from OAuth, that name is stored as both `displayName` and `realName`, so the profile leads with the fan's actual name instead of guessing from the email local-part. If the provider gives us nothing (Apple Hide-My-Email with name withheld), `realName` stays null and the fan can add it on `/finish-setup`.
+
 ### Login-page provider lookup (Task #45)
 
 `POST /api/auth/lookup` returns `{ exists, provider }` on email blur so the customer login form can swap the password field for "Continue with Google/Apple" when the account is OAuth-only — stops the silent "invalid credentials" lockout. Per-IP rate limit (30/min), 80ms constant-time floor, no PII in response.

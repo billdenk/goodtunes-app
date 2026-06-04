@@ -1199,6 +1199,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.redirect(`/error?${params.toString()}`);
     }
 
+    // Apple sends the user's real name ONLY in the `user` field of the
+    // form_post callback body, and ONLY on the very first authorization —
+    // never in the id_token and never on later sign-ins. Capture it here
+    // so we mint the account with their actual name instead of guessing
+    // from the email local-part. Shape: { name: { firstName, lastName }, … }.
+    if (provider === "apple" && req.body?.user) {
+      try {
+        const appleUser = typeof req.body.user === "string" ? JSON.parse(req.body.user) : req.body.user;
+        const first = String(appleUser?.name?.firstName ?? "").trim();
+        const last = String(appleUser?.name?.lastName ?? "").trim();
+        const full = [first, last].filter(Boolean).join(" ").trim();
+        if (full) identity.name = full;
+      } catch (err: any) {
+        console.warn(`[oauth] apple first-auth name parse failed: ${err?.message}`);
+      }
+    }
+
     const homePath = kind === "admin" ? "/admin" : "/account";
 
     // Link-from-profile flow: an authenticated user is attaching this
@@ -1473,11 +1490,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const placeholderPwd = await hashPassword(randomBytes(16).toString("hex"));
       // Admin OAuth sign-up is gated above (Task #78 invite-only); only
       // customers reach this branch.
+      // Store the provider's full name as the account's real name too
+      // (Google passes it; Apple sends it once on first authorize — see
+      // the form_post parse above) so the profile can lead with it. Falls
+      // back to null when the provider gave us nothing (e.g. Apple
+      // Hide-My-Email with no name) — the fan can add it on /finish-setup.
+      const providerRealName = (identity.name && identity.name.trim()) || null;
       const c = await storage.createCustomer({
         username,
         email: identity.email ?? `${username}@oauth.local`,
         displayName,
-        realName: null,
+        realName: providerRealName,
         password: placeholderPwd,
       });
       userId = c.id;

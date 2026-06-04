@@ -271,9 +271,16 @@ export function Account() {
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
 
-  const initials = user?.displayName
-    ? user.displayName.split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()
-    : "?";
+  // Lead the profile with the fan's full name — real name first, falling
+  // back to the display name — never the email. Initials follow the same
+  // source so a "Bill Denk" account shows "BD", not a single "B".
+  const fullName = (user?.realName || "").trim() || (user?.displayName || "").trim();
+  const handle = user?.handle || user?.username || "";
+  const initials = fullName
+    ? fullName.split(/\s+/).filter(Boolean).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()
+    : handle
+      ? handle.slice(0, 2).toUpperCase()
+      : "?";
 
   // Profile photo comes from the server (auth payload). Actual edit lives on
   // the dedicated /account/edit page.
@@ -372,8 +379,12 @@ export function Account() {
                 <Pencil className="w-3.5 h-3.5 text-fan-primary" strokeWidth={2.4} />
               </span>
             </button>
-            <p className="text-fan-primary text-xl font-bold">{user?.displayName}</p>
-            <p className="text-fan-secondary text-sm mt-1">@{user?.username}</p>
+            <p className="text-fan-primary text-xl font-bold" data-testid="text-profile-name">
+              {fullName || (handle ? `@${handle}` : "Your account")}
+            </p>
+            {fullName && handle && (
+              <p className="text-fan-secondary text-sm mt-1" data-testid="text-profile-handle">@{handle}</p>
+            )}
           </div>
 
           <div className="px-5">
