@@ -724,6 +724,38 @@ type ArtistInviteRow = {
 };
 type EarmarkedSuggestion = { id: string; name: string; email: string; notes: string | null };
 
+// Referral funnel + invite-status primitives (Task #1199). Keep the
+// per-invitee status vocabulary and the sent → joined → units → pending
+// rollup styled consistently in one place.
+type InviteStatus = "Invited" | "Joined" | "Revoked" | "Expired";
+
+const INVITE_STATUS_STYLE: Record<InviteStatus, string> = {
+  Invited: "bg-[color:var(--brand-blue)]/15 text-[color:var(--brand-blue)]",
+  Joined: "bg-[color:var(--brand-mint)]/15 text-[color:var(--brand-mint)]",
+  Revoked: "bg-white/10 text-fan-faint",
+  Expired: "bg-white/10 text-fan-faint",
+};
+
+function InviteStatusPill({ status, testId }: { status: InviteStatus; testId?: string }) {
+  return (
+    <span
+      className={`shrink-0 text-xs font-semibold uppercase tracking-wider rounded-full px-2 py-0.5 ${INVITE_STATUS_STYLE[status]}`}
+      data-testid={testId}
+    >
+      {status}
+    </span>
+  );
+}
+
+function FunnelStat({ label, value, accent, testId }: { label: string; value: string; accent?: boolean; testId: string }) {
+  return (
+    <div className="rounded-xl bg-white/[0.04] ring-1 ring-white/10 px-3 py-2.5" data-testid={testId}>
+      <p className={`text-lg font-bold tabular-nums leading-none ${accent ? "text-[color:var(--brand-mint)]" : ""}`} data-testid={`${testId}-value`}>{value}</p>
+      <p className="mt-1 text-fan-secondary text-xs">{label}</p>
+    </div>
+  );
+}
+
 function InviteArtistPanel() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -816,9 +848,14 @@ function InviteArtistPanel() {
   const cap = list.data?.cap ?? 5;
   const outstanding = list.data?.outstanding ?? 0;
   const atCap = outstanding >= cap;
+  const slotsLeft = Math.max(0, cap - outstanding);
   const invites = list.data?.invites ?? [];
   const suggestions = sugg.data?.suggestions ?? [];
-  // Funnel rollup shown in the panel subtitle: sent → joined → units sold.
+  // Funnel rollup: sent → joined → units sold → pending payout. "Sent"
+  // counts every invite still on the list (incl. revoked/expired);
+  // joined/units/pending only count accepted invitees, matching the
+  // per-row numbers below.
+  const sentCount = invites.length;
   const joinedCount = invites.filter((iv) => iv.usedAt).length;
   let totalUnits = 0;
   let totalPendingCents = 0;
@@ -829,9 +866,6 @@ function InviteArtistPanel() {
   }
   const fmtMoney = (c: number) => `$${(c / 100).toFixed(2)}`;
   const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  const subtitle =
-    `${outstanding}/${cap} outstanding · ${joinedCount} joined · ${totalUnits} unit${totalUnits === 1 ? "" : "s"} sold` +
-    (totalPendingCents > 0 ? ` · ${fmtMoney(totalPendingCents)} pending` : "");
 
   const pickSuggestion = (s: EarmarkedSuggestion) => {
     setName(s.name);
@@ -842,19 +876,35 @@ function InviteArtistPanel() {
   return (
     <Card
       title="Invite an artist or label"
-      subtitle={subtitle}
+      subtitle="Invite verified artists & labels — you earn $1 on every paid unit they ship, for life."
       testId="invite-artist-panel"
     >
+      {sentCount > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4" data-testid="referral-funnel">
+          <FunnelStat label="Invites sent" value={String(sentCount)} testId="funnel-sent" />
+          <FunnelStat label="Joined" value={String(joinedCount)} testId="funnel-joined" />
+          <FunnelStat label={`Unit${totalUnits === 1 ? "" : "s"} sold`} value={String(totalUnits)} testId="funnel-units" />
+          <FunnelStat label="Pending payout" value={fmtMoney(totalPendingCents)} accent testId="funnel-pending" />
+        </div>
+      )}
+
       {!open ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          disabled={atCap}
-          className="text-xs font-semibold text-white bg-[var(--brand-purple)] hover:opacity-90 rounded-md px-3 py-1.5 disabled:opacity-40"
-          data-testid="button-open-invite-artist"
-        >
-          {atCap ? "Cap reached — revoke one to invite another" : "Invite an artist or label"}
-        </button>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            disabled={atCap}
+            className="text-xs font-semibold text-white bg-[var(--brand-purple)] hover:opacity-90 rounded-md px-3 py-1.5 disabled:opacity-40"
+            data-testid="button-open-invite-artist"
+          >
+            Invite an artist or label
+          </button>
+          <span className="text-fan-secondary text-xs" data-testid="text-invite-slots">
+            {atCap
+              ? "All invite slots used — revoke one below to free a slot"
+              : `${slotsLeft} of ${cap} invite slot${cap === 1 ? "" : "s"} left`}
+          </span>
+        </div>
       ) : (
         <form
           onSubmit={(e) => { e.preventDefault(); if (email.trim() && name.trim() && !atCap) send.mutate(); }}
@@ -946,28 +996,23 @@ function InviteArtistPanel() {
         </div>
       )}
 
-      {invites.length > 0 && (
+      {invites.length > 0 ? (
         <ul className="mt-4 divide-y divide-white/5" data-testid="list-artist-invites">
           {invites.map((iv) => {
             const accepted = !!iv.usedAt;
             const revoked = !!iv.revokedAt;
             const expired = !accepted && !revoked && new Date(iv.expiresAt) <= new Date();
-            const status = accepted ? "Joined" : revoked ? "Revoked" : expired ? "Expired" : "Invited";
-            const tone = accepted
-              ? "text-[color:var(--brand-mint)]"
-              : revoked ? "text-white/40"
-              : expired ? "text-white/40"
-              : "text-[color:var(--brand-blue)]";
+            const status: InviteStatus = accepted ? "Joined" : revoked ? "Revoked" : expired ? "Expired" : "Invited";
             const stats = accepted && iv.roleScopeId ? partnerByScope.get(iv.roleScopeId) : undefined;
-            // Funnel meta line per row: invited date → joined date (if
-            // accepted) + units sold + pending payout (if any). Pending
-            // rows show the resend marker so the artist sees their
-            // recent action.
+            const pending = !accepted && !revoked;
+            // Per-row timeline: invited date → joined date (if accepted),
+            // plus resend / expiry markers on still-pending rows. Units
+            // sold + pending payout sit on the right for joined invitees.
             const metaBits: string[] = [];
             metaBits.push(`Invited ${fmtDate(iv.createdAt)}`);
             if (accepted && iv.usedAt) metaBits.push(`Joined ${fmtDate(iv.usedAt)}`);
-            if (!accepted && !revoked && iv.resentAt) metaBits.push(`Resent ${fmtDate(iv.resentAt)}`);
-            if (!accepted && !revoked && expired) metaBits.push(`Expired ${fmtDate(iv.expiresAt)}`);
+            if (pending && iv.resentAt) metaBits.push(`Resent ${fmtDate(iv.resentAt)}`);
+            if (pending && expired) metaBits.push(`Expired ${fmtDate(iv.expiresAt)}`);
             return (
               <li key={iv.id} className="py-2.5" data-testid={`row-artist-invite-${iv.id}`}>
                 <div className="flex items-center gap-3">
@@ -980,19 +1025,33 @@ function InviteArtistPanel() {
                     <p className="font-semibold truncate text-sm flex items-center gap-1.5" data-testid={`text-artist-invite-name-${iv.id}`}>
                       <span className="truncate">{iv.scopeName ?? iv.email}</span>
                       {iv.role === "label" && (
-                        <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-white/55 bg-white/10 rounded px-1.5 py-0.5" data-testid={`tag-artist-invite-role-${iv.id}`}>Label</span>
+                        <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-fan-secondary bg-white/10 rounded px-1.5 py-0.5" data-testid={`tag-artist-invite-role-${iv.id}`}>Label</span>
                       )}
                     </p>
-                    <p className="text-xs text-white/55 truncate">{iv.email}</p>
+                    <p className="text-xs text-fan-secondary truncate">{iv.email}</p>
                   </div>
-                  <span className={`text-xs font-semibold uppercase tracking-wider ${tone}`} data-testid={`text-artist-invite-status-${iv.id}`}>{status}</span>
-                  {!accepted && !revoked && (
-                  <>
+                  <InviteStatusPill status={status} testId={`text-artist-invite-status-${iv.id}`} />
+                </div>
+                <div className="mt-1.5 pl-14 flex items-start justify-between gap-3">
+                  <p className="text-xs text-fan-secondary min-w-0" data-testid={`text-artist-invite-meta-${iv.id}`}>
+                    {metaBits.join(" · ")}
+                  </p>
+                  {accepted && (
+                    <div className="text-right shrink-0" data-testid={`text-artist-invite-units-${iv.id}`}>
+                      <p className="text-xs text-fan-primary tabular-nums">{stats?.units ?? 0} unit{(stats?.units ?? 0) === 1 ? "" : "s"} sold</p>
+                      {stats && stats.pendingCents > 0 && (
+                        <p className="text-xs text-[color:var(--brand-mint)] tabular-nums">{fmtMoney(stats.pendingCents)} pending</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {pending && (
+                  <div className="mt-2 pl-14 flex flex-wrap items-center gap-2 text-xs">
                     {iv.acceptUrl && (
                       <button
                         type="button"
                         onClick={() => copyLink(iv)}
-                        className="text-xs text-white/70 hover:text-white px-2 py-1"
+                        className="text-fan-secondary hover:text-white px-2 py-1"
                         data-testid={`button-copy-artist-invite-${iv.id}`}
                       >
                         {copiedId === iv.id ? "Copied" : "Copy link"}
@@ -1002,40 +1061,43 @@ function InviteArtistPanel() {
                       type="button"
                       onClick={() => resend.mutate(iv.id)}
                       disabled={resend.isPending}
-                      className="text-xs text-white/70 hover:text-white px-2 py-1 disabled:opacity-40"
+                      className="text-fan-secondary hover:text-white px-2 py-1 disabled:opacity-40"
                       data-testid={`button-resend-artist-invite-${iv.id}`}
                     >
                       Resend
                     </button>
                     <button
                       type="button"
-                      onClick={() => { if (confirm(`Revoke invite to ${iv.email}?`)) revoke.mutate(iv.id); }}
+                      onClick={() => { if (confirm(`Revoke invite to ${iv.email}? This frees up an invite slot.`)) revoke.mutate(iv.id); }}
                       disabled={revoke.isPending}
-                      className="text-xs text-[color:var(--brand-heart)]/80 hover:text-[color:var(--brand-heart)] px-2 py-1 disabled:opacity-40"
+                      className="text-[color:var(--brand-heart)]/80 hover:text-[color:var(--brand-heart)] px-2 py-1 disabled:opacity-40"
                       data-testid={`button-revoke-artist-invite-${iv.id}`}
                     >
                       Revoke
                     </button>
-                  </>
-                  )}
-                </div>
-                <p className="mt-1.5 pl-14 text-xs text-white/55" data-testid={`text-artist-invite-meta-${iv.id}`}>
-                  {metaBits.join(" · ")}
-                  {stats && (
-                    <>
-                      {" · "}
-                      <span className="text-white/85">{stats.units} unit{stats.units === 1 ? "" : "s"} sold</span>
-                      {stats.pendingCents > 0 && (
-                        <span className="text-[color:var(--brand-mint)]"> · {fmtMoney(stats.pendingCents)} pending</span>
-                      )}
-                    </>
-                  )}
-                </p>
+                  </div>
+                )}
               </li>
             );
           })}
         </ul>
-      )}
+      ) : !open ? (
+        <div className="mt-4 rounded-xl border border-dashed border-white/15 px-4 py-6 text-center" data-testid="empty-artist-invites">
+          <p className="font-semibold text-sm">Tell other artists about GoodTunes</p>
+          <p className="mt-1 text-fan-secondary text-xs max-w-sm mx-auto">
+            Invite the artists and labels you rate. When they join and start selling, you earn $1 on every paid unit they ship — for life.
+          </p>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            disabled={atCap}
+            className="mt-3 text-xs font-semibold text-white bg-[var(--brand-purple)] hover:opacity-90 rounded-md px-3 py-1.5 disabled:opacity-40"
+            data-testid="button-empty-invite-artist"
+          >
+            Send your first invite
+          </button>
+        </div>
+      ) : null}
     </Card>
   );
 }
@@ -1099,9 +1161,9 @@ function ReferralsTab() {
       </section>
       <Card title="Artists you've referred" subtitle="$1 per paid unit, for life" testId="table-referred-artists">
         {d.partners.length === 0 ? (
-          <p className="py-8 text-center text-white/55 text-[13px]" data-testid="empty-referrals">
-            You haven't referred anyone yet. Email <a className="underline" href="mailto:nick@goodtunes.fm">nick@goodtunes.fm</a> to refer an artist —
-            you'll earn $1 on every paid unit they ship.
+          <p className="py-8 text-center text-fan-secondary text-sm" data-testid="empty-referrals">
+            No one's joined yet. Invite an artist or label above — once they accept, they'll
+            show up here with the units they've sold and your $1-per-unit payout.
           </p>
         ) : (
           <ul className="divide-y divide-white/5">
