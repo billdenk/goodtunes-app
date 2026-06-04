@@ -218,11 +218,12 @@ export function SyncedLyrics({
         })}
         {Array.isArray(writers) && writers.length > 0 && (
           <div
-            className="text-white/45 italic pt-6"
-            style={{ fontSize: 12 }}
+            className="text-fan-secondary pt-6 mt-6 border-t border-white/15"
+            style={{ fontSize: 15, lineHeight: 1.4 }}
             data-testid="text-written-by"
           >
-            Written by {writers.join(", ")}
+            <span className="font-semibold text-fan-primary">Written by:</span>{" "}
+            <span className="font-normal not-italic">{writers.join(", ")}</span>
           </div>
         )}
       </div>
