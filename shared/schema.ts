@@ -1192,9 +1192,11 @@ export const vendors = pgTable("vendors", {
   // parent row). drizzle-kit doesn't push WHERE clauses on indexes;
   // the matching CREATE UNIQUE INDEX … WHERE lives in
   // scripts/prod-schema-fixups/2026-05-23-task-237-parent-vendor.sql.
+  // Task #1252 — also exclude soft-deleted rows so trashing a vendor
+  // immediately frees its domain slot for re-creation.
   domainTopUniq: uniqueIndex("vendors_domain_top_uniq")
     .on(table.domain)
-    .where(sql`${table.parentVendorId} IS NULL`),
+    .where(sql`${table.parentVendorId} IS NULL AND ${table.deletedAt} IS NULL`),
 }));
 
 // Join row attaching a vendor to an instrument with a per-instrument

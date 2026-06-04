@@ -285,6 +285,10 @@ export interface IStorage {
   // IS NULL). Used by the create-flow collision check so a sub-brand's
   // domain match doesn't dead-end the operator on 409.
   getTopLevelVendorByDomain(domain: string): Promise<Vendor | undefined>;
+  // Task #1252 — same as above but includes soft-deleted rows. Used by
+  // the create/update routes to detect a trashed-domain collision and
+  // return a friendly message instead of a raw 23505 unique-violation.
+  getTopLevelVendorByDomainIncludingTrashed(domain: string): Promise<Vendor | undefined>;
   // Task #237 — list every sub-brand directly under this vendor.
   // Single-level: a sub-brand cannot itself be a parent.
   getVendorChildren(parentId: string): Promise<Vendor[]>;
@@ -1834,6 +1838,16 @@ export class DbStorage implements IStorage {
       .select()
       .from(vendors)
       .where(and(eq(vendors.domain, domain.toLowerCase()), isNull(vendors.parentVendorId), isNull(vendors.deletedAt)));
+    return v;
+  }
+  async getTopLevelVendorByDomainIncludingTrashed(domain: string): Promise<Vendor | undefined> {
+    // Task #1252 — same lookup but includes soft-deleted rows. Used by
+    // the create/update 23505 catch block to detect a trashed-domain
+    // collision and return a friendly message to the operator.
+    const [v] = await db
+      .select()
+      .from(vendors)
+      .where(and(eq(vendors.domain, domain.toLowerCase()), isNull(vendors.parentVendorId)));
     return v;
   }
   async getVendorChildren(parentId: string): Promise<Vendor[]> {

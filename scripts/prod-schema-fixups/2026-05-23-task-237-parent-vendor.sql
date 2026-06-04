@@ -45,9 +45,13 @@ DROP INDEX IF EXISTS vendors_domain_key;
 --    constrained. Two sub-brands of Gibson can both list
 --    domain='gibson.com' without colliding with each other or with
 --    Gibson's own top-level row.
+-- Task #1252 — also exclude soft-deleted rows so trashing a vendor
+--    immediately frees its domain slot for re-creation. Drop the old
+--    index (which lacked the deleted_at predicate) before recreating.
+DROP INDEX IF EXISTS vendors_domain_top_uniq;
 CREATE UNIQUE INDEX IF NOT EXISTS vendors_domain_top_uniq
   ON vendors (domain)
-  WHERE parent_vendor_id IS NULL;
+  WHERE parent_vendor_id IS NULL AND deleted_at IS NULL;
 
 -- 4. Helper index for "list all sub-brands of X" lookups.
 CREATE INDEX IF NOT EXISTS vendors_parent_vendor_id_idx

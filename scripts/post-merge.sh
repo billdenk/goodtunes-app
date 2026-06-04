@@ -3998,3 +3998,34 @@ SQL
 }
 seed_task_1229_gruhn_vendor dev  "${DATABASE_URL:-}"
 seed_task_1229_gruhn_vendor prod "${PROD_DATABASE_URL:-}"
+
+# Task #1252 — fix vendors_domain_top_uniq partial index to also exclude
+# soft-deleted rows. The original index (WHERE parent_vendor_id IS NULL) did
+# NOT filter on deleted_at, so a soft-deleted vendor permanently squatted its
+# domain and re-creation blew up with an unhandled 23505 unique-violation.
+# Drop the old index and recreate with the corrected predicate on BOTH dev and
+# prod. Idempotent: DROP IF EXISTS + CREATE UNIQUE INDEX IF NOT EXISTS.
+migrate_vendors_domain_top_uniq() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping vendors_domain_top_uniq fix on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+-- Drop the old index that did not exclude soft-deleted rows.
+DROP INDEX IF EXISTS vendors_domain_top_uniq;
+-- Recreate with deleted_at IS NULL so trashing a vendor frees its domain slot.
+CREATE UNIQUE INDEX IF NOT EXISTS vendors_domain_top_uniq
+  ON vendors (domain)
+  WHERE parent_vendor_id IS NULL AND deleted_at IS NULL;
+COMMIT;
+SQL
+  then
+    echo "post-merge: vendors_domain_top_uniq fix ok on $label"
+  else
+    echo "post-merge: WARNING — vendors_domain_top_uniq fix failed on $label (continuing)"
+  fi
+}
+migrate_vendors_domain_top_uniq dev  "${DATABASE_URL:-}"
+migrate_vendors_domain_top_uniq prod "${PROD_DATABASE_URL:-}"

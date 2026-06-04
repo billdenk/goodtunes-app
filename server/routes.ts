@@ -15315,20 +15315,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         },
       });
     }
-    const v = await storage.createVendor({
-      name: String(name),
-      domain: normDomain,
-      homeUrl: homeUrl ? String(homeUrl) : null,
-      aboutUrl: aboutUrl ? String(aboutUrl) : null,
-      logoUrl: logoUrl ? String(logoUrl) : null,
-      tagline: tagline ? String(tagline) : null,
-      bio: bio ? String(bio) : null,
-      location: location ? String(location) : null,
-      coverUrl: coverUrl ? String(coverUrl) : null,
-      ...(isMaker === true ? { isMaker: true } : {}),
-      ...(isReseller === false ? { isReseller: false } : {}),
-    } as any);
-    return res.status(201).json(v);
+    try {
+      const v = await storage.createVendor({
+        name: String(name),
+        domain: normDomain,
+        homeUrl: homeUrl ? String(homeUrl) : null,
+        aboutUrl: aboutUrl ? String(aboutUrl) : null,
+        logoUrl: logoUrl ? String(logoUrl) : null,
+        tagline: tagline ? String(tagline) : null,
+        bio: bio ? String(bio) : null,
+        location: location ? String(location) : null,
+        coverUrl: coverUrl ? String(coverUrl) : null,
+        ...(isMaker === true ? { isMaker: true } : {}),
+        ...(isReseller === false ? { isReseller: false } : {}),
+      } as any);
+      return res.status(201).json(v);
+    } catch (err: any) {
+      // Task #1252 — catch unique-violation on vendors_domain_top_uniq.
+      // With the index now excluding soft-deleted rows this should only
+      // fire in a race (two concurrent creates) but we keep it as defence
+      // in depth. Check if the colliding row is trashed so we can return
+      // an actionable message instead of a raw DB error.
+      if (err?.code === "23505") {
+        const trashed = await storage.getTopLevelVendorByDomainIncludingTrashed(normDomain);
+        if (trashed?.deletedAt) {
+          return res.status(409).json({
+            message: `A trashed vendor already uses ${normDomain} — restore it from trash or purge it first.`,
+          });
+        }
+        return res.status(409).json({ message: "A vendor with that domain already exists" });
+      }
+      throw err;
+    }
   });
   app.put("/api/admin/vendors/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
@@ -15428,7 +15446,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Map the postgres unique-violation on `vendors.domain` to a real 409
       // so the admin client can surface "another vendor already uses this
       // domain" instead of a generic 500.
+      // Task #1252 — check if the colliding row is trashed; if so give a
+      // more actionable message so the operator knows to restore/purge it.
       if (err?.code === "23505") {
+        if (updates.domain) {
+          const trashed = await storage.getTopLevelVendorByDomainIncludingTrashed(updates.domain);
+          if (trashed?.deletedAt) {
+            return res.status(409).json({
+              message: `A trashed vendor already uses ${updates.domain} — restore it from trash or purge it first.`,
+            });
+          }
+        }
         return res.status(409).json({ message: "Another vendor is already using that domain" });
       }
       throw err;
@@ -15506,18 +15534,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         vendorId = existing.id;
       } else {
         if (!body.name) return res.status(400).json({ message: "name is required when creating a new vendor" });
-        const created = await storage.createVendor({
-          name: String(body.name),
-          domain: normDomain,
-          homeUrl: body.homeUrl ? String(body.homeUrl) : `https://${normDomain}/`,
-          aboutUrl: body.aboutUrl ? String(body.aboutUrl) : null,
-          logoUrl: body.logoUrl ? String(body.logoUrl) : null,
-          tagline: body.tagline ? String(body.tagline) : null,
-          bio: body.bio ? String(body.bio) : null,
-          location: body.location ? String(body.location) : null,
-          coverUrl: body.coverUrl ? String(body.coverUrl) : null,
-        });
-        vendorId = created.id;
+        // Task #1252 — wrap in try/catch so a trashed-domain collision
+        // surfaces as a friendly 409 rather than a raw 23505 DB error.
+        try {
+          const created = await storage.createVendor({
+            name: String(body.name),
+            domain: normDomain,
+            homeUrl: body.homeUrl ? String(body.homeUrl) : `https://${normDomain}/`,
+            aboutUrl: body.aboutUrl ? String(body.aboutUrl) : null,
+            logoUrl: body.logoUrl ? String(body.logoUrl) : null,
+            tagline: body.tagline ? String(body.tagline) : null,
+            bio: body.bio ? String(body.bio) : null,
+            location: body.location ? String(body.location) : null,
+            coverUrl: body.coverUrl ? String(body.coverUrl) : null,
+          });
+          vendorId = created.id;
+        } catch (err: any) {
+          if (err?.code === "23505") {
+            const trashed = await storage.getTopLevelVendorByDomainIncludingTrashed(normDomain);
+            if (trashed?.deletedAt) {
+              return res.status(409).json({
+                message: `A trashed vendor already uses ${normDomain} — restore it from trash or purge it first.`,
+              });
+            }
+            return res.status(409).json({ message: "A vendor with that domain already exists" });
+          }
+          throw err;
+        }
       }
     }
 
