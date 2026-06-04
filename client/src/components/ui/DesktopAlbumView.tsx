@@ -838,11 +838,12 @@ function PreviewPlayPill({
 /**
  * Rose-filled Buy pill wrapper.
  *
- * - At rest: "Buy Bundle — $14.99".
- * - On `pointer:fine` hover (desktop / trackpad): label flips to
- *   "Buy Now" and a small add-on chip pops below offering the printed +
- *   signed GoodDeed at its add-on price. Toggling the chip pre-checks
- *   the matching toggle in BuySheet on click.
+ * - At rest: "Buy Now".
+ * - On `pointer:fine` hover (desktop / trackpad): label flips to just
+ *   the formatted price (e.g. "$25.00") and a small add-on chip pops
+ *   below offering the printed + signed GoodDeed at its add-on price.
+ *   Toggling the chip pre-checks the matching toggle in BuySheet on
+ *   click.
  * - Touch surfaces (no fine pointer): the chip is always visible
  *   underneath when an add-on is offered, since hover doesn't exist.
  *
@@ -904,8 +905,10 @@ function BuyPricePill({
         }}
       >
         {/* Both labels occupy the same grid cell so the pill always sizes
-            to the wider (price) label — swapping "Buy Now" ⇄ the price on
-            hover never changes the button's width. */}
+            to the wider label — swapping "Buy Now" ⇄ the price on hover
+            never changes the button's width. With the hover label now just
+            the price, "Buy Now" is typically the wider of the two, so the
+            grid still pins to whichever label is longer. */}
         <span className="grid justify-items-center" data-testid="text-buy-label">
           <span
             className="col-start-1 row-start-1 whitespace-nowrap"
@@ -918,7 +921,7 @@ function BuyPricePill({
             style={{ visibility: hover ? "visible" : "hidden" }}
             aria-hidden={!hover}
           >
-            {`Buy Bundle — ${priceLabel}`}
+            {priceLabel}
           </span>
         </span>
       </button>
