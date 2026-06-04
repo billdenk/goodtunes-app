@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MoreHorizontal, Play, Pause, Lock, Plus, ListStart, ListEnd, ListPlus, Heart } from "lucide-react";
+import { MoreHorizontal, Play, Pause, Plus, ListStart, ListEnd, ListPlus, Heart } from "lucide-react";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { IconButton } from "@/components/ui/IconButton";
 import {
@@ -39,6 +39,10 @@ export type AlbumDesktopTrackRowProps = {
   onPlayNext?: () => void;
   onPlayLast?: () => void;
   onToggleFavorite?: () => void;
+  /** When false, the trailing ⋯ context menu is suppressed entirely (used
+   *  on the not-owned preview/buy surface, where queue/playlist/favorite
+   *  actions don't apply yet). Defaults to true for the owned library. */
+  showMenu?: boolean;
 };
 
 /**
@@ -66,6 +70,7 @@ export function AlbumDesktopTrackRow({
   onPlayNext,
   onPlayLast,
   onToggleFavorite,
+  showMenu = true,
 }: AlbumDesktopTrackRowProps) {
   const [hover, setHover] = useState(false);
   const interactive = state !== "locked";
@@ -179,13 +184,6 @@ export function AlbumDesktopTrackRow({
           {title}
         </span>
         {isExplicit && <ExplicitBadge tone="slate" />}
-        {state === "locked" && (
-          <Lock
-            className="w-3 h-3 text-fan-faint flex-shrink-0"
-            strokeWidth={2.2}
-            aria-hidden
-          />
-        )}
       </div>
 
       {/* `+` add-to-playlist chip — fades in on hover, beside runtime. */}
@@ -212,9 +210,10 @@ export function AlbumDesktopTrackRow({
         )}
       </div>
 
-      {/* ⋯ menu — hidden on locked rows. Apple-Music track context menu:
-          Play Next / Play Last / Add to Playlist / Favorite. */}
-      {state !== "locked" && (
+      {/* ⋯ menu — hidden on locked rows and wherever showMenu is false
+          (the not-owned preview/buy surface). Apple-Music track context
+          menu: Play Next / Play Last / Add to Playlist / Favorite. */}
+      {state !== "locked" && showMenu && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <IconButton
@@ -283,7 +282,9 @@ export function AlbumDesktopTrackRow({
           </DropdownMenuContent>
         </DropdownMenu>
       )}
-      {state === "locked" && <div className="w-11 -mr-2" aria-hidden />}
+      {(state === "locked" || !showMenu) && (
+        <div className="w-11 -mr-2" aria-hidden />
+      )}
     </div>
   );
 }

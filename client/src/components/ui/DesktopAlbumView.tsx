@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Link, useLocation } from "wouter";
-import { ChevronLeft, Play, Pause, Shuffle, MoreHorizontal, Lock, Share, Info } from "lucide-react";
+import { ChevronLeft, Play, Pause, Shuffle, Lock, Share, Info } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { IconButton } from "@/components/ui/IconButton";
 import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
@@ -342,15 +342,6 @@ export function DesktopAlbumView({
             >
               <Share strokeWidth={2} />
             </IconButton>
-            <IconButton
-              variant="glass"
-              size="md"
-              label="More options"
-              className="text-fan-secondary hover:text-white"
-              data-testid="button-album-more"
-            >
-              <MoreHorizontal strokeWidth={2} />
-            </IconButton>
           </div>
         </div>
 
@@ -465,18 +456,8 @@ export function DesktopAlbumView({
                    white Play/Preview pill · Buy / Sold Out / Listen on … ·
                    Info (glass). */
                 <>
-                  {canPlay && (
-                    <IconButton
-                      variant="glass"
-                      size="lg"
-                      label="Shuffle"
-                      onClick={onShuffle}
-                      style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
-                      data-testid="button-shuffle-album"
-                    >
-                      <Shuffle strokeWidth={2.2} />
-                    </IconButton>
-                  )}
+                  {/* Shuffle intentionally omitted on the preview/buy row —
+                      the not-owned surface leads with Preview + Buy only. */}
                   <PreviewPlayPill
                     canPlay={canPlay}
                     active={previewActive}
@@ -648,6 +629,7 @@ export function DesktopAlbumView({
                         ? undefined
                         : () => onToggleFavoriteTrack(s)
                     }
+                    showMenu={isOwned}
                   />
                 );
               })}
@@ -897,8 +879,23 @@ function BuyPricePill({
             : "0 4px 12px rgba(49,158,216,0.25)",
         }}
       >
-        <span className="whitespace-nowrap" data-testid="text-buy-label">
-          {hover ? "Buy Now" : `Buy Bundle — ${priceLabel}`}
+        {/* Both labels occupy the same grid cell so the pill always sizes
+            to the wider (price) label — swapping "Buy Now" ⇄ the price on
+            hover never changes the button's width. */}
+        <span className="grid justify-items-center" data-testid="text-buy-label">
+          <span
+            className="col-start-1 row-start-1 whitespace-nowrap"
+            style={{ visibility: hover ? "hidden" : "visible" }}
+          >
+            Buy Now
+          </span>
+          <span
+            className="col-start-1 row-start-1 whitespace-nowrap"
+            style={{ visibility: hover ? "visible" : "hidden" }}
+            aria-hidden={!hover}
+          >
+            {`Buy Bundle — ${priceLabel}`}
+          </span>
         </span>
       </button>
 
