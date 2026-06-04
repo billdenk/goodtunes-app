@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useRef } from "react";
+import { useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { LyricsGapDots } from "@/components/LyricsGapDots";
 import { buildSyncedLines } from "@/lib/syncedLyrics";
+
+// Apple-Music focus handoff. The active line sharpens/brightens while the
+// neighbours soften over a single gentle ease-in-out ramp, so the change
+// between lines reads as one continuous cross-fade rather than a stepped
+// pop. 520ms on a symmetric ease-in-out curve matches the unhurried feel
+// of Apple's lyric focus. Tuned alongside the auto-scroll's native smooth
+// behavior so the focus ramp and the column glide read as one motion.
+const FOCUS_MS = 520;
+const FOCUS_EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
 
 /**
  * Shared synced-lyrics column. The Apple-Music karaoke surface — active
@@ -87,6 +97,7 @@ export function SyncedLyrics({
 
   const lyricLineRefs = useRef<Array<HTMLDivElement | null>>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     if (!active) return;
@@ -96,11 +107,16 @@ export function SyncedLyrics({
     // Apple-style: land the active line ~28% down from the top of the
     // scroll viewport (not flush with the top edge), so the line sits
     // comfortably below the header fade-mask and there's room for the
-    // next 4-5 upcoming lines to be visible.
+    // next 4-5 upcoming lines to be visible. The native smooth scroll is
+    // paced to glide alongside the focus cross-fade so the column move and
+    // the brightness handoff read as one continuous motion, not two jolts.
     const targetOffset = scroll.clientHeight * scrollOffsetRatio;
     const top = el.offsetTop - targetOffset;
-    scroll.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-  }, [activeLineIdx, active, scrollOffsetRatio]);
+    scroll.scrollTo({
+      top: Math.max(0, top),
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  }, [activeLineIdx, active, scrollOffsetRatio, reduceMotion]);
 
   return (
     <div
@@ -199,13 +215,26 @@ export function SyncedLyrics({
               style={{
                 color: "#FFFFFF",
                 opacity,
-                fontWeight: isActive ? 800 : 700,
+                // Constant weight on every line. Swapping 700↔800 on the
+                // active line can't tween (font-weight isn't interpolable)
+                // and the bolder glyphs reflow the line's width mid-handoff,
+                // which is what read as a snap and fought the auto-scroll.
+                // Emphasis now comes entirely from the tween-friendly
+                // opacity + blur + glow ramp, matching Apple's lyric focus.
+                fontWeight: 700,
                 fontSize,
                 lineHeight: 1.22,
-                filter: blurPx > 0 ? `blur(${blurPx}px)` : "none",
-                transition:
-                  "opacity 400ms ease, filter 400ms ease, text-shadow 350ms ease",
-                textShadow: isActive ? "0 1px 18px rgba(0,0,0,0.35)" : "none",
+                // Always emit a blur() (active = blur(0px)) so the focus
+                // change interpolates smoothly — CSS can't tween none↔blur().
+                filter: `blur(${blurPx}px)`,
+                transition: reduceMotion
+                  ? "none"
+                  : `opacity ${FOCUS_MS}ms ${FOCUS_EASE}, filter ${FOCUS_MS}ms ${FOCUS_EASE}, text-shadow ${FOCUS_MS}ms ${FOCUS_EASE}`,
+                // Inactive shadow is transparent (not "none") so the glow
+                // fades in/out smoothly instead of popping.
+                textShadow: isActive
+                  ? "0 1px 18px rgba(0,0,0,0.35)"
+                  : "0 1px 18px rgba(0,0,0,0)",
                 letterSpacing: "-0.01em",
                 willChange: distance <= 2 ? "filter, opacity" : undefined,
               }}
