@@ -45,6 +45,9 @@ export interface AlbumDetailMobileSurfaceAlbum {
   // footer falls back to the year-only line when they're absent.
   originalReleaseDate?: string | null;
   copyrightLine?: string | null;
+  // Task #1158 — per-album footer copyright symbol (℗ vs ©). Null renders
+  // as the ℗ default so existing albums are unchanged.
+  copyrightSymbol?: string | null;
   // Album-level streaming handoff links (Task #734).
   spotifyUrl?: string | null;
   appleMusicUrl?: string | null;
@@ -1005,12 +1008,12 @@ export function AlbumDetailMobileSurface({
                   : `You own ${ownedNums.length} ${album.type === "EP" ? "EPs" : album.type === "Single" ? "singles" : album.type === "Duo" ? "duos" : "LPs"}.`}
               </span>
             )}
-            {/* Task #1078 — ℗ phonogram/copyright line. Operator stores the
-                bare credit ("2009 Brash Music"); the ℗ glyph is prepended
-                here. Hidden entirely when unset. */}
+            {/* Task #1078 / #1158 — copyright line. Operator stores the bare
+                credit ("2009 Brash Music"); the per-album symbol (℗ default,
+                or ©) is prepended here. Hidden entirely when unset. */}
             {album.copyrightLine && (
               <span className="block mt-1" data-testid="text-album-copyright-footer">
-                ℗ {album.copyrightLine}
+                {album.copyrightSymbol || "℗"} {album.copyrightLine}
               </span>
             )}
           </p>

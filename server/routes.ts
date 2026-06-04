@@ -252,6 +252,15 @@ function normalizeReleaseDate(value: unknown): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
 }
 
+// Task #1158 — coerce the per-album footer copyright symbol. Only the two
+// sanctioned glyphs are accepted: "℗" (sound-recording default) and "©"
+// (general copyright). Empty / unknown → null, which the footers render as
+// the ℗ default so existing albums are unchanged.
+function normalizeCopyrightSymbol(value: unknown): string | null {
+  const s = typeof value === "string" ? value.trim() : "";
+  return s === "©" || s === "℗" ? s : null;
+}
+
 // Task #644 — structured payload surfaced by the album create/update
 // routes when the album's primary artist is already signed to a
 // *different* label than the one just stamped on the album. The PUT
@@ -5919,6 +5928,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // Task #1078 — Apple-style footer fields.
         originalReleaseDate: normalizeReleaseDate(req.body?.originalReleaseDate),
         copyrightLine: req.body?.copyrightLine ? String(req.body.copyrightLine).trim() : null,
+        copyrightSymbol: normalizeCopyrightSymbol(req.body?.copyrightSymbol),
         primaryArtistId: await resolvePrimaryArtistId(req.body?.primaryArtistId),
         // Discography "+ Add" + Apple-URL seed paths leave this off; admin
         // flips it on once an album is actually being released by GoodTunes.
@@ -6609,6 +6619,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       updates.originalReleaseDate = normalizeReleaseDate(req.body.originalReleaseDate);
     if (req.body?.copyrightLine !== undefined)
       updates.copyrightLine = req.body.copyrightLine ? String(req.body.copyrightLine).trim() : null;
+    if (req.body?.copyrightSymbol !== undefined)
+      updates.copyrightSymbol = normalizeCopyrightSymbol(req.body.copyrightSymbol);
     if (req.body?.primaryArtistId !== undefined)
       updates.primaryArtistId = await resolvePrimaryArtistId(req.body.primaryArtistId);
     if (req.body?.labelId !== undefined) {

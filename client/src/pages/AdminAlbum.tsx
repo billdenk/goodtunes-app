@@ -180,6 +180,8 @@ interface AlbumFull {
   // Task #1078 — Apple-style album footer fields.
   originalReleaseDate?: string | null;
   copyrightLine?: string | null;
+  // Task #1158 — per-album footer copyright symbol (℗ vs ©).
+  copyrightSymbol?: string | null;
   appleMusicUrl?: string | null;
   spotifyUrl?: string | null;
   tidalUrl?: string | null;
@@ -2439,6 +2441,10 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           genre: album.genre,
           labelId: album.labelId ?? "",
           copyrightLine: album.copyrightLine,
+          // Task #1158 — default the picker to ℗ for albums with no explicit
+          // choice. EditablePanel only sends dirty fields, so this default is
+          // never stamped onto a null row by an unrelated save.
+          copyrightSymbol: album.copyrightSymbol ?? "℗",
           description: album.description,
           // Stored in cents on the wire, edited as dollars (e.g. "19.99")
           // in the admin form — dollars-to-cents normalization happens in
@@ -2495,8 +2501,17 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
             options: labelOptions,
           },
           {
+            key: "copyrightSymbol",
+            label: "Copyright symbol",
+            type: "select",
+            options: [
+              { value: "℗", label: "℗ (sound recording)" },
+              { value: "©", label: "© (copyright)" },
+            ],
+          },
+          {
             key: "copyrightLine",
-            label: "℗ Copyright line",
+            label: "Copyright line",
             type: "text",
             placeholder: "2009 Brash Music",
           },

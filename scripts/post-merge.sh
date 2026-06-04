@@ -518,7 +518,10 @@ migrate_albums_apple_footer_fields() {
   if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
 ALTER TABLE albums
   ADD COLUMN IF NOT EXISTS copyright_line        text,
-  ADD COLUMN IF NOT EXISTS original_release_date text;
+  ADD COLUMN IF NOT EXISTS original_release_date text,
+  -- Task #1158 — per-album footer copyright symbol (℗ vs ©). Nullable;
+  -- null renders as the ℗ default so existing rows are unchanged.
+  ADD COLUMN IF NOT EXISTS copyright_symbol      text;
 SQL
   then
     echo "post-merge: albums apple-footer migration ok on $label"

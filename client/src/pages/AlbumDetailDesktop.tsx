@@ -92,6 +92,8 @@ type ApiAlbum = {
   // Task #1078 — Apple-style album footer fields.
   originalReleaseDate?: string | null;
   copyrightLine?: string | null;
+  // Task #1158 — per-album footer copyright symbol (℗ vs ©).
+  copyrightSymbol?: string | null;
   spotifyUrl?: string | null;
   appleMusicUrl?: string | null;
   tidalUrl?: string | null;

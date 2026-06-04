@@ -273,6 +273,8 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
     // Task #1078 — Apple-style album footer fields.
     originalReleaseDate: string | null;
     copyrightLine: string | null;
+    // Task #1158 — per-album footer copyright symbol (℗ vs ©).
+    copyrightSymbol: string | null;
     // Album-level streaming handoff links (Task #734 / #816).
     spotifyUrl: string | null;
     appleMusicUrl: string | null;
@@ -779,6 +781,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
             priceCents: (album as any).priceCents ?? null,
             originalReleaseDate: apiAlbum?.originalReleaseDate ?? null,
             copyrightLine: apiAlbum?.copyrightLine ?? null,
+            copyrightSymbol: apiAlbum?.copyrightSymbol ?? null,
           }}
           songs={songs.map((s) => ({
             id: s.id,

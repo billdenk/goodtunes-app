@@ -40,6 +40,9 @@ export type DesktopAlbumData = {
   // footer degrades to the bare year when no exact date is set.
   originalReleaseDate?: string | null;
   copyrightLine?: string | null;
+  // Task #1158 — per-album footer copyright symbol (℗ vs ©). Null renders
+  // as the ℗ default so existing albums are unchanged.
+  copyrightSymbol?: string | null;
   // Task #970 — clean per-release share slug. When present, the copy-link
   // CTA copies https://get.goodtunes.music/<slug> instead of /album/:id.
   shareSlug?: string | null;
@@ -673,7 +676,7 @@ export function DesktopAlbumView({
                 )}
                 {album.copyrightLine && (
                   <p data-testid="text-album-copyright-footer">
-                    ℗ {album.copyrightLine}
+                    {album.copyrightSymbol || "℗"} {album.copyrightLine}
                   </p>
                 )}
               </div>

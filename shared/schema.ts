@@ -176,6 +176,12 @@ export const albums = pgTable("albums", {
   // prepends the ℗ glyph). Both nullable; neither is auto-imported.
   originalReleaseDate: text("original_release_date"),
   copyrightLine: text("copyright_line"),
+  // Task #1158 — per-album footer copyright symbol. The footer prepends a
+  // symbol in front of `copyrightLine`; this picks which one. "℗" (sound-
+  // recording / phonogram — the music-industry default) or "©" (general
+  // copyright). Nullable; null renders as "℗" so every existing album is
+  // unchanged. Operator-chosen in the album editor; never auto-imported.
+  copyrightSymbol: text("copyright_symbol"),
   // The label this album was released on. SET NULL so deleting a label
   // doesn't take down its catalog; the album just loses its label credit
   // until reassigned. Album reads denormalize the joined label entity

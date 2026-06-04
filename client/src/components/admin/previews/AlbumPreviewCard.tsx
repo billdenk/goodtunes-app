@@ -31,6 +31,12 @@ export interface AlbumPreviewAlbum {
   isExplicit?: boolean;
   genre?: string | null;
   label?: { id: string; name: string } | null;
+  // Task #1078 / #1158 — Apple-style album footer fields so the admin
+  // preview's footer matches the fan page line-for-line, including the
+  // per-album copyright symbol (℗ default, or ©).
+  originalReleaseDate?: string | null;
+  copyrightLine?: string | null;
+  copyrightSymbol?: string | null;
   songs: AlbumPreviewSong[];
   // Ownership mirrors the real Album type so the preview's footer matches
   // the fan-facing AlbumDetail line-for-line ("You own No. 03 of this LP."
@@ -73,6 +79,9 @@ export function adminAlbumToSurface(album: AlbumPreviewAlbum) {
       isExplicit: album.isExplicit,
       genre: album.genre ?? null,
       priceCents: null,
+      originalReleaseDate: album.originalReleaseDate ?? null,
+      copyrightLine: album.copyrightLine ?? null,
+      copyrightSymbol: album.copyrightSymbol ?? null,
     },
     songs: sorted.map((s) => ({
       id: s.id,
