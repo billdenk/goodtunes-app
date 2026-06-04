@@ -904,6 +904,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // email local-part fallback).
       suggestedHandle: ((c as any).handle as string | null) || c.username || "",
       displayName: c.displayName || "",
+      // Pre-fill the full-name field. Google passes a real name (mirrored
+      // onto realName at OAuth signup); Apple "Hide My Email" usually
+      // withholds it, leaving this empty so the fan can type one in.
+      realName: c.realName || "",
       email,
       isPrivateRelay,
       // Show the picker's "this handle is held for the artist" copy
@@ -933,6 +937,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const body = req.body ?? {};
     const handleRaw = String(body.handle ?? "").trim().toLowerCase();
     const displayName = String(body.displayName ?? "").trim();
+    // Full name is optional on this screen — Apple "Hide My Email" can
+    // withhold it, and a fan shouldn't be blocked from finishing setup
+    // over it. Empty → null so the profile header cleanly falls back to
+    // the display name. Capped at 120 to match the loose name columns.
+    const realNameRaw = String(body.realName ?? "").trim().slice(0, 120);
     const contactEmail = String(body.contactEmail ?? "").trim().toLowerCase();
     const contactPhone = String(body.contactPhone ?? "").trim();
 
@@ -989,6 +998,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         handle: handleRaw,
         username: handleRaw,
         displayName,
+        realName: realNameRaw || null,
         contactEmail: normalizedContactEmail,
         contactPhone: normalizedContactPhone,
         signupCompletedAt: new Date(),

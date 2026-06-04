@@ -36,6 +36,7 @@ type SetupState = {
   isComplete: boolean;
   suggestedHandle: string;
   displayName: string;
+  realName: string;
   email: string;
   isPrivateRelay: boolean;
   requiresContact: boolean;
@@ -56,6 +57,7 @@ export function FinishSetup() {
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [handle, setHandle] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [realName, setRealName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [handleStatus, setHandleStatus] = useState<HandleStatus>({ kind: "idle" });
@@ -78,6 +80,7 @@ export function FinishSetup() {
         setState(j);
         setHandle(j.suggestedHandle || "");
         setDisplayName(j.displayName || "");
+        setRealName(j.realName || "");
       } catch (err: any) {
         if (!cancelled) setLoadErr(err?.message ?? "Couldn't load your account.");
       }
@@ -137,6 +140,7 @@ export function FinishSetup() {
       const r = await apiRequest("POST", "/api/auth/complete-signup", {
         handle,
         displayName: displayName.trim(),
+        realName: realName.trim() || undefined,
         contactEmail: contactEmail.trim() || undefined,
         contactPhone: contactPhone.trim() || undefined,
       });
@@ -188,7 +192,7 @@ export function FinishSetup() {
           One last thing
         </h1>
         <p className="mt-2 text-white/60 text-base">
-          Pick your @handle and confirm your name. This is what other fans and artists will see.
+          Pick your @handle and tell us your name. Your @handle is what other fans and artists see.
         </p>
 
         {/* Handle */}
@@ -211,6 +215,21 @@ export function FinishSetup() {
         <p className="mt-1 text-xs text-white/40">
           Handles that match a famous artist may be reclaimed by that artist's team later.
         </p>
+
+        {/* Full name — drives the profile header + avatar initials. Apple
+            "Hide My Email" withholds this, so it's pre-filled when the
+            provider gave us one and blank otherwise. Optional: a fan who
+            skips it just gets a header that falls back to display name. */}
+        <label className="block mt-6 text-xs uppercase tracking-wider text-white/50">Full name</label>
+        <input
+          type="text"
+          value={realName}
+          onChange={(e) => setRealName(e.target.value.slice(0, 120))}
+          placeholder="Your name"
+          autoComplete="name"
+          className="mt-2 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 outline-none text-lg focus:border-[var(--brand-blue)]"
+          data-testid="input-real-name"
+        />
 
         {/* Display name */}
         <label className="block mt-6 text-xs uppercase tracking-wider text-white/50">Display name</label>

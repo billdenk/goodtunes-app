@@ -147,6 +147,71 @@ function PrivateRelayBanner({ relayEmail }: { relayEmail: string }) {
   );
 }
 
+// Task #1145 — one-time "add your name" nudge. Some sign-in paths leave
+// us with no real name: Apple "Hide My Email" can withhold it, and fans
+// created before realName existed never had one stored. Those accounts
+// fall back to showing their @handle/display name in the profile header.
+// We gently prompt the fan (once, dismissible) to add a full name; saving
+// writes realName so the header + avatar initials read with a real name.
+// Dismissal is per-user in localStorage so a fan who taps "Not now" isn't
+// nagged again — but the nudge naturally disappears for everyone once a
+// name is on file, so a future name removal would re-surface it.
+const namePromptDismissedKey = (userId: string) => `gt:name-prompt-dismissed:${userId}`;
+
+function AddNameBanner({ userId }: { userId: string }) {
+  const { updateProfile, isUpdatePending, updateError } = useAuth();
+  const [name, setName] = useState("");
+  const save = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      await updateProfile({ realName: trimmed });
+      // On success the /api/me cache updates and this banner unmounts
+      // (the parent stops rendering it once realName is present).
+    } catch {
+      // updateError surfaces the message inline; keep the form open.
+    }
+  };
+  const dismiss = () => {
+    try { localStorage.setItem(namePromptDismissedKey(userId), "1"); } catch {}
+    // Re-render the parent so it re-reads the dismissal flag.
+    window.dispatchEvent(new Event("gt:name-prompt-dismissed"));
+  };
+  return (
+    <div className="rounded-2xl overflow-hidden mb-6 px-4 py-3.5" style={{ background: "rgba(49, 158, 216, 0.10)", border: "1px solid rgba(49,158,216,0.25)" }} data-testid="banner-add-name">
+      <p className="text-fan-primary text-sm font-semibold mb-1">Add your name</p>
+      <p className="text-fan-secondary text-xs leading-snug mb-3">
+        We don't have your name on file, so your profile shows your handle. Add it and your profile reads with your real name.
+      </p>
+      <div className="flex flex-col gap-2">
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value.slice(0, 120))}
+          placeholder="Your name"
+          autoComplete="name"
+          className="w-full border border-white/15 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm focus:outline-none focus:border-[var(--brand-blue)]"
+          style={{ background: "rgba(255,255,255,0.06)" }}
+          data-testid="input-add-name"
+        />
+        {updateError && <p className="text-xs text-rose-300" data-testid="text-add-name-err">{updateError}</p>}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={save}
+            disabled={isUpdatePending || !name.trim()}
+            className="px-3 py-1.5 rounded-full bg-[var(--brand-blue)] text-white text-xs font-semibold disabled:opacity-40"
+            data-testid="button-save-add-name"
+          >
+            {isUpdatePending ? "Saving…" : "Save"}
+          </button>
+          <button type="button" onClick={dismiss} className="text-fan-secondary text-xs" data-testid="button-dismiss-add-name">Not now</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LinkedProvidersPanel() {
   const kind = useAuthKind();
   const { data: identities = [], isLoading } = useQuery<Array<{ id: string; provider: string; email: string | null }>>({
@@ -272,11 +337,33 @@ export function Account() {
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
 
-  // Lead the profile with the fan's full name — real name first, falling
-  // back to the display name — never the email. Initials follow the same
   // source so a "Bill Denk" account shows "BD", not a single "B". Logic
   // lives in deriveAccountIdentity so it can be unit-tested standalone.
   const { fullName, handle, initials } = deriveAccountIdentity(user);
+
+  // Task #1145 — one-time "add your name" nudge. Show it only for a
+  // signed-in customer who has no real name on file AND hasn't dismissed
+  // the prompt before. The dismissal flag lives in localStorage keyed by
+  // user id; we mirror it into state and listen for the custom event the
+  // banner fires on "Not now" so the page re-renders without a refresh.
+  const hasRealName = Boolean((user?.realName || "").trim());
+  const [namePromptDismissed, setNamePromptDismissed] = useState(false);
+  useEffect(() => {
+    if (!user?.id) return;
+    const read = () => {
+      try { setNamePromptDismissed(localStorage.getItem(`gt:name-prompt-dismissed:${user.id}`) === "1"); }
+      catch { setNamePromptDismissed(false); }
+    };
+    read();
+    window.addEventListener("gt:name-prompt-dismissed", read);
+    window.addEventListener("storage", read);
+    return () => {
+      window.removeEventListener("gt:name-prompt-dismissed", read);
+      window.removeEventListener("storage", read);
+    };
+  }, [user?.id]);
+  const showAddNamePrompt =
+    user?.kind === "customer" && !hasRealName && !namePromptDismissed && Boolean(user?.id);
 
   // Profile photo comes from the server (auth payload). Actual edit lives on
   // the dedicated /account/edit page.
@@ -384,6 +471,11 @@ export function Account() {
           </div>
 
           <div className="px-5">
+          {/* Task #1145 — "add your name" nudge sits at the very top of the
+              content so a fan with no name on file sees it first, then
+              naturally disappears once a name is saved or dismissed. */}
+          {showAddNamePrompt && <AddNameBanner userId={user!.id} />}
+
           {/* Your Collections — two rows that push to dedicated list pages.
               Keeps Account a hub instead of a feed; new collection types
               (Followed Labels, Saved Gear, Stations…) slot in here without

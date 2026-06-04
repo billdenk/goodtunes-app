@@ -19462,6 +19462,11 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/pages/FinishSetup.tsx",
+    "snippet": "<label className=\"block mt-6 text-xs uppercase tracking-wider text-white/50\">Full name</label>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/FinishSetup.tsx",
     "snippet": "<label className=\"block mt-6 text-xs uppercase tracking-wider text-white/50\">Display name</label>"
   },
   {
