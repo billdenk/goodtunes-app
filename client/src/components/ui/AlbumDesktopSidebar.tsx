@@ -35,6 +35,12 @@ export function AlbumDesktopSidebar({
   onSearch?: () => void;
 }) {
   const [, navigate] = useLocation();
+  // A logged-out visitor (no fan/admin session) landing on a shared
+  // Preview & Purchase link sees a stripped rail: just the GoodTunes
+  // lockup up top and a branded "Log in" CTA pinned to the bottom. The
+  // Collection/Search nav + account footer are meaningless until they
+  // have an account, so we hide them rather than dead-end.
+  const loggedIn = !!user;
   return (
     <aside
       className="flex flex-col flex-shrink-0 h-full text-fan-primary"
@@ -55,46 +61,65 @@ export function AlbumDesktopSidebar({
         />
       </div>
 
-      <nav className="px-2">
-        <FanRailNav
-          active={searchActive ? { kind: "search" } : null}
-          onSearch={onSearch}
-        />
-      </nav>
+      {loggedIn && (
+        <nav className="px-2">
+          <FanRailNav
+            active={searchActive ? { kind: "search" } : null}
+            onSearch={onSearch}
+          />
+        </nav>
+      )}
 
       <div className="flex-1" />
 
-      <div className="px-4 pb-6 pt-4">
-        <div className="flex items-center gap-3 px-1">
+      {loggedIn ? (
+        <div className="px-4 pb-6 pt-4">
+          <div className="flex items-center gap-3 px-1">
+            <button
+              type="button"
+              onClick={() => navigate("/account")}
+              className="flex items-center gap-3 min-w-0 flex-1 rounded-lg -mx-1 px-1 py-1 text-left hover:bg-white/[0.06] transition-colors"
+              data-testid="button-open-account"
+            >
+              <div
+                className="w-10 h-10 rounded-full flex-shrink-0 overflow-hidden bg-white/[0.18] ring-1 ring-white/30"
+                aria-hidden
+              >
+                {user?.avatarUrl ? (
+                  <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-fan-primary text-[13px] font-semibold">
+                    {(user?.displayName || user?.email || "?").slice(0, 1).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-fan-primary text-[13px] font-semibold truncate">
+                  {user?.displayName || "Guest"}
+                </div>
+                {user?.email && (
+                  <div className="text-fan-secondary text-[11.5px] truncate">{user.email}</div>
+                )}
+              </div>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="px-4 pb-6 pt-4">
           <button
             type="button"
-            onClick={() => navigate("/account")}
-            className="flex items-center gap-3 min-w-0 flex-1 rounded-lg -mx-1 px-1 py-1 text-left hover:bg-white/[0.06] transition-colors"
-            data-testid="button-open-account"
+            onClick={() => {
+              const next = window.location.pathname + window.location.search;
+              navigate(`/login?next=${encodeURIComponent(next)}`);
+            }}
+            className="w-full h-11 rounded-full font-semibold text-sm text-fan-primary transition-opacity hover:opacity-90"
+            style={{ background: BRAND_BLUE }}
+            data-testid="button-fan-login"
           >
-            <div
-              className="w-10 h-10 rounded-full flex-shrink-0 overflow-hidden bg-white/[0.18] ring-1 ring-white/30"
-              aria-hidden
-            >
-              {user?.avatarUrl ? (
-                <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-fan-primary text-[13px] font-semibold">
-                  {(user?.displayName || user?.email || "?").slice(0, 1).toUpperCase()}
-                </div>
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-fan-primary text-[13px] font-semibold truncate">
-                {user?.displayName || "Guest"}
-              </div>
-              {user?.email && (
-                <div className="text-fan-secondary text-[11.5px] truncate">{user.email}</div>
-              )}
-            </div>
+            Log in
           </button>
         </div>
-      </div>
+      )}
     </aside>
   );
 }
