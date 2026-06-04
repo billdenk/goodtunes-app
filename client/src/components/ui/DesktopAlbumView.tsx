@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Link, useLocation } from "wouter";
+import { useHasInAppHistory } from "@/lib/navHistory";
 import { ChevronLeft, Play, Pause, Shuffle, Lock, Share, Info } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { IconButton } from "@/components/ui/IconButton";
@@ -257,6 +258,10 @@ export function DesktopAlbumView({
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const handleBack = onBack ?? (() => navigate("/collection"));
+  // Only show the back-carat when the fan actually navigated within the app
+  // to get here. Most fans reach an album page directly (share link, deep
+  // link, refresh, new tab), where a back control is a dead end — hide it.
+  const hasInAppHistory = useHasInAppHistory();
   const handleCopyShareLink = async () => {
     // Task #970 — copy the clean per-release share link when the album has
     // a slug so what fans share matches what operators promote.
@@ -318,20 +323,23 @@ export function DesktopAlbumView({
             and returns the viewer to where they came from (collection by
             default, or the originating context if a host passes `onBack`). The
             album title lives in the hero below. */}
-        <div className="flex items-start justify-between gap-2">
-          <IconButton
-            variant="glass"
-            label="Back to collection"
-            onClick={handleBack}
-            data-testid="button-back-album"
-          >
-            <ChevronLeft strokeWidth={2.5} className="-translate-x-[1px]" />
-          </IconButton>
+        <div className="flex items-start gap-2">
+          {hasInAppHistory && (
+            <IconButton
+              variant="glass"
+              label="Back to collection"
+              onClick={handleBack}
+              data-testid="button-back-album"
+            >
+              <ChevronLeft strokeWidth={2.5} className="-translate-x-[1px]" />
+            </IconButton>
+          )}
 
           {/* Apple-Music top-right chrome: Share + More sit together at the
               right edge of the album header, away from the transport controls
-              (Task #1055). */}
-          <div className="flex items-center gap-1">
+              (Task #1055). `ml-auto` keeps them right-aligned whether or not
+              the back-carat is present. */}
+          <div className="flex items-center gap-1 ml-auto">
             <IconButton
               variant="glass"
               size="md"

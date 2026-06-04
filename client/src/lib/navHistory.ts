@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 
 // Whether the fan has navigated within the SPA at least once since the
@@ -9,6 +9,11 @@ import { useLocation } from "wouter";
 // hard-coded fallback when there's no prior in-app context (deep link,
 // share open, refresh, opened in a new tab).
 let navigatedWithinApp = false;
+
+// Components that show/hide an in-app back affordance subscribe here so
+// they re-render the moment `navigatedWithinApp` flips true (the flip
+// happens in an effect, after the first render of any deep-linked page).
+const subscribers = new Set<() => void>();
 
 /**
  * Mount once near the router root. Flips `navigatedWithinApp` true on the
@@ -23,8 +28,30 @@ export function useTrackInAppNavigation(): void {
       isFirst.current = false;
       return;
     }
-    navigatedWithinApp = true;
+    if (!navigatedWithinApp) {
+      navigatedWithinApp = true;
+      subscribers.forEach((fn) => fn());
+    }
   }, [location]);
+}
+
+/**
+ * Reactive read of `navigatedWithinApp`. Returns false on a direct landing
+ * (share open, deep link, refresh, new tab) and true once the fan has
+ * navigated within the app. Surfaces use this to hide a back control that
+ * would otherwise be a dead end for someone who came straight here.
+ */
+export function useHasInAppHistory(): boolean {
+  const [val, setVal] = useState(navigatedWithinApp);
+  useEffect(() => {
+    const update = () => setVal(navigatedWithinApp);
+    update();
+    subscribers.add(update);
+    return () => {
+      subscribers.delete(update);
+    };
+  }, []);
+  return val;
 }
 
 /**
