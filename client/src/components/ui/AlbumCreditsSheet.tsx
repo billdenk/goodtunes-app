@@ -250,12 +250,16 @@ export function AlbumCreditsModal({
   albumTitle,
   artist,
   credits,
+  eyebrow = "Album Credits",
   onOpenPerson,
   onClose,
 }: {
   albumTitle: string;
   artist: string;
   credits: AlbumCreditsPayload;
+  /** Small uppercase label above the title. Defaults to "Album Credits";
+   *  the per-track surface passes "Song Credits". */
+  eyebrow?: string;
   onOpenPerson?: (personId: string, role: string) => void;
   onClose: () => void;
 }) {
@@ -302,7 +306,7 @@ export function AlbumCreditsModal({
             <div className="flex items-start gap-3 px-5 pt-5 pb-4">
               <div className="flex-1 min-w-0">
                 <p className="text-[color:var(--brand-blue)] text-xs font-semibold uppercase tracking-wider mb-1">
-                  Album Credits
+                  {eyebrow}
                 </p>
                 <h2 className="text-white text-[22px] font-bold leading-tight tracking-tight">
                   {albumTitle}

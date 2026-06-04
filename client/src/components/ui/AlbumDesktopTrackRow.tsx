@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MoreHorizontal, Play, Pause, ListStart, ListEnd, ListPlus, Heart } from "lucide-react";
+import { MoreHorizontal, Play, Pause, ListStart, ListEnd, ListPlus, Heart, Info } from "lucide-react";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { IconButton } from "@/components/ui/IconButton";
 import {
@@ -38,6 +38,14 @@ export type AlbumDesktopTrackRowProps = {
   onPlayNext?: () => void;
   onPlayLast?: () => void;
   onToggleFavorite?: () => void;
+  /** Opens this track's credits (per-track: that song's performers/writers
+   *  plus the album's production). Mirrors the mobile track popover's
+   *  "View Credits" entry. Omit to hide the menu item. */
+  onViewCredits?: () => void;
+  /** Whether this track actually carries credits. The Credits item only
+   *  renders when this is true (matching mobile, where tracks with no
+   *  credits never present a working Credits action). */
+  hasCredits?: boolean;
   /** When false, the trailing ⋯ context menu is suppressed entirely (used
    *  on the not-owned preview/buy surface, where queue/playlist/favorite
    *  actions don't apply yet). Defaults to true for the owned library. */
@@ -69,6 +77,8 @@ export function AlbumDesktopTrackRow({
   onPlayNext,
   onPlayLast,
   onToggleFavorite,
+  onViewCredits,
+  hasCredits = false,
   showMenu = true,
 }: AlbumDesktopTrackRowProps) {
   const [hover, setHover] = useState(false);
@@ -266,6 +276,23 @@ export function AlbumDesktopTrackRow({
                 />
                 {isFavorite ? "Remove from Favorites" : "Add to Favorites"}
               </DropdownMenuItem>
+            )}
+            {/* Credits — mirrors the mobile track popover's "View Credits"
+                entry: sits at the bottom, behind its own separator, and only
+                renders for tracks that actually carry credits. */}
+            {onViewCredits && hasCredits && (
+              <>
+                {(onPlayNext || onPlayLast || onAdd || onToggleFavorite) && (
+                  <DropdownMenuSeparator className="bg-white/10" />
+                )}
+                <DropdownMenuItem
+                  data-testid={`menu-track-credits-${trackNumber}`}
+                  onSelect={() => onViewCredits()}
+                  className="gap-3 rounded-lg px-3 py-2 text-sm font-normal text-white focus:bg-white/10 focus:text-white"
+                >
+                  <Info className="w-4 h-4" /> Credits
+                </DropdownMenuItem>
+              </>
             )}
           </DropdownMenuContent>
         </DropdownMenu>

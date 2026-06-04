@@ -119,6 +119,13 @@ export type DesktopAlbumViewProps = {
   onPlayNextTrack?: (song: DesktopAlbumSong) => void;
   onPlayLastTrack?: (song: DesktopAlbumSong) => void;
   onToggleFavoriteTrack?: (song: DesktopAlbumSong) => void;
+  /** Opens the per-track credits surface for a song (mirrors the mobile
+   *  track popover's "View Credits"). Wired by the host into the desktop
+   *  credits modal scoped to that one song. */
+  onViewCreditsTrack?: (song: DesktopAlbumSong) => void;
+  /** Per-song "has credits" predicate. The row's Credits item only renders
+   *  for songs this returns true for, matching mobile's gating. */
+  songHasCredits?: (song: DesktopAlbumSong) => boolean;
 
   /** Songs the current viewer has favorited. The track row renders a
    *  small neutral-white heart (quiet status marker) to the left of the
@@ -229,6 +236,8 @@ export function DesktopAlbumView({
   onPlayNextTrack,
   onPlayLastTrack,
   onToggleFavoriteTrack,
+  onViewCreditsTrack,
+  songHasCredits,
   favoriteSongIds,
   hasAlbumCredits = false,
   onOpenAlbumCredits,
@@ -742,6 +751,12 @@ export function DesktopAlbumView({
                         ? undefined
                         : () => onToggleFavoriteTrack(s)
                     }
+                    onViewCredits={
+                      state === "locked" || !onViewCreditsTrack
+                        ? undefined
+                        : () => onViewCreditsTrack(s)
+                    }
+                    hasCredits={songHasCredits?.(s) ?? false}
                     showMenu={isOwned}
                   />
                 );

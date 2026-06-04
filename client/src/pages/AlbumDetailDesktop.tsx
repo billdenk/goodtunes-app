@@ -58,6 +58,7 @@ import type { Album as PlayerAlbum, Person } from "@/data/musicData";
 import { PersonDetailSheet, ProvenanceSheet, OwnershipSheet } from "@/pages/AlbumDetail";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { goBack } from "@/lib/navHistory";
+import { track } from "@/lib/analytics";
 
 type ApiSong = {
   id: string;
@@ -245,6 +246,11 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   // self-contained About/Music/Gear sheet (+ instrument/vendor sub-stack).
   const [creditPerson, setCreditPerson] = useState<{ person: Person; role: string } | null>(null);
 
+  // Per-track credits opened from a track row's ⋯ menu (mirrors the mobile
+  // track popover's "View Credits"). Scoped to one song — that song's
+  // performers/writers plus the album-level production rows.
+  const [creditsForSong, setCreditsForSong] = useState<{ id: string; title: string } | null>(null);
+
   const { data: album, isLoading } = useQuery<ApiAlbum>({
     queryKey: ["/api/albums", id],
     enabled: !!id,
@@ -415,6 +421,30 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   };
   const handleToggleFavoriteTrack = (song: DesktopAlbumSong) => {
     player.toggleFavorite(song.id);
+  };
+  // Per-track credits: scope the album credits payload down to one song's
+  // performers/writers (the album-level production rows ride along so the
+  // desktop card shows the same three groups the album modal does).
+  const scopedCreditsFor = (songId: string): AlbumCreditsPayload => ({
+    bySongId: albumCredits?.bySongId?.[songId]
+      ? { [songId]: albumCredits.bySongId[songId] }
+      : {},
+    production: albumCredits?.production ?? [],
+  });
+  // A track "has credits" when it carries its own performers or writers,
+  // mirroring the mobile track popover's gating (album-only production never
+  // lights up a track's Credits action).
+  const songHasCredits = (song: DesktopAlbumSong) => {
+    const bucket = albumCredits?.bySongId?.[song.id];
+    return (
+      !!bucket &&
+      ((bucket.performers?.length ?? 0) > 0 || (bucket.writers?.length ?? 0) > 0)
+    );
+  };
+  const handleViewCreditsTrack = (song: DesktopAlbumSong) => {
+    setShowAlbumCredits(false);
+    setCreditsForSong({ id: song.id, title: song.title });
+    if (album) track("credits_opened", { songId: song.id, albumId: album.id });
   };
   const handleBuyBundle = (opts?: { signedCert?: boolean }) => {
     setBuyAddons({ signedCert: !!opts?.signedCert });
@@ -658,6 +688,8 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             onPlayNextTrack={handlePlayNextTrack}
             onPlayLastTrack={handlePlayLastTrack}
             onToggleFavoriteTrack={handleToggleFavoriteTrack}
+            onViewCreditsTrack={handleViewCreditsTrack}
+            songHasCredits={songHasCredits}
             favoriteSongIds={favSongs.set}
             hasAlbumCredits={effectiveOwned && hasAnyCredits}
             onOpenAlbumCredits={() => setShowAlbumCredits(true)}
@@ -908,6 +940,29 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             });
           }}
           onClose={() => setShowAlbumCredits(false)}
+        />
+      ) : creditsForSong && effectiveOwned && album ? (
+        <AlbumCreditsModal
+          albumTitle={creditsForSong.title}
+          artist={`${album.artist} · ${album.title}`}
+          eyebrow="Song Credits"
+          credits={scopedCreditsFor(creditsForSong.id)}
+          onOpenPerson={(personId, role) => {
+            const entry = buildAlbumCreditGroups(scopedCreditsFor(creditsForSong.id))
+              .flatMap((g) => g.entries)
+              .find((e) => e.personId === personId);
+            if (!entry) return;
+            setCreditsForSong(null);
+            setCreditPerson({
+              person: {
+                id: personId,
+                name: entry.name,
+                photoUrl: entry.photoUrl ?? undefined,
+              },
+              role,
+            });
+          }}
+          onClose={() => setCreditsForSong(null)}
         />
       ) : null}
     </div>
