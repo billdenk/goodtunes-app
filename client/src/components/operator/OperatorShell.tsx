@@ -14,6 +14,7 @@
 import * as React from "react";
 import type { LucideIcon } from "lucide-react";
 import { DashboardTabs, type TabDef } from "@/components/partner/dashboard-controls";
+import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
 import { cn } from "@/lib/utils";
 
 export type OperatorShellProps<TabId extends string> = {
@@ -99,6 +100,9 @@ export function OperatorShell<TabId extends string>({
                   {subtitle}
                 </div>
               )}
+            </div>
+            <div className="shrink-0 self-start" data-testid="operator-shell-account">
+              <AdminUserMenu />
             </div>
           </div>
 
