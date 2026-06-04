@@ -18240,6 +18240,11 @@
     "snippet": "<h3 className=\"text-fan-primary text-[22px] font-bold tracking-tight mb-3\" data-testid=\"heading-album-photos\">"
   },
   {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/AlbumDetail.tsx",
+    "snippet": "<button type=\"button\" onClick={startPlayback} disabled={phase === \"loading\"} className=\"absolute inset-0 flex items-center justify-center\" aria-label={phase === \"preparing\" || phase === \"error\" ? `Ret"
+  },
+  {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<div className=\"absolute -left-[18px] top-1 w-3 h-3 rounded-full\" style={{ background: e.color, boxShadow: `0 0 0 3px rgba(0,6,43,1), 0 0 12px ${e.color}55` }} />"

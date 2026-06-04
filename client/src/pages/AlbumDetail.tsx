@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { AlbumDetailMobileSurface } from "@/components/ui/AlbumDetailMobileSurface";
 import { AlbumDetailMobileSkeleton, AlbumNotFound } from "@/components/ui/AlbumDetailSkeleton";
 import { AlbumCreditsSheet, buildAlbumCreditGroups } from "@/components/ui/AlbumCreditsSheet";
+import { BonusPlayBadge } from "@/components/ui/BonusPlayBadge";
 import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
@@ -38,7 +39,7 @@ import { toast } from "@/hooks/use-toast";
 import { IconButton } from "@/components/ui/IconButton";
 import { ChromeScrim } from "@/components/ui/ChromeScrim";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
-import { ChevronLeft, Share, MoreHorizontal, Lock, Loader2 } from "lucide-react";
+import { ChevronLeft, Share, MoreHorizontal, Lock } from "lucide-react";
 import { buyEnabled, nativeDownloadsEnabled } from "@/lib/platform";
 import { downloadSong, removeDownload, listDownloadedSongs } from "@/lib/nativeDownloads";
 import { track } from "@/lib/analytics";
@@ -3734,15 +3735,7 @@ function BonusVideoPlayer({ video, locked = false }: { video: BonusVideo; locked
             aria-label={phase === "preparing" || phase === "error" ? `Retry ${video.title}` : `Play ${video.title}`}
             data-testid={`button-play-album-bonus-${video.id}`}
           >
-            <span className="w-12 h-12 rounded-full bg-black/55 flex items-center justify-center">
-              {phase === "loading" ? (
-                <Loader2 className="w-5 h-5 text-fan-primary animate-spin" strokeWidth={2.4} />
-              ) : (
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" className="text-fan-primary translate-x-[1px]">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              )}
-            </span>
+            <BonusPlayBadge loading={phase === "loading"} />
           </button>
           {phase === "preparing" && (
             <div

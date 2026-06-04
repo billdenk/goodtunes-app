@@ -4,6 +4,7 @@ import { Link, useLocation } from "wouter";
 import { useHasInAppHistory } from "@/lib/navHistory";
 import { ChevronLeft, Play, Pause, Shuffle, Lock, Share, Info, X } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
+import { BonusPlayBadge } from "@/components/ui/BonusPlayBadge";
 import { IconButton } from "@/components/ui/IconButton";
 import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
 import { useToast } from "@/hooks/use-toast";
@@ -1058,6 +1059,7 @@ function BonusGrid({
               </div>
             </div>
           )}
+          {!locked && kind === "video" && <BonusPlayBadge />}
           {it.label && (
             <div className="absolute left-3 right-3 bottom-3 text-fan-primary text-[12.5px] font-semibold truncate">
               {it.label}
