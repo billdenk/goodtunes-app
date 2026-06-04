@@ -214,6 +214,15 @@ function detectCurrentEntity(
 
 export function ViewAsSwitcher() {
   const [location, navigate] = useLocation();
+  // Super-admin-only chrome. Partner roles (label / artist / press / etc.)
+  // must never see the "View as" persona switcher — it's a god-view tool for
+  // jumping across any entity's admin detail page. Gated on the real logged-in
+  // role (this control only navigates, it never swaps the session, so the role
+  // response is stable). The server already scopes what each role can open.
+  const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
+    queryKey: ["/api/me/role"],
+  });
+  const isSuperAdmin = roleInfo?.role === "super_admin";
   const currentEntity = useMemo(() => {
     const search = typeof window !== "undefined" ? window.location.search : "";
     return detectCurrentEntity(location, search);
@@ -303,6 +312,10 @@ export function ViewAsSwitcher() {
   };
 
   const PersonaIcon = persona.icon;
+
+  // All hooks above run unconditionally; only the render is gated so a
+  // non-super-admin sees nothing at all.
+  if (!isSuperAdmin) return null;
 
   return (
     <div className="flex items-center gap-2" data-testid="view-as-switcher">
