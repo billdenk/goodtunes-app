@@ -20,6 +20,7 @@ import {
   type StreamingServiceId,
 } from "@/lib/streamingService";
 import { ServiceGlyphBadge } from "@/components/ui/ServiceGlyph";
+import { deriveAccountIdentity } from "@/lib/accountIdentity";
 
 // Task #74 — minimal order shape for the "My Orders" card on the
 // profile. We only need a few fields to render the count + most-recent
@@ -273,14 +274,9 @@ export function Account() {
 
   // Lead the profile with the fan's full name — real name first, falling
   // back to the display name — never the email. Initials follow the same
-  // source so a "Bill Denk" account shows "BD", not a single "B".
-  const fullName = (user?.realName || "").trim() || (user?.displayName || "").trim();
-  const handle = user?.handle || user?.username || "";
-  const initials = fullName
-    ? fullName.split(/\s+/).filter(Boolean).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()
-    : handle
-      ? handle.slice(0, 2).toUpperCase()
-      : "?";
+  // source so a "Bill Denk" account shows "BD", not a single "B". Logic
+  // lives in deriveAccountIdentity so it can be unit-tested standalone.
+  const { fullName, handle, initials } = deriveAccountIdentity(user);
 
   // Profile photo comes from the server (auth payload). Actual edit lives on
   // the dedicated /account/edit page.

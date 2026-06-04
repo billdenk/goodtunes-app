@@ -54,6 +54,7 @@ import { geoFromRequest, forwardToPostHog, isPostHogEnabled } from "./analytics"
 import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, fetchSpotifyTrackByUrl, searchTrackCandidates, resolveSpotifyAlbumUrl, resolveSpotifyAlbumUrlsForReleases, type SpotifyArtistCandidate } from "./lib/spotify";
 import { resolveStreamingLinksFromAppleCollectionId, resolveStreamingLinksForCollections, hasAnyResolvedLink, appleCollectionIdFromUrl, appleCountryFromUrl } from "./lib/streamingLinks";
 import { adminLoginPasswordOk, isLinkableEmail } from "./auth/identityLink";
+import { applyAppleFirstAuthName } from "./auth/appleName";
 
 const scryptAsync = promisify(scrypt);
 
@@ -1201,20 +1202,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     // Apple sends the user's real name ONLY in the `user` field of the
     // form_post callback body, and ONLY on the very first authorization —
-    // never in the id_token and never on later sign-ins. Capture it here
-    // so we mint the account with their actual name instead of guessing
-    // from the email local-part. Shape: { name: { firstName, lastName }, … }.
-    if (provider === "apple" && req.body?.user) {
-      try {
-        const appleUser = typeof req.body.user === "string" ? JSON.parse(req.body.user) : req.body.user;
-        const first = String(appleUser?.name?.firstName ?? "").trim();
-        const last = String(appleUser?.name?.lastName ?? "").trim();
-        const full = [first, last].filter(Boolean).join(" ").trim();
-        if (full) identity.name = full;
-      } catch (err: any) {
-        console.warn(`[oauth] apple first-auth name parse failed: ${err?.message}`);
-      }
-    }
+    // never in the id_token and never on later sign-ins. Fold it into
+    // identity.name (no-op for Google / later sign-ins / malformed bodies)
+    // so we mint the account with their actual name. See server/auth/appleName.ts.
+    applyAppleFirstAuthName(identity, provider, req.body);
 
     const homePath = kind === "admin" ? "/admin" : "/account";
 
