@@ -12,10 +12,17 @@ and drops maker/price/year/description. The robust fix (same philosophy as the
 Gruhn `api.guitars.com` handler) is to hit Shopify's public
 `/products/<handle>.json` instead of scraping HTML.
 
-**Rule:** for a confirmed-Shopify shop, add its host to the `SHOPIFY_JSON_HOSTS`
-set inside the `/api/admin/instruments/scrape` route (and to `KNOWN_HOSTS` as a
-reseller). The shared handler extracts the handle from the last `/products/<h>`
-path segment, fetches `https://<host>/products/<handle>.json`, and maps:
+**Rule:** curated-Shopify shops live in `SHOPIFY_JSON_HOSTS` (always structured,
+fail-loud). **Unknown** hosts are auto-detected: if the pasted URL has a
+`/products/<handle>` segment, the route probes `<host>/products/<handle>.json`
+and uses the structured path only when it returns JSON with a `product` object —
+otherwise it falls through to the generic HTML scraper (no fail-loud, no
+fabricated maker). Auto-detect deliberately skips `KNOWN_HOSTS` so their
+curated/specialized handlers (e.g. Gruhn, Reverb table-scrape) stay intact.
+Unknown-host reseller name is a title-cased domain (`shop.com` → "Shop"). The
+shared mapper (`tryShopifyJsonImport`) extracts the handle from the last
+`/products/<h>` path segment, fetches `https://<host>/products/<handle>.json`,
+and maps:
 `title→name`, `vendor→brand/maker`, `variants[0].price→price`,
 `body_html→description`, `images[0].src→photo`, leading 18xx/19xx/20xx token in
 the title → `specs.Year`, `Label:Value` tags (skip `Level N:` taxonomy nav) →

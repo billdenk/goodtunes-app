@@ -5314,6 +5314,123 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         lookupVendorByName: (b) => storage.getVendorByNameInsensitive(b),
       });
 
+    // Task #1228 / #1234 — fetch a Shopify shop's public
+    // `/products/<handle>.json` and map it into the scrape response shape.
+    // Shared by the curated SHOPIFY_JSON_HOSTS path (fail-loud) and the
+    // auto-detect path for unknown hosts (caller falls through to the
+    // generic HTML scraper when this returns `error`). Same host as the
+    // pasted URL, so the SSRF-guarded safeFetch is fine.
+    type ShopifyImportResult =
+      | { kind: "ok"; payload: Record<string, unknown> }
+      | { kind: "error"; status: number; message: string };
+    const tryShopifyJsonImport = async (
+      handle: string,
+    ): Promise<ShopifyImportResult> => {
+      // Curated hosts carry a friendly display name; unknown hosts get a
+      // title-cased domain so the reseller chip isn't a bare "shop.com".
+      const shopName =
+        hostInfo?.name ??
+        host
+          .split(".")
+          .slice(0, -1)
+          .join(".")
+          .replace(/\b\w/g, (c) => c.toUpperCase());
+      const apiUrl = `https://${host}/products/${encodeURIComponent(handle)}.json`;
+      const shopCtrl = new AbortController();
+      const shopT = setTimeout(() => shopCtrl.abort(), 12_000);
+      let sProduct: any;
+      try {
+        const apiRes = await safeFetchWithUaFallback(apiUrl, {
+          signal: shopCtrl.signal,
+          headers: { Accept: "application/json" },
+        }).finally(() => clearTimeout(shopT));
+        if (apiRes.status === 404) {
+          return {
+            kind: "error",
+            status: 404,
+            message: `Item not found on ${shopName} — the listing may have been sold or removed.`,
+          };
+        }
+        if (!apiRes.ok) {
+          return {
+            kind: "error",
+            status: 502,
+            message: `${shopName} returned ${apiRes.status} — the item may no longer be listed.`,
+          };
+        }
+        // A real Shopify `.json` endpoint returns JSON. A non-Shopify host
+        // that happens to have a `/products/<handle>` URL usually serves an
+        // HTML page here — bail (so auto-detect falls through) instead of
+        // parsing a whole HTML body.
+        const contentType = (apiRes.headers.get("content-type") || "").toLowerCase();
+        if (!contentType.includes("json")) {
+          try { await apiRes.body?.cancel(); } catch { /* ignore */ }
+          return {
+            kind: "error",
+            status: 502,
+            message: `${shopName} didn't return product data for this URL.`,
+          };
+        }
+        let body: any;
+        try {
+          body = await apiRes.json();
+        } catch {
+          return {
+            kind: "error",
+            status: 502,
+            message: `${shopName} didn't return product data for this URL.`,
+          };
+        }
+        sProduct = body?.product;
+        if (!sProduct || typeof sProduct !== "object") {
+          return {
+            kind: "error",
+            status: 404,
+            message: `${shopName} returned no product data for this URL.`,
+          };
+        }
+      } catch (e: any) {
+        const msg =
+          e?.name === "AbortError"
+            ? `${shopName} took too long to respond.`
+            : e?.message || `Could not reach ${shopName}.`;
+        return { kind: "error", status: 502, message: msg };
+      }
+
+      // Pure field-mapping lives in ./lib/shopifyGearMapping so it's
+      // unit-tested against saved Retrofret/Gryphon fixtures. The helper
+      // keeps the impure tail: image rehosting + brand→maker resolution.
+      const mapped = mapShopifyProduct(sProduct, shopName);
+
+      let shopifyPhotoUrl: string | null = null;
+      if (mapped.rawImage) {
+        try { shopifyPhotoUrl = await rehostRemoteImage(mapped.rawImage); }
+        catch { shopifyPhotoUrl = mapped.rawImage; }
+      }
+
+      const shopifyReseller = buildHostSlot(host, shopName, url);
+      const shopifyMaker = mapped.brand
+        ? await makerSlotFromBrand(mapped.brand)
+        : null;
+
+      return {
+        kind: "ok",
+        payload: {
+          name: mapped.name,
+          brand: mapped.brand,
+          category: mapped.category,
+          description: mapped.description,
+          specs: mapped.specs,
+          price: mapped.price,
+          photoUrl: shopifyPhotoUrl,
+          sourceImage: mapped.rawImage,
+          reseller: shopifyReseller,
+          maker: shopifyMaker,
+          vendor: shopifyReseller,
+        },
+      };
+    };
+
     try {
       // — Gruhn Guitars (guitars.com) ————————————————————————————————
       // guitars.com is a client-side-rendered SPA: the fetched HTML is
@@ -5443,86 +5560,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       // ————————————————————————————————————————————————————————————————
 
-      // — Shopify vintage shops (Retrofret, Gryphon) ————————————————————
-      // These stores either emit no JSON-LD Product / no og:description
+      // — Shopify shops (curated + auto-detected) ——————————————————————
+      // Shopify stores either emit no JSON-LD Product / no og:description
       // (Gryphon) or carry junk in their meta, so the generic HTML path
       // would import a name + photo but lose the maker, price, year, and
       // description. Shopify's public `/products/<handle>.json` endpoint
       // returns clean structured data; we hit it directly (same host, so
-      // SSRF-guarded safeFetch is fine). Fail-loud like Gruhn.
-      if (SHOPIFY_JSON_HOSTS.has(host)) {
-        const shopName = hostInfo?.name ?? host;
-        const segs = parsed.pathname.split("/").filter(Boolean);
-        const pIdx = segs.lastIndexOf("products");
-        const handle = pIdx >= 0 ? (segs[pIdx + 1] ?? "") : "";
-        if (!handle) {
-          return res.status(400).json({
-            message: `Could not find a product handle in this ${shopName} URL — paste a link to a specific listing (it should contain /products/...).`,
-          });
-        }
-        const apiUrl = `https://${host}/products/${encodeURIComponent(handle)}.json`;
-        const shopCtrl = new AbortController();
-        const shopT = setTimeout(() => shopCtrl.abort(), 12_000);
-        let sProduct: any;
-        try {
-          const apiRes = await safeFetchWithUaFallback(apiUrl, {
-            signal: shopCtrl.signal,
-            headers: { Accept: "application/json" },
-          }).finally(() => clearTimeout(shopT));
-          if (apiRes.status === 404) {
-            return res.status(404).json({
-              message: `Item not found on ${shopName} — the listing may have been sold or removed.`,
+      // SSRF-guarded safeFetch is fine). Curated SHOPIFY_JSON_HOSTS fail
+      // loud; unknown hosts are probed and fall through on a miss (#1234).
+      {
+        const shopifySegs = parsed.pathname.split("/").filter(Boolean);
+        const shopifyPIdx = shopifySegs.lastIndexOf("products");
+        const shopifyHandle =
+          shopifyPIdx >= 0 ? (shopifySegs[shopifyPIdx + 1] ?? "") : "";
+
+        if (SHOPIFY_JSON_HOSTS.has(host)) {
+          // Curated Shopify host — always take the structured path and fail
+          // loud (the operator confirmed this shop is Shopify).
+          const shopName = hostInfo?.name ?? host;
+          if (!shopifyHandle) {
+            return res.status(400).json({
+              message: `Could not find a product handle in this ${shopName} URL — paste a link to a specific listing (it should contain /products/...).`,
             });
           }
-          if (!apiRes.ok) {
-            return res.status(502).json({
-              message: `${shopName} returned ${apiRes.status} — the item may no longer be listed.`,
-            });
-          }
-          const body = await apiRes.json();
-          sProduct = body?.product;
-          if (!sProduct || typeof sProduct !== "object") {
-            return res.status(404).json({
-              message: `${shopName} returned no product data for this URL.`,
-            });
-          }
-        } catch (e: any) {
-          const msg =
-            e?.name === "AbortError"
-              ? `${shopName} took too long to respond.`
-              : e?.message || `Could not reach ${shopName}.`;
-          return res.status(502).json({ message: msg });
+          const r = await tryShopifyJsonImport(shopifyHandle);
+          if (r.kind === "ok") return res.json(r.payload);
+          return res.status(r.status).json({ message: r.message });
         }
 
-        // Pure field-mapping lives in ./lib/shopifyGearMapping so it's
-        // unit-tested against saved Retrofret/Gryphon fixtures. The route
-        // keeps the impure tail: image rehosting + brand→maker resolution.
-        const mapped = mapShopifyProduct(sProduct, shopName);
-
-        let shopifyPhotoUrl: string | null = null;
-        if (mapped.rawImage) {
-          try { shopifyPhotoUrl = await rehostRemoteImage(mapped.rawImage); }
-          catch { shopifyPhotoUrl = mapped.rawImage; }
+        // Task #1234 — auto-detect Shopify for *unknown* hosts. When the URL
+        // points at a `/products/<handle>` listing and that host answers its
+        // public `.json` endpoint with real Shopify product data, use the
+        // structured path so new boutique Shopify shops work without a code
+        // change. A failed probe just falls through to the generic HTML
+        // scraper below — no fail-loud, no fabricated maker domain. We skip
+        // KNOWN_HOSTS here to preserve their curated/specialized handling.
+        if (!hostInfo && shopifyHandle) {
+          const r = await tryShopifyJsonImport(shopifyHandle);
+          if (r.kind === "ok") return res.json(r.payload);
+          // else: not a (working) Shopify store — fall through to generic.
         }
-
-        const shopifyReseller = buildHostSlot(host, shopName, url);
-        const shopifyMaker = mapped.brand
-          ? await makerSlotFromBrand(mapped.brand)
-          : null;
-
-        return res.json({
-          name: mapped.name,
-          brand: mapped.brand,
-          category: mapped.category,
-          description: mapped.description,
-          specs: mapped.specs,
-          price: mapped.price,
-          photoUrl: shopifyPhotoUrl,
-          sourceImage: mapped.rawImage,
-          reseller: shopifyReseller,
-          maker: shopifyMaker,
-          vendor: shopifyReseller,
-        });
       }
       // ————————————————————————————————————————————————————————————————
 
