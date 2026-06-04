@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Disc3,
@@ -273,6 +273,28 @@ export function VinylOrderPanel({
     return m;
   }, [songs]);
 
+  // Vinyl ordering writes through `edit_metadata` on the same gate as
+  // every other album mutation. When the caller can't save — out-of-scope
+  // partner, post-sale lock without an override, or approval-only mode
+  // (the route treats divert as a 403 here) — the panel goes read-only so
+  // drag AND Undo/Redo/Reset never fire a speculative 403. Optimistically
+  // writable while the probe is in flight (operators are the common case).
+  const { data: editAccess } = useQuery<{
+    canEdit: boolean;
+    requiresApproval: boolean;
+  }>({
+    queryKey: ["/api/admin/albums", albumId, "edit-access"],
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/albums/${albumId}/edit-access`, {
+        credentials: "include",
+      });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+  });
+  const readOnly =
+    !!editAccess && (!editAccess.canEdit || editAccess.requiresApproval);
+
   const saveMut = useMutation({
     mutationFn: async (next: WorkingState) => {
       await apiRequest("POST", `/api/admin/albums/${albumId}/vinyl-order`, {
@@ -301,6 +323,7 @@ export function VinylOrderPanel({
     next: WorkingState,
     opts: { record: boolean; resetStack?: boolean },
   ) => {
+    if (readOnly) return;
     if (workingsEqual(next, working)) return;
     setWorking(next);
     if (opts.resetStack) {
@@ -317,6 +340,7 @@ export function VinylOrderPanel({
 
   // ── DnD ───────────────────────────────────────────────────────────
   const onDragStart = (id: string) => (e: React.DragEvent) => {
+    if (readOnly) return;
     setDragId(id);
     dragStartPointRef.current = { x: e.clientX, y: e.clientY };
     try {
@@ -463,7 +487,7 @@ export function VinylOrderPanel({
   const canReset = snapshots.length > 1 || cursor !== 0;
 
   const onUndo = () => {
-    if (!canUndo) return;
+    if (readOnly || !canUndo) return;
     const next = snapshots[cursor - 1];
     setCursor(cursor - 1);
     if (!workingsEqual(next, working)) {
@@ -472,7 +496,7 @@ export function VinylOrderPanel({
     }
   };
   const onRedo = () => {
-    if (!canRedo) return;
+    if (readOnly || !canRedo) return;
     const next = snapshots[cursor + 1];
     setCursor(cursor + 1);
     if (!workingsEqual(next, working)) {
@@ -481,7 +505,7 @@ export function VinylOrderPanel({
     }
   };
   const onResetRequest = () => {
-    if (!canReset) return;
+    if (readOnly || !canReset) return;
     setResetConfirm(true);
   };
   const onResetCancel = () => setResetConfirm(false);
@@ -542,7 +566,7 @@ export function VinylOrderPanel({
               variant="ghost"
               size="sm"
               className="h-8 px-2 text-slate-700"
-              disabled={!canUndo}
+              disabled={!canUndo || readOnly}
               onClick={onUndo}
               data-testid="button-vinyl-undo"
             >
@@ -554,7 +578,7 @@ export function VinylOrderPanel({
               variant="ghost"
               size="sm"
               className="h-8 px-2 text-slate-700"
-              disabled={!canRedo}
+              disabled={!canRedo || readOnly}
               onClick={onRedo}
               data-testid="button-vinyl-redo"
             >
@@ -567,7 +591,7 @@ export function VinylOrderPanel({
               variant="ghost"
               size="sm"
               className="h-8 px-2 text-slate-600"
-              disabled={!canReset}
+              disabled={!canReset || readOnly}
               onClick={onResetRequest}
               data-testid="button-vinyl-reset"
             >
@@ -604,6 +628,16 @@ export function VinylOrderPanel({
           </div>
         )}
       </div>
+
+      {readOnly && (
+        <div
+          className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
+          data-testid="banner-vinyl-readonly"
+        >
+          You don't have edit access for this album's vinyl order — the
+          sequence below is read-only.
+        </div>
+      )}
 
       {/* Task #583 — the format dropdown was retired with the move into
           the Physical tab; cut format derives from the album's
@@ -696,13 +730,16 @@ export function VinylOrderPanel({
                     return (
                       <li
                         key={id}
-                        draggable
+                        draggable={!readOnly}
                         onDragStart={onDragStart(id)}
                         onDragEnd={onDragEnd}
                         onDragOver={onRowDragOver(id)}
                         onDrop={onRowDrop(id)}
                         className={cn(
-                          "relative flex items-center gap-3 px-4 py-2.5 border-t border-slate-100 cursor-grab active:cursor-grabbing select-none",
+                          "relative flex items-center gap-3 px-4 py-2.5 border-t border-slate-100 select-none",
+                          readOnly
+                            ? "cursor-default"
+                            : "cursor-grab active:cursor-grabbing",
                           i === 0 && "border-t-0",
                           isDragging && "opacity-40",
                         )}
