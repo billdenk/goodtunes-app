@@ -233,6 +233,15 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   // actions). See useFanPreview / the floating toggle in AlbumDetail.
   const { fanView } = useFanPreview();
   const effectiveOwned = !fanView && (isOwned || fullPlaybackAccess);
+  // Task #909 parity — is this album an *active* admin-granted preview (a
+  // temporary "demo" grant) rather than a real owned/comp copy? When it is,
+  // the GoodDeed cert must render "[Demo]" everywhere a serial would appear
+  // instead of falling back to a misleading "#01". Mirrors mobile AlbumDetail;
+  // the server already excludes expired previews from /api/my-albums.
+  const { data: myAlbumsForPreview } = useQuery<Array<{ albumId: string; isPreview?: boolean }> | null>({
+    queryKey: ["/api/my-albums"],
+  });
+  const isPreviewAlbum = !!id && (myAlbumsForPreview ?? []).some((a) => a.albumId === id && a.isPreview);
   const favSongs = useFavoriteSongs();
   const [showAlbumCredits, setShowAlbumCredits] = useState(false);
   const [playlistPickerSong, setPlaylistPickerSong] = useState<{ id: string; title: string } | null>(null);
@@ -884,7 +893,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
           }}
           certificateNumber={singleCertNum ?? ownedNums[0] ?? 1}
           certificateNumbers={singleCertNum !== null ? [singleCertNum] : ownedNums}
-          isPreview={false}
+          isPreview={isPreviewAlbum}
           onClose={() => { setShowCert(false); setSingleCertNum(null); }}
         />
       )}

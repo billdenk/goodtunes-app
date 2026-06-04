@@ -27,3 +27,12 @@ album row never returns cert numbers.
   `OwnershipSheet` reads `album.ownedCertificates` + `album.purchases`, so stamp
   `ownedCertificates: ownedNums` onto the cast (purchases stay absent → prices
   show "—", acceptable; it only shows when owning >1).
+- **Demo grants ≠ orders:** an admin-granted *temporary preview* album has no
+  order, so `ownedNums` is empty and the cert would fall back to a misleading
+  `#01`. The "[Demo]" state is NOT order-derived — it comes from the
+  `/api/my-albums` row's `isPreview` flag (Task #909). Mirror mobile: query
+  `/api/my-albums`, compute `isPreviewAlbum` for this id, pass
+  `isPreview={isPreviewAlbum}` into `GoodDeedCertificate` (which swaps every
+  serial, the share text, and the PNG filename to `[Demo]`). Only the cert swaps
+  — both mobile and desktop intentionally leave `ProvenanceSheet` showing
+  "Certificate #N" for demos.
