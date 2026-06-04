@@ -435,7 +435,7 @@ export function requirePartnerPermission(
     // mapping, and payouts intentionally remain editable post-sale (those
     // are operational, not historical-record, changes).
     const isLocked = !!target.firstSoldAt;
-    const needsApproval = !!perms.metadataEditsRequireApproval;
+    const needsApproval = !!perms?.metadataEditsRequireApproval;
 
     if (verb === "edit_metadata" && isLocked && !opts.skipPostSaleLock) {
       // Post-sale lock: partner edit is BLOCKED unless an active
@@ -619,7 +619,7 @@ export async function partnerEditGate(
 
   // Approval mode: only metadata edits divert. Master uploads, Shopify,
   // payouts, invites all apply directly (or 403) — no review queue.
-  if (verb === "edit_metadata" && perms.metadataEditsRequireApproval) {
+  if (verb === "edit_metadata" && perms?.metadataEditsRequireApproval) {
     return "divert";
   }
   return "allow";
