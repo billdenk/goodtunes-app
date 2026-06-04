@@ -4918,6 +4918,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "rudysmusic.com": { name: "Rudy's Music", role: "reseller" },
     "ricksmusicworld.com": { name: "Rick's Music World", role: "reseller" },
     "guitars.com": { name: "Gruhn Guitars", role: "reseller" },
+    "retrofret.com": { name: "Retrofret Vintage Guitars", role: "reseller" },
+    "gryphonstrings.com": { name: "Gryphon Stringed Instruments", role: "reseller" },
     // Europe / UK / international resellers
     "thomann.de": { name: "Thomann", role: "reseller" },
     "andertons.co.uk": { name: "Andertons", role: "reseller" },
@@ -4981,6 +4983,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "martin": "martinguitar.com",
     "c.f. martin": "martinguitar.com",
     "c. f. martin": "martinguitar.com",
+    "cf martin & co.": "martinguitar.com",
+    "cf martin & co": "martinguitar.com",
+    "c.f. martin & co.": "martinguitar.com",
+    "c.f. martin & co": "martinguitar.com",
     "mesa": "mesaboogie.com",
     "mesa/boogie": "mesaboogie.com",
     "boogie": "mesaboogie.com",
@@ -4999,6 +5005,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // only — widening this list rewrites other single-brand maker sites,
   // so it's a deliberate one-at-a-time decision (see task notes).
   const SUB_BRAND_PARENT_HOSTS: Set<string> = new Set(["gibson.com"]);
+
+  // Task #1228 — vintage shops on Shopify whose product pages are either
+  // minimal-meta (Gryphon emits no JSON-LD Product and no og:description)
+  // or carry junk in the JSON-LD `vendor` field. Rather than scrape the
+  // fragile HTML, we hit Shopify's public `/products/<handle>.json`
+  // endpoint, which returns clean structured data (title, body_html,
+  // vendor, variants[].price, images[].src, tags). Add a host here once
+  // we've confirmed it's a Shopify store and its `.json` endpoint is
+  // open. Fail-loud like the Gruhn handler — no silent garbage imports.
+  const SHOPIFY_JSON_HOSTS: Set<string> = new Set([
+    "retrofret.com",
+    "gryphonstrings.com",
+  ]);
 
   function resolveMakerHostFromBrand(brand: string): string | null {
     const norm = brand.trim().toLowerCase();
@@ -5309,6 +5328,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
     }
 
+    // Resolve a free-text brand string into a Maker VendorSlot: prefer a
+    // known maker host, then an existing catalog row by name, else emit a
+    // name-only slot (the client skips auto-attach when domain is null
+    // because vendors.domain is NOT NULL). Mirrors the reseller-brand
+    // resolution in the generic success path below.
+    const makerSlotFromBrand = async (
+      brandStr: string,
+    ): Promise<VendorSlot | null> => {
+      const b = brandStr.trim();
+      if (!b) return null;
+      const resolvedHost = resolveMakerHostFromBrand(b);
+      if (resolvedHost) {
+        const info = KNOWN_HOSTS[resolvedHost];
+        return buildHostSlot(resolvedHost, info?.name ?? b, null);
+      }
+      const byName = await storage.getVendorByNameInsensitive(b);
+      if (byName?.domain) {
+        return {
+          name: byName.name,
+          domain: byName.domain,
+          affiliateUrl: null,
+          aboutUrl: byName.aboutUrl ?? `https://${byName.domain}/`,
+          logoUrl:
+            byName.logoUrl ??
+            `https://www.google.com/s2/favicons?sz=128&domain=${byName.domain}`,
+          known: false,
+        };
+      }
+      return {
+        name: b,
+        domain: null,
+        affiliateUrl: null,
+        aboutUrl: null,
+        logoUrl: null,
+        known: false,
+      };
+    };
+
     try {
       // — Gruhn Guitars (guitars.com) ————————————————————————————————
       // guitars.com is a client-side-rendered SPA: the fetched HTML is
@@ -5434,6 +5491,160 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           reseller: gruhnReseller,
           maker: gruhnMaker,
           vendor: gruhnReseller,
+        });
+      }
+      // ————————————————————————————————————————————————————————————————
+
+      // — Shopify vintage shops (Retrofret, Gryphon) ————————————————————
+      // These stores either emit no JSON-LD Product / no og:description
+      // (Gryphon) or carry junk in their meta, so the generic HTML path
+      // would import a name + photo but lose the maker, price, year, and
+      // description. Shopify's public `/products/<handle>.json` endpoint
+      // returns clean structured data; we hit it directly (same host, so
+      // SSRF-guarded safeFetch is fine). Fail-loud like Gruhn.
+      if (SHOPIFY_JSON_HOSTS.has(host)) {
+        const shopName = hostInfo?.name ?? host;
+        const segs = parsed.pathname.split("/").filter(Boolean);
+        const pIdx = segs.lastIndexOf("products");
+        const handle = pIdx >= 0 ? (segs[pIdx + 1] ?? "") : "";
+        if (!handle) {
+          return res.status(400).json({
+            message: `Could not find a product handle in this ${shopName} URL — paste a link to a specific listing (it should contain /products/...).`,
+          });
+        }
+        const apiUrl = `https://${host}/products/${encodeURIComponent(handle)}.json`;
+        const shopCtrl = new AbortController();
+        const shopT = setTimeout(() => shopCtrl.abort(), 12_000);
+        let sProduct: any;
+        try {
+          const apiRes = await safeFetchWithUaFallback(apiUrl, {
+            signal: shopCtrl.signal,
+            headers: { Accept: "application/json" },
+          }).finally(() => clearTimeout(shopT));
+          if (apiRes.status === 404) {
+            return res.status(404).json({
+              message: `Item not found on ${shopName} — the listing may have been sold or removed.`,
+            });
+          }
+          if (!apiRes.ok) {
+            return res.status(502).json({
+              message: `${shopName} returned ${apiRes.status} — the item may no longer be listed.`,
+            });
+          }
+          const body = await apiRes.json();
+          sProduct = body?.product;
+          if (!sProduct || typeof sProduct !== "object") {
+            return res.status(404).json({
+              message: `${shopName} returned no product data for this URL.`,
+            });
+          }
+        } catch (e: any) {
+          const msg =
+            e?.name === "AbortError"
+              ? `${shopName} took too long to respond.`
+              : e?.message || `Could not reach ${shopName}.`;
+          return res.status(502).json({ message: msg });
+        }
+
+        const rawTitle: string =
+          typeof sProduct.title === "string" ? sProduct.title.trim() : "";
+        const shopifyName = rawTitle || null;
+        // Year — first 18xx/19xx/20xx token in the title ("1974 Martin D-35").
+        const yearMatch = rawTitle.match(/\b(?:18|19|20)\d{2}\b/);
+        const shopifyYear = yearMatch ? yearMatch[0] : null;
+
+        // Shopify `vendor` usually holds the brand, but some shops leave a
+        // placeholder ("<Foo> Maker") or the store's own name — treat those
+        // as no-brand rather than fabricating a maker.
+        const vendorRaw =
+          typeof sProduct.vendor === "string" ? sProduct.vendor.trim() : "";
+        const shopifyBrand =
+          vendorRaw && vendorRaw.toLowerCase() !== shopName.toLowerCase()
+            ? vendorRaw
+            : null;
+
+        let shopifyDesc: string | null =
+          typeof sProduct.body_html === "string" ? sProduct.body_html : null;
+        if (shopifyDesc) {
+          shopifyDesc = shopifyDesc
+            .replace(/<br\s*\/?>/gi, "\n")
+            .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
+            .replace(/<[^>]+>/g, "")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
+          shopifyDesc = decodeEntities(shopifyDesc) || null;
+        }
+
+        const sVariants = Array.isArray(sProduct.variants)
+          ? sProduct.variants
+          : [];
+        const priceRaw = sVariants.length ? sVariants[0]?.price : null;
+        const shopifyPrice =
+          priceRaw != null && priceRaw !== "" && !isNaN(parseFloat(String(priceRaw)))
+            ? `USD ${parseFloat(String(priceRaw)).toFixed(2)}`
+            : null;
+
+        const sImages = Array.isArray(sProduct.images) ? sProduct.images : [];
+        let shopifyRawImage: string | null = sImages.length
+          ? (sImages[0]?.src ?? null)
+          : null;
+        if (shopifyRawImage?.startsWith("http://")) {
+          shopifyRawImage = "https://" + shopifyRawImage.slice("http://".length);
+        }
+        let shopifyPhotoUrl: string | null = null;
+        if (shopifyRawImage) {
+          try { shopifyPhotoUrl = await rehostRemoteImage(shopifyRawImage); }
+          catch { shopifyPhotoUrl = shopifyRawImage; }
+        }
+
+        // Specs — Year plus any `Label:Value` tags (skip Shopify's taxonomy
+        // navigation tags like "Level 1: Instruments" and overlong junk).
+        const specs: Record<string, string> = {};
+        if (shopifyYear) specs.Year = shopifyYear;
+        const tags: string[] = Array.isArray(sProduct.tags)
+          ? sProduct.tags.map((t: any) => String(t))
+          : typeof sProduct.tags === "string"
+            ? sProduct.tags.split(",")
+            : [];
+        for (const t of tags) {
+          const tag = t.trim();
+          const ci = tag.indexOf(":");
+          if (ci <= 0) continue;
+          const label = tag.slice(0, ci).trim();
+          const value = tag.slice(ci + 1).trim();
+          if (!label || !value) continue;
+          if (/^level\s*\d+$/i.test(label)) continue;
+          if (label.length > 40 || value.length > 120) continue;
+          if (!(label in specs)) specs[label] = value;
+        }
+
+        const ptype =
+          typeof sProduct.product_type === "string"
+            ? sProduct.product_type.trim()
+            : "";
+        const shopifyCategory =
+          ptype &&
+          !/^(instruments?|otherdefault|default)$/i.test(ptype)
+            ? ptype
+            : null;
+
+        const shopifyReseller = buildHostSlot(host, shopName, url);
+        const shopifyMaker = shopifyBrand
+          ? await makerSlotFromBrand(shopifyBrand)
+          : null;
+
+        return res.json({
+          name: shopifyName,
+          brand: shopifyBrand,
+          category: shopifyCategory,
+          description: shopifyDesc,
+          specs,
+          price: shopifyPrice,
+          photoUrl: shopifyPhotoUrl,
+          sourceImage: shopifyRawImage,
+          reseller: shopifyReseller,
+          maker: shopifyMaker,
+          vendor: shopifyReseller,
         });
       }
       // ————————————————————————————————————————————————————————————————
