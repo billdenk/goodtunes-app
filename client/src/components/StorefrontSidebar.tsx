@@ -159,45 +159,43 @@ export function StorefrontSidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 pb-6 scrollbar-hide">
-        <FanRailNav active={railActive} />
-
-        {playlists.length > 0 && (
-          <>
-            <div className="px-3 pt-6 pb-2 text-xs font-semibold uppercase tracking-wider text-white/35">
-              Your Playlists
-            </div>
-            <div className="space-y-0.5">
-              {playlists.map((pl) => (
-                <button
-                  key={pl.id}
-                  type="button"
-                  onClick={() =>
-                    navigate(`/playlists?playlist=${encodeURIComponent(pl.id)}`)
-                  }
-                  className="w-full flex items-center gap-3 px-3 h-9 rounded-lg text-sm text-white/70 hover:text-white hover:bg-white/[0.06] transition-colors"
-                  data-testid={`sidebar-playlist-${pl.id}`}
-                >
-                  <div
-                    className="w-6 h-6 rounded flex-shrink-0 overflow-hidden"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, #1D5E8F 0%, #4A1E8F 100%)",
-                    }}
+        <FanRailNav
+          active={railActive}
+          playlistsSlot={
+            playlists.length > 0
+              ? playlists.map((pl) => (
+                  <button
+                    key={pl.id}
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        `/playlists?playlist=${encodeURIComponent(pl.id)}`,
+                      )
+                    }
+                    className="w-full flex items-center gap-3 px-3 h-9 rounded-lg text-sm text-white/70 hover:text-white hover:bg-white/[0.06] transition-colors"
+                    data-testid={`sidebar-playlist-${pl.id}`}
                   >
-                    {pl.artworks?.[0] && (
-                      <img
-                        src={pl.artworks[0]}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    )}
-                  </div>
-                  <span className="truncate flex-1 text-left">{pl.name}</span>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
+                    <div
+                      className="w-6 h-6 rounded flex-shrink-0 overflow-hidden"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, #1D5E8F 0%, #4A1E8F 100%)",
+                      }}
+                    >
+                      {pl.artworks?.[0] && (
+                        <img
+                          src={pl.artworks[0]}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                    </div>
+                    <span className="truncate flex-1 text-left">{pl.name}</span>
+                  </button>
+                ))
+              : null
+          }
+        />
       </nav>
 
       {/* Account footer — Apple-Music-style identity chip that opens a menu */}
