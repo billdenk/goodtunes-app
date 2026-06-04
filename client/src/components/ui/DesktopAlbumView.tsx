@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { useHasInAppHistory } from "@/lib/navHistory";
-import { ChevronLeft, Play, Pause, Shuffle, Lock, Share, Info, X } from "lucide-react";
+import { ChevronLeft, Play, Pause, Shuffle, Lock, Share, Info } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { BonusPlayBadge } from "@/components/ui/BonusPlayBadge";
 import { IconButton } from "@/components/ui/IconButton";
@@ -145,11 +145,10 @@ export type DesktopAlbumViewProps = {
    *  edge; the main content column smoothly reflows to make room and
    *  stays visible beside it (Apple-Music behavior — no full-screen
    *  takeover). The `lyrics` node owns its own scroll/karaoke surface
-   *  (the fan route passes the shared `SyncedLyrics`). `onCloseLyrics`
-   *  wires the panel's `×` button — host owns the open/close state. */
+   *  (the fan route passes the shared `SyncedLyrics`). The panel has no
+   *  title/close header — the dock mic owns the open/close toggle. */
   lyricsOpen?: boolean;
   lyrics?: ReactNode;
-  onCloseLyrics?: () => void;
 
   /** When true, render the medium-breakpoint (portrait-tablet) sizing
    *  regardless of the actual viewport width. Used by the admin tablet
@@ -228,7 +227,6 @@ export function DesktopAlbumView({
   onBack,
   lyricsOpen,
   lyrics,
-  onCloseLyrics,
   compact = false,
 }: DesktopAlbumViewProps) {
   const reduceMotion = useReducedMotion();
@@ -766,26 +764,10 @@ export function DesktopAlbumView({
                   border: "1px solid rgba(255,255,255,0.08)",
                 }}
               >
-                {/* Header: title + the `×` close chip the prop docs promise.
-                    Mirrors the md overlay's close affordance (same IconButton
-                    ghost treatment) so closing reads identically across the
-                    two lyrics surfaces; host owns the open/close state via
-                    `onCloseLyrics`. */}
-                <div className="flex items-center justify-between px-4 pt-3 pb-1">
-                  <span className="text-fan-primary text-sm font-semibold tracking-[-0.005em]">
-                    Lyrics
-                  </span>
-                  <IconButton
-                    variant="ghost"
-                    size="md"
-                    label="Close lyrics"
-                    onClick={() => onCloseLyrics?.()}
-                    data-testid="button-close-lyrics"
-                    className="w-9 h-9 [&>svg]:w-4 [&>svg]:h-4 text-fan-secondary hover:text-fan-primary"
-                  >
-                    <X strokeWidth={2.2} />
-                  </IconButton>
-                </div>
+                {/* No title/close header — the dock mic toggles the panel
+                    open and closed, so the card is just the lyrics. The
+                    shared SyncedLyrics owns its own top padding/fade, so the
+                    karaoke body reads cleanly from the top of the card. */}
                 <div className="flex-1 min-h-0 flex flex-col">{lyrics}</div>
               </div>
             </div>

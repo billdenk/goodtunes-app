@@ -130,7 +130,6 @@ function Harness() {
       isPlaying: false,
       lyricsOpen: showLyrics,
       lyrics: lyricsBody,
-      onCloseLyrics: () => setShowLyrics(false),
     }),
     h(PlayerDock, {
       track: { title: "Song one", subtitle: "Tester — Test Album", playable: true },
@@ -147,7 +146,7 @@ function Harness() {
   );
 }
 
-test("desktop lyrics panel toggles from the dock button and closes via its X", async () => {
+test("desktop lyrics panel toggles open and closed from the dock button", async () => {
   const container = document.createElement("div");
   document.body.appendChild(container);
   let root: any;
@@ -214,10 +213,21 @@ test("desktop lyrics panel toggles from the dock button and closes via its X", a
     "panel shows the current song's lyrics",
   );
 
-  // Close via the panel's X → panel hides, button returns to unpressed.
-  await click(q("button-close-lyrics")!);
+  // No title/close header in the panel — the dock mic is the only toggle.
+  assert.equal(
+    q("button-close-lyrics"),
+    null,
+    "panel has no in-pane close (X) button",
+  );
+
+  // Click the dock lyrics button again → panel closes, button unpressed.
+  await click(q("button-lyrics")!);
   await settle();
-  assert.equal(await waitForGone("panel-lyrics"), null, "X closes the panel");
+  assert.equal(
+    await waitForGone("panel-lyrics"),
+    null,
+    "clicking the dock lyrics button again closes the panel",
+  );
   assert.equal(
     q("button-lyrics")!.getAttribute("aria-pressed"),
     "false",

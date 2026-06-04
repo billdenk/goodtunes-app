@@ -331,11 +331,27 @@ test("md (900px): dock lyrics button opens the full-bleed overlay, not the panel
       "overlay shows the current song's lyrics",
     );
 
-    // The md overlay's own X closes it back down.
-    await click(q("button-close-lyrics-md")!);
+    // No title/close header on the overlay — the dock mic owns the toggle,
+    // and a slim grab handle keeps the swipe-down-to-dismiss gesture alive.
+    assert.equal(
+      q("button-close-lyrics-md"),
+      null,
+      "md overlay has no in-pane close (X) button",
+    );
+    assert.ok(
+      q("handle-lyrics-md-drag"),
+      "md overlay keeps a drag handle for swipe-to-dismiss",
+    );
+
+    // Click the dock lyrics button again → overlay closes back down.
+    await click(q("button-lyrics")!);
     await settle();
     for (let i = 0; i < 60 && q("overlay-lyrics-md"); i++) await settle(1);
-    assert.equal(q("overlay-lyrics-md"), null, "overlay X closes it");
+    assert.equal(
+      q("overlay-lyrics-md"),
+      null,
+      "clicking the dock lyrics button again closes the overlay",
+    );
     assert.equal(
       q("button-lyrics")!.getAttribute("aria-pressed"),
       "false",

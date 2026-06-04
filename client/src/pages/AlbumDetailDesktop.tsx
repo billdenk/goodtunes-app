@@ -5,11 +5,9 @@ import {
   useDragControls,
   useReducedMotion,
 } from "framer-motion";
-import { X } from "lucide-react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { IconButton } from "@/components/ui/IconButton";
 import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
 import { BuySheet } from "@/components/checkout/BuySheet";
 import { buyEnabled } from "@/lib/platform";
@@ -618,7 +616,6 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             onStreamAlbum={handleStreamAlbum}
             lyricsOpen={player.showLyrics && isLgViewport}
             lyrics={lyricsBody}
-            onCloseLyrics={() => player.setShowLyrics(false)}
           />
           )}
         </main>
@@ -666,25 +663,25 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
               aria-label="Lyrics"
               data-testid="overlay-lyrics-md"
             >
+              {/* No title/close header — the dock mic owns the open/close
+                  toggle. This slim bar keeps the swipe-down-to-dismiss
+                  gesture alive with a minimal grab affordance (the little
+                  pill) instead of a "Lyrics" + X row. */}
               <div
-                className="flex items-center justify-between px-6 py-4 border-b border-white/8 cursor-grab active:cursor-grabbing touch-none select-none"
+                className="flex items-center justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing touch-none select-none"
                 onPointerDown={(e) => lyricsDragControls.start(e)}
+                aria-label="Drag down to close lyrics"
                 data-testid="handle-lyrics-md-drag"
               >
-                <span className="text-fan-primary text-sm font-semibold tracking-[-0.005em]">
-                  Lyrics
-                </span>
-                <IconButton
-                  variant="ghost"
-                  size="md"
-                  label="Close lyrics"
-                  onClick={() => player.setShowLyrics(false)}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  data-testid="button-close-lyrics-md"
-                  className="w-9 h-9 [&>svg]:w-4 [&>svg]:h-4 text-fan-secondary hover:text-fan-primary"
-                >
-                  <X strokeWidth={2.2} />
-                </IconButton>
+                <span
+                  aria-hidden
+                  style={{
+                    height: 4,
+                    width: 36,
+                    borderRadius: 9999,
+                    background: "rgba(255,255,255,0.25)",
+                  }}
+                />
               </div>
               <div className="flex-1 min-h-0 flex flex-col">{lyricsBody}</div>
             </motion.div>
