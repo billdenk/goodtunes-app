@@ -18,7 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-const goodTunesLogo = "/goodtunes-g-mark.png";
+const goodTunesWordmark = "/goodtunes-logo-white-sm.png";
 
 // Task #547 — Apple-Music-web-style fixed sidebar that takes over from
 // the floating BottomNav pill at lg+ (≥1024px). Web only — Capacitor
@@ -140,22 +140,16 @@ export function StorefrontSidebar() {
       }}
       data-testid="storefront-sidebar"
     >
-      {/* Brand */}
-      <div className="flex items-center gap-2.5 px-5 pt-6 pb-5">
+      {/* Brand — white wordmark, matches AlbumDesktopSidebar */}
+      <div className="px-5 pt-6 pb-5">
         <img
-          src={goodTunesLogo}
+          src={goodTunesWordmark}
           alt="GoodTunes®"
-          className="w-9 h-9 object-contain"
+          className="w-[124px] h-auto block"
           decoding="async"
           draggable={false}
           data-testid="img-sidebar-logo"
         />
-        <div className="leading-tight">
-          <div className="text-white text-base font-bold tracking-tight">
-            GoodTunes<span className="text-white/40 align-super text-xs ml-0.5">®</span>
-          </div>
-          <div className="text-white/40 text-xs">Player</div>
-        </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 pb-6 scrollbar-hide">

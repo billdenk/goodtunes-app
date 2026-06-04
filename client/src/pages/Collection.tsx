@@ -104,25 +104,39 @@ export function Collection() {
   // Task #909 — the fan's collection (real owned/comp + active previews;
   // expired previews already filtered server-side). Used to flag previewed
   // albums with a "Demo" chip in the grid and a [Demo] GoodDeed cert.
-  const { data: myAlbumsRaw } = useQuery<Array<{ albumId: string; isPreview?: boolean }> | null>({
+  // Task #1255 — also used as the authoritative filter for which albums
+  // appear in Collection. Only owned/comp/active-preview albums show;
+  // the full-catalog flood is gone.
+  const { data: myAlbumsRaw, isLoading: myAlbumsLoading } = useQuery<Array<{ albumId: string; isPreview?: boolean }> | null>({
     queryKey: ["/api/my-albums"],
   });
   const previewAlbumIds = useMemo(
     () => new Set((myAlbumsRaw ?? []).filter((a) => a.isPreview).map((a) => a.albumId)),
     [myAlbumsRaw],
   );
+  // Set of album ids the fan actually owns/has access to.
+  const ownedAlbumIds = useMemo(
+    () => new Set((myAlbumsRaw ?? []).map((a) => a.albumId)),
+    [myAlbumsRaw],
+  );
   // The /api/albums endpoint returns BOTH GoodTunes-curated releases and
   // the streaming-only discography rows we ingest from Apple Music (used
   // to power the artist sheet's "How to Play" links). The main Collection
-  // is the curated catalog only — hide every row where `isGoodTunesRelease`
-  // is false. Songs + artists derive from this filtered list so the
-  // Songs tab and Artists tab also stay catalog-only.
+  // is the fan's own albums only — GoodTunes releases that are in their
+  // owned set (owned/comp + active previews). Songs + artists derive from
+  // this filtered list so the Songs tab and Artists tab also stay scoped.
   const dbAlbums = useMemo(
     // Task #440 — "Prepping" GT shells (created by + Add Album but not yet
-    // promoted to Released) must stay off the fan-side Collection. Once the
-    // admin flips isPrepping=false on the album page, the row appears here.
-    () => (albumsRaw ?? []).filter((a) => a.isGoodTunesRelease && !(a as any).isPrepping),
-    [albumsRaw],
+    // promoted to Released) must stay off the fan-side Collection.
+    // Task #1255 — further restrict to the fan's own collection.
+    () =>
+      (albumsRaw ?? []).filter(
+        (a) =>
+          a.isGoodTunesRelease &&
+          !(a as any).isPrepping &&
+          ownedAlbumIds.has(a.id),
+      ),
+    [albumsRaw, ownedAlbumIds],
   );
   const dbAlbumIds = useMemo(
     () => new Set(dbAlbums.map((a) => a.id)),
@@ -164,14 +178,11 @@ export function Collection() {
       if (!albumId || seen.has(albumId)) continue;
       const album = albumById.get(albumId);
       if (album) {
+        // Only render albums the fan owns — albumById is now scoped to the
+        // owned set so any album not found here is unowned and should not
+        // appear in "Recently Played".
         seen.add(albumId);
         out.push({ id: album.id, title: album.title, artist: album.artist, artwork: album.artwork, album });
-      } else if (r.entityKind === "album") {
-        // Album not in the loaded catalog (e.g. hidden) — fall back to the
-        // denormalised fields the recent itself carries so the rail still
-        // renders a sensible card.
-        seen.add(albumId);
-        out.push({ id: albumId, title: r.title, artist: r.subtitle ?? "", artwork: r.thumbUrl ?? "" });
       }
       if (out.length >= 8) break;
     }
@@ -668,13 +679,24 @@ export function Collection() {
 
           {tab === "albums" && (
             <div className="px-5 pb-4">
-              {filteredAlbums.length === 0 ? (
+              {myAlbumsLoading && filteredAlbums.length === 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4" data-testid="skeleton-albums">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="flex flex-col gap-2">
+                      <div className="aspect-square rounded-2xl animate-pulse" style={{ background: "rgba(255,255,255,0.08)" }} />
+                      <div className="h-3 rounded animate-pulse w-3/4" style={{ background: "rgba(255,255,255,0.08)" }} />
+                      <div className="h-2.5 rounded animate-pulse w-1/2" style={{ background: "rgba(255,255,255,0.06)" }} />
+                    </div>
+                  ))}
+                </div>
+              ) : filteredAlbums.length === 0 ? (
                 search ? (
                   <p className="text-fan-faint text-sm text-center mt-8" data-testid="text-empty-albums-search">No albums match "{search}"</p>
                 ) : (
                   <div className="text-center mt-16 px-6 flex flex-col items-center gap-3" data-testid="text-empty-albums">
                     <Disc3 className="w-10 h-10 text-fan-faint" strokeWidth={1.5} />
                     <p className="text-fan-secondary text-sm">No Albums yet</p>
+                    <p className="text-fan-faint text-xs">Albums you own will appear here</p>
                   </div>
                 )
               ) : (
@@ -707,13 +729,26 @@ export function Collection() {
 
           {tab === "songs" && (
             <div className="px-5 pb-4 flex flex-col">
-              {filteredSongs.length === 0 && (
+              {myAlbumsLoading && filteredSongs.length === 0 ? (
+                <div className="flex flex-col gap-0" data-testid="skeleton-songs">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 py-2.5" style={{ borderBottom: i < 5 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
+                      <div className="w-11 h-11 rounded-md animate-pulse flex-shrink-0" style={{ background: "rgba(255,255,255,0.08)" }} />
+                      <div className="flex-1 flex flex-col gap-1.5">
+                        <div className="h-3 rounded animate-pulse w-2/3" style={{ background: "rgba(255,255,255,0.08)" }} />
+                        <div className="h-2.5 rounded animate-pulse w-1/3" style={{ background: "rgba(255,255,255,0.06)" }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : filteredSongs.length === 0 && (
                 search ? (
                   <p className="text-fan-faint text-sm text-center mt-8" data-testid="text-empty-songs-search">No songs match "{search}"</p>
                 ) : (
                   <div className="text-center mt-16 px-6 flex flex-col items-center gap-3" data-testid="text-empty-songs">
                     <Music2 className="w-10 h-10 text-fan-faint" strokeWidth={1.5} />
                     <p className="text-fan-secondary text-sm">No Songs yet</p>
+                    <p className="text-fan-faint text-xs">Songs from albums you own will appear here</p>
                   </div>
                 )
               )}
@@ -792,13 +827,23 @@ export function Collection() {
             const anyFavorited = filteredArtists.some((a) => favArtists.has(a.name));
             return (
             <div className="px-5 pb-4 flex flex-col">
-              {filteredArtists.length === 0 && (
+              {myAlbumsLoading && filteredArtists.length === 0 ? (
+                <div className="flex flex-col gap-0" data-testid="skeleton-artists">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 py-3" style={{ borderBottom: i < 3 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
+                      <div className="w-11 h-11 rounded-full animate-pulse flex-shrink-0" style={{ background: "rgba(255,255,255,0.08)" }} />
+                      <div className="h-3 rounded animate-pulse w-1/2" style={{ background: "rgba(255,255,255,0.08)" }} />
+                    </div>
+                  ))}
+                </div>
+              ) : filteredArtists.length === 0 && (
                 search ? (
                   <p className="text-fan-faint text-sm text-center mt-8" data-testid="text-empty-artists-search">No artists match "{search}"</p>
                 ) : (
                   <div className="text-center mt-16 px-6 flex flex-col items-center gap-3" data-testid="text-empty-artists">
                     <Mic2 className="w-10 h-10 text-fan-faint" strokeWidth={1.5} />
                     <p className="text-fan-secondary text-sm">No Artists yet</p>
+                    <p className="text-fan-faint text-xs">Artists from albums you own will appear here</p>
                   </div>
                 )
               )}
