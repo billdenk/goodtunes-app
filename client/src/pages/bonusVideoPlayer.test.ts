@@ -108,12 +108,22 @@ g.IS_REACT_ACT_ENVIRONMENT = true;
 // MSE, so Hls.isSupported() is false regardless, but mp4 keeps it simple).
 const SIGNED_URL = "https://cdn.example.com/signed/clip.mp4";
 const fetchCalls: string[] = [];
+// Per-test override of the playback-url response. Defaults to a ready,
+// signed-URL 200; the "still processing" / "unplayable" tests swap in a
+// 409/503 or a non-ok response before tapping play.
+type FetchStub = { ok: boolean; status: number; json?: () => Promise<any> };
+let nextFetchResponse: FetchStub = {
+  ok: true,
+  status: 200,
+  json: async () => ({ url: SIGNED_URL }),
+};
 g.fetch = async (input: any) => {
   fetchCalls.push(String(input));
+  const { ok, status, json } = nextFetchResponse;
   return {
-    ok: true,
-    status: 200,
-    json: async () => ({ url: SIGNED_URL }),
+    ok,
+    status,
+    json: json ?? (async () => ({})),
   } as any;
 };
 
@@ -169,6 +179,13 @@ async function mount(props: { locked?: boolean }) {
       root.unmount();
     });
     container.remove();
+    // Restore the default ready response so a stub set by one test never
+    // bleeds into the next.
+    nextFetchResponse = {
+      ok: true,
+      status: 200,
+      json: async () => ({ url: SIGNED_URL }),
+    };
   };
   return { container, q, click, settle, teardown };
 }
@@ -222,6 +239,142 @@ test("unlocked bonus tile: idle shows a labelled play badge over the poster, tap
       q(`button-play-album-bonus-${VIDEO_ID}`),
       null,
       "the play badge is gone once the video is playing",
+    );
+  } finally {
+    await teardown();
+  }
+});
+
+// Task #1178 — still-encoding + unplayable retry states.
+//
+// When Mux hasn't finished encoding (the playback-url route answers 409 or
+// 503) the tile must tell the fan it's preparing and KEEP the central badge
+// tappable so a lazy-ingest that just kicked off can be retried — never a
+// silent blank tile. A non-ok response (any other error) shows the
+// "couldn't play" caption with the same retry affordance.
+for (const status of [409, 503] as const) {
+  test(`unlocked bonus tile: a ${status} playback-url response shows the preparing caption with a tappable retry`, async () => {
+    nextFetchResponse = { ok: false, status, json: async () => ({}) };
+    const { q, click, settle, teardown } = await mount({});
+    try {
+      const playBtn = q(`button-play-album-bonus-${VIDEO_ID}`);
+      assert.ok(playBtn, "idle tile renders the play badge button");
+
+      await click(playBtn!);
+      await settle();
+
+      // The fan is told the video is still being prepared.
+      const preparing = q(`text-album-bonus-video-preparing-${VIDEO_ID}`);
+      assert.ok(
+        preparing,
+        `a ${status} response surfaces the preparing caption`,
+      );
+      assert.match(
+        preparing!.textContent ?? "",
+        /retry/i,
+        "the preparing caption invites the fan to retry",
+      );
+
+      // The central badge is still a real button → retry is one tap away,
+      // not a blank tile the fan is stuck on.
+      const retryBtn = q(`button-play-album-bonus-${VIDEO_ID}`);
+      assert.ok(retryBtn, "the badge stays mounted as a retry affordance");
+      assert.equal(
+        retryBtn!.tagName,
+        "BUTTON",
+        "the retry affordance is a real button",
+      );
+      assert.ok(
+        !(retryBtn as HTMLButtonElement).disabled,
+        "the badge is tappable again (not stuck disabled) after preparing",
+      );
+      assert.match(
+        retryBtn!.getAttribute("aria-label") ?? "",
+        /retry/i,
+        "the badge relabels itself as a retry control",
+      );
+
+      // The unplayable caption must NOT be showing — this is a transient
+      // "still processing", not a hard failure.
+      assert.equal(
+        q(`text-album-bonus-video-unplayable-${VIDEO_ID}`),
+        null,
+        "a still-processing response is not reported as unplayable",
+      );
+
+      // Tapping again re-requests a signed URL (the retry actually retries).
+      const before = fetchCalls.length;
+      await click(retryBtn!);
+      await settle();
+      assert.ok(
+        fetchCalls.length > before &&
+          fetchCalls
+            .slice(before)
+            .some((u) => u.includes(`/api/album-videos/${VIDEO_ID}/playback-url`)),
+        "tapping the badge again re-requests the signed playback URL",
+      );
+    } finally {
+      await teardown();
+    }
+  });
+}
+
+test("unlocked bonus tile: a non-ok playback-url response shows the unplayable caption with a tappable retry", async () => {
+  nextFetchResponse = { ok: false, status: 500, json: async () => ({}) };
+  const { q, click, settle, teardown } = await mount({});
+  try {
+    const playBtn = q(`button-play-album-bonus-${VIDEO_ID}`);
+    assert.ok(playBtn, "idle tile renders the play badge button");
+
+    await click(playBtn!);
+    await settle();
+
+    // A hard failure is reported as unplayable (not "preparing").
+    const unplayable = q(`text-album-bonus-video-unplayable-${VIDEO_ID}`);
+    assert.ok(unplayable, "a non-ok response surfaces the unplayable caption");
+    assert.match(
+      unplayable!.textContent ?? "",
+      /retry/i,
+      "the unplayable caption invites the fan to retry",
+    );
+    assert.equal(
+      q(`text-album-bonus-video-preparing-${VIDEO_ID}`),
+      null,
+      "a hard failure is not mislabelled as still-preparing",
+    );
+
+    // The badge stays a tappable retry — a blank tile would strand the fan.
+    const retryBtn = q(`button-play-album-bonus-${VIDEO_ID}`);
+    assert.ok(retryBtn, "the badge stays mounted as a retry affordance");
+    assert.ok(
+      !(retryBtn as HTMLButtonElement).disabled,
+      "the badge is tappable again after the error",
+    );
+    assert.match(
+      retryBtn!.getAttribute("aria-label") ?? "",
+      /retry/i,
+      "the badge relabels itself as a retry control",
+    );
+
+    // And the retry recovers: swap in a ready response, tap, video plays.
+    nextFetchResponse = {
+      ok: true,
+      status: 200,
+      json: async () => ({ url: SIGNED_URL }),
+    };
+    await click(retryBtn!);
+    await settle();
+    const playingVideo = q(`video-album-bonus-${VIDEO_ID}`) as HTMLVideoElement | null;
+    assert.ok(playingVideo, "the <video> is mounted after a successful retry");
+    assert.equal(
+      playingVideo!.style.display,
+      "block",
+      "the retry recovers and the video becomes visible",
+    );
+    assert.equal(
+      q(`text-album-bonus-video-unplayable-${VIDEO_ID}`),
+      null,
+      "the unplayable caption clears once the retry succeeds",
     );
   } finally {
     await teardown();
