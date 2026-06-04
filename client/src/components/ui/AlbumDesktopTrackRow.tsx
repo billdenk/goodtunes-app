@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MoreHorizontal, Play, Pause, ListStart, ListEnd, ListPlus, Heart, Info } from "lucide-react";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { IconButton } from "@/components/ui/IconButton";
@@ -15,6 +15,19 @@ import {
    (Apple-Music desktop accent). #FF5470 is the only rose in the GoodTunes
    palette. Inline so this primitive stays self-contained. */
 const ROSE = "#FF5470";
+
+// Gate hover-driven fill to true pointer devices so a tap on a touch screen
+// can never strand a highlighted row (mouseleave doesn't fire reliably on
+// coarse-pointer devices after a tap).
+function useCanHover(): boolean {
+  const [can, setCan] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
+    setCan(mq.matches);
+  }, []);
+  return can;
+}
 
 export type AlbumDesktopTrackRowProps = {
   trackNumber: number;
@@ -82,14 +95,17 @@ export function AlbumDesktopTrackRow({
   showMenu = true,
 }: AlbumDesktopTrackRowProps) {
   const [hover, setHover] = useState(false);
+  const canHover = useCanHover();
   const interactive = state !== "locked";
   const showPlayGlyph = interactive && hover && !isCurrent;
 
   // Apple parity: rows are FLUSH (transparent) at rest with a thin
-  // hairline separator between them — they should not all look pre-
-  // hovered. The soft elevated background lifts in only on the hovered
-  // row and the currently-playing row.
-  const elevated = hover || isCurrent;
+  // hairline separator between them. The soft elevated background lifts in
+  // ONLY on the hovered row — never persistently on the currently-playing
+  // row. The playing track is indicated solely by its rose title color and
+  // the equalizer/paused glyph. Fill is also gated to fine-pointer devices
+  // so touch taps can't leave a stranded highlight.
+  const elevated = canHover && hover;
   const bg = elevated ? "rgba(255,255,255,0.08)" : "transparent";
 
   return (
