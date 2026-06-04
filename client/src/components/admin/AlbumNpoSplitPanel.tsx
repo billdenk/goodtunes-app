@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, HeartHandshake } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -43,6 +42,10 @@ type Row = {
 };
 
 const fmt = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+
+// Per-unit donation amounts the operator can pick, in cents. The cap is
+// $1.00/unit (split across up to 4 NPOs), so quarter steps cover it cleanly.
+const CENTS_OPTIONS = [25, 50, 75, 100];
 
 export function AlbumNpoSplitPanel({ albumId }: { albumId: string }) {
   const { toast } = useToast();
@@ -218,21 +221,34 @@ export function AlbumNpoSplitPanel({ albumId }: { albumId: string }) {
                   ))}
                 </SelectContent>
               </Select>
-              <div className="relative w-24">
-                <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                  ¢
-                </span>
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  min={isLockedRow ? row.baselineCents ?? 1 : 1}
-                  max={cap}
-                  value={row.perUnitCents}
-                  onChange={(e) => setCents(idx, e.target.value)}
-                  className="h-9 pl-5 tabular-nums"
-                  data-testid={`input-npo-cents-${idx}`}
-                />
-              </div>
+              <Select
+                value={
+                  CENTS_OPTIONS.includes(row.perUnitCents)
+                    ? String(row.perUnitCents)
+                    : undefined
+                }
+                onValueChange={(v) => setCents(idx, v)}
+              >
+                <SelectTrigger
+                  className="h-9 w-24 tabular-nums"
+                  data-testid={`select-npo-cents-${idx}`}
+                >
+                  <SelectValue placeholder="Amount" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CENTS_OPTIONS.filter(
+                    (c) => c >= (row.baselineCents ?? 0),
+                  ).map((c) => (
+                    <SelectItem
+                      key={c}
+                      value={String(c)}
+                      data-testid={`option-npo-cents-${idx}-${c}`}
+                    >
+                      {fmt(c)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {!isLockedRow && (
                 <Button
                   type="button"
