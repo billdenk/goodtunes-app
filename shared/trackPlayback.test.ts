@@ -19,17 +19,12 @@ test("owned albums always render the full track", () => {
   assert.equal(trackPlaybackState({ isOwned: true }), "full");
 });
 
-test("not-owned + previewable renders a preview row", () => {
+test("not-owned always renders a preview row — previews are store-wide", () => {
+  // Previews are leak-proof (server 30s cap), so a not-owned track is never
+  // locked regardless of the legacy previewability flag's value.
   assert.equal(trackPlaybackState({ isOwned: false, isPreviewable: true }), "preview");
-});
-
-test("not-owned + preview hidden renders a locked row", () => {
-  assert.equal(trackPlaybackState({ isOwned: false, isPreviewable: false }), "locked");
-});
-
-test("not-owned with unknown/missing previewability locks the row", () => {
-  // Mirrors the surfaces' falsy handling: null/undefined preview is locked.
-  assert.equal(trackPlaybackState({ isOwned: false, isPreviewable: null }), "locked");
-  assert.equal(trackPlaybackState({ isOwned: false }), "locked");
-  assert.equal(trackPlaybackState({}), "locked");
+  assert.equal(trackPlaybackState({ isOwned: false, isPreviewable: false }), "preview");
+  assert.equal(trackPlaybackState({ isOwned: false, isPreviewable: null }), "preview");
+  assert.equal(trackPlaybackState({ isOwned: false }), "preview");
+  assert.equal(trackPlaybackState({}), "preview");
 });
