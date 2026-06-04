@@ -16,7 +16,11 @@ import { buyEnabled } from "@/lib/platform";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
-import { AlbumCreditsModal, type AlbumCreditsRow } from "@/components/ui/AlbumCreditsSheet";
+import {
+  AlbumCreditsModal,
+  buildAlbumCreditGroups,
+  type AlbumCreditsPayload,
+} from "@/components/ui/AlbumCreditsSheet";
 import { StreamServicePickerSheet } from "@/components/StreamServicePickerSheet";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import {
@@ -230,14 +234,15 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
     queryKey: ["/api/albums", id],
     enabled: !!id,
   });
-  const { data: albumCredits } = useQuery<{
-    bySongId: Record<string, unknown>;
-    production?: AlbumCreditsRow[];
-  }>({
+  const { data: albumCredits } = useQuery<AlbumCreditsPayload>({
     queryKey: ["/api/albums", id, "credits"],
     enabled: !!id,
   });
-  const productionCredits = albumCredits?.production ?? [];
+  const creditGroups = useMemo(
+    () => buildAlbumCreditGroups(albumCredits),
+    [albumCredits],
+  );
+  const hasAnyCredits = creditGroups.length > 0;
   const { data: videos = [] } = useQuery<ApiAlbumVideo[]>({
     queryKey: ["/api/albums", id, "videos"],
     enabled: !!id,
@@ -598,7 +603,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             onPlayLastTrack={handlePlayLastTrack}
             onToggleFavoriteTrack={handleToggleFavoriteTrack}
             favoriteSongIds={favSongs.set}
-            hasAlbumCredits={productionCredits.length > 0}
+            hasAlbumCredits={effectiveOwned && hasAnyCredits}
             onOpenAlbumCredits={() => setShowAlbumCredits(true)}
             onBack={() => goBack(navigate)}
             onBuyBundle={buyEnabled ? handleBuyBundle : undefined}
@@ -775,18 +780,23 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
           contextLabel={creditPerson.role}
           onClose={() => setCreditPerson(null)}
         />
-      ) : showAlbumCredits && productionCredits.length > 0 && album ? (
+      ) : showAlbumCredits && effectiveOwned && hasAnyCredits && album ? (
         <AlbumCreditsModal
           albumTitle={album.title}
           artist={album.artist}
-          rows={productionCredits}
+          credits={albumCredits ?? {}}
           onOpenPerson={(personId, role) => {
-            const row = productionCredits.find((r) => (r.person?.id ?? r.personId) === personId);
-            const p = row?.person;
-            if (!p) return;
+            const entry = creditGroups
+              .flatMap((g) => g.entries)
+              .find((e) => e.personId === personId);
+            if (!entry) return;
             setShowAlbumCredits(false);
             setCreditPerson({
-              person: { id: p.id, name: p.name, photoUrl: p.photoUrl ?? undefined },
+              person: {
+                id: personId,
+                name: entry.name,
+                photoUrl: entry.photoUrl ?? undefined,
+              },
               role,
             });
           }}

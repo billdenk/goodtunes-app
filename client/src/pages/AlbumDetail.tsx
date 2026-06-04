@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlbumDetailMobileSurface } from "@/components/ui/AlbumDetailMobileSurface";
 import { AlbumDetailMobileSkeleton, AlbumNotFound } from "@/components/ui/AlbumDetailSkeleton";
-import { AlbumCreditsSheet } from "@/components/ui/AlbumCreditsSheet";
+import { AlbumCreditsSheet, buildAlbumCreditGroups } from "@/components/ui/AlbumCreditsSheet";
 import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
@@ -397,6 +397,13 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
     enabled: !!id,
   });
   const productionCredits = apiAlbumCredits?.production ?? [];
+  // Apple's three broad credit groups (performers + writers + production)
+  // aggregated from the full payload — drives both the album-credits sheet
+  // and whether it has anything to show.
+  const albumCreditGroups = useMemo(
+    () => buildAlbumCreditGroups(apiAlbumCredits),
+    [apiAlbumCredits],
+  );
   const { creditsBySongId, peopleById, instrumentsById } = useMemo(() => {
     const peopleById = new Map<string, Person>();
     const instrumentsById = new Map<string, Instrument>();
@@ -1035,11 +1042,11 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
           />
         ) : null}
 
-        {showAlbumCredits && productionCredits.length > 0 && (
+        {showAlbumCredits && albumCreditGroups.length > 0 && (
           <AlbumCreditsSheet
             albumTitle={album.title}
             artist={album.artist}
-            rows={productionCredits}
+            credits={apiAlbumCredits ?? {}}
             onOpenPerson={(personId, role) => {
               const person = peopleById.get(personId);
               if (!person) return;

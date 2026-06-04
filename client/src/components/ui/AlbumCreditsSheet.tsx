@@ -4,20 +4,43 @@ import { SheetShell, SheetHeader } from "@/pages/AlbumDetail";
 import { SheetClose } from "@/components/ui/SheetChrome";
 import { EASE_OUT, scrimFade } from "@/lib/motion";
 
-export type AlbumCreditsRow = {
+export type AlbumCreditsPerson = {
   id: string;
-  personId: string | null;
   name: string;
-  role: string;
-  person: { id: string; name: string; photoUrl?: string | null } | null;
+  photoUrl?: string | null;
 };
 
-type Entry = {
+export type AlbumCreditsRow = {
+  id: string;
+  personId?: string | null;
+  name: string;
+  role: string;
+  person: AlbumCreditsPerson | null;
+};
+
+/* Full credits payload as returned by GET /api/albums/:id/credits — the
+   per-song writers/performers plus the album-level production rows. The
+   credits surface aggregates all three into Apple's broad groups. */
+export type AlbumCreditsPayload = {
+  bySongId?: Record<
+    string,
+    { writers?: AlbumCreditsRow[]; performers?: AlbumCreditsRow[] } | undefined
+  >;
+  production?: AlbumCreditsRow[];
+};
+
+type CreditEntry = {
   key: string;
   name: string;
   personId: string | null;
   photoUrl: string | null;
+  /* Apple shows each person's specific role(s) as a subtitle under the name
+     (e.g. "Vocals, Bass Guitar"). We dedupe a person within a group and join
+     their distinct roles in first-seen order. */
+  subtitle: string;
 };
+
+type CreditGroup = { title: string; entries: CreditEntry[] };
 
 function initialsOf(name: string) {
   return name
@@ -28,36 +51,80 @@ function initialsOf(name: string) {
     .join("");
 }
 
-function useCreditsByRole(rows: AlbumCreditsRow[]) {
-  return useMemo(() => {
-    const m = new Map<string, Entry[]>();
-    for (const r of rows) {
-      const list = m.get(r.role) ?? [];
-      list.push({
-        key: r.id,
-        name: r.person?.name ?? r.name,
-        personId: r.person?.id ?? null,
-        photoUrl: r.person?.photoUrl ?? null,
-      });
-      m.set(r.role, list);
+/* Collapse a flat list of credit rows into one entry per person, collecting
+   their distinct roles (preserving first-seen order) into the subtitle. */
+function aggregateRows(rows: AlbumCreditsRow[]): CreditEntry[] {
+  const order: string[] = [];
+  const byKey = new Map<
+    string,
+    { name: string; personId: string | null; photoUrl: string | null; roles: string[] }
+  >();
+  for (const r of rows) {
+    const personId = r.person?.id ?? r.personId ?? null;
+    const name = r.person?.name ?? r.name;
+    const photoUrl = r.person?.photoUrl ?? null;
+    const key = personId ?? `name:${name.trim().toLowerCase()}`;
+    let entry = byKey.get(key);
+    if (!entry) {
+      entry = { name, personId, photoUrl, roles: [] };
+      byKey.set(key, entry);
+      order.push(key);
     }
-    return Array.from(m.entries());
-  }, [rows]);
+    if (!entry.photoUrl && photoUrl) entry.photoUrl = photoUrl;
+    const role = (r.role ?? "").trim();
+    if (role && !entry.roles.includes(role)) entry.roles.push(role);
+  }
+  return order.map((key) => {
+    const e = byKey.get(key)!;
+    return {
+      key,
+      name: e.name,
+      personId: e.personId,
+      photoUrl: e.photoUrl,
+      subtitle: e.roles.join(", "),
+    };
+  });
+}
+
+/* Build Apple's three broad credit groups from the full credits payload:
+   Performing Artists (track performers), Composition & Lyrics (track
+   writers), and Production & Engineering (album-level production). Empty
+   groups are dropped so a section heading never renders without entries. */
+export function buildAlbumCreditGroups(
+  credits: AlbumCreditsPayload | undefined,
+): CreditGroup[] {
+  if (!credits) return [];
+  const performers: AlbumCreditsRow[] = [];
+  const writers: AlbumCreditsRow[] = [];
+  for (const song of Object.values(credits.bySongId ?? {})) {
+    if (song?.performers) performers.push(...song.performers);
+    if (song?.writers) writers.push(...song.writers);
+  }
+  const groups: CreditGroup[] = [];
+  const performing = aggregateRows(performers);
+  if (performing.length) groups.push({ title: "Performing Artists", entries: performing });
+  const composition = aggregateRows(writers);
+  if (composition.length)
+    groups.push({ title: "Composition & Lyrics", entries: composition });
+  const production = aggregateRows(credits.production ?? []);
+  if (production.length)
+    groups.push({ title: "Production & Engineering", entries: production });
+  return groups;
 }
 
 /* Shared role-grouped credits list. Rendered identically inside the mobile
    bottom sheet (AlbumCreditsSheet) and the desktop centered modal
-   (AlbumCreditsModal) so fans see the same content on both surfaces. */
+   (AlbumCreditsModal) so fans see the same content on both surfaces. Apple
+   style: broad-category headings, a responsive multi-column grid, and each
+   person's specific role(s) as a subtitle beneath the name. */
 function AlbumCreditsBody({
-  rows,
+  groups,
   onOpenPerson,
 }: {
-  rows: AlbumCreditsRow[];
+  groups: CreditGroup[];
   onOpenPerson?: (personId: string, role: string) => void;
 }) {
-  const byRole = useCreditsByRole(rows);
-
-  if (rows.length === 0) {
+  if (groups.length === 0) {
     return (
       <div className="px-5 pb-4 text-white/55 text-sm">
         Production credits for this album haven't been published yet.
@@ -67,78 +134,75 @@ function AlbumCreditsBody({
 
   return (
     <div className="px-5 pb-4">
-      {byRole.map(([role, entries], roleIdx) => (
+      {groups.map((group, groupIdx) => (
         <section
-          key={role}
-          className={roleIdx === 0 ? "" : "mt-7"}
-          data-testid={`row-album-credit-role-${role.replace(/\s+/g, "-").toLowerCase()}`}
+          key={group.title}
+          className={
+            groupIdx === 0 ? "" : "mt-8 pt-7 border-t border-white/10"
+          }
+          data-testid={`row-album-credit-role-${group.title
+            .replace(/\s+/g, "-")
+            .toLowerCase()}`}
         >
           <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-white/55 mb-3">
-            {role}
+            {group.title}
           </h3>
-          <ul className="flex flex-col">
-            {entries.map((e) => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+            {group.entries.map((e) => {
               const avatar = e.photoUrl ? (
                 <img
                   src={e.photoUrl}
                   alt=""
-                  style={{ width: 32, height: 32 }}
+                  style={{ width: 36, height: 36 }}
                   className="rounded-full object-cover flex-shrink-0"
                 />
               ) : (
                 <span
                   aria-hidden
-                  style={{ width: 32, height: 32 }}
+                  style={{ width: 36, height: 36 }}
                   className="rounded-full bg-white/[0.14] ring-1 ring-inset ring-white/20 flex-shrink-0 inline-flex items-center justify-center text-xs font-medium text-white/80"
                 >
                   {initialsOf(e.name)}
                 </span>
               );
+              const text = (
+                <span className="flex-1 min-w-0">
+                  <span className="block truncate text-white text-sm font-medium leading-tight tracking-[-0.01em]">
+                    {e.name}
+                  </span>
+                  {e.subtitle && (
+                    <span className="block truncate text-xs leading-tight text-fan-faint mt-0.5">
+                      {e.subtitle}
+                    </span>
+                  )}
+                </span>
+              );
               if (e.personId && onOpenPerson) {
                 return (
-                  <li key={e.key}>
-                    <button
-                      type="button"
-                      onClick={() => onOpenPerson(e.personId!, role)}
-                      className="group -mx-2 flex w-[calc(100%+1rem)] items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.06] active:bg-white/10"
-                      data-testid={`link-album-credit-person-${e.personId}`}
-                    >
-                      {avatar}
-                      <span className="flex-1 min-w-0 truncate text-white text-base font-normal leading-snug tracking-[-0.01em]">
-                        {e.name}
-                      </span>
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="flex-shrink-0 text-white/25 transition-colors group-hover:text-white/45"
-                        aria-hidden="true"
-                      >
-                        <path d="M9 6l6 6-6 6" />
-                      </svg>
-                    </button>
-                  </li>
+                  <button
+                    key={e.key}
+                    type="button"
+                    onClick={() => onOpenPerson(e.personId!, e.subtitle)}
+                    className="group -mx-2 flex items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/[0.06] active:bg-white/10"
+                    data-testid={`link-album-credit-person-${e.personId}`}
+                  >
+                    {avatar}
+                    {text}
+                  </button>
                 );
               }
               return (
-                <li
+                <div
                   key={e.key}
-                  className="flex items-center gap-3 py-1.5"
+                  className="flex items-center gap-3 py-2"
                   data-testid={`text-album-credit-${e.key}`}
                 >
                   {avatar}
-                  <span className="text-white text-base font-normal leading-snug tracking-[-0.01em]">
-                    {e.name}
-                  </span>
-                </li>
+                  {text}
+                </div>
               );
             })}
-          </ul>
+          </div>
         </section>
       ))}
     </div>
@@ -148,16 +212,17 @@ function AlbumCreditsBody({
 export function AlbumCreditsSheet({
   albumTitle,
   artist,
-  rows,
+  credits,
   onOpenPerson,
   onClose,
 }: {
   albumTitle: string;
   artist: string;
-  rows: AlbumCreditsRow[];
+  credits: AlbumCreditsPayload;
   onOpenPerson?: (personId: string, role: string) => void;
   onClose: () => void;
 }) {
+  const groups = useMemo(() => buildAlbumCreditGroups(credits), [credits]);
   return (
     <SheetShell
       ariaLabel={`Credits for ${albumTitle}`}
@@ -170,7 +235,7 @@ export function AlbumCreditsSheet({
         subtitle={artist}
         onClose={onClose}
       />
-      <AlbumCreditsBody rows={rows} onOpenPerson={onOpenPerson} />
+      <AlbumCreditsBody groups={groups} onOpenPerson={onOpenPerson} />
     </SheetShell>
   );
 }
@@ -184,19 +249,20 @@ export function AlbumCreditsSheet({
 export function AlbumCreditsModal({
   albumTitle,
   artist,
-  rows,
+  credits,
   onOpenPerson,
   onClose,
 }: {
   albumTitle: string;
   artist: string;
-  rows: AlbumCreditsRow[];
+  credits: AlbumCreditsPayload;
   onOpenPerson?: (personId: string, role: string) => void;
   onClose: () => void;
 }) {
   const reduce = !!useReducedMotion();
   const [open, setOpen] = useState(true);
   const requestClose = () => setOpen(false);
+  const groups = useMemo(() => buildAlbumCreditGroups(credits), [credits]);
 
   return (
     <AnimatePresence onExitComplete={onClose}>
@@ -223,7 +289,7 @@ export function AlbumCreditsModal({
             data-testid="backdrop-album-credits"
           />
           <motion.div
-            className="relative z-10 w-full max-w-[440px] max-h-[80vh] overflow-y-auto scrollbar-hide rounded-3xl pt-1 pb-6"
+            className="relative z-10 w-full max-w-[600px] max-h-[80vh] overflow-y-auto scrollbar-hide rounded-3xl pt-1 pb-6"
             style={{
               background: "rgb(20, 24, 48)",
               boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
@@ -254,7 +320,7 @@ export function AlbumCreditsModal({
                 data-testid="button-credits-modal-close"
               />
             </div>
-            <AlbumCreditsBody rows={rows} onOpenPerson={onOpenPerson} />
+            <AlbumCreditsBody groups={groups} onOpenPerson={onOpenPerson} />
           </motion.div>
         </motion.div>
       )}
