@@ -153,7 +153,11 @@ export function AlbumDesktopTrackRow({
             ].join(" ")}
             style={{ color: ROSE }}
           >
-            <Play className="w-3.5 h-3.5 fill-current" strokeWidth={0} />
+            {/* Nudge right ~2px: the Lucide Play triangle's tip ends at
+                x=20/24, so it carries transparent whitespace on its right
+                edge — without this the triangle's visual edge sits left of
+                the right-aligned resting numbers above/below it. */}
+            <Play className="w-3.5 h-3.5 fill-current translate-x-[2px]" strokeWidth={0} />
           </button>
         )}
 
@@ -314,8 +318,12 @@ function Equalizer({ color }: { color: string }) {
  */
 function PausedGlyph({ color }: { color: string }) {
   return (
+    // Nudge right ~3.5px: the Lucide Pause glyph's right bar ends at
+    // x=18/24, leaving transparent whitespace on its right edge. Without
+    // this it would sit left of the right-aligned numbers / equalizer and
+    // produce a horizontal jump when switching playing → paused.
     <Pause
-      className="w-3.5 h-3.5 fill-current"
+      className="w-3.5 h-3.5 fill-current translate-x-[3.5px]"
       strokeWidth={0}
       style={{ color }}
     />
