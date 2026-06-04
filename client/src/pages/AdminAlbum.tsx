@@ -282,12 +282,15 @@ type Tab = "overview" | "tracks" | "sell" | "press" | "shopify";
 // `direct`, Shopify for `shopify`, Bonus in both. The Press tab is
 // NEVER shown in Shopify mode (the label fulfills the physical
 // product themselves; there is no press to talk about).
-function visibleTabsFor(album: {
-  sellMode?: string | null;
-  sellQuoteLockedAt?: string | null;
-  isGoodTunesRelease?: boolean;
-  isPrepping?: boolean;
-}): { key: Tab; label: string }[] {
+function visibleTabsFor(
+  album: {
+    sellMode?: string | null;
+    sellQuoteLockedAt?: string | null;
+    isGoodTunesRelease?: boolean;
+    isPrepping?: boolean;
+  },
+  opts?: { hidePress?: boolean },
+): { key: Tab; label: string }[] {
   const base: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "sell", label: "Package" },
@@ -306,6 +309,9 @@ function visibleTabsFor(album: {
   // did nothing). The panels themselves render their own pre-lock
   // empty/early states.
   if (album.sellMode === "direct") {
+    // Artist and label partners don't manage manufacturing, so the Physical
+    // tab (pressing plant + master preflight) is hidden for them for now.
+    if (opts?.hidePress) return base;
     return [...base, { key: "press", label: "Physical" }];
   }
   if (album.sellMode === "shopify") {
@@ -332,6 +338,10 @@ export function AdminAlbum() {
     enabled: !!user?.isAdmin,
   });
   const isArtist = adminRoleInfo?.role === "artist";
+  const isLabel = adminRoleInfo?.role === "label";
+  // Hide the Physical/press section (pressing plant + master preflight) for
+  // artist and label partners for now — manufacturing stays with operators.
+  const hidePressSection = isArtist || isLabel;
   // Smart-back deep link: `/admin/albums/:id?track=<songId>` lands the
   // Tracks tab with that row already open + scrolled into view, so a
   // user returning from a credit-tapped Person page comes back to the
@@ -743,9 +753,9 @@ export function AdminAlbum() {
   // `album` in the dependency array.
   useEffect(() => {
     if (!album) return;
-    const allowed = visibleTabsFor(album).map((t) => t.key);
+    const allowed = visibleTabsFor(album, { hidePress: hidePressSection }).map((t) => t.key);
     if (!allowed.includes(tab)) setTab(tab === ("bonus" as Tab) ? "tracks" : "sell");
-  }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, tab, album]);
+  }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, tab, album, hidePressSection]);
 
   // Task #674 — Mirror the active tab into the URL (`?tab=`) so a refresh
   // reopens the same tab. Uses `replace` so repeated tab clicks don't
@@ -1049,7 +1059,7 @@ export function AdminAlbum() {
           data-testid="tabs-admin-album"
         >
           <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
-            {visibleTabsFor(album).map((t) => (
+            {visibleTabsFor(album, { hidePress: hidePressSection }).map((t) => (
               <button
                 key={t.key}
                 onClick={(e) =>
@@ -1209,7 +1219,7 @@ export function AdminAlbum() {
             `tab` back to "sell" whenever the current tab leaves the
             allowed set. */}
         {(() => {
-          const allowed = new Set(visibleTabsFor(album).map((t) => t.key));
+          const allowed = new Set(visibleTabsFor(album, { hidePress: hidePressSection }).map((t) => t.key));
           const safeTab: Tab = allowed.has(tab) ? tab : "sell";
           return (
             <>
