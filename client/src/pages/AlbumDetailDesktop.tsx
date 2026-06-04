@@ -52,7 +52,6 @@ import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
 import {
   DesktopAlbumView,
   type DesktopAlbumSong,
-  type DesktopAlbumTab,
 } from "@/components/ui/DesktopAlbumView";
 import type { PlayerSong } from "@/context/PlayerContext";
 import type { Album as PlayerAlbum, Person } from "@/data/musicData";
@@ -139,7 +138,7 @@ type ApiAlbumPhoto = {
  *
  * This page composes:
  *   • AlbumDesktopSidebar          (left nav, incl. top "Search" entry)
- *   • DesktopAlbumView             (hero + tabs + tracklist + bonus + lyrics panel)
+ *   • DesktopAlbumView             (hero + tracklist + stacked bonus + lyrics panel)
  *   • DesktopSearchView            (shown in place of the hero in search mode)
  *   • PlayerDock density="compact" (Apple-Music-density bottom chrome)
  *
@@ -170,7 +169,6 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   // because `lyricsOpen` (lg panel) and the md overlay are mutually
   // exclusive on this flag.
   const isLgViewport = useMediaQuery("(min-width: 1024px)");
-  const [tab, setTab] = useState<DesktopAlbumTab>("music");
   // Task #1054 — sidebar "Search" swaps the main content area into an
   // Apple-Music-style search view (box at top, ranked results below)
   // instead of the album hero. Picking a result navigates + drops back
@@ -649,8 +647,6 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             label={album?.label ?? null}
             isOwned={effectiveOwned}
             canPlay={canPlay}
-            tab={tab}
-            onTabChange={setTab}
             currentSongId={player.currentSong?.id ?? null}
             isPlaying={player.isPlaying}
             onPlayAll={handlePlayAll}

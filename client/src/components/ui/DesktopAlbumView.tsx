@@ -63,8 +63,6 @@ export type DesktopAlbumPhoto = {
   caption?: string | null;
 };
 
-export type DesktopAlbumTab = "music" | "videos" | "photos";
-
 export type DesktopAlbumViewProps = {
   album: DesktopAlbumData;
   songs: DesktopAlbumSong[];
@@ -76,10 +74,6 @@ export type DesktopAlbumViewProps = {
   isOwned: boolean;
   /** When false, "Play" / "Shuffle" CTAs are suppressed (no previews + locked album). */
   canPlay: boolean;
-
-  // Active tab + setter so hosts can persist or sync tab state.
-  tab: DesktopAlbumTab;
-  onTabChange: (t: DesktopAlbumTab) => void;
 
   // Currently-playing wiring. Either supply a song id + isPlaying, or omit
   // both for non-interactive previews (admin preview when no player is on
@@ -206,8 +200,8 @@ function formatPrice(cents: number): string {
  *     fan surface, pixel-for-pixel, instead of relying on a separate
  *     mock).
  *
- * Scope: hero (cover + title/artist/meta/CTAs), tabs, tracklist, and the
- * Videos/Photos bonus grids. Does NOT render the left sidebar, top
+ * Scope: hero (cover + title/artist/meta/CTAs), tracklist, and the
+ * stacked Videos/Photos bonus grids. Does NOT render the left sidebar, top
  * now-playing strip, or PlayerDock — those belong to the host so each
  * surface can wire its own chrome.
  */
@@ -219,8 +213,6 @@ export function DesktopAlbumView({
   label,
   isOwned,
   canPlay,
-  tab,
-  onTabChange,
   currentSongId,
   isPlaying,
   onPlayAll,
@@ -323,27 +315,13 @@ export function DesktopAlbumView({
     .join(" · ");
   const showLyrics = !!lyricsOpen && !!lyrics;
 
-  // Task #1118 — fans never see empty bonus tabs (no dashed-line
-  // placeholders). Build the visible tab list from content: Music is
-  // always present; Videos/Photos only when populated. When neither
-  // bonus kind exists, the strip is hidden entirely (a lone "Music" tab
-  // is pointless) and the tracklist renders directly below the hero.
-  const visibleTabs = [
-    { key: "music", label: "Music", count: songs.length },
-    ...(videos.length > 0
-      ? [{ key: "videos", label: "Videos", count: videos.length }]
-      : []),
-    ...(photos.length > 0
-      ? [{ key: "photos", label: "Photos", count: photos.length }]
-      : []),
-  ] as { key: DesktopAlbumTab; label: string; count: number }[];
-  const showTabStrip = visibleTabs.length > 1;
-  // If the host's selected tab is no longer visible (content removed, or
-  // the strip is hidden), fall back to Music so content never vanishes.
-  const effectiveTab = visibleTabs.some((t) => t.key === tab) ? tab : "music";
-  useEffect(() => {
-    if (tab !== effectiveTab) onTabChange(effectiveTab);
-  }, [tab, effectiveTab, onTabChange]);
+  // Task #1183 — the desktop album page mirrors Apple Music (and our own
+  // mobile surface): no pill toggle. The tracklist renders first, then a
+  // "Videos" section, then a "Photos" section, stacked vertically in one
+  // scroll. Each bonus section only renders when it has items (Task #1118
+  // hide-empty rule), so fans never see an empty heading or placeholder.
+  const hasVideos = videos.length > 0;
+  const hasPhotos = photos.length > 0;
 
   return (
     <div className="flex gap-6 w-full" data-testid="desktop-album-view">
@@ -713,58 +691,11 @@ export function DesktopAlbumView({
           </div>
         </section>
 
-        {/* Tabs — Apple-Music segmented control. Hidden entirely when the
-            album has no bonus video/photo content (Task #1118), so fans
-            never see a lone "Music" tab or empty dashed placeholders. */}
-        {showTabStrip && (
-        <div className="mt-8 flex items-center justify-start">
-          <div
-            className="inline-flex items-center gap-1 rounded-full bg-white/8 p-1"
-            role="tablist"
-            data-testid="hero-tabs"
-          >
-            {visibleTabs.map((it) => {
-              const on = it.key === effectiveTab;
-              return (
-                <button
-                  key={it.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={on}
-                  data-testid={`tab-${it.key}`}
-                  onClick={() => onTabChange(it.key)}
-                  className="relative h-9 px-5 inline-flex items-center justify-center gap-1.5 rounded-full text-sm font-semibold transition-colors"
-                  style={{ color: on ? "#fff" : "rgba(255,255,255,0.55)" }}
-                >
-                  {on && (
-                    <motion.span
-                      aria-hidden
-                      layoutId="album-tab-pill"
-                      className="absolute inset-0 rounded-full bg-white/15 shadow-[0_1px_3px_rgba(0,0,0,0.25)] ring-1 ring-white/10"
-                      transition={
-                        reduceMotion
-                          ? { duration: 0 }
-                          : { type: "spring", stiffness: 520, damping: 38, mass: 0.8 }
-                      }
-                    />
-                  )}
-                  <span className="relative z-10">{it.label}</span>
-                  {it.key !== "music" && it.count > 0 && (
-                    <span className="relative z-10 text-xs text-fan-secondary font-medium">
-                      ({it.count})
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        )}
-
-        {/* Tab content */}
+        {/* Tracklist + stacked bonus sections (Task #1183). No pill toggle —
+            Music, then Videos, then Photos read as one vertical scroll, the
+            same way the mobile surface and Apple Music proper do. */}
         <div className="mt-5">
-          {effectiveTab === "music" && (
-            <div className="flex flex-col pt-1" data-testid="track-list">
+          <div className="flex flex-col pt-1" data-testid="track-list">
               {/* Apple-style top hairline — inset + same weight as the
                   per-row separators so the list reads as one uniform set of
                   rules instead of a thick full-bleed bar above row 1. */}
@@ -838,18 +769,24 @@ export function DesktopAlbumView({
                 )}
               </div>
             </div>
-          )}
 
           {/* Bonus sections (videos/photos) sit on a subtly lighter panel —
               Apple-Music treatment where the below-the-music sections read as
-              a distinct background tint from the tracklist. Only albums with
-              bonus media ever reach these tabs, so the tint is scoped to them. */}
-          {effectiveTab === "videos" && (
-            <div
-              className="rounded-2xl p-5"
+              a distinct background tint from the tracklist. Each section only
+              renders when it has items (Task #1118 hide-empty rule), so fans
+              never see an empty heading. */}
+          {hasVideos && (
+            <section
+              className="mt-10 rounded-2xl p-5"
               style={{ background: "rgba(255,255,255,0.04)" }}
               data-testid="section-videos"
             >
+              <h2
+                className="text-fan-primary text-xl font-bold tracking-tight mb-4"
+                data-testid="heading-videos"
+              >
+                Videos
+              </h2>
               <BonusGrid
                 items={videos.map((v) => ({
                   id: v.id,
@@ -859,15 +796,21 @@ export function DesktopAlbumView({
                 locked={!isOwned}
                 kind="video"
               />
-            </div>
+            </section>
           )}
 
-          {effectiveTab === "photos" && (
-            <div
-              className="rounded-2xl p-5"
+          {hasPhotos && (
+            <section
+              className="mt-10 rounded-2xl p-5"
               style={{ background: "rgba(255,255,255,0.04)" }}
               data-testid="section-photos"
             >
+              <h2
+                className="text-fan-primary text-xl font-bold tracking-tight mb-4"
+                data-testid="heading-photos"
+              >
+                Photos
+              </h2>
               <BonusGrid
                 items={photos.map((p) => ({
                   id: p.id,
@@ -877,7 +820,7 @@ export function DesktopAlbumView({
                 locked={!isOwned}
                 kind="photo"
               />
-            </div>
+            </section>
           )}
         </div>
 
@@ -1159,23 +1102,31 @@ export function BonusGrid({
   kind: "video" | "photo";
 }) {
   // Task #1118 — fans never see the dashed-border "No {kind}s yet"
-  // placeholder. Empty bonus tabs are hidden upstream so this branch
+  // placeholder. Empty bonus sections are hidden upstream so this branch
   // should be unreachable on the fan surface; render nothing rather than
   // a dotted-line empty state if it ever is reached.
   if (items.length === 0) {
     return null;
   }
+  const isVideo = kind === "video";
   return (
     <div
-      className="grid grid-cols-3 gap-4"
+      // Task #1183 — videos render as wide 16:9 cards (two-up), photos stay
+      // as a tidy square-tile grid (the same square look as "More By…").
+      className={
+        isVideo ? "grid grid-cols-2 gap-4" : "grid grid-cols-3 gap-4"
+      }
       data-testid={`grid-${kind}s`}
       data-locked={locked ? "true" : "false"}
     >
       {items.map((it) => (
         <div
           key={it.id}
-          className="relative aspect-square rounded-2xl overflow-hidden bg-white/5"
+          className={`group relative ${
+            isVideo ? "aspect-video" : "aspect-square"
+          } rounded-2xl overflow-hidden bg-white/5`}
           style={{ cursor: locked ? "default" : "pointer" }}
+          tabIndex={!locked && isVideo ? 0 : undefined}
           data-testid={`thumb-${kind}-${it.id}`}
         >
           <img
@@ -1202,8 +1153,14 @@ export function BonusGrid({
               </div>
             </div>
           )}
-          {!locked && kind === "video" && (
-            <BonusPlayBadge testId={`badge-play-${kind}-${it.id}`} />
+          {!locked && isVideo && (
+            // Task #1183 — the play badge is revealed on hover/focus (Apple
+            // Music wide-video behavior) rather than always-on. The badge
+            // element stays mounted; only its opacity animates, so it still
+            // reads as playable to assistive tech and tests.
+            <div className="absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 group-focus:opacity-100">
+              <BonusPlayBadge testId={`badge-play-${kind}-${it.id}`} />
+            </div>
           )}
           {it.label && (
             <div className="absolute left-3 right-3 bottom-3 text-fan-primary text-[12.5px] font-semibold truncate">
