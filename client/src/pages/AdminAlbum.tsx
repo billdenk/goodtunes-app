@@ -29,6 +29,7 @@ import {
   ImagePlus,
   Link2,
   Copy,
+  ExternalLink,
   X as XIcon,
   Circle,
   CheckCircle2,
@@ -2003,6 +2004,14 @@ function ShareLinkPanel({
   // isn't a dead no-op.
   const copyableSlug = savedSlug || (validation?.ok ? validation.slug : "");
   const copyUrl = copyableSlug ? `https://${SHARE_LINK_HOST}/${copyableSlug}` : "";
+  // One-click preview opens the page on the CURRENT origin (relative path), so
+  // an operator's existing admin session rides along — that's what unlocks the
+  // staging view of a still-prepping release without a second login on the get
+  // host. The shareable get.goodtunes.music link is the Copy button's job.
+  const previewUrl = copyableSlug ? `/${copyableSlug}` : "";
+  const openPreview = () => {
+    if (previewUrl) window.open(previewUrl, "_blank", "noopener");
+  };
   const copy = async () => {
     if (!copyUrl) return;
     const ok = await copyTextToClipboard(copyUrl);
@@ -2071,6 +2080,18 @@ function ShareLinkPanel({
             data-testid="input-share-slug"
           />
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 shrink-0"
+          disabled={!previewUrl}
+          onClick={openPreview}
+          data-testid="button-open-share-link"
+          title="Open this page in a new tab using your admin session (works even before the release is public)."
+        >
+          <ExternalLink className="w-4 h-4" />
+          <span className="ml-1.5">Open</span>
+        </Button>
         <Button
           type="button"
           variant="outline"
