@@ -960,6 +960,27 @@ export function Login() {
                 >
                   {isPending ? "Signing in..." : "Sign In"}
                 </button>
+                {/* Preview-only escape hatch. On *.replit.dev the root
+                    page shows fan chrome, so Bill's admin password always
+                    comes back "Invalid." This button hits the existing
+                    GET /dev-login-bill route (full navigation so the
+                    server redirect to /admin/login#token=… runs and the
+                    hash-token pickup completes sign-in) and lands the
+                    operator in the admin shell as the super-admin — no
+                    password, no 2FA. It renders ONLY in the dev/preview
+                    build (import.meta.env.DEV); the production bundle ships
+                    without it, and even a hand-crafted request 404s
+                    because /dev-login-bill is gated on NODE_ENV. */}
+                {isAdmin && import.meta.env.DEV && (
+                  <button
+                    type="button"
+                    onClick={() => { window.location.href = "/dev-login-bill"; }}
+                    className={`${s.ghostBtn} rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-2.5 font-medium transition-colors hover:bg-slate-100`}
+                    data-testid="button-dev-admin-login"
+                  >
+                    🛠 Dev admin login (preview only)
+                  </button>
+                )}
               </>
             )}
           </form>
