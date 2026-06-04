@@ -633,29 +633,31 @@ export function PlayerDock({
                 {coverNode ?? emptyCover}
               </div>
               <div className="min-w-0 flex-1">
-                <div
-                  className={`${D.titleSize} font-semibold truncate leading-tight`}
-                  data-testid="text-track-title"
-                >
-                  {track.title}
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div
+                    className={`${D.titleSize} font-semibold truncate leading-tight`}
+                    data-testid="text-track-title"
+                  >
+                    {track.title}
+                  </div>
+                  {previewMode && (
+                    <span
+                      className="inline-flex items-center px-1.5 h-[14px] rounded-[3px] text-[9.5px] font-bold uppercase tracking-[0.08em] flex-shrink-0"
+                      style={{ background: "rgba(255,84,112,0.18)", color: "#FF5470" }}
+                      data-testid="badge-preview-mode"
+                    >
+                      Preview
+                    </span>
+                  )}
                 </div>
                 {track.subtitle && (
                   <div
                     className={`${D.subtitleSize} ${
                       isCompactDensity ? "text-fan-secondary" : "text-fan-secondary"
-                    } truncate leading-tight mt-0.5 flex items-center gap-1.5`}
+                    } truncate leading-tight mt-0.5`}
                     data-testid="text-track-subtitle"
                   >
-                    {previewMode && (
-                      <span
-                        className="inline-flex items-center px-1.5 h-[14px] rounded-[3px] text-[9.5px] font-bold uppercase tracking-[0.08em] flex-shrink-0"
-                        style={{ background: "rgba(255,84,112,0.18)", color: "#FF5470" }}
-                        data-testid="badge-preview-mode"
-                      >
-                        Preview
-                      </span>
-                    )}
-                    <span className="truncate">{track.subtitle}</span>
+                    {track.subtitle}
                   </div>
                 )}
               </div>
