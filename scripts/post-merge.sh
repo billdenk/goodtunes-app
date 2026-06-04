@@ -3922,3 +3922,54 @@ SQL
 }
 backfill_task_1182_nightbirde_release_date dev  "${DATABASE_URL:-}"
 backfill_task_1182_nightbirde_release_date prod "${PROD_DATABASE_URL:-}"
+
+# Task #1229 — Seed Gruhn Guitars as a recognized reseller vendor row.
+# guitars.com is registered in KNOWN_HOSTS (server/routes.ts) and the
+# scraper resolves it as "Gruhn Guitars," but with no matching `vendors`
+# row the first guitar scraped from guitars.com auto-creates a bare stub
+# (32x32 favicon logo only, no bio, no cover). This seeds a proper row so
+# the reseller chip looks polished immediately after the first import.
+#
+# The wordmark is Gruhn's own storefront header logo, mirrored ONCE into
+# the shared dev+prod Object Storage bucket (see scripts/mirror-gruhn-
+# logo.ts + .agents/memory/object-storage-shared-bucket.md), so the same
+# /objects/uploads/<id> URL resolves in both environments.
+#
+# Idempotent: an INSERT … SELECT guarded by NOT EXISTS on the apex domain
+# among top-level (parent_vendor_id IS NULL), non-deleted rows — so it
+# never duplicates Gruhn, never resurrects a soft-deleted row, and never
+# clobbers an operator's later edits (logo/bio/location curation wins).
+# is_reseller=true / is_maker=false matches the KNOWN_HOSTS "reseller"
+# role. Runs on BOTH dev and prod.
+seed_task_1229_gruhn_vendor() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1229 gruhn-vendor seed on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+INSERT INTO vendors (name, domain, is_maker, is_reseller, home_url, about_url, logo_url, bio, location)
+SELECT 'Gruhn Guitars',
+       'guitars.com',
+       false,
+       true,
+       'https://guitars.com/',
+       'https://guitars.com/',
+       '/objects/uploads/420c4a77-5888-4c68-a30c-7b6cb187174c.png',
+       'Nashville''s premier vintage guitar dealer, founded in 1970',
+       'Nashville, TN'
+WHERE NOT EXISTS (
+  SELECT 1 FROM vendors
+  WHERE domain = 'guitars.com'
+    AND parent_vendor_id IS NULL
+    AND deleted_at IS NULL
+);
+SQL
+  then
+    echo "post-merge: task-1229 gruhn-vendor seed ok on $label"
+  else
+    echo "post-merge: WARNING — task-1229 gruhn-vendor seed failed on $label (continuing)"
+  fi
+}
+seed_task_1229_gruhn_vendor dev  "${DATABASE_URL:-}"
+seed_task_1229_gruhn_vendor prod "${PROD_DATABASE_URL:-}"
