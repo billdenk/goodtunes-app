@@ -33,6 +33,13 @@ import {
 } from "./partnerInvites";
 import { pgArray } from "./lib/pgArray";
 import { hasArtistShape, personShape } from "./lib/personArtistShape";
+import {
+  resolveMakerHostFromBrand as resolveMakerHostFromBrandShared,
+  buildHostSlot as buildHostSlotShared,
+  makerSlotFromBrand as makerSlotFromBrandShared,
+  mapShopifyProduct,
+  classifyShopifyApiResult,
+} from "./lib/shopifyGearMapping";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual, randomUUID, createHash } from "crypto";
@@ -4975,28 +4982,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // find-or-create-by-domain path in the attach endpoint matches the
   // existing maker row instead of inventing a duplicate). Short brand
   // aliases get explicit mappings; everything else falls through to a
-  // case-insensitive name match against KNOWN_HOSTS values.
-  const BRAND_ALIASES: Record<string, string> = {
-    "prs": "prsguitars.com",
-    "paul reed smith": "prsguitars.com",
-    "paul reed smith guitars": "prsguitars.com",
-    "martin": "martinguitar.com",
-    "c.f. martin": "martinguitar.com",
-    "c. f. martin": "martinguitar.com",
-    "cf martin & co.": "martinguitar.com",
-    "cf martin & co": "martinguitar.com",
-    "c.f. martin & co.": "martinguitar.com",
-    "c.f. martin & co": "martinguitar.com",
-    "mesa": "mesaboogie.com",
-    "mesa/boogie": "mesaboogie.com",
-    "boogie": "mesaboogie.com",
-    "ernie ball music man": "ernieball.com",
-    "music man": "ernieball.com",
-    "d'addario": "daddario.com",
-    "daddario": "daddario.com",
-    "earthquaker": "earthquakerdevices.com",
-    "chase bliss": "chasebliss.com",
-  };
+  // case-insensitive name match against KNOWN_HOSTS values. The alias
+  // table + resolver now live in ./lib/shopifyGearMapping so the
+  // Add-gear scrape tests can lock in the brand→host contract.
   // Task #603 — hosts that ship multiple brands off one domain. For
   // these, when the JSON-LD `brand` differs from the host's display
   // name, the scrape route promotes the brand into the Maker slot as
@@ -5019,16 +5007,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "gryphonstrings.com",
   ]);
 
-  function resolveMakerHostFromBrand(brand: string): string | null {
-    const norm = brand.trim().toLowerCase();
-    if (!norm) return null;
-    if (BRAND_ALIASES[norm]) return BRAND_ALIASES[norm];
-    for (const [host, info] of Object.entries(KNOWN_HOSTS)) {
-      if (info.role === "reseller") continue;
-      if (info.name.toLowerCase() === norm) return host;
-    }
-    return null;
-  }
+  const resolveMakerHostFromBrand = (brand: string): string | null =>
+    resolveMakerHostFromBrandShared(brand, KNOWN_HOSTS);
 
   // Centralized UA strings + header builders for outbound vendor scrapes.
   // Many vendor sites (PRS Guitars, etc.) 403 obvious bot UAs at their
@@ -5270,14 +5250,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       slotHost: string,
       slotName: string,
       affiliate: string | null,
-    ): VendorSlot => ({
-      name: slotName,
-      domain: slotHost,
-      affiliateUrl: affiliate,
-      aboutUrl: `https://${slotHost}/`,
-      logoUrl: `https://www.google.com/s2/favicons?sz=128&domain=${slotHost}`,
-      known: slotHost in KNOWN_HOSTS,
-    });
+    ): VendorSlot => buildHostSlotShared(slotHost, slotName, affiliate, KNOWN_HOSTS);
     // Sweetwater URLs look like `/store/detail/Foo--bar-baz-quux`. The
     // human-readable name is everything after `--`. For other resellers
     // we fall back to the last path segment. Hyphens / underscores → spaces,
@@ -5333,38 +5306,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // name-only slot (the client skips auto-attach when domain is null
     // because vendors.domain is NOT NULL). Mirrors the reseller-brand
     // resolution in the generic success path below.
-    const makerSlotFromBrand = async (
+    const makerSlotFromBrand = (
       brandStr: string,
-    ): Promise<VendorSlot | null> => {
-      const b = brandStr.trim();
-      if (!b) return null;
-      const resolvedHost = resolveMakerHostFromBrand(b);
-      if (resolvedHost) {
-        const info = KNOWN_HOSTS[resolvedHost];
-        return buildHostSlot(resolvedHost, info?.name ?? b, null);
-      }
-      const byName = await storage.getVendorByNameInsensitive(b);
-      if (byName?.domain) {
-        return {
-          name: byName.name,
-          domain: byName.domain,
-          affiliateUrl: null,
-          aboutUrl: byName.aboutUrl ?? `https://${byName.domain}/`,
-          logoUrl:
-            byName.logoUrl ??
-            `https://www.google.com/s2/favicons?sz=128&domain=${byName.domain}`,
-          known: false,
-        };
-      }
-      return {
-        name: b,
-        domain: null,
-        affiliateUrl: null,
-        aboutUrl: null,
-        logoUrl: null,
-        known: false,
-      };
-    };
+    ): Promise<VendorSlot | null> =>
+      makerSlotFromBrandShared(brandStr, {
+        knownHosts: KNOWN_HOSTS,
+        lookupVendorByName: (b) => storage.getVendorByNameInsensitive(b),
+      });
 
     try {
       // — Gruhn Guitars (guitars.com) ————————————————————————————————
@@ -5546,102 +5494,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           return res.status(502).json({ message: msg });
         }
 
-        const rawTitle: string =
-          typeof sProduct.title === "string" ? sProduct.title.trim() : "";
-        const shopifyName = rawTitle || null;
-        // Year — first 18xx/19xx/20xx token in the title ("1974 Martin D-35").
-        const yearMatch = rawTitle.match(/\b(?:18|19|20)\d{2}\b/);
-        const shopifyYear = yearMatch ? yearMatch[0] : null;
+        // Pure field-mapping lives in ./lib/shopifyGearMapping so it's
+        // unit-tested against saved Retrofret/Gryphon fixtures. The route
+        // keeps the impure tail: image rehosting + brand→maker resolution.
+        const mapped = mapShopifyProduct(sProduct, shopName);
 
-        // Shopify `vendor` usually holds the brand, but some shops leave a
-        // placeholder ("<Foo> Maker") or the store's own name — treat those
-        // as no-brand rather than fabricating a maker.
-        const vendorRaw =
-          typeof sProduct.vendor === "string" ? sProduct.vendor.trim() : "";
-        const shopifyBrand =
-          vendorRaw && vendorRaw.toLowerCase() !== shopName.toLowerCase()
-            ? vendorRaw
-            : null;
-
-        let shopifyDesc: string | null =
-          typeof sProduct.body_html === "string" ? sProduct.body_html : null;
-        if (shopifyDesc) {
-          shopifyDesc = shopifyDesc
-            .replace(/<br\s*\/?>/gi, "\n")
-            .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
-            .replace(/<[^>]+>/g, "")
-            .replace(/\n{3,}/g, "\n\n")
-            .trim();
-          shopifyDesc = decodeEntities(shopifyDesc) || null;
-        }
-
-        const sVariants = Array.isArray(sProduct.variants)
-          ? sProduct.variants
-          : [];
-        const priceRaw = sVariants.length ? sVariants[0]?.price : null;
-        const shopifyPrice =
-          priceRaw != null && priceRaw !== "" && !isNaN(parseFloat(String(priceRaw)))
-            ? `USD ${parseFloat(String(priceRaw)).toFixed(2)}`
-            : null;
-
-        const sImages = Array.isArray(sProduct.images) ? sProduct.images : [];
-        let shopifyRawImage: string | null = sImages.length
-          ? (sImages[0]?.src ?? null)
-          : null;
-        if (shopifyRawImage?.startsWith("http://")) {
-          shopifyRawImage = "https://" + shopifyRawImage.slice("http://".length);
-        }
         let shopifyPhotoUrl: string | null = null;
-        if (shopifyRawImage) {
-          try { shopifyPhotoUrl = await rehostRemoteImage(shopifyRawImage); }
-          catch { shopifyPhotoUrl = shopifyRawImage; }
+        if (mapped.rawImage) {
+          try { shopifyPhotoUrl = await rehostRemoteImage(mapped.rawImage); }
+          catch { shopifyPhotoUrl = mapped.rawImage; }
         }
-
-        // Specs — Year plus any `Label:Value` tags (skip Shopify's taxonomy
-        // navigation tags like "Level 1: Instruments" and overlong junk).
-        const specs: Record<string, string> = {};
-        if (shopifyYear) specs.Year = shopifyYear;
-        const tags: string[] = Array.isArray(sProduct.tags)
-          ? sProduct.tags.map((t: any) => String(t))
-          : typeof sProduct.tags === "string"
-            ? sProduct.tags.split(",")
-            : [];
-        for (const t of tags) {
-          const tag = t.trim();
-          const ci = tag.indexOf(":");
-          if (ci <= 0) continue;
-          const label = tag.slice(0, ci).trim();
-          const value = tag.slice(ci + 1).trim();
-          if (!label || !value) continue;
-          if (/^level\s*\d+$/i.test(label)) continue;
-          if (label.length > 40 || value.length > 120) continue;
-          if (!(label in specs)) specs[label] = value;
-        }
-
-        const ptype =
-          typeof sProduct.product_type === "string"
-            ? sProduct.product_type.trim()
-            : "";
-        const shopifyCategory =
-          ptype &&
-          !/^(instruments?|otherdefault|default)$/i.test(ptype)
-            ? ptype
-            : null;
 
         const shopifyReseller = buildHostSlot(host, shopName, url);
-        const shopifyMaker = shopifyBrand
-          ? await makerSlotFromBrand(shopifyBrand)
+        const shopifyMaker = mapped.brand
+          ? await makerSlotFromBrand(mapped.brand)
           : null;
 
         return res.json({
-          name: shopifyName,
-          brand: shopifyBrand,
-          category: shopifyCategory,
-          description: shopifyDesc,
-          specs,
-          price: shopifyPrice,
+          name: mapped.name,
+          brand: mapped.brand,
+          category: mapped.category,
+          description: mapped.description,
+          specs: mapped.specs,
+          price: mapped.price,
           photoUrl: shopifyPhotoUrl,
-          sourceImage: shopifyRawImage,
+          sourceImage: mapped.rawImage,
           reseller: shopifyReseller,
           maker: shopifyMaker,
           vendor: shopifyReseller,
