@@ -19507,19 +19507,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return "invited";
     }
 
+    // Resolve the invitee to a clickable admin entity, but ONLY when the
+    // id actually resolves to a real row (present in the relevant index) —
+    // a named target Person wins, else the role scope (artist→Person,
+    // label→Label, manufacturer→Press, non_profit→Org). Free-text rows and
+    // unresolved scopes stay null so the client renders them non-links.
+    function inviteeLink(r: any, target: any): { inviteeKind: string | null; inviteeId: string | null } {
+      if (target) return { inviteeKind: "person", inviteeId: target.id };
+      const scopeId = r.roleScopeId as string | null;
+      if (!scopeId) return { inviteeKind: null, inviteeId: null };
+      if (r.role === "artist" && peopleIdx.get(scopeId)) return { inviteeKind: "person", inviteeId: scopeId };
+      if (r.role === "label" && labelsIdx.get(scopeId)) return { inviteeKind: "label", inviteeId: scopeId };
+      if (r.role === "manufacturer" && mfgIdx.get(scopeId)) return { inviteeKind: "manufacturer", inviteeId: scopeId };
+      if (r.role === "non_profit" && npoIdx.get(scopeId)) return { inviteeKind: "non_profit", inviteeId: scopeId };
+      return { inviteeKind: null, inviteeId: null };
+    }
+    // Referrer is clickable only when refMeta found the row (name present);
+    // otherwise referrerId stays null and the client keeps it plain text.
+    function referrerLinkId(kind: string | null, scopeId: string | null, name: string | null): string | null {
+      return kind && scopeId && name ? scopeId : null;
+    }
+
     res.json(rows.map((r: any) => {
       const sm = scopeMeta(r.role, r.roleScopeId);
       const target = r.targetPersonId ? peopleIdx.get(r.targetPersonId) : null;
+      const rm = refMeta(r.referrerKind ?? null, r.referrerScopeId ?? null);
       return {
         id: r.id,
         email: r.email,
         // Invitee display name: a named target person wins, else the scope.
         inviteeName: (target?.name ?? sm.scopeName) ?? null,
         inviteeThumbUrl: (target?.photoUrl ?? sm.scopeThumbUrl) ?? null,
+        ...inviteeLink(r, target),
         role: r.role,
         inviteRole: r.inviteRole ?? null,
         referrerKind: r.referrerKind ?? null,
-        ...refMeta(r.referrerKind ?? null, r.referrerScopeId ?? null),
+        ...rm,
+        referrerId: referrerLinkId(r.referrerKind ?? null, r.referrerScopeId ?? null, rm.referrerName),
         status: statusOf(r),
         invitedAt: r.createdAt,
         joinedAt: r.usedAt ?? null,

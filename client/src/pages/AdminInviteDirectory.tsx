@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
@@ -14,11 +15,17 @@ interface DirectoryInvite {
   email: string;
   inviteeName: string | null;
   inviteeThumbUrl: string | null;
+  // When the invitee resolves to a real admin entity these point at it so
+  // the cell deep-links to its sheet; null for plain free-text rows.
+  inviteeKind: string | null;
+  inviteeId: string | null;
   role: string;
   inviteRole: string | null;
   referrerKind: string | null;
   referrerName: string | null;
   referrerThumbUrl: string | null;
+  // Set only when the referrer resolved to a real entity row.
+  referrerId: string | null;
   status: "invited" | "joined" | "revoked" | "expired";
   invitedAt: string;
   joinedAt: string | null;
@@ -53,6 +60,23 @@ const REFERRER_KIND_LABEL: Record<string, string> = {
   manufacturer: "Press",
   ambassador: "Ambassador",
 };
+
+// Map an entity kind onto its admin sheet route. We deep-link with the
+// generic `partner` smart-back origin (backHref + backName carried on the
+// URL) so destinations that render useSmartBackCrumb show a "Invite
+// directory" back-link, and the rest simply ignore it. Returns null for
+// kinds without an admin sheet so those cells stay plain text.
+const BACK = "from=partner&backHref=%2Fadmin%2Finvite-directory&backName=Invite%20directory";
+function adminHrefFor(kind: string | null, id: string | null): string | null {
+  if (!kind || !id) return null;
+  let base: string | null = null;
+  if (kind === "person" || kind === "artist" || kind === "ambassador") base = `/admin/people/${id}`;
+  else if (kind === "label") base = `/admin/labels/${id}`;
+  else if (kind === "manufacturer") base = `/admin/manufacturers/${id}`;
+  else if (kind === "non_profit") base = `/admin/non-profits/${id}`;
+  if (!base) return null;
+  return `${base}?${BACK}`;
+}
 
 function fmtDate(s: string | null): string {
   if (!s) return "—";
@@ -262,11 +286,18 @@ export function AdminInviteDirectory() {
                             <div className="w-8 h-8 rounded-full bg-slate-200 flex-shrink-0" />
                           )}
                           <div className="min-w-0">
-                            {inv.inviteeName && (
-                              <div className="font-medium text-slate-900 truncate" data-testid={`text-invitee-name-${inv.id}`}>
-                                {inv.inviteeName}
-                              </div>
-                            )}
+                            {inv.inviteeName && (() => {
+                              const href = adminHrefFor(inv.inviteeKind, inv.inviteeId);
+                              return href ? (
+                                <Link href={href} className="font-medium text-slate-900 truncate block transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2" data-testid={`link-invitee-name-${inv.id}`}>
+                                  {inv.inviteeName}
+                                </Link>
+                              ) : (
+                                <div className="font-medium text-slate-900 truncate" data-testid={`text-invitee-name-${inv.id}`}>
+                                  {inv.inviteeName}
+                                </div>
+                              );
+                            })()}
                             <div
                               className={inv.inviteeName ? "text-xs text-slate-500 truncate" : "font-medium text-slate-900 truncate"}
                               data-testid={`text-invitee-email-${inv.id}`}
@@ -280,7 +311,16 @@ export function AdminInviteDirectory() {
                         {inv.referrerName ? (
                           <div className="flex items-center gap-2 min-w-0" data-testid={`text-referrer-${inv.id}`}>
                             <Heart className="w-3.5 h-3.5 text-[color:var(--brand-pink)] flex-shrink-0" />
-                            <span className="text-slate-700 truncate">{inv.referrerName}</span>
+                            {(() => {
+                              const href = adminHrefFor(inv.referrerKind, inv.referrerId);
+                              return href ? (
+                                <Link href={href} className="text-slate-700 truncate transition-colors hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2" data-testid={`link-referrer-${inv.id}`}>
+                                  {inv.referrerName}
+                                </Link>
+                              ) : (
+                                <span className="text-slate-700 truncate">{inv.referrerName}</span>
+                              );
+                            })()}
                             {inv.referrerKind && (
                               <span className="text-xs text-slate-400 flex-shrink-0">
                                 {REFERRER_KIND_LABEL[inv.referrerKind] || inv.referrerKind}
