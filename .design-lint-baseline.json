@@ -11247,11 +11247,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-[15px] font-semibold\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
     "snippet": "<div className=\"text-[15px] font-semibold truncate\">{options.title}</div>"
   },
   {
@@ -11967,11 +11962,6 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/components/StorefrontSidebar.tsx",
-    "snippet": "<div className=\"px-3 pt-6 pb-2 text-xs font-semibold uppercase tracking-wider text-white/35\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/StorefrontSidebar.tsx",
     "snippet": "className=\"w-full flex items-center gap-3 px-3 h-9 rounded-lg text-sm text-white/70 hover:text-white hover:bg-white/[0.06] transition-colors\""
   },
   {
@@ -12065,11 +12055,6 @@
     "snippet": "className=\"rounded-full bg-white/[0.14] ring-1 ring-inset ring-white/20 flex-shrink-0 inline-flex items-center justify-center text-xs font-medium text-white/80\""
   },
   {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/ui/AlbumCreditsSheet.tsx",
-    "snippet": "className=\"flex-shrink-0 text-white/25 transition-colors group-hover:text-white/45\""
-  },
-  {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumCreditsSheet.tsx",
     "snippet": "<h2 className=\"text-white text-[22px] font-bold leading-tight tracking-tight\">"
@@ -12127,22 +12112,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumDesktopTrackRow.tsx",
-    "snippet": "\"text-[13px] tabular-nums transition-opacity\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/AlbumDesktopTrackRow.tsx",
     "snippet": "\"truncate text-[14px]\","
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumDesktopTrackRow.tsx",
     "snippet": "<span className=\"text-fan-secondary text-[13px] tabular-nums\">{duration}</span>"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/components/ui/AlbumDesktopTrackRow.tsx",
-    "snippet": "className=\"w-7 h-7 -mr-1 inline-flex items-center justify-center rounded-full text-fan-secondary hover:text-white hover:bg-white/10 transition-opacity\""
   },
   {
     "rule": "brand-hex-literal",
@@ -12285,34 +12260,29 @@
     "snippet": "<p className=\"mt-2 text-base text-white/55 leading-snug\">"
   },
   {
-    "rule": "brand-hex-literal",
+    "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "const ROSE = \"#FF5470\";"
+    "snippet": "title: \"text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[26px]\","
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "title: \"text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[32px]\","
+    "snippet": "title: \"text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[26px] lg:text-[30px]\","
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "title: \"text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[32px] lg:text-[40px]\","
+    "snippet": "className=\"self-start mt-2 text-[21px] font-semibold tracking-[-0.01em] transition-colors hover:underline underline-offset-4\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"self-start mt-2 text-[17px] font-semibold tracking-[-0.01em] transition-colors hover:underline underline-offset-4\""
+    "snippet": "className=\"self-start mt-2 text-[21px] font-semibold tracking-[-0.01em]\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"self-start mt-2 text-[17px] font-semibold tracking-[-0.01em]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"mt-3 text-fan-secondary text-[11.5px] font-semibold uppercase tracking-[0.14em]\""
+    "snippet": "className=\"mt-2 text-fan-secondary text-[13px] font-medium tracking-[0]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -12322,27 +12292,27 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"h-12 pl-6 pr-7 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97]\""
+    "snippet": "className=\"h-12 pl-5 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97]\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"h-12 px-7 rounded-full inline-flex items-center justify-center font-semibold text-[15px] text-fan-secondary cursor-not-allowed\""
+    "snippet": "className=\"h-12 px-6 rounded-full inline-flex items-center justify-center font-semibold text-[15px] text-fan-secondary cursor-not-allowed\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"h-12 px-7 rounded-full inline-flex items-center justify-center gap-2 text-white font-semibold text-[15px] transition-transform active:scale-[0.97]\""
+    "snippet": "className=\"h-12 px-6 rounded-full inline-flex items-center justify-center gap-2 text-white font-semibold text-[15px] transition-transform active:scale-[0.97]\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"h-12 pl-6 pr-7 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97] disabled:cursor-not-allowed\""
+    "snippet": "className=\"h-12 pl-5 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97] disabled:cursor-not-allowed\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"h-12 px-7 rounded-full inline-flex items-center justify-center text-white font-semibold text-[15px] transition-[background-color,box-shadow,transform] cursor-pointer active:scale-[0.97]\""
+    "snippet": "className=\"h-12 px-6 rounded-full inline-flex items-center justify-center text-white font-semibold text-[15px] transition-[background-color,box-shadow,transform] cursor-pointer active:scale-[0.97]\""
   },
   {
     "rule": "hardcoded-font-size",

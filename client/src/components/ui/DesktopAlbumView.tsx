@@ -241,7 +241,7 @@ export function DesktopAlbumView({
         column: "max-w-[720px] mx-auto px-6 py-6 transition-[max-width,margin] duration-200 flex-1 min-w-0",
         heroSection: "mt-7 flex gap-6",
         cover: "rounded-2xl overflow-hidden flex-shrink-0 w-[220px] h-[220px]",
-        title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[32px]",
+        title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[26px]",
       }
     : {
         // Apple parity: let the album content (hero + tracklist) breathe
@@ -253,7 +253,7 @@ export function DesktopAlbumView({
         column: "max-w-[720px] mx-auto lg:max-w-none lg:mx-0 2xl:max-w-[1600px] 2xl:mx-auto px-6 lg:px-12 py-6 lg:py-8 transition-[max-width,margin] duration-200 flex-1 min-w-0",
         heroSection: "mt-7 flex gap-6 lg:gap-8",
         cover: "rounded-2xl overflow-hidden flex-shrink-0 w-[220px] h-[220px] lg:w-[280px] lg:h-[280px]",
-        title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[32px] lg:text-[40px]",
+        title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[26px] lg:text-[30px]",
       };
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -382,14 +382,14 @@ export function DesktopAlbumView({
               <Link
                 href={`/admin/people/${album.primaryArtistId}`}
                 data-testid="link-artist"
-                className="self-start mt-2 text-[17px] font-semibold tracking-[-0.01em] transition-colors hover:underline underline-offset-4"
+                className="self-start mt-2 text-[21px] font-semibold tracking-[-0.01em] transition-colors hover:underline underline-offset-4"
                 style={{ color: BRAND_BLUE, textDecorationColor: BRAND_BLUE }}
               >
                 {album.artist}
               </Link>
             ) : (
               <span
-                className="self-start mt-2 text-[17px] font-semibold tracking-[-0.01em]"
+                className="self-start mt-2 text-[21px] font-semibold tracking-[-0.01em]"
                 style={{ color: BRAND_BLUE }}
                 data-testid="text-artist"
               >
@@ -399,7 +399,7 @@ export function DesktopAlbumView({
 
             {meta && (
               <div
-                className="mt-3 text-fan-secondary text-[11.5px] font-semibold uppercase tracking-[0.14em]"
+                className="mt-2 text-fan-secondary text-[13px] font-medium tracking-[0]"
                 data-testid="album-meta"
               >
                 {meta}
@@ -438,7 +438,7 @@ export function DesktopAlbumView({
                       type="button"
                       onClick={onPlayAll}
                       data-testid="button-play-album"
-                      className="h-12 pl-6 pr-7 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97]"
+                      className="h-12 pl-5 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97]"
                       style={{ background: "#fff", color: "var(--brand-bg)" }}
                     >
                       <Play className="w-5 h-5 fill-current" strokeWidth={0} />
@@ -481,7 +481,7 @@ export function DesktopAlbumView({
                       <button
                         type="button"
                         disabled
-                        className="h-12 px-7 rounded-full inline-flex items-center justify-center font-semibold text-[15px] text-fan-secondary cursor-not-allowed"
+                        className="h-12 px-6 rounded-full inline-flex items-center justify-center font-semibold text-[15px] text-fan-secondary cursor-not-allowed"
                         style={{ background: "rgba(255,255,255,0.06)" }}
                         data-testid="button-buy-sold-out"
                       >
@@ -500,7 +500,7 @@ export function DesktopAlbumView({
                       type="button"
                       onClick={onStreamAlbum}
                       data-testid="button-listen-on"
-                      className="h-12 px-7 rounded-full inline-flex items-center justify-center gap-2 text-white font-semibold text-[15px] transition-transform active:scale-[0.97]"
+                      className="h-12 px-6 rounded-full inline-flex items-center justify-center gap-2 text-white font-semibold text-[15px] transition-transform active:scale-[0.97]"
                       style={{
                         background:
                           "linear-gradient(135deg, var(--brand-purple), var(--brand-blue))",
@@ -819,7 +819,7 @@ function PreviewPlayPill({
       }
       data-testid="button-play-preview"
       aria-label={showPause ? "Pause preview" : "Play preview"}
-      className="h-12 pl-6 pr-7 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97] disabled:cursor-not-allowed"
+      className="h-12 pl-5 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97] disabled:cursor-not-allowed"
       style={{
         background: disabled ? "rgba(255,255,255,0.35)" : "#fff",
         color: "var(--brand-bg)",
@@ -896,7 +896,7 @@ function BuyPricePill({
         onClick={() => onBuy?.(signedCert ? { signedCert: true } : undefined)}
         data-testid="button-buy-bundle"
         data-hover={hover ? "true" : "false"}
-        className="h-12 px-7 rounded-full inline-flex items-center justify-center text-white font-semibold text-[15px] transition-[background-color,box-shadow,transform] cursor-pointer active:scale-[0.97]"
+        className="h-12 px-6 rounded-full inline-flex items-center justify-center text-white font-semibold text-[15px] transition-[background-color,box-shadow,transform] cursor-pointer active:scale-[0.97]"
         style={{
           background: BUY_BLUE_GRADIENT,
           boxShadow: hover
