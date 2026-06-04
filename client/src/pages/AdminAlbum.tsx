@@ -1841,6 +1841,36 @@ function SpinPromoPanel({
 // the standard PUT /api/admin/albums/:id edit_metadata gate + post-sale
 // lock (so `disabled` freezes the input when the album is locked).
 const SHARE_LINK_HOST = "get.goodtunes.music";
+
+// Robust copy: the async Clipboard API rejects (or silently hangs) in a
+// cross-origin/unfocused iframe like the Replit workspace preview, which left
+// the Copy button looking dead — no "Copied", no error. Try it, then fall back
+// to a hidden-textarea execCommand so the copy + success feedback still fire.
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to the legacy path below */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 function ShareLinkPanel({
   album,
   disabled,
@@ -1968,14 +1998,23 @@ function ShareLinkPanel({
   };
 
   const fullUrl = savedSlug ? `https://${SHARE_LINK_HOST}/${savedSlug}` : "";
+  // Copy whatever clean slug is in play — the saved one, or a valid just-typed
+  // draft that's about to save on blur — so clicking Copy right after typing
+  // isn't a dead no-op.
+  const copyableSlug = savedSlug || (validation?.ok ? validation.slug : "");
+  const copyUrl = copyableSlug ? `https://${SHARE_LINK_HOST}/${copyableSlug}` : "";
   const copy = async () => {
-    if (!fullUrl) return;
-    try {
-      await navigator.clipboard.writeText(fullUrl);
+    if (!copyUrl) return;
+    const ok = await copyTextToClipboard(copyUrl);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      toast({ title: "Couldn't copy", variant: "destructive" });
+    } else {
+      toast({
+        title: "Couldn't copy",
+        description: copyUrl,
+        variant: "destructive",
+      });
     }
   };
 
@@ -2036,7 +2075,7 @@ function ShareLinkPanel({
           type="button"
           variant="outline"
           className="h-8 shrink-0"
-          disabled={!fullUrl}
+          disabled={!copyUrl}
           onClick={copy}
           data-testid="button-copy-share-link"
         >
