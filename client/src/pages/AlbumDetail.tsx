@@ -38,10 +38,11 @@ import { toast } from "@/hooks/use-toast";
 import { IconButton } from "@/components/ui/IconButton";
 import { ChromeScrim } from "@/components/ui/ChromeScrim";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
-import { ChevronLeft, Share, MoreHorizontal, Lock } from "lucide-react";
+import { ChevronLeft, Share, MoreHorizontal, Lock, Loader2 } from "lucide-react";
 import { buyEnabled, nativeDownloadsEnabled } from "@/lib/platform";
 import { downloadSong, removeDownload, listDownloadedSongs } from "@/lib/nativeDownloads";
 import { track } from "@/lib/analytics";
+import Hls from "hls.js";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { useRecordRecent } from "@/hooks/useRecents";
 import { ALBUMS, getSongsByAlbum, getCreditsForSong, PEOPLE, INSTRUMENTS, type Song, type Album, type Person, type Instrument, type InstrumentVendor, type TrackPerformer, type TrackCredits } from "@/data/musicData";
@@ -3495,17 +3496,169 @@ function InAppBrowserSheet({
 // /api/albums/:id) so we keep one round-trip per surface rather than
 // bloating the album payload that every other surface (search, library,
 // playlist hydration) already loads.
-interface BonusVideo { id: string; albumId: string; title: string; videoUrl: string; posterUrl: string | null; position: number; }
+interface BonusVideo {
+  id: string;
+  albumId: string;
+  title: string;
+  // Fans never receive the raw source URL — GET /api/albums/:id/videos
+  // strips it for non-admins so the master never leaves as a file. Stays
+  // optional here because only the admin payload carries it.
+  videoUrl?: string;
+  posterUrl: string | null;
+  position: number;
+  // Mux pipeline — bonus videos stream as signed adaptive HLS, never the
+  // raw object-storage MP4. `muxStatus`: null | "preparing" | "ready" |
+  // "errored". The fan payload exposes only muxPlaybackId/muxStatus.
+  muxPlaybackId?: string | null;
+  muxStatus?: string | null;
+}
 interface BonusPhoto { id: string; albumId: string; photoUrl: string; caption: string | null; position: number; }
 
-// Bonus-video tile with poster fallback. When the <video> element
-// can't decode the source (legacy .mov / .m4v rows that slipped past
-// the importer, codec the browser refuses, transient 404 on the
-// object, etc.), we hide the <video>, keep the poster as a still
-// background, and overlay a small "Couldn't play this video" line so
-// the shelf doesn't go visually blank.
+// Bonus-video tile. Fans stream Mux signed adaptive HLS (hls.js drives
+// MSE on Chrome/Firefox, native HLS on Safari/iOS) — we never fall back
+// to the raw object-storage MP4, so the original upload never leaves as a
+// downloadable file. Until Mux finishes encoding (the legacy cohort that
+// pre-dates this pipeline ingests lazily on first view) the tile shows a
+// "Preparing this video…" state instead of going blank. Tap-to-play so
+// we only mint a signed URL (and only start watch analytics) on intent.
 function BonusVideoPlayer({ video, locked = false }: { video: BonusVideo; locked?: boolean }) {
-  const [errored, setErrored] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const hlsRef = useRef<Hls | null>(null);
+  const [phase, setPhase] = useState<"idle" | "loading" | "active" | "preparing" | "error">("idle");
+
+  // Watch-through analytics — fire once per quartile, mirroring the audio
+  // play funnel. Refs (not state) so the high-frequency timeupdate handler
+  // never triggers re-renders.
+  const startedRef = useRef(false);
+  const milestonesRef = useRef<Set<number>>(new Set());
+  const lastTimeRef = useRef(0);
+
+  const teardown = () => {
+    if (hlsRef.current) {
+      try { hlsRef.current.destroy(); } catch { /* noop */ }
+      hlsRef.current = null;
+    }
+  };
+  useEffect(() => () => teardown(), []);
+
+  const attach = (url: string) => {
+    const el = videoRef.current;
+    if (!el) return;
+    const isHls = /\.m3u8(\?|$)/i.test(url);
+    if (isHls && !el.canPlayType("application/vnd.apple.mpegurl") && Hls.isSupported()) {
+      teardown();
+      const hls = new Hls({ enableWorker: true });
+      hlsRef.current = hls;
+      hls.on(Hls.Events.ERROR, (_e, data) => {
+        if (data?.fatal) {
+          console.error("[bonus-video] hls fatal", data.type, data.details);
+          setPhase("error");
+        }
+      });
+      hls.loadSource(url);
+      hls.attachMedia(el);
+    } else {
+      el.src = url;
+      el.load();
+    }
+  };
+
+  const startPlayback = async () => {
+    if (locked || phase === "loading" || phase === "active") return;
+    setPhase("loading");
+    try {
+      const r = await fetch(`/api/album-videos/${video.id}/playback-url`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (r.status === 409 || r.status === 503) {
+        // Not ready yet (still encoding / lazy-ingest just kicked off).
+        setPhase("preparing");
+        return;
+      }
+      if (!r.ok) {
+        setPhase("error");
+        return;
+      }
+      const json = (await r.json()) as { url?: string };
+      if (!json?.url) {
+        setPhase("error");
+        return;
+      }
+      attach(json.url);
+      setPhase("active");
+      requestAnimationFrame(() => {
+        videoRef.current?.play().catch(() => { /* user can hit the native control */ });
+      });
+    } catch (err) {
+      console.error("[bonus-video] playback request failed", err);
+      setPhase("error");
+    }
+  };
+
+  const refs = () => ({ albumId: video.albumId, videoId: video.id });
+
+  const handlePlay = () => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    const el = videoRef.current;
+    track("video_play_start", {
+      ...refs(),
+      videoTitle: video.title,
+      duration: el && Number.isFinite(el.duration) ? el.duration : undefined,
+    });
+  };
+
+  const handleTimeUpdate = () => {
+    const el = videoRef.current;
+    if (!el || !Number.isFinite(el.duration) || el.duration <= 0) return;
+    const pct = (el.currentTime / el.duration) * 100;
+    for (const m of [25, 50, 75] as const) {
+      if (pct >= m && !milestonesRef.current.has(m)) {
+        milestonesRef.current.add(m);
+        track("video_progress", { ...refs(), percent: m, at: el.currentTime, duration: el.duration });
+      }
+    }
+    // Steady playhead position for seek-delta reporting.
+    if (!el.seeking) lastTimeRef.current = el.currentTime;
+  };
+
+  const handleEnded = () => {
+    const el = videoRef.current;
+    track("video_complete", {
+      ...refs(),
+      at: el?.currentTime ?? 0,
+      duration: el && Number.isFinite(el.duration) ? el.duration : 0,
+    });
+  };
+
+  const handlePause = () => {
+    const el = videoRef.current;
+    if (!el || el.ended) return;
+    const duration = Number.isFinite(el.duration) ? el.duration : 0;
+    track("video_pause", {
+      ...refs(),
+      at: el.currentTime,
+      duration,
+      percent: duration > 0 ? Math.round((el.currentTime / duration) * 100) : 0,
+    });
+  };
+
+  const handleSeeked = () => {
+    const el = videoRef.current;
+    if (!el) return;
+    const from = lastTimeRef.current;
+    const to = el.currentTime;
+    lastTimeRef.current = to;
+    if (Math.abs(to - from) < 0.5) return;
+    track("video_seek", {
+      ...refs(),
+      from,
+      to,
+      duration: Number.isFinite(el.duration) ? el.duration : 0,
+    });
+  };
+
   if (locked) {
     return (
       <div
@@ -3536,39 +3689,77 @@ function BonusVideoPlayer({ video, locked = false }: { video: BonusVideo; locked
       </div>
     );
   }
+
   return (
     <div
       className="relative rounded-lg overflow-hidden bg-black/40"
       style={{ aspectRatio: "16 / 9" }}
     >
-      {!errored ? (
-        <video
-          src={video.videoUrl}
-          poster={video.posterUrl ?? undefined}
-          controls
-          playsInline
-          preload="none"
-          className="w-full h-full object-cover"
-          onError={() => setErrored(true)}
-          data-testid={`video-album-bonus-${video.id}`}
-        />
-      ) : (
+      {/* The <video> is always mounted (hls.js needs the element to attach
+          to) but stays empty + hidden until the fan taps play and we have
+          a signed URL. */}
+      <video
+        ref={videoRef}
+        poster={video.posterUrl ?? undefined}
+        controls={phase === "active"}
+        playsInline
+        preload="none"
+        className="w-full h-full object-cover"
+        style={{ display: phase === "active" ? "block" : "none" }}
+        onPlay={handlePlay}
+        onTimeUpdate={handleTimeUpdate}
+        onEnded={handleEnded}
+        onPause={handlePause}
+        onSeeked={handleSeeked}
+        onError={() => setPhase("error")}
+        data-testid={`video-album-bonus-${video.id}`}
+      />
+
+      {phase !== "active" && (
         <>
           {video.posterUrl ? (
-            <img
-              src={video.posterUrl}
-              alt=""
-              className="w-full h-full object-cover"
-            />
+            <img src={video.posterUrl} alt="" className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full bg-black/60" />
           )}
-          <div
-            className="absolute inset-x-0 bottom-0 flex items-center justify-center px-3 py-2 text-xs font-medium text-fan-primary bg-black/55 backdrop-blur-sm"
-            data-testid={`text-album-bonus-video-unplayable-${video.id}`}
+          {/* Central control is always live while not playing — in the
+              "preparing"/"error" states it doubles as a retry so a fan
+              whose lazy-ingest just kicked off can tap again instead of
+              being stuck until reload. */}
+          <button
+            type="button"
+            onClick={startPlayback}
+            disabled={phase === "loading"}
+            className="absolute inset-0 flex items-center justify-center"
+            aria-label={phase === "preparing" || phase === "error" ? `Retry ${video.title}` : `Play ${video.title}`}
+            data-testid={`button-play-album-bonus-${video.id}`}
           >
-            Couldn't play this video
-          </div>
+            <span className="w-12 h-12 rounded-full bg-black/55 flex items-center justify-center">
+              {phase === "loading" ? (
+                <Loader2 className="w-5 h-5 text-fan-primary animate-spin" strokeWidth={2.4} />
+              ) : (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" className="text-fan-primary translate-x-[1px]">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </span>
+          </button>
+          {phase === "preparing" && (
+            <div
+              className="absolute inset-x-0 bottom-0 flex items-center justify-center px-3 py-2 text-xs font-medium text-fan-primary bg-black/55 backdrop-blur-sm pointer-events-none"
+              data-testid={`text-album-bonus-video-preparing-${video.id}`}
+            >
+              Preparing this video — tap to retry
+            </div>
+          )}
+          {phase === "error" && (
+            <div
+              className="absolute inset-x-0 bottom-0 flex items-center justify-center px-3 py-2 text-xs font-medium text-fan-primary bg-black/55 backdrop-blur-sm pointer-events-none"
+              data-testid={`text-album-bonus-video-unplayable-${video.id}`}
+            >
+              Couldn't play this video — tap to retry
+            </div>
+          )}
         </>
       )}
     </div>

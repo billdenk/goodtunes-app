@@ -528,6 +528,16 @@ export const albumVideos = pgTable("album_videos", {
   // Bill can copy/open the original. Never shown fan-side.
   sourceUrl: text("source_url"),
   position: integer("position").notNull().default(0),
+  // Mux pipeline — bonus videos stream as signed, adaptive-bitrate HLS
+  // (same path as audio masters), NOT as the raw progressive MP4. The
+  // original upload above (`videoUrl`) is preserved in Object Storage and
+  // used only as Mux's ingest source. `muxStatus`: null | "preparing" |
+  // "ready" | "errored". A row only plays fan-side when status is "ready"
+  // and a playback id exists; otherwise the player shows a "preparing" tile.
+  muxAssetId: text("mux_asset_id"),
+  muxPlaybackId: text("mux_playback_id"),
+  muxStatus: text("mux_status"),
+  muxLastError: text("mux_last_error"),
   ...softDeleteCols,
 });
 
@@ -2904,7 +2914,14 @@ export const insertJobRunSchema = createInsertSchema(jobRuns).omit({ id: true, f
 export type InsertJobRun = z.infer<typeof insertJobRunSchema>;
 export type JobRun = typeof jobRuns.$inferSelect;
 
-export const insertAlbumVideoSchema = createInsertSchema(albumVideos).omit({ id: true });
+export const insertAlbumVideoSchema = createInsertSchema(albumVideos).omit({
+  id: true,
+  // Mux fields are server-managed (ingest pipeline / webhook), never client-set.
+  muxAssetId: true,
+  muxPlaybackId: true,
+  muxStatus: true,
+  muxLastError: true,
+});
 export type InsertAlbumVideo = z.infer<typeof insertAlbumVideoSchema>;
 export type AlbumVideo = typeof albumVideos.$inferSelect;
 

@@ -9,6 +9,7 @@ Out of scope here: dashboards / chart pages. Those are tracked on the roadmap.
 Every event GoodTunes fires has a name and a typed payload declared in [`shared/analytics.ts`](../shared/analytics.ts). **That file is the source of truth** — this list is descriptive, not authoritative. The registry is grouped by domain:
 
 - **playback** — `play_start`, `play_30s`, `play_complete`, `play_skip`, `play_seek`, `play_pause`, `play_resume`
+- **video** — `video_play_start`, `video_progress` (quartiles 25/50/75), `video_complete`, `video_pause`, `video_seek` (album bonus videos; fired from the Mux-backed `BonusVideoPlayer` on `AlbumDetail`, each carries `albumId` + `videoId`)
 - **library** — `favorite_song`, `unfavorite_song`, `favorite_artist`, `unfavorite_artist`, `follow_artist` (mirrors the additive star-toggle so dashboards can pivot on the follow concept)
 - **playlists** — `playlist_created`, `playlist_renamed`, `playlist_deleted`, `song_added_to_playlist`, `song_removed_from_playlist`
 - **discovery** — `search_performed`, `search_result_clicked`, `album_viewed`, `artist_viewed`, `song_viewed`

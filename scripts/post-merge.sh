@@ -393,6 +393,34 @@ SQL
 migrate_songs_mux_retry_ladder dev  "${DATABASE_URL:-}"
 migrate_songs_mux_retry_ladder prod "${PROD_DATABASE_URL:-}"
 
+# Bonus videos now stream through Mux (signed adaptive HLS) just like audio
+# masters. album_videos carries the same four Mux columns. Pre-create on
+# both DBs to keep the publish dev→prod diff empty and stop the video
+# ingest/playback routes + reconcile sweep from 500'ing on a freshly-cloned
+# dev. All additive nullable text — safe; the original upload stays in
+# Object Storage as the ingest source.
+migrate_album_videos_mux() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping album_videos mux migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE album_videos
+  ADD COLUMN IF NOT EXISTS mux_asset_id    text,
+  ADD COLUMN IF NOT EXISTS mux_playback_id text,
+  ADD COLUMN IF NOT EXISTS mux_status      text,
+  ADD COLUMN IF NOT EXISTS mux_last_error  text;
+SQL
+  then
+    echo "post-merge: album_videos mux migration ok on $label"
+  else
+    echo "post-merge: WARNING — album_videos mux migration failed on $label (continuing)"
+  fi
+}
+migrate_album_videos_mux dev  "${DATABASE_URL:-}"
+migrate_album_videos_mux prod "${PROD_DATABASE_URL:-}"
+
 # Task #937 — branded order-receipt email. orders.receipt_email_sent_at
 # is the atomic single-send claim (UPDATE … WHERE receipt_email_sent_at
 # IS NULL). Pre-create on both DBs so the publish dev→prod diff stays

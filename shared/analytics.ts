@@ -56,6 +56,17 @@ export interface AnalyticsEventMap {
   // device picker opens (only reachable on iOS Safari with a target nearby).
   airplay_picker_opened: EntityRefs;
 
+  // ─── Bonus-video playback ────────────────────────────────────
+  // Album bonus videos stream as signed Mux HLS. These mirror the audio
+  // playback funnel so dashboards can pivot on watch-through. `videoId` is
+  // the album_videos row id; `albumId` rides on EntityRefs. `duration` /
+  // `at` are seconds. `video_progress` fires once per quartile crossed.
+  video_play_start: EntityRefs & { videoId: string; videoTitle?: string; albumTitle?: string; duration?: number };
+  video_progress: EntityRefs & { videoId: string; percent: 25 | 50 | 75; at: number; duration: number };
+  video_complete: EntityRefs & { videoId: string; at: number; duration: number };
+  video_pause: EntityRefs & { videoId: string; at: number; duration: number; percent: number };
+  video_seek: EntityRefs & { videoId: string; from: number; to: number; duration: number };
+
   // ─── Library ─────────────────────────────────────────────────
   favorite_song: EntityRefs;
   unfavorite_song: EntityRefs;

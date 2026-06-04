@@ -11718,7 +11718,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const album = await loadAlbumForBonusRead(req, res);
     if (!album) return;
     const rows = await storage.listAlbumVideos(album.id);
-    return res.json(rows);
+    // Admins (CMS) get the full row — they edit videoUrl/sourceUrl and
+    // need the raw source to manage the asset. Fans stream Mux-only, so we
+    // never disclose the raw object-storage source URL (a publicly
+    // fetchable /objects/ master) or the internal Mux asset id — that would
+    // hand out the downloadable original we promise never leaves as a file.
+    if (await isAdminUser(req)) return res.json(rows);
+    const safe = rows.map((v: any) => ({
+      id: v.id,
+      albumId: v.albumId,
+      title: v.title,
+      description: v.description ?? null,
+      posterUrl: v.posterUrl ?? null,
+      position: v.position,
+      muxPlaybackId: v.muxPlaybackId ?? null,
+      muxStatus: v.muxStatus ?? null,
+    }));
+    return res.json(safe);
   });
   app.get("/api/albums/:id/photos", async (req, res) => {
     const album = await loadAlbumForBonusRead(req, res);
@@ -11742,6 +11758,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const v = await storage.createAlbumVideo(parsed.data);
+    // Kick off Mux ingest so the bonus video streams as signed adaptive
+    // HLS (same pipeline as audio masters). Fire-and-forget; the fan
+    // player polls /playback-url until the webhook flips it to ready.
+    maybeIngestVideoToMux(v.id, v.videoUrl);
     return res.status(201).json(v);
   });
   app.put("/api/admin/album-videos/:id", requireAdminBearer, async (req, res) => {
@@ -11749,8 +11769,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     // `albumId` is immutable from this endpoint — strip it if a client sends it.
     const { albumId: _i, ...patch } = parsed.data as any;
+    const prev = await storage.getAlbumVideoById(String(req.params.id));
+    const videoUrlChanged =
+      typeof patch.videoUrl === "string" && !!prev && patch.videoUrl !== prev.videoUrl;
+    if (videoUrlChanged) {
+      // New source file → drop the stale Mux asset so the row re-ingests
+      // from scratch and never serves the old encode.
+      patch.muxAssetId = null;
+      patch.muxPlaybackId = null;
+      patch.muxStatus = null;
+      patch.muxLastError = null;
+    }
     const v = await storage.updateAlbumVideo(String(req.params.id), patch);
     if (!v) return res.status(404).json({ message: "Video not found" });
+    if (videoUrlChanged) maybeIngestVideoToMux(v.id, v.videoUrl);
     return res.json(v);
   });
   app.delete("/api/admin/album-videos/:id", requireAdminBearer, async (req, res) => {
@@ -17075,6 +17107,104 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     })();
   }
 
+  // ─── Bonus-video Mux pipeline (mirror of the audio helper above) ──
+  // Album bonus videos go through the same Mux path as audio masters:
+  // the original upload stays in Object Storage purely as the ingest
+  // source, and fans stream signed, adaptive-bitrate HLS. Reuses
+  // createAssetFromUrl (playback_policy ["signed"], video_quality
+  // "basic" = the full adaptive ladder up to 1080p at the cost-efficient
+  // tier — the right call for promo videos). Fire-and-forget like the
+  // audio helper; the fan player polls /playback-url until it's ready.
+  // Function *declaration* so it's hoisted to the earlier video CRUD
+  // callsites (POST/PUT /api/admin/...videos).
+  async function maybeIngestVideoToMux(videoId: string, videoUrl: string | null | undefined) {
+    if (!isMuxConfigured() || !videoUrl) return;
+    if (!videoUrl.startsWith("/objects/")) return;
+    (async () => {
+      try {
+        const cur = await storage.getAlbumVideoById(videoId);
+        // Skip if another caller already attached a healthy asset — keeps
+        // the create hook, lazy-backfill, and reconcile sweep from racing
+        // into duplicate Mux assets for the same video.
+        if (cur?.muxAssetId && cur.muxStatus !== "errored") return;
+        const publicUrl = await objectStorage.getSignedDownloadUrl(videoUrl);
+        const asset = await createAssetFromUrl(publicUrl);
+        await storage.updateAlbumVideo(videoId, {
+          muxAssetId: asset.assetId,
+          muxPlaybackId: asset.playbackId,
+          muxStatus: asset.status,
+          muxLastError: null,
+        });
+        console.log(`[mux-video] video=${videoId} asset=${asset.assetId} status=${asset.status}`);
+      } catch (err: any) {
+        try {
+          await storage.updateAlbumVideo(videoId, {
+            muxStatus: "errored",
+            muxLastError: `ingest-create: ${err?.message ?? "unknown"}`.slice(0, 500),
+          });
+        } catch { /* secondary failure — already logged below */ }
+        console.error(`[mux-video] video=${videoId} failed`, err?.message);
+      }
+    })();
+  }
+
+  // Bonus-video reconcile — lean counterpart to the song sweeps below
+  // (no persisted retry ladder; bonus videos are low-volume). One pass
+  // does two jobs:
+  //   • Heal rows stuck in a non-terminal status because their
+  //     `video.asset.ready` webhook never landed (poll Mux for truth).
+  //   • Ingest rows that have an /objects video but no Mux asset yet —
+  //     the legacy cohort that pre-dates this pipeline, plus any that
+  //     errored on a previous attempt.
+  let muxVideoReconcileInFlight = false;
+  async function reconcileMuxVideos(reason: string): Promise<void> {
+    if (!isMuxConfigured() || muxVideoReconcileInFlight) return;
+    muxVideoReconcileInFlight = true;
+    try {
+      const all = await storage.listAllAlbumVideos();
+      const stuck = all.filter(
+        (v: any) => v.muxAssetId && v.muxStatus !== "ready" && v.muxStatus !== "errored",
+      );
+      const needIngest = all.filter(
+        (v: any) =>
+          typeof v.videoUrl === "string" &&
+          v.videoUrl.startsWith("/objects/") &&
+          v.muxStatus !== "ready" &&
+          (!v.muxAssetId || v.muxStatus === "errored"),
+      );
+      if (stuck.length === 0 && needIngest.length === 0) return;
+      console.log(
+        `[mux-video-reconcile:${reason}] ${stuck.length} stuck, ${needIngest.length} to ingest`,
+      );
+      for (const v of stuck) {
+        try {
+          const asset: any = await getAsset((v as any).muxAssetId);
+          if (asset?.status !== "ready" && asset?.status !== "errored") continue;
+          const pb = (asset.playback_ids || []).find((p: any) => p.policy === "signed");
+          await storage.updateAlbumVideo(v.id, {
+            muxStatus: asset.status,
+            muxPlaybackId: pb?.id ?? (v as any).muxPlaybackId,
+            muxLastError:
+              asset.status === "errored"
+                ? (extractMuxAssetError(asset) ?? (v as any).muxLastError ?? "errored")
+                : null,
+          });
+        } catch (err: any) {
+          console.error(`[mux-video-reconcile:${reason}] heal ${v.id} failed: ${err?.message}`);
+        }
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      for (const v of needIngest) {
+        maybeIngestVideoToMux(v.id, (v as any).videoUrl);
+        await new Promise((r) => setTimeout(r, 250));
+      }
+    } catch (err: any) {
+      console.error(`[mux-video-reconcile:${reason}] sweep failed`, err?.message);
+    } finally {
+      muxVideoReconcileInFlight = false;
+    }
+  }
+
   app.post("/api/admin/songs/:id/mux-ingest", requireAdminBearer, async (req, res) => {
     if (!isMuxConfigured()) {
       return res.status(503).json({ message: "Mux not configured (missing MUX_* env vars)" });
@@ -17334,6 +17464,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Fan-facing bonus-video playback. Unlike /api/songs/:id/playback-url
+  // (gated behind requireAuth + ownership) bonus videos are promotional
+  // and shown to everyone the album page is shown to — including
+  // anonymous visitors on public share pages — so this stays open. The
+  // upgrade is delivery, not access: fans get a short-lived *signed* HLS
+  // URL instead of a permanent public file URL, and the original upload
+  // never leaves Object Storage as a downloadable master. No raw-MP4
+  // fallback — if Mux isn't ready the player shows a "preparing" tile.
+  app.post("/api/album-videos/:id/playback-url", async (req, res) => {
+    if (!isMuxConfigured()) return res.status(503).json({ message: "Mux not configured" });
+    const video = await storage.getAlbumVideoById(req.params.id as string);
+    if (!video) return res.status(404).json({ message: "Video not found" });
+    if (!video.muxPlaybackId) {
+      // Legacy cohort (pre-Mux) or a row that errored — kick a lazy
+      // ingest so it heals on first view, and report the state so the
+      // player can render "preparing" rather than failing silently.
+      if (!video.muxAssetId && video.videoUrl?.startsWith("/objects/")) {
+        maybeIngestVideoToMux(video.id, video.videoUrl);
+      }
+      return res.status(409).json({
+        message: "No Mux playback for this video",
+        status: video.muxStatus ?? "preparing",
+        lastError: (video as any).muxLastError ?? null,
+      });
+    }
+    if (video.muxStatus !== "ready") {
+      return res.status(409).json({
+        message: "Mux asset not ready",
+        status: video.muxStatus,
+        lastError: (video as any).muxLastError ?? null,
+      });
+    }
+    try {
+      const url = await signPlaybackUrl(video.muxPlaybackId);
+      res.json({ url, expiresInSec: 3600 });
+    } catch (err: any) {
+      console.error("[video-playback-url] failed", err?.message);
+      res.status(500).json({ message: err?.message || "Failed to sign playback URL" });
+    }
+  });
+
   // Mux fires lifecycle events here. Keep this BEFORE express.json() body
   // parsing would normally apply (Express already parsed JSON for other
   // routes, but we use the verifier with the stringified payload, which
@@ -17355,7 +17526,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const songs = await storage.getAllSongs({ includeHidden: true });
       const song = songs.find((s: any) => s.muxAssetId === assetId);
-      if (!song) return res.json({ ok: true, ignored: "no matching song" });
+      if (!song) {
+        // No song owns this asset — it may be an album bonus video, which
+        // shares the same Mux account/webhook. Match + update it here so
+        // videos flip to "ready" on the webhook (not just the slow
+        // reconcile sweep), mirroring the song path above.
+        const vids = await storage.listAllAlbumVideos();
+        const vid = vids.find((v: any) => v.muxAssetId === assetId);
+        if (!vid) return res.json({ ok: true, ignored: "no matching song or video" });
+        const vpb = (payload.data?.playback_ids || []).find((p: any) => p.policy === "signed");
+        const vStatus =
+          type === "video.asset.ready"
+            ? "ready"
+            : type === "video.asset.errored"
+              ? "errored"
+              : payload.data?.status || vid.muxStatus;
+        await storage.updateAlbumVideo(vid.id, {
+          muxStatus: vStatus,
+          muxPlaybackId: vpb?.id ?? vid.muxPlaybackId,
+          ...(vStatus === "ready"
+            ? { muxLastError: null }
+            : vStatus === "errored"
+              ? { muxLastError: "asset.errored (webhook)" }
+              : {}),
+        });
+        return res.json({ ok: true, matched: "album_video" });
+      }
       const pb = (payload.data?.playback_ids || []).find((p: any) => p.policy === "signed");
       const newStatus =
         type === "video.asset.ready"
@@ -17614,6 +17810,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       backfillMuxIngest("interval");
     }, 30 * 60 * 1000).unref();
 
+    // Bonus-video reconcile — one combined sweep (heal stuck + ingest
+    // missing) every 5 min. Lower cadence than songs because bonus
+    // videos are low-volume and a single sweep covers both jobs.
+    setInterval(() => {
+      reconcileMuxVideos("interval");
+    }, 5 * 60 * 1000).unref();
+
     setTimeout(async () => {
       try {
         await reconcileStuckMuxSongs("boot");
@@ -17622,6 +17825,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // pass 1 just discovered to be `errored` is eligible for retry
         // in the same boot run — not just on the next restart.
         await backfillMuxIngest("boot");
+        // Bonus videos — backfill the legacy cohort + heal any stuck row.
+        await reconcileMuxVideos("boot");
       } catch (err: any) {
         console.error("[mux-backfill] boot sweep failed", err?.message);
       }

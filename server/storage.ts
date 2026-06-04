@@ -171,6 +171,7 @@ export interface IStorage {
   // album delete keeps orphan rows out of the DB.
   listAlbumVideos(albumId: string): Promise<AlbumVideo[]>;
   listAllAlbumVideos(): Promise<AlbumVideo[]>;
+  getAlbumVideoById(id: string): Promise<AlbumVideo | undefined>;
   createAlbumVideo(data: InsertAlbumVideo): Promise<AlbumVideo>;
   updateAlbumVideo(id: string, data: Partial<AlbumVideo>): Promise<AlbumVideo | undefined>;
   deleteAlbumVideo(id: string): Promise<void>;
@@ -1133,6 +1134,11 @@ export class DbStorage implements IStorage {
   }
   async listAllAlbumVideos(): Promise<AlbumVideo[]> {
     return db.select().from(albumVideos).where(isNull(albumVideos.deletedAt));
+  }
+  async getAlbumVideoById(id: string): Promise<AlbumVideo | undefined> {
+    const [v] = await db.select().from(albumVideos)
+      .where(and(eq(albumVideos.id, id), isNull(albumVideos.deletedAt)));
+    return v;
   }
   async createAlbumVideo(data: InsertAlbumVideo): Promise<AlbumVideo> {
     const [v] = await db.insert(albumVideos).values(data as any).returning();
