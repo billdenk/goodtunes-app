@@ -356,11 +356,15 @@ export function BuySheet({
         onClick={(e) => e.stopPropagation()}
         data-testid="sheet-buy"
       >
-        <div className="flex items-center justify-between px-5 pt-5 pb-3">
-          <div className="text-[15px] font-semibold">
+        {/* Apple "Continue with Email" modal shape — the close chip floats
+            in the top-LEFT corner and the title sits centered, rather than
+            the prior title-left / close-right header bar. Content below is
+            unchanged. */}
+        <div className="relative flex items-center px-5 pt-5 pb-3">
+          <SheetClose onClick={onClose} data-testid="button-close-buy" />
+          <div className="absolute left-1/2 -translate-x-1/2 text-base font-semibold">
             {inCheckout ? "Checkout" : "Buy this album"}
           </div>
-          <SheetClose onClick={onClose} data-testid="button-close-buy" />
         </div>
 
         {!inCheckout && (
