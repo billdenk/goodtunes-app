@@ -697,6 +697,19 @@ export function AdminAlbums() {
               disabled={createAlbum.isPending}
               onClick={() => {
                 if (createAlbum.isPending) return;
+                // Task #1251 — artist-role users already are the artist,
+                // so skip the "Who's the artist?" picker and go straight
+                // to naming the album with their own identity attached.
+                // Other roles (super_admin/admin/label) keep the picker;
+                // an artist with no scope id falls back to it too.
+                if (user?.role === "artist" && user.roleScopeId) {
+                  setPendingArtist({
+                    name: user.roleScopeName || user.displayName,
+                    id: user.roleScopeId,
+                  });
+                  setTitleDialogOpen(true);
+                  return;
+                }
                 setArtistDialogOpen(true);
               }}
               className="px-2.5 py-1.5 rounded-md text-[11.5px] font-semibold inline-flex items-center gap-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"

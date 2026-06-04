@@ -25,6 +25,13 @@ interface AuthUser {
   // Task #734 — fan's chosen streaming service for stream-elsewhere
   // handoffs ("spotify" | "apple_music"). Null until they pick one.
   favoriteStreamingService?: string | null;
+  // Task #1251 — caller's resolved admin role + (for partner roles)
+  // their scope id and display name. God roles (super_admin/admin) carry
+  // a null scope. Used to skip the "Who's the artist?" picker for
+  // artist-role users and label the auto-attached artist.
+  role?: string | null;
+  roleScopeId?: string | null;
+  roleScopeName?: string | null;
 }
 
 // Login can return one of:

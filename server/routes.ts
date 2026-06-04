@@ -810,7 +810,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const user = await storage.getUser(req.session.userId!);
     if (!user) return res.status(404).json({ message: "User not found" });
     const photoUrl = await storage.getProfilePhoto(user.id);
-    return res.json(shapeAdmin(user, photoUrl));
+    // Task #1251 — surface the caller's resolved role + (for partner
+    // roles) their scope id and a display name so the client can skip
+    // the "Who's the artist?" picker for artist-role users and label the
+    // auto-attached artist. God roles (super_admin/admin) carry a null
+    // scope; artist scope ids point at a `people` row so resolve its name.
+    const { getPartnerScope } = await import("./auth/roles");
+    const scope = await getPartnerScope(user.id);
+    let roleScopeName: string | null = null;
+    if (scope.role === "artist" && scope.roleScopeId) {
+      const person = await storage.getPersonById(scope.roleScopeId);
+      roleScopeName = person?.name ?? null;
+    }
+    return res.json({
+      ...shapeAdmin(user, photoUrl),
+      role: scope.role,
+      roleScopeId: scope.roleScopeId,
+      roleScopeName,
+    });
   });
 
   app.put("/api/me", requireAuth, async (req, res) => {
