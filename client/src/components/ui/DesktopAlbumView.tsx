@@ -157,6 +157,12 @@ export type DesktopAlbumViewProps = {
    *  /collection (mirrors the mobile album surface's back carat). */
   onBack?: () => void;
 
+  /** Clicking (or Enter/Space on) an unlocked bonus-video card calls this
+   *  with the video id so the host can open the playback modal — mirrors the
+   *  mobile inline tap-to-play. Locked/unowned cards never invoke it. When
+   *  omitted (e.g. the admin preview) the cards stay non-interactive. */
+  onPlayVideo?: (videoId: string) => void;
+
   /** Optional right-side lyrics slide-in panel. When `lyrics` is supplied
    *  AND `lyricsOpen=true`, a 360-wide panel animates in from the right
    *  edge; the main content column smoothly reflows to make room and
@@ -247,6 +253,7 @@ export function DesktopAlbumView({
   onDownloadCert,
   isMultiOwned = false,
   onBack,
+  onPlayVideo,
   lyricsOpen,
   lyrics,
   compact = false,
@@ -810,6 +817,7 @@ export function DesktopAlbumView({
                 }))}
                 locked={!isOwned}
                 kind="video"
+                onPlayItem={onPlayVideo}
               />
             </section>
           )}
@@ -1111,10 +1119,15 @@ export function BonusGrid({
   items,
   locked,
   kind,
+  onPlayItem,
 }: {
   items: { id: string; thumb: string; label: string }[];
   locked: boolean;
   kind: "video" | "photo";
+  // Video cards only: invoked when the fan clicks (or presses Enter/Space on)
+  // an unlocked tile, so the host can open the playback modal. Omitted for
+  // photos and ignored while locked.
+  onPlayItem?: (id: string) => void;
 }) {
   // Task #1118 — fans never see the dashed-border "No {kind}s yet"
   // placeholder. Empty bonus sections are hidden upstream so this branch
@@ -1137,11 +1150,27 @@ export function BonusGrid({
       {items.map((it) =>
         isVideo ? (
           // Video card: thumbnail + caption below (Apple Music Music Videos style).
+          // Unlocked tiles are an accessible button-like control: click or
+          // Enter/Space opens the playback modal (matches the mobile tap-to-
+          // play). Locked tiles stay inert (no handler, no role).
           <div
             key={it.id}
             className="group flex flex-col gap-1.5"
             style={{ cursor: locked ? "default" : "pointer" }}
             tabIndex={!locked ? 0 : undefined}
+            role={!locked && onPlayItem ? "button" : undefined}
+            aria-label={!locked && onPlayItem ? `Play ${it.label || "video"}` : undefined}
+            onClick={!locked && onPlayItem ? () => onPlayItem(it.id) : undefined}
+            onKeyDown={
+              !locked && onPlayItem
+                ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onPlayItem(it.id);
+                    }
+                  }
+                : undefined
+            }
             data-testid={`thumb-${kind}-${it.id}`}
           >
             <div className="relative aspect-video rounded-xl overflow-hidden bg-white/5">

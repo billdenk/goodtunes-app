@@ -55,7 +55,9 @@ import {
 } from "@/components/ui/DesktopAlbumView";
 import type { PlayerSong } from "@/context/PlayerContext";
 import type { Album as PlayerAlbum, Person } from "@/data/musicData";
-import { PersonDetailSheet, ProvenanceSheet, OwnershipSheet } from "@/pages/AlbumDetail";
+import { PersonDetailSheet, ProvenanceSheet, OwnershipSheet, BonusVideoPlayer } from "@/pages/AlbumDetail";
+import { X } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { goBack } from "@/lib/navHistory";
 import { track } from "@/lib/analytics";
@@ -240,6 +242,20 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const [provenanceCertNum, setProvenanceCertNum] = useState<number | null>(null);
   const [showOwnership, setShowOwnership] = useState(false);
   const [showAlbumPlaylistPicker, setShowAlbumPlaylistPicker] = useState(false);
+  // Bonus video opened for playback in the desktop modal. Holds the id of the
+  // clicked card; the overlay reuses the mobile BonusVideoPlayer (autoStart)
+  // so a click plays straight away. Cleared on close.
+  const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
+  // Escape closes the bonus-video playback modal (mirrors the click-on-scrim
+  // dismiss). Only listens while a video is open.
+  useEffect(() => {
+    if (!playingVideoId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPlayingVideoId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [playingVideoId]);
 
   // Person opened from the album-credits sheet. The desktop view has no
   // SuperCredits sheet stack of its own, so PersonDetailSheet brings its own
@@ -699,6 +715,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             onDownloadCert={pdfOrder ? downloadPdf : undefined}
             isMultiOwned={isMulti}
             onBack={() => goBack(navigate)}
+            onPlayVideo={effectiveOwned ? setPlayingVideoId : undefined}
             onBuyBundle={buyEnabled ? handleBuyBundle : undefined}
             signedCertPriceCents={buyEnabled ? signedCertPriceCents : null}
             signedCertSoldOut={signedCertSoldOut}
@@ -965,6 +982,68 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
           onClose={() => setCreditsForSong(null)}
         />
       ) : null}
+
+      {/* Bonus-video playback modal. Clicking an unlocked video card on the
+          desktop album page opens this full-screen overlay, reusing the same
+          BonusVideoPlayer the mobile bonus tile uses (autoStart so the click
+          plays straight away). Only mounts for owned albums — the card never
+          invokes onPlayVideo while locked. */}
+      <AnimatePresence>
+        {playingVideoId && (() => {
+          const v = videos.find((x) => x.id === playingVideoId);
+          if (!v) return null;
+          return (
+            <motion.div
+              key="bonus-video-modal"
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 bg-black/85"
+              initial={reduceMotion ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={reduceMotion ? { duration: 0 } : { duration: 0.18 }}
+              onClick={() => setPlayingVideoId(null)}
+              role="dialog"
+              aria-modal="true"
+              aria-label={v.title ?? "Bonus video"}
+              data-testid="modal-bonus-video"
+            >
+              <div
+                className="relative w-full max-w-5xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <IconButton
+                  size="md"
+                  variant="glass"
+                  label="Close video"
+                  onClick={() => setPlayingVideoId(null)}
+                  className="absolute -top-12 right-0"
+                  data-testid="button-close-bonus-video"
+                >
+                  <X strokeWidth={2.2} />
+                </IconButton>
+                {v.title && (
+                  <p
+                    className="absolute -top-10 left-0 text-fan-primary text-sm font-semibold truncate max-w-[calc(100%-3rem)]"
+                    data-testid="text-bonus-video-title"
+                  >
+                    {v.title}
+                  </p>
+                )}
+                <BonusVideoPlayer
+                  key={v.id}
+                  video={{
+                    id: v.id,
+                    albumId: v.albumId,
+                    title: v.title ?? "Untitled",
+                    posterUrl: v.posterUrl ?? null,
+                    position: 0,
+                  }}
+                  autoStart
+                />
+              </div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
     </div>
   );
 }

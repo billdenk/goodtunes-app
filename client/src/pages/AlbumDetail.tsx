@@ -3567,12 +3567,19 @@ export function BonusVideoPlayer({
   video,
   locked = false,
   retryDelaysMs = BONUS_VIDEO_RETRY_DELAYS_MS,
+  autoStart = false,
 }: {
   video: BonusVideo;
   locked?: boolean;
   // Test seam: override the auto-retry backoff schedule so jsdom tests can
   // exercise recovery + give-up without waiting real seconds.
   retryDelaysMs?: number[];
+  // Desktop reuses this player inside a click-to-open modal: the fan already
+  // tapped the card to express play intent, so the modal asks the player to
+  // start immediately rather than making them tap the badge a second time.
+  // Off by default so the mobile inline tile (and its tests) keep their
+  // tap-to-play contract.
+  autoStart?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -3683,6 +3690,14 @@ export function BonusVideoPlayer({
       setPhase("error");
     }
   };
+
+  // Desktop click-to-open modal: kick off playback as soon as the player
+  // mounts (the card click was the play intent). Mobile leaves autoStart off
+  // so its inline tile keeps tap-to-play. Runs once on mount.
+  useEffect(() => {
+    if (autoStart && !locked) void startPlayback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const refs = () => ({ albumId: video.albumId, videoId: video.id });
 
