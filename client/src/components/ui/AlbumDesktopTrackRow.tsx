@@ -85,7 +85,7 @@ export function AlbumDesktopTrackRow({
 
   return (
     <div
-      className="group relative flex items-center gap-4 h-12 px-4 rounded-xl transition-colors"
+      className="group relative flex items-center gap-3 h-12 px-3 rounded-xl transition-colors"
       style={{ background: bg, cursor: interactive && onPlay ? "pointer" : "default" }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -102,26 +102,25 @@ export function AlbumDesktopTrackRow({
           present). See docs/design-system.md → "Track-row hairline". */}
       <span
         aria-hidden
-        className="absolute left-4 right-4 bottom-0 h-px bg-white/10"
+        className="absolute left-3 right-3 bottom-0 h-px bg-white/10"
       />
-      {/* Leading favorite heart — sits to the left of the number, reserves
-          its slot even when empty so titles stay aligned across rows. Reads
-          as a quiet status marker (neutral white ~70%, like Apple's row
-          dots), not the loud brand rose. Stays visible while the row plays —
-          it lives in its own cell, separate from the equalizer. */}
-      <div className="w-3 flex items-center justify-center" aria-hidden>
-        {isFavorite && (
-          <svg
-            width="11"
-            height="11"
-            viewBox="0 0 24 24"
-            fill="rgba(255,255,255,0.55)"
-            data-testid={`icon-favorite-row-${trackNumber}`}
-          >
-            <path d="M12 21s-7-4.5-9.5-9C1 9 2.5 5 6.5 5c2 0 3.5 1 5.5 3 2-2 3.5-3 5.5-3 4 0 5.5 4 4 7-2.5 4.5-9.5 9-9.5 9z" />
-          </svg>
-        )}
-      </div>
+      {/* Leading favorite heart — Apple-style, sits in the left gutter
+          (absolute, just left of the number) so it never pushes the number
+          or title inward. Quiet white ~55%, not the loud brand rose; not a
+          tap target. Favoriting is toggled from the ⋯ menu. */}
+      {isFavorite && (
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="rgba(255,255,255,0.55)"
+          aria-hidden
+          data-testid={`icon-favorite-row-${trackNumber}`}
+          className="absolute left-0 -ml-1 top-1/2 -translate-y-1/2"
+        >
+          <path d="M12 21s-7-4.5-9.5-9C1 9 2.5 5 6.5 5c2 0 3.5 1 5.5 3 2-2 3.5-3 5.5-3 4 0 5.5 4 4 7-2.5 4.5-9.5 9-9.5 9z" />
+        </svg>
+      )}
 
       {/* Track number / play affordance / equalizer cell. */}
       <div className="w-6 text-right relative h-5">

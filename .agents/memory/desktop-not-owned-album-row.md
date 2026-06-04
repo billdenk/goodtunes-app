@@ -26,3 +26,20 @@ they were removed on Bill's explicit direction.
 favorite actions and shuffle don't apply before purchase.
 **How to apply:** scope additions to `isOwned` (or the row's `showMenu`) rather than
 showing them unconditionally; keep the Buy pill's two-label grid so width stays stable.
+
+## Apple track-row left alignment
+
+The desktop track row content (number/title) must sit close to the album-art left
+edge, Apple-style — NOT floating far right. The row's left edge already equals the
+album-art left edge (both at the column padding). What pushed content inward was a
+leading favorite-heart flex cell (`w-3` + `gap`). That heart is now rendered
+**absolute in the left gutter** (`absolute left-0 -ml-1`), so it never displaces the
+number. Row uses `gap-3 px-3` (not `gap-4 px-4`); hairlines inset `left-3 right-3` /
+top `mx-3`. Top gap album-bottom → first rule is the tab-content wrapper `mt-5`
+(was `mt-6`) — Apple's gap is tight.
+
+**Why:** Bill compared against Apple Music (Paul McCartney "RAM"); our numbers sat
+~62px right of the art edge vs Apple's ~18px. Do NOT re-add a leading flex cell for
+the favorite — it re-introduces the offset.
+**How to apply:** keep the favorite heart absolute/gutter; tune leading inset via the
+row's `px-*`/`gap-*`, not by adding cells before the number.
