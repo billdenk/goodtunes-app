@@ -22983,6 +22983,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         : [...songs].sort(
             (a: any, b: any) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0),
           );
+      // Task #541 — the side-break tracklist the plant needs (which
+      // tracks sit on A vs B, with each track's run time) is ALREADY
+      // captured by the operator in the vinyl-order panel — it lives on
+      // songs.vinylSide / vinylOrder. Assemble it here so the per-side
+      // length check runs for real and the "Tracklist" requirement clears,
+      // instead of falsely reporting "no side-break tracklist supplied".
+      // When no sides are assigned yet, leave it undefined so the checks
+      // correctly fall back to fail/warn ("supply a side-break tracklist").
+      const sideBreaks = anyVinylAssigned
+        ? (() => {
+            const bySide = new Map<string, { order: number; dur: number }[]>();
+            for (const s of songs as any[]) {
+              if (!s.vinylSide || s.vinylOrder == null) continue;
+              const arr = bySide.get(s.vinylSide) ?? [];
+              arr.push({
+                order: (s.vinylOrder as number) ?? 0,
+                dur: (s.duration as number) ?? 0,
+              });
+              bySide.set(s.vinylSide, arr);
+            }
+            return [...bySide.entries()]
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([side, rows]) => ({
+                side,
+                trackTimesSeconds: rows
+                  .sort((x, y) => x.order - y.order)
+                  .map((r) => r.dur),
+              }));
+          })()
+        : undefined;
       let validated = 0;
       let missing = 0;
       for (const song of sorted as any[]) {
@@ -23029,6 +23059,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           // the per-track "one file per side" check to that side so
           // plants requiring side-tagging (e.g. Hellbender) pass cleanly.
           side: (song.vinylSide as string | null) ?? null,
+          // Feed the assembled side-break tracklist (from the vinyl-order
+          // panel) so the Tracklist + Side length checks evaluate against
+          // real data rather than warning that none was supplied.
+          sideBreaks,
         });
         const extMatch = url.match(/\.(\w+)(?:\?|$)/);
         const ext = extMatch ? extMatch[0] : "";
