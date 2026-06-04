@@ -150,13 +150,19 @@ const video = {
   muxStatus: "ready",
 };
 
-async function mount(props: { locked?: boolean }) {
+async function mount(props: { locked?: boolean; retryDelaysMs?: number[] }) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   let root: any;
   await act(async () => {
     root = createRoot(container);
-    root.render(h(BonusVideoPlayer, { video, locked: props.locked }));
+    root.render(
+      h(BonusVideoPlayer, {
+        video,
+        locked: props.locked,
+        retryDelaysMs: props.retryDelaysMs,
+      }),
+    );
   });
   const q = (id: string) =>
     container.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
@@ -318,6 +324,138 @@ for (const status of [409, 503] as const) {
     }
   });
 }
+
+// Task #1179 — auto-retry while a clip is still encoding.
+//
+// A 409/503 means Mux hasn't finished encoding yet. Rather than stranding
+// the fan on a "tap to retry" caption (most won't keep tapping), the tile
+// quietly re-polls the playback-url endpoint a bounded number of times with
+// backoff and recovers on its own once Mux reports ready. We inject a
+// zero-delay backoff schedule so the test exercises the recovery + give-up
+// behaviour without waiting real seconds.
+
+test("unlocked bonus tile: a still-processing tile auto-recovers when a later poll returns a ready signed URL", async () => {
+  // The first poll is "still encoding" (409); every poll after that hands
+  // back a ready signed URL — simulating Mux finishing encoding between
+  // attempts. Using a call-counting stub keeps the assertion independent of
+  // exactly which settle frame the (zero-delay) backoff timer fires on.
+  const realFetch = g.fetch;
+  let calls = 0;
+  g.fetch = async (input: any) => {
+    fetchCalls.push(String(input));
+    calls += 1;
+    if (calls === 1) {
+      return { ok: false, status: 409, json: async () => ({}) } as any;
+    }
+    return { ok: true, status: 200, json: async () => ({ url: SIGNED_URL }) } as any;
+  };
+  const before = fetchCalls.length;
+  const { q, click, settle, teardown } = await mount({ retryDelaysMs: [2000, 4000] });
+  try {
+    const playBtn = q(`button-play-album-bonus-${VIDEO_ID}`);
+    assert.ok(playBtn, "idle tile renders the play badge button");
+
+    await click(playBtn!);
+    await settle();
+
+    // The first poll said "still preparing".
+    assert.ok(
+      q(`text-album-bonus-video-preparing-${VIDEO_ID}`),
+      "the first 409 surfaces the preparing caption",
+    );
+    assert.equal(
+      calls,
+      1,
+      "only the manual poll has fired so far (the backoff timer is still pending)",
+    );
+
+    // Let the scheduled auto-retry fire (no manual tap needed). The injected
+    // backoff is real-time (2s), so advance time past it.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 2200));
+    });
+    await settle();
+
+    const playingVideo = q(`video-album-bonus-${VIDEO_ID}`) as HTMLVideoElement | null;
+    assert.ok(playingVideo, "the <video> is mounted after the auto-retry");
+    assert.equal(
+      playingVideo!.style.display,
+      "block",
+      "the auto-retry recovers and the video becomes visible without a manual tap",
+    );
+    assert.equal(
+      q(`text-album-bonus-video-preparing-${VIDEO_ID}`),
+      null,
+      "the preparing caption clears once the auto-retry succeeds",
+    );
+    // The auto-retry actually re-polled the endpoint (manual tap + 1 auto).
+    const autoPolls = fetchCalls
+      .slice(before)
+      .filter((u) => u.includes(`/api/album-videos/${VIDEO_ID}/playback-url`));
+    assert.ok(
+      autoPolls.length >= 2,
+      "the tile re-polled the playback URL on its own at least once",
+    );
+  } finally {
+    g.fetch = realFetch;
+    await teardown();
+  }
+});
+
+test("unlocked bonus tile: auto-retry is bounded — it gives up to the manual retry caption after the cap, and a manual tap refreshes the budget", async () => {
+  // Stay 409 forever so we exhaust the (two-attempt) budget.
+  nextFetchResponse = { ok: false, status: 409, json: async () => ({}) };
+  const { q, click, settle, teardown } = await mount({ retryDelaysMs: [0, 0] });
+  try {
+    const playBtn = q(`button-play-album-bonus-${VIDEO_ID}`);
+    assert.ok(playBtn, "idle tile renders the play badge button");
+
+    const before = fetchCalls.length;
+    await click(playBtn!);
+    // Pump enough frames for both budgeted auto-retries to fire.
+    await settle(12);
+
+    const polls = () =>
+      fetchCalls
+        .slice(before)
+        .filter((u) => u.includes(`/api/album-videos/${VIDEO_ID}/playback-url`))
+        .length;
+
+    // manual tap + 2 auto-retries = 3 polls, then it stops.
+    assert.equal(polls(), 3, "the manual poll plus two budgeted auto-retries fired");
+
+    // Settling further must not produce more polls — the budget is spent.
+    await settle(12);
+    assert.equal(polls(), 3, "no further auto-retries once the cap is reached");
+
+    // The fan is left with the tappable manual-retry affordance.
+    const preparing = q(`text-album-bonus-video-preparing-${VIDEO_ID}`);
+    assert.ok(preparing, "the preparing caption remains after the cap");
+    assert.match(
+      preparing!.textContent ?? "",
+      /retry/i,
+      "the caption invites a manual retry once auto-retry gives up",
+    );
+    const retryBtn = q(`button-play-album-bonus-${VIDEO_ID}`) as HTMLButtonElement | null;
+    assert.ok(retryBtn, "the badge stays mounted as a manual retry affordance");
+    assert.ok(!retryBtn!.disabled, "the badge is tappable after auto-retry gives up");
+
+    // A manual tap refreshes the retry budget → another round of polls fires.
+    const beforeManual = fetchCalls.length;
+    await click(retryBtn!);
+    await settle(12);
+    const afterManual = fetchCalls
+      .slice(beforeManual)
+      .filter((u) => u.includes(`/api/album-videos/${VIDEO_ID}/playback-url`))
+      .length;
+    assert.ok(
+      afterManual >= 2,
+      "tapping retry resets the budget and kicks off another round of auto-retries",
+    );
+  } finally {
+    await teardown();
+  }
+});
 
 test("unlocked bonus tile: a non-ok playback-url response shows the unplayable caption with a tappable retry", async () => {
   nextFetchResponse = { ok: false, status: 500, json: async () => ({}) };

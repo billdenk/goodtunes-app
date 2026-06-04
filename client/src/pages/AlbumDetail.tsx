@@ -3522,7 +3522,24 @@ interface BonusPhoto { id: string; albumId: string; photoUrl: string; caption: s
 // pre-dates this pipeline ingests lazily on first view) the tile shows a
 // "Preparing this video…" state instead of going blank. Tap-to-play so
 // we only mint a signed URL (and only start watch analytics) on intent.
-export function BonusVideoPlayer({ video, locked = false }: { video: BonusVideo; locked?: boolean }) {
+// Backoff schedule (ms) for auto-retrying a still-encoding bonus video.
+// Capped + bounded: a freshly-uploaded clip usually finishes encoding a few
+// seconds after upload, so we poll the playback-url endpoint a handful of
+// times before falling back to the manual "tap to retry" affordance. Tests
+// inject a zero-delay schedule via the `retryDelaysMs` prop.
+const BONUS_VIDEO_RETRY_DELAYS_MS = [2000, 4000, 8000];
+
+export function BonusVideoPlayer({
+  video,
+  locked = false,
+  retryDelaysMs = BONUS_VIDEO_RETRY_DELAYS_MS,
+}: {
+  video: BonusVideo;
+  locked?: boolean;
+  // Test seam: override the auto-retry backoff schedule so jsdom tests can
+  // exercise recovery + give-up without waiting real seconds.
+  retryDelaysMs?: number[];
+}) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const [phase, setPhase] = useState<"idle" | "loading" | "active" | "preparing" | "error">("idle");
@@ -3534,13 +3551,27 @@ export function BonusVideoPlayer({ video, locked = false }: { video: BonusVideo;
   const milestonesRef = useRef<Set<number>>(new Set());
   const lastTimeRef = useRef(0);
 
+  // Auto-retry bookkeeping. `retryCountRef` is the number of auto-retries
+  // already scheduled this attempt (reset on a manual tap); `retryTimerRef`
+  // holds the pending backoff timer so we can cancel it on a manual tap or
+  // unmount.
+  const retryCountRef = useRef(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearRetryTimer = () => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  };
+
   const teardown = () => {
     if (hlsRef.current) {
       try { hlsRef.current.destroy(); } catch { /* noop */ }
       hlsRef.current = null;
     }
   };
-  useEffect(() => () => teardown(), []);
+  useEffect(() => () => { teardown(); clearRetryTimer(); }, []);
 
   const attach = (url: string) => {
     const el = videoRef.current;
@@ -3564,8 +3595,15 @@ export function BonusVideoPlayer({ video, locked = false }: { video: BonusVideo;
     }
   };
 
-  const startPlayback = async () => {
+  const startPlayback = async (opts?: { auto?: boolean }) => {
     if (locked || phase === "loading" || phase === "active") return;
+    // A manual tap (anything that isn't a scheduled auto-retry) cancels any
+    // pending backoff and refreshes the retry budget, so the fan always gets
+    // a fresh round of attempts on intent.
+    if (!opts?.auto) {
+      clearRetryTimer();
+      retryCountRef.current = 0;
+    }
     setPhase("loading");
     try {
       const r = await fetch(`/api/album-videos/${video.id}/playback-url`, {
@@ -3573,19 +3611,33 @@ export function BonusVideoPlayer({ video, locked = false }: { video: BonusVideo;
         credentials: "include",
       });
       if (r.status === 409 || r.status === 503) {
-        // Not ready yet (still encoding / lazy-ingest just kicked off).
+        // Not ready yet (still encoding / lazy-ingest just kicked off). Show
+        // the preparing caption and quietly auto-retry with backoff a bounded
+        // number of times before leaving the fan with the manual retry tap.
         setPhase("preparing");
+        if (retryCountRef.current < retryDelaysMs.length) {
+          const delay = retryDelaysMs[retryCountRef.current];
+          retryCountRef.current += 1;
+          clearRetryTimer();
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null;
+            void startPlayback({ auto: true });
+          }, delay);
+        }
         return;
       }
       if (!r.ok) {
+        clearRetryTimer();
         setPhase("error");
         return;
       }
       const json = (await r.json()) as { url?: string };
       if (!json?.url) {
+        clearRetryTimer();
         setPhase("error");
         return;
       }
+      clearRetryTimer();
       attach(json.url);
       setPhase("active");
       requestAnimationFrame(() => {
@@ -3593,6 +3645,7 @@ export function BonusVideoPlayer({ video, locked = false }: { video: BonusVideo;
       });
     } catch (err) {
       console.error("[bonus-video] playback request failed", err);
+      clearRetryTimer();
       setPhase("error");
     }
   };
