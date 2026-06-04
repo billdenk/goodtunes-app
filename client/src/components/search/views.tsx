@@ -232,17 +232,21 @@ export function FullResults({
 }) {
   // Per-category drill lists. "top" is intentionally absent — Top
   // Results renders as a sectioned view of best-N-per-type below.
+  // Every category is `?? []`-guarded: a partial search payload (a category
+  // key present but null) reaches here whenever counts.top > 0 from a sibling
+  // category, and an unguarded `.slice()` / spread on a null array would crash
+  // the whole fan app (Task #1259, same root cause as useFanSearch).
   const itemsForCategory = (k: CategoryKey): Hit[] => {
     switch (k) {
       case "top":       return [];
-      case "artists":   return results.artists;
-      case "albums":    return results.albums;
-      case "songs":     return results.songs;
-      case "gear":      return results.instruments;
-      case "vendors":   return results.vendors;
-      case "labels":    return results.labels;
-      case "people":    return results.people;
-      case "playlists": return results.playlists;
+      case "artists":   return results.artists ?? [];
+      case "albums":    return results.albums ?? [];
+      case "songs":     return results.songs ?? [];
+      case "gear":      return results.instruments ?? [];
+      case "vendors":   return results.vendors ?? [];
+      case "labels":    return results.labels ?? [];
+      case "people":    return results.people ?? [];
+      case "playlists": return results.playlists ?? [];
     }
   };
 
@@ -250,16 +254,16 @@ export function FullResults({
   // category, in Apple's pill order. Bonus video/photo gets a small
   // tail block so it's still discoverable without a dedicated pill.
   const topSections: { key: CategoryKey; label: string; items: Hit[] }[] = ([
-    { key: "artists",   label: CATEGORY_LABELS.artists,   items: results.artists.slice(0, TOP_RESULTS_PER_SECTION) },
-    { key: "albums",    label: CATEGORY_LABELS.albums,    items: results.albums.slice(0, TOP_RESULTS_PER_SECTION) },
-    { key: "songs",     label: CATEGORY_LABELS.songs,     items: results.songs.slice(0, TOP_RESULTS_PER_SECTION) },
-    { key: "gear",      label: CATEGORY_LABELS.gear,      items: results.instruments.slice(0, TOP_RESULTS_PER_SECTION) },
-    { key: "vendors",   label: CATEGORY_LABELS.vendors,   items: results.vendors.slice(0, TOP_RESULTS_PER_SECTION) },
-    { key: "labels",    label: CATEGORY_LABELS.labels,    items: results.labels.slice(0, TOP_RESULTS_PER_SECTION) },
-    { key: "people",    label: CATEGORY_LABELS.people,    items: results.people.slice(0, TOP_RESULTS_PER_SECTION) },
-    { key: "playlists", label: CATEGORY_LABELS.playlists, items: results.playlists.slice(0, TOP_RESULTS_PER_SECTION) },
+    { key: "artists",   label: CATEGORY_LABELS.artists,   items: (results.artists ?? []).slice(0, TOP_RESULTS_PER_SECTION) },
+    { key: "albums",    label: CATEGORY_LABELS.albums,    items: (results.albums ?? []).slice(0, TOP_RESULTS_PER_SECTION) },
+    { key: "songs",     label: CATEGORY_LABELS.songs,     items: (results.songs ?? []).slice(0, TOP_RESULTS_PER_SECTION) },
+    { key: "gear",      label: CATEGORY_LABELS.gear,      items: (results.instruments ?? []).slice(0, TOP_RESULTS_PER_SECTION) },
+    { key: "vendors",   label: CATEGORY_LABELS.vendors,   items: (results.vendors ?? []).slice(0, TOP_RESULTS_PER_SECTION) },
+    { key: "labels",    label: CATEGORY_LABELS.labels,    items: (results.labels ?? []).slice(0, TOP_RESULTS_PER_SECTION) },
+    { key: "people",    label: CATEGORY_LABELS.people,    items: (results.people ?? []).slice(0, TOP_RESULTS_PER_SECTION) },
+    { key: "playlists", label: CATEGORY_LABELS.playlists, items: (results.playlists ?? []).slice(0, TOP_RESULTS_PER_SECTION) },
   ] as { key: CategoryKey; label: string; items: Hit[] }[]).filter((s) => s.items.length > 0);
-  const bonusItems = [...results.videos, ...results.photos].slice(0, TOP_RESULTS_PER_SECTION);
+  const bonusItems = [...(results.videos ?? []), ...(results.photos ?? [])].slice(0, TOP_RESULTS_PER_SECTION);
 
   return (
     <div>

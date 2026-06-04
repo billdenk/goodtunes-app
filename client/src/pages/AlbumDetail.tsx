@@ -1962,7 +1962,7 @@ function PerformerSheet({
       tracks: PersonProfile["tracks"];
     }>;
     const byAlbum = new Map<string, { albumId: string; albumTitle: string; albumArtwork: string; albumYear: number | null; tracks: PersonProfile["tracks"] }>();
-    for (const t of profile.tracks) {
+    for (const t of profile.tracks ?? []) {
       if (t.albumId === album.id) continue;
       const entry = byAlbum.get(t.albumId) ?? {
         albumId: t.albumId,
@@ -1986,7 +1986,7 @@ function PerformerSheet({
     type GearEntry = { id: string; name: string; shortCategory: string | null; category: string | null; photoUrl: string | null; tracks: Set<string> };
     const byInstrument = new Map<string, GearEntry>();
     if (profile) {
-      for (const t of profile.tracks) {
+      for (const t of profile.tracks ?? []) {
         if (!t.instrumentId) continue;
         const entry = byInstrument.get(t.instrumentId) ?? {
           id: t.instrumentId,
@@ -2025,7 +2025,7 @@ function PerformerSheet({
       .sort((a, b) => b.trackCount - a.trackCount || a.name.localeCompare(b.name));
   })();
 
-  const totalTrackCount = profile?.tracks.length ?? (onThisSong.length + otherTracks.length);
+  const totalTrackCount = profile?.tracks?.length ?? (onThisSong.length + otherTracks.length);
 
   // Open an instrument by id, even when it lives on an album outside the
   // current page's static instrument map. Falls back to a minimal synthetic
@@ -3233,7 +3233,7 @@ function VendorSheet({
               // who actually played a vendor's instrument — producers and
               // lyricists don't get tagged on a gear-driven page.
               const label = t === "about" ? "About" : t === "instruments" ? "Gear" : "Artists";
-              const count = t === "instruments" ? profile?.instruments.length : t === "artists" ? usedBy.length : undefined;
+              const count = t === "instruments" ? profile?.instruments?.length : t === "artists" ? usedBy.length : undefined;
               return (
                 <button
                   key={t}
@@ -3308,11 +3308,11 @@ function VendorSheet({
               <p className="text-[14px]" style={{ color: "rgba(235,235,245,0.5)" }}>Couldn't load instruments. Try again later.</p>
             ) : !profile ? (
               <p className="text-[14px]" style={{ color: "rgba(235,235,245,0.5)" }}>Loading…</p>
-            ) : profile.instruments.length === 0 ? (
+            ) : (profile.instruments?.length ?? 0) === 0 ? (
               <p className="text-[14px]" style={{ color: "rgba(235,235,245,0.5)" }}>No instruments attached yet.</p>
             ) : (
               <ul className="flex flex-col">
-                {profile.instruments.map((inst, idx) => {
+                {(profile.instruments ?? []).map((inst, idx) => {
                   // Build a fan-side Instrument from the profile payload so
                   // tapping the row can hand off straight to InstrumentSheet
                   // without a second fetch. Nulls → undefined to match the

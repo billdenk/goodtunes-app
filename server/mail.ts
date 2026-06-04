@@ -658,6 +658,7 @@ export type ErrorReportPayload = {
   provider?: string | null;
   step?: string | null;
   route?: string | null;
+  componentName?: string | null;
   userAgent?: string | null;
   viewport?: string | null;
   timestamp: string;
@@ -692,6 +693,7 @@ export async function sendErrorReportEmail(
     `When: ${payload.timestamp}`,
     `Who:  ${idLine}`,
     `Where: ${payload.route ?? "(unknown route)"}`,
+    payload.componentName ? `Component: ${payload.componentName}` : null,
     payload.provider ? `Provider: ${payload.provider}${payload.step ? ` / step ${payload.step}` : ""}` : null,
     payload.userAgent ? `UA: ${payload.userAgent}` : null,
     payload.viewport ? `Viewport: ${payload.viewport}` : null,
@@ -706,6 +708,7 @@ export async function sendErrorReportEmail(
     ["When", payload.timestamp],
     ["Who", idLine],
     ["Where", payload.route ?? "(unknown route)"],
+    payload.componentName ? ["Component", payload.componentName] : null,
     payload.provider ? ["Provider", `${payload.provider}${payload.step ? ` / step ${payload.step}` : ""}`] : null,
     payload.userAgent ? ["User agent", payload.userAgent] : null,
     payload.viewport ? ["Viewport", payload.viewport] : null,

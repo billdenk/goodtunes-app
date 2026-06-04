@@ -27,6 +27,14 @@ export default defineConfig({
     },
   },
   root: path.resolve(import.meta.dirname, "client"),
+  // Keep function/class names through minification so the React
+  // componentStack in production names real components (e.g. "AlbumDetail")
+  // instead of mangled identifiers like "U" — this is what makes the
+  // tap-to-report "Component:" line useful in prod, where we ship no source
+  // maps (Task #1259). Negligible bundle-size cost.
+  esbuild: {
+    keepNames: true,
+  },
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,

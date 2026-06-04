@@ -62,18 +62,25 @@ export function useFanSearch(opts?: { onNavigate?: () => void }) {
   });
 
   const r = data?.results;
+  // Each category is optional-chained on BOTH `r` AND the array itself: a
+  // malformed/partial search payload (a category key present but null, or a
+  // 200 with a null body) would otherwise crash here with
+  // `null is not an object (evaluating 'r.artists.length')` — and since
+  // useFanSearch backs the BottomNav search dock mounted on every fan page,
+  // that took down the whole fan app on iOS Safari (Task #1259). Treat a
+  // missing/null category as "0 results", never throw.
   const counts: Record<CategoryKey, number> = {
     top: 0,
-    artists: r?.artists.length ?? 0,
-    albums: r?.albums.length ?? 0,
-    songs: r?.songs.length ?? 0,
-    gear: r?.instruments.length ?? 0,
-    vendors: r?.vendors.length ?? 0,
-    labels: r?.labels.length ?? 0,
-    people: r?.people.length ?? 0,
-    playlists: r?.playlists.length ?? 0,
+    artists: r?.artists?.length ?? 0,
+    albums: r?.albums?.length ?? 0,
+    songs: r?.songs?.length ?? 0,
+    gear: r?.instruments?.length ?? 0,
+    vendors: r?.vendors?.length ?? 0,
+    labels: r?.labels?.length ?? 0,
+    people: r?.people?.length ?? 0,
+    playlists: r?.playlists?.length ?? 0,
   };
-  const bonusCount = (r?.videos.length ?? 0) + (r?.photos.length ?? 0);
+  const bonusCount = (r?.videos?.length ?? 0) + (r?.photos?.length ?? 0);
   counts.top =
     counts.artists + counts.albums + counts.songs + bonusCount +
     counts.gear + counts.vendors + counts.labels + counts.people + counts.playlists;
@@ -83,17 +90,20 @@ export function useFanSearch(opts?: { onNavigate?: () => void }) {
   // → Gear → Vendors → Labels → People → Playlists → Bonus.
   const unifiedHits: Hit[] = useMemo(() => {
     if (!r) return [];
+    // `?? []` on every category for the same reason as `counts` above —
+    // spreading a null category (`...null`) throws "is not iterable" and
+    // would crash the search dock on a partial payload.
     return [
-      ...r.artists,
-      ...r.albums,
-      ...r.songs,
-      ...r.instruments,
-      ...r.vendors,
-      ...r.labels,
-      ...r.people,
-      ...r.playlists,
-      ...r.videos,
-      ...r.photos,
+      ...(r.artists ?? []),
+      ...(r.albums ?? []),
+      ...(r.songs ?? []),
+      ...(r.instruments ?? []),
+      ...(r.vendors ?? []),
+      ...(r.labels ?? []),
+      ...(r.people ?? []),
+      ...(r.playlists ?? []),
+      ...(r.videos ?? []),
+      ...(r.photos ?? []),
     ];
   }, [r]);
 

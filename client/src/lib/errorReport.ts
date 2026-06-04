@@ -10,6 +10,13 @@ export type FriendlyErrorContext = {
   provider?: string | null;
   step?: string | null;
   serverBody?: string | null;
+  // Task #1259 — self-diagnosing reports. The error boundary parses the
+  // throwing component's name out of React's componentStack and the
+  // current route, and threads them here so a future tap-to-report lands
+  // in the inbox already pointing at the screen + component that broke —
+  // even in prod where the JS stack is otherwise minified/source-mapless.
+  route?: string | null;
+  componentName?: string | null;
 };
 
 export type FriendlyErrorInfo = {
@@ -30,7 +37,12 @@ export type ErrorReportResult =
   | { ok: false; reason: string; mailto: string };
 
 function buildPayload(input: ErrorReportInput) {
-  const route = typeof window !== "undefined" ? window.location.pathname + window.location.search : null;
+  // Prefer the route captured at throw-time (passed in via context) so the
+  // report names the screen that actually broke, not wherever the user
+  // drifted to before tapping "Send". Fall back to the live URL.
+  const route =
+    input.context.route ??
+    (typeof window !== "undefined" ? window.location.pathname + window.location.search : null);
   const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : null;
   const viewport =
     typeof window !== "undefined"
@@ -43,6 +55,7 @@ function buildPayload(input: ErrorReportInput) {
     step: input.context.step ?? null,
     serverBody: input.context.serverBody ?? null,
     route,
+    componentName: input.context.componentName ?? null,
     userAgent,
     viewport,
     timestamp: new Date().toISOString(),
@@ -68,6 +81,7 @@ function buildMailto(target: string, input: ErrorReportInput): string {
     `When: ${payload.timestamp}`,
     payload.reporterEmail ? `From: ${payload.reporterEmail}` : null,
     `Where: ${payload.route ?? ""}`,
+    payload.componentName ? `Component: ${payload.componentName}` : null,
     payload.userAgent ? `UA: ${payload.userAgent}` : null,
     payload.viewport ? `Viewport: ${payload.viewport}` : null,
     payload.provider ? `Provider: ${payload.provider}${payload.step ? ` / ${payload.step}` : ""}` : null,

@@ -1749,6 +1749,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         provider: trim(body.provider, 40),
         step: trim(body.step, 80),
         route: trim(body.route, 500),
+        componentName: trim(body.componentName, 200),
         userAgent: trim(body.userAgent, 500),
         viewport: trim(body.viewport, 40),
         timestamp: trim(body.timestamp, 40) || new Date().toISOString(),

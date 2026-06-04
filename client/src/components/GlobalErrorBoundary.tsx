@@ -150,6 +150,30 @@ export function installGlobalErrorReporter() {
   });
 }
 
+/**
+ * Pull the throwing component's name out of React's `componentStack`.
+ * Each frame looks like `\n    at AlbumDetail (...)` (or `at AlbumDetail`
+ * with no location). The first frame is the component closest to the
+ * throw; host elements (`div`, `span`, …) are lowercase so we skip them
+ * and return the first real (capitalized) component, falling back to the
+ * very first frame. Names are minified in prod unless the client build
+ * keeps them — see `esbuild.keepNames` in vite.config.ts. Never throws.
+ */
+export function parseComponentName(componentStack?: string | null): string | null {
+  if (!componentStack) return null;
+  try {
+    const frames: string[] = [];
+    const re = /\n?\s*(?:at|in)\s+([A-Za-z0-9$_.]+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(componentStack)) !== null) frames.push(m[1]);
+    if (frames.length === 0) return null;
+    const component = frames.find((f) => /^[A-Z]/.test(f));
+    return component ?? frames[0];
+  } catch {
+    return null;
+  }
+}
+
 export class GlobalErrorBoundary extends Component<
   { children: ReactNode },
   { error: Error | null; info: string | null }
@@ -173,12 +197,18 @@ export class GlobalErrorBoundary extends Component<
     const stack = (e.stack ?? "").split("\n").slice(0, 12).join("\n");
     const comp = (this.state.info ?? "").split("\n").slice(0, 12).join("\n");
     const composedStack = [stack, comp && `\nComponent stack:\n${comp}`].filter(Boolean).join("\n");
+    // Self-diagnosing context (Task #1259): name the throwing component +
+    // capture the route AT THROW-TIME so the report points at the screen
+    // that broke even if the user navigates before tapping "Send".
+    const componentName = parseComponentName(this.state.info);
+    const route =
+      typeof window !== "undefined" ? window.location.pathname + window.location.search : null;
     return (
       <div data-testid="global-error-boundary">
         <FriendlyError
           headline="Something went wrong"
           explanation="The app hit an unexpected snag. Try again or reload — and if it keeps happening, tap below so we can take a look."
-          context={{ source: "global-boundary" }}
+          context={{ source: "global-boundary", componentName, route }}
           error={{ name: e.name || "Error", message: e.message || "(no message)", stack: composedStack }}
           onRetry={this.reset}
           onReload={this.reload}
