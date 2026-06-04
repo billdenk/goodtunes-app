@@ -19520,6 +19520,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (r.role === "label" && labelsIdx.get(scopeId)) return { inviteeKind: "label", inviteeId: scopeId };
       if (r.role === "manufacturer" && mfgIdx.get(scopeId)) return { inviteeKind: "manufacturer", inviteeId: scopeId };
       if (r.role === "non_profit" && npoIdx.get(scopeId)) return { inviteeKind: "non_profit", inviteeId: scopeId };
+      if (r.role === "vendor" && vendorIdx.get(scopeId)) return { inviteeKind: "vendor", inviteeId: scopeId };
       return { inviteeKind: null, inviteeId: null };
     }
     // Referrer is clickable only when refMeta found the row (name present);

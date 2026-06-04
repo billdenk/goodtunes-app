@@ -4,7 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { useHasInAppHistory } from "@/lib/navHistory";
 import { popBounce } from "@/lib/motion";
-import { ChevronLeft, Play, Pause, Shuffle, Lock, Share, Info, X, MoreHorizontal } from "lucide-react";
+import { ChevronLeft, ChevronRight, Play, Pause, Shuffle, Lock, Share, Info, MoreHorizontal } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { BonusPlayBadge } from "@/components/ui/BonusPlayBadge";
 import { IconButton } from "@/components/ui/IconButton";
@@ -338,6 +338,16 @@ export function DesktopAlbumView({
   // hide-empty rule), so fans never see an empty heading or placeholder.
   const hasVideos = videos.length > 0;
   const hasPhotos = photos.length > 0;
+
+  // Apple-Music "Music Videos" treatment: the section shows a horizontally
+  // scrolled rail of up to VIDEO_ROW_CAP wide tiles. A "See All" affordance
+  // on the heading flips the rail into the full stacked grid when there are
+  // more than fit comfortably in one glance. Tapping a tile calls onPlayVideo
+  // so the host opens the full-screen playback modal (the desktop page reuses
+  // the mobile BonusVideoPlayer with autoStart).
+  const VIDEO_ROW_CAP = 10;
+  const [showAllVideos, setShowAllVideos] = useState(false);
+  const showVideoSeeAll = videos.length > 4;
 
   return (
     <div className="flex gap-6 w-full" data-testid="desktop-album-view">
@@ -803,12 +813,32 @@ export function DesktopAlbumView({
               style={{ background: "rgba(255,255,255,0.04)" }}
               data-testid="section-videos"
             >
-              <h2
-                className="text-fan-primary text-xl font-bold tracking-tight mb-4"
-                data-testid="heading-videos"
-              >
-                Videos
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2
+                  className="text-fan-primary text-xl font-bold tracking-tight"
+                  data-testid="heading-videos"
+                >
+                  Videos
+                </h2>
+                {showVideoSeeAll && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllVideos((v) => !v)}
+                    className="flex items-center gap-0.5 text-sm font-semibold text-fan-secondary hover:text-fan-primary transition-colors"
+                    data-testid="button-see-all-videos"
+                    aria-expanded={showAllVideos}
+                  >
+                    {showAllVideos ? "Show Less" : "See All"}
+                    <ChevronRight
+                      className={[
+                        "w-4 h-4 transition-transform",
+                        showAllVideos ? "rotate-90" : "",
+                      ].join(" ")}
+                      strokeWidth={2.4}
+                    />
+                  </button>
+                )}
+              </div>
               <BonusGrid
                 items={videos.map((v) => ({
                   id: v.id,
@@ -818,6 +848,8 @@ export function DesktopAlbumView({
                 locked={!isOwned}
                 kind="video"
                 onPlayItem={onPlayVideo}
+                layout={showAllVideos ? "grid" : "row"}
+                limit={showAllVideos ? undefined : VIDEO_ROW_CAP}
               />
             </section>
           )}
@@ -898,6 +930,7 @@ export function DesktopAlbumView({
           </motion.aside>
         )}
       </AnimatePresence>
+
     </div>
   );
 }
@@ -1120,6 +1153,8 @@ export function BonusGrid({
   locked,
   kind,
   onPlayItem,
+  layout = "grid",
+  limit,
 }: {
   items: { id: string; thumb: string; label: string }[];
   locked: boolean;
@@ -1128,6 +1163,11 @@ export function BonusGrid({
   // an unlocked tile, so the host can open the playback modal. Omitted for
   // photos and ignored while locked.
   onPlayItem?: (id: string) => void;
+  // "grid" — stacked 3-up grid (the See-All / photo layout). "row" — a single
+  // horizontally scrolled Apple-Music rail of fixed-width tiles.
+  layout?: "grid" | "row";
+  // Cap the number of tiles rendered (the rail shows up to N before See-All).
+  limit?: number;
 }) {
   // Task #1118 — fans never see the dashed-border "No {kind}s yet"
   // placeholder. Empty bonus sections are hidden upstream so this branch
@@ -1137,17 +1177,24 @@ export function BonusGrid({
     return null;
   }
   const isVideo = kind === "video";
+  const isRow = isVideo && layout === "row";
+  const shown = typeof limit === "number" ? items.slice(0, limit) : items;
   return (
     <div
-      // Videos: smaller Apple-Music-style cards (3-up) with captions beneath.
-      // Photos: unchanged 3-column square-tile grid.
+      // Videos: smaller Apple-Music-style cards with captions beneath. In
+      // "row" layout they sit on a horizontally scrolled rail; otherwise a
+      // 3-up grid. Photos: unchanged 3-column square-tile grid.
       className={
-        isVideo ? "grid grid-cols-3 gap-3" : "grid grid-cols-3 gap-4"
+        isRow
+          ? "flex gap-3 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1 snap-x"
+          : isVideo
+            ? "grid grid-cols-3 gap-3"
+            : "grid grid-cols-3 gap-4"
       }
       data-testid={`grid-${kind}s`}
       data-locked={locked ? "true" : "false"}
     >
-      {items.map((it) =>
+      {shown.map((it) =>
         isVideo ? (
           // Video card: thumbnail + caption below (Apple Music Music Videos style).
           // Unlocked tiles are an accessible button-like control: click or
@@ -1155,7 +1202,10 @@ export function BonusGrid({
           // play). Locked tiles stay inert (no handler, no role).
           <div
             key={it.id}
-            className="group flex flex-col gap-1.5"
+            className={[
+              "group flex flex-col gap-1.5",
+              isRow ? "flex-shrink-0 w-[260px] snap-start" : "",
+            ].join(" ")}
             style={{ cursor: locked ? "default" : "pointer" }}
             tabIndex={!locked ? 0 : undefined}
             role={!locked && onPlayItem ? "button" : undefined}
@@ -1199,11 +1249,15 @@ export function BonusGrid({
                 </div>
               )}
               {!locked && (
-                // Task #1183 — play badge revealed on hover/focus (Apple Music
-                // wide-video behavior); badge stays mounted so it reads to
-                // assistive tech while only opacity animates.
+                // Play badge revealed on hover/focus, pinned to the
+                // bottom-right corner (Apple Music Music-Videos affordance —
+                // single play control, no overflow menu). Badge stays mounted
+                // so it reads to assistive tech while only opacity animates.
                 <div className="absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 group-focus:opacity-100">
-                  <BonusPlayBadge testId={`badge-play-${kind}-${it.id}`} />
+                  <BonusPlayBadge
+                    placement="bottom-right"
+                    testId={`badge-play-${kind}-${it.id}`}
+                  />
                 </div>
               )}
             </div>

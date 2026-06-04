@@ -74,6 +74,7 @@ function adminHrefFor(kind: string | null, id: string | null): string | null {
   else if (kind === "label") base = `/admin/labels/${id}`;
   else if (kind === "manufacturer") base = `/admin/manufacturers/${id}`;
   else if (kind === "non_profit") base = `/admin/non-profits/${id}`;
+  else if (kind === "vendor") base = `/admin/vendors/${id}`;
   if (!base) return null;
   return `${base}?${BACK}`;
 }

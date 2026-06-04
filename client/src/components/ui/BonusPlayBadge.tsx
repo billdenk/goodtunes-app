@@ -24,13 +24,22 @@ import { Loader2 } from "lucide-react";
 export function BonusPlayBadge({
   loading = false,
   testId,
+  placement = "center",
 }: {
   loading?: boolean;
   testId?: string;
+  // "center" — the original full-overlay placement used by the mobile
+  // tap-to-play player. "bottom-right" — Apple-Music Music-Videos hover
+  // affordance pinned to the lower-right corner of a wide video tile.
+  placement?: "center" | "bottom-right";
 }) {
   return (
     <div
-      className="absolute inset-0 flex items-center justify-center pointer-events-none"
+      className={
+        placement === "bottom-right"
+          ? "absolute inset-0 flex items-end justify-end p-3 pointer-events-none"
+          : "absolute inset-0 flex items-center justify-center pointer-events-none"
+      }
       data-testid={testId}
     >
       <div

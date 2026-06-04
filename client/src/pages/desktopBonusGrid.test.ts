@@ -5,16 +5,15 @@
 // bonusVideoPlayer.test.ts), but had no test. This pins the desktop play-badge
 // contract so a refactor of BonusGrid can't silently regress it.
 //
-// NOTE on scope: unlike the MOBILE `BonusVideoPlayer` (a real tap-to-play
-// <button> that mints a signed URL and swaps in a <video>), the desktop
-// `BonusGrid` play badge is currently a DECORATIVE overlay — a
-// `pointer-events-none` sibling with no click handler and no inline <video>.
-// Clicking a desktop bonus tile does nothing today. So this test pins the
-// contract that actually exists on desktop:
+// NOTE on scope: the MOBILE `BonusVideoPlayer` is a real tap-to-play <button>
+// that mints a signed URL and swaps in a <video>. On desktop the play happens
+// in a lightbox owned by the PARENT (DesktopAlbumView): an unlocked video tile
+// is now a real clickable control that fires `onPlayItem(id)`, and the parent
+// opens the shared player over a scrim. This test pins the BonusGrid contract:
 //   • Unlocked video tile → poster image + play badge over it.
-//   • Locked tile → lock badge, NO play badge (nothing presented as playable).
+//   • Unlocked video tile → clicking (or Enter) fires onPlayItem(id).
+//   • Locked tile → lock badge, NO play badge, and does NOT fire onPlayItem.
 //   • Photo tiles → never carry the (video-only) play badge.
-// (See the proposed follow-up to make desktop bonus videos actually playable.)
 //
 // We render the REAL BonusGrid (exported from DesktopAlbumView.tsx) into
 // jsdom, so a regression fails here instead of in QA.
@@ -105,6 +104,9 @@ async function mount(props: {
   kind: "video" | "photo";
   locked: boolean;
   items?: { id: string; thumb: string; label: string }[];
+  layout?: "grid" | "row";
+  limit?: number;
+  onPlayItem?: (id: string) => void;
 }) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -116,6 +118,9 @@ async function mount(props: {
         items: props.items ?? [videoItem],
         locked: props.locked,
         kind: props.kind,
+        layout: props.layout,
+        limit: props.limit,
+        onPlayItem: props.onPlayItem,
       }),
     );
   });
@@ -153,6 +158,105 @@ test("unlocked desktop video tile: poster shows with the play badge over it", as
       q(`badge-locked-video-${VIDEO_ID}`),
       null,
       "unlocked tile shows no lock badge",
+    );
+  } finally {
+    await teardown();
+  }
+});
+
+test("unlocked desktop video tile: clicking fires onPlayItem with the video id", async () => {
+  const selected: string[] = [];
+  const { q, teardown } = await mount({
+    kind: "video",
+    locked: false,
+    layout: "row",
+    onPlayItem: (id) => selected.push(id),
+  });
+  try {
+    const tile = q(`thumb-video-${VIDEO_ID}`);
+    assert.ok(tile, "the video tile renders");
+    await act(async () => {
+      tile!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+    assert.deepEqual(
+      selected,
+      [VIDEO_ID],
+      "clicking an unlocked video tile fires onPlayItem with its id",
+    );
+  } finally {
+    await teardown();
+  }
+});
+
+test("unlocked desktop video tile: Enter key fires onPlayItem (keyboard parity)", async () => {
+  const selected: string[] = [];
+  const { q, teardown } = await mount({
+    kind: "video",
+    locked: false,
+    layout: "row",
+    onPlayItem: (id) => selected.push(id),
+  });
+  try {
+    const tile = q(`thumb-video-${VIDEO_ID}`);
+    assert.ok(tile, "the video tile renders");
+    await act(async () => {
+      tile!.dispatchEvent(
+        new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+    });
+    assert.deepEqual(
+      selected,
+      [VIDEO_ID],
+      "pressing Enter on a focused video tile fires onPlayItem",
+    );
+  } finally {
+    await teardown();
+  }
+});
+
+test("locked desktop video tile: clicking does NOT fire onPlayItem", async () => {
+  const selected: string[] = [];
+  const { q, teardown } = await mount({
+    kind: "video",
+    locked: true,
+    layout: "row",
+    onPlayItem: (id) => selected.push(id),
+  });
+  try {
+    const tile = q(`thumb-video-${VIDEO_ID}`);
+    assert.ok(tile, "the locked video tile renders");
+    await act(async () => {
+      tile!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+    assert.deepEqual(
+      selected,
+      [],
+      "a locked tile is not playable, so it never fires onPlayItem",
+    );
+  } finally {
+    await teardown();
+  }
+});
+
+test("row layout honors the limit cap (Apple-Music rail shows at most N)", async () => {
+  const many = Array.from({ length: 14 }, (_, i) => ({
+    id: `vid-${i}`,
+    thumb: POSTER,
+    label: `Clip ${i}`,
+  }));
+  const { container, teardown } = await mount({
+    kind: "video",
+    locked: false,
+    layout: "row",
+    limit: 10,
+    items: many,
+  });
+  try {
+    const tiles = container.querySelectorAll('[data-testid^="thumb-video-"]');
+    assert.equal(
+      tiles.length,
+      10,
+      "row layout renders only the first `limit` tiles",
     );
   } finally {
     await teardown();
