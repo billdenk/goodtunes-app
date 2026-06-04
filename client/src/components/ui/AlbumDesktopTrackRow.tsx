@@ -229,7 +229,7 @@ export function AlbumDesktopTrackRow({
           <DropdownMenuContent
             align="end"
             onClick={(e) => e.stopPropagation()}
-            className="min-w-[208px] text-white backdrop-blur-xl"
+            className="min-w-[208px] rounded-2xl p-1.5 text-white backdrop-blur-xl"
             style={{
               background: "rgba(11,19,54,0.95)",
               border: "1px solid rgba(255,255,255,0.1)",
@@ -239,7 +239,7 @@ export function AlbumDesktopTrackRow({
               <DropdownMenuItem
                 data-testid={`menu-track-play-next-${trackNumber}`}
                 onSelect={() => onPlayNext()}
-                className="gap-3 text-white focus:bg-white/10 focus:text-white"
+                className="gap-3 rounded-lg px-3 py-2 text-sm font-normal text-white focus:bg-white/10 focus:text-white"
               >
                 <ListStart className="w-4 h-4" /> Play Next
               </DropdownMenuItem>
@@ -248,7 +248,7 @@ export function AlbumDesktopTrackRow({
               <DropdownMenuItem
                 data-testid={`menu-track-play-last-${trackNumber}`}
                 onSelect={() => onPlayLast()}
-                className="gap-3 text-white focus:bg-white/10 focus:text-white"
+                className="gap-3 rounded-lg px-3 py-2 text-sm font-normal text-white focus:bg-white/10 focus:text-white"
               >
                 <ListEnd className="w-4 h-4" /> Play Last
               </DropdownMenuItem>
@@ -260,7 +260,7 @@ export function AlbumDesktopTrackRow({
               <DropdownMenuItem
                 data-testid={`menu-track-add-playlist-${trackNumber}`}
                 onSelect={() => onAdd()}
-                className="gap-3 text-white focus:bg-white/10 focus:text-white"
+                className="gap-3 rounded-lg px-3 py-2 text-sm font-normal text-white focus:bg-white/10 focus:text-white"
               >
                 <ListPlus className="w-4 h-4" /> Add to Playlist…
               </DropdownMenuItem>
@@ -269,7 +269,7 @@ export function AlbumDesktopTrackRow({
               <DropdownMenuItem
                 data-testid={`menu-track-favorite-${trackNumber}`}
                 onSelect={() => onToggleFavorite()}
-                className="gap-3 text-white focus:bg-white/10 focus:text-white"
+                className="gap-3 rounded-lg px-3 py-2 text-sm font-normal text-white focus:bg-white/10 focus:text-white"
               >
                 <Heart
                   className="w-4 h-4"
