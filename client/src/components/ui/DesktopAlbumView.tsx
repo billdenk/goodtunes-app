@@ -1009,7 +1009,7 @@ function BuyPricePill({
   );
 }
 
-function BonusGrid({
+export function BonusGrid({
   items,
   locked,
   kind,
@@ -1053,13 +1053,18 @@ function BonusGrid({
             draggable={false}
           />
           {locked && (
-            <div className="absolute inset-0 flex items-center justify-center">
+            <div
+              className="absolute inset-0 flex items-center justify-center"
+              data-testid={`badge-locked-${kind}-${it.id}`}
+            >
               <div className="w-9 h-9 rounded-full bg-black/55 flex items-center justify-center">
                 <Lock className="w-4 h-4 text-fan-primary" strokeWidth={2.2} />
               </div>
             </div>
           )}
-          {!locked && kind === "video" && <BonusPlayBadge />}
+          {!locked && kind === "video" && (
+            <BonusPlayBadge testId={`badge-play-${kind}-${it.id}`} />
+          )}
           {it.label && (
             <div className="absolute left-3 right-3 bottom-3 text-fan-primary text-[12.5px] font-semibold truncate">
               {it.label}

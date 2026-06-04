@@ -21,9 +21,18 @@ import { Loader2 } from "lucide-react";
  * swallowing the tap. Pass `loading` while a signed playback URL is being
  * minted to swap the triangle for a spinner.
  */
-export function BonusPlayBadge({ loading = false }: { loading?: boolean }) {
+export function BonusPlayBadge({
+  loading = false,
+  testId,
+}: {
+  loading?: boolean;
+  testId?: string;
+}) {
   return (
-    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+    <div
+      className="absolute inset-0 flex items-center justify-center pointer-events-none"
+      data-testid={testId}
+    >
       <div
         className="w-12 h-12 rounded-full flex items-center justify-center"
         style={{
