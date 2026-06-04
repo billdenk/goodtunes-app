@@ -641,6 +641,16 @@ async function main() {
   // ── APPLY ────────────────────────────────────────────────────────────────
   console.log(`\n🟢 APPLY — writing to DB (transaction)…\n`);
 
+  // Bulk inserts are batched into multi-row statements. The prod DB sits behind
+  // a proxy with a ~68ms round-trip and a 5-minute idle-in-transaction cap, so
+  // ~9,000 sequential single-row inserts (the naive path) run ~10min and get
+  // torn down mid-transaction. Chunked multi-row inserts cut that to seconds.
+  const chunk = <T>(arr: T[], n: number): T[][] => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+    return out;
+  };
+
   const personLegacyToId = new Map<string, string>();
   const albumLegacyToId = new Map<string, string>();
   const customerLegacyToId = new Map<string, string>();
@@ -743,6 +753,7 @@ async function main() {
       target.set(r.release_id, list);
     }
 
+    const songInserts: any[] = [];
     for (const [releaseId, list] of audioByRelease) {
       const albumId = albumLegacyToId.get(releaseId);
       if (!albumId) continue;
@@ -793,27 +804,28 @@ async function main() {
         usedTracks.add(desired);
         if (!appendMode) nextTrack = Math.max(nextTrack, desired);
         const trackNumber = desired;
-        const [created] = await tx
-          .insert(songs)
-          .values({
-            albumId,
-            title: rec.title.trim(),
-            trackNumber,
-            duration: Number(rec.duration) || 180,
-            audioUrl: rec.source_url || null,
-            muxAssetId: null,
-            muxPlaybackId: rec.stream_id || null,
-            muxStatus: rec.stream_id ? "preparing" : null,
-            legacyGogoodsId: rec.id,
-          } as any)
-          .returning();
-        songLegacyToId.set(rec.id, created.id);
+        // songLegacyToId is never read downstream, so we don't need the
+        // generated id back — collect and batch-insert below.
+        songInserts.push({
+          albumId,
+          title: rec.title.trim(),
+          trackNumber,
+          duration: Number(rec.duration) || 180,
+          audioUrl: rec.source_url || null,
+          muxAssetId: null,
+          muxPlaybackId: rec.stream_id || null,
+          muxStatus: rec.stream_id ? "preparing" : null,
+          legacyGogoodsId: rec.id,
+        });
         seenTitles.add(norm(rec.title));
         report.songsCreate.push({
           kind: "create",
           detail: `${rec.title} → album ${albumId} (track ${trackNumber})`,
         });
       }
+    }
+    for (const part of chunk(songInserts, 500)) {
+      await tx.insert(songs).values(part as any);
     }
 
     for (const [releaseId, list] of videoByRelease) {
@@ -850,6 +862,7 @@ async function main() {
     }
 
     // 4. Customers
+    const customerInserts: any[] = [];
     for (const c of customersPlan) {
       if (c.existingId) {
         await tx
@@ -872,19 +885,30 @@ async function main() {
       let n = 2;
       while (usedUsernames.has(username)) username = `${base}${n++}`;
       usedUsernames.add(username);
-      const [created] = await tx
+      customerInserts.push({
+        username,
+        email: c.email,
+        displayName: c.displayName,
+        realName: c.realName,
+        password: null,
+        emailVerifiedAt: c.createdAt ?? new Date(),
+        legacyGogoodsId: c.legacyId,
+      });
+    }
+    // Batch-insert and rebuild the legacyId→id map from RETURNING. Each created
+    // customer carries a unique legacyGogoodsId, so we correlate on that rather
+    // than relying on RETURNING row order.
+    for (const part of chunk(customerInserts, 500)) {
+      const rows = await tx
         .insert(customerUsers)
-        .values({
-          username,
-          email: c.email,
-          displayName: c.displayName,
-          realName: c.realName,
-          password: null,
-          emailVerifiedAt: c.createdAt ?? new Date(),
-          legacyGogoodsId: c.legacyId,
-        } as any)
-        .returning();
-      customerLegacyToId.set(c.legacyId, created.id);
+        .values(part as any)
+        .returning({
+          id: customerUsers.id,
+          legacyGogoodsId: customerUsers.legacyGogoodsId,
+        });
+      for (const r of rows) {
+        if (r.legacyGogoodsId) customerLegacyToId.set(r.legacyGogoodsId, r.id);
+      }
     }
 
     // 5. UserAlbums — only for resolved (customer × album) pairs.
@@ -894,6 +918,7 @@ async function main() {
     const ownedSet = new Set(
       existingUserAlbums.map((r) => `${r.userId}::${r.albumId}`),
     );
+    const userAlbumInserts: any[] = [];
     for (const [, c] of ownedByUserAlbum) {
       const customerId = customerLegacyToId.get(c.user_id);
       const albumId = albumLegacyToId.get(c.release_id);
@@ -906,20 +931,66 @@ async function main() {
       }
       const k = `${customerId}::${albumId}`;
       if (ownedSet.has(k)) continue;
-      await tx.insert(userAlbums).values({
+      userAlbumInserts.push({
         userId: customerId,
         albumId,
         certificateNumber: Number(c.index),
         acquiredAt: parseTs(c.created_at) ?? new Date(),
-      } as any);
+      });
       ownedSet.add(k);
       report.userAlbumsCreate.push({
         kind: "create",
         detail: `customer ${customerId} → album ${albumId} #${c.index}`,
       });
     }
+    for (const part of chunk(userAlbumInserts, 500)) {
+      await tx.insert(userAlbums).values(part as any);
+    }
 
     // 6. Orders
+    //
+    // Two prod unique constraints must be respected, and the gogoods source
+    // violates both:
+    //   • orders_album_good_deed_number_uniq — partial unique on
+    //     (album_id, good_deed_number) WHERE good_deed_number IS NOT NULL.
+    //     Resold collectibles mean the same GoodDeed number can appear across
+    //     several complete txns on one album. We keep the MOST RECENT complete
+    //     txn (the sale of record, consistent with the current owner captured
+    //     in user_albums) and skip the older duplicates. Orders with no
+    //     collectibles (good_deed_number = null) never collide (partial index).
+    //   • orders_stripe_payment_intent_id_unique — full unique on
+    //     stripe_payment_intent_id. Postgres treats NULLs as distinct, so the
+    //     many legacy orders with no payment id are fine; for the rare repeated
+    //     non-null payment id we null the duplicate ref (keeping the order) so
+    //     the import never drops a purchase over a stale Stripe linkage.
+    // Both seen-sets are seeded from existing prod orders so re-runs stay
+    // idempotent.
+    const existingOrderKeys = await tx
+      .select({
+        albumId: orders.albumId,
+        goodDeedNumber: orders.goodDeedNumber,
+        stripePaymentIntentId: orders.stripePaymentIntentId,
+      })
+      .from(orders);
+    const usedGoodDeed = new Set(
+      existingOrderKeys
+        .filter((r) => r.goodDeedNumber != null)
+        .map((r) => `${r.albumId}::${r.goodDeedNumber}`),
+    );
+    const usedPaymentIntent = new Set(
+      existingOrderKeys
+        .map((r) => r.stripePaymentIntentId)
+        .filter((p): p is string => !!p),
+    );
+
+    type OrderCandidate = {
+      albumId: string;
+      goodDeed: number | null;
+      createdAt: Date;
+      txnId: string;
+      values: Record<string, unknown>;
+    };
+    const orderCandidates: OrderCandidate[] = [];
     for (const t of gTxns) {
       if (t.payment_status !== "complete") continue;
       if (orderByLegacy.has(t.id)) continue;
@@ -937,24 +1008,66 @@ async function main() {
       );
       const goodDeed = colls.length ? Number(colls[0].index) : null;
       const buyerEmail = userById.get(t.user_id)?.email ?? null;
-      await tx.insert(orders).values({
-        customerId,
+      const createdAt = parseTs(t.created_at) ?? new Date();
+      orderCandidates.push({
         albumId,
-        totalCents: Number(t.total_amount_cents),
-        currency: (t.currency || "usd").toLowerCase(),
-        status: "complete",
-        stripePaymentIntentId: t.payment_id || null,
-        buyerEmail,
-        goodDeedNumber: goodDeed,
-        origin: "legacy:gogoods",
-        skuKind: "gooddeed",
-        legacyGogoodsId: t.id,
-        createdAt: parseTs(t.created_at) ?? new Date(),
-      } as any);
+        goodDeed,
+        createdAt,
+        txnId: t.id,
+        values: {
+          customerId,
+          albumId,
+          totalCents: Number(t.total_amount_cents),
+          currency: (t.currency || "usd").toLowerCase(),
+          status: "complete",
+          stripePaymentIntentId: t.payment_id || null,
+          buyerEmail,
+          goodDeedNumber: goodDeed,
+          origin: "legacy:gogoods",
+          skuKind: "gooddeed",
+          legacyGogoodsId: t.id,
+          createdAt,
+        },
+      });
+    }
+    // Most recent complete txn wins each (album, GoodDeed) slot and each
+    // non-null payment-intent id.
+    orderCandidates.sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+    );
+    const orderInserts: any[] = [];
+    for (const cand of orderCandidates) {
+      if (cand.goodDeed != null) {
+        const key = `${cand.albumId}::${cand.goodDeed}`;
+        if (usedGoodDeed.has(key)) {
+          report.ordersSkipped.push({
+            kind: "skip",
+            detail: `txn#${cand.txnId} → album ${cand.albumId} GoodDeed #${cand.goodDeed} already taken (resale/dup) — kept most recent`,
+          });
+          continue;
+        }
+        usedGoodDeed.add(key);
+      }
+      const pid = cand.values.stripePaymentIntentId as string | null;
+      if (pid) {
+        if (usedPaymentIntent.has(pid)) {
+          cand.values.stripePaymentIntentId = null;
+          report.ordersSkipped.push({
+            kind: "skip",
+            detail: `txn#${cand.txnId} duplicate payment_id ${pid} — kept order, nulled Stripe ref`,
+          });
+        } else {
+          usedPaymentIntent.add(pid);
+        }
+      }
+      orderInserts.push(cand.values);
       report.ordersCreate.push({
         kind: "create",
-        detail: `txn#${t.id} → order on album ${albumId} (GoodDeed #${goodDeed ?? "n/a"})`,
+        detail: `txn#${cand.txnId} → order on album ${cand.albumId} (GoodDeed #${cand.goodDeed ?? "n/a"})`,
       });
+    }
+    for (const part of chunk(orderInserts, 500)) {
+      await tx.insert(orders).values(part as any);
     }
   });
 
