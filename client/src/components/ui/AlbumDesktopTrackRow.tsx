@@ -84,7 +84,7 @@ export function AlbumDesktopTrackRow({
 
   return (
     <div
-      className="group relative flex items-center gap-3 h-12 px-3 rounded-xl transition-colors"
+      className="group relative flex items-center gap-3 h-11 px-3 rounded-xl transition-colors"
       style={{ background: bg, cursor: interactive && onPlay ? "pointer" : "default" }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}

@@ -46,14 +46,14 @@ function Row({
       type="button"
       onClick={onClick}
       data-testid={testId}
-      className={`relative w-full flex items-center gap-3 h-10 rounded-lg px-3 text-sm font-medium transition-colors ${
+      className={`relative w-full flex items-center gap-3 h-9 rounded-md px-3 text-sm font-medium transition-colors ${
         active
           ? "text-[color:var(--brand-blue)] bg-[rgba(49,158,216,0.14)]"
           : "text-white/70 hover:text-white hover:bg-white/[0.06]"
       }`}
     >
       <span className="w-6 flex items-center justify-center flex-shrink-0">
-        <Icon className="w-5 h-5" strokeWidth={2} />
+        <Icon className="w-[18px] h-[18px]" strokeWidth={2} />
       </span>
       <span className="flex-1 text-left truncate">{label}</span>
     </button>
@@ -65,7 +65,7 @@ function Row({
  *  headers read consistently. */
 function GroupHeader({ children }: { children: ReactNode }) {
   return (
-    <div className="px-3 pt-6 pb-2 text-xs font-semibold uppercase tracking-wider text-fan-faint">
+    <div className="px-3 pt-5 pb-1.5 text-xs font-semibold uppercase tracking-wider text-fan-faint">
       {children}
     </div>
   );
@@ -93,7 +93,7 @@ export function FanRailNav({
   return (
     <div>
       {/* Top group — Search, no header. */}
-      <div className="space-y-1">
+      <div className="space-y-0.5">
         <Row
           testId="rail-search"
           icon={Search}

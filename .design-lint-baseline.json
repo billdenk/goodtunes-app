@@ -12267,22 +12267,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "title: \"text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[26px]\","
+    "snippet": "title: \"text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[24px]\","
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "title: \"text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[26px] lg:text-[30px]\","
+    "snippet": "title: \"text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[24px] lg:text-[28px]\","
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"self-start mt-2 text-[21px] font-semibold tracking-[-0.01em] transition-colors hover:underline underline-offset-4\""
+    "snippet": "className=\"self-start mt-1.5 text-[18px] font-semibold tracking-[-0.01em] transition-colors hover:underline underline-offset-4\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"self-start mt-2 text-[21px] font-semibold tracking-[-0.01em]\""
+    "snippet": "className=\"self-start mt-1.5 text-[18px] font-semibold tracking-[-0.01em]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -12292,22 +12292,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"mt-4 text-fan-secondary text-[14px] leading-[1.55] max-w-[640px] line-clamp-3\""
+    "snippet": "className=\"mt-3 text-fan-secondary text-[14px] leading-[1.55] max-w-[640px] line-clamp-3\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"h-12 pl-5 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97]\""
+    "snippet": "className=\"h-11 pl-5 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97]\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"h-12 px-6 rounded-full inline-flex items-center justify-center font-semibold text-[15px] text-fan-secondary cursor-not-allowed\""
+    "snippet": "className=\"h-11 px-6 rounded-full inline-flex items-center justify-center font-semibold text-[15px] text-fan-secondary cursor-not-allowed\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"h-12 px-6 rounded-full inline-flex items-center justify-center gap-2 text-white font-semibold text-[15px] transition-transform active:scale-[0.97]\""
+    "snippet": "className=\"h-11 px-6 rounded-full inline-flex items-center justify-center gap-2 text-white font-semibold text-[15px] transition-transform active:scale-[0.97]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -12483,11 +12483,6 @@
     "rule": "fan-text-tone",
     "file": "client/src/components/ui/SyncedLyrics.tsx",
     "snippet": "className=\"text-white/30 font-semibold tracking-[0.18em] uppercase pt-2\""
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/ui/SyncedLyrics.tsx",
-    "snippet": "className=\"text-white/45 italic pt-6\""
   },
   {
     "rule": "fan-text-tone",

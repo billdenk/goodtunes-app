@@ -241,10 +241,10 @@ export function DesktopAlbumView({
      and lg with the actual window width. */
   const cls = compact
     ? {
-        column: "max-w-[720px] mx-auto px-6 py-6 transition-[max-width,margin] duration-200 flex-1 min-w-0",
-        heroSection: "mt-7 flex gap-6",
-        cover: "rounded-2xl overflow-hidden flex-shrink-0 w-[220px] h-[220px]",
-        title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[26px]",
+        column: "max-w-[720px] mx-auto px-6 py-5 transition-[max-width,margin] duration-200 flex-1 min-w-0",
+        heroSection: "mt-3 flex gap-6",
+        cover: "rounded-2xl overflow-hidden flex-shrink-0 w-[200px] h-[200px]",
+        title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[24px]",
       }
     : {
         // Apple parity: let the album content (hero + tracklist) breathe
@@ -253,10 +253,10 @@ export function DesktopAlbumView({
         // generous cap on ultra-wide monitors (2xl) so rows don't stretch
         // absurdly long. The description keeps its own reading measure via
         // its max-w below.
-        column: "max-w-[720px] mx-auto lg:max-w-none lg:mx-0 2xl:max-w-[1600px] 2xl:mx-auto px-6 lg:px-12 py-6 lg:py-8 transition-[max-width,margin] duration-200 flex-1 min-w-0",
-        heroSection: "mt-7 flex gap-6 lg:gap-8",
-        cover: "rounded-2xl overflow-hidden flex-shrink-0 w-[220px] h-[220px] lg:w-[280px] lg:h-[280px]",
-        title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[26px] lg:text-[30px]",
+        column: "max-w-[720px] mx-auto lg:max-w-none lg:mx-0 2xl:max-w-[1600px] 2xl:mx-auto px-6 lg:px-12 py-5 lg:py-6 transition-[max-width,margin] duration-200 flex-1 min-w-0",
+        heroSection: "mt-3 flex gap-6 lg:gap-8",
+        cover: "rounded-2xl overflow-hidden flex-shrink-0 w-[200px] h-[200px] lg:w-[240px] lg:h-[240px]",
+        title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[24px] lg:text-[28px]",
       };
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -385,14 +385,14 @@ export function DesktopAlbumView({
               <Link
                 href={`/admin/people/${album.primaryArtistId}`}
                 data-testid="link-artist"
-                className="self-start mt-2 text-[21px] font-semibold tracking-[-0.01em] transition-colors hover:underline underline-offset-4"
+                className="self-start mt-1.5 text-[18px] font-semibold tracking-[-0.01em] transition-colors hover:underline underline-offset-4"
                 style={{ color: BRAND_BLUE, textDecorationColor: BRAND_BLUE }}
               >
                 {album.artist}
               </Link>
             ) : (
               <span
-                className="self-start mt-2 text-[21px] font-semibold tracking-[-0.01em]"
+                className="self-start mt-1.5 text-[18px] font-semibold tracking-[-0.01em]"
                 style={{ color: BRAND_BLUE }}
                 data-testid="text-artist"
               >
@@ -411,14 +411,14 @@ export function DesktopAlbumView({
 
             {album.description && (
               <p
-                className="mt-4 text-fan-secondary text-[14px] leading-[1.55] max-w-[640px] line-clamp-3"
+                className="mt-3 text-fan-secondary text-[14px] leading-[1.55] max-w-[640px] line-clamp-3"
                 data-testid="album-description"
               >
                 {album.description}
               </p>
             )}
 
-            <div className="mt-6 flex items-center gap-3">
+            <div className="mt-5 flex items-center gap-2.5">
               {isOwned ? (
                 /* Apple-tone transport row, mirroring the mobile album
                    surface: Shuffle (glass) · Play (white pill, primary) ·
@@ -427,7 +427,7 @@ export function DesktopAlbumView({
                   {canPlay && (
                     <IconButton
                       variant="glass"
-                      size="lg"
+                      size="md"
                       label="Shuffle"
                       onClick={onShuffle}
                       style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
@@ -441,17 +441,17 @@ export function DesktopAlbumView({
                       type="button"
                       onClick={onPlayAll}
                       data-testid="button-play-album"
-                      className="h-12 pl-5 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97]"
+                      className="h-11 pl-5 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97]"
                       style={{ background: "#fff", color: "var(--brand-bg)" }}
                     >
-                      <Play className="w-5 h-5 fill-current" strokeWidth={0} />
+                      <Play className="w-[18px] h-[18px] fill-current" strokeWidth={0} />
                       Play
                     </button>
                   )}
                   {hasAlbumCredits && (
                     <IconButton
                       variant="glass"
-                      size="lg"
+                      size="md"
                       label="Album credits"
                       onClick={onOpenAlbumCredits}
                       style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
@@ -484,7 +484,7 @@ export function DesktopAlbumView({
                       <button
                         type="button"
                         disabled
-                        className="h-12 px-6 rounded-full inline-flex items-center justify-center font-semibold text-[15px] text-fan-secondary cursor-not-allowed"
+                        className="h-11 px-6 rounded-full inline-flex items-center justify-center font-semibold text-[15px] text-fan-secondary cursor-not-allowed"
                         style={{ background: "rgba(255,255,255,0.06)" }}
                         data-testid="button-buy-sold-out"
                       >
@@ -503,7 +503,7 @@ export function DesktopAlbumView({
                       type="button"
                       onClick={onStreamAlbum}
                       data-testid="button-listen-on"
-                      className="h-12 px-6 rounded-full inline-flex items-center justify-center gap-2 text-white font-semibold text-[15px] transition-transform active:scale-[0.97]"
+                      className="h-11 px-6 rounded-full inline-flex items-center justify-center gap-2 text-white font-semibold text-[15px] transition-transform active:scale-[0.97]"
                       style={{
                         background:
                           "linear-gradient(135deg, var(--brand-purple), var(--brand-blue))",
@@ -527,7 +527,7 @@ export function DesktopAlbumView({
                   {hasAlbumCredits && (
                     <IconButton
                       variant="glass"
-                      size="lg"
+                      size="md"
                       label="Album credits"
                       onClick={onOpenAlbumCredits}
                       style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
@@ -546,7 +546,7 @@ export function DesktopAlbumView({
             album has no bonus video/photo content (Task #1118), so fans
             never see a lone "Music" tab or empty dashed placeholders. */}
         {showTabStrip && (
-        <div className="mt-10 flex items-center justify-center">
+        <div className="mt-8 flex items-center justify-start">
           <div
             className="inline-flex items-center gap-1 rounded-full bg-white/8 p-1"
             role="tablist"
