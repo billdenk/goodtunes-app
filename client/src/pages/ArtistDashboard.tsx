@@ -756,7 +756,7 @@ function FunnelStat({ label, value, accent, testId }: { label: string; value: st
   );
 }
 
-function InviteArtistPanel() {
+export function InviteArtistPanel() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
