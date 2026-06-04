@@ -105,13 +105,13 @@ export function AlbumDesktopTrackRow({
       data-row-state={state}
       data-row-current={isCurrent ? "true" : "false"}
     >
-      {/* Apple-style hairline separator between flush rows. Light, persistent
-          `white/10` line that stays visible on hover and on the currently-
+      {/* Apple-style hairline separator between flush rows. Visible, persistent
+          `white/20` line that stays visible on hover and on the currently-
           playing row (matching Apple Music, where the dividers are always
           present). See docs/design-system.md → "Track-row hairline". */}
       <span
         aria-hidden
-        className="absolute left-3 right-3 bottom-0 h-px bg-white/10"
+        className="absolute left-3 right-3 bottom-0 h-px bg-white/20"
       />
       {/* Leading favorite heart — Apple-style, sits in the left gutter
           (absolute, just left of the number) so it never pushes the number
@@ -139,7 +139,7 @@ export function AlbumDesktopTrackRow({
             the glyph jumps a hair on hover. */}
         <span
           className={[
-            "absolute inset-0 inline-flex items-center justify-end pr-[1px] text-xs tabular-nums transition-opacity",
+            "absolute inset-0 inline-flex items-center justify-end pr-[1px] text-xs tabular-nums font-normal transition-opacity",
             state === "locked" ? "text-fan-faint" : "text-fan-primary/[0.32]",
             showPlayGlyph || isCurrent ? "opacity-0" : "opacity-100",
           ].join(" ")}
@@ -188,10 +188,8 @@ export function AlbumDesktopTrackRow({
       <div className="flex-1 min-w-0 flex items-center gap-2.5">
         <span
           className={[
-            "truncate text-[14px]",
-            state === "locked" ? "text-fan-secondary font-medium" : "text-fan-primary",
-            state === "preview" ? "font-semibold" : state === "full" ? "font-medium" : "",
-            isCurrent ? "font-semibold" : "",
+            "truncate text-sm font-normal",
+            state === "locked" ? "text-fan-secondary" : "text-fan-primary",
           ].join(" ")}
           style={isCurrent ? { color: ROSE } : undefined}
           data-testid={`text-track-title-${trackNumber}`}

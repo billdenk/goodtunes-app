@@ -708,7 +708,7 @@ export function DesktopAlbumView({
               {/* Apple-style top hairline — inset + same weight as the
                   per-row separators so the list reads as one uniform set of
                   rules instead of a thick full-bleed bar above row 1. */}
-              <span aria-hidden className="mx-3 h-px bg-white/10" />
+              <span aria-hidden className="mx-3 h-px bg-white/20" />
               {songs.map((s) => {
                 const state = trackPlaybackState({
                   isOwned,
@@ -766,7 +766,7 @@ export function DesktopAlbumView({
                   count + total runtime, then the ℗ copyright line. The
                   standalone label credit line was intentionally removed. */}
               <div
-                className="mt-12 text-sm leading-relaxed"
+                className="mt-12 px-3 text-sm leading-relaxed"
                 style={{ color: "rgba(255,255,255,0.34)" }}
               >
                 <p data-testid="text-album-date-footer">

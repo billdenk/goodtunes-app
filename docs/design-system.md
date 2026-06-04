@@ -87,13 +87,13 @@ Anywhere a piece of metadata in admin chrome (artist name on an album header, ve
 
 Track lists (fan album track list, admin Tracks tab) divide rows with **one light, persistent Apple-Music-style hairline**. It is **always visible** — it does **not** fade out on hover or on the currently-playing/active row (Apple Music keeps its dividers present on every row). Use one tone per surface family:
 
-- **Navy fan surfaces** (`#00062B` bg) — `white/10` (`rgba(255,255,255,0.10)`). Reference: `AlbumDesktopTrackRow.tsx` (per-row bottom hairline + `DesktopAlbumView.tsx` top hairline above the list) and `AlbumDetailMobileSurface.tsx` (per-row top hairline). Mobile and desktop use the **same** value so the two surfaces match.
+- **Navy fan surfaces** (`#00062B` bg) — `white/20` (`rgba(255,255,255,0.20)`). Reference: `AlbumDesktopTrackRow.tsx` (per-row bottom hairline + `DesktopAlbumView.tsx` top hairline above the list) and `AlbumDetailMobileSurface.tsx` (per-row top hairline). Desktop and mobile use the **same** value so the two surfaces match.
 - **Admin / white chrome** (`body.gt-admin`) — `border-slate-100` (or `divide-slate-100` for a flush list). Persistent on every row except the last. Reference: the Tracks tab row in `AdminAlbum.tsx` and the `admin-album-tracks` / `admin-tracks-mode` mockups.
 
 Rules:
 
 - **Never fade the divider on hover or current.** A row's soft elevated highlight sits *behind* the hairline; the line stays on top so the list never reads as borderless.
-- **Don't drift the tone.** New track/list work reuses `white/10` (navy) or `slate-100` (admin) — don't reach for `white/[0.06]`, `white/[0.07]`, `white/[0.08]`, etc. for a track divider.
+- **Don't drift the tone.** New track/list work reuses `white/20` (navy) or `slate-100` (admin) — don't reach for `white/10`, `white/[0.06]`, `white/[0.07]`, `white/[0.08]`, etc. for a track divider.
 - **Scope: track rows only.** This is the divider between rows in a *track* list. Non-track lists (credits sheets, spec sheets, menus, section header rules) keep their own treatment.
 
 ## Save semantics — default to auto-save, reserve explicit Save for the few cases that need it
