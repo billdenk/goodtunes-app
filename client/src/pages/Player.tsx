@@ -542,8 +542,14 @@ export function Player() {
           </div>
           <div className="relative w-full max-w-[390px] h-[100dvh] flex flex-col">
 
-            {/* Header: small art + song info + star + ... */}
-            <div className="relative z-10 flex items-center gap-3 px-5 pt-14 pb-4">
+            {/* Header: small art + song info + star + ... — sits at a higher
+                stacking level than the lyrics below so the ⋯ dropdown (which
+                projects downward via `absolute top-full`) and its tap-catcher
+                backdrop always paint cleanly above the SyncedLyrics surface.
+                SyncedLyrics applies a mask-image (creating its own stacking
+                context) and comes after the header in the DOM, so at an equal
+                z-index it would otherwise overpaint the menu on WebKit/iOS. */}
+            <div className="relative z-20 flex items-center gap-3 px-5 pt-14 pb-4">
               <button
                 type="button"
                 onClick={() => setShowLyrics(false)}
