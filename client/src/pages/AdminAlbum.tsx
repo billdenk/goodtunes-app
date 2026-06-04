@@ -345,13 +345,14 @@ export function AdminAlbum() {
   // Hide the Physical/press section (pressing plant + master preflight) for
   // artist and label partners for now — manufacturing stays with operators.
   const hidePressSection = isArtist || isLabel;
-  // Hide the album/track Delete affordances for artist and label partners —
-  // destructive removal of an album or its tracks stays with operators.
-  // Task #1250 — artists now get a (request-only) delete affordance; only
-  // labels keep the album/track Delete affordances fully hidden. The
+  // Task #1250 / #1267 — artist *and* label partners get a single
+  // (request-only) album-delete affordance: it routes to the sold-blocked
+  // popup or the request-to-delete confirmation based on the album's sold
+  // state, and queues a review request instead of deleting directly. The
   // direct-delete chrome (track multi-select, "delete all tracks") stays
-  // operator-only — artists see a single album-delete button instead.
-  const hideDelete = isLabel;
+  // operator-only for both partner kinds. The backend DELETE flow already
+  // applies the sold-block / queue-a-request behavior to all partners.
+  const partnerDelete = isArtist || isLabel;
   // Smart-back deep link: `/admin/albums/:id?track=<songId>` lands the
   // Tracks tab with that row already open + scrolled into view, so a
   // user returning from a credit-tapped Person page comes back to the
@@ -1131,11 +1132,11 @@ export function AdminAlbum() {
               pair. In multi-select mode the trigger collapses into a
               "Delete N Tracks" call-to-action (rose-tinted when N>0,
               slate-100 when N=0) plus a Cancel-out-of-selection link. */}
-          {hideDelete ? null : isArtist ? (
-            // Task #1250 — Artists get a single album-delete affordance
-            // (no track multi-select / delete-all chrome). The click
-            // routes to the sold-blocked popup or the request-to-delete
-            // confirmation based on the album's sold state.
+          {partnerDelete ? (
+            // Task #1250 / #1267 — Artists and labels get a single
+            // album-delete affordance (no track multi-select / delete-all
+            // chrome). The click routes to the sold-blocked popup or the
+            // request-to-delete confirmation based on the album's sold state.
             <button
               type="button"
               onClick={() => {
