@@ -257,6 +257,15 @@ export function PlayerDock({
   }, []);
   const compact = forceCompact ?? windowWidth < COMPACT_BREAKPOINT;
 
+  // In preview mode the lyrics button is hidden from the right cluster
+  // (Apple-match — see the utility cluster below). On wide layouts that
+  // narrows the cluster by the lyrics button + gap, so tighten the
+  // inline scrubber's right inset to keep the bar reaching to ~12px
+  // before the (now lyrics-less) cluster instead of leaving a dead gap.
+  // Compact layouts drop the scrubber entirely, so this only matters wide.
+  const scrubRightClass =
+    !compact && previewMode ? "right-[96px]" : D.scrubRight;
+
   // ── Derived ────────────────────────────────────────────────────────
   const cycleRepeat = () => {
     const next: RepeatMode =
@@ -695,7 +704,14 @@ export function PlayerDock({
             {/* Lyrics mic — rendered ALWAYS so the dock anatomy is
                 complete; if the host hasn't wired `onLyrics` yet (admin
                 today) the button is a visual-only placeholder. Same
-                slot will fire the Lyrics overlay once it's wired. */}
+                slot will fire the Lyrics overlay once it's wired.
+                EXCEPTION: hidden entirely while a track is in Preview
+                (the rose "Preview" badge is showing). Apple Music drops
+                the lyrics control in preview, and it's driven by the
+                SAME `previewMode` flag as the badge so the two stay in
+                lock-step. Side benefit: fans can't open lyrics for a
+                track they haven't bought. */}
+            {!previewMode && (
             <button
               type="button"
               aria-label={lyricsActive ? "Hide lyrics" : "Show lyrics"}
@@ -726,6 +742,7 @@ export function PlayerDock({
             >
               <LyricsIcon size={D.utilityIcon} />
             </button>
+            )}
             {/* Volume cluster — slider slides out left on hover.
                 Hidden in compact: Apple drops volume from its narrow
                 mini-player too. The title gets the ~46px back.
@@ -827,7 +844,7 @@ export function PlayerDock({
           <>
             <div
               className={[
-                `absolute ${D.scrubLeft} ${D.scrubRight} inset-y-0 flex items-center justify-between pointer-events-none z-10`,
+                `absolute ${D.scrubLeft} ${scrubRightClass} inset-y-0 flex items-center justify-between pointer-events-none z-10`,
                 "transition-opacity duration-150",
                 scrubHover && hasSelection ? "opacity-100" : "opacity-0",
               ].join(" ")}
@@ -847,7 +864,7 @@ export function PlayerDock({
             </div>
             <div
               className={[
-                `group/scrub absolute ${D.scrubLeft} ${D.scrubRight} bottom-1.5 h-3 flex items-center touch-none select-none`,
+                `group/scrub absolute ${D.scrubLeft} ${scrubRightClass} bottom-1.5 h-3 flex items-center touch-none select-none`,
                 hasSelection ? "cursor-pointer" : "cursor-default pointer-events-none",
               ].join(" ")}
               onMouseEnter={() => setScrubHover(true)}

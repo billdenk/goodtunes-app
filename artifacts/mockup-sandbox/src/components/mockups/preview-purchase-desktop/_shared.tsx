@@ -504,6 +504,10 @@ export function FloatingPlayerDock() {
   // Demo always has a selection; the idle branch below mirrors the real
   // PlayerDock's centered gray "G" so future polish stays in lock-step.
   const hasSelection = Boolean(current);
+  // This surface is the unowned Preview & Purchase page, so the dock is
+  // always in preview mode: the rose "Preview" badge shows and — matching
+  // Apple Music and the real PlayerDock — the lyrics control is hidden.
+  const previewMode = true;
   const [playing, setPlaying] = useState(true);
   const progress = 42;
 
@@ -661,8 +665,18 @@ export function FloatingPlayerDock() {
                 <img src={ALBUM_COVER} alt="" className="w-full h-full object-cover" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-semibold truncate leading-tight">
-                  {current.title}
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div className="text-[13px] font-semibold truncate leading-tight">
+                    {current.title}
+                  </div>
+                  {previewMode && (
+                    <span
+                      className="inline-flex items-center px-1.5 h-[14px] rounded-[3px] text-[9.5px] font-bold uppercase tracking-[0.08em] flex-shrink-0"
+                      style={{ background: "rgba(255,84,112,0.18)", color: HEART_PINK }}
+                    >
+                      Preview
+                    </span>
+                  )}
                 </div>
                 <div className="text-[11px] text-slate-400 truncate leading-tight mt-0.5">
                   Nick Carter — Love Life Tragedy
@@ -690,6 +704,10 @@ export function FloatingPlayerDock() {
 
           {/* RIGHT · utility cluster */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Lyrics control is hidden while in preview mode (Apple-match,
+                mirrors the real PlayerDock). When owned/not-preview it
+                returns to this slot. */}
+            {!previewMode && (
             <button
               aria-label="Show lyrics"
               title="Show lyrics"
@@ -697,6 +715,7 @@ export function FloatingPlayerDock() {
             >
               <Mic2 className="w-5 h-5" />
             </button>
+            )}
             {!compact && (
               <div className="group/vol flex items-center pr-0.5">
                 <div className="overflow-hidden transition-[width,margin] duration-200 ease-out w-0 group-hover/vol:w-[68px] group-hover/vol:mr-1.5">

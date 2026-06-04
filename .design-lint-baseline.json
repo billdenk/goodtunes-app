@@ -8207,6 +8207,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "artifacts/mockup-sandbox/src/components/mockups/preview-purchase-desktop/_shared.tsx",
+    "snippet": "className=\"inline-flex items-center px-1.5 h-[14px] rounded-[3px] text-[9.5px] font-bold uppercase tracking-[0.08em] flex-shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/preview-purchase-desktop/_shared.tsx",
     "snippet": "<div className=\"text-[11px] text-slate-400 truncate leading-tight mt-0.5\">"
   },
   {
