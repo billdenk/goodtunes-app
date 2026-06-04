@@ -7206,30 +7206,82 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/admin/albums/:id", requireAdmin, async (req, res) => {
-    // Task #79 — deleting an album is a content mutation that must
-    // respect edit_metadata + the post-sale lock, AND divert to the
-    // review queue under approval-mode. A sold album can never be
-    // deleted by a partner without an override.
-    {
-      const id = String(req.params.id);
-      const { partnerEditGate, resolveAlbumScope, createPendingChange } = await import("./auth/partnerPermissions");
+    // Task #79 / #1250 — deleting an album is a content mutation.
+    //
+    //  • super_admin / admin keep DIRECT delete.
+    //  • A partner (artist/label) NEVER deletes directly. A sold album is
+    //    hard-blocked with a plain-language reason; an unsold album always
+    //    writes a delete REQUEST to the super-admin review queue — even
+    //    when approval-mode is off — and every super-admin is emailed.
+    const id = String(req.params.id);
+    const userId = req.session.userId!;
+    const { getUserRole, listSuperAdminEmails } = await import("./auth/roles");
+    const role = await getUserRole(userId);
+    const isOperator = role?.role === "super_admin" || role?.role === "admin";
+
+    if (!isOperator) {
+      const { resolveAlbumScope, checkPartnerVerbForScope, createPendingChange } =
+        await import("./auth/partnerPermissions");
       const albumScope = await resolveAlbumScope(id);
       if (!albumScope) return res.status(404).json({ message: "Album not found" });
-      if (albumScope.scope) {
-        const outcome = await partnerEditGate(req, res, "edit_metadata", albumScope.scope, { albumIdForLock: id });
-        if (outcome === "deny") return;
-        if (outcome === "divert") {
-          const row = await createPendingChange({
-            targetTable: "albums", targetId: id, albumId: id,
-            scopeKind: albumScope.scope.kind, scopeId: albumScope.scope.id,
-            patch: { __op: "delete" },
-            submittedByUserId: req.session.userId!,
-          });
-          return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
-        }
+      const scope = albumScope.scope;
+      if (!scope) {
+        return res.status(403).json({ message: "This album isn't managed by your team" });
       }
+      // Membership + edit_metadata permission + per-user override, all via
+      // the shared partner gate so this endpoint honors the same auth
+      // semantics as every other partner edit. We intentionally DON'T pass
+      // albumIdForLock — a partner can never delete a sold album (even with
+      // an unlock override), so we apply our own hard sold-block below
+      // instead of the lock's softer override path.
+      const gate = await checkPartnerVerbForScope(userId, "edit_metadata", scope, { req });
+      if (gate) return res.status(gate.status).json(gate.body);
+      // A sold album can never be deleted by a partner — hard block.
+      if (albumScope.firstSoldAt) {
+        return res.status(403).json({
+          message: "This album is sold, and cannot be deleted.",
+          sold: true,
+        });
+      }
+      // Otherwise always queue a delete request (independent of approval mode).
+      const row = await createPendingChange({
+        targetTable: "albums", targetId: id, albumId: id,
+        scopeKind: scope.kind, scopeId: scope.id,
+        patch: { __op: "delete" },
+        submittedByUserId: userId,
+      });
+      // Best-effort: email every super-admin (membership-aware lookup, so
+      // multi-hat super-admins aren't missed). Failure must never fail the
+      // request — the queue row is already written.
+      try {
+        const superEmails = await listSuperAdminEmails();
+        const requesterRow = await storage.getUser(userId);
+        const albumRow = await storage.getAlbumById(id, { includeHidden: true, includeTrashed: true });
+        const requester = {
+          displayName: requesterRow?.displayName || requesterRow?.username || requesterRow?.email || "A partner",
+          email: requesterRow?.email || "",
+        };
+        const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+        const host = req.headers["x-forwarded-host"] || req.headers.host || "admin.goodtunes.music";
+        const reviewUrl = `${proto}://${host}/admin/review`;
+        const { sendAlbumDeleteRequestEmail } = await import("./mail");
+        for (const email of superEmails) {
+          try {
+            await sendAlbumDeleteRequestEmail(email, requester, { id, title: albumRow?.title ?? "Untitled album" }, reviewUrl);
+          } catch (e) {
+            console.warn("[task-1250] delete-request notify failed", email, e);
+          }
+        }
+      } catch (e) {
+        console.warn("[task-1250] delete-request notify lookup failed", e);
+      }
+      return res.status(202).json({
+        pendingChange: row,
+        message: "Your request was sent to GoodTunes for review.",
+      });
     }
-    await storage.deleteAlbum(String(req.params.id), req.session.userId ?? null);
+
+    await storage.deleteAlbum(id, userId ?? null);
     return res.json({ message: "Deleted" });
   });
 

@@ -92,6 +92,43 @@ async function detectMembershipsTable(): Promise<boolean> {
   return membershipsTableKnownToExist;
 }
 
+// Task #1250 — every super-admin's email, resolved membership-aware.
+// Legacy users.role stays authoritative, but a multi-hat account can
+// carry its super_admin hat only in the memberships table (legacy
+// users.role pointing at a different primary hat), so we UNION both and
+// dedupe. Used to fan out review/notification emails to all super-admins.
+export async function listSuperAdminEmails(): Promise<string[]> {
+  const emails = new Set<string>();
+  try {
+    const r = await db.execute<{ email: string }>(sql`
+      SELECT email FROM users
+       WHERE role = 'super_admin' AND email IS NOT NULL AND email <> ''
+    `);
+    for (const row of ((r as any).rows ?? [])) {
+      if (row.email) emails.add(row.email);
+    }
+  } catch {
+    // Legacy role columns may be absent on a fresh clone — fall through
+    // to the membership-aware query below.
+  }
+  if (await detectMembershipsTable()) {
+    try {
+      const r = await db.execute<{ email: string }>(sql`
+        SELECT u.email AS email
+          FROM memberships m
+          JOIN users u ON u.id = m.user_id
+         WHERE m.role = 'super_admin' AND u.email IS NOT NULL AND u.email <> ''
+      `);
+      for (const row of ((r as any).rows ?? [])) {
+        if (row.email) emails.add(row.email);
+      }
+    } catch {
+      // best-effort
+    }
+  }
+  return [...emails];
+}
+
 // Task #1036 — resolve the FULL SET of memberships (hats) for an account.
 // Reads the memberships table when present; otherwise — or when a user
 // has no rows yet — synthesizes exactly ONE membership from the legacy

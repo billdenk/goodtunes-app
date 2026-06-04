@@ -350,6 +350,44 @@ export async function sendAdminAccessRequestEmail(
   return sendViaResend("admin-access-request", toEmail, subject, html, text);
 }
 
+// Task #1250 — Notify super-admins that a partner (artist/label) asked
+// to delete one of their albums. The deletion is queued as a pending
+// change; this email points the reviewer at the review queue to approve
+// or deny. Best-effort: the caller swallows send failures so the request
+// itself never fails.
+export async function sendAlbumDeleteRequestEmail(
+  toEmail: string,
+  requester: { displayName: string; email: string },
+  album: { id: string; title: string },
+  reviewUrl: string,
+): Promise<SendResult> {
+  const subject = `${requester.displayName} requested to delete "${album.title}"`;
+  const text = [
+    `${requester.displayName} <${requester.email}> requested to delete the album "${album.title}".`,
+    ``,
+    `Nothing has been removed yet. Review the request and approve or deny it in the GoodTunes review queue:`,
+    reviewUrl,
+    ``,
+    `Approving deletes the album; denying leaves it untouched.`,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Review</div>
+      <h1 style="font-size: 22px; margin: 12px 0 12px; font-weight: 700;">Album deletion requested</h1>
+      <p style="font-size: 15px; line-height: 1.5; color: #333;">
+        <strong>${escapeHtml(requester.displayName)}</strong> &lt;${escapeHtml(requester.email)}&gt; requested to delete the album <strong>${escapeHtml(album.title)}</strong>.
+      </p>
+      <p style="font-size: 14px; line-height: 1.5; color: #555;">Nothing has been removed yet — approve or deny the request from the review queue.</p>
+      <p style="margin: 24px 0;">
+        <a href="${reviewUrl}" style="display: inline-block; background: #319ED8; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600; font-size: 14px;">Open the review queue</a>
+      </p>
+      <p style="font-size: 13px; color: #888; line-height: 1.5;">Approving deletes the album; denying leaves it untouched.</p>
+    </div>
+  `;
+  return sendViaResend("album-delete-request", toEmail, subject, html, text);
+}
+
 // Task #269 — Admin "Forgot password?" reset link. Always called from
 // a neutral 200 endpoint, so the caller can't use mail-send failure to
 // probe account existence. Mirror the OTP template visually so the

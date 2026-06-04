@@ -99,6 +99,7 @@ The admin tooling and operational process that lets a tiny team run the whole bu
 ## Operations
 
 - **Invite directory.** One read-only super-admin page lists every invite ever sent — pending, joined, revoked, and expired — showing each invitee, who referred them (name + kind), the invite role, status, invited/joined dates, and units sold by the invited artist. Searchable, status/role filterable, and sortable, it sits alongside the existing send-an-invite screen and the per-scope referral invite tree. Invitee and referrer names deep-link straight to the matching admin sheet (Person, Label, Press, or Non-profit) when they resolve to a real record.
+- **Artist-requested album deletion with review.** Artists can ask to remove one of their own albums right from the album editor. If the album has already sold a copy it's blocked outright with a plain-language message (nothing is queued). If it hasn't sold, confirming sends a deletion **request** into the existing super-admin review queue — the album stays live and untouched until a super-admin approves it — and every super-admin is emailed so the request never sits unseen. Super-admins and admins still delete directly.
 - **Order management.** Track every sale, gift, and fulfillment status.
 - **Artist payouts.** Automated reporting and payout management.
 - **Customer support.** Integrated tools for handling fan inquiries.
