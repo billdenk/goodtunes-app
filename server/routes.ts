@@ -7159,9 +7159,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (!result.ok) {
           return res.status(400).json({ message: result.reason });
         }
+        // Task #1254 — only LIVE (non-trashed) releases reserve a slug. A
+        // soft-deleted album's slug isn't publicly resolvable, so trashing
+        // a release frees its slug for re-use (mirrors the vendors domain
+        // fix). The partial unique index now excludes deleted rows too.
         const existing = await storage.getAlbumBySlug(result.slug, {
           includeHidden: true,
-          includeTrashed: true,
         });
         if (existing && existing.id !== id) {
           return res
@@ -7171,7 +7174,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         updates.shareSlug = result.slug;
       }
     }
-    const updated = await storage.updateAlbum(id, updates);
+    let updated;
+    try {
+      updated = await storage.updateAlbum(id, updates);
+    } catch (err: any) {
+      // Task #1254 — map a race on the share-slug partial unique index to a
+      // friendly 409 instead of a raw 500 (mirrors the labels/vendors fix).
+      if (err?.code === "23505" && updates.shareSlug) {
+        return res
+          .status(409)
+          .json({ message: `"${updates.shareSlug}" is already used by another release.` });
+      }
+      throw err;
+    }
     if (!updated) return res.status(404).json({ message: "Album not found" });
     // Task #857 — best-effort Spotify deep-link resolution after a save
     // that leaves the album with an artist + title but no Apple URL.
@@ -13930,17 +13945,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           .json({ message: "A label with that domain already exists", label: existing });
       }
     }
-    const l = await storage.createLabel({
-      name: String(name),
-      domain: normDomain,
-      logoUrl: logoUrl ? String(logoUrl) : null,
-      bio: bio ? String(bio) : null,
-      location: location ? String(location) : null,
-      websiteUrl: websiteUrl ? String(websiteUrl) : null,
-      instagramUrl: instagramUrl ? String(instagramUrl) : null,
-      coverUrl: coverUrl ? String(coverUrl) : null,
-    });
-    return res.status(201).json(l);
+    try {
+      const l = await storage.createLabel({
+        name: String(name),
+        domain: normDomain,
+        logoUrl: logoUrl ? String(logoUrl) : null,
+        bio: bio ? String(bio) : null,
+        location: location ? String(location) : null,
+        websiteUrl: websiteUrl ? String(websiteUrl) : null,
+        instagramUrl: instagramUrl ? String(instagramUrl) : null,
+        coverUrl: coverUrl ? String(coverUrl) : null,
+      });
+      return res.status(201).json(l);
+    } catch (err: any) {
+      // Task #1254 — map a race on the labels.domain partial unique index
+      // to a friendly 409 instead of a raw 500 (mirrors manufacturers/vendors).
+      if (err?.code === "23505") {
+        return res.status(409).json({ message: "A label with that domain already exists" });
+      }
+      throw err;
+    }
   });
   app.put("/api/admin/labels/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);

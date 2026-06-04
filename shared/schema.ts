@@ -95,8 +95,10 @@ export const labels = pgTable("labels", {
   // Canonical apex domain (lowercased, no www). Mirrors `vendors.domain`
   // as the dedup key so the "paste a label URL" flow can detect "already
   // added" before double-creating. Nullable for legacy rows created
-  // before the paste-URL flow existed.
-  domain: text("domain").unique(),
+  // before the paste-URL flow existed. Uniqueness is enforced by the
+  // partial index in the table callback (excludes soft-deleted rows), not
+  // a plain `.unique()` constraint — see `labelsDomainUniq`.
+  domain: text("domain"),
   logoUrl: text("logo_url"),
   // Curation lock on `logoUrl`. When true, automated paths (favicon
   // backfills, "re-scrape from website" enrichment, any future logo
@@ -142,7 +144,17 @@ export const labels = pgTable("labels", {
   pressMode: text("press_mode"),
   createdAt: timestamp("created_at").defaultNow(),
   ...softDeleteCols,
-});
+}, (table) => ({
+  // Task #1254 — domain uniqueness must exclude soft-deleted rows so
+  // trashing a label immediately frees its domain slot for re-creation
+  // (mirrors the vendors_domain_top_uniq fix). drizzle-kit doesn't push
+  // WHERE-claused indexes, so the matching partial index lives in
+  // scripts/post-merge.sh (migrate_softdelete_natural_key_uniques) and
+  // scripts/prod-schema-fixups/2026-06-04-task-1254-softdelete-natural-key-uniques.sql.
+  domainUniq: uniqueIndex("labels_domain_unique")
+    .on(table.domain)
+    .where(sql`${table.domain} IS NOT NULL AND ${table.deletedAt} IS NULL`),
+}));
 
 export const albums = pgTable("albums", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -235,7 +247,9 @@ export const albums = pgTable("albums", {
   // PUT layer via shared/shareSlug.ts. The public resolver only returns an
   // album for its slug when it's buy-eligible (non-hidden, non-prepping,
   // non-soft-deleted), so a slug is no less secure than the UUID URL.
-  shareSlug: text("share_slug").unique(),
+  // Uniqueness is enforced by the partial index in the table callback
+  // (excludes soft-deleted rows, Task #1254) — see `shareSlugUniq`.
+  shareSlug: text("share_slug"),
   // Streaming-service handoff. We host the album in-app for the first ~2 weeks
   // then surface "Listen on Apple Music / Spotify" buttons on the album page
   // that point fans at the canonical album URL on each service — same
@@ -446,6 +460,15 @@ export const albums = pgTable("albums", {
   legacyGogoodsIdUniq: uniqueIndex("albums_legacy_gogoods_id_uniq")
     .on(t.legacyGogoodsId)
     .where(sql`${t.legacyGogoodsId} IS NOT NULL`),
+  // Task #1254 — share-slug uniqueness must exclude soft-deleted rows so
+  // trashing a release frees its slug for re-use (mirrors the vendors
+  // domain fix). drizzle-kit doesn't push WHERE-claused indexes; the
+  // matching partial index lives in scripts/post-merge.sh
+  // (migrate_softdelete_natural_key_uniques) +
+  // scripts/prod-schema-fixups/2026-06-04-task-1254-softdelete-natural-key-uniques.sql.
+  shareSlugUniq: uniqueIndex("albums_share_slug_unique")
+    .on(t.shareSlug)
+    .where(sql`${t.shareSlug} IS NOT NULL AND ${t.deletedAt} IS NULL`),
 }));
 
 export const ALBUM_SELL_MODES = ["direct", "shopify"] as const;
@@ -3264,7 +3287,9 @@ export type ShopifyRedemptionCode = typeof shopifyRedemptionCodes.$inferSelect;
 export const manufacturers = pgTable("manufacturers", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
-  domain: text("domain").unique(),
+  // Uniqueness enforced by the partial index in the table callback
+  // (excludes soft-deleted rows, Task #1254), not a plain `.unique()`.
+  domain: text("domain"),
   logoUrl: text("logo_url"),
   coverUrl: text("cover_url"),
   bio: text("bio"),
@@ -3361,12 +3386,21 @@ export const manufacturers = pgTable("manufacturers", {
     "manufacturers_capability_at_least_one",
     sql`${table.doesVinyl} OR ${table.doesGoodDeed} OR ${table.doesFulfillment}`,
   ),
+  // Task #1254 — domain uniqueness must exclude soft-deleted rows so
+  // trashing a press frees its domain slot (mirrors the vendors fix).
+  // drizzle-kit doesn't push WHERE-claused indexes; the real partial
+  // index lives in scripts/post-merge.sh + the matching prod-schema-fixup.
+  domainUniq: uniqueIndex("manufacturers_domain_unique")
+    .on(table.domain)
+    .where(sql`${table.domain} IS NOT NULL AND ${table.deletedAt} IS NULL`),
 }));
 
 export const fulfillmentPartners = pgTable("fulfillment_partners", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
-  domain: text("domain").unique(),
+  // Uniqueness enforced by the partial index in the table callback
+  // (excludes soft-deleted rows, Task #1254), not a plain `.unique()`.
+  domain: text("domain"),
   logoUrl: text("logo_url"),
   coverUrl: text("cover_url"),
   bio: text("bio"),
@@ -3387,7 +3421,15 @@ export const fulfillmentPartners = pgTable("fulfillment_partners", {
   shippingAddressStruct: jsonb("shipping_address_struct").$type<PartnerAddressSnapshot>(),
   createdAt: timestamp("created_at").defaultNow(),
   ...softDeleteCols,
-});
+}, (table) => ({
+  // Task #1254 — domain uniqueness must exclude soft-deleted rows so
+  // trashing a fulfillment partner frees its domain slot (mirrors the
+  // vendors fix). drizzle-kit doesn't push WHERE-claused indexes; the
+  // real partial index lives in scripts/post-merge.sh + the prod-schema-fixup.
+  domainUniq: uniqueIndex("fulfillment_partners_domain_unique")
+    .on(table.domain)
+    .where(sql`${table.domain} IS NOT NULL AND ${table.deletedAt} IS NULL`),
+}));
 
 // One open quote request from a label/artist out to N manufacturers.
 // `albumId` is the album being pressed; the broadcast list (rfqReplies

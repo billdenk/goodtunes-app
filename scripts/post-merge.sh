@@ -4029,3 +4029,65 @@ SQL
 }
 migrate_vendors_domain_top_uniq dev  "${DATABASE_URL:-}"
 migrate_vendors_domain_top_uniq prod "${PROD_DATABASE_URL:-}"
+
+# Task #1254 — audit follow-up to the vendors_domain_top_uniq fix (#1252).
+# The same soft-delete/unique-index mismatch existed on every other
+# soft-deletable entity carrying a natural-key unique: labels.domain,
+# manufacturers.domain, fulfillment_partners.domain, and albums.share_slug.
+# None of those partial indexes filtered on deleted_at, so trashing a
+# label/press/fulfillment-partner/release permanently squatted its
+# domain/slug and re-creation blew up with an unhandled 23505. Drop each
+# old index and recreate with `... AND deleted_at IS NULL` on BOTH dev and
+# prod. Idempotent: DROP IF EXISTS + CREATE UNIQUE INDEX IF NOT EXISTS.
+migrate_softdelete_natural_key_uniques() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping softdelete natural-key uniques fix on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+-- labels.domain — drop any prior form (constraint or partial index) then
+-- recreate excluding soft-deleted rows.
+ALTER TABLE labels DROP CONSTRAINT IF EXISTS labels_domain_unique;
+ALTER TABLE labels DROP CONSTRAINT IF EXISTS labels_domain_key;
+DROP INDEX IF EXISTS labels_domain_unique;
+DROP INDEX IF EXISTS labels_domain_key;
+CREATE UNIQUE INDEX IF NOT EXISTS labels_domain_unique
+  ON labels (domain)
+  WHERE domain IS NOT NULL AND deleted_at IS NULL;
+
+-- manufacturers.domain
+ALTER TABLE manufacturers DROP CONSTRAINT IF EXISTS manufacturers_domain_unique;
+ALTER TABLE manufacturers DROP CONSTRAINT IF EXISTS manufacturers_domain_key;
+DROP INDEX IF EXISTS manufacturers_domain_unique;
+DROP INDEX IF EXISTS manufacturers_domain_key;
+CREATE UNIQUE INDEX IF NOT EXISTS manufacturers_domain_unique
+  ON manufacturers (domain)
+  WHERE domain IS NOT NULL AND deleted_at IS NULL;
+
+-- fulfillment_partners.domain
+ALTER TABLE fulfillment_partners DROP CONSTRAINT IF EXISTS fulfillment_partners_domain_unique;
+ALTER TABLE fulfillment_partners DROP CONSTRAINT IF EXISTS fulfillment_partners_domain_key;
+DROP INDEX IF EXISTS fulfillment_partners_domain_unique;
+DROP INDEX IF EXISTS fulfillment_partners_domain_key;
+CREATE UNIQUE INDEX IF NOT EXISTS fulfillment_partners_domain_unique
+  ON fulfillment_partners (domain)
+  WHERE domain IS NOT NULL AND deleted_at IS NULL;
+
+-- albums.share_slug — the prior partial index filtered share_slug IS NOT
+-- NULL but NOT deleted_at, so a trashed release squatted its slug.
+DROP INDEX IF EXISTS albums_share_slug_unique;
+CREATE UNIQUE INDEX IF NOT EXISTS albums_share_slug_unique
+  ON albums (share_slug)
+  WHERE share_slug IS NOT NULL AND deleted_at IS NULL;
+COMMIT;
+SQL
+  then
+    echo "post-merge: softdelete natural-key uniques fix ok on $label"
+  else
+    echo "post-merge: WARNING — softdelete natural-key uniques fix failed on $label (continuing)"
+  fi
+}
+migrate_softdelete_natural_key_uniques dev  "${DATABASE_URL:-}"
+migrate_softdelete_natural_key_uniques prod "${PROD_DATABASE_URL:-}"
