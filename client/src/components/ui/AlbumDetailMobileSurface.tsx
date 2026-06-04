@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -779,10 +780,7 @@ export function AlbumDetailMobileSurface({
         </div>
 
         {/* Tracks */}
-        <div
-          className="bg-[#00062B] px-5 mt-5 border-t"
-          style={{ borderColor: "rgba(255,255,255,0.08)" }}
-        >
+        <div className="bg-[color:var(--brand-bg)] px-5 mt-5 flex flex-col">
           {songs.map((song, i) => {
             const isActive = currentSongId === song.id;
             const isDownloaded = !!downloadedSongIds?.has(song.id);
@@ -797,48 +795,53 @@ export function AlbumDetailMobileSurface({
               }) === "locked";
             if (locked) {
               return (
-                <div
-                  key={song.id}
-                  className="flex items-center gap-3 h-16"
-                  data-testid={`row-track-${song.id}`}
-                >
-                  <div className="flex items-center gap-4 flex-1 min-w-0 h-full">
-                    <div className="flex-shrink-0 flex items-center gap-1.5">
-                      <div className="w-3" />
-                      <div className="w-6 flex items-center justify-end">
-                        <span
-                          className="text-[15px] tabular-nums"
-                          style={{ color: "rgba(255,255,255,0.22)" }}
-                        >
-                          {song.trackNumber}
-                        </span>
+                <Fragment key={song.id}>
+                  <div
+                    className="h-px flex-shrink-0"
+                    style={{ background: "rgba(255,255,255,0.20)" }}
+                    aria-hidden
+                  />
+                  <div
+                    className="flex items-center gap-3 h-16"
+                    data-testid={`row-track-${song.id}`}
+                  >
+                    <div className="flex items-center gap-4 flex-1 min-w-0 h-full">
+                      <div className="flex-shrink-0 flex items-center gap-1.5">
+                        <div className="w-3" />
+                        <div className="w-6 flex items-center justify-end">
+                          <span
+                            className="text-[15px] tabular-nums"
+                            style={{ color: "rgba(255,255,255,0.22)" }}
+                          >
+                            {song.trackNumber}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0 h-full flex items-center gap-2.5">
+                        <p className="text-[15px] font-medium truncate text-white/45">
+                          {song.title}
+                        </p>
+                        {song.isExplicit && <ExplicitBadge />}
+                        <Lock
+                          className="w-3 h-3 text-white/35 flex-shrink-0"
+                          strokeWidth={2.2}
+                          aria-hidden
+                          data-testid={`icon-locked-${song.id}`}
+                        />
                       </div>
                     </div>
-                    <div className="flex-1 min-w-0 relative h-full flex items-center gap-2.5">
-                      <p className="text-[15px] font-medium truncate text-white/45">
-                        {song.title}
-                      </p>
-                      {song.isExplicit && <ExplicitBadge />}
-                      <Lock
-                        className="w-3 h-3 text-white/35 flex-shrink-0"
-                        strokeWidth={2.2}
-                        aria-hidden
-                        data-testid={`icon-locked-${song.id}`}
-                      />
-                      {i > 0 && (
-                        <span
-                          className="absolute left-0 right-0 top-0 h-px pointer-events-none"
-                          style={{ background: "rgba(255,255,255,0.10)" }}
-                        />
-                      )}
-                    </div>
                   </div>
-                </div>
+                </Fragment>
               );
             }
             return (
+              <Fragment key={song.id}>
               <div
-                key={song.id}
+                className="h-px flex-shrink-0"
+                style={{ background: "rgba(255,255,255,0.20)" }}
+                aria-hidden
+              />
+              <div
                 className="flex items-center gap-3 h-16 active:bg-white/[0.03] transition-colors"
                 data-testid={`row-track-${song.id}`}
               >
@@ -913,19 +916,13 @@ export function AlbumDetailMobileSurface({
                       )}
                     </div>
                   </div>
-                  <div className="flex-1 min-w-0 relative h-full flex items-center gap-2.5">
+                  <div className="flex-1 min-w-0 h-full flex items-center gap-2.5">
                     <p
                       className={`text-[15px] font-semibold truncate ${isActive ? "text-[#319ED8]" : "text-fan-primary"}`}
                     >
                       {song.title}
                     </p>
                     {song.isExplicit && <ExplicitBadge />}
-                    {i > 0 && (
-                      <span
-                        className="absolute left-0 right-0 top-0 h-px pointer-events-none"
-                        style={{ background: "rgba(255,255,255,0.10)" }}
-                      />
-                    )}
                   </div>
                 </button>
                 {nativeDownloadsEnabled && (
@@ -999,11 +996,12 @@ export function AlbumDetailMobileSurface({
                   </svg>
                 </button>
               </div>
+              </Fragment>
             );
           })}
           <div
-            className="h-px"
-            style={{ background: "rgba(255,255,255,0.08)" }}
+            className="h-px flex-shrink-0"
+            style={{ background: "rgba(255,255,255,0.20)" }}
           />
         </div>
 
