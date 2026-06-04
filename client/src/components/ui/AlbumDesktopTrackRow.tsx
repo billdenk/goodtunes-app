@@ -123,11 +123,14 @@ export function AlbumDesktopTrackRow({
       )}
 
       {/* Track number / play affordance / equalizer cell. */}
-      <div className="w-6 text-right relative h-5">
-        {/* Plain number — visible whenever the row is at rest. */}
+      <div className="w-6 relative h-5">
+        {/* Plain number — visible whenever the row is at rest. Stacked
+            absolute + flex-centered + justify-end pr-[1px] so it occupies the
+            EXACT same box as the play triangle / equalizer below; otherwise
+            the glyph jumps a hair on hover. */}
         <span
           className={[
-            "text-[13px] tabular-nums transition-opacity",
+            "absolute inset-0 inline-flex items-center justify-end pr-[1px] text-xs tabular-nums transition-opacity",
             state === "locked" ? "text-fan-faint" : "text-fan-primary/[0.32]",
             showPlayGlyph || isCurrent ? "opacity-0" : "opacity-100",
           ].join(" ")}
