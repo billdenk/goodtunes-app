@@ -680,28 +680,44 @@ export function DesktopAlbumView({
             </div>
           )}
 
+          {/* Bonus sections (videos/photos) sit on a subtly lighter panel —
+              Apple-Music treatment where the below-the-music sections read as
+              a distinct background tint from the tracklist. Only albums with
+              bonus media ever reach these tabs, so the tint is scoped to them. */}
           {effectiveTab === "videos" && (
-            <BonusGrid
-              items={videos.map((v) => ({
-                id: v.id,
-                thumb: v.posterUrl ?? album.artwork,
-                label: v.title ?? "Untitled",
-              }))}
-              locked={!isOwned}
-              kind="video"
-            />
+            <div
+              className="rounded-2xl p-5"
+              style={{ background: "rgba(255,255,255,0.04)" }}
+              data-testid="section-videos"
+            >
+              <BonusGrid
+                items={videos.map((v) => ({
+                  id: v.id,
+                  thumb: v.posterUrl ?? album.artwork,
+                  label: v.title ?? "Untitled",
+                }))}
+                locked={!isOwned}
+                kind="video"
+              />
+            </div>
           )}
 
           {effectiveTab === "photos" && (
-            <BonusGrid
-              items={photos.map((p) => ({
-                id: p.id,
-                thumb: p.photoUrl,
-                label: p.caption ?? "",
-              }))}
-              locked={!isOwned}
-              kind="photo"
-            />
+            <div
+              className="rounded-2xl p-5"
+              style={{ background: "rgba(255,255,255,0.04)" }}
+              data-testid="section-photos"
+            >
+              <BonusGrid
+                items={photos.map((p) => ({
+                  id: p.id,
+                  thumb: p.photoUrl,
+                  label: p.caption ?? "",
+                }))}
+                locked={!isOwned}
+                kind="photo"
+              />
+            </div>
           )}
         </div>
 
