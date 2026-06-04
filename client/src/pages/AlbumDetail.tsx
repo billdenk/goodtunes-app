@@ -853,7 +853,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
             if (full) handleStreamSong(full);
           }}
           onStreamAlbum={handleStreamAlbum}
-          bonusSlot={<AlbumBonusContent albumId={album.id} locked={!isOwned} />}
+          bonusSlot={<AlbumBonusContent albumId={album.id} locked={!isOwned} artist={album.artist} />}
           lineupSlot={<AlbumLineupRail albumId={album.id} onPickMember={(name) => navigate(`/artist/${encodeURIComponent(name)}`)} />}
           onBack={() => goBack(navigate)}
           onShare={handleShare}
@@ -3660,7 +3660,7 @@ function LightboxSlide({
   );
 }
 
-export function AlbumBonusContent({ albumId, locked = false }: { albumId: string; locked?: boolean }) {
+export function AlbumBonusContent({ albumId, locked = false, artist }: { albumId: string; locked?: boolean; artist?: string }) {
   const { data: videos = [] } = useQuery<BonusVideo[]>({
     queryKey: ["/api/albums", albumId, "videos"],
   });
@@ -3724,6 +3724,9 @@ export function AlbumBonusContent({ albumId, locked = false }: { albumId: string
                 >
                   <BonusVideoPlayer video={v} locked={locked} />
                   <p className="mt-2 text-[14px] text-fan-primary font-medium truncate">{v.title}</p>
+                  {artist && (
+                    <p className="text-xs text-fan-secondary truncate">{artist}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -3755,7 +3758,10 @@ export function AlbumBonusContent({ albumId, locked = false }: { albumId: string
               {videos.map((v) => (
                 <div key={v.id} data-testid={`tile-all-album-video-${v.id}`}>
                   <BonusVideoPlayer video={v} locked={locked} />
-                  <p className="mt-2 text-[15px] text-fan-primary font-medium">{v.title}</p>
+                  <p className="mt-2 text-sm text-fan-primary font-medium truncate">{v.title}</p>
+                  {artist && (
+                    <p className="text-xs text-fan-secondary truncate">{artist}</p>
+                  )}
                 </div>
               ))}
             </div>

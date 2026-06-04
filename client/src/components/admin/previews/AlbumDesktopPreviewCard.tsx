@@ -62,7 +62,7 @@ export function AlbumDesktopPreviewCard({ album }: { album: AlbumPreviewAlbum })
               ownedNums={[1]}
               currentSongId={null}
               isPlaying={false}
-              bonusSlot={<AlbumBonusContent albumId={album.id} />}
+              bonusSlot={<AlbumBonusContent albumId={album.id} artist={album.artist} />}
               lineupSlot={
                 <AlbumLineupRail
                   albumId={album.id}

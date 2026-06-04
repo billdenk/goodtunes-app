@@ -853,6 +853,7 @@ export function DesktopAlbumView({
                   id: v.id,
                   thumb: v.posterUrl ?? album.artwork,
                   label: v.title ?? "Untitled",
+                  sublabel: album.artist,
                 }))}
                 locked={!isOwned}
                 kind="video"
@@ -1165,7 +1166,7 @@ export function BonusGrid({
   layout = "grid",
   limit,
 }: {
-  items: { id: string; thumb: string; label: string }[];
+  items: { id: string; thumb: string; label: string; sublabel?: string }[];
   locked: boolean;
   kind: "video" | "photo";
   // Video cards only: invoked when the fan clicks (or presses Enter/Space on)
@@ -1271,9 +1272,16 @@ export function BonusGrid({
               )}
             </div>
             {it.label && (
-              <p className="text-fan-secondary text-xs leading-snug truncate px-0.5">
-                {it.label}
-              </p>
+              <div className="px-0.5">
+                <p className="text-fan-primary text-xs font-medium leading-snug truncate">
+                  {it.label}
+                </p>
+                {it.sublabel && (
+                  <p className="text-fan-secondary text-xs leading-snug truncate mt-0.5">
+                    {it.sublabel}
+                  </p>
+                )}
+              </div>
             )}
           </div>
         ) : (
