@@ -35,6 +35,7 @@ import {
   setDevAlbumOwnership,
 } from "@/hooks/useAlbumOwnership";
 import { useFullPlaybackAccess } from "@/hooks/useFullPlaybackAccess";
+import { useFanPreview } from "@/hooks/useFanPreview";
 import {
   AlbumDesktopSidebar,
   BRAND_BG,
@@ -211,7 +212,11 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   // still flip between owned/not-owned states. Temporary until the real
   // ownership pipeline lands (Phase 4).
   const fullPlaybackAccess = useFullPlaybackAccess();
-  const effectiveOwned = isOwned || fullPlaybackAccess;
+  // "View as a fan" lens — when a privileged operator flips it on, the page
+  // renders as a non-owner visitor would see it (previews + Buy, no library
+  // actions). See useFanPreview / the floating toggle in AlbumDetail.
+  const { fanView } = useFanPreview();
+  const effectiveOwned = !fanView && (isOwned || fullPlaybackAccess);
   const favSongs = useFavoriteSongs();
   const [showAlbumCredits, setShowAlbumCredits] = useState(false);
   const [playlistPickerSong, setPlaylistPickerSong] = useState<{ id: string; title: string } | null>(null);

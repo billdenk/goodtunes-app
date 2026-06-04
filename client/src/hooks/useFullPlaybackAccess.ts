@@ -1,4 +1,5 @@
 import { useAuth } from "./useAuth";
+import { isFullAccessEmail } from "@shared/fullAccess";
 
 /**
  * Temporary "for now" exemption from the preview-first 30s cap.
@@ -32,16 +33,10 @@ import { useAuth } from "./useAuth";
  * FULL_ACCESS_EMAILS. When the real ownership pipeline lands, delete this
  * hook and its callers.
  */
-const FULL_ACCESS_EMAILS: string[] = [
-  // Bill's fan-side account (@billy). Add more emails (lowercase) below as needed.
-  "billdenk@mac.com",
-];
-
 export function useFullPlaybackAccess(): boolean {
   const { user } = useAuth();
   if (!user) return false;
   if (user.isAdmin || user.kind === "admin") return true;
-  const email = user.email?.toLowerCase().trim();
-  if (email && FULL_ACCESS_EMAILS.includes(email)) return true;
+  if (isFullAccessEmail(user.email)) return true;
   return false;
 }

@@ -15945,11 +15945,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const { normalizeShareSlug } = await import("@shared/shareSlug");
     const slug = normalizeShareSlug(String(req.params.slug));
     if (!slug) return res.status(404).json({ message: "Not found" });
-    const album = await storage.getAlbumBySlug(slug);
-    // getAlbumBySlug already filters hidden / trashed / sunrise. Prepping
-    // (not-yet-released shells) must also 404 — a slug is only valid once
-    // the release is buy-eligible.
-    if (!album || album.isPrepping) {
+    // Operator "staging" preview: a slug resolves for a privileged viewer even
+    // while the release is still hidden / prepping / pre-sunrise, so we can
+    // iterate on the public Preview & Purchase page with real data before
+    // flipping it live. Everyone else only ever sees buy-eligible releases.
+    // OG/unfurl (server/og.ts) stays gated, so a crawler still can't surface a
+    // staged release.
+    //
+    // NOTE: this route is reached on the get.goodtunes.music host, which is
+    // hard-mapped to the *customer* auth kind — an admin-kind session is
+    // rejected there, so `isAdminUser` alone would always be false on the host
+    // that matters. We also accept a signed-in full-access customer (Bill's fan
+    // account) by email, the only account that needs staging on the get host.
+    let staging = await isAdminUser(req);
+    if (!staging) {
+      const auth = await getAuthFromRequest(req);
+      if (auth?.kind === "customer") {
+        const { isFullAccessEmail } = await import("@shared/fullAccess");
+        const c = await storage.getCustomer(auth.userId);
+        if (isFullAccessEmail(c?.email)) staging = true;
+      }
+    }
+    const album = await storage.getAlbumBySlug(
+      slug,
+      staging ? { includeHidden: true } : undefined,
+    );
+    // getAlbumBySlug already filters hidden / trashed / sunrise (relaxed for
+    // staging above). Prepping (not-yet-released shells) must also 404 for
+    // everyone else — a slug is only valid once the release is buy-eligible.
+    if (!album || (album.isPrepping && !staging)) {
       return res.status(404).json({ message: "Not found" });
     }
     const songs = await storage.getSongsByAlbum(album.id);

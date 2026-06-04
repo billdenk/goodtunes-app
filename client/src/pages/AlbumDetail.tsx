@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
 import { useAlbumOwnership } from "@/hooks/useAlbumOwnership";
 import { useFullPlaybackAccess } from "@/hooks/useFullPlaybackAccess";
+import { FanPreviewProvider, FanPreviewToggle, useFanPreview } from "@/hooks/useFanPreview";
 import { useAuth } from "@/hooks/useAuth";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
@@ -122,8 +123,21 @@ export function AlbumDetail({ albumId }: { albumId?: string } = {}) {
   // The desktop surface is preview-first for non-owners and surfaces
   // Buy CTAs; both violate App Review 3.1.1 if shown in the iOS app.
   // The mobile shell already respects `buyEnabled` everywhere.
-  if (isDesktop && buyEnabled) return <AlbumDetailDesktop albumId={albumId} />;
-  return <AlbumDetailMobile albumId={albumId} />;
+  const surface =
+    isDesktop && buyEnabled ? (
+      <AlbumDetailDesktop albumId={albumId} />
+    ) : (
+      <AlbumDetailMobile albumId={albumId} />
+    );
+  // FanPreviewProvider + the floating "View as a fan" toggle let privileged
+  // operators flip this page into the locked visitor view; both surfaces read
+  // the lens via useFanPreview().
+  return (
+    <FanPreviewProvider>
+      {surface}
+      <FanPreviewToggle />
+    </FanPreviewProvider>
+  );
 }
 
 // `albumId` lets a host-aware caller (the store launch storefront) render a
@@ -135,7 +149,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
   const _recordRecent = useRecordRecent();
   const [, navigate] = useLocation();
   const { playSong, currentSong, isPlaying, togglePlay, playNext, playLast, addToQueue, queue, currentIndex, previewMode, setPreviewMode, currentTime } = usePlayer();
-  const isOwned = useAlbumOwnership(id);
+  const isOwnedRaw = useAlbumOwnership(id);
   // Task #909 — is this album an *active* admin-granted preview (vs a real
   // owned/comp copy)? Drives the [Demo] GoodDeed cert. Server already
   // excludes expired previews from /api/my-albums.
@@ -147,13 +161,18 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
   // exempted from preview-first "for now" so they hear full-length tracks
   // on every album — including ones shared to an account that doesn't own
   // them. Temporary until the real ownership pipeline lands (Phase 4).
-  const fullPlaybackAccess = useFullPlaybackAccess();
+  const fullPlaybackAccessRaw = useFullPlaybackAccess();
   // On web (buyEnabled) the album is in preview-first mode when the fan
   // hasn't bought it yet — every play triggers the 30s-per-track preview
   // session instead of full-track playback (matching the AlbumDetail-
   // Desktop branch). On iOS native (buyEnabled=false) we keep the in-app
   // behavior since IAP isn't wired and the player is for owned content.
   // Full-playback accounts are treated like owners here.
+  // "View as a fan" lens: when a privileged operator flips it on, force the
+  // page to render exactly as a non-owner visitor would see it.
+  const { fanView } = useFanPreview();
+  const isOwned = fanView ? false : isOwnedRaw;
+  const fullPlaybackAccess = fanView ? false : fullPlaybackAccessRaw;
   const previewFirst = buyEnabled && !isOwned && !fullPlaybackAccess;
   const queueHasUpcoming = queue.length - currentIndex - 1 > 0;
   const { user, updateProfile } = useAuth();
