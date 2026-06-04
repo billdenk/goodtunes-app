@@ -1,8 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { useHasInAppHistory } from "@/lib/navHistory";
-import { ChevronLeft, Play, Pause, Shuffle, Lock, Share, Info } from "lucide-react";
+import { popBounce } from "@/lib/motion";
+import { ChevronLeft, Play, Pause, Shuffle, Lock, Share, Info, X, MoreHorizontal } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { BonusPlayBadge } from "@/components/ui/BonusPlayBadge";
 import { IconButton } from "@/components/ui/IconButton";
@@ -136,6 +138,20 @@ export type DesktopAlbumViewProps = {
   hasAlbumCredits?: boolean;
   onOpenAlbumCredits?: () => void;
 
+  /** Task #1185 — top-right ⋯ album menu (mirrors the mobile album
+   *  surface's Share+⋯ pill). Each item only renders when its handler is
+   *  supplied, so hosts gate by ownership/applicability exactly like the
+   *  mobile menu. The Share button always renders (copy-link). */
+  onViewCertificate?: () => void;
+  onViewProvenance?: () => void;
+  onAddAlbumToPlaylist?: () => void;
+  /** Download the unsigned fan GoodDeed certificate PDF — wired only when
+   *  the fan owns a downloadable GoodDeed for this album. */
+  onDownloadCert?: () => void;
+  /** Drives the provenance item's label: "Ownership" when the fan owns
+   *  more than one copy, else "View Provenance" (matches mobile). */
+  isMultiOwned?: boolean;
+
   /** Override the back-pill destination. Defaults to navigating to
    *  /collection (mirrors the mobile album surface's back carat). */
   onBack?: () => void;
@@ -224,6 +240,11 @@ export function DesktopAlbumView({
   favoriteSongIds,
   hasAlbumCredits = false,
   onOpenAlbumCredits,
+  onViewCertificate,
+  onViewProvenance,
+  onAddAlbumToPlaylist,
+  onDownloadCert,
+  isMultiOwned = false,
   onBack,
   lyricsOpen,
   lyrics,
@@ -279,6 +300,23 @@ export function DesktopAlbumView({
       toast({ title: "Copy failed", description: url, variant: "destructive" });
     }
   };
+
+  // Task #1185 — top-right ⋯ album menu. Anchored under the ⋯ button and
+  // portaled to <body> so it floats above the album chrome regardless of
+  // overflow. Mirrors the mobile album surface's menu item set.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const hasMenuItems =
+    !!onViewCertificate || !!onDownloadCert || !!onViewProvenance || !!onAddAlbumToPlaylist;
+  const openMenu = () => {
+    const rect = menuBtnRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMenuPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+    }
+    setMenuOpen((s) => !s);
+  };
+
   const meta = [album.genre, album.type === "LP" ? "LP" : album.type, album.year]
     .filter(Boolean)
     .map((s) => String(s).toUpperCase())
@@ -341,9 +379,16 @@ export function DesktopAlbumView({
               right edge of the album header, away from the transport controls
               (Task #1055). `ml-auto` keeps them right-aligned whether or not
               the back-carat is present. */}
-          <div className="flex items-center gap-1 ml-auto">
+          <div
+            className="flex items-center rounded-full ml-auto"
+            style={{
+              background: "rgba(255,255,255,0.17)",
+              backdropFilter: "blur(18px) saturate(180%)",
+              WebkitBackdropFilter: "blur(18px) saturate(180%)",
+            }}
+          >
             <IconButton
-              variant="glass"
+              variant="ghost"
               size="md"
               label="Share album"
               onClick={handleCopyShareLink}
@@ -352,8 +397,130 @@ export function DesktopAlbumView({
             >
               <Share strokeWidth={2} />
             </IconButton>
+            {hasMenuItems && (
+              <>
+                <div className="w-px h-4 bg-white/25" aria-hidden />
+                <IconButton
+                  ref={menuBtnRef}
+                  variant="ghost"
+                  size="md"
+                  label="Album options"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  onClick={openMenu}
+                  className="text-fan-primary hover:text-white"
+                  data-testid="button-album-menu"
+                >
+                  <MoreHorizontal strokeWidth={2} />
+                </IconButton>
+              </>
+            )}
           </div>
         </div>
+
+        {createPortal(
+          <AnimatePresence>
+            {menuOpen && menuPos && (
+              <>
+                <motion.div
+                  className="fixed inset-0 z-[60]"
+                  onClick={() => setMenuOpen(false)}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.12 }}
+                />
+                <motion.div
+                  role="menu"
+                  className="fixed z-[61] rounded-2xl py-1 min-w-[230px] overflow-hidden"
+                  style={{
+                    top: menuPos.top,
+                    right: menuPos.right,
+                    background: "rgba(28, 30, 38, 0.96)",
+                    backdropFilter: "blur(28px) saturate(180%)",
+                    WebkitBackdropFilter: "blur(28px) saturate(180%)",
+                    boxShadow: "0 16px 40px rgba(0,0,0,0.6)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    transformOrigin: "top right",
+                  }}
+                  initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.8, y: -6 }}
+                  animate={{ opacity: 1, scale: 1, y: 0, transition: popBounce(!!reduceMotion) }}
+                  exit={reduceMotion ? { opacity: 0, transition: { duration: 0.12 } } : { opacity: 0, scale: 0.92, y: -4, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }}
+                >
+                  {onViewCertificate && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => { setMenuOpen(false); onViewCertificate(); }}
+                        className="w-full flex items-center justify-between px-4 py-3 text-sm text-white transition-colors active:bg-white/10"
+                        data-testid="menu-view-certificate"
+                      >
+                        <span>View GoodDeed®</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-mint)" strokeWidth="2">
+                          <path d="M9 12l2 2 4-4M7.8 4.7a3.4 3.4 0 001.95-.8 3.4 3.4 0 014.4 0 3.4 3.4 0 001.95.8 3.4 3.4 0 013.15 3.15 3.4 3.4 0 00.8 1.95 3.4 3.4 0 010 4.4 3.4 3.4 0 00-.8 1.95 3.4 3.4 0 01-3.15 3.15 3.4 3.4 0 00-1.95.8 3.4 3.4 0 01-4.4 0 3.4 3.4 0 00-1.95-.8 3.4 3.4 0 01-3.15-3.15 3.4 3.4 0 00-.8-1.95 3.4 3.4 0 010-4.4 3.4 3.4 0 00.8-1.95 3.4 3.4 0 013.15-3.15z" />
+                        </svg>
+                      </button>
+                      <div className="h-px bg-white/8" />
+                    </>
+                  )}
+                  {onDownloadCert && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => { setMenuOpen(false); onDownloadCert(); }}
+                        className="w-full flex items-center justify-between px-4 py-3 text-sm text-white transition-colors active:bg-white/10"
+                        data-testid="menu-download-gooddeed-pdf"
+                      >
+                        <span>Download GoodDeed PDF</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-mint)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 3v12" />
+                          <path d="M7 10l5 5 5-5" />
+                          <path d="M5 21h14" />
+                        </svg>
+                      </button>
+                      <div className="h-px bg-white/8" />
+                    </>
+                  )}
+                  {onViewProvenance && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => { setMenuOpen(false); onViewProvenance(); }}
+                        className="w-full flex items-center justify-between px-4 py-3 text-sm text-white transition-colors active:bg-white/10"
+                        data-testid="menu-view-provenance"
+                      >
+                        <span>{isMultiOwned ? "Ownership" : "View Provenance"}</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-blue)" strokeWidth="2" strokeLinecap="round">
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M12 7v5l3 2" />
+                        </svg>
+                      </button>
+                      <div className="h-px bg-white/8" />
+                    </>
+                  )}
+                  {onAddAlbumToPlaylist && (
+                    <button
+                      type="button"
+                      onClick={() => { setMenuOpen(false); onAddAlbumToPlaylist(); }}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm text-white transition-colors active:bg-white/10"
+                      data-testid="menu-add-album-to-playlist"
+                    >
+                      <span>Add to Playlist</span>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="3" y1="6" x2="14" y2="6" />
+                        <line x1="3" y1="12" x2="14" y2="12" />
+                        <line x1="3" y1="18" x2="10" y2="18" />
+                        <line x1="18" y1="9" x2="18" y2="21" />
+                        <line x1="12" y1="15" x2="24" y2="15" />
+                      </svg>
+                    </button>
+                  )}
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
 
         {/* Hero. Cover shrinks to 220px at md (portrait tablets) so the
             artist/title block keeps a comfortable reading measure next

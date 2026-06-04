@@ -118,6 +118,17 @@ import { hasReachedSunset } from "@shared/albumStage";
  * Both branches consume the same `/api/albums/:id` cache so there's no
  * double fetch on resize.
  */
+// Task #1185 — trimmed order shape for resolving a downloadable GoodDeed
+// cert (mirrors AlbumCard's OrderLite). Keyed off the shared `/api/orders`
+// cache; we only read the fields the ⋯ menu's PDF download needs.
+type OrderLite = {
+  id: string;
+  albumId: string;
+  goodDeedNumber: number | null;
+  refundedAt: string | null;
+  cert?: { id: string } | null;
+};
+
 export function AlbumDetail({ albumId }: { albumId?: string } = {}) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   // iOS native (including iPad — the app ships universal,
@@ -558,6 +569,28 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
   const ownedNums = album?.ownedCertificates ?? (album?.certificateNumber ? [album.certificateNumber] : []);
   const isMulti = ownedNums.length > 1;
 
+  // Task #1185 — resolve the fan's owning order(s) for this album so the
+  // ⋯ menu can offer "Download GoodDeed PDF" (unsigned fan cert) when the
+  // fan owns a downloadable GoodDeed. Mirrors the AlbumCard pattern; the
+  // download hits the existing GET /api/orders/:orderId/cert/pdf endpoint.
+  const { data: certOrdersData } = useQuery<OrderLite[]>({
+    queryKey: ["/api/orders"],
+    enabled: !!user,
+  });
+  const certOrders = (certOrdersData ?? []).filter(
+    (o) => o.albumId === album?.id && !o.refundedAt && (o.cert || o.goodDeedNumber != null),
+  );
+  const pdfOrder = certOrders[0] ?? null;
+  const downloadPdf = () => {
+    if (!pdfOrder) return;
+    const a = document.createElement("a");
+    a.href = `/api/orders/${pdfOrder.id}/cert/pdf`;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
   const moreByArtist = album
     ? ALBUMS.filter((a) => a.artist === album.artist && a.id !== album.id)
     : [];
@@ -837,6 +870,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
           onViewCertificate={() => setShowCert(true)}
           onViewProvenance={handleViewProvenance}
           onAddAlbumToPlaylist={() => setShowAlbumPlaylistPicker(true)}
+          onDownloadCert={pdfOrder ? downloadPdf : undefined}
         >
           {editorialPanel}
         </AlbumDetailMobileSurface>

@@ -139,6 +139,11 @@ export interface AlbumDetailMobileSurfaceProps {
   onViewCertificate?: () => void;
   onViewProvenance?: () => void;
   onAddAlbumToPlaylist?: () => void;
+  /** Download the unsigned fan GoodDeed certificate PDF. Wired only when
+   *  the fan owns a downloadable GoodDeed for this album; renders a
+   *  "Download GoodDeed PDF" menu item between View GoodDeed and View
+   *  Provenance (mirrors the AlbumCard menu). */
+  onDownloadCert?: () => void;
 }
 
 /**
@@ -188,6 +193,7 @@ export function AlbumDetailMobileSurface({
   onViewCertificate,
   onViewProvenance,
   onAddAlbumToPlaylist,
+  onDownloadCert,
 }: AlbumDetailMobileSurfaceProps) {
   const [showMenu, setShowMenu] = useState(false);
   // Task #913 — when the bottom-nav search owns the top frosted layer, the
@@ -370,6 +376,27 @@ export function AlbumDetailMobileSurface({
                       strokeWidth="2"
                     >
                       <path d="M9 12l2 2 4-4M7.8 4.7a3.4 3.4 0 001.95-.8 3.4 3.4 0 014.4 0 3.4 3.4 0 001.95.8 3.4 3.4 0 013.15 3.15 3.4 3.4 0 00.8 1.95 3.4 3.4 0 010 4.4 3.4 3.4 0 00-.8 1.95 3.4 3.4 0 01-3.15 3.15 3.4 3.4 0 00-1.95.8 3.4 3.4 0 01-4.4 0 3.4 3.4 0 00-1.95-.8 3.4 3.4 0 01-3.15-3.15 3.4 3.4 0 00-.8-1.95 3.4 3.4 0 010-4.4 3.4 3.4 0 00.8-1.95 3.4 3.4 0 013.15-3.15z" />
+                    </svg>
+                  </button>
+                  <div className="h-px bg-white/8" />
+                </>
+              )}
+              {onDownloadCert && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMenu(false);
+                      onDownloadCert();
+                    }}
+                    className="w-full flex items-center justify-between px-4 py-3 text-sm text-white transition-colors active:bg-white/10"
+                    data-testid="menu-download-gooddeed-pdf"
+                  >
+                    <span>Download GoodDeed PDF</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-mint)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 3v12" />
+                      <path d="M7 10l5 5 5-5" />
+                      <path d="M5 21h14" />
                     </svg>
                   </button>
                   <div className="h-px bg-white/8" />

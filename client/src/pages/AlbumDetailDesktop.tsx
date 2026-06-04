@@ -56,7 +56,8 @@ import {
 } from "@/components/ui/DesktopAlbumView";
 import type { PlayerSong } from "@/context/PlayerContext";
 import type { Album as PlayerAlbum, Person } from "@/data/musicData";
-import { PersonDetailSheet } from "@/pages/AlbumDetail";
+import { PersonDetailSheet, ProvenanceSheet, OwnershipSheet } from "@/pages/AlbumDetail";
+import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { goBack } from "@/lib/navHistory";
 
 type ApiSong = {
@@ -103,6 +104,16 @@ type ApiAlbum = {
   shareSlug?: string | null;
   label?: { id: string; name: string; logoUrl: string | null } | null;
   songs: ApiSong[];
+};
+// Task #1185 — minimal shape of an /api/orders row, just the fields the ⋯
+// menu's "Download GoodDeed PDF" action needs to resolve the owning order.
+// Mirrors AlbumCard / mobile AlbumDetail's OrderLite.
+type OrderLite = {
+  id: string;
+  albumId: string;
+  goodDeedNumber: number | null;
+  refundedAt: string | null;
+  cert?: { id: string } | null;
 };
 type ApiAlbumVideo = {
   id: string;
@@ -224,6 +235,12 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const favSongs = useFavoriteSongs();
   const [showAlbumCredits, setShowAlbumCredits] = useState(false);
   const [playlistPickerSong, setPlaylistPickerSong] = useState<{ id: string; title: string } | null>(null);
+  // Task #1185 — desktop ⋯ menu sheet stack (mirrors mobile AlbumDetail).
+  const [showCert, setShowCert] = useState(false);
+  const [singleCertNum, setSingleCertNum] = useState<number | null>(null);
+  const [provenanceCertNum, setProvenanceCertNum] = useState<number | null>(null);
+  const [showOwnership, setShowOwnership] = useState(false);
+  const [showAlbumPlaylistPicker, setShowAlbumPlaylistPicker] = useState(false);
 
   // Person opened from the album-credits sheet. The desktop view has no
   // SuperCredits sheet stack of its own, so PersonDetailSheet brings its own
@@ -260,6 +277,46 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
 
   const hasPreviews = songs.some((s) => s.isPreviewable !== false);
   const canPlay = effectiveOwned || hasPreviews;
+
+  // Task #1185 — resolve the fan's owning order(s) for this album so the ⋯
+  // menu can offer GoodDeed actions (view cert/provenance/ownership +
+  // "Download GoodDeed PDF"). The desktop ApiAlbum carries no ownership
+  // numbers, so we derive them from the shared /api/orders cache (same
+  // pattern as AlbumCard / mobile AlbumDetail). Download hits the existing
+  // GET /api/orders/:orderId/cert/pdf unsigned fan endpoint.
+  const { data: certOrdersData } = useQuery<OrderLite[]>({
+    queryKey: ["/api/orders"],
+    enabled: !!user,
+  });
+  const certOrders = (certOrdersData ?? []).filter(
+    (o) => o.albumId === album?.id && !o.refundedAt && (o.cert || o.goodDeedNumber != null),
+  );
+  const ownedNums = certOrders
+    .map((o) => o.goodDeedNumber)
+    .filter((n): n is number => n != null)
+    .sort((a, b) => a - b);
+  const hasCert = ownedNums.length > 0;
+  const isMulti = ownedNums.length > 1;
+  const pdfOrder = certOrders[0] ?? null;
+  const downloadPdf = () => {
+    if (!pdfOrder) return;
+    const a = document.createElement("a");
+    a.href = `/api/orders/${pdfOrder.id}/cert/pdf`;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+  // Album cast for the GoodDeed sheets (same `as unknown as PlayerAlbum`
+  // pattern PersonDetailSheet uses). OwnershipSheet reads ownedCertificates,
+  // which the API row lacks, so stamp the order-derived numbers on.
+  const certAlbum = album
+    ? ({ ...(album as unknown as PlayerAlbum), ownedCertificates: ownedNums })
+    : null;
+  const handleViewProvenance = () => {
+    if (isMulti) setShowOwnership(true);
+    else setProvenanceCertNum(ownedNums[0] ?? 1);
+  };
 
   // Is the player currently auditioning a song from this album under
   // preview-mode? Used by the rose Play pill to switch into its Pause
@@ -608,6 +665,11 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             favoriteSongIds={favSongs.set}
             hasAlbumCredits={effectiveOwned && hasAnyCredits}
             onOpenAlbumCredits={() => setShowAlbumCredits(true)}
+            onViewCertificate={hasCert ? () => setShowCert(true) : undefined}
+            onViewProvenance={hasCert ? handleViewProvenance : undefined}
+            onAddAlbumToPlaylist={() => setShowAlbumPlaylistPicker(true)}
+            onDownloadCert={pdfOrder ? downloadPdf : undefined}
+            isMultiOwned={isMulti}
             onBack={() => goBack(navigate)}
             onBuyBundle={buyEnabled ? handleBuyBundle : undefined}
             signedCertPriceCents={buyEnabled ? signedCertPriceCents : null}
@@ -753,6 +815,53 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
           />
         )}
       </AnimatePresence>
+
+      {/* Task #1185 — desktop ⋯ menu GoodDeed sheet stack (mirrors mobile). */}
+      <AnimatePresence>
+        {showAlbumPlaylistPicker && album && (
+          <PlaylistPickerSheet
+            songIds={songs.map((s) => s.id)}
+            songTitle={`${album.title} · ${songs.length} song${songs.length === 1 ? "" : "s"}`}
+            heading="Add Album to Playlist"
+            onClose={() => setShowAlbumPlaylistPicker(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {showCert && certAlbum && (
+        <GoodDeedCertificate
+          album={certAlbum}
+          ownerName={user?.displayName || "GoodTunes Fan"}
+          identities={{
+            realName: user?.realName ?? null,
+            displayName: user?.displayName || "GoodTunes Fan",
+            username: user?.username || "you",
+          }}
+          certificateNumber={singleCertNum ?? ownedNums[0] ?? 1}
+          certificateNumbers={singleCertNum !== null ? [singleCertNum] : ownedNums}
+          isPreview={false}
+          onClose={() => { setShowCert(false); setSingleCertNum(null); }}
+        />
+      )}
+
+      {provenanceCertNum !== null && certAlbum && (
+        <ProvenanceSheet
+          onViewGoodDeed={(n) => { setProvenanceCertNum(null); setShowCert(true); setSingleCertNum(n); }}
+          album={certAlbum}
+          ownerName={user?.displayName || "GoodTunes Fan"}
+          certNum={provenanceCertNum}
+          onClose={() => setProvenanceCertNum(null)}
+        />
+      )}
+
+      {showOwnership && certAlbum && (
+        <OwnershipSheet
+          album={certAlbum}
+          ownerName={user?.displayName || "GoodTunes Fan"}
+          onClose={() => setShowOwnership(false)}
+          onSelectCert={(n) => { setShowOwnership(false); setProvenanceCertNum(n); }}
+        />
+      )}
 
       {showBuySheet && album && (
         <BuySheet
