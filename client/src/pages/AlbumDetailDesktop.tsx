@@ -526,8 +526,8 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
         active={player.showLyrics}
         fontSize={22}
         gapClassName="gap-3"
-        scrollOffsetRatio={0.3}
-        paddingTop="12vh"
+        scrollOffsetRatio={0.16}
+        paddingTop="16vh"
         paddingBottom="24vh"
         className="flex-1 min-h-0 px-4"
       />

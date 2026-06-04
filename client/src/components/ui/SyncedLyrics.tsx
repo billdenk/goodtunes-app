@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { LyricsGapDots } from "@/components/LyricsGapDots";
@@ -8,15 +8,26 @@ import { buildSyncedLines } from "@/lib/syncedLyrics";
 // neighbours soften over a single gentle ease-in-out ramp, so the change
 // between lines reads as one continuous cross-fade rather than a stepped
 // pop. 520ms on a symmetric ease-in-out curve matches the unhurried feel
-// of Apple's lyric focus. Tuned alongside the auto-scroll's native smooth
-// behavior so the focus ramp and the column glide read as one motion.
+// of Apple's lyric focus. Tuned alongside the unison pull-up below so the
+// focus ramp and the column move read as one motion.
 const FOCUS_MS = 520;
 const FOCUS_EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
 
+// Apple-Music "pull-up in unison". Each time the active line advances, the
+// WHOLE lyric stack translates up together as one unit (a transform, not a
+// per-line scroll) so every line below moves in lock-step. The easing is an
+// ease-out-back curve whose >1 control point overshoots the target slightly
+// and settles back — the subtle bounce Bill asked for. ~620ms reads as a
+// single gentle motion rather than a flat linear scroll. prefers-reduced-
+// motion drops the transition entirely so the stack snaps with no bounce.
+const MOVE_MS = 620;
+const MOVE_EASE = "cubic-bezier(0.34, 1.35, 0.5, 1)";
+
 /**
  * Shared synced-lyrics column. The Apple-Music karaoke surface — active
- * line sharp + pure white, neighbours progressively blurred + faded, the
- * column auto-scrolls to keep the active line ~28% down the viewport,
+ * line sharp + pure white anchored near the TOP of the viewport (just
+ * below the top fade), neighbours progressively blurred + faded, and on
+ * each advance the whole stack pulls up in unison with a slight bounce,
  * instrumental gaps render LyricsGapDots, and a trailing "Written by …"
  * credit rides the bottom fade.
  *
@@ -43,18 +54,20 @@ export interface SyncedLyricsProps {
   currentTime: number;
   onSeek: (seconds: number) => void;
   writers?: string[] | null;
-  /** Gates the auto-scroll effect — the consumer keeps it true while the
+  /** Gates the unison pull-up — the consumer keeps it true while the
    *  lyric column is actually on screen (mobile passes `showLyrics`). */
   active?: boolean;
   /** Active-line font size in px. Default 28 (mobile parity). */
   fontSize?: number;
   /** Vertical gap between rows (Tailwind class). Default `gap-3`. */
   gapClassName?: string;
-  /** Where the active line lands in the viewport (0 = top, 1 = bottom).
-   *  Default 0.28 — Apple-Music's ~28%-down resting position. */
+  /** Where the active line rests in the viewport (0 = top, 1 = bottom).
+   *  Default 0.16 — anchored near the top, just below the top fade, the
+   *  way Apple's newer desktop karaoke parks the current line. */
   scrollOffsetRatio?: number;
-  /** CSS length for the scroll viewport's top/bottom padding so the first
-   *  and last lines can still center. Defaults to mobile's 18vh / 30vh. */
+  /** CSS length for the stack's top/bottom padding so the first line can
+   *  rest at the top slot and the last line can still pull all the way up
+   *  to it. Defaults to mobile's 16vh / 30vh. */
   paddingTop?: string;
   paddingBottom?: string;
   /** Override the top/bottom fade mask. Defaults to the mobile gradient. */
@@ -75,8 +88,8 @@ export function SyncedLyrics({
   active = true,
   fontSize = 28,
   gapClassName = "gap-3",
-  scrollOffsetRatio = 0.28,
-  paddingTop = "18vh",
+  scrollOffsetRatio = 0.16,
+  paddingTop = "16vh",
   paddingBottom = "30vh",
   maskImage = DEFAULT_MASK,
   className,
@@ -97,41 +110,60 @@ export function SyncedLyrics({
 
   const lyricLineRefs = useRef<Array<HTMLDivElement | null>>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const stackRef = useRef<HTMLDivElement | null>(null);
   const reduceMotion = useReducedMotion();
+  // How far (px) the whole lyric stack is translated up so the active line
+  // rests in its top slot. Each advance changes this value and the stack's
+  // CSS transform tweens the whole column up together (see MOVE_EASE).
+  const [translateY, setTranslateY] = useState(0);
 
-  useEffect(() => {
+  // Measure in a layout effect (before paint) so the very first active line
+  // is positioned without an entry slide, and so the transform target is
+  // read against the real laid-out geometry. Apple-style: park the active
+  // line near the TOP of the viewport (`scrollOffsetRatio`), just clear of
+  // the top fade-mask, leaving the upcoming lines below it. Because the
+  // whole stack is a single transformed element, every line below the
+  // active one moves up in unison — never a per-line or flat-scroll feel.
+  useLayoutEffect(() => {
     if (!active) return;
     const el = lyricLineRefs.current[activeLineIdx];
-    const scroll = scrollRef.current;
-    if (!el || !scroll) return;
-    // Apple-style: land the active line ~28% down from the top of the
-    // scroll viewport (not flush with the top edge), so the line sits
-    // comfortably below the header fade-mask and there's room for the
-    // next 4-5 upcoming lines to be visible. The native smooth scroll is
-    // paced to glide alongside the focus cross-fade so the column move and
-    // the brightness handoff read as one continuous motion, not two jolts.
-    const targetOffset = scroll.clientHeight * scrollOffsetRatio;
-    const top = el.offsetTop - targetOffset;
-    scroll.scrollTo({
-      top: Math.max(0, top),
-      behavior: reduceMotion ? "auto" : "smooth",
-    });
-  }, [activeLineIdx, active, scrollOffsetRatio, reduceMotion]);
+    const viewport = scrollRef.current;
+    if (!el || !viewport) return;
+    const targetOffset = viewport.clientHeight * scrollOffsetRatio;
+    // el.offsetTop is measured against the relatively-positioned stack (its
+    // offset parent), so it already includes the stack's top padding.
+    const next = Math.max(0, el.offsetTop - targetOffset);
+    setTranslateY(next);
+  }, [activeLineIdx, active, scrollOffsetRatio, syncedLines.length, fontSize]);
 
   return (
     <div
       ref={scrollRef}
-      className={cn("overflow-y-auto scrollbar-hide", className)}
+      className={cn("overflow-hidden scrollbar-hide", className)}
       style={{
-        paddingTop,
-        paddingBottom,
         WebkitMaskImage: maskImage,
         maskImage,
         ...style,
       }}
       data-testid="lyrics-scroll"
     >
-      <div className={cn("flex flex-col", gapClassName)}>
+      <div
+        ref={stackRef}
+        className={cn("relative flex flex-col", gapClassName)}
+        style={{
+          paddingTop,
+          paddingBottom,
+          // The whole stack moves up together as one unit — every line
+          // below the active one keeps its relative spacing and pulls up
+          // in lock-step. The overshoot easing gives the slight bounce;
+          // reduced-motion snaps with no transition.
+          transform: `translate3d(0, ${-translateY}px, 0)`,
+          transition: reduceMotion
+            ? "none"
+            : `transform ${MOVE_MS}ms ${MOVE_EASE}`,
+          willChange: "transform",
+        }}
+      >
         {syncedLines.map((line, i) => {
           if (line.isGap) {
             const gapStart = line.time as number;
