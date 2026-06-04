@@ -357,11 +357,14 @@ export function BottomNav() {
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-40 pointer-events-none">
         {/* Shared chrome scrim behind the dock: a soft navy gradient fade at
             rest so collection art scrolls cleanly under the floating pills
-            (no hard band), swapping in a single frosted blur band only while
-            search is open. First child so it sits behind every pill. */}
+            (no hard band). Never frosted here — the search overlay paints a
+            fully solid var(--brand-bg) over the page, so there's nothing
+            scrolling behind the dock for a blur band to do; an active frosted
+            band would just read as a dark box over the solid overlay. First
+            child so it sits behind every pill. */}
         <ChromeScrim
           edge="bottom"
-          active={searchOpen}
+          active={false}
           className="absolute inset-x-0 bottom-0 h-32"
         />
         {/* LEFT — collapsed active-tab puck (scrolled), shown only when
@@ -447,7 +450,8 @@ export function BottomNav() {
             // on the same raised baseline above the browser chrome.
             bottom: DOCK_BOTTOM,
             // Glass (own blur) at rest; blur-free fill while search is open so
-            // the active ChromeScrim is the bottom region's only blur surface.
+            // the bottom region keeps at most one blur surface (the resting
+            // glass), and the solid search overlay stays free of any band.
             ...(searchOpen ? solidDockStyle : glassStyle),
           }}
           animate={{ width: toggleSize, height: toggleSize }}
