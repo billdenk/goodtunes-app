@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Search, X, Guitar, Store, Loader2, Factory, ShoppingBag } from "lucide-react";
@@ -449,7 +449,7 @@ export function AdminInstruments() {
       <div className="space-y-5">
       <AdminPageHeader
         title="Gear"
-        subtitle="Gear + per-gear vendor links — the SuperCredits™ Micro-Sponsorship surface."
+        subtitle={<>Gear + per-gear vendor links — the SuperCredits™ Micro-Sponsorship surface.{" "}<Link href="/admin/makers" className="hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors">Looking for Makers?</Link></>}
         actions={(<>
           {searchOpen ? (
             <div className="flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2.5 h-9">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
-import { useLocation, useRoute } from "wouter";
+import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Search, X, Store, Hammer, Loader2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -119,8 +119,7 @@ export function AdminVendors() {
     ? {
         active: "makers" as const,
         title: "Makers",
-        subtitle:
-          "Brands that build the gear — guitar makers, amp builders, microphone manufacturers. A row can also sell direct; flip Reseller on its detail page.",
+        subtitle: (<>Brands that build the gear — guitar makers, amp builders, microphone manufacturers. A row can also sell direct; flip Reseller on its detail page.{" "}<Link href="/admin/instruments" className="hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors">Looking for Gear?</Link></>),
         addLabel: "Add maker",
         addDialogTitle: "Add maker",
         listRoute: "/admin/makers",
