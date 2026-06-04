@@ -2529,6 +2529,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!contentType) contentType = "application/octet-stream";
       const totalSize = Number(metadata.size || 0);
       const range = req.headers.range;
+      // Cap bytes served per response. The deployment edge proxy (Google
+      // Frontend) 500s a single multi-hundred-MB stream before it finishes,
+      // so open-ended media ranges (`bytes=0-`, which is exactly what a
+      // <video> element sends) and large no-range GETs must be answered as
+      // bounded 206 chunks. The client just requests the next window as it
+      // plays or seeks. RFC 7233 valid; small windows (suffix moov
+      // tail-seeks, bounded image fetches) stay untouched.
+      const MAX_RANGE_CHUNK = 8 * 1024 * 1024;
       const isPublic = acl.visibility === "public";
       const cacheTtlSec = 31536000;
       const cacheControl = `${isPublic ? "public" : "private"}, max-age=${cacheTtlSec}, immutable`;
@@ -2582,6 +2590,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
         // A client may request past EOF on a bounded range — clamp it.
         if (end >= totalSize) end = totalSize - 1;
+        // Cap the window so an open-ended `bytes=0-` (the whole file) isn't
+        // streamed in one shot and 500'd by the edge proxy.
+        if (end - start + 1 > MAX_RANGE_CHUNK) end = start + MAX_RANGE_CHUNK - 1;
         res.status(206).set({
           "Content-Type": contentType,
           "Content-Length": String(end - start + 1),
@@ -2602,8 +2613,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         stream.pipe(res);
         return;
       }
-      // No Range header — still advertise that we support it so the
-      // client's next request can seek.
+      // No Range header — stream the whole object as a standards-compliant
+      // 200 and advertise range support so the client's next request can
+      // seek. We deliberately do NOT cap this path: a 206 without a request
+      // Range is non-conformant and would silently truncate large generic
+      // downloads. It isn't needed for the prod video fix either — a
+      // <video> element's first request is always `Range: bytes=0-`, which
+      // the capped range branch above already bounds.
       res.status(200).set({
         "Content-Type": contentType,
         ...(totalSize ? { "Content-Length": String(totalSize) } : {}),
