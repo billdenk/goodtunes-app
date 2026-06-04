@@ -88,6 +88,8 @@ interface InstrumentFull {
   category: string;
   shortCategory: string | null;
   photoUrl: string | null;
+  // Task #1233 — extra gallery photos beyond the hero, in display order.
+  photoUrls: string[] | null;
   about: string | null;
   artistNote: string | null;
   vendors: AttachedVendor[];
@@ -1622,6 +1624,36 @@ function PhotoPanel({ instrument }: { instrument: InstrumentFull }) {
     },
   });
 
+  // Task #1233 — gallery management. The scraper imports the whole listing
+  // gallery into `photoUrls`; let the operator remove a shot or promote one
+  // to the hero. Both persist the full array via PUT (already-hosted URLs,
+  // no rehost). Promote swaps the picked extra with the current hero.
+  const gallery = instrument.photoUrls ?? [];
+  const galleryMut = useMutation({
+    mutationFn: async (next: { photoUrl?: string | null; photoUrls: string[] }) => {
+      await apiRequest("PUT", `/api/admin/instruments/${instrument.id}`, next);
+    },
+    onSuccess: async () => {
+      await invalidateAdminEntity(qc, "instrument", instrument.id);
+      toast({ title: "Gallery updated" });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't update the gallery",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+  const removeFromGallery = (url: string) => {
+    galleryMut.mutate({ photoUrls: gallery.filter((u) => u !== url) });
+  };
+  const promoteToHero = (url: string) => {
+    const rest = gallery.filter((u) => u !== url);
+    if (instrument.photoUrl) rest.unshift(instrument.photoUrl);
+    galleryMut.mutate({ photoUrl: url, photoUrls: rest });
+  };
+
   const acceptFile = (file: File | undefined | null) => {
     if (!file) return;
     if (!/^image\//.test(file.type)) {
@@ -1644,9 +1676,11 @@ function PhotoPanel({ instrument }: { instrument: InstrumentFull }) {
   };
 
   const busy = mut.isPending;
+  const galleryBusy = galleryMut.isPending;
   const shownUrl = previewUrl || instrument.photoUrl;
 
   return (
+    <div className="space-y-5">
     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
       <Card
         className="rounded-2xl shadow-sm p-6"
@@ -1743,6 +1777,58 @@ function PhotoPanel({ instrument }: { instrument: InstrumentFull }) {
           credits surface when a performer played this on a track.
         </p>
       </Card>
+    </div>
+
+      {gallery.length > 0 && (
+        <Card
+          className="rounded-2xl shadow-sm p-6"
+          data-testid="panel-photo-gallery"
+        >
+          <div className="text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3">
+            Gallery photos ({gallery.length})
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+            {gallery.map((url) => (
+              <div
+                key={url}
+                className="group relative aspect-square rounded-xl overflow-hidden bg-slate-100 ring-1 ring-slate-200"
+                data-testid={`gallery-photo-${url}`}
+              >
+                <img
+                  src={url}
+                  alt={instrument.name}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 flex items-end justify-between gap-1 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-black/55 to-transparent">
+                  <button
+                    type="button"
+                    disabled={galleryBusy}
+                    onClick={() => promoteToHero(url)}
+                    className="rounded-md bg-white/90 px-2 py-1 text-xs font-semibold text-slate-800 hover:bg-white disabled:opacity-50"
+                    data-testid={`button-promote-photo-${url}`}
+                  >
+                    Make hero
+                  </button>
+                  <button
+                    type="button"
+                    disabled={galleryBusy}
+                    onClick={() => removeFromGallery(url)}
+                    className="rounded-md bg-white/90 p-1 text-slate-800 hover:bg-white disabled:opacity-50"
+                    aria-label="Remove photo"
+                    data-testid={`button-remove-photo-${url}`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-[11.5px] text-slate-500 leading-relaxed">
+            Imported from the listing gallery. “Make hero” swaps a shot into the
+            main photo; the × removes it from the fan-side gallery strip.
+          </p>
+        </Card>
+      )}
     </div>
   );
 }

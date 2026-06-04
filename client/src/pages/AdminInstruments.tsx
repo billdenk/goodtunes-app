@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Search, X, Guitar, Store, Loader2, Factory, ShoppingBag } from "lucide-react";
+import { Search, X, Guitar, Store, Loader2, Factory, ShoppingBag, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -65,6 +65,10 @@ interface ScrapeResult {
   price: string | null;
   photoUrl: string | null;
   sourceImage: string | null;
+  // Task #1233 — every candidate photo the scraper found, primary first.
+  // The operator picks which extras to import in the preview; each picked
+  // one is rehosted to Object Storage on save.
+  sourceImages?: string[];
   reseller: VendorSlot | null;
   maker: VendorSlot | null;
   notice?: string | null;
@@ -178,6 +182,11 @@ export function AdminInstruments() {
   const [pasteUrl, setPasteUrl] = useState("");
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [scraped, setScraped] = useState<ScrapeResult | null>(null);
+  // Task #1233 — which extra gallery photos (raw source URLs beyond the
+  // hero) the operator has checked for import. Defaults to ALL when a
+  // scrape returns more than one shot. Each stays a RAW URL here; the
+  // server rehosts the picked ones to Object Storage on save.
+  const [selectedExtras, setSelectedExtras] = useState<Set<string>>(new Set());
 
   // Find-or-create a vendor row by domain, OR-promoting the maker /
   // reseller flag if the row already exists with the opposite flag.
@@ -251,6 +260,10 @@ export function AdminInstruments() {
     onSuccess: (data) => {
       setScraped(data);
       setPasteError(null);
+      // Default every extra photo (beyond the hero) to "import" so the
+      // common case is one click; the operator unchecks any they don't want.
+      const extras = (data.sourceImages ?? []).slice(1);
+      setSelectedExtras(new Set(extras));
     },
     onError: (err: any) => {
       setPasteError(humanizeApiError(err));
@@ -305,11 +318,19 @@ export function AdminInstruments() {
         }
       }
 
+      // Task #1233 — the extra gallery photos the operator kept checked,
+      // in the scraper's original order. Raw source URLs; the server
+      // rehosts each to Object Storage and drops any equal to the hero.
+      const galleryImageUrls = (s?.sourceImages ?? [])
+        .slice(1)
+        .filter((u) => selectedExtras.has(u));
+
       const res = await apiRequest("POST", "/api/admin/instruments", {
         name,
         category,
         ...(photoUrl ? { photoUrl } : {}),
         ...(about ? { about } : {}),
+        ...(galleryImageUrls.length > 0 ? { galleryImageUrls } : {}),
         // Task #461 — remember the page the operator pasted.
         ...(trimmedUrl ? { sourceUrl: trimmedUrl } : {}),
         // Task #500 — stamp the maker at create time so AdminInstrument
@@ -355,6 +376,7 @@ export function AdminInstruments() {
       setPasteUrl("");
       setPasteError(null);
       setScraped(null);
+      setSelectedExtras(new Set());
       if (scraped?.name || makerVendor || resellerVendor) {
         const headline = scraped?.name ?? "Created blank gear";
         const parts: string[] = [];
@@ -389,6 +411,7 @@ export function AdminInstruments() {
     setPasteError(null);
     setPasteUrl("");
     setScraped(null);
+    setSelectedExtras(new Set());
     setAddOpen(true);
   };
 
@@ -421,6 +444,7 @@ export function AdminInstruments() {
   const resetScrape = () => {
     if (scrapeUrl.isPending || createInstrument.isPending) return;
     setScraped(null);
+    setSelectedExtras(new Set());
     setPasteError(null);
   };
 
@@ -586,6 +610,7 @@ export function AdminInstruments() {
             setPasteUrl("");
             setPasteError(null);
             setScraped(null);
+            setSelectedExtras(new Set());
           }
         }}
       >
@@ -700,6 +725,71 @@ export function AdminInstruments() {
                     </span>
                   )}
                 </div>
+                {(() => {
+                  // Task #1233 — gallery picker. Show every shot beyond the
+                  // hero as a selectable thumbnail; checked ones import.
+                  const extras = (scraped.sourceImages ?? []).slice(1);
+                  if (extras.length === 0) return null;
+                  const allOn = extras.every((u) => selectedExtras.has(u));
+                  const selCount = extras.filter((u) => selectedExtras.has(u)).length;
+                  return (
+                    <div className="space-y-1.5 pt-1" data-testid="panel-scrape-gallery">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          {extras.length} more photo{extras.length === 1 ? "" : "s"} — {selCount} selected
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedExtras(allOn ? new Set() : new Set(extras))
+                          }
+                          className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+                          data-testid="button-scrape-gallery-toggle-all"
+                        >
+                          {allOn ? "Clear all" : "Select all"}
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {extras.map((u, idx) => {
+                          const on = selectedExtras.has(u);
+                          return (
+                            <button
+                              key={u}
+                              type="button"
+                              onClick={() =>
+                                setSelectedExtras((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(u)) next.delete(u);
+                                  else next.add(u);
+                                  return next;
+                                })
+                              }
+                              className={`relative aspect-square overflow-hidden rounded-md ring-1 transition ${
+                                on
+                                  ? "ring-2 ring-sky-500"
+                                  : "ring-slate-200 opacity-60 hover:opacity-100"
+                              }`}
+                              aria-pressed={on}
+                              data-testid={`button-scrape-gallery-photo-${idx}`}
+                            >
+                              <img
+                                src={u}
+                                alt={`Extra photo ${idx + 1}`}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                              {on && (
+                                <span className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-sky-500 text-white">
+                                  <Check className="h-2.5 w-2.5" />
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {scraped.notice && (
                   <p
                     className="text-xs text-slate-500 leading-snug"

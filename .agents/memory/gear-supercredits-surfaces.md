@@ -19,3 +19,7 @@ The vendor chat-bubbles were the only entry points to start a chat (Chat tab alr
 
 ## Chrome
 Both sheets use the 44px `IconButton` primitive (glass variant, circular bg) for back/share/bookmark/globe/direct-gear — no ad-hoc sub-44px buttons (design-lint flags `rounded-full` < `w-11` on fan surfaces).
+
+## Gear photo gallery (`instruments.photo_urls`, extra shots beyond the hero)
+The hero stays on `photoUrl`; extra listing photos live in `photo_urls text[]`. The gallery STRIP renders in **three parallel surfaces** — mirror any display change across all: the `InstrumentSheet` in `AlbumDetail.tsx`, the standalone `InstrumentDetail.tsx` route, and admin `AdminInstrument.tsx` PhotoPanel (where operators can "Make hero" / remove). The Add-gear scraper (`AdminInstruments.tsx`) returns `sourceImages: string[]` (primary first) from all 3 scrape handlers; the picker defaults every extra ON; create rehosts each picked `galleryImageUrls` to Object Storage (drops any === primary), PUT stores `photoUrls` verbatim (no rehost). `getInstrumentById`/credits return the full row so `photoUrls` flows automatically.
+**Why:** the same "parallel fan surfaces drift" trap as AlbumCard/SyncedLyrics — a gallery added to one surface but not the others silently regresses the others.

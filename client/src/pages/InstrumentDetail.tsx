@@ -54,6 +54,7 @@ interface ApiInstrument {
   category: string;
   shortCategory: string | null;
   photoUrl: string | null;
+  photoUrls: string[] | null;
   about: string | null;
   artistNote: string | null;
   vendors: ApiInstrumentVendor[];
@@ -66,6 +67,7 @@ function liveToInstrument(i: ApiInstrument): Instrument {
     category: i.category,
     shortCategory: i.shortCategory ?? undefined,
     photoUrl: i.photoUrl ?? undefined,
+    photoUrls: i.photoUrls ?? undefined,
     about: i.about ?? undefined,
     artistNote: i.artistNote ?? undefined,
     vendors: i.vendors.map((v) => ({
@@ -273,6 +275,31 @@ export function InstrumentDetail() {
               </div>
             )}
           </div>
+
+          {/* Task #1233 — gallery strip: every extra listing photo beyond
+              the hero, horizontally scrollable. */}
+          {instrument.photoUrls && instrument.photoUrls.length > 0 && (
+            <div
+              className="flex gap-2 overflow-x-auto scrollbar-hide px-5 pb-4 -mt-1"
+              data-testid="strip-instrument-gallery"
+            >
+              {instrument.photoUrls.map((u, i) => (
+                <div
+                  key={u}
+                  className="flex-shrink-0 w-28 rounded-xl overflow-hidden ring-1 ring-white/10"
+                  style={{ aspectRatio: "1 / 1" }}
+                >
+                  <img
+                    src={u}
+                    alt={`${instrument.name} photo ${i + 2}`}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                    data-testid={`img-instrument-gallery-${i}`}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Title */}
           <div className="px-5 pb-4">

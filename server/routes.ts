@@ -5198,6 +5198,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   }
 
+  // Task #1233 — normalize a candidate image URL for the gear gallery.
+  // Upgrades protocol-relative (`//cdn…`) and bare `http://` to https,
+  // trims, and returns null for anything that isn't a usable absolute
+  // URL. Relative paths are resolved against `origin` when provided.
+  function normalizeImageUrl(raw: any, origin?: string): string | null {
+    if (typeof raw !== "string") return null;
+    let s = raw.trim();
+    if (!s) return null;
+    if (s.startsWith("//")) s = "https:" + s;
+    else if (s.startsWith("/") && origin) s = origin + s;
+    if (s.startsWith("http://")) s = "https://" + s.slice("http://".length);
+    if (!/^https:\/\//i.test(s)) return null;
+    return s;
+  }
+  // Dedupe a list of (possibly null) image URLs preserving first-seen
+  // order, dropping nulls, and capping the count so a pathological page
+  // with hundreds of thumbnails can't flood the picker. Comparison is
+  // case-insensitive on the full URL (CDN hosts are case-stable but query
+  // strings sometimes vary only in case).
+  function dedupeImageUrls(urls: (string | null)[], cap = 24): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const u of urls) {
+      if (!u) continue;
+      const key = u.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(u);
+      if (out.length >= cap) break;
+    }
+    return out;
+  }
+
   async function rehostRemoteImage(src: string): Promise<string> {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 10_000);
@@ -5292,6 +5325,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         price: null,
         photoUrl: null,
         sourceImage: null,
+        sourceImages: [],
         reseller,
         maker: hostInfo.role === "both" ? reseller : null,
         // Backward-compat alias — see success path below for context.
@@ -5424,6 +5458,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           price: mapped.price,
           photoUrl: shopifyPhotoUrl,
           sourceImage: mapped.rawImage,
+          // Task #1233 — whole-gallery import: normalize + dedupe the raw
+          // image srcs (primary first) with the same helpers the other
+          // scrapers use so the operator can pick which photos to bring in.
+          sourceImages: dedupeImageUrls(
+            mapped.gallery.map((s) => normalizeImageUrl(s)),
+          ),
           reseller: shopifyReseller,
           maker: shopifyMaker,
           vendor: shopifyReseller,
@@ -5499,11 +5539,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             .trim();
         }
 
+        // Task #1233 — Gruhn's API returns the full photo set in
+        // `field_instr_image[]`. Collect every file.url so the operator can
+        // import the whole gallery, not just the first frame.
         const gruhnImages = apiData.field_instr_image;
-        const gruhnRawImage: string | null =
-          Array.isArray(gruhnImages) && gruhnImages.length > 0
-            ? (gruhnImages[0]?.file?.url ?? null)
-            : null;
+        const gruhnGallery = dedupeImageUrls(
+          Array.isArray(gruhnImages)
+            ? gruhnImages.map((g: any) => normalizeImageUrl(g?.file?.url))
+            : [],
+        );
+        const gruhnRawImage: string | null = gruhnGallery[0] ?? null;
         let gruhnPhotoUrl: string | null = null;
         if (gruhnRawImage) {
           try { gruhnPhotoUrl = await rehostRemoteImage(gruhnRawImage); }
@@ -5553,6 +5598,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           price: gruhnPrice,
           photoUrl: gruhnPhotoUrl,
           sourceImage: gruhnRawImage,
+          sourceImages: gruhnGallery,
           reseller: gruhnReseller,
           maker: gruhnMaker,
           vendor: gruhnReseller,
@@ -5769,6 +5815,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (typeof img === "object") return img.url || img.contentUrl || null;
         return null;
       };
+      // Flatten JSON-LD Product.image (it's often an ARRAY of all listing
+      // shots, not a single URL) into an ordered list of strings.
+      const flattenImages = (img: any): string[] => {
+        if (!img) return [];
+        if (typeof img === "string") return [img];
+        if (Array.isArray(img)) return img.flatMap(flattenImages);
+        if (typeof img === "object") {
+          const u = img.url || img.contentUrl;
+          return u ? [u] : [];
+        }
+        return [];
+      };
+
       let rawImage: string | null =
         pickImage(product?.image) ||
         meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] ||
@@ -5778,6 +5837,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         meta["image"] || null;
       if (rawImage?.startsWith("//")) rawImage = `https:${rawImage}`;
       if (rawImage?.startsWith("/")) rawImage = `${parsed.origin}${rawImage}`;
+
+      // Task #1233 — collect the WHOLE gallery, not just the hero. The meta
+      // harvest above keeps only the FIRST occurrence per key, so og:image
+      // repeats (shops emit one per photo for FB) are lost. Re-scan the raw
+      // HTML for every og:image/secure_url/twitter:image occurrence and union
+      // with the JSON-LD Product.image array. Hero (rawImage) goes first.
+      const galleryCandidates: (string | null)[] = [];
+      galleryCandidates.push(normalizeImageUrl(rawImage, parsed.origin));
+      for (const u of flattenImages(product?.image)) {
+        galleryCandidates.push(normalizeImageUrl(u, parsed.origin));
+      }
+      const ogImgRe =
+        /<meta[^>]+(?:property|name)=["'](?:og:image(?::secure_url)?|twitter:image)["'][^>]+content=["']([^"']+)["'][^>]*>/gi;
+      const ogImgRe2 =
+        /<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image(?::secure_url)?|twitter:image)["'][^>]*>/gi;
+      let im: RegExpExecArray | null;
+      while ((im = ogImgRe.exec(html))) {
+        galleryCandidates.push(normalizeImageUrl(decodeEntities(im[1]), parsed.origin));
+      }
+      while ((im = ogImgRe2.exec(html))) {
+        galleryCandidates.push(normalizeImageUrl(decodeEntities(im[1]), parsed.origin));
+      }
+      const sourceImages = dedupeImageUrls(galleryCandidates);
 
       let photoUrl: string | null = null;
       if (rawImage) {
@@ -5926,6 +6008,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         price,
         photoUrl,
         sourceImage: rawImage,
+        sourceImages,
         reseller,
         maker,
         // Task #500 — backward-compat alias for the legacy /admin/classic
@@ -13589,7 +13672,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json(i);
   });
   app.post("/api/admin/instruments", requireAdmin, async (req, res) => {
-    const { name, category, shortCategory, photoUrl, about, artistNote, makerVendorId, sourceUrl } = req.body ?? {};
+    const { name, category, shortCategory, photoUrl, about, artistNote, makerVendorId, sourceUrl, galleryImageUrls } = req.body ?? {};
     if (!name || !category) return res.status(400).json({ message: "name and category are required" });
     if (shortCategory && !(SHORT_CATEGORIES as readonly string[]).includes(String(shortCategory))) {
       return res.status(400).json({ message: `Invalid shortCategory. Allowed: ${SHORT_CATEGORIES.join(", ")}` });
@@ -13612,11 +13695,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       sourceUrlClean = s;
     }
+    // Task #1233 — extra gallery photos picked in the Add-gear preview.
+    // The client sends RAW source URLs (the scrape only rehosts the hero);
+    // rehost each into Object Storage like the primary, best-effort with a
+    // hot-link fallback so a single bad image never sinks the whole import.
+    // Dedupe + drop anything equal to the already-stored primary photoUrl.
+    let photoUrlsClean: string[] | null = null;
+    if (Array.isArray(galleryImageUrls) && galleryImageUrls.length > 0) {
+      const primary = photoUrl ? String(photoUrl) : null;
+      const raws = dedupeImageUrls(
+        galleryImageUrls.map((u: any) => normalizeImageUrl(u)),
+      ).filter((u) => u !== primary);
+      const hosted: string[] = [];
+      for (const raw of raws) {
+        try { hosted.push(await rehostRemoteImage(raw)); }
+        catch { hosted.push(raw); /* hot-link fallback, operator can re-fetch */ }
+      }
+      if (hosted.length > 0) photoUrlsClean = hosted;
+    }
     const i = await storage.createInstrument({
       name: String(name),
       category: String(category),
       shortCategory: shortCategory ? String(shortCategory) : null,
       photoUrl: photoUrl ? String(photoUrl) : null,
+      photoUrls: photoUrlsClean,
       about: about ? String(about) : null,
       artistNote: artistNote ? String(artistNote) : null,
       makerVendorId: makerVendorId ? String(makerVendorId) : null,
@@ -13626,7 +13728,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   app.put("/api/admin/instruments/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
-    const { name, category, shortCategory, photoUrl, about, artistNote, makerVendorId, sourceUrl } = req.body ?? {};
+    const { name, category, shortCategory, photoUrl, photoUrls, about, artistNote, makerVendorId, sourceUrl } = req.body ?? {};
     const updates: any = {};
     if (name !== undefined) updates.name = String(name);
     if (category !== undefined) updates.category = String(category);
@@ -13637,6 +13739,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       updates.shortCategory = shortCategory ? String(shortCategory) : null;
     }
     if (photoUrl !== undefined) updates.photoUrl = photoUrl ? String(photoUrl) : null;
+    // Task #1233 — gallery edit. Accepts an array of already-hosted URLs
+    // (operator reorder/remove in the PhotoPanel); null/empty clears it.
+    // These are stored verbatim — no rehosting on PUT, since they're
+    // already Object-Storage URLs from the import.
+    if (photoUrls !== undefined) {
+      if (!photoUrls || (Array.isArray(photoUrls) && photoUrls.length === 0)) {
+        updates.photoUrls = null;
+      } else if (Array.isArray(photoUrls)) {
+        const cleaned = dedupeImageUrls(photoUrls.map((u: any) => normalizeImageUrl(u)));
+        updates.photoUrls = cleaned.length > 0 ? cleaned : null;
+      }
+    }
     if (about !== undefined) updates.about = about ? String(about) : null;
     if (artistNote !== undefined) updates.artistNote = artistNote ? String(artistNote) : null;
     // Task #461 — empty string clears the breadcrumb; non-empty must

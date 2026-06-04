@@ -133,6 +133,9 @@ export interface Instrument {
   category: string;        // e.g. "Bass", "Acoustic Guitar"
   shortCategory?: string;  // e.g. "Violin", "Guitar" — what we show inline next to a performer
   photoUrl?: string;
+  // Task #1233 — extra gallery photos beyond the hero `photoUrl`, in
+  // display order. The full gear gallery scraped from the listing.
+  photoUrls?: string[];
   about?: string;          // neutral "About" copy (history, model facts)
   artistNote?: string;     // why this artist chose THIS instrument for THIS track
   vendors?: InstrumentVendor[];

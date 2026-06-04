@@ -59,7 +59,7 @@ import { ALBUMS, getSongsByAlbum, getCreditsForSong, PEOPLE, INSTRUMENTS, type S
 // server-side so the fan-side credits surface renders from a single fetch.
 type ApiPerson = { id: string; name: string; photoUrl?: string | null; bio?: string | null };
 type ApiVendor = { id: string; instrumentId: string; vendorId: string; name: string; domain?: string; affiliateUrl: string; aboutUrl?: string | null; homeUrl?: string | null; logoUrl?: string | null; tagline?: string | null; bio?: string | null; location?: string | null; coverUrl?: string | null; position: number };
-type ApiInstrument = { id: string; name: string; category: string; shortCategory?: string | null; photoUrl?: string | null; about?: string | null; artistNote?: string | null; vendors: ApiVendor[] };
+type ApiInstrument = { id: string; name: string; category: string; shortCategory?: string | null; photoUrl?: string | null; photoUrls?: string[] | null; about?: string | null; artistNote?: string | null; vendors: ApiVendor[] };
 type ApiSongCredits = {
   writers: Array<{ id: string; songId: string; personId: string | null; name: string; role: string; position: number; person: ApiPerson | null }>;
   performers: Array<{ id: string; songId: string; personId: string | null; instrumentId: string | null; name: string; role: string; tuningNotes: string | null; position: number; person: ApiPerson | null; instrument: ApiInstrument | null }>;
@@ -79,6 +79,7 @@ function normalizeInstrument(i: ApiInstrument): Instrument {
     category: i.category,
     shortCategory: nu(i.shortCategory),
     photoUrl: nu(i.photoUrl),
+    photoUrls: nu(i.photoUrls),
     about: nu(i.about),
     artistNote: nu(i.artistNote),
     vendors: i.vendors.map((v) => ({
@@ -2743,6 +2744,18 @@ function InstrumentSheet({
           </div>
         )}
       </div>
+
+      {/* Task #1233 — gallery strip: every extra listing photo beyond the
+          hero, horizontally scrollable. */}
+      {instrument.photoUrls && instrument.photoUrls.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide px-5 pb-4 -mt-1" data-testid="strip-instrument-gallery">
+          {instrument.photoUrls.map((u, i) => (
+            <div key={u} className="flex-shrink-0 w-28 rounded-xl overflow-hidden ring-1 ring-white/10" style={{ aspectRatio: "1 / 1" }}>
+              <img src={u} alt={`${instrument.name} photo ${i + 2}`} className="w-full h-full object-cover" loading="lazy" data-testid={`img-instrument-gallery-${i}`} />
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Title block — Apple Music "About Neil Diamond" pattern: small grey eyebrow, big bold title */}
       <div className="px-5 pb-4">

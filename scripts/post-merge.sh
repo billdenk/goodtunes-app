@@ -584,6 +584,31 @@ SQL
 migrate_albums_share_slug dev  "${DATABASE_URL:-}"
 migrate_albums_share_slug prod "${PROD_DATABASE_URL:-}"
 
+# Task #1233 — gear gallery. instruments.photo_urls (text[]) holds the
+# additional listing photos beyond the hero `photo_url` (the Add-gear
+# scraper now imports the whole gallery, not just the first shot). The
+# enriched instrument read shape SELECTs * so a freshly-cloned dev DB
+# missing this column would 500 every /api/instruments route; pre-create
+# on both DBs to keep the publish dev->prod diff empty too. Additive
+# nullable array — backwards-compatible, no rename. Safe on every merge.
+migrate_instruments_photo_urls() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping instruments.photo_urls migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE instruments ADD COLUMN IF NOT EXISTS photo_urls text[];
+SQL
+  then
+    echo "post-merge: instruments.photo_urls migration ok on $label"
+  else
+    echo "post-merge: WARNING — instruments.photo_urls migration failed on $label (continuing)"
+  fi
+}
+migrate_instruments_photo_urls dev  "${DATABASE_URL:-}"
+migrate_instruments_photo_urls prod "${PROD_DATABASE_URL:-}"
+
 # Task #1025 — album_skus exact catalog identity snapshot. The legacy
 # vinyl_color/vinyl_color_tier snapshots store only display NAMES, which
 # resolve to a different swatch for each admin once a press re-imports

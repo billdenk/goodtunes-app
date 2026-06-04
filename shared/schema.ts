@@ -1089,6 +1089,13 @@ export const instruments = pgTable("instruments", {
   category: text("category").notNull(),
   shortCategory: text("short_category"),
   photoUrl: text("photo_url"),
+  // Task #1233 — additional gallery photos beyond the headline `photoUrl`.
+  // Vintage listings carry 5–15 shots (front, back, headstock, serial,
+  // case); the Add-gear scraper now surfaces the whole gallery so the
+  // operator can one-click import the extras. The hero stays in
+  // `photoUrl`; these are the rest, in display order. Each is an Object-
+  // Storage URL rehosted at import time (same as the hero).
+  photoUrls: text("photo_urls").array(),
   about: text("about"),
   artistNote: text("artist_note"),
   // Headline maker — the partner who *built* this piece of gear (Gibson,

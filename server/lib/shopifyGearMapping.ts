@@ -202,6 +202,11 @@ export type MappedShopifyGear = {
   description: string | null;
   price: string | null;
   rawImage: string | null;
+  // Task #1233 — every product image src (primary first, raw/unnormalized);
+  // the route normalizes + dedupes these into the importable gallery so an
+  // operator can pull the front/back/headstock/serial/case shots, not just
+  // images[0].
+  gallery: string[];
   specs: Record<string, string>;
   category: string | null;
 };
@@ -260,6 +265,15 @@ export function mapShopifyProduct(
     rawImage = "https://" + rawImage.slice("http://".length);
   }
 
+  // Task #1233 — collect every image src (primary first). Left raw here so
+  // the route can normalize + dedupe with the same helpers the other
+  // scrapers use; this module stays pure (no URL-origin resolution).
+  const gallery: string[] = [];
+  for (const img of images) {
+    const src = (img as any)?.src;
+    if (typeof src === "string" && src.trim()) gallery.push(src.trim());
+  }
+
   // Specs — Year plus any `Label:Value` tags (skip Shopify's taxonomy
   // navigation tags like "Level 1: Instruments" and overlong junk).
   const specs: Record<string, string> = {};
@@ -288,5 +302,5 @@ export function mapShopifyProduct(
       ? ptype
       : null;
 
-  return { name, brand, year, description, price, rawImage, specs, category };
+  return { name, brand, year, description, price, rawImage, gallery, specs, category };
 }
