@@ -645,20 +645,20 @@ export function DesktopAlbumView({
                   release date (falls back to the bare year), song count +
                   total runtime, label credit, then the ℗ copyright line. */}
               <div
-                className="mt-7 text-xs leading-relaxed"
+                className="mt-12 text-sm leading-relaxed"
                 style={{ color: "rgba(255,255,255,0.34)" }}
               >
                 <p data-testid="text-album-date-footer">
                   {formatReleaseDateLong(album.originalReleaseDate) ?? album.year}
                 </p>
-                <p className="mt-0.5" data-testid="text-album-runtime-footer">
+                <p data-testid="text-album-runtime-footer">
                   {songs.length} {songs.length === 1 ? "song" : "songs"}
                   {", "}
                   {formatRuntime(songs)}
                 </p>
                 {label && label.name && (
                   <p
-                    className="mt-1 inline-flex items-center gap-1.5"
+                    className="inline-flex items-center gap-1.5"
                     data-testid={`text-album-label-footer-${label.id}`}
                   >
                     {label.logoUrl && (
@@ -672,7 +672,7 @@ export function DesktopAlbumView({
                   </p>
                 )}
                 {album.copyrightLine && (
-                  <p className="mt-1" data-testid="text-album-copyright-footer">
+                  <p data-testid="text-album-copyright-footer">
                     ℗ {album.copyrightLine}
                   </p>
                 )}
