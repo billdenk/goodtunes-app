@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { LogOut, ShieldCheck, UserPlus, Heart, Check } from "lucide-react";
+import { LogOut, ShieldCheck, UserPlus, Heart, Check, UserPen } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -114,9 +114,18 @@ export function AdminUserMenu() {
           type="button"
           aria-label="Account menu"
           data-testid="button-admin-user-menu"
-          className="w-8 h-8 rounded-full bg-[var(--brand-blue)] text-white text-[12px] font-semibold flex items-center justify-center tracking-wide hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2"
+          className="w-8 h-8 rounded-full bg-[var(--brand-blue)] text-white text-[12px] font-semibold flex items-center justify-center tracking-wide overflow-hidden hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2"
         >
-          {initials}
+          {user.photoUrl ? (
+            <img
+              src={user.photoUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              data-testid="img-admin-user-avatar"
+            />
+          ) : (
+            initials
+          )}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -163,6 +172,14 @@ export function AdminUserMenu() {
         )}
 
         <DropdownMenuSeparator className="bg-slate-200" />
+        <DropdownMenuItem
+          onClick={() => navigate("/account/edit")}
+          data-testid="menu-item-edit-profile"
+          className="text-[13px] cursor-pointer text-slate-700 focus:bg-slate-100 focus:text-slate-900"
+        >
+          <UserPen className="w-4 h-4 mr-2 text-slate-500" />
+          Edit profile
+        </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => navigate("/admin/invites")}
           data-testid="menu-item-invites"

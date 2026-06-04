@@ -270,7 +270,10 @@ function Router() {
       return <Redirect to="/account" />;
     }
     if (kind === "admin" && (
-      location.startsWith("/collection") || location.startsWith("/account") ||
+      location.startsWith("/collection") ||
+      // Admins reach the shared profile editor from their account menu;
+      // /account/edit is intentionally exempt from the customer-surface block.
+      (location.startsWith("/account") && !location.startsWith("/account/edit")) ||
       location.startsWith("/playlists") || location.startsWith("/chat") ||
       location.startsWith("/album") || location.startsWith("/artist") ||
       location.startsWith("/instrument") || location.startsWith("/search") ||

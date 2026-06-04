@@ -2,11 +2,17 @@ import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Camera, Check, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useAuthKind } from "@/hooks/useAuthKind";
 import { IconButton } from "@/components/ui/IconButton";
 
 export function EditAccount() {
   const { user, updateProfile, updatePhoto, removePhoto, isUpdatePending, updateError } = useAuth();
   const [, navigate] = useLocation();
+  // The editor is shared by the customer profile and the admin account menu.
+  // Admins came from the admin shell (and the customer /account hub is blocked
+  // on the admin host), so send them back to /admin rather than /account.
+  const kind = useAuthKind();
+  const backTo = kind === "admin" ? "/admin" : "/account";
   const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [username, setUsername] = useState(user?.username || "");
   const [realName, setRealName] = useState(user?.realName || "");
@@ -91,7 +97,7 @@ export function EditAccount() {
     try {
       await updateProfile({ displayName, username, realName: realName || null });
       setSaved(true);
-      setTimeout(() => { setSaved(false); navigate("/account"); }, 900);
+      setTimeout(() => { setSaved(false); navigate(backTo); }, 900);
     } catch {}
   };
 
@@ -109,7 +115,7 @@ export function EditAccount() {
           <IconButton
             label="Cancel"
             variant="glass"
-            onClick={() => navigate("/account")}
+            onClick={() => navigate(backTo)}
             data-testid="button-cancel"
           >
             <X strokeWidth={2.4} />

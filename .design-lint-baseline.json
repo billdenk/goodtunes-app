@@ -8872,7 +8872,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/AdminUserMenu.tsx",
-    "snippet": "className=\"w-8 h-8 rounded-full bg-[var(--brand-blue)] text-white text-[12px] font-semibold flex items-center justify-center tracking-wide hover:opacity-90 focus:outline-none focus-visible:ring-2 focu"
+    "snippet": "className=\"w-8 h-8 rounded-full bg-[var(--brand-blue)] text-white text-[12px] font-semibold flex items-center justify-center tracking-wide overflow-hidden hover:opacity-90 focus:outline-none focus-vis"
   },
   {
     "rule": "hardcoded-font-size",
