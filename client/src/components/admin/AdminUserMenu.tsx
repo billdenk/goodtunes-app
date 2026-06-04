@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { LogOut, ShieldCheck, UserPlus, Heart, Check, UserPen } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -11,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { AdminEditProfileDialog } from "@/components/admin/AdminEditProfileDialog";
 
 function initialsFor(name: string | undefined, email: string | undefined): string {
   const source = (name || "").trim();
@@ -55,6 +57,10 @@ function membershipLabel(m: Membership): string {
 export function AdminUserMenu() {
   const { user, logout } = useAuth();
   const [, navigate] = useLocation();
+  // Task #1237 — "Edit profile" opens an admin-styled dialog *over* the
+  // current admin page (left nav + shell stay visible) instead of
+  // navigating to the fan player's dark-chrome editor at /account/edit.
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
 
   // Task #1038 — Unified identity P3. List every hat this account holds so a
   // multi-membership operator can switch the active one. Single-membership
@@ -108,6 +114,7 @@ export function AdminUserMenu() {
   };
 
   return (
+    <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
@@ -173,7 +180,7 @@ export function AdminUserMenu() {
 
         <DropdownMenuSeparator className="bg-slate-200" />
         <DropdownMenuItem
-          onClick={() => navigate("/account/edit")}
+          onClick={() => setEditProfileOpen(true)}
           data-testid="menu-item-edit-profile"
           className="text-[13px] cursor-pointer text-slate-700 focus:bg-slate-100 focus:text-slate-900"
         >
@@ -215,5 +222,7 @@ export function AdminUserMenu() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    <AdminEditProfileDialog open={editProfileOpen} onOpenChange={setEditProfileOpen} />
+    </>
   );
 }
