@@ -124,6 +124,19 @@ export function AdminInvites() {
     setPreFlightedAlbumId(null);
   }, [effectiveTargetPersonId]);
 
+  const { data: adminMe } = useQuery<{ role: string; roleScopeId: string | null }>({
+    queryKey: ["/api/admin/me"],
+  });
+  const isArtistCaller = adminMe?.role === "artist";
+
+  // Artists may only invite Artist or Non-profit partners.
+  const visiblePartnerTypes = isArtistCaller
+    ? PARTNER_TYPES.filter((t) => t.value === "artist" || t.value === "non_profit")
+    : PARTNER_TYPES;
+  const visibleRoleOptions = isArtistCaller
+    ? ROLE_OPTIONS.filter((o) => o.value === "artist" || o.value === "non_profit")
+    : ROLE_OPTIONS;
+
   const {
     data: invites = [],
     isLoading,
@@ -291,7 +304,7 @@ export function AdminInvites() {
                 Who are you inviting?
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" data-testid="partner-type-grid">
-                {PARTNER_TYPES.map((t) => {
+                {visiblePartnerTypes.map((t) => {
                   const selected = role === t.value;
                   return (
                     <button
@@ -345,7 +358,7 @@ export function AdminInvites() {
                   data-testid="select-invite-role"
                 >
                   <option value="">— Choose a role —</option>
-                  {ROLE_OPTIONS.map((o) => (
+                  {visibleRoleOptions.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>

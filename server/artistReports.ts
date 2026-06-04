@@ -296,9 +296,40 @@ async function summaryHandler(req: Request, res: Response) {
   const scope = await resolveArtistScope(req);
   if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
   const { range, compare } = parseRange(req);
-  const kpis = await computeKpis(scope, range);
-  const previous = compare ? await computeKpis(scope, compare) : null;
-  return res.json({ range, compare, current: kpis, previous });
+  const [kpis, previous, topFansRows, npoCents] = await Promise.all([
+    computeKpis(scope, range),
+    compare ? computeKpis(scope, compare) : Promise.resolve(null),
+    scope.albumIds.length
+      ? db.execute<{ email: string; total_cents: string }>(sql`
+          SELECT cu.email,
+                 SUM(o.total_cents)::text AS total_cents
+          FROM orders o
+          JOIN customer_users cu ON cu.id = o.customer_id
+          WHERE o.album_id = ANY(${pgArray(scope.albumIds)}::text[])
+            AND o.status = 'paid'
+            AND o.created_at >= ${range.from} AND o.created_at < ${range.to}
+          GROUP BY cu.id, cu.email
+          ORDER BY SUM(o.total_cents) DESC
+          LIMIT 3
+        `)
+      : Promise.resolve({ rows: [] } as any),
+    scope.albumIds.length
+      ? db.execute<{ total: string }>(sql`
+          SELECT COALESCE(SUM(rc.amount_cents), 0)::text AS total
+          FROM referral_credits rc
+          JOIN orders o ON o.id = rc.order_id
+          WHERE rc.kind = 'npo'
+            AND o.album_id = ANY(${pgArray(scope.albumIds)}::text[])
+            AND o.created_at >= ${range.from} AND o.created_at < ${range.to}
+        `)
+      : Promise.resolve({ rows: [{ total: "0" }] } as any),
+  ]);
+  const topFans = ((topFansRows as any).rows ?? []).map((r: any) => ({
+    email: String(r.email).replace(/(?<=.{2}).+(?=@)/, "***"),
+    totalCents: Number(r.total_cents),
+  }));
+  const npoPayout = Number(((npoCents as any).rows?.[0]?.total) ?? 0);
+  return res.json({ range, compare, current: kpis, previous, topFans, npoPayout });
 }
 
 async function timeseriesHandler(req: Request, res: Response) {

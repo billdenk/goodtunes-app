@@ -2424,13 +2424,35 @@ export function registerCommerceRoutes(app: Express) {
   // ─── Admin order list + ship ────────────────────────────────────
   app.get("/api/admin/orders", requireAdmin, async (req, res) => {
     const status = (req.query.status as string | undefined)?.trim();
+
+    // Artist scoping: artists only see orders for their own albums.
+    const userId = (req as any).session?.userId as string | undefined;
+    let artistAlbumIds: string[] | null = null;
+    if (userId) {
+      const { getUserRole } = await import("./auth/roles");
+      const roleInfo = await getUserRole(userId);
+      if (roleInfo?.role === "artist" && roleInfo.roleScopeId) {
+        const albumRows = await db.execute<{ id: string }>(sql`
+          SELECT id FROM albums
+          WHERE primary_artist_id = ${roleInfo.roleScopeId}
+             OR (payout_owner_kind = 'person' AND payout_owner_id = ${roleInfo.roleScopeId})
+        `);
+        artistAlbumIds = ((albumRows as any).rows ?? []).map((r: any) => r.id as string);
+        if (artistAlbumIds.length === 0) return res.json([]);
+      }
+    }
+
+    const conditions: any[] = [];
+    if (status) conditions.push(eq(orders.status, status));
+    if (artistAlbumIds) conditions.push(inArray(orders.albumId, artistAlbumIds));
+
     let q = db
       .select({ order: orders, album: albums, customer: customerUsers })
       .from(orders)
       .innerJoin(albums, eq(orders.albumId, albums.id))
       .innerJoin(customerUsers, eq(orders.customerId, customerUsers.id))
       .$dynamic();
-    if (status) q = q.where(eq(orders.status, status));
+    if (conditions.length > 0) q = q.where(and(...conditions));
     const rows = await q.orderBy(desc(orders.createdAt)).limit(500);
     const orderIds = rows.map((r) => r.order.id);
     const giftRows = orderIds.length > 0

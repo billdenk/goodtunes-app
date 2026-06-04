@@ -37,6 +37,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Minus,
+  Music,
+  PackageOpen,
+  Heart,
 } from "lucide-react";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -342,9 +345,17 @@ export function AdminDashboard() {
     [priorFrom, priorTo],
   );
 
+  const { data: role } = useQuery<{ role: string; roleScopeId: string | null }>({
+    queryKey: ["/api/me/role"],
+  });
+  const isArtistEarly = role?.role === "artist";
+
+  // God-view KPI/ops endpoints are super_admin/admin-only — don't fire
+  // them at all for artist partners (they'd 403). Wait until role loads.
   const { data: kpis, isLoading: kpisLoading } = useQuery<KpisData>({
     queryKey: ["/api/admin/reports/kpis", qs],
     queryFn: () => fetchAdminJson<KpisData>(`/api/admin/reports/kpis?${qs}`),
+    enabled: !!role && !isArtistEarly,
   });
 
   // Second fetch for the prior-period daily series. The KPIs endpoint
@@ -354,11 +365,24 @@ export function AdminDashboard() {
   const { data: priorKpis } = useQuery<KpisData>({
     queryKey: ["/api/admin/reports/kpis", priorQs],
     queryFn: () => fetchAdminJson<KpisData>(`/api/admin/reports/kpis?${priorQs}`),
+    enabled: !!role && !isArtistEarly,
   });
 
   const { data: ops } = useQuery<OpsData>({
     queryKey: ["/api/admin/reports/ops", qs],
     queryFn: () => fetchAdminJson<OpsData>(`/api/admin/reports/ops?${qs}`),
+    enabled: !!role && !isArtistEarly,
+  });
+
+  const { data: artistSummary } = useQuery<{
+    current: { grossCents: number; units: number; buyers: number; plays: number; topAlbum: { title: string; revenue: string } | null };
+    previous: { grossCents: number; units: number; buyers: number; plays: number } | null;
+    topFans: { email: string; totalCents: number }[];
+    npoPayout: number;
+  }>({
+    queryKey: ["/api/artist/summary", qs],
+    queryFn: () => fetchAdminJson(`/api/artist/summary?${qs}`),
+    enabled: isArtistEarly,
   });
 
   const { data: recentOrders } = useQuery<OrderRow[]>({
@@ -369,10 +393,8 @@ export function AdminDashboard() {
     queryKey: ["/api/admin/customers"],
   });
 
-  const { data: role } = useQuery<{ role: string; roleScopeId: string | null }>({
-    queryKey: ["/api/me/role"],
-  });
   const isSuperAdmin = role?.role === "super_admin";
+  const isArtist = isArtistEarly;
 
   return (
     <AdminFrame active="dashboard">
@@ -390,36 +412,55 @@ export function AdminDashboard() {
           <SectionBoundary section="page-header">
             <AdminPageHeader
               title="Dashboard"
-              subtitle="How GoodTunes is doing right now."
+              subtitle={isArtist ? "Your releases and recent fan activity." : "How GoodTunes is doing right now."}
               testId="heading-admin-dashboard"
               actions={<RangeSwitcher value={range} onChange={setRange} />}
             />
           </SectionBoundary>
 
-          <SectionBoundary section="ops-health">
-            {ops && <OpsHealthStrip ops={ops} />}
-          </SectionBoundary>
-
-          <SectionBoundary section="referral-payouts">
-            {isSuperAdmin && <ReferralPayoutsCard />}
-          </SectionBoundary>
-
-          <SectionBoundary section="kpi-grid">
-            <KpiGrid kpis={kpis} loading={kpisLoading} qs={qs} />
-          </SectionBoundary>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <div className="lg:col-span-2">
-              <SectionBoundary section="primary-chart">
-                <PrimaryChart kpis={kpis} prior={priorKpis} loading={kpisLoading} />
+          {!isArtist && (
+            <>
+              <SectionBoundary section="ops-health">
+                {ops && <OpsHealthStrip ops={ops} />}
               </SectionBoundary>
-            </div>
-            <div>
+
+              <SectionBoundary section="referral-payouts">
+                {isSuperAdmin && <ReferralPayoutsCard />}
+              </SectionBoundary>
+
+              <SectionBoundary section="kpi-grid">
+                <KpiGrid kpis={kpis} loading={kpisLoading} qs={qs} />
+              </SectionBoundary>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                <div className="lg:col-span-2">
+                  <SectionBoundary section="primary-chart">
+                    <PrimaryChart kpis={kpis} prior={priorKpis} loading={kpisLoading} />
+                  </SectionBoundary>
+                </div>
+                <div>
+                  <SectionBoundary section="activity-feed">
+                    <ActivityFeed orders={recentOrders ?? []} customers={recentCustomers?.rows ?? []} />
+                  </SectionBoundary>
+                </div>
+              </div>
+            </>
+          )}
+
+          {isArtist && (
+            <>
+              <SectionBoundary section="artist-kpis">
+                <ArtistKpiTiles
+                  summary={artistSummary}
+                  loading={!role}
+                  openOrders={recentOrders?.filter(o => o.status === "paid").length ?? 0}
+                />
+              </SectionBoundary>
               <SectionBoundary section="activity-feed">
                 <ActivityFeed orders={recentOrders ?? []} customers={recentCustomers?.rows ?? []} />
               </SectionBoundary>
-            </div>
-          </div>
+            </>
+          )}
         </div>
       </DashboardContentBoundary>
     </AdminFrame>
@@ -826,6 +867,131 @@ function PrimaryChart({
 }
 
 // ─── Activity feed ─────────────────────────────────────────────────────
+
+// ─── Artist KPI tiles ──────────────────────────────────────────────────
+
+type ArtistSummaryData = {
+  current: { grossCents: number; units: number; buyers: number; plays: number; topAlbum: { title: string; revenue: string } | null };
+  previous: { grossCents: number; units: number; buyers: number; plays: number } | null;
+  topFans: { email: string; totalCents: number }[];
+  npoPayout: number;
+};
+
+function pctChange(cur: number, prev: number): number | null {
+  if (!prev) return null;
+  return Math.round(((cur - prev) / prev) * 100);
+}
+
+function TileArrow({ pct }: { pct: number | null }) {
+  if (pct === null) return null;
+  if (pct > 0) return <span className="text-emerald-600 flex items-center gap-0.5 text-xs font-medium"><ArrowUpRight className="w-3.5 h-3.5" />{pct}%</span>;
+  if (pct < 0) return <span className="text-rose-500 flex items-center gap-0.5 text-xs font-medium"><ArrowDownRight className="w-3.5 h-3.5" />{Math.abs(pct)}%</span>;
+  return <span className="text-slate-400 flex items-center gap-0.5 text-xs"><Minus className="w-3 h-3" />0%</span>;
+}
+
+function ArtistKpiTiles({
+  summary,
+  loading,
+  openOrders,
+}: {
+  summary: ArtistSummaryData | undefined;
+  loading: boolean;
+  openOrders: number;
+}) {
+  const topFans = summary?.topFans ?? [];
+  const npoPayout = summary?.npoPayout ?? 0;
+  const cur = summary?.current;
+  const prev = summary?.previous;
+  const tiles = [
+    {
+      label: "Revenue",
+      icon: <Banknote className="w-4 h-4 text-[color:var(--brand-blue)]" />,
+      value: cur ? `$${(cur.grossCents / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—",
+      pct: cur && prev ? pctChange(cur.grossCents, prev.grossCents) : null,
+    },
+    {
+      label: "Units sold",
+      icon: <ShoppingBag className="w-4 h-4 text-[color:var(--brand-blue)]" />,
+      value: cur ? cur.units.toLocaleString() : "—",
+      pct: cur && prev ? pctChange(cur.units, prev.units) : null,
+    },
+    {
+      label: "Fans",
+      icon: <UserPlus className="w-4 h-4 text-[color:var(--brand-blue)]" />,
+      value: cur ? cur.buyers.toLocaleString() : "—",
+      pct: cur && prev ? pctChange(cur.buyers, prev.buyers) : null,
+    },
+    {
+      label: "Streams",
+      icon: <Music className="w-4 h-4 text-[color:var(--brand-blue)]" />,
+      value: cur ? cur.plays.toLocaleString() : "—",
+      pct: cur && prev ? pctChange(cur.plays, prev.plays) : null,
+    },
+    {
+      label: "Open orders",
+      icon: <PackageOpen className="w-4 h-4 text-amber-500" />,
+      value: loading ? "—" : openOrders.toLocaleString(),
+      pct: null as number | null,
+    },
+  ];
+  const topAlbum = cur?.topAlbum ?? null;
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3" data-testid="artist-kpi-grid">
+        {tiles.map((t) => (
+          <div key={t.label} className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col gap-2" data-testid={`kpi-tile-${t.label.toLowerCase().replace(/\s+/g, "-")}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">{t.label}</span>
+              {t.icon}
+            </div>
+            {loading ? (
+              <div className="h-6 w-16 rounded bg-slate-100 animate-pulse" />
+            ) : (
+              <div className="flex items-end justify-between gap-2">
+                <span className="text-2xl font-bold text-slate-900 leading-none">{t.value}</span>
+                <TileArrow pct={t.pct} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {topAlbum && (
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 flex items-center gap-3" data-testid="artist-top-album">
+          <ShoppingBag className="w-4 h-4 text-slate-400 flex-shrink-0" />
+          <span className="text-sm text-slate-600">Top release this period:</span>
+          <span className="text-sm font-semibold text-slate-900 truncate">{topAlbum.title}</span>
+          <span className="text-sm text-slate-500 ml-auto flex-shrink-0">
+            ${(Number(topAlbum.revenue) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          </span>
+        </div>
+      )}
+      {topFans.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3" data-testid="artist-top-fans">
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Top fans this period</p>
+          <div className="space-y-1.5">
+            {topFans.map((fan, i) => (
+              <div key={i} className="flex items-center justify-between gap-2">
+                <span className="text-sm text-slate-700 truncate">{fan.email}</span>
+                <span className="text-sm font-semibold text-slate-900 flex-shrink-0">
+                  ${(fan.totalCents / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {npoPayout > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 flex items-center gap-3" data-testid="artist-npo-payout">
+          <Heart className="w-4 h-4 text-[color:var(--heart-pink)] flex-shrink-0" />
+          <span className="text-sm text-slate-600">NPO giving this period:</span>
+          <span className="text-sm font-semibold text-slate-900 ml-auto">
+            ${(npoPayout / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface FeedItem {
   kind: "order" | "signup" | "payout";

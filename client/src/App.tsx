@@ -283,23 +283,41 @@ function Router() {
     }
   }
 
-  // Task #859 — artist quote sandbox deep-link guard. An `artist` partner
-  // may reach only their releases list and an album detail page; every
-  // other /admin/* surface (dashboard, people, vendors, presses, the
-  // per-album engagement analytics, etc.) bounces back to the list. Auth
-  // paths stay open so a locked-out artist can still sign in/out.
+  // Artist partner route guard. Artists now have a full sectioned nav;
+  // god-view surfaces (presses, labels, makers, jobs, platform pricing,
+  // payouts, invite tree, etc.) remain blocked. Auth paths stay open so
+  // a locked-out artist can still sign in / reset their password.
   if (isArtistPartner && location.startsWith("/admin")) {
-    const isAlbumList =
-      location === "/admin/albums" || location.startsWith("/admin/albums?");
-    const isAlbumDetail = /^\/admin\/albums\/[^/?]+(\?.*)?$/.test(location);
     const isAuthPath =
       location.startsWith("/admin/login") ||
       location.startsWith("/admin/logout") ||
       location.startsWith("/admin/register") ||
       location.startsWith("/admin/forgot-password") ||
       location.startsWith("/admin/reset-password");
-    if (!isAlbumList && !isAlbumDetail && !isAuthPath) {
-      return <Redirect to="/admin/albums" />;
+    const allowedPrefixes = [
+      "/admin/dashboard",
+      "/admin/albums",
+      "/admin/people",
+      "/admin/instruments",
+      "/admin/custom-addons",
+      "/admin/non-profits",
+      "/admin/fan-orders",
+      "/admin/customers",
+      "/admin/reports",
+      "/admin/invite-directory",
+      "/admin/invites",
+      "/admin/trash",
+    ];
+    const isAllowed =
+      isAuthPath ||
+      allowedPrefixes.some(
+        (p) =>
+          location === p ||
+          location.startsWith(p + "?") ||
+          location.startsWith(p + "/"),
+      );
+    if (!isAllowed) {
+      return <Redirect to="/admin/dashboard" />;
     }
   }
 

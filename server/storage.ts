@@ -120,6 +120,7 @@ import {
 } from "@shared/schema";
 import { and, asc, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "./db";
+import { pgArray } from "./lib/pgArray";
 import { softDeleteEntity, restoreEntity, purgeEntity } from "./softDelete";
 import { todayISODate } from "@shared/albumStage";
 
@@ -577,7 +578,7 @@ export interface IStorage {
   // List returns each customer's row plus a roll-up (order count + lifetime
   // spend on paid/shipped orders + last activity timestamp). Profile
   // returns the customer + orders + collection items + playlist summaries.
-  listAdminCustomers(opts?: { q?: string; limit?: number; offset?: number }): Promise<{
+  listAdminCustomers(opts?: { q?: string; limit?: number; offset?: number; artistAlbumIds?: string[] }): Promise<{
     rows: Array<CustomerUser & { orderCount: number; lifetimeSpendCents: number; lastActivityAt: Date | null }>;
     total: number;
   }>;
@@ -3236,22 +3237,28 @@ export class DbStorage implements IStorage {
   }
 
   // ---- Admin customers directory (Task #131) -------------------------
-  async listAdminCustomers(opts?: { q?: string; limit?: number; offset?: number }) {
+  async listAdminCustomers(opts?: { q?: string; limit?: number; offset?: number; artistAlbumIds?: string[] }) {
     const q = (opts?.q ?? "").trim().toLowerCase();
     const limit = Math.min(Math.max(opts?.limit ?? 200, 1), 500);
     const offset = Math.max(opts?.offset ?? 0, 0);
+    const artistAlbumIds = opts?.artistAlbumIds;
     const like = `%${q}%`;
     // Per-customer roll-up: order count + lifetime spend on paid/shipped
     // orders (refunded orders are excluded from spend but still counted
     // in orderCount so the admin can see refund activity). lastActivity
     // is max(orders.createdAt, customer.createdAt) — gives a meaningful
     // "last seen" even before a customer has placed any orders.
-    const whereExpr = q
+    const textExpr = q
       ? sql`(lower(${customerUsers.displayName}) LIKE ${like}
              OR lower(${customerUsers.email}) LIKE ${like}
              OR lower(${customerUsers.username}) LIKE ${like}
              OR lower(coalesce(${customerUsers.realName}, '')) LIKE ${like})`
       : sql`true`;
+    // When scoping to an artist's albums, restrict to customers who have
+    // at least one order for one of those albums.
+    const whereExpr = artistAlbumIds?.length
+      ? and(textExpr, sql`${customerUsers.id} IN (SELECT customer_id FROM orders WHERE album_id = ANY(${pgArray(artistAlbumIds)}::text[]))`)
+      : textExpr;
 
     const rows = await db
       .select({

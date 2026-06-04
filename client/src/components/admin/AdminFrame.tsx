@@ -83,6 +83,7 @@ const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   "platform-pricing": "system",
   "payouts-release": "system",
   invites: "system",
+  "invite-directory": "system",
   trash: "system",
 };
 
@@ -373,20 +374,18 @@ export function AdminFrame({
     enabled: !!user?.isAdmin,
   });
   const isSuperAdmin = roleInfo?.role === "super_admin";
-  // Task #859 — an `artist` partner is locked to the quote sandbox: the
-  // only reachable surface is their own releases + the builder, so the
-  // sidebar collapses to a single "My releases" entry and the global
-  // search (which spans every entity) is hidden.
+  // Artist partners now get a full sectioned nav (not just "My releases").
+  // Global search (which spans every entity) is still hidden for artists.
   const isArtist = roleInfo?.role === "artist";
-  // Task #933 — press (manufacturer) & non-profit partners are trimmed
-  // the same way as artists. Their real home is their dark partner
-  // portal; inside the admin shell they can only read Reports (scoped
-  // to their own cohort) + the read-only GoodDeed pricing summary, so
-  // every god-view section is hidden and the global search is dropped.
+  // Task #933 — press (manufacturer) & non-profit partners are trimmed:
+  // their real home is their dark partner portal; inside the admin shell
+  // they can only read Reports + GoodDeed pricing.
   const isPress = roleInfo?.role === "manufacturer";
   const isNonProfit = roleInfo?.role === "non_profit";
+  // isTrimmedPartner gates the global search bar (artists are included
+  // since global search spans all entities, not just theirs).
   const isTrimmedPartner = isArtist || isPress || isNonProfit;
-  const partnerHome = isPress ? "/vendor" : isNonProfit ? "/non-profit" : "/admin/albums";
+  const partnerHome = isPress ? "/vendor" : isNonProfit ? "/non-profit" : "/admin/dashboard";
 
   // Task #273 + #309 — Collapsible sidebar sections (Stripe-style),
   // accordion: at most one section open at a time. State persists to
@@ -450,7 +449,7 @@ export function AdminFrame({
             from sidebar → main → preview pane. */}
         <div className="h-14 flex-shrink-0 flex items-center px-4 border-b border-slate-200">
           <Link
-            href={isTrimmedPartner ? partnerHome : "/admin/dashboard"}
+            href={isArtist ? "/admin/dashboard" : isTrimmedPartner ? partnerHome : "/admin/dashboard"}
             className="flex items-center"
             data-testid="link-admin-home"
           >
@@ -466,19 +465,148 @@ export function AdminFrame({
           </div>
         )}
         <nav className="flex-1 px-2 pt-2 pb-3 space-y-0.5 border-r border-slate-200 overflow-y-auto" data-testid="nav-admin-entities">
-            {/* Task #859 — artist quote sandbox: the only reachable
-                surface for an `artist` partner is their own releases, so
-                the sidebar is a single "My releases" entry and every
-                other section is dropped. */}
             {isArtist ? (
-              <SidebarLink
-                icon={Disc3}
-                label="My releases"
-                count={albumCount}
-                active={active === "albums"}
-                onClick={() => navigate("/admin/albums")}
-                testId="nav-albums"
-              />
+              <>
+                {/* Dashboard — artist's at-a-glance home. */}
+                <SidebarLink
+                  icon={LayoutDashboard}
+                  label="Dashboard"
+                  count={-1}
+                  active={active === "dashboard"}
+                  onClick={() => navigate("/admin/dashboard")}
+                  testId="nav-dashboard"
+                />
+
+                <Section
+                  id="catalog"
+                  label="Catalog"
+                  containsActive={activeSection === "catalog"}
+                  expanded={isSectionOpen("catalog")}
+                  onToggle={() => toggleSection("catalog")}
+                >
+                  <SidebarLink
+                    icon={Disc3}
+                    label="Albums"
+                    count={albumCount}
+                    active={active === "albums"}
+                    onClick={() => navigate("/admin/albums")}
+                    testId="nav-albums"
+                  />
+                  <SidebarLink
+                    icon={User}
+                    label="People"
+                    count={people.length}
+                    active={active === "people"}
+                    onClick={() => navigate("/admin/people")}
+                    testId="nav-people"
+                  />
+                  <SidebarLink
+                    icon={Guitar}
+                    label="Gear"
+                    count={instruments.length}
+                    active={active === "gear"}
+                    onClick={() => navigate("/admin/instruments")}
+                    testId="nav-gear"
+                  />
+                  <SidebarLink
+                    icon={Gift}
+                    label="Custom add-ons"
+                    active={active === "custom-addons"}
+                    onClick={() => navigate("/admin/custom-addons")}
+                    testId="nav-custom-addons"
+                  />
+                </Section>
+
+                {/* Partners — NPOs the artist works with. */}
+                <Section
+                  id="partners"
+                  label="Partners"
+                  containsActive={activeSection === "partners"}
+                  expanded={isSectionOpen("partners")}
+                  onToggle={() => toggleSection("partners")}
+                >
+                  <SidebarLink
+                    icon={HeartHandshake}
+                    label="NPOs"
+                    count={nonProfits.length}
+                    active={active === "nonprofits"}
+                    onClick={() => navigate("/admin/non-profits")}
+                    testId="nav-nonprofits"
+                  />
+                </Section>
+
+                {/* Queues — fan orders for the artist's albums. */}
+                <Section
+                  id="queues"
+                  label="Queues"
+                  containsActive={activeSection === "queues"}
+                  expanded={isSectionOpen("queues")}
+                  onToggle={() => toggleSection("queues")}
+                >
+                  <SidebarLink
+                    icon={ShoppingBag}
+                    label="Fan orders"
+                    count={fanOrdersActiveCount}
+                    active={active === "fan-orders"}
+                    onClick={() => navigate("/admin/fan-orders")}
+                    testId="nav-fan-orders"
+                  />
+                </Section>
+
+                {/* Audience — fans who have bought from this artist. */}
+                <Section
+                  id="audience"
+                  label="Audience"
+                  containsActive={activeSection === "audience"}
+                  expanded={isSectionOpen("audience")}
+                  onToggle={() => toggleSection("audience")}
+                >
+                  <SidebarLink
+                    icon={Users}
+                    label="Customers"
+                    count={customerCount}
+                    active={active === "customers"}
+                    onClick={() => navigate("/admin/customers")}
+                    testId="nav-customers"
+                  />
+                </Section>
+
+                {/* Reports — artist-scoped analytics. */}
+                <SidebarLink
+                  icon={BarChart3}
+                  label="Reports"
+                  count={-1}
+                  active={active === "reports"}
+                  onClick={() => navigate("/admin/reports")}
+                  testId="nav-reports"
+                />
+
+                {/* System — invite management + soft-delete bin. */}
+                <Section
+                  id="system"
+                  label="System"
+                  containsActive={activeSection === "system"}
+                  expanded={isSectionOpen("system")}
+                  onToggle={() => toggleSection("system")}
+                >
+                  <SidebarLink
+                    icon={UserPlus}
+                    label="Invites"
+                    count={-1}
+                    active={active === "invite-directory"}
+                    onClick={() => navigate("/admin/invite-directory")}
+                    testId="nav-invites"
+                  />
+                  <SidebarLink
+                    icon={Trash2}
+                    label="Deleted items"
+                    count={-1}
+                    active={active === "trash"}
+                    onClick={() => navigate("/admin/trash")}
+                    testId="nav-trash"
+                  />
+                </Section>
+              </>
             ) : isPress || isNonProfit ? (
               <>
                 <SidebarLink

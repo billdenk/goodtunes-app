@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { ROLE_LABEL } from "@/components/admin/RoleScopePicker";
-import { ArrowUpDown, ArrowDown, ArrowUp, Heart, Search } from "lucide-react";
+import { ArrowUpDown, ArrowDown, ArrowUp, Heart, Search, UserPlus } from "lucide-react";
 
 // Task #1198 — read-only directory of every invite ever sent (pending +
 // joined + revoked + expired). Additive to /admin/invites (pending-only)
@@ -94,6 +94,11 @@ export function AdminInviteDirectory() {
   const [sortKey, setSortKey] = useState<SortKey>("invitedAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
+  const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
+    queryKey: ["/api/me/role"],
+  });
+  const isArtist = roleInfo?.role === "artist";
+
   const {
     data: invites = [],
     isLoading,
@@ -172,15 +177,32 @@ export function AdminInviteDirectory() {
   return (
     <AdminFrame active="invite-directory" contentWidth="wide">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900 mb-1" data-testid="text-page-title">
-          Invite directory
-        </h1>
+        <div className="flex items-start justify-between mb-1 gap-4">
+          <h1 className="text-2xl font-semibold text-slate-900" data-testid="text-page-title">
+            {isArtist ? "Invites" : "Invite directory"}
+          </h1>
+          {isArtist && (
+            <a
+              href="/admin/invites"
+              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-[var(--brand-blue)] text-white text-sm font-semibold hover:opacity-90 transition-opacity flex-shrink-0"
+              data-testid="link-new-invite"
+            >
+              <UserPlus className="w-4 h-4" />
+              + Add Invite
+            </a>
+          )}
+        </div>
         <p className="text-sm text-slate-600 mb-6">
-          Every invite ever sent — pending, joined, revoked, and expired — in one read-only list. Search by
-          invitee or referrer, filter by status, referrer, or role, and sort by date or units sold (the units
-          credited to each referral). To send a new invite use{" "}
-          <span className="font-medium text-slate-700">Invites</span>; for the referral hierarchy use{" "}
-          <span className="font-medium text-slate-700">Invite tree</span>.
+          {isArtist
+            ? "Invites you've sent — pending, joined, revoked, and expired. Use + Add Invite to refer an artist or NPO partner."
+            : "Every invite ever sent — pending, joined, revoked, and expired — in one read-only list. Search by invitee or referrer, filter by status, referrer, or role, and sort by date or units sold (the units credited to each referral). To send a new invite use\u00a0"
+          }
+          {!isArtist && (
+            <>
+              <span className="font-medium text-slate-700">Invites</span>; for the referral hierarchy use{" "}
+              <span className="font-medium text-slate-700">Invite tree</span>.
+            </>
+          )}
         </p>
 
         {/* Controls — search, status tabs, role filter. */}

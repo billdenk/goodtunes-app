@@ -12430,11 +12430,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // null = inherit (resolver falls to the label, then "dedicated").
     pressMode: p.pressMode ?? null,
   });
-  app.get("/api/people", async (_req, res) => {
+  app.get("/api/people", async (req, res) => {
+    // Artist admins see only people credited on their own albums/songs.
+    // Fans and unauthenticated callers see the full public list (no auth
+    // required — fan pages like ArtistDetail/FavoriteArtists depend on this).
+    let artistPersonIdFilter: Set<string> | null = null;
+    const callerRolePeople = req.session?.userId
+      ? await getUserRole(req.session.userId)
+      : null;
+    if (callerRolePeople?.role === "artist" && callerRolePeople.roleScopeId) {
+      const artistPid = callerRolePeople.roleScopeId;
+      const albumRows = await db.execute<{ id: string }>(sql`
+        SELECT id FROM albums
+        WHERE (primary_artist_id = ${artistPid}
+               OR (payout_owner_kind = 'person' AND payout_owner_id = ${artistPid}))
+          AND deleted_at IS NULL
+      `);
+      const artistAlbumIds: string[] = (albumRows as any).rows?.map((r: any) => r.id) ?? [];
+      if (artistAlbumIds.length) {
+        const credited = await db.execute<{ person_id: string }>(sql`
+          SELECT DISTINCT person_id FROM (
+            SELECT tp.person_id FROM track_performers tp
+            JOIN songs s ON s.id = tp.song_id
+            WHERE s.album_id = ANY(${pgArray(artistAlbumIds)}::text[]) AND tp.person_id IS NOT NULL
+            UNION ALL
+            SELECT tw.person_id FROM track_writers tw
+            JOIN songs s ON s.id = tw.song_id
+            WHERE s.album_id = ANY(${pgArray(artistAlbumIds)}::text[]) AND tw.person_id IS NOT NULL
+            UNION ALL
+            SELECT ac.person_id FROM album_credits ac
+            WHERE ac.album_id = ANY(${pgArray(artistAlbumIds)}::text[]) AND ac.person_id IS NOT NULL
+          ) q
+        `);
+        artistPersonIdFilter = new Set(
+          (credited as any).rows?.map((r: any) => String(r.person_id)) ?? [],
+        );
+        // Always include the artist's own person record.
+        artistPersonIdFilter.add(artistPid);
+      } else {
+        // Artist has no albums yet — show only themselves.
+        artistPersonIdFilter = new Set([artistPid]);
+      }
+    }
     const [rows, allLabels] = await Promise.all([
       storage.getPeople(),
       storage.getLabels(),
     ]);
+    // Apply artist scope filter before building the response.
+    const filteredRows = artistPersonIdFilter
+      ? rows.filter((p) => artistPersonIdFilter!.has(p.id))
+      : rows;
     const labelById = new Map(allLabels.map((l) => [l.id, l]));
     // Partner affiliation fallback so a contact attached to a press /
     // vendor / label / fulfillment partner / non-profit shows that org's
@@ -12526,7 +12571,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.warn(`[people] artist-shape lookup failed: ${e?.message}`);
     }
     return res.json(
-      rows.map((p) => {
+      filteredRows.map((p) => {
         const derived = (derivedByPerson.get(p.id) ?? []).slice();
         const storedRoles: string[] = Array.isArray((p as any).roles) ? (p as any).roles : [];
         // Task #968 — classify artist vs contact with the SAME predicate
@@ -12607,6 +12652,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/admin/people/:id", requireAdmin, async (req, res) => {
     const id = String(req.params.id);
+    // Artist scope: only allow access to people credited on their albums.
+    const callerPeople = await getUserRole(req.session.userId!);
+    if (callerPeople?.role === "artist" && callerPeople.roleScopeId) {
+      const artistPid = callerPeople.roleScopeId;
+      if (id !== artistPid) {
+        const credited = await db.execute<{ exists: boolean }>(sql`
+          SELECT EXISTS(
+            SELECT 1 FROM (
+              SELECT tp.person_id FROM track_performers tp
+                JOIN songs s ON s.id = tp.song_id
+                JOIN albums a ON a.id = s.album_id
+                WHERE a.deleted_at IS NULL
+                  AND (a.primary_artist_id = ${artistPid}
+                       OR (a.payout_owner_kind = 'person' AND a.payout_owner_id = ${artistPid}))
+                  AND tp.person_id = ${id}
+              UNION ALL
+              SELECT tw.person_id FROM track_writers tw
+                JOIN songs s ON s.id = tw.song_id
+                JOIN albums a ON a.id = s.album_id
+                WHERE a.deleted_at IS NULL
+                  AND (a.primary_artist_id = ${artistPid}
+                       OR (a.payout_owner_kind = 'person' AND a.payout_owner_id = ${artistPid}))
+                  AND tw.person_id = ${id}
+              UNION ALL
+              SELECT ac.person_id FROM album_credits ac
+                JOIN albums a ON a.id = ac.album_id
+                WHERE a.deleted_at IS NULL
+                  AND (a.primary_artist_id = ${artistPid}
+                       OR (a.payout_owner_kind = 'person' AND a.payout_owner_id = ${artistPid}))
+                  AND ac.person_id = ${id}
+            ) AS credited
+          ) AS exists
+        `);
+        const allowed = !!((credited as any).rows ?? [])[0]?.exists;
+        if (!allowed) return res.status(403).json({ message: "Access denied" });
+      }
+    }
     const p = await storage.getPersonById(id);
     if (!p) return res.status(404).json({ message: "Person not found" });
     // Task #665 — derive a person's shape so the admin Person page can
@@ -13779,7 +13861,40 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Admins (CMS) see every vendor — hidden ones still need to be editable.
     // Fans see the public set only.
     const includeHiddenVendors = await isAdminUser(req);
-    return res.json(await storage.getInstruments({ includeHiddenVendors }));
+    const instruments = await storage.getInstruments({ includeHiddenVendors });
+    // Artist admins see only instruments credited on their own albums/songs.
+    const callerRoleInstr = req.session?.userId
+      ? await getUserRole(req.session.userId)
+      : null;
+    if (callerRoleInstr?.role === "artist" && callerRoleInstr.roleScopeId) {
+      const artistPid = callerRoleInstr.roleScopeId;
+      const albumRows = await db.execute<{ id: string }>(sql`
+        SELECT id FROM albums
+        WHERE (primary_artist_id = ${artistPid}
+               OR (payout_owner_kind = 'person' AND payout_owner_id = ${artistPid}))
+          AND deleted_at IS NULL
+      `);
+      const artistAlbumIds: string[] = (albumRows as any).rows?.map((r: any) => r.id) ?? [];
+      if (artistAlbumIds.length) {
+        const instrIds = await db.execute<{ instrument_id: string }>(sql`
+          SELECT DISTINCT instrument_id FROM (
+            SELECT tp.instrument_id FROM track_performers tp
+            JOIN songs s ON s.id = tp.song_id
+            WHERE s.album_id = ANY(${pgArray(artistAlbumIds)}::text[]) AND tp.instrument_id IS NOT NULL
+            UNION ALL
+            SELECT ac.instrument_id FROM album_credits ac
+            WHERE ac.album_id = ANY(${pgArray(artistAlbumIds)}::text[]) AND ac.instrument_id IS NOT NULL
+          ) q
+        `);
+        const scopedIds = new Set(
+          (instrIds as any).rows?.map((r: any) => String(r.instrument_id)) ?? [],
+        );
+        return res.json(instruments.filter((i) => scopedIds.has(i.id)));
+      }
+      // Artist has no albums yet — return empty list.
+      return res.json([]);
+    }
+    return res.json(instruments);
   });
   app.get("/api/instruments/:id", async (req, res) => {
     const includeHiddenVendors = await isAdminUser(req);
@@ -18718,7 +18833,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Task #78 — Non-profits are stored in the existing `organizations`
   // table with kind='non_profit'. This endpoint hydrates the scope
   // picker on the invite sheet and the referrer picker.
-  app.get("/api/non-profits", requireAdmin, async (_req, res) => {
+  app.get("/api/non-profits", requireAdmin, async (req, res) => {
+    const callerNpo = await getUserRole(req.session.userId!);
+    if (callerNpo?.role === "artist" && callerNpo.roleScopeId) {
+      // Artist: only NPOs that are beneficiaries on their albums.
+      const pid = callerNpo.roleScopeId;
+      const rows = await db.execute<{ id: string; name: string; logo_url: string | null; website_url: string | null }>(sql`
+        SELECT DISTINCT o.id, o.name, o.logo_url, o.website_url
+        FROM organizations o
+        JOIN album_npo_beneficiaries b ON b.organization_id = o.id
+        JOIN albums a ON a.id = b.album_id
+        WHERE o.kind = 'non_profit'
+          AND a.deleted_at IS NULL
+          AND (a.primary_artist_id = ${pid}
+               OR (a.payout_owner_kind = 'person' AND a.payout_owner_id = ${pid}))
+        ORDER BY o.name ASC
+      `);
+      return res.json(((rows as any).rows ?? []).map((r: any) => ({
+        id: r.id, name: r.name, logoUrl: r.logo_url, websiteUrl: r.website_url,
+      })));
+    }
     const rows = await db.execute<{ id: string; name: string; logo_url: string | null; website_url: string | null }>(
       sql`SELECT id, name, logo_url, website_url FROM organizations WHERE kind = 'non_profit' ORDER BY name ASC`,
     );
@@ -18800,6 +18934,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // GET a single non-profit by id — used by the admin detail page so it
   // doesn't have to fetch the whole list and filter client-side.
   app.get("/api/non-profits/:id", requireAdmin, async (req, res) => {
+    const callerNpoDetail = await getUserRole(req.session.userId!);
+    if (callerNpoDetail?.role === "artist" && callerNpoDetail.roleScopeId) {
+      const pid = callerNpoDetail.roleScopeId;
+      const chk = await db.execute<{ exists: boolean }>(sql`
+        SELECT EXISTS(
+          SELECT 1 FROM album_npo_beneficiaries b
+          JOIN albums a ON a.id = b.album_id
+          WHERE b.organization_id = ${req.params.id}
+            AND a.deleted_at IS NULL
+            AND (a.primary_artist_id = ${pid}
+                 OR (a.payout_owner_kind = 'person' AND a.payout_owner_id = ${pid}))
+        ) AS exists
+      `);
+      if (!((chk as any).rows ?? [])[0]?.exists) return res.status(403).json({ message: "Access denied" });
+    }
     const rows = await db.execute<{ id: string; name: string; logo_url: string | null; website_url: string | null; mailing_address: string | null; mailing_address_struct: any }>(
       sql`SELECT id, name, logo_url, website_url, mailing_address, mailing_address_struct FROM organizations WHERE id = ${req.params.id} AND kind = 'non_profit' LIMIT 1`,
     );
@@ -18814,6 +18963,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // non-profit so a stray org id (label, publisher) can't be probed
   // through this NPO-scoped endpoint.
   app.get("/api/non-profits/:id/people", requireAdmin, async (req, res) => {
+    const callerNpoPeople = await getUserRole(req.session.userId!);
+    if (callerNpoPeople?.role === "artist" && callerNpoPeople.roleScopeId) {
+      const pid = callerNpoPeople.roleScopeId;
+      const chk = await db.execute<{ exists: boolean }>(sql`
+        SELECT EXISTS(
+          SELECT 1 FROM album_npo_beneficiaries b
+          JOIN albums a ON a.id = b.album_id
+          WHERE b.organization_id = ${req.params.id}
+            AND a.deleted_at IS NULL
+            AND (a.primary_artist_id = ${pid}
+                 OR (a.payout_owner_kind = 'person' AND a.payout_owner_id = ${pid}))
+        ) AS exists
+      `);
+      if (!((chk as any).rows ?? [])[0]?.exists) return res.status(403).json({ message: "Access denied" });
+    }
     const npo = await db.execute(sql`SELECT 1 FROM organizations WHERE id = ${req.params.id} AND kind = 'non_profit' LIMIT 1`);
     if (((npo as any).rows ?? []).length === 0) return res.status(404).json({ message: "Non-profit not found" });
     // Task #665 — Invite tokens are bearer credentials. Only return
@@ -18904,8 +19068,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // every album by an attached artist. Reads are open to any admin; writes
   // are super-admin only (mirrors the NPO CRUD above). Stored in the
   // `custom_addons` + `custom_addon_artists` tables.
-  app.get("/api/admin/custom-addons", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/custom-addons", requireAdmin, async (req, res) => {
     try {
+    // Artist partners see only add-ons that apply to all artists or explicitly list them.
+    const callerRoleCA = await getUserRole(req.session.userId!);
+    const artistPersonIdCA = callerRoleCA?.role === "artist" ? callerRoleCA.roleScopeId : null;
     const rows = await db.execute<any>(sql`
       SELECT ca.id, ca.organization_id, ca.name, ca.description, ca.image_url,
              ca.price_cents, ca.fulfiller, ca.active, ca.applies_to_all_artists,
@@ -18922,6 +19089,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       JOIN organizations o ON o.id = ca.organization_id
       LEFT JOIN custom_addon_artists caa ON caa.custom_addon_id = ca.id
       LEFT JOIN people p ON p.id = caa.person_id
+      ${artistPersonIdCA ? sql`WHERE (ca.applies_to_all_artists = true OR EXISTS (
+        SELECT 1 FROM custom_addon_artists caa_scope
+        WHERE caa_scope.custom_addon_id = ca.id AND caa_scope.person_id = ${artistPersonIdCA}
+      ))` : sql``}
       GROUP BY ca.id, o.name, o.logo_url
       ORDER BY ca.position ASC, ca.created_at DESC
     `);
@@ -18948,6 +19119,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/admin/custom-addons/:id", requireAdmin, async (req, res) => {
     try {
+    const callerRoleCAD = await getUserRole(req.session.userId!);
+    const artistPersonIdCAD = callerRoleCAD?.role === "artist" ? callerRoleCAD.roleScopeId : null;
     const rows = await db.execute<any>(sql`
       SELECT ca.id, ca.organization_id, ca.name, ca.description, ca.image_url,
              ca.price_cents, ca.fulfiller, ca.active, ca.applies_to_all_artists,
@@ -18969,6 +19142,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     `);
     const r = ((rows as any).rows ?? [])[0];
     if (!r) return res.status(404).json({ message: "Add-on not found" });
+    // Artist scope guard: only accessible if applies_to_all_artists or explicitly listed.
+    if (artistPersonIdCAD && !r.applies_to_all_artists) {
+      const inList = ((r.artists as any[]) ?? []).some((a: any) => a.personId === artistPersonIdCAD);
+      if (!inList) return res.status(403).json({ message: "Not your add-on" });
+    }
     res.json({
       id: r.id,
       organizationId: r.organization_id,
@@ -19936,12 +20114,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ok: true, activeKey: key });
   });
 
-  // List pending invites (super-admin only). For scoped roles
-  // (artist/label/manufacturer/fulfillment) we hydrate the scope
-  // entity's name + thumbnail so the row can render "Artist · Garry
-  // Tallent" without the client doing a second fetch per row.
-  app.get("/api/admin/invites", requireAdmin, requireRole("super_admin"), async (_req, res) => {
-    const rows = await storage.listPendingAdminInvites();
+  // List pending invites. Super-admins see all; artists see only invites
+  // they referred (referrerKind=artist, referrerScopeId=their personId).
+  // All other admin roles get 403 (they have no self-serve invite surface).
+  app.get("/api/admin/invites", requireAdmin, async (req, res) => {
+    const userId = (req as any).session?.userId as string | undefined;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const { getUserRole } = await import("./auth/roles");
+    const roleInfo = await getUserRole(userId);
+    if (!roleInfo) return res.status(401).json({ message: "Unauthorized" });
+    let artistPersonId: string | null = null;
+    if (roleInfo.role !== "super_admin") {
+      if (roleInfo.role === "artist" && roleInfo.roleScopeId) {
+        artistPersonId = roleInfo.roleScopeId;
+      } else {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+    }
+    const allRows = await storage.listPendingAdminInvites();
+    const rows = artistPersonId
+      ? allRows.filter((r: any) => r.referrerKind === "artist" && r.referrerScopeId === artistPersonId)
+      : allRows;
     const need = (kind: string) =>
       Array.from(new Set(rows.filter((r) => r.role === kind && r.roleScopeId).map((r) => r.roleScopeId!)));
     const [peopleNeeded, labelsNeeded, mfgNeeded, ffNeeded, vendorNeeded] = [
@@ -20006,12 +20199,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Task #1198 — read-only invite directory. Every invite ever sent
-  // (pending + joined + revoked + expired) in one searchable list, with
-  // the invitee, who referred them (name + kind), role, status, dates,
-  // and units sold by the invited artist. Super-admin-only; additive to
-  // /api/admin/invites (pending-only) and the per-scope invite-tree.
-  app.get("/api/admin/invite-directory", requireAdmin, requireRole("super_admin"), async (_req, res) => {
-    const rows = await storage.listAllAdminInvites();
+  // (pending + joined + revoked + expired) in one searchable list.
+  // Super-admins see all rows; artists see only their own referrals.
+  app.get("/api/admin/invite-directory", requireAdmin, async (req, res) => {
+    const userId = (req as any).session?.userId as string | undefined;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const { getUserRole } = await import("./auth/roles");
+    const roleInfo = await getUserRole(userId);
+    if (!roleInfo) return res.status(401).json({ message: "Unauthorized" });
+    let artistPersonId: string | null = null;
+    if (roleInfo.role !== "super_admin") {
+      if (roleInfo.role === "artist" && roleInfo.roleScopeId) {
+        artistPersonId = roleInfo.roleScopeId;
+      } else {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+    }
+    const allRows = await storage.listAllAdminInvites();
+    const rows = artistPersonId
+      ? allRows.filter((r: any) => r.referrerKind === "artist" && r.referrerScopeId === artistPersonId)
+      : allRows;
     const now = Date.now();
 
     // --- Invitee scope identity (role + roleScopeId), same as /invites. ---
@@ -20221,13 +20428,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (callerRole.role === "manufacturer" && invitingArtistOrLabel) {
         pressInviterScopeId = callerRole.roleScopeId;
         // keep client-provided role + roleScopeId
-      } else if (callerRole.role === "artist" && invitingArtistOrLabel && !isTeammateInvite) {
-        // Task #546 / #952 — fresh artist→artist OR artist→label invite.
-        // Caller is forwarding from an artist-portal wrapper which has
-        // already minted a placeholder Person/Label for the invitee and
-        // set roleScopeId to that id. Pin the referrer to the caller's
-        // artist Person below; everything else falls through unchanged.
-        artistInviterScopeId = callerRole.roleScopeId;
+      } else if (callerRole.role === "artist" && !isTeammateInvite) {
+        // Artist callers may only target other artists or non-profits.
+        // Any other role is a cross-tenant escalation attempt.
+        if (role !== "artist" && role !== "non_profit") {
+          return res.status(403).json({ message: "Artists can only invite other artists or non-profits." });
+        }
+        // For artist→artist: pin the referrer so the referral tree resolves.
+        // For artist→non_profit: also pin referrer so the invite row appears
+        // in the artist's invite-list/directory (both filter by referrer_kind='artist').
+        if (role === "artist" || role === "non_profit") artistInviterScopeId = callerRole.roleScopeId;
       } else if (callerRole.role === "label" && invitingArtistOrLabel && !isTeammateInvite) {
         // Task #952 — fresh label→artist OR label→label invite. Caller
         // forwards from the label-portal wrapper which has minted the
@@ -23073,13 +23283,64 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const q = typeof req.query.q === "string" ? req.query.q : "";
     const limit = Math.min(Number(req.query.limit) || 200, 500);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
-    const result = await storage.listAdminCustomers({ q, limit, offset });
+    // Artist partners see only fans who purchased their albums.
+    let artistAlbumIds: string[] | undefined;
+    const callerRole = await getUserRole(req.session.userId!);
+    if (callerRole?.role === "artist") {
+      const personId = callerRole.roleScopeId;
+      if (!personId) return res.json({ rows: [], total: 0 });
+      const albumRows = await db.execute<{ id: string }>(sql`
+        SELECT id FROM albums
+        WHERE (primary_artist_id = ${personId}
+               OR (payout_owner_kind = 'person' AND payout_owner_id = ${personId}))
+          AND deleted_at IS NULL
+      `);
+      const ids = (albumRows as any).rows?.map((r: any) => r.id) ?? [];
+      if (!ids.length) return res.json({ rows: [], total: 0 });
+      artistAlbumIds = ids;
+    }
+    const result = await storage.listAdminCustomers({ q, limit, offset, artistAlbumIds });
     res.json(result);
   });
   app.get("/api/admin/customers/:id", requireAdmin, async (req, res) => {
+    // Artist partners can only view profiles of customers who bought their albums.
+    // Variables declared in outer scope so they're accessible after the guard block.
+    const callerRole = await getUserRole(req.session.userId!);
+    let artistScopedAlbumIds: string[] = [];
+    if (callerRole?.role === "artist") {
+      const personId = callerRole.roleScopeId;
+      if (!personId) return res.status(403).json({ message: "No artist scope" });
+      const albumRows = await db.execute<{ id: string }>(sql`
+        SELECT id FROM albums
+        WHERE (primary_artist_id = ${personId}
+               OR (payout_owner_kind = 'person' AND payout_owner_id = ${personId}))
+          AND deleted_at IS NULL
+      `);
+      artistScopedAlbumIds = (albumRows as any).rows?.map((r: any) => r.id) ?? [];
+      if (!artistScopedAlbumIds.length) return res.status(403).json({ message: "No albums in scope" });
+      const orderCheck = await db.execute<{ count: string }>(sql`
+        SELECT COUNT(*)::text AS count FROM orders
+        WHERE customer_id = ${String(req.params.id)}
+          AND album_id = ANY(${pgArray(artistScopedAlbumIds)}::text[])
+      `);
+      const count = Number((orderCheck as any).rows?.[0]?.count ?? 0);
+      if (count === 0) return res.status(403).json({ message: "Not your customer" });
+    }
     const profile = await storage.getAdminCustomerProfile(String(req.params.id));
     if (!profile) return res.status(404).json({ message: "Customer not found" });
-    res.json(profile);
+    // For artist partners, scope the returned profile to their albums only.
+    // Playlists are fan-private data — not surfaced in the artist view.
+    if (artistScopedAlbumIds.length) {
+      const albumIdSet = new Set(artistScopedAlbumIds);
+      res.json({
+        ...profile,
+        orders: profile.orders.filter((o) => albumIdSet.has(o.albumId)),
+        collection: profile.collection.filter((c) => albumIdSet.has(c.albumId)),
+        playlists: [],
+      });
+    } else {
+      res.json(profile);
+    }
   });
 
   // Demo-only: super_admin grants a fan a comp album so we can show the
@@ -24885,9 +25146,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     app.get(
       "/api/admin/trash",
       requireAdmin,
-      requireSuperAdmin,
-      async (_req, res) => {
+      async (req, res) => {
         try {
+          // Super-admins see the full cross-tenant trash.
+          // Artists see only their own soft-deleted albums.
+          const callerRoleTrash = await getUserRole((req as any).session?.userId);
+          if (callerRoleTrash?.role !== "super_admin") {
+            if (callerRoleTrash?.role === "artist" && callerRoleTrash.roleScopeId) {
+              const deletedAlbums = await db.execute<any>(sql`
+                SELECT a.id, a.title, a.artist, a.deleted_at,
+                       u.name AS deleted_by_name
+                FROM albums a
+                LEFT JOIN users u ON u.id = a.deleted_by_user_id
+                WHERE a.deleted_at IS NOT NULL
+                  AND (a.primary_artist_id = ${callerRoleTrash.roleScopeId}
+                       OR (a.payout_owner_kind = 'person' AND a.payout_owner_id = ${callerRoleTrash.roleScopeId}))
+                ORDER BY a.deleted_at DESC
+              `);
+              // Return rows in the TrashRow[] shape the AdminTrash page expects.
+              return res.json(
+                ((deletedAlbums as any).rows ?? []).map((r: any) => ({
+                  type: "album",
+                  id: r.id,
+                  label: r.title + (r.artist ? ` · ${r.artist}` : ""),
+                  deletedAt: r.deleted_at,
+                  deletedByUserId: null,
+                  deletedByUserName: r.deleted_by_name ?? null,
+                })),
+              );
+            }
+            return res.status(403).json({ message: "Super-admin access required" });
+          }
           res.json(await listTrash());
         } catch (e: any) {
           res.status(500).json({ message: e?.message ?? "Failed to list trash" });
@@ -24913,10 +25202,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     app.post(
       "/api/admin/trash/:type/:id/restore",
       requireAdmin,
-      requireSuperAdmin,
       async (req, res) => {
         const kind = parseType(String(req.params.type));
         if (!kind) return res.status(400).json({ message: "Unknown entity type" });
+        // Super-admins can restore any entity. Artists may only restore their
+        // own soft-deleted albums (they cannot restore songs, people, etc.).
+        const callerRoleRestore = await getUserRole(req.session.userId!);
+        if (callerRoleRestore?.role !== "super_admin") {
+          if (callerRoleRestore?.role === "artist" && kind === "album") {
+            const personId = callerRoleRestore.roleScopeId;
+            if (!personId) return res.status(403).json({ message: "No artist scope" });
+            const albumCheck = await db.execute<{ id: string }>(sql`
+              SELECT id FROM albums
+              WHERE id = ${String(req.params.id)}
+                AND (primary_artist_id = ${personId}
+                     OR (payout_owner_kind = 'person' AND payout_owner_id = ${personId}))
+            `);
+            if (!((albumCheck as any).rows ?? []).length) {
+              return res.status(403).json({ message: "Not your album" });
+            }
+          } else {
+            return res.status(403).json({ message: "Super-admin access required" });
+          }
+        }
         try {
           await restoreEntity(kind, String(req.params.id));
           res.json({ message: "Restored" });
