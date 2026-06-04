@@ -13508,11 +13508,17 @@ function VideoTile({
               className="w-full h-full object-cover"
             />
           ) : (
+            /* No poster — use the first frame of the video as a thumbnail.
+               pointer-events-none + disablePictureInPicture + controlsList
+               ensure the browser never renders its native control chrome
+               (PiP button, fullscreen expand, native play square). */
             <video
               src={video.videoUrl}
               preload="metadata"
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover pointer-events-none"
               muted
+              disablePictureInPicture
+              controlsList="nodownload nofullscreen noremoteplayback"
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
@@ -13548,7 +13554,11 @@ function VideoTile({
               className="absolute inset-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-inset"
               data-testid={`button-play-video-${video.id}`}
             >
-              <Play className="w-9 h-9 text-white/85 drop-shadow-lg" />
+              {/* Dark pill gives the play icon a consistent backdrop so it
+                  reads clearly over both light and dark artwork. */}
+              <span className="flex items-center justify-center w-12 h-12 rounded-full bg-black/55 backdrop-blur-[2px] shadow-lg ring-1 ring-white/20">
+                <Play className="w-5 h-5 text-white fill-white translate-x-px" />
+              </span>
             </button>
           )}
         </>
@@ -13609,7 +13619,7 @@ function TileActions({
   disabled?: boolean;
 }) {
   return (
-    <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
+    <div className="absolute top-2 right-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity duration-150">
       <button
         type="button"
         onClick={(e) => {
@@ -13619,9 +13629,9 @@ function TileActions({
         disabled={disabled}
         aria-label="Edit"
         title="Edit"
-        className="w-7 h-7 rounded-full bg-white/90 backdrop-blur-sm text-slate-700 hover:bg-white hover:text-slate-900 inline-flex items-center justify-center shadow"
+        className="w-8 h-8 rounded-full bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900 inline-flex items-center justify-center shadow-md disabled:opacity-50"
       >
-        <Pencil className="w-3.5 h-3.5" />
+        <Pencil className="w-4 h-4" />
       </button>
       <button
         type="button"
@@ -13632,9 +13642,9 @@ function TileActions({
         disabled={disabled}
         aria-label="Delete"
         title="Delete"
-        className="w-7 h-7 rounded-full bg-white/90 backdrop-blur-sm text-rose-600 hover:bg-white hover:text-rose-700 inline-flex items-center justify-center shadow"
+        className="w-8 h-8 rounded-full bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 inline-flex items-center justify-center shadow-md disabled:opacity-50"
       >
-        <Trash2 className="w-3.5 h-3.5" />
+        <Trash2 className="w-4 h-4" />
       </button>
     </div>
   );
