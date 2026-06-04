@@ -2112,6 +2112,11 @@ function ShareLinkPanel({
           variant="outline"
           className="h-8 shrink-0"
           disabled={!canPreview || save.isPending}
+          // Stop the button from stealing focus: otherwise clicking Open
+          // blurs the input, which fires its OWN save and flips save.isPending
+          // true before onClick runs — making openPreview bail and open
+          // nothing. Keeping focus lets Open be the single save-then-open path.
+          onMouseDown={(e) => e.preventDefault()}
           onClick={openPreview}
           data-testid="button-open-share-link"
           title="Open this page in a new tab using your admin session (saves the link first, and works even before the release is public)."
