@@ -19,12 +19,18 @@ test("owned albums always render the full track", () => {
   assert.equal(trackPlaybackState({ isOwned: true }), "full");
 });
 
-test("not-owned always renders a preview row — previews are store-wide", () => {
-  // Previews are leak-proof (server 30s cap), so a not-owned track is never
-  // locked regardless of the legacy previewability flag's value.
+test("not-owned defaults to a store-wide 30-second preview row", () => {
+  // Previews are leak-proof (server 30s cap), so a not-owned track is a
+  // preview row by default — true / null / absent all stay store-wide.
   assert.equal(trackPlaybackState({ isOwned: false, isPreviewable: true }), "preview");
-  assert.equal(trackPlaybackState({ isOwned: false, isPreviewable: false }), "preview");
   assert.equal(trackPlaybackState({ isOwned: false, isPreviewable: null }), "preview");
   assert.equal(trackPlaybackState({ isOwned: false }), "preview");
   assert.equal(trackPlaybackState({}), "preview");
+});
+
+test("not-owned honors the per-track Hide-preview embargo", () => {
+  // Operator hid this track's pre-purchase preview (previewHidden → the
+  // server sends isPreviewable:false) → quiet locked row: number + title
+  // only, no runtime, not playable. Only an explicit false locks the row.
+  assert.equal(trackPlaybackState({ isOwned: false, isPreviewable: false }), "locked");
 });

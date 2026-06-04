@@ -248,7 +248,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
     [album?.songs],
   );
 
-  const hasPreviews = songs.some((s) => s.isPreviewable);
+  const hasPreviews = songs.some((s) => s.isPreviewable !== false);
   const canPlay = effectiveOwned || hasPreviews;
 
   // Is the player currently auditioning a song from this album under
@@ -275,7 +275,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
       description: album.description ?? "",
     };
     return songs
-      .filter((s) => effectiveOwned || s.isPreviewable)
+      .filter((s) => effectiveOwned || s.isPreviewable !== false)
       .map((s) => ({
         id: s.id,
         albumId: s.albumId,

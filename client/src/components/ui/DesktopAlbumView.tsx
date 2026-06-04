@@ -778,10 +778,10 @@ function PreviewPlayPill({
           ? "Previews aren't available for this album yet"
           : showPause
             ? "Pause preview"
-            : "Play 30-second preview"
+            : "Play preview"
       }
       data-testid="button-play-preview"
-      aria-label={showPause ? "Pause preview" : "Play 30-second preview"}
+      aria-label={showPause ? "Pause preview" : "Play preview"}
       className={[
         "h-11 pl-4 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[14px] transition-colors",
         disabled

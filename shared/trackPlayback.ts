@@ -7,8 +7,6 @@
 // (e.g. adding a sunset/stream-only nuance to only one). Both now call this
 // helper so the rule can never disagree. (Task #1095.)
 
-// "locked" is retained in the union for back-compat with surfaces that still
-// branch on it, but the rule never returns it anymore — see below.
 export type TrackPlaybackState = "locked" | "preview" | "full";
 
 // The minimal track shape the rule reads.
@@ -16,19 +14,26 @@ export interface TrackPlaybackInput {
   // Whether the viewer owns the album (purchased / granted). Owners always
   // get the full track.
   isOwned?: boolean | null;
-  // Legacy preview flag. Previews are now store-wide — every track is
-  // previewable before purchase (server-capped to the artist's 30-second
-  // window) — so this no longer gates the row. Kept so existing callers
-  // keep compiling.
+  // Per-track preview gate. Previews are store-wide by default — every track
+  // is auditionable before purchase (server-capped to the artist's 30-second
+  // window). An operator can embargo a SINGLE track's pre-purchase preview
+  // via the Master tile's "Hide preview" toggle (`previewHidden` → the server
+  // sends `isPreviewable: false`); only an explicit `false` locks the row.
+  // `true` / `null` / absent all stay store-wide previews.
   isPreviewable?: boolean | null;
 }
 
-// Owned → "full"; everyone else → "preview". Previews are store-wide and
-// leak-proof (the server hard-caps a not-owned listen to the artist's
-// 30-second window), so a not-owned track is never "locked" on any fan
-// surface — fans can always audition the music before buying.
+// Owned → "full". Not owned → "preview", EXCEPT a track whose preview the
+// operator hid (`isPreviewable === false`) → "locked": the fan sees the track
+// number + title only (no runtime, not playable), matching Apple's pre-release
+// pattern. Store-wide previews stay leak-proof — the server hard-caps a
+// not-owned listen to the artist's 30-second window — and the playback-url
+// route independently refuses to sign a hidden track, so a "locked" row can
+// never be coaxed into playing.
 export function trackPlaybackState({
   isOwned,
+  isPreviewable,
 }: TrackPlaybackInput): TrackPlaybackState {
-  return isOwned ? "full" : "preview";
+  if (isOwned) return "full";
+  return isPreviewable === false ? "locked" : "preview";
 }

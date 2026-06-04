@@ -188,17 +188,6 @@ export function AlbumDesktopTrackRow({
         )}
       </div>
 
-      {/* "Preview · 30s" hint — preview rows only, fades in on hover. */}
-      {state === "preview" && !isCurrent && (
-        <div
-          className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-fan-secondary transition-opacity"
-          style={{ opacity: hover ? 1 : 0 }}
-          aria-hidden
-        >
-          Preview · 30s
-        </div>
-      )}
-
       {/* `+` add-to-playlist chip — fades in on hover, beside runtime. */}
       {interactive && (
         <button
