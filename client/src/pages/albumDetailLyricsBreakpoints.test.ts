@@ -73,6 +73,12 @@ g.history = window.history;
 g.localStorage = window.localStorage;
 g.addEventListener = window.addEventListener.bind(window);
 g.removeEventListener = window.removeEventListener.bind(window);
+// wouter v3 patches history.pushState/replaceState to emit a navigation
+// event via the GLOBAL dispatchEvent (AlbumDetailDesktop's overlay
+// back-button effect runs window.history.pushState during render). jsdom
+// only exposes it on window, so mirror it onto the global or wouter throws
+// "dispatchEvent is not defined" before any assertion runs.
+g.dispatchEvent = window.dispatchEvent.bind(window);
 g.HTMLElement = window.HTMLElement;
 g.SVGElement = window.SVGElement;
 g.Element = window.Element;

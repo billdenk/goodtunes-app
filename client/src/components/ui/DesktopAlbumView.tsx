@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { useHasInAppHistory } from "@/lib/navHistory";
-import { ChevronLeft, Play, Pause, Shuffle, Lock, Share, Info } from "lucide-react";
+import { ChevronLeft, Play, Pause, Shuffle, Lock, Share, Info, X } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { IconButton } from "@/components/ui/IconButton";
 import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
@@ -765,6 +765,26 @@ export function DesktopAlbumView({
                   border: "1px solid rgba(255,255,255,0.08)",
                 }}
               >
+                {/* Header: title + the `×` close chip the prop docs promise.
+                    Mirrors the md overlay's close affordance (same IconButton
+                    ghost treatment) so closing reads identically across the
+                    two lyrics surfaces; host owns the open/close state via
+                    `onCloseLyrics`. */}
+                <div className="flex items-center justify-between px-4 pt-3 pb-1">
+                  <span className="text-fan-primary text-sm font-semibold tracking-[-0.005em]">
+                    Lyrics
+                  </span>
+                  <IconButton
+                    variant="ghost"
+                    size="md"
+                    label="Close lyrics"
+                    onClick={() => onCloseLyrics?.()}
+                    data-testid="button-close-lyrics"
+                    className="w-9 h-9 [&>svg]:w-4 [&>svg]:h-4 text-fan-secondary hover:text-fan-primary"
+                  >
+                    <X strokeWidth={2.2} />
+                  </IconButton>
+                </div>
                 <div className="flex-1 min-h-0 flex flex-col">{lyrics}</div>
               </div>
             </div>
