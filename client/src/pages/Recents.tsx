@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Star } from "lucide-react";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
@@ -71,21 +72,44 @@ export function RecentsPage() {
   const clearAll = useClearRecents();
   const [confirmClear, setConfirmClear] = useState(false);
 
+  // A fan only ever has their own albums to open — Collection is scoped to
+  // owned albums too (Task #1255), so an album-kind recent pointing at an
+  // album the fan doesn't own would dead-end. Scope album rows to the owned
+  // set; other entity kinds (artist/gear/vendor/etc.) stay browsable and are
+  // left untouched.
+  const { data: myAlbumsRaw, isLoading: myAlbumsLoading, isSuccess: ownershipReady } = useQuery<Array<{ albumId: string; isPreview?: boolean }> | null>({
+    queryKey: ["/api/my-albums"],
+  });
+  const ownedAlbumIds = useMemo(
+    () => new Set((myAlbumsRaw ?? []).map((a) => a.albumId)),
+    [myAlbumsRaw],
+  );
+  const loading = isLoading || myAlbumsLoading;
+
   const grouped = useMemo(() => {
     const now = new Date();
     const buckets: Record<string, FanRecent[]> = { today: [], yesterday: [], week: [], earlier: [] };
     for (const row of recents ?? []) {
+      // Fail open: only drop an unowned album once ownership has actually
+      // resolved. If /api/my-albums errors (ownedAlbumIds would be empty),
+      // keep showing the fan's real history instead of a false empty state.
+      if (ownershipReady && row.entityKind === "album" && !ownedAlbumIds.has(row.entityId)) continue;
       buckets[groupKey(new Date(row.lastAt as any), now)].push(row);
     }
     return buckets;
-  }, [recents]);
+  }, [recents, ownedAlbumIds, ownershipReady]);
+
+  const totalShown = useMemo(
+    () => Object.values(grouped).reduce((n, rows) => n + rows.length, 0),
+    [grouped],
+  );
 
   return (
     <main className="h-screen w-full flex justify-center overflow-hidden bg-[#00062B]">
       <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1100px] lg:mx-auto h-screen text-white flex flex-col">
         <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
           <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Recents</h1>
-          {(recents?.length ?? 0) > 0 && (
+          {totalShown > 0 && (
             <button
               type="button"
               onClick={() => setConfirmClear(true)}
@@ -98,10 +122,10 @@ export function RecentsPage() {
         </header>
 
         <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
-          {isLoading && (
+          {loading && (
             <p className="text-white/45 text-sm text-center mt-8">Loading…</p>
           )}
-          {!isLoading && (recents?.length ?? 0) === 0 && (
+          {!loading && totalShown === 0 && (
             <div className="text-center mt-16 px-6">
               <p className="text-white/55 text-sm">Nothing here yet.</p>
               <p className="text-white/35 text-xs mt-1">Albums, songs, and gear you open will show up here.</p>
