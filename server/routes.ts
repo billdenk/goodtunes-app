@@ -4917,6 +4917,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "davesguitar.com": { name: "Dave's Guitar Shop", role: "reseller" },
     "rudysmusic.com": { name: "Rudy's Music", role: "reseller" },
     "ricksmusicworld.com": { name: "Rick's Music World", role: "reseller" },
+    "guitars.com": { name: "Gruhn Guitars", role: "reseller" },
     // Europe / UK / international resellers
     "thomann.de": { name: "Thomann", role: "reseller" },
     "andertons.co.uk": { name: "Andertons", role: "reseller" },
@@ -5309,6 +5310,134 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     try {
+      // — Gruhn Guitars (guitars.com) ————————————————————————————————
+      // guitars.com is a client-side-rendered SPA: the fetched HTML is
+      // an empty shell with no OG/JSON-LD data. Product data lives on
+      // the Drupal JSON API at api.guitars.com. Two-step lookup: extract
+      // the inventory slug from the URL path, then GET /api/nodes?path=.
+      if (host === "guitars.com") {
+        const segs = parsed.pathname.split("/").filter(Boolean);
+        const slug = segs[segs.length - 1] ?? "";
+        if (!slug) {
+          return res
+            .status(400)
+            .json({ message: "Could not extract a product slug from this guitars.com URL." });
+        }
+        const apiUrl = `https://api.guitars.com/api/nodes?path=${encodeURIComponent("inventory/" + slug)}`;
+        const gruhnCtrl = new AbortController();
+        const gruhnT = setTimeout(() => gruhnCtrl.abort(), 12_000);
+        let apiData: any;
+        try {
+          const apiRes = await fetch(apiUrl, {
+            signal: gruhnCtrl.signal,
+            headers: { "User-Agent": BOT_UA, Accept: "application/json" },
+          }).finally(() => clearTimeout(gruhnT));
+          if (!apiRes.ok) {
+            return res.status(502).json({
+              message: `Gruhn Guitars API returned ${apiRes.status} — the item may no longer be listed.`,
+            });
+          }
+          const body = await apiRes.json();
+          if (!body?.data || body.status === 404) {
+            return res.status(404).json({
+              message: "Item not found on Gruhn Guitars — the listing may have been sold or removed.",
+            });
+          }
+          apiData = body.data;
+        } catch (e: any) {
+          const msg =
+            e?.name === "AbortError"
+              ? "Gruhn Guitars API took too long to respond."
+              : e?.message || "Could not reach the Gruhn Guitars API.";
+          return res.status(502).json({ message: msg });
+        }
+
+        // Strip leading SKU code ("EZ6094 1987 Mosrite…" → "1987 Mosrite…").
+        // SKU codes are 1–4 letters followed by 2–8 digits at the title start.
+        const rawTitle: string = typeof apiData.title === "string" ? apiData.title : "";
+        const gruhnName = rawTitle.replace(/^[A-Za-z]{1,4}\d{2,8}\s+/, "").trim() || rawTitle.trim() || null;
+
+        const gruhnYear: string | null = apiData.field_instr_year?.value
+          ? String(apiData.field_instr_year.value)
+          : null;
+        const priceRaw = apiData.field_instr_asking_price?.value;
+        const gruhnPrice: string | null = priceRaw
+          ? `USD ${parseFloat(priceRaw).toFixed(2)}`
+          : null;
+
+        const gruhnBrand: string | null = apiData.field_manufacturer?.manufacturer?.name ?? null;
+
+        let gruhnDesc: string | null = apiData.field_instr_product_description?.value ?? null;
+        if (gruhnDesc) {
+          gruhnDesc = gruhnDesc
+            .replace(/<br\s*\/?>/gi, "\n")
+            .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
+            .replace(/<[^>]+>/g, "")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
+        }
+
+        const gruhnImages = apiData.field_instr_image;
+        const gruhnRawImage: string | null =
+          Array.isArray(gruhnImages) && gruhnImages.length > 0
+            ? (gruhnImages[0]?.file?.url ?? null)
+            : null;
+        let gruhnPhotoUrl: string | null = null;
+        if (gruhnRawImage) {
+          try { gruhnPhotoUrl = await rehostRemoteImage(gruhnRawImage); }
+          catch { gruhnPhotoUrl = gruhnRawImage; }
+        }
+
+        const gruhnReseller = buildHostSlot("guitars.com", "Gruhn Guitars", url);
+
+        let gruhnMaker: VendorSlot | null = null;
+        if (gruhnBrand) {
+          const resolvedHost = resolveMakerHostFromBrand(gruhnBrand);
+          if (resolvedHost) {
+            const info = KNOWN_HOSTS[resolvedHost];
+            gruhnMaker = buildHostSlot(resolvedHost, info?.name ?? gruhnBrand, null);
+          } else {
+            const byName = await storage.getVendorByNameInsensitive(gruhnBrand);
+            if (byName?.domain) {
+              gruhnMaker = {
+                name: byName.name,
+                domain: byName.domain,
+                affiliateUrl: null,
+                aboutUrl: byName.aboutUrl ?? `https://${byName.domain}/`,
+                logoUrl:
+                  byName.logoUrl ??
+                  `https://www.google.com/s2/favicons?sz=128&domain=${byName.domain}`,
+                known: false,
+              };
+            } else {
+              gruhnMaker = {
+                name: gruhnBrand,
+                domain: null,
+                affiliateUrl: null,
+                aboutUrl: null,
+                logoUrl: null,
+                known: false,
+              };
+            }
+          }
+        }
+
+        return res.json({
+          name: gruhnName,
+          brand: gruhnBrand,
+          category: null,
+          description: gruhnDesc,
+          specs: gruhnYear ? { Year: gruhnYear } : {},
+          price: gruhnPrice,
+          photoUrl: gruhnPhotoUrl,
+          sourceImage: gruhnRawImage,
+          reseller: gruhnReseller,
+          maker: gruhnMaker,
+          vendor: gruhnReseller,
+        });
+      }
+      // ————————————————————————————————————————————————————————————————
+
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 10_000);
       const fetchRes = await safeFetchWithUaFallback(url, {
