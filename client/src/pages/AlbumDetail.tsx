@@ -3522,7 +3522,7 @@ interface BonusPhoto { id: string; albumId: string; photoUrl: string; caption: s
 // pre-dates this pipeline ingests lazily on first view) the tile shows a
 // "Preparing this video…" state instead of going blank. Tap-to-play so
 // we only mint a signed URL (and only start watch analytics) on intent.
-function BonusVideoPlayer({ video, locked = false }: { video: BonusVideo; locked?: boolean }) {
+export function BonusVideoPlayer({ video, locked = false }: { video: BonusVideo; locked?: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const [phase, setPhase] = useState<"idle" | "loading" | "active" | "preparing" | "error">("idle");
