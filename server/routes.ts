@@ -15487,9 +15487,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
   app.delete("/api/admin/vendors/:id", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    // Task #1253 — `?purge=true` hard-DELETEs (permanent, DB cascade
+    // drops the instrument_vendors join rows). The default path stays a
+    // soft-delete (flips deleted_at), which keeps the row recoverable
+    // from the Trash tab on AdminVendors.
+    const purge = String(req.query.purge ?? "").toLowerCase() === "true";
+    if (purge) {
+      await storage.purgeVendor(id);
+      return res.json({ message: "Purged" });
+    }
     // Cascades to every instrument_vendors row pointing at this vendor.
-    await storage.deleteVendor(String(req.params.id), req.session.userId ?? null);
+    await storage.deleteVendor(id, req.session.userId ?? null);
     return res.json({ message: "Deleted" });
+  });
+  // Task #1253 — Trash tab data + self-service restore. Mirrors the
+  // super-admin recycle bin (/api/admin/trash) but scoped to vendors so
+  // any admin can recover or permanently remove a trashed Maker/Reseller
+  // from within the page they deleted it on. Supports the same `?role=`
+  // filter as GET /api/vendors so the tab matches the page's mode.
+  app.get("/api/admin/vendors/trash", requireAdmin, async (req, res) => {
+    const all = await storage.getTrashedVendors();
+    const role = String(req.query.role ?? "").toLowerCase();
+    if (role === "maker") return res.json(all.filter((v) => (v as any).isMaker));
+    if (role === "reseller") return res.json(all.filter((v) => (v as any).isReseller));
+    return res.json(all);
+  });
+  app.post("/api/admin/vendors/:id/restore", requireAdmin, async (req, res) => {
+    try {
+      await storage.restoreVendor(String(req.params.id));
+      return res.json({ message: "Restored" });
+    } catch (err: any) {
+      // restoreEntity throws RestoreConflictError when a live vendor
+      // already claims the trashed row's domain — surface it as an
+      // actionable 409 instead of a generic 500.
+      if (err?.name === "RestoreConflictError") {
+        return res.status(409).json({ message: err.message });
+      }
+      throw err;
+    }
   });
 
   // ----- Vendor↔Instrument attachment CRUD -------------------------------

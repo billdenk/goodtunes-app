@@ -120,7 +120,7 @@ import {
 } from "@shared/schema";
 import { and, asc, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "./db";
-import { softDeleteEntity } from "./softDelete";
+import { softDeleteEntity, restoreEntity, purgeEntity } from "./softDelete";
 import { todayISODate } from "@shared/albumStage";
 
 export interface IStorage {
@@ -295,6 +295,14 @@ export interface IStorage {
   createVendor(data: InsertVendor & { id?: string }): Promise<Vendor>;
   updateVendor(id: string, data: Partial<Vendor>): Promise<Vendor | undefined>;
   deleteVendor(id: string): Promise<void>;
+  // Task #1253 — self-service Trash for vendors. `getTrashedVendors`
+  // lists soft-deleted top-level vendors (root deletions only — sub-
+  // brands that cascaded with a parent aren't independent restore
+  // targets). `restoreVendor` clears the soft-delete trio; `purgeVendor`
+  // hard-DELETEs the row (DB cascade cleans up instrument_vendors).
+  getTrashedVendors(): Promise<Vendor[]>;
+  restoreVendor(id: string): Promise<void>;
+  purgeVendor(id: string): Promise<void>;
   // Vendor profile reads — power the fan-facing VendorSheet tabs.
   // `getVendorInstruments` lists every (non-hidden) instrument attached to
   // this vendor. `getVendorSuperCreditArtists` derives artists by walking
@@ -1886,6 +1894,32 @@ export class DbStorage implements IStorage {
     // alive while the vendor is in trash (the join table has no soft-
     // delete column) and only get hard-cascaded on Purge.
     await softDeleteEntity("vendor", id, userId ?? null);
+  }
+
+  async getTrashedVendors(): Promise<Vendor[]> {
+    // Task #1253 — soft-deleted top-level vendors only. Sub-brands that
+    // cascaded with a parent carry `deletedViaParentId` and aren't
+    // independent restore targets (they come back when the parent is
+    // restored), so we mirror listTrash's root-only filter here.
+    return await db
+      .select()
+      .from(vendors)
+      .where(and(
+        sql`${vendors.deletedAt} IS NOT NULL`,
+        isNull(vendors.deletedViaParentId),
+      ))
+      .orderBy(desc(vendors.deletedAt));
+  }
+  async restoreVendor(id: string): Promise<void> {
+    // Clears the soft-delete trio on the row (and any children stamped
+    // with this id). Throws RestoreConflictError on a domain collision
+    // with a live vendor — the route maps that to a 409.
+    await restoreEntity("vendor", id);
+  }
+  async purgeVendor(id: string): Promise<void> {
+    // Hard DELETE — DB-level ON DELETE CASCADE drops the
+    // instrument_vendors join rows that were kept alive in trash.
+    await purgeEntity("vendor", id);
   }
 
   async getVendorInstruments(vendorId: string): Promise<Instrument[]> {

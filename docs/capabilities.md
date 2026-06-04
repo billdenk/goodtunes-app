@@ -94,6 +94,7 @@ The admin tooling and operational process that lets a tiny team run the whole bu
 - **Bulk credit editing.** Edit credits across an entire album at once.
 - **Waveform-based preview editing.** Set the 30-second preview window visually against the waveform.
 - **Asset management.** High-res masters, artwork, and bonus content are stored and served securely.
+- **Self-service vendor trash.** Deleting a Maker or Reseller now drops it into a Trash tab on the same admin page instead of erasing it. Admins can Restore a deleted vendor (bringing it and its gear links back) or Purge it permanently behind a confirm dialog. When adding a vendor whose domain is already held by a trashed row, the conflict message links straight to the Trash tab so the operator can restore or purge it on the spot.
 
 ## Operations
 

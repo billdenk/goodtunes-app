@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, X, Store, Hammer, Loader2 } from "lucide-react";
+import { Search, X, Store, Hammer, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -22,6 +22,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 
 // apiRequest throws errors shaped like `"502: {\"message\":\"…\"}"` — strip
@@ -105,6 +115,14 @@ interface VendorLite {
   tagline: string | null;
 }
 
+// Task #1253 — a soft-deleted vendor row, as returned by
+// GET /api/admin/vendors/trash. Shares VendorLite's display fields plus
+// the soft-delete timestamp used to show "deleted X" and auto-purge
+// countdown in the Trash tab.
+interface TrashedVendor extends VendorLite {
+  deletedAt: string | null;
+}
+
 export function AdminVendors() {
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
@@ -150,6 +168,15 @@ export function AdminVendors() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useViewMode("vendors");
   const { toast } = useToast();
+  // Task #1253 — Active vs Trash tab. Trashed (soft-deleted) vendors are
+  // hidden from the live list; this tab surfaces them with Restore +
+  // Purge so an operator can recover a deletion or free a domain slot
+  // without dropping to a dev console.
+  const [tab, setTab] = useState<"active" | "trash">("active");
+  // The trashed-domain 409 in the Add dialog flips this so the inline
+  // error renders a "View trash" affordance instead of a dead-end string.
+  const [pasteErrorIsTrash, setPasteErrorIsTrash] = useState(false);
+  const [pendingPurge, setPendingPurge] = useState<TrashedVendor | null>(null);
 
   // "Add Vendor" opens a paste-URL dialog — paste the vendor's home or
   // About page and the server scraper prefills name / domain / logo /
@@ -367,13 +394,20 @@ export function AdminVendors() {
               scrapedName: scrapedNameForPrompt,
             });
             setPasteError(null);
+            setPasteErrorIsTrash(false);
             return;
           }
         } catch {
           /* fall through to humanized message */
         }
       }
-      setPasteError(humanizeApiError(err));
+      // Task #1253 — the "A trashed vendor already uses … — restore it
+      // from trash or purge it first." 409 is actionable: flag it so the
+      // inline error renders a "View trash" button that jumps the
+      // operator to the Trash tab instead of dead-ending on the string.
+      const message = humanizeApiError(err);
+      setPasteErrorIsTrash(/trashed vendor already uses/i.test(message));
+      setPasteError(message);
     },
   });
 
@@ -424,6 +458,75 @@ export function AdminVendors() {
     enabled: !!user?.isAdmin,
   });
 
+  // Task #1253 — trashed vendors for the Trash tab. Same ?role= filter
+  // as the live list so the Maker page only shows trashed makers, etc.
+  // Fetched up front (not just when the tab is open) so the tab badge can
+  // show a count and the operator notices recoverable rows.
+  const trashUrl = `/api/admin/vendors/trash?role=${mode}`;
+  const {
+    data: trashed = [],
+    isLoading: trashLoading,
+    isError: trashError,
+    error: trashErrorObj,
+    refetch: refetchTrash,
+  } = useQuery<TrashedVendor[]>({
+    queryKey: [trashUrl],
+    enabled: !!user?.isAdmin,
+  });
+
+  const invalidateTrash = () => {
+    queryClient.invalidateQueries({
+      predicate: (q) =>
+        Array.isArray(q.queryKey) &&
+        typeof q.queryKey[0] === "string" &&
+        q.queryKey[0].startsWith("/api/admin/vendors/trash"),
+    });
+  };
+  const invalidateActive = () => {
+    queryClient.invalidateQueries({
+      predicate: (q) =>
+        Array.isArray(q.queryKey) &&
+        typeof q.queryKey[0] === "string" &&
+        q.queryKey[0].startsWith("/api/vendors"),
+    });
+  };
+
+  const restoreVendor = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/admin/vendors/${id}/restore`);
+    },
+    onSuccess: () => {
+      invalidateTrash();
+      invalidateActive();
+      toast({ title: "Restored", description: "Vendor is back in the live list." });
+    },
+    onError: (err) => {
+      toast({
+        title: "Couldn't restore",
+        description: humanizeApiError(err),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const purgeVendor = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/vendors/${id}?purge=true`);
+    },
+    onSuccess: () => {
+      setPendingPurge(null);
+      invalidateTrash();
+      toast({ title: "Purged", description: "Vendor permanently deleted." });
+    },
+    onError: (err) => {
+      toast({
+        title: "Couldn't purge",
+        description: humanizeApiError(err),
+        variant: "destructive",
+      });
+    },
+  });
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const rows = q
@@ -437,6 +540,27 @@ export function AdminVendors() {
     rows.sort((a, b) => a.name.localeCompare(b.name));
     return rows;
   }, [vendors, search]);
+
+  // Task #1253 — Trash tab list. Same search box filters both tabs;
+  // trashed rows sort most-recently-deleted first so the thing you just
+  // deleted (and most likely want to undo) is at the top.
+  const filteredTrash = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const rows = q
+      ? trashed.filter(
+          (v) =>
+            v.name.toLowerCase().includes(q) ||
+            v.domain.toLowerCase().includes(q) ||
+            (v.tagline ?? "").toLowerCase().includes(q),
+        )
+      : trashed.slice();
+    rows.sort(
+      (a, b) =>
+        new Date(b.deletedAt ?? 0).getTime() -
+        new Date(a.deletedAt ?? 0).getTime(),
+    );
+    return rows;
+  }, [trashed, search]);
 
   const openVendor = (id: string) => navigate(`${copy.listRoute}/${id}`);
 
@@ -545,48 +669,136 @@ export function AdminVendors() {
         </>)}
       />
 
-      {isLoading ? (
+      {/* Task #1253 — Active vs Trash segmented control. Trash carries a
+          count badge so recoverable rows are noticeable without opening
+          the tab. */}
+      <div
+        className="inline-flex items-center gap-1 rounded-lg bg-slate-100 p-1 mb-5"
+        data-testid="tabs-vendors"
+      >
+        <button
+          type="button"
+          onClick={() => setTab("active")}
+          className={`px-3 h-8 rounded-md text-[13px] font-semibold transition-colors ${
+            tab === "active"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+          data-testid="tab-vendors-active"
+        >
+          Active
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("trash")}
+          className={`px-3 h-8 rounded-md text-[13px] font-semibold inline-flex items-center gap-1.5 transition-colors ${
+            tab === "trash"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+          data-testid="tab-vendors-trash"
+        >
+          Trash
+          {trashed.length > 0 && (
+            <span
+              className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-slate-200 text-slate-600 text-[11px] font-semibold"
+              data-testid="badge-trash-count"
+            >
+              {trashed.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {tab === "active" ? (
+        isLoading ? (
+          <div className="py-20 flex items-center justify-center">
+            <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : vendorsError ? (
+          <ErrorState
+            error={vendorsErrorObj}
+            onRetry={() => refetchVendors()}
+            title={`Couldn't load ${copy.title.toLowerCase()}`}
+            testId="admin-vendors-error"
+          />
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            searching={search.trim().length > 0}
+            title={copy.emptyTitle}
+            hint={copy.emptyHint}
+            searchHint={copy.emptySearchHint}
+            Icon={copy.Icon}
+          />
+        ) : view === "grid" ? (
+          <div
+            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+            data-testid="grid-vendors"
+          >
+            {filtered.map((v) => (
+              <VendorCard
+                key={v.id}
+                vendor={v}
+                onOpen={() => openVendor(v.id)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div
+            className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+            data-testid="list-vendors"
+          >
+            {filtered.map((v) => (
+              <VendorRow
+                key={v.id}
+                vendor={v}
+                onOpen={() => openVendor(v.id)}
+              />
+            ))}
+          </div>
+        )
+      ) : trashLoading ? (
         <div className="py-20 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-[var(--brand-blue)] border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : vendorsError ? (
+      ) : trashError ? (
         <ErrorState
-          error={vendorsErrorObj}
-          onRetry={() => refetchVendors()}
-          title={`Couldn't load ${copy.title.toLowerCase()}`}
-          testId="admin-vendors-error"
+          error={trashErrorObj}
+          onRetry={() => refetchTrash()}
+          title="Couldn't load trash"
+          testId="admin-vendors-trash-error"
         />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          searching={search.trim().length > 0}
-          title={copy.emptyTitle}
-          hint={copy.emptyHint}
-          searchHint={copy.emptySearchHint}
-          Icon={copy.Icon}
-        />
-      ) : view === "grid" ? (
+      ) : filteredTrash.length === 0 ? (
         <div
-          className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
-          data-testid="grid-vendors"
+          className="py-16 text-center"
+          data-testid="empty-vendors-trash"
         >
-          {filtered.map((v) => (
-            <VendorCard
-              key={v.id}
-              vendor={v}
-              onOpen={() => openVendor(v.id)}
-            />
-          ))}
+          <Trash2 className="w-8 h-8 mx-auto text-slate-300" />
+          <p className="mt-3 text-[14px] font-semibold text-slate-700">
+            {search.trim() ? "No matches in trash" : "Trash is empty"}
+          </p>
+          <p className="mt-1 text-[12.5px] text-slate-400">
+            {search.trim()
+              ? "Try a different name or domain."
+              : `Deleted ${copy.title.toLowerCase()} show up here so you can restore or permanently remove them.`}
+          </p>
         </div>
       ) : (
         <div
           className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
-          data-testid="list-vendors"
+          data-testid="list-vendors-trash"
         >
-          {filtered.map((v) => (
-            <VendorRow
+          {filteredTrash.map((v) => (
+            <TrashedVendorRow
               key={v.id}
               vendor={v}
-              onOpen={() => openVendor(v.id)}
+              onRestore={() => restoreVendor.mutate(v.id)}
+              onPurge={() => setPendingPurge(v)}
+              busy={
+                (restoreVendor.isPending &&
+                  restoreVendor.variables === v.id) ||
+                (purgeVendor.isPending && pendingPurge?.id === v.id)
+              }
             />
           ))}
         </div>
@@ -819,12 +1031,32 @@ export function AdminVendors() {
               data-testid="input-add-vendor-url"
             />
             {pasteError && (
-              <p
-                className="text-[12px] text-red-600"
-                data-testid="text-add-vendor-error"
-              >
-                {pasteError}
-              </p>
+              <div className="space-y-1.5">
+                <p
+                  className="text-[12px] text-red-600"
+                  data-testid="text-add-vendor-error"
+                >
+                  {pasteError}
+                </p>
+                {pasteErrorIsTrash && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddOpen(false);
+                      setPasteUrl("");
+                      setPasteError(null);
+                      setPasteErrorIsTrash(false);
+                      setSubBrandPrompt(null);
+                      setSearch("");
+                      setTab("trash");
+                    }}
+                    className="text-[12px] font-semibold text-[var(--brand-blue)] underline underline-offset-2 hover:opacity-80"
+                    data-testid="link-add-vendor-view-trash"
+                  >
+                    View trash →
+                  </button>
+                )}
+              </div>
             )}
             <p className="text-[11.5px] text-slate-400">
               Reads the page's Open Graph metadata and rehosts the logo + cover
@@ -860,6 +1092,49 @@ export function AdminVendors() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Task #1253 — Purge confirm. Purge is a hard DELETE (DB cascade
+          drops the instrument_vendors join rows) and is NOT recoverable,
+          so it requires an explicit confirm with a rose-tinted action —
+          per docs/design-system.md destructive-action rules. */}
+      <AlertDialog
+        open={!!pendingPurge}
+        onOpenChange={(o) => {
+          if (!o && !purgeVendor.isPending) setPendingPurge(null);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-purge-vendor">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Permanently delete "{pendingPurge?.name}"?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This can't be undone. The vendor and every gear listing linked
+              to it will be removed for good. To keep it recoverable, use
+              Restore instead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={purgeVendor.isPending}
+              data-testid="button-purge-cancel"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (pendingPurge) purgeVendor.mutate(pendingPurge.id);
+              }}
+              disabled={purgeVendor.isPending}
+              className="bg-rose-600 hover:bg-rose-700 focus:ring-rose-600"
+              data-testid="button-purge-confirm"
+            >
+              {purgeVendor.isPending ? "Deleting…" : "Delete permanently"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminFrame>
   );
 }
@@ -952,6 +1227,104 @@ function VendorRow({
       )}
     </button>
   );
+}
+
+// Task #1253 — a trashed-vendor row. Non-clickable (the detail page only
+// serves live vendors); the only affordances are Restore (un-delete) and
+// Purge (permanent, confirmed via AlertDialog in the parent).
+function TrashedVendorRow({
+  vendor,
+  onRestore,
+  onPurge,
+  busy,
+}: {
+  vendor: TrashedVendor;
+  onRestore: () => void;
+  onPurge: () => void;
+  busy: boolean;
+}) {
+  return (
+    <div
+      className="flex items-center gap-3 px-3 py-2"
+      data-testid={`row-trashed-vendor-${vendor.id}`}
+    >
+      <div className="w-10 h-10 rounded-md overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0 opacity-70">
+        {vendor.logoUrl ? (
+          <img
+            src={vendor.logoUrl}
+            alt={vendor.name}
+            className="w-full h-full object-cover grayscale"
+          />
+        ) : (
+          <Store className="w-4 h-4 text-slate-300" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div
+          className="text-slate-700 text-[13.5px] font-semibold truncate"
+          data-testid={`text-trashed-vendor-name-${vendor.id}`}
+        >
+          {vendor.name}
+        </div>
+        <div className="text-slate-400 text-[11.5px] truncate">
+          {vendor.domain}
+          {vendor.deletedAt && (
+            <span className="text-slate-300">
+              {" · deleted "}
+              {timeAgo(vendor.deletedAt)}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onRestore}
+          disabled={busy}
+          className="h-8 gap-1.5 text-[12.5px]"
+          data-testid={`button-restore-vendor-${vendor.id}`}
+        >
+          {busy ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <RotateCcw className="w-3.5 h-3.5" />
+          )}
+          Restore
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onPurge}
+          disabled={busy}
+          className="h-8 gap-1.5 text-[12.5px] border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+          data-testid={`button-purge-vendor-${vendor.id}`}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+          Purge
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Compact relative-time label for the "deleted …" hint. Coarse on
+// purpose — minutes/hours/days, not seconds — since the exact moment a
+// vendor was trashed doesn't matter to the operator deciding to restore.
+function timeAgo(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const secs = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (secs < 60) return "just now";
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
 }
 
 function EmptyState({

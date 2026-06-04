@@ -12142,11 +12142,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
-    "snippet": "className=\"bg-[#00062B] px-5 mt-5 border-t\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
     "snippet": "background: \"#319ED8\","
   },
   {
@@ -17507,6 +17502,31 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
+    "snippet": "className={`px-3 h-8 rounded-md text-[13px] font-semibold transition-colors ${"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminVendors.tsx",
+    "snippet": "className={`px-3 h-8 rounded-md text-[13px] font-semibold inline-flex items-center gap-1.5 transition-colors ${"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminVendors.tsx",
+    "snippet": "className=\"inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-slate-200 text-slate-600 text-[11px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminVendors.tsx",
+    "snippet": "<p className=\"mt-3 text-[14px] font-semibold text-slate-700\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminVendors.tsx",
+    "snippet": "<p className=\"mt-1 text-[12.5px] text-slate-400\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminVendors.tsx",
     "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900\">"
   },
   {
@@ -17552,6 +17572,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
+    "snippet": "className=\"text-[12px] font-semibold text-[var(--brand-blue)] underline underline-offset-2 hover:opacity-80\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminVendors.tsx",
     "snippet": "className=\"text-slate-900 text-[14px] font-semibold leading-tight truncate\""
   },
   {
@@ -17573,6 +17598,21 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminVendors.tsx",
     "snippet": "<div className=\"text-slate-500 text-[12px] truncate flex-shrink-0 max-w-[40%] hidden md:block\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminVendors.tsx",
+    "snippet": "className=\"text-slate-700 text-[13.5px] font-semibold truncate\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminVendors.tsx",
+    "snippet": "className=\"h-8 gap-1.5 text-[12.5px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminVendors.tsx",
+    "snippet": "className=\"h-8 gap-1.5 text-[12.5px] border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -18218,11 +18258,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<h3 className=\"text-fan-primary text-[22px] font-bold tracking-tight\">Videos</h3>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"mt-2 text-[15px] text-fan-primary font-medium\">{v.title}</p>"
   },
   {
     "rule": "hardcoded-font-size",
