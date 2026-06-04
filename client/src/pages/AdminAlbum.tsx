@@ -2008,9 +2008,36 @@ function ShareLinkPanel({
   // an operator's existing admin session rides along — that's what unlocks the
   // staging view of a still-prepping release without a second login on the get
   // host. The shareable get.goodtunes.music link is the Copy button's job.
-  const previewUrl = copyableSlug ? `/${copyableSlug}` : "";
-  const openPreview = () => {
-    if (previewUrl) window.open(previewUrl, "_blank", "noopener");
+  //
+  // Critical: the public resolver only knows SAVED slugs, so a typed-but-unsaved
+  // draft opens to a dead "release not found" page. So Open persists a valid
+  // dirty draft first, then navigates. The tab is opened synchronously inside
+  // the click (a window.open fired after the save `await` gets killed by popup
+  // blockers) and redirected once the save lands.
+  const canPreview = !!savedSlug || (!disabled && !!(validation?.ok));
+  const openPreview = async () => {
+    if (!canPreview || save.isPending) return;
+    const needSave =
+      !disabled && !!validation?.ok && validation.slug !== savedSlug;
+    const targetSlug = needSave ? validation!.slug : savedSlug;
+    if (!targetSlug) return;
+    const win = window.open(needSave ? "" : `/${targetSlug}`, "_blank");
+    if (win) {
+      try {
+        win.opener = null;
+      } catch {
+        /* cross-origin opener lock — harmless */
+      }
+    }
+    if (needSave) {
+      try {
+        await save.mutateAsync(targetSlug);
+        setDraft(targetSlug);
+        if (win) win.location.replace(`/${targetSlug}`);
+      } catch {
+        if (win) win.close();
+      }
+    }
   };
   const copy = async () => {
     if (!copyUrl) return;
@@ -2084,10 +2111,10 @@ function ShareLinkPanel({
           type="button"
           variant="outline"
           className="h-8 shrink-0"
-          disabled={!previewUrl}
+          disabled={!canPreview || save.isPending}
           onClick={openPreview}
           data-testid="button-open-share-link"
-          title="Open this page in a new tab using your admin session (works even before the release is public)."
+          title="Open this page in a new tab using your admin session (saves the link first, and works even before the release is public)."
         >
           <ExternalLink className="w-4 h-4" />
           <span className="ml-1.5">Open</span>
