@@ -508,9 +508,12 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
     const hasSynced = !!cs.syncedLyrics && cs.syncedLyrics.length > 0;
     if (!hasPlain && !hasSynced) {
       return (
-        <div className="flex-1 min-h-0 flex items-center justify-center px-6">
-          <p className="text-fan-secondary italic text-sm text-center">
-            No lyrics yet for "{cs.title}".
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-center px-6 text-center">
+          <p className="text-fan-primary font-semibold text-base">
+            No Lyrics Available
+          </p>
+          <p className="text-fan-secondary text-sm mt-1">
+            There aren't any lyrics available for this song.
           </p>
         </div>
       );
