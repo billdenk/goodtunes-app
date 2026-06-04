@@ -709,8 +709,8 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             favoriteSongIds={favSongs.set}
             hasAlbumCredits={effectiveOwned && hasAnyCredits}
             onOpenAlbumCredits={() => setShowAlbumCredits(true)}
-            onViewCertificate={hasCert ? () => setShowCert(true) : undefined}
-            onViewProvenance={hasCert ? handleViewProvenance : undefined}
+            onViewCertificate={effectiveOwned ? () => setShowCert(true) : undefined}
+            onViewProvenance={effectiveOwned ? handleViewProvenance : undefined}
             onAddAlbumToPlaylist={() => setShowAlbumPlaylistPicker(true)}
             onDownloadCert={pdfOrder ? downloadPdf : undefined}
             isMultiOwned={isMulti}
