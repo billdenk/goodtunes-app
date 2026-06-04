@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MoreHorizontal, Play, Pause, Plus, ListStart, ListEnd, ListPlus, Heart } from "lucide-react";
+import { MoreHorizontal, Play, Pause, ListStart, ListEnd, ListPlus, Heart } from "lucide-react";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { IconButton } from "@/components/ui/IconButton";
 import {
@@ -30,9 +30,8 @@ export type AlbumDesktopTrackRowProps = {
   isFavorite?: boolean;
   state: "locked" | "preview" | "full";
   onPlay?: () => void;
-  /** Optional "add to playlist" affordance — fades in on hover next to
-   *  the runtime, and also drives the ⋯ menu's "Add to Playlist" item.
-   *  Omit to hide both the `+` chip and the menu item. */
+  /** Optional "add to playlist" affordance — drives the ⋯ menu's
+   *  "Add to Playlist" item. Omit to hide the menu item. */
   onAdd?: () => void;
   /** ⋯ track-menu actions (Apple-Music context menu). Omit any to hide
    *  that one item; the ⋯ trigger renders whenever the row isn't locked. */
@@ -187,23 +186,6 @@ export function AlbumDesktopTrackRow({
         </span>
         {isExplicit && <ExplicitBadge tone="slate" />}
       </div>
-
-      {/* `+` add-to-playlist chip — fades in on hover, beside runtime. */}
-      {interactive && (
-        <button
-          type="button"
-          aria-label={`Add ${title} to playlist`}
-          data-testid={`button-add-row-${trackNumber}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onAdd?.();
-          }}
-          className="w-7 h-7 -mr-1 inline-flex items-center justify-center rounded-full text-fan-secondary hover:text-white hover:bg-white/10 transition-opacity"
-          style={{ opacity: hover && !isCurrent ? 1 : 0, pointerEvents: hover && !isCurrent ? "auto" : "none" }}
-        >
-          <Plus className="w-[15px] h-[15px]" strokeWidth={2.2} />
-        </button>
-      )}
 
       {/* Runtime — hidden on locked rows (Apple's pre-release pattern). */}
       <div className="w-12 text-right">
