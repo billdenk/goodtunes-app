@@ -96,6 +96,7 @@ The admin tooling and operational process that lets a tiny team run the whole bu
 
 ## Operations
 
+- **Invite directory.** One read-only super-admin page lists every invite ever sent — pending, joined, revoked, and expired — showing each invitee, who referred them (name + kind), the invite role, status, invited/joined dates, and units sold by the invited artist. Searchable, status/role filterable, and sortable, it sits alongside the existing send-an-invite screen and the per-scope referral invite tree.
 - **Order management.** Track every sale, gift, and fulfillment status.
 - **Artist payouts.** Automated reporting and payout management.
 - **Customer support.** Integrated tools for handling fan inquiries.

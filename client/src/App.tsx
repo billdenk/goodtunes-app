@@ -78,6 +78,7 @@ import { AdminInvites } from "@/pages/AdminInvites";
 import { AdminEarmarkedArtists } from "@/pages/AdminEarmarkedArtists";
 import { AdminPressEarlyCutQueue } from "@/pages/AdminPressEarlyCutQueue";
 import { AdminInviteTree } from "@/pages/AdminInviteTree";
+import { AdminInviteDirectory } from "@/pages/AdminInviteDirectory";
 import { AdminReview } from "@/pages/AdminReview";
 import { AdminPressingOrders } from "@/pages/AdminPressingOrders";
 import AcceptInvite from "@/pages/AcceptInvite";
@@ -432,6 +433,10 @@ function Router() {
         {/* Task #350 — Invite tree (multi-level referral visualiser). */}
         <Route path="/admin/invite-tree">
           <ProtectedRoute component={AdminInviteTree} />
+        </Route>
+        {/* Task #1198 — Invite directory (read-only list of every invite). */}
+        <Route path="/admin/invite-directory">
+          <ProtectedRoute component={AdminInviteDirectory} />
         </Route>
         {/* Task #79 — Super-admin queue of partner-submitted metadata
             edits awaiting review. */}

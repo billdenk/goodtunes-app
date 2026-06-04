@@ -19393,6 +19393,141 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     })));
   });
 
+  // Task #1198 — read-only invite directory. Every invite ever sent
+  // (pending + joined + revoked + expired) in one searchable list, with
+  // the invitee, who referred them (name + kind), role, status, dates,
+  // and units sold by the invited artist. Super-admin-only; additive to
+  // /api/admin/invites (pending-only) and the per-scope invite-tree.
+  app.get("/api/admin/invite-directory", requireAdmin, requireRole("super_admin"), async (_req, res) => {
+    const rows = await storage.listAllAdminInvites();
+    const now = Date.now();
+
+    // --- Invitee scope identity (role + roleScopeId), same as /invites. ---
+    const need = (kind: string) =>
+      Array.from(new Set(rows.filter((r) => r.role === kind && r.roleScopeId).map((r) => r.roleScopeId!)));
+    const [labelsNeeded, mfgNeeded, ffNeeded, vendorNeeded] = [
+      need("label"), need("manufacturer"), need("fulfillment"), need("vendor"),
+    ];
+    const scopeArtistIds = need("artist");
+    const npoIdsScope = Array.from(new Set(rows.filter((r) => r.role === "non_profit" && r.roleScopeId).map((r) => r.roleScopeId!)));
+
+    // targetPersonId can name the invitee directly (a real Person row).
+    const targetPersonIds = Array.from(new Set(rows.filter((r: any) => r.targetPersonId).map((r: any) => r.targetPersonId as string)));
+
+    // --- Referrer identity across every kind. ---
+    const refByKind = (kind: string) =>
+      Array.from(new Set(rows.filter((r: any) => r.referrerKind === kind && r.referrerScopeId).map((r: any) => r.referrerScopeId as string)));
+    const refPersonIds = refByKind("artist");
+    const refAmbassadorIds = refByKind("ambassador");
+    const refLabelIds = refByKind("label");
+    const refMfgIds = refByKind("manufacturer");
+    const refOrgIds = refByKind("non_profit");
+
+    const allPersonIds = Array.from(new Set([...scopeArtistIds, ...targetPersonIds, ...refPersonIds, ...refAmbassadorIds]));
+    const allLabelIds = Array.from(new Set([...labelsNeeded, ...refLabelIds]));
+    const allMfgIds = Array.from(new Set([...mfgNeeded, ...refMfgIds]));
+    const allNpoIds = Array.from(new Set([...npoIdsScope, ...refOrgIds]));
+
+    const [people, labels, mfgs, ffs, npos, vends] = await Promise.all([
+      allPersonIds.length ? Promise.all(allPersonIds.map((id) => storage.getPersonById(id))) : [],
+      allLabelIds.length ? Promise.all(allLabelIds.map((id) => storage.getLabelById(id))) : [],
+      allMfgIds.length ? Promise.all(allMfgIds.map((id) => storage.getManufacturerById(id))) : [],
+      ffNeeded.length ? Promise.all(ffNeeded.map((id) => storage.getFulfillmentPartnerById(id))) : [],
+      allNpoIds.length
+        ? db.execute<{ id: string; name: string; logo_url: string | null }>(sql`SELECT id, name, logo_url FROM organizations WHERE id = ANY(${pgArray(allNpoIds, "varchar")})`).then((r: any) => r.rows ?? [])
+        : Promise.resolve([] as any[]),
+      vendorNeeded.length ? Promise.all(vendorNeeded.map((id) => storage.getVendorById(id))) : [],
+    ]);
+    const idx = (arr: any[]) => new Map(arr.filter(Boolean).map((r: any) => [r.id, r]));
+    const peopleIdx = idx(people), labelsIdx = idx(labels), mfgIdx = idx(mfgs), ffIdx = idx(ffs), vendorIdx = idx(vends);
+    const npoIdx = new Map((npos as any[]).map((r) => [r.id, { id: r.id, name: r.name, logoUrl: r.logo_url }]));
+
+    // --- Units sold attributed to each referral relationship. ---
+    // Mirrors /api/artist/referrals (partner.units) + the invite-tree
+    // credit rollup: units come from referral_credits keyed by (referrer,
+    // referred artist), NOT raw order rows, so the number is what THIS
+    // referral actually earned — not the invitee's total sales. The
+    // invitee artist id is the target person, else the artist scope.
+    // Non-person/org referrers (label/press) and self-joins accrue no
+    // referral credit and read 0.
+    const inviteeArtistIdFor = (r: any): string | null =>
+      (r.targetPersonId as string | null) ?? (r.role === "artist" ? (r.roleScopeId as string | null) : null);
+    const referredArtistIds = Array.from(new Set(rows.map(inviteeArtistIdFor).filter((x): x is string => !!x)));
+    // creditUnits keyed `${"p"|"o"}:${referrerId}|${referredArtistId}`.
+    const creditUnits = new Map<string, number>();
+    if (referredArtistIds.length) {
+      const u = await db.execute<{ referrer_person_id: string | null; referrer_org_id: string | null; referred_artist_id: string; units: number }>(sql`
+        SELECT referrer_person_id, referrer_org_id, referred_artist_id, SUM(units)::int AS units
+        FROM referral_credits
+        WHERE referred_artist_id = ANY(${pgArray(referredArtistIds, "varchar")})
+        GROUP BY referrer_person_id, referrer_org_id, referred_artist_id
+      `);
+      for (const row of ((u as any).rows ?? [])) {
+        const units = Number(row.units) || 0;
+        if (row.referrer_person_id) creditUnits.set(`p:${row.referrer_person_id}|${row.referred_artist_id}`, units);
+        if (row.referrer_org_id) creditUnits.set(`o:${row.referrer_org_id}|${row.referred_artist_id}`, units);
+      }
+    }
+    function unitsFor(r: any): number {
+      const artistId = inviteeArtistIdFor(r);
+      const kind = r.referrerKind;
+      const refId = r.referrerScopeId;
+      if (!artistId || !kind || !refId) return 0;
+      if (kind === "artist" || kind === "ambassador") return creditUnits.get(`p:${refId}|${artistId}`) ?? 0;
+      if (kind === "non_profit") return creditUnits.get(`o:${refId}|${artistId}`) ?? 0;
+      return 0;
+    }
+
+    function scopeMeta(role: string, scopeId: string | null) {
+      if (!scopeId) return { scopeName: null as string | null, scopeThumbUrl: null as string | null };
+      let row: any = null;
+      if (role === "artist") row = peopleIdx.get(scopeId);
+      else if (role === "label") row = labelsIdx.get(scopeId);
+      else if (role === "manufacturer") row = mfgIdx.get(scopeId);
+      else if (role === "fulfillment") row = ffIdx.get(scopeId);
+      else if (role === "non_profit") row = npoIdx.get(scopeId);
+      else if (role === "vendor") row = vendorIdx.get(scopeId);
+      if (!row) return { scopeName: null, scopeThumbUrl: null };
+      return { scopeName: row.name ?? null, scopeThumbUrl: row.photoUrl ?? row.logoUrl ?? null };
+    }
+    function refMeta(kind: string | null, scopeId: string | null) {
+      if (!kind || !scopeId) return { referrerName: null as string | null, referrerThumbUrl: null as string | null };
+      let row: any = null;
+      if (kind === "artist" || kind === "ambassador") row = peopleIdx.get(scopeId);
+      else if (kind === "label") row = labelsIdx.get(scopeId);
+      else if (kind === "manufacturer") row = mfgIdx.get(scopeId);
+      else if (kind === "non_profit") row = npoIdx.get(scopeId);
+      if (!row) return { referrerName: null, referrerThumbUrl: null };
+      return { referrerName: row.name ?? null, referrerThumbUrl: row.photoUrl ?? row.logoUrl ?? null };
+    }
+    function statusOf(r: any): "joined" | "revoked" | "expired" | "invited" {
+      if (r.usedAt) return "joined";
+      if (r.revokedAt) return "revoked";
+      if (r.expiresAt && new Date(r.expiresAt).getTime() < now) return "expired";
+      return "invited";
+    }
+
+    res.json(rows.map((r: any) => {
+      const sm = scopeMeta(r.role, r.roleScopeId);
+      const target = r.targetPersonId ? peopleIdx.get(r.targetPersonId) : null;
+      return {
+        id: r.id,
+        email: r.email,
+        // Invitee display name: a named target person wins, else the scope.
+        inviteeName: (target?.name ?? sm.scopeName) ?? null,
+        inviteeThumbUrl: (target?.photoUrl ?? sm.scopeThumbUrl) ?? null,
+        role: r.role,
+        inviteRole: r.inviteRole ?? null,
+        referrerKind: r.referrerKind ?? null,
+        ...refMeta(r.referrerKind ?? null, r.referrerScopeId ?? null),
+        status: statusOf(r),
+        invitedAt: r.createdAt,
+        joinedAt: r.usedAt ?? null,
+        unitsSold: unitsFor(r),
+      };
+    }));
+  });
+
   // Create + email an invite. Super-admin can invite anyone into any
   // role/scope. Task #79 — a partner (label/artist/etc.) with the
   // `invite_subusers` permission can also call this, but the invite

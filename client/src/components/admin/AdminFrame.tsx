@@ -22,6 +22,7 @@ import {
   DollarSign,
   LayoutDashboard,
   Mail,
+  ClipboardList,
   HeartHandshake,
   ShoppingBag,
   PanelRightClose,
@@ -132,6 +133,8 @@ export type EntityKey =
   | "platform-pricing"
   | "gooddeed-pricing"
   | "invites"
+  | "invite-tree"
+  | "invite-directory"
   | "trash"
   | "none";
 
@@ -798,6 +801,16 @@ export function AdminFrame({
                   active={active === "invite-tree"}
                   onClick={() => navigate("/admin/invite-tree")}
                   testId="nav-invite-tree"
+                />
+                {/* Task #1198 — Invite directory: read-only list of every
+                    invite ever sent (pending + joined + revoked + expired). */}
+                <SidebarLink
+                  icon={ClipboardList}
+                  label="Invite directory"
+                  count={-1}
+                  active={active === "invite-directory"}
+                  onClick={() => navigate("/admin/invite-directory")}
+                  testId="nav-invite-directory"
                 />
                 {/* Task #475 — Soft-delete recycle bin (super-admin only).
                     Labelled "Deleted items" so the mechanical destructive-

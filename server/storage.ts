@@ -689,6 +689,9 @@ export interface IStorage {
   // token only so a leaked invite list can't be re-emailed.
   createAdminInvite(data: InsertAdminInvite & { token: string; expiresAt: Date; createdByUserId: string }): Promise<AdminInvite>;
   listPendingAdminInvites(): Promise<AdminInvite[]>;
+  // Task #1198 — every invite ever sent (pending + accepted + revoked +
+  // expired) for the read-only admin invite directory.
+  listAllAdminInvites(): Promise<AdminInvite[]>;
   getAdminInviteByToken(token: string): Promise<AdminInvite | undefined>;
   markAdminInviteUsed(id: string, acceptedUserId: string): Promise<void>;
   deleteAdminInvite(id: string): Promise<void>;
@@ -3770,6 +3773,9 @@ export class DbStorage implements IStorage {
       .from(adminInvites)
       .where(sql`${adminInvites.usedAt} IS NULL AND ${adminInvites.revokedAt} IS NULL`)
       .orderBy(desc(adminInvites.createdAt));
+  }
+  async listAllAdminInvites(): Promise<AdminInvite[]> {
+    return db.select().from(adminInvites).orderBy(desc(adminInvites.createdAt));
   }
   async getAdminInviteByToken(token: string): Promise<AdminInvite | undefined> {
     const [row] = await db.select().from(adminInvites).where(eq(adminInvites.token, token)).limit(1);
