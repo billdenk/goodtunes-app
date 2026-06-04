@@ -1126,64 +1126,105 @@ export function BonusGrid({
   const isVideo = kind === "video";
   return (
     <div
-      // Task #1183 — videos render as wide 16:9 cards (two-up), photos stay
-      // as a tidy square-tile grid (the same square look as "More By…").
+      // Videos: smaller Apple-Music-style cards (3-up) with captions beneath.
+      // Photos: unchanged 3-column square-tile grid.
       className={
-        isVideo ? "grid grid-cols-2 gap-4" : "grid grid-cols-3 gap-4"
+        isVideo ? "grid grid-cols-3 gap-3" : "grid grid-cols-3 gap-4"
       }
       data-testid={`grid-${kind}s`}
       data-locked={locked ? "true" : "false"}
     >
-      {items.map((it) => (
-        <div
-          key={it.id}
-          className={`group relative ${
-            isVideo ? "aspect-video" : "aspect-square"
-          } rounded-2xl overflow-hidden bg-white/5`}
-          style={{ cursor: locked ? "default" : "pointer" }}
-          tabIndex={!locked && isVideo ? 0 : undefined}
-          data-testid={`thumb-${kind}-${it.id}`}
-        >
-          <img
-            src={it.thumb}
-            alt=""
-            className="w-full h-full object-cover"
-            style={
-              locked
-                ? {
-                    filter: "brightness(0.55) saturate(0.85) blur(16px)",
-                    transform: "scale(1.2)",
-                  }
-                : undefined
-            }
-            draggable={false}
-          />
-          {locked && (
-            <div
-              className="absolute inset-0 flex items-center justify-center"
-              data-testid={`badge-locked-${kind}-${it.id}`}
-            >
-              <div className="w-9 h-9 rounded-full bg-black/55 flex items-center justify-center">
-                <Lock className="w-4 h-4 text-fan-primary" strokeWidth={2.2} />
+      {items.map((it) =>
+        isVideo ? (
+          // Video card: thumbnail + caption below (Apple Music Music Videos style).
+          <div
+            key={it.id}
+            className="group flex flex-col gap-1.5"
+            style={{ cursor: locked ? "default" : "pointer" }}
+            tabIndex={!locked ? 0 : undefined}
+            data-testid={`thumb-${kind}-${it.id}`}
+          >
+            <div className="relative aspect-video rounded-xl overflow-hidden bg-white/5">
+              <img
+                src={it.thumb}
+                alt=""
+                className="w-full h-full object-cover"
+                style={
+                  locked
+                    ? {
+                        filter: "brightness(0.55) saturate(0.85) blur(16px)",
+                        transform: "scale(1.2)",
+                      }
+                    : undefined
+                }
+                draggable={false}
+              />
+              {locked && (
+                <div
+                  className="absolute inset-0 flex items-center justify-center"
+                  data-testid={`badge-locked-${kind}-${it.id}`}
+                >
+                  <div className="w-9 h-9 rounded-full bg-black/55 flex items-center justify-center">
+                    <Lock className="w-4 h-4 text-fan-primary" strokeWidth={2.2} />
+                  </div>
+                </div>
+              )}
+              {!locked && (
+                // Task #1183 — play badge revealed on hover/focus (Apple Music
+                // wide-video behavior); badge stays mounted so it reads to
+                // assistive tech while only opacity animates.
+                <div className="absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 group-focus:opacity-100">
+                  <BonusPlayBadge testId={`badge-play-${kind}-${it.id}`} />
+                </div>
+              )}
+            </div>
+            {it.label && (
+              <p className="text-fan-secondary text-xs leading-snug truncate px-0.5">
+                {it.label}
+              </p>
+            )}
+          </div>
+        ) : (
+          // Photo card: unchanged square tile (layout, label overlay, and states
+          // match exactly what the single-branch version had before the split).
+          <div
+            key={it.id}
+            className="group relative aspect-square rounded-2xl overflow-hidden bg-white/5"
+            style={{ cursor: locked ? "default" : "pointer" }}
+            data-testid={`thumb-${kind}-${it.id}`}
+          >
+            <img
+              src={it.thumb}
+              alt=""
+              className="w-full h-full object-cover"
+              style={
+                locked
+                  ? {
+                      filter: "brightness(0.55) saturate(0.85) blur(16px)",
+                      transform: "scale(1.2)",
+                    }
+                  : undefined
+              }
+              draggable={false}
+            />
+            {locked && (
+              <div
+                className="absolute inset-0 flex items-center justify-center"
+                data-testid={`badge-locked-${kind}-${it.id}`}
+              >
+                <div className="w-9 h-9 rounded-full bg-black/55 flex items-center justify-center">
+                  <Lock className="w-4 h-4 text-fan-primary" strokeWidth={2.2} />
+                </div>
               </div>
-            </div>
-          )}
-          {!locked && isVideo && (
-            // Task #1183 — the play badge is revealed on hover/focus (Apple
-            // Music wide-video behavior) rather than always-on. The badge
-            // element stays mounted; only its opacity animates, so it still
-            // reads as playable to assistive tech and tests.
-            <div className="absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100 group-focus:opacity-100">
-              <BonusPlayBadge testId={`badge-play-${kind}-${it.id}`} />
-            </div>
-          )}
-          {it.label && (
-            <div className="absolute left-3 right-3 bottom-3 text-fan-primary text-[12.5px] font-semibold truncate">
-              {it.label}
-            </div>
-          )}
-        </div>
-      ))}
+            )}
+            {it.label && (
+              <div className="absolute left-3 right-3 bottom-3 text-fan-primary text-[12.5px] font-semibold truncate">
+                {it.label}
+              </div>
+            )}
+          </div>
+        )
+      )}
     </div>
   );
 }
