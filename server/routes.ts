@@ -22345,11 +22345,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.json({ ok: true });
       }
 
-      // Preview path. Default 24h; allow an override (1..720h) so the
-      // dialog can offer a different default later without a new route.
-      const rawHours = Number(req.body?.previewHours);
-      const hours = Number.isFinite(rawHours) && rawHours > 0 ? Math.min(rawHours, 720) : 24;
-      const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
+      // Preview path. Task #1189 — the operator may pick the exact expiry
+      // up front (same date picker as Extend) by passing `expiresAt` as an
+      // ISO string. We still accept the legacy `previewHours` override, and
+      // fall back to a sensible 24h default when neither is supplied.
+      const expiresAtRaw = String(req.body?.expiresAt || "").trim();
+      let expiresAt: Date;
+      if (expiresAtRaw) {
+        expiresAt = new Date(expiresAtRaw);
+        if (Number.isNaN(expiresAt.getTime())) {
+          return res.status(400).json({ message: "expiresAt is not a valid date" });
+        }
+      } else {
+        const rawHours = Number(req.body?.previewHours);
+        const hours = Number.isFinite(rawHours) && rawHours > 0 ? Math.min(rawHours, 720) : 24;
+        expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
+      }
 
       const [existing] = await db
         .select()

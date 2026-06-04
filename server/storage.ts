@@ -948,21 +948,13 @@ export class DbStorage implements IStorage {
       .insert(users)
       .values({ ...insertUser, realName: insertUser.realName ?? null })
       .returning();
-    // Grant every signup the seed albums (matches MemStore behavior).
-    const certNums = [12, 7, 3, 21];
-    const all = await db.select().from(albums);
-    if (all.length) {
-      await db
-        .insert(userAlbums)
-        .values(
-          all.map((a, i) => ({
-            userId: u.id,
-            albumId: a.id,
-            certificateNumber: certNums[i] ?? null,
-          })),
-        )
-        .onConflictDoNothing();
-    }
+    // Task #1189 — new accounts start with an EMPTY library. We no longer
+    // auto-grant the seed/standard albums (or, because the old loop ran
+    // over the whole albums table, any other catalog album). The only way
+    // an album lands in a fan's library for free now is a deliberate,
+    // super-admin-only demo grant (time-boxed, expires) or a permanent
+    // comp — both from the admin customer-detail page. Real ownership
+    // comes from a paid order.
     return u;
   }
   async updateUser(id: string, data: Partial<User>): Promise<User | undefined> {

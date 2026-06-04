@@ -738,6 +738,8 @@ function GrantAlbumDialog({
 }) {
   const { toast } = useToast();
   const [q, setQ] = useState("");
+  // Task #1189 — operator picks the demo expiry up front. Default 24h.
+  const [when, setWhen] = useState(() => toLocalInputValue(new Date(Date.now() + 24 * 3600 * 1000)));
   const owned = useMemo(() => new Set(ownedAlbumIds), [ownedAlbumIds]);
   const previewing = useMemo(() => new Set(previewAlbumIds), [previewAlbumIds]);
   const { data: allAlbums = [], isLoading } = useQuery<AdminAlbumLite[]>({
@@ -757,10 +759,19 @@ function GrantAlbumDialog({
 
   const grant = useMutation({
     mutationFn: async (vars: { albumId: string; preview: boolean }) => {
+      let body: Record<string, unknown> = { albumId: vars.albumId };
+      if (vars.preview) {
+        // Task #1189 — send the operator-chosen expiry up front. Fall back
+        // to the server's 24h default if the field is somehow empty/invalid.
+        const expiresAt = new Date(when);
+        body = Number.isNaN(expiresAt.getTime())
+          ? { albumId: vars.albumId, preview: true }
+          : { albumId: vars.albumId, preview: true, expiresAt: expiresAt.toISOString() };
+      }
       const r = await apiRequest(
         "POST",
         `/api/admin/customers/${customerId}/grant-album`,
-        vars.preview ? { albumId: vars.albumId, preview: true } : { albumId: vars.albumId },
+        body,
       );
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
@@ -769,8 +780,9 @@ function GrantAlbumDialog({
     },
     onSuccess: (_, vars) => {
       const a = allAlbums.find((x) => x.id === vars.albumId);
+      const expiry = formatExpiry(vars.preview ? new Date(when).toISOString() : null);
       toast({
-        title: vars.preview ? "Preview granted (24h)" : "Album granted",
+        title: vars.preview ? `Demo granted — ${expiry.label.toLowerCase()}` : "Album granted",
         description: a ? `${a.title} — ${a.artist}` : undefined,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/customers", customerId] });
@@ -793,7 +805,7 @@ function GrantAlbumDialog({
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
           <div>
             <div className="text-slate-900 text-sm font-semibold">Grant album (demo)</div>
-            <div className="text-slate-500 text-xs">Preview = 24h full-playback, no order/number · Grant = permanent comp · super-admin only</div>
+            <div className="text-slate-500 text-xs">Preview = time-boxed full-playback, no order/number · Grant = permanent comp · super-admin only</div>
           </div>
           <button
             type="button"
@@ -804,7 +816,7 @@ function GrantAlbumDialog({
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="px-4 py-3 border-b border-slate-100">
+        <div className="px-4 py-3 border-b border-slate-100 space-y-2.5">
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
@@ -817,6 +829,18 @@ function GrantAlbumDialog({
               data-testid="input-grant-album-search"
             />
           </div>
+          {/* Task #1189 — pick the demo's expiry up front; applies to every
+              Preview grant in this dialog. Defaults to 24h from now. */}
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            <span className="whitespace-nowrap font-medium">Demo expires</span>
+            <input
+              type="datetime-local"
+              value={when}
+              onChange={(e) => setWhen(e.target.value)}
+              className="flex-1 rounded border border-slate-200 px-2 py-1 text-xs text-slate-900 focus:outline-none focus:border-[var(--brand-blue)]"
+              data-testid="input-grant-preview-expiry"
+            />
+          </label>
         </div>
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
@@ -859,7 +883,7 @@ function GrantAlbumDialog({
                           onClick={() => grant.mutate({ albumId: a.id, preview: true })}
                           className="rounded-md border border-[var(--brand-blue)] text-[var(--brand-blue)] px-2.5 py-1 text-xs font-medium hover:bg-blue-50 disabled:opacity-50"
                           data-testid={`button-preview-album-${a.id}`}
-                          title="Time-boxed 24h full-playback preview — no order, no GoodDeed number"
+                          title="Time-boxed full-playback demo — expires at the time chosen above, no order, no GoodDeed number"
                         >
                           {isPreviewing ? "Renew preview" : "Preview"}
                         </button>
