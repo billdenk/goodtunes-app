@@ -3191,6 +3191,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const tmpIn = path.join(os.tmpdir(), `${randomUUID()}.mov`);
           let convOut: string | null = null;
           let newPath = finalPath;
+          let posterUrl: string | null = null;
           try {
             await pipeline(file.createReadStream(), fs.createWriteStream(tmpIn));
             const conv = await transcodeVideoToWebFriendlyMp4(tmpIn, ".mov");
@@ -3209,11 +3210,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               console.warn(`[upload-video/finalize] failed to delete original .mov ${finalPath}`, e);
             }
             newPath = `/objects/uploads/${newId}`;
+            // Best-effort poster from the transcoded .mp4 (still on disk).
+            // The browser can't decode HEVC .mov inline, so its client-side
+            // canvas capture always fails here — server extraction is the
+            // only way these tiles get a real thumbnail.
+            try {
+              posterUrl = await extractPosterToObjectStorage(conv.outputPath);
+            } catch (e) {
+              console.warn("[upload-video/finalize] poster extract failed (.mov)", e);
+            }
           } finally {
             try { await fsp.unlink(tmpIn); } catch {}
             if (convOut) { try { await fsp.unlink(convOut); } catch {} }
           }
-          return res.json({ url: newPath });
+          return res.json({ url: newPath, posterUrl });
         }
 
         const desiredCt = VIDEO_MIME_BY_EXT[ext];
@@ -3228,7 +3238,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           owner: "admin",
           visibility: "public",
         });
-        return res.json({ url: finalPath });
+        // Best-effort server-side poster. The browser already tries a
+        // client-side canvas capture for plain .mp4/.webm, but that fails
+        // on some codecs/containers — extracting here too guarantees every
+        // tile lands with a real thumbnail. ffmpeg reads the object via a
+        // short-lived signed GET URL using HTTP range requests, so it only
+        // pulls the bytes it needs for the first frame, not the whole file.
+        let posterUrl: string | null = null;
+        try {
+          const signedGet = await signGcsUrl(
+            file.bucket.name,
+            file.name,
+            "GET",
+            300,
+          );
+          posterUrl = await extractPosterToObjectStorage(signedGet);
+        } catch (e) {
+          console.warn(`[upload-video/finalize] poster extract failed for ${finalPath}`, e);
+        }
+        return res.json({ url: finalPath, posterUrl });
       } catch (err) {
         if (err instanceof ObjectNotFoundError) {
           return res.status(404).json({ message: "Upload not found" });
@@ -8089,11 +8117,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return { outputPath, mime: "video/mp4", ext: ".mp4", action };
   }
 
-  // Pulls a single still ~1s into a video file (or 0s for files shorter
-  // than that), encodes it as JPEG, uploads to Object Storage, and
-  // returns the public `/objects/uploads/<id>` URL. Best-effort — callers
+  // Pulls a single still ~1s into a video (or 0s for files shorter than
+  // that), encodes it as JPEG, uploads to Object Storage, and returns the
+  // public `/objects/uploads/<id>` URL. `videoSrc` may be a local file
+  // path OR an http(s) URL — ffmpeg seeks remote inputs with HTTP range
+  // requests, so passing a signed GET URL only pulls the bytes needed for
+  // the first frame instead of the whole file. Best-effort — callers
   // should treat any failure as "no poster" and continue.
-  async function extractPosterToObjectStorage(videoPath: string): Promise<string | null> {
+  async function extractPosterToObjectStorage(videoSrc: string): Promise<string | null> {
     const { spawn } = await import("node:child_process");
     const fsp = await import("node:fs/promises");
     const os = await import("node:os");
@@ -8111,7 +8142,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           [
             "-y",
             "-ss", seek,
-            "-i", videoPath,
+            "-i", videoSrc,
             "-frames:v", "1",
             "-q:v", "4",
             outPath,

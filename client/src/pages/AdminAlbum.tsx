@@ -12855,7 +12855,7 @@ interface AlbumPhoto {
 async function uploadVideoFile(
   file: File,
   onProgress?: (fraction: number) => void,
-): Promise<string> {
+): Promise<{ url: string; posterUrl: string | null }> {
   const token = getAuthToken();
   if (!token) {
     throw new Error("Sign out and back in — your session token is missing.");
@@ -12905,8 +12905,11 @@ async function uploadVideoFile(
     const body = await finRes.json().catch(() => ({}));
     throw new Error(body.message || `Upload finalize failed (${finRes.status})`);
   }
-  const { url } = (await finRes.json()) as { url: string };
-  return url;
+  const { url, posterUrl } = (await finRes.json()) as {
+    url: string;
+    posterUrl?: string | null;
+  };
+  return { url, posterUrl: posterUrl ?? null };
 }
 
 function friendlyVideoError(raw: string): string {
@@ -14128,9 +14131,17 @@ function AlbumVideoSheet({
         let resolvedSourceUrl: string | null = null;
         if (source === "upload" && pickedFile) {
           setProgress(0);
-          videoUrl = await uploadVideoFile(pickedFile, (f) =>
+          const uploaded = await uploadVideoFile(pickedFile, (f) =>
             setProgress(Math.min(0.99, f)),
           );
+          videoUrl = uploaded.url;
+          // The client tries a canvas capture on pick, but it fails on
+          // codecs the browser can't decode (e.g. HEVC .mov). Fall back to
+          // the server-extracted still so the tile always has a real poster.
+          if (!resolvedPosterUrl && uploaded.posterUrl) {
+            resolvedPosterUrl = uploaded.posterUrl;
+            setPosterUrl(resolvedPosterUrl);
+          }
         } else if (source === "url") {
           const pastedUrl = importUrl.trim();
           resolvedSourceUrl = pastedUrl;
