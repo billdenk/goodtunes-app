@@ -3863,3 +3863,62 @@ SQL
 }
 backfill_task_1189_scrub_standard_autogrants dev  "${DATABASE_URL:-}"
 backfill_task_1189_scrub_standard_autogrants prod "${PROD_DATABASE_URL:-}"
+
+# Task #1182 — Set the Nightbirde "Hope" album's full original release date so
+# the desktop album footer's first line reads "June 8, 2026" instead of the
+# bare-year fallback ("2026"). Nightbirde data is prod-only, so this targets
+# the prod album row by its stable id (dev simply updates 0 rows).
+#
+# TRUE ONE-TIME backfill, NOT a per-merge reset: a marker row in
+# `post_merge_data_backfills` gates it so a later operator edit (changing the
+# release date in the CMS) is never clobbered on the next merge. We also only
+# write when the date is currently NULL, so an existing operator value wins
+# even before the marker lands. Guard + write share one transaction.
+backfill_task_1182_nightbirde_release_date() {
+  local label="$1"; local url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1182 nightbirde release-date backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills
+    WHERE name = 'task_1182_nightbirde_release_date'
+  ) THEN
+    UPDATE albums
+       SET original_release_date = '2026-06-08'
+     WHERE id = 'b250a5a5-98cc-4673-9903-ab39e5278d8c'
+       AND original_release_date IS NULL;
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+
+    INSERT INTO post_merge_data_backfills (name)
+    VALUES ('task_1182_nightbirde_release_date');
+
+    RAISE NOTICE 'task-1182 backfill applied: % album release date(s) set', v_count;
+  ELSE
+    RAISE NOTICE 'task-1182 backfill already applied — skipping (operator edits preserved)';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1182 nightbirde release-date backfill ok on $label"
+    echo "$out" | grep -i 'task-1182' || true
+  else
+    echo "post-merge: WARNING — task-1182 nightbirde release-date backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_1182_nightbirde_release_date dev  "${DATABASE_URL:-}"
+backfill_task_1182_nightbirde_release_date prod "${PROD_DATABASE_URL:-}"

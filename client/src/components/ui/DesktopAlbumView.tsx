@@ -648,9 +648,10 @@ export function DesktopAlbumView({
                   />
                 );
               })}
-              {/* Task #1078 — Apple-style album footer: full original
-                  release date (falls back to the bare year), song count +
-                  total runtime, label credit, then the ℗ copyright line. */}
+              {/* Task #1182 — Apple-style album footer: exactly three lines —
+                  full original release date (falls back to the bare year), song
+                  count + total runtime, then the ℗ copyright line. The
+                  standalone label credit line was intentionally removed. */}
               <div
                 className="mt-12 text-sm leading-relaxed"
                 style={{ color: "rgba(255,255,255,0.34)" }}
@@ -663,21 +664,6 @@ export function DesktopAlbumView({
                   {", "}
                   {formatRuntime(songs)}
                 </p>
-                {label && label.name && (
-                  <p
-                    className="inline-flex items-center gap-1.5"
-                    data-testid={`text-album-label-footer-${label.id}`}
-                  >
-                    {label.logoUrl && (
-                      <img
-                        src={label.logoUrl}
-                        alt=""
-                        className="w-3.5 h-3.5 rounded-sm object-contain bg-white/10"
-                      />
-                    )}
-                    <span>{label.name}</span>
-                  </p>
-                )}
                 {album.copyrightLine && (
                   <p data-testid="text-album-copyright-footer">
                     {album.copyrightSymbol || "℗"} {album.copyrightLine}
