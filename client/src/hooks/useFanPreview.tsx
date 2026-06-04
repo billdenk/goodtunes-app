@@ -78,33 +78,93 @@ export function useFanPreview(): FanPreviewValue {
   return useContext(FanPreviewContext);
 }
 
+const FAN_TOGGLE_COLLAPSED_KEY = "gt:fan-toggle-collapsed";
+
 /**
  * Floating pill that flips between the owner view and the locked fan view.
- * Renders nothing for non-privileged accounts.
+ * Renders nothing for non-privileged accounts. Collapses to a small eye
+ * button in the bottom-right corner (the slot the ScreenTag used to occupy).
+ * Collapsed state persists in localStorage.
  */
 export function FanPreviewToggle() {
   const { fanView, canToggle, setFanView } = useFanPreview();
+
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(FAN_TOGGLE_COLLAPSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(FAN_TOGGLE_COLLAPSED_KEY, collapsed ? "1" : "0");
+    } catch {}
+  }, [collapsed]);
+
   if (!canToggle) return null;
+
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={() => setCollapsed(false)}
+        data-testid="button-fan-preview-expand"
+        className={
+          "fixed z-[9999] bottom-3 right-3 h-11 w-11 rounded-full inline-flex items-center justify-center shadow-lg transition-colors " +
+          (fanView
+            ? "bg-white text-black hover:bg-white/90"
+            : "bg-black/70 text-white hover:bg-black/80")
+        }
+        title="Show fan-view toggle"
+      >
+        {fanView ? <EyeOff className="w-4 h-4" aria-hidden /> : <Eye className="w-4 h-4" aria-hidden />}
+      </button>
+    );
+  }
+
   return (
-    <button
-      type="button"
-      onClick={() => setFanView(!fanView)}
-      data-testid="button-fan-preview-toggle"
-      aria-pressed={fanView}
+    <div
       className={
-        "fixed z-[70] bottom-24 right-4 flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold shadow-lg ring-1 backdrop-blur transition-colors " +
+        "fixed z-[9999] bottom-3 right-3 flex items-center gap-1.5 rounded-full shadow-lg ring-1 backdrop-blur transition-colors " +
         (fanView
-          ? "bg-white text-black ring-black/10 hover:bg-white/90"
-          : "bg-black/70 text-white ring-white/20 hover:bg-black/80")
+          ? "bg-white text-black ring-black/10"
+          : "bg-black/70 text-white ring-white/20")
       }
-      title={
-        fanView
-          ? "You're seeing the locked Preview & Purchase view a fan gets. Click to return to your full owner view."
-          : "Preview the locked Preview & Purchase page exactly as a visitor sees it (30s previews + Buy)."
-      }
+      data-testid="fan-preview-toggle"
     >
-      {fanView ? <EyeOff className="w-4 h-4" aria-hidden /> : <Eye className="w-4 h-4" aria-hidden />}
-      <span>{fanView ? "Viewing as fan" : "View as fan"}</span>
-    </button>
+      <button
+        type="button"
+        onClick={() => setFanView(!fanView)}
+        data-testid="button-fan-preview-toggle"
+        aria-pressed={fanView}
+        className="flex items-center gap-2 pl-3 pr-2 py-2 text-sm font-semibold hover:opacity-80 transition-opacity"
+        title={
+          fanView
+            ? "You're seeing the locked Preview & Purchase view a fan gets. Click to return to your full owner view."
+            : "Preview the locked Preview & Purchase page exactly as a visitor sees it (30s previews + Buy)."
+        }
+      >
+        {fanView ? <EyeOff className="w-4 h-4" aria-hidden /> : <Eye className="w-4 h-4" aria-hidden />}
+        <span>{fanView ? "Viewing as fan" : "View as fan"}</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setCollapsed(true)}
+        data-testid="button-fan-preview-collapse"
+        className={
+          "mr-1 w-5 h-5 rounded inline-flex items-center justify-center transition-colors " +
+          (fanView
+            ? "text-black/40 hover:text-black hover:bg-black/10"
+            : "text-fan-secondary hover:text-white hover:bg-white/10")
+        }
+        title="Hide"
+        aria-label="Hide fan-view toggle"
+      >
+        ×
+      </button>
+    </div>
   );
 }

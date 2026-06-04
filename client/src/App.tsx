@@ -91,7 +91,6 @@ import { AdminAlbumEngagement } from "@/pages/AdminAlbumEngagement";
 import { AnalyticsDebugOverlay } from "@/components/admin/AnalyticsDebugOverlay";
 // Task #536 — "What's New" welcome-back sheet for returning fans.
 import { WhatsNewSheet } from "@/components/WhatsNewSheet";
-import { ScreenTag } from "@/components/admin/ScreenTag";
 import { isAnalyticsDebugOverlayEnabled } from "@/lib/analytics";
 import { AdminReports } from "@/pages/AdminReports";
 import { AdminJobs } from "@/pages/AdminJobs";
@@ -678,11 +677,6 @@ function Router() {
           !native. Mobile/tablet keep the floating BottomNav. */}
       <StorefrontSidebar />
       {user?.kind === "admin" && isAnalyticsDebugOverlayEnabled() && <AnalyticsDebugOverlay />}
-      {/* Super-admin-only screen-code chip. Shown on every page so Nick
-          can include the code in a screenshot/comment and we know
-          exactly which route → file → component to touch. Self-gates on
-          super_admin via /api/me/role. */}
-      <ScreenTag />
     </>
   );
 }
