@@ -534,10 +534,22 @@ export function AlbumDetailMobileSurface({
                 })()}
               </p>
             )}
-            {album.description && (
+            {/* Apple reserves the description's room and anchors the Play /
+                Shuffle / Info row lower, so it doesn't slide up when an album
+                has no description. When a description exists, keep the
+                ClampedDescription behavior; when it's absent, hold the same
+                two-line vertical space (matching the clamped height + its
+                top margin) so the transport row keeps a stable position. */}
+            {album.description ? (
               <ClampedDescription
                 text={album.description}
                 onExpand={() => onExpandDescription?.()}
+              />
+            ) : (
+              <div
+                aria-hidden
+                className="mt-3 h-[2.85rem]"
+                data-testid="album-description-spacer"
               />
             )}
           </div>

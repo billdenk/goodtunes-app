@@ -417,7 +417,12 @@ export function DesktopAlbumView({
               </p>
             )}
 
-            <div className="mt-5 flex items-center gap-2.5">
+            {/* Apple anchors the transport row at the BOTTOM of the album
+                header so it lines up with the bottom of the artwork whether
+                or not a description exists. `mt-auto` pushes this row to the
+                foot of the metadata column (which stretches to the artwork
+                height), reserving the description's room implicitly. */}
+            <div className="mt-auto pt-5 flex items-center gap-2.5">
               {isOwned ? (
                 /* Apple-tone transport row, mirroring the mobile album
                    surface: Shuffle (glass) · Play (white pill, primary) ·
