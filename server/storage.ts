@@ -3264,18 +3264,24 @@ export class DbStorage implements IStorage {
     // even across pagination. "buyers" and "no_sales" use EXISTS/NOT EXISTS
     // subqueries so the outer LEFT JOIN order count stays independent.
     // "unclaimed" = gogoods-imported (legacyGogoodsId set) + no password.
+    //
+    // NOTE: the outer correlation MUST be the literal `customer_users.id`, not
+    // `${customerUsers.id}`. Drizzle renders the interpolated Column as a bare
+    // `"id"` here, and inside `FROM orders` Postgres binds bare `id` to
+    // `orders.id` — turning the test into `orders.customer_id = orders.id`
+    // (never true), so every buyer silently counted as no-sales.
     const segmentExpr =
       segment === "buyers"
-        ? sql`EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ${customerUsers.id})`
+        ? sql`EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = customer_users.id)`
         : segment === "no_sales"
-        ? sql`NOT EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ${customerUsers.id})`
+        ? sql`NOT EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = customer_users.id)`
         : segment === "unclaimed"
         ? sql`(${customerUsers.legacyGogoodsId} IS NOT NULL AND ${customerUsers.password} IS NULL)`
         : sql`true`;
     // When scoping to an artist's albums, restrict to customers who have
     // at least one order for one of those albums.
     const baseExpr = artistAlbumIds?.length
-      ? and(notMergedExpr, textExpr, sql`${customerUsers.id} IN (SELECT customer_id FROM orders WHERE album_id = ANY(${pgArray(artistAlbumIds)}::text[]))`)
+      ? and(notMergedExpr, textExpr, sql`customer_users.id IN (SELECT customer_id FROM orders WHERE album_id = ANY(${pgArray(artistAlbumIds)}::text[]))`)
       : and(notMergedExpr, textExpr);
     const whereExpr = and(baseExpr, segmentExpr);
 
@@ -3304,13 +3310,13 @@ export class DbStorage implements IStorage {
     // artistAlbumIds scope still applies so artist-partner views stay bounded.
     // mergedIntoId IS NULL is always required so merged stubs never inflate counts.
     const countsBaseExpr = artistAlbumIds?.length
-      ? and(notMergedExpr, sql`${customerUsers.id} IN (SELECT customer_id FROM orders WHERE album_id = ANY(${pgArray(artistAlbumIds)}::text[]))`)
+      ? and(notMergedExpr, sql`customer_users.id IN (SELECT customer_id FROM orders WHERE album_id = ANY(${pgArray(artistAlbumIds)}::text[]))`)
       : notMergedExpr;
     const [countsRow] = await db
       .select({
         all: sql<number>`count(*)::int`,
-        buyers: sql<number>`count(*) FILTER (WHERE EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ${customerUsers.id}))::int`,
-        no_sales: sql<number>`count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ${customerUsers.id}))::int`,
+        buyers: sql<number>`count(*) FILTER (WHERE EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = customer_users.id))::int`,
+        no_sales: sql<number>`count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = customer_users.id))::int`,
         unclaimed: sql<number>`count(*) FILTER (WHERE ${customerUsers.legacyGogoodsId} IS NOT NULL AND ${customerUsers.password} IS NULL)::int`,
       })
       .from(customerUsers)
