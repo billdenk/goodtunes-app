@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeAudioUrl } from "@shared/audioUrl";
-import { normalizeShareSlug, validateShareSlug } from "@shared/shareSlug";
+import { normalizeShareSlug, validateShareSlug, shareUrlForSlugs, SHARE_LINK_HOST } from "@shared/shareSlug";
 import { createPortal } from "react-dom";
 import { Card } from "@/components/ui/card";
 import { Link, useLocation, useRoute, useSearch } from "wouter";
@@ -2026,13 +2026,14 @@ function SpinPromoPanel({
   );
 }
 
-// Task #965 — clean per-release share-link editor. Operator types a slug
-// (normalized live), auto-saves on blur, and copies the full
-// get.goodtunes.music/<slug> URL. Self-contained panel (EditablePanel has
-// no copy-button field type) mirroring SpinPromoPanel's shape. Saves ride
-// the standard PUT /api/admin/albums/:id edit_metadata gate + post-sale
-// lock (so `disabled` freezes the input when the album is locked).
-const SHARE_LINK_HOST = "get.goodtunes.music";
+// Task #965 / Task #1310 — two-part artist/album share-link editor.
+// Operator sets both the artist slug (shared across all of that artist's
+// releases; stored on the person row) and the album slug (stored on the
+// album row), each saving independently on blur/enter. Self-contained
+// panel (EditablePanel has no two-field copy-button type). Album slug
+// saves ride the standard PUT /api/admin/albums/:id edit_metadata gate +
+// post-sale lock (so `disabled` freezes that input when the album is
+// locked); artist slug always editable for admins.
 
 // Robust copy: the async Clipboard API rejects (or silently hangs) in a
 // cross-origin/unfocused iframe like the Replit workspace preview, which left
@@ -2063,6 +2064,10 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
   }
 }
 
+// Task #1310 — two-part artist/album share link panel.
+// Artist part (first segment) is stored on the person row (artist-wide,
+// affects all of that artist's releases). Album part (second segment) is
+// stored on the album row. Both fields save independently on blur/enter.
 function ShareLinkPanel({
   album,
   disabled,
@@ -2074,23 +2079,105 @@ function ShareLinkPanel({
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [draft, setDraft] = useState(album.shareSlug ?? "");
+
+  // ── Artist slug (person.artistShareSlug) ───────────────────────────────
+  const artistId = album.primaryArtistId ?? null;
+  const { data: personData } = useQuery<{ artistShareSlug?: string | null; name?: string } | null>({
+    queryKey: ["/api/people", artistId],
+    enabled: !!artistId,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const r = await fetch(`/api/people/${artistId}`, { credentials: "include" });
+      if (!r.ok) return null;
+      return r.json();
+    },
+  });
+  const savedArtistSlug = personData?.artistShareSlug ?? "";
+  const [artistDraft, setArtistDraft] = useState(savedArtistSlug);
+  const [artistSuggesting, setArtistSuggesting] = useState(false);
+  useEffect(() => { setArtistDraft(savedArtistSlug); }, [savedArtistSlug]);
+
+  const artistValidation = artistDraft.trim() === "" ? null : validateShareSlug(artistDraft);
+  const artistLocalError = artistValidation && !artistValidation.ok ? artistValidation.reason : null;
+  const artistNormalized = normalizeShareSlug(artistDraft);
+  const artistIsDirty = artistNormalized !== savedArtistSlug;
+
+  const saveArtist = useMutation({
+    mutationFn: async (next: string | null) => {
+      const r = await apiRequest("PUT", `/api/admin/people/${artistId}`, {
+        artistShareSlug: next,
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/people", artistId] });
+      toast({ title: "Artist URL saved." });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't save artist URL",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+      setArtistDraft(savedArtistSlug);
+    },
+  });
+
+  const commitArtist = () => {
+    if (!artistId || saveArtist.isPending) return;
+    const trimmed = artistDraft.trim();
+    if (trimmed === "") {
+      if (savedArtistSlug !== "") saveArtist.mutate(null);
+      return;
+    }
+    if (!artistValidation?.ok) return;
+    if (artistValidation.slug === savedArtistSlug) { setArtistDraft(savedArtistSlug); return; }
+    setArtistDraft(artistValidation.slug);
+    saveArtist.mutate(artistValidation.slug);
+  };
+
+  const checkArtistAvailable = async (slug: string): Promise<boolean> => {
+    if (!artistId) return false;
+    try {
+      const r = await apiRequest(
+        "GET",
+        `/api/admin/people/${artistId}/artist-share-slug-available?slug=${encodeURIComponent(slug)}`,
+      );
+      const data = await r.json();
+      return !!data.available;
+    } catch { return false; }
+  };
+
+  const suggestArtist = async () => {
+    if (!artistId || disabled || saveArtist.isPending || artistSuggesting) return;
+    const v = validateShareSlug(personData?.name ?? album.artist ?? "");
+    if (!v.ok) { toast({ title: "No artist name to suggest from." }); return; }
+    setArtistSuggesting(true);
+    try {
+      for (let n = 1; n <= 9; n++) {
+        const candidate = n === 1 ? v.slug : `${v.slug}-${n}`;
+        const cv = validateShareSlug(candidate);
+        if (!cv.ok) continue;
+        if (await checkArtistAvailable(cv.slug)) { setArtistDraft(cv.slug); return; }
+      }
+      setArtistDraft(v.slug);
+      toast({ title: "Artist slug may be taken", description: "Tweak it before saving." });
+    } finally { setArtistSuggesting(false); }
+  };
+
+  // ── Album slug (albums.shareSlug) ──────────────────────────────────────
+  const [albumDraft, setAlbumDraft] = useState(album.shareSlug ?? "");
+  const [albumSuggesting, setAlbumSuggesting] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [suggesting, setSuggesting] = useState(false);
+  useEffect(() => { setAlbumDraft(album.shareSlug ?? ""); }, [album.shareSlug]);
 
-  // Keep the field in sync if the album reloads with a different slug
-  // (e.g. another tab saved it) — but only when not mid-edit.
-  useEffect(() => {
-    setDraft(album.shareSlug ?? "");
-  }, [album.shareSlug]);
+  const savedAlbumSlug = album.shareSlug ?? "";
+  const albumValidation = albumDraft.trim() === "" ? null : validateShareSlug(albumDraft);
+  const albumLocalError = albumValidation && !albumValidation.ok ? albumValidation.reason : null;
+  const albumNormalized = normalizeShareSlug(albumDraft);
+  const albumIsDirty = albumNormalized !== savedAlbumSlug;
 
-  const normalized = normalizeShareSlug(draft);
-  const savedSlug = album.shareSlug ?? "";
-  const isDirty = normalized !== savedSlug;
-  const validation = draft.trim() === "" ? null : validateShareSlug(draft);
-  const localError = validation && !validation.ok ? validation.reason : null;
-
-  const save = useMutation({
+  const saveAlbum = useMutation({
     mutationFn: async (next: string | null) => {
       const r = await apiRequest("PUT", `/api/admin/albums/${album.id}`, {
         shareSlug: next,
@@ -2100,26 +2187,32 @@ function ShareLinkPanel({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
       qc.invalidateQueries({ queryKey: ["/api/admin/albums"] });
-      toast({ title: "Share link saved." });
+      toast({ title: "Album URL saved." });
     },
     onError: (e: any) => {
       toast({
-        title: "Couldn't save share link",
+        title: "Couldn't save album URL",
         description: e?.message || "Please try again.",
         variant: "destructive",
       });
-      setDraft(savedSlug);
+      setAlbumDraft(savedAlbumSlug);
     },
   });
 
-  // Task #969 — propose a clean, available slug from the album's primary
-  // artist / title. Build a short ordered list of candidates (artist,
-  // title, artist-title), then for each base probe the server uniqueness
-  // endpoint, falling back to `-2`, `-3` … suffixes when a base is taken.
-  // The first available candidate fills the field (operator can override
-  // and the save still re-validates). If everything probed is taken, we
-  // still fill the best-shaped base so the operator has a starting point.
-  const checkAvailable = async (slug: string): Promise<boolean> => {
+  const commitAlbum = () => {
+    if (disabled || saveAlbum.isPending) return;
+    const trimmed = albumDraft.trim();
+    if (trimmed === "") {
+      if (savedAlbumSlug !== "") saveAlbum.mutate(null);
+      return;
+    }
+    if (!albumValidation?.ok) return;
+    if (albumValidation.slug === savedAlbumSlug) { setAlbumDraft(savedAlbumSlug); return; }
+    setAlbumDraft(albumValidation.slug);
+    saveAlbum.mutate(albumValidation.slug);
+  };
+
+  const checkAlbumAvailable = async (slug: string): Promise<boolean> => {
     try {
       const r = await apiRequest(
         "GET",
@@ -2127,26 +2220,21 @@ function ShareLinkPanel({
       );
       const data = await r.json();
       return !!data.available;
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   };
 
-  const suggest = async () => {
-    if (disabled || save.isPending || suggesting) return;
+  const suggestAlbum = async () => {
+    if (disabled || saveAlbum.isPending || albumSuggesting) return;
     const bases: string[] = [];
-    for (const raw of [album.artist, album.title, `${album.artist} ${album.title}`]) {
+    for (const raw of [album.title, `${album.artist} ${album.title}`]) {
       const v = validateShareSlug(raw ?? "");
       if (v.ok && !bases.includes(v.slug)) bases.push(v.slug);
     }
     if (bases.length === 0) {
-      toast({
-        title: "Couldn't suggest a link",
-        description: "This release needs a title or artist to suggest from.",
-      });
+      toast({ title: "Couldn't suggest", description: "This release needs a title to suggest from." });
       return;
     }
-    setSuggesting(true);
+    setAlbumSuggesting(true);
     try {
       let fallback = "";
       for (const base of bases) {
@@ -2155,80 +2243,29 @@ function ShareLinkPanel({
           const candidate = n === 1 ? base : `${base}-${n}`;
           const v = validateShareSlug(candidate);
           if (!v.ok) continue;
-          if (await checkAvailable(v.slug)) {
-            setDraft(v.slug);
-            return;
-          }
+          if (await checkAlbumAvailable(v.slug)) { setAlbumDraft(v.slug); return; }
         }
       }
-      // Nothing free in the small search space — still hand the operator a
-      // clean starting point rather than a blank field.
-      setDraft(fallback);
-      toast({
-        title: "Suggestion may be taken",
-        description: "Tweak it before saving — the closest clean slug is filled in.",
-      });
-    } finally {
-      setSuggesting(false);
-    }
+      setAlbumDraft(fallback);
+      toast({ title: "Suggestion may be taken", description: "Tweak it before saving." });
+    } finally { setAlbumSuggesting(false); }
   };
 
-  const commit = () => {
-    if (disabled || save.isPending) return;
-    const trimmed = draft.trim();
-    if (trimmed === "") {
-      if (savedSlug !== "") save.mutate(null);
-      return;
-    }
-    if (!validation?.ok) return;
-    if (validation.slug === savedSlug) {
-      setDraft(savedSlug);
-      return;
-    }
-    setDraft(validation.slug);
-    save.mutate(validation.slug);
-  };
+  // ── Computed full URL + copy/open ─────────────────────────────────────
+  const fullUrl = (savedArtistSlug && savedAlbumSlug)
+    ? shareUrlForSlugs(savedArtistSlug, savedAlbumSlug)
+    : "";
+  const copyableArtist = savedArtistSlug || (artistValidation?.ok ? artistValidation.slug : "");
+  const copyableAlbum = savedAlbumSlug || (albumValidation?.ok ? albumValidation.slug : "");
+  const copyUrl = (copyableArtist && copyableAlbum)
+    ? shareUrlForSlugs(copyableArtist, copyableAlbum)
+    : "";
 
-  const fullUrl = savedSlug ? `https://${SHARE_LINK_HOST}/${savedSlug}` : "";
-  // Copy whatever clean slug is in play — the saved one, or a valid just-typed
-  // draft that's about to save on blur — so clicking Copy right after typing
-  // isn't a dead no-op.
-  const copyableSlug = savedSlug || (validation?.ok ? validation.slug : "");
-  const copyUrl = copyableSlug ? `https://${SHARE_LINK_HOST}/${copyableSlug}` : "";
-  // One-click preview opens the page on the CURRENT origin (relative path), so
-  // an operator's existing admin session rides along — that's what unlocks the
-  // staging view of a still-prepping release without a second login on the get
-  // host. The shareable get.goodtunes.music link is the Copy button's job.
-  //
-  // Critical: the public resolver only knows SAVED slugs, so a typed-but-unsaved
-  // draft opens to a dead "release not found" page. So Open persists a valid
-  // dirty draft first, then navigates. The tab is opened synchronously inside
-  // the click (a window.open fired after the save `await` gets killed by popup
-  // blockers) and redirected once the save lands.
-  const canPreview = !!savedSlug || (!disabled && !!(validation?.ok));
-  const openPreview = async () => {
-    if (!canPreview || save.isPending) return;
-    const needSave =
-      !disabled && !!validation?.ok && validation.slug !== savedSlug;
-    const targetSlug = needSave ? validation!.slug : savedSlug;
-    if (!targetSlug) return;
-    const win = window.open(needSave ? "" : `/${targetSlug}`, "_blank");
-    if (win) {
-      try {
-        win.opener = null;
-      } catch {
-        /* cross-origin opener lock — harmless */
-      }
-    }
-    if (needSave) {
-      try {
-        await save.mutateAsync(targetSlug);
-        setDraft(targetSlug);
-        if (win) win.location.replace(`/${targetSlug}`);
-      } catch {
-        if (win) win.close();
-      }
-    }
+  const canPreview = !!(savedArtistSlug && savedAlbumSlug);
+  const openPreview = () => {
+    if (!canPreview) return;
+    const win = window.open(`/${savedArtistSlug}/${savedAlbumSlug}`, "_blank");
+    if (win) { try { win.opener = null; } catch { /* harmless */ } }
   };
   const copy = async () => {
     if (!copyUrl) return;
@@ -2237,13 +2274,11 @@ function ShareLinkPanel({
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } else {
-      toast({
-        title: "Couldn't copy",
-        description: copyUrl,
-        variant: "destructive",
-      });
+      toast({ title: "Couldn't copy", description: copyUrl, variant: "destructive" });
     }
   };
+
+  const anyPending = saveArtist.isPending || saveAlbum.isPending;
 
   return (
     <div
@@ -2252,98 +2287,136 @@ function ShareLinkPanel({
     >
       <div className="flex items-center gap-1.5">
         <Link2 className="w-4 h-4 text-[color:var(--brand-blue)]" />
-        <span className="text-sm font-semibold text-slate-900">
-          Share link
-        </span>
-        <button
-          type="button"
-          onClick={suggest}
-          disabled={disabled || save.isPending || suggesting}
-          className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-[color:var(--brand-blue)] hover:underline disabled:opacity-50 disabled:no-underline"
-          data-testid="button-suggest-share-slug"
-        >
-          {suggesting ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <Sparkles className="w-3.5 h-3.5" />
-          )}
-          {suggesting ? "Checking…" : "Suggest"}
-        </button>
+        <span className="text-sm font-semibold text-slate-900">Share link</span>
       </div>
       <p className="text-xs text-slate-500 mt-1 leading-snug">
-        A clean, shareable URL for this release. Saves on blur. Letters,
-        numbers, and hyphens only — must be unique and not a reserved word.
+        Two-part shareable URL: <span className="font-medium text-slate-700">{SHARE_LINK_HOST}/<em>artist</em>/<em>album</em></span>.
+        Artist part is shared across all of that artist's releases.
       </p>
       {disabled && disabledReason && (
         <p className="text-xs text-amber-700 mt-1">{disabledReason}</p>
       )}
-      <div className="mt-3 flex items-center gap-2">
-        <div className="flex flex-1 items-center rounded-md border border-slate-200 bg-slate-50 focus-within:border-[color:var(--brand-blue)] overflow-hidden">
-          <span className="pl-2.5 pr-1 text-xs text-slate-400 whitespace-nowrap select-none">
-            {SHARE_LINK_HOST}/
-          </span>
-          <Input
-            value={draft}
-            disabled={disabled || save.isPending}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commit}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                (e.target as HTMLInputElement).blur();
-              }
-            }}
-            placeholder="nightbirde"
-            className="h-8 border-0 bg-transparent px-1 focus-visible:ring-0 shadow-none"
-            data-testid="input-share-slug"
-          />
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-8 shrink-0"
-          disabled={!canPreview || save.isPending}
-          // Stop the button from stealing focus: otherwise clicking Open
-          // blurs the input, which fires its OWN save and flips save.isPending
-          // true before onClick runs — making openPreview bail and open
-          // nothing. Keeping focus lets Open be the single save-then-open path.
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={openPreview}
-          data-testid="button-open-share-link"
-          title="Open this page in a new tab using your admin session (saves the link first, and works even before the release is public)."
-        >
-          <ExternalLink className="w-4 h-4" />
-          <span className="ml-1.5">Open</span>
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-8 shrink-0"
-          disabled={!copyUrl}
-          onClick={copy}
-          data-testid="button-copy-share-link"
-        >
-          {copied ? (
-            <Check className="w-4 h-4 text-emerald-600" />
-          ) : (
-            <Copy className="w-4 h-4" />
-          )}
-          <span className="ml-1.5">{copied ? "Copied" : "Copy"}</span>
-        </Button>
-      </div>
-      {localError ? (
-        <p className="text-xs text-rose-600 mt-1.5" data-testid="text-share-slug-error">
-          {localError}
+
+      {!artistId ? (
+        <p className="text-xs text-amber-700 mt-3 p-2 bg-amber-50 rounded-md border border-amber-200">
+          Set a primary artist on the Overview tab first to enable the share link.
         </p>
-      ) : normalized && isDirty ? (
-        <p className="text-xs text-slate-500 mt-1.5">
-          Saves as <span className="font-medium text-slate-700">{normalized}</span>
-        </p>
-      ) : fullUrl ? (
-        <p className="text-xs text-slate-500 mt-1.5" data-testid="text-share-link-url">
-          {fullUrl}
-        </p>
-      ) : null}
+      ) : (
+        <>
+          {/* Artist URL field */}
+          <div className="mt-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-slate-600">Artist URL</span>
+              <button
+                type="button"
+                onClick={suggestArtist}
+                disabled={disabled || saveArtist.isPending || artistSuggesting}
+                className="inline-flex items-center gap-1 text-xs font-medium text-[color:var(--brand-blue)] hover:underline disabled:opacity-50 disabled:no-underline"
+                data-testid="button-suggest-artist-slug"
+              >
+                {artistSuggesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                {artistSuggesting ? "Checking…" : "Suggest"}
+              </button>
+            </div>
+            <div className="flex items-center rounded-md border border-slate-200 bg-slate-50 focus-within:border-[color:var(--brand-blue)] overflow-hidden">
+              <span className="pl-2.5 pr-1 text-xs text-slate-400 whitespace-nowrap select-none">
+                {SHARE_LINK_HOST}/
+              </span>
+              <Input
+                value={artistDraft}
+                disabled={saveArtist.isPending}
+                onChange={(e) => setArtistDraft(e.target.value)}
+                onBlur={commitArtist}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
+                placeholder="nightbirde"
+                className="h-8 border-0 bg-transparent px-1 focus-visible:ring-0 shadow-none"
+                data-testid="input-artist-share-slug"
+              />
+            </div>
+            {artistLocalError ? (
+              <p className="text-xs text-rose-600 mt-1" data-testid="text-artist-slug-error">{artistLocalError}</p>
+            ) : artistIsDirty && artistNormalized ? (
+              <p className="text-xs text-slate-500 mt-1">Saves as <span className="font-medium text-slate-700">{artistNormalized}</span></p>
+            ) : savedArtistSlug ? (
+              <p className="text-xs text-slate-500 mt-1">Affects all of {personData?.name ?? album.artist}'s releases.</p>
+            ) : null}
+          </div>
+
+          {/* Album URL field */}
+          <div className="mt-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-medium text-slate-600">Album URL</span>
+              <button
+                type="button"
+                onClick={suggestAlbum}
+                disabled={disabled || saveAlbum.isPending || albumSuggesting}
+                className="inline-flex items-center gap-1 text-xs font-medium text-[color:var(--brand-blue)] hover:underline disabled:opacity-50 disabled:no-underline"
+                data-testid="button-suggest-share-slug"
+              >
+                {albumSuggesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                {albumSuggesting ? "Checking…" : "Suggest"}
+              </button>
+            </div>
+            <div className="flex items-center rounded-md border border-slate-200 bg-slate-50 focus-within:border-[color:var(--brand-blue)] overflow-hidden">
+              <span className="pl-2.5 pr-1 text-xs text-slate-400 whitespace-nowrap select-none">
+                {savedArtistSlug ? `${savedArtistSlug}/` : "artist/"}
+              </span>
+              <Input
+                value={albumDraft}
+                disabled={disabled || saveAlbum.isPending}
+                onChange={(e) => setAlbumDraft(e.target.value)}
+                onBlur={commitAlbum}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
+                placeholder="its-ok"
+                className="h-8 border-0 bg-transparent px-1 focus-visible:ring-0 shadow-none"
+                data-testid="input-share-slug"
+              />
+            </div>
+            {albumLocalError ? (
+              <p className="text-xs text-rose-600 mt-1" data-testid="text-share-slug-error">{albumLocalError}</p>
+            ) : albumIsDirty && albumNormalized ? (
+              <p className="text-xs text-slate-500 mt-1">Saves as <span className="font-medium text-slate-700">{albumNormalized}</span></p>
+            ) : null}
+          </div>
+
+          {/* Full URL + action buttons */}
+          <div className="mt-3 flex items-center gap-2">
+            {fullUrl ? (
+              <p className="flex-1 text-xs text-slate-500 truncate" data-testid="text-share-link-url">
+                {fullUrl}
+              </p>
+            ) : (
+              <p className="flex-1 text-xs text-slate-400 italic">
+                Set both fields to get the full link.
+              </p>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 shrink-0"
+              disabled={!canPreview || anyPending}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={openPreview}
+              data-testid="button-open-share-link"
+              title="Open this page in a new tab using your admin session."
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span className="ml-1.5">Open</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 shrink-0"
+              disabled={!copyUrl}
+              onClick={copy}
+              data-testid="button-copy-share-link"
+            >
+              {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+              <span className="ml-1.5">{copied ? "Copied" : "Copy"}</span>
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -7175,9 +7175,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const raw = req.body.sellQuoteLockedAt;
       updates.sellQuoteLockedAt = raw ? new Date() : null;
     }
-    // Task #965 — clean per-release share slug. Empty / null clears it.
-    // Otherwise normalize + validate (reserved-word + shape) via the shared
-    // helper, then enforce uniqueness against every OTHER album.
+    // Task #965 / Task #1310 — clean per-release share slug (album part).
+    // Empty / null clears it. Otherwise normalize + validate via the shared
+    // helper, then enforce uniqueness within the same artist (not globally —
+    // Task #1310 changed the constraint from global to per-artist).
     if (req.body?.shareSlug !== undefined) {
       const raw = req.body.shareSlug;
       if (raw === null || (typeof raw === "string" && raw.trim() === "")) {
@@ -7188,17 +7189,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (!result.ok) {
           return res.status(400).json({ message: result.reason });
         }
-        // Task #1254 — only LIVE (non-trashed) releases reserve a slug. A
-        // soft-deleted album's slug isn't publicly resolvable, so trashing
-        // a release frees its slug for re-use (mirrors the vendors domain
-        // fix). The partial unique index now excludes deleted rows too.
-        const existing = await storage.getAlbumBySlug(result.slug, {
-          includeHidden: true,
-        });
-        if (existing && existing.id !== id) {
-          return res
-            .status(400)
-            .json({ message: `"${result.slug}" is already used by another release.` });
+        // Task #1310 — uniqueness is now per-artist (not global). Fetch the
+        // current album to get its primaryArtistId, then check within that
+        // artist's catalog. If no primaryArtistId, still save (no conflict
+        // possible; the two-part public URL won't resolve without an artist
+        // slug anyway, but the admin can set it later).
+        const thisAlbum = await storage.getAlbumById(id, { includeHidden: true });
+        const artistId = thisAlbum?.primaryArtistId ?? null;
+        if (artistId) {
+          const existing = await storage.getAlbumByArtistAndSlug(artistId, result.slug, {
+            includeHidden: true,
+            includeTrashed: true,
+          });
+          if (existing && existing.id !== id) {
+            return res
+              .status(400)
+              .json({ message: `"${result.slug}" is already used by another release from this artist.` });
+          }
         }
         updates.shareSlug = result.slug;
       }
@@ -7207,12 +7214,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       updated = await storage.updateAlbum(id, updates);
     } catch (err: any) {
-      // Task #1254 — map a race on the share-slug partial unique index to a
-      // friendly 409 instead of a raw 500 (mirrors the labels/vendors fix).
+      // Task #1254/1310 — map a race on the share-slug per-artist unique index to a
+      // friendly 409 instead of a raw 500.
       if (err?.code === "23505" && updates.shareSlug) {
         return res
           .status(409)
-          .json({ message: `"${updates.shareSlug}" is already used by another release.` });
+          .json({ message: `"${updates.shareSlug}" is already used by another release from this artist.` });
       }
       throw err;
     }
@@ -13025,10 +13032,57 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.coverLocked !== undefined) {
       updates.coverLocked = !(b.coverLocked === false || b.coverLocked === "false");
     }
+    // Task #1310 — artist share slug (the artist "part" of the two-part
+    // get.goodtunes.music/<artist>/<album> URL). Empty/null clears it;
+    // otherwise normalize + validate then enforce per-person uniqueness.
+    if (b.artistShareSlug !== undefined) {
+      const raw = b.artistShareSlug;
+      if (raw === null || (typeof raw === "string" && raw.trim() === "")) {
+        updates.artistShareSlug = null;
+      } else {
+        const { validateShareSlug } = await import("@shared/shareSlug");
+        const result = validateShareSlug(String(raw));
+        if (!result.ok) {
+          return res.status(400).json({ message: result.reason });
+        }
+        // Check uniqueness against ALL other live (non-trashed) people rows.
+        const existing = await storage.getPersonByArtistShareSlug(result.slug);
+        if (existing && existing.id !== id) {
+          return res.status(400).json({
+            message: `"${result.slug}" is already used as an artist URL by another person.`,
+          });
+        }
+        updates.artistShareSlug = result.slug;
+      }
+    }
     const p = await storage.updatePerson(id, updates);
     if (!p) return res.status(404).json({ message: "Person not found" });
     return res.json(p);
   });
+
+  // Task #1310 — artist share-slug availability probe. Mirrors the PUT
+  // uniqueness rule exactly: validate shape/reserved-word via the shared
+  // helper, then check collisions against every other live person.
+  app.get(
+    "/api/admin/people/:id/artist-share-slug-available",
+    requireAdmin,
+    async (req, res) => {
+      const { validateShareSlug } = await import("@shared/shareSlug");
+      const result = validateShareSlug(String(req.query.slug ?? ""));
+      if (!result.ok) {
+        return res.json({ available: false, reason: result.reason });
+      }
+      const existing = await storage.getPersonByArtistShareSlug(result.slug);
+      const taken = !!existing && existing.id !== String(req.params.id);
+      return res.json({
+        available: !taken,
+        slug: result.slug,
+        reason: taken
+          ? `"${result.slug}" is already used as an artist URL by another person.`
+          : undefined,
+      });
+    },
+  );
 
   // Refresh a Person's portrait from Spotify. Pulls fresh /v1/artists/{id}
   // by the saved `spotifyUrl`, rehosts the largest image into our object
@@ -16784,6 +16838,49 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // getAlbumBySlug already filters hidden / trashed / sunrise (relaxed for
     // staging above). Prepping (not-yet-released shells) must also 404 for
     // everyone else — a slug is only valid once the release is buy-eligible.
+    if (!album || (album.isPrepping && !staging)) {
+      return res.status(404).json({ message: "Not found" });
+    }
+    const songs = await storage.getSongsByAlbum(album.id);
+    const derivedExplicit =
+      album.isExplicit || songs.some((s) => (s as any).isExplicit === true);
+    return res.json({ ...album, isExplicit: derivedExplicit, songs });
+  });
+
+  // Task #1310 — PUBLIC two-part share-link resolver
+  // (get.goodtunes.music/<artist>/<album>). Identical buy-eligibility
+  // gating as the single-segment resolver above: hidden / prepping /
+  // trashed / pre-sunrise all 404 for regular fans; staging viewers see
+  // hidden/prepping rows. Must sit ABOVE the /api/albums/:id route
+  // (which also has a single-segment catch, though Express would
+  // differentiate them by method anyway).
+  app.get("/api/public/album-by-slug/:artistSlug/:albumSlug", async (req, res) => {
+    const { normalizeShareSlug } = await import("@shared/shareSlug");
+    const artistSlug = normalizeShareSlug(String(req.params.artistSlug));
+    const albumSlug = normalizeShareSlug(String(req.params.albumSlug));
+    if (!artistSlug || !albumSlug) return res.status(404).json({ message: "Not found" });
+
+    // Staging preview: same logic as the single-slug route (full-access email).
+    let staging = false;
+    {
+      const { getAuthFromRequest } = await import("./auth/session");
+      const auth = await getAuthFromRequest(req);
+      if (auth?.kind === "admin") staging = true;
+      if (!staging && auth?.kind === "customer") {
+        const { isFullAccessEmail } = await import("@shared/fullAccess");
+        const c = await storage.getCustomer(auth.userId);
+        if (isFullAccessEmail(c?.email)) staging = true;
+      }
+    }
+
+    const artist = await storage.getPersonByArtistShareSlug(artistSlug);
+    if (!artist) return res.status(404).json({ message: "Not found" });
+
+    const album = await storage.getAlbumByArtistAndSlug(
+      artist.id,
+      albumSlug,
+      staging ? { includeHidden: true } : undefined,
+    );
     if (!album || (album.isPrepping && !staging)) {
       return res.status(404).json({ message: "Not found" });
     }
@@ -23793,13 +23890,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   );
 
-  // Task #969 — share-slug availability probe powering the "Suggest"
-  // affordance in AdminAlbum's ShareLinkPanel. Mirrors the PUT uniqueness
-  // rule exactly: validate shape/reserved-word via the shared helper, then
-  // check collisions against EVERY other album (incl. hidden + trashed) so
-  // the suggested slug the operator gets is truthfully free, not just free
-  // among published releases. Read-only; leaks no data the operator can't
-  // already infer when their save bounces with the same message.
+  // Task #969 / Task #1310 — share-slug availability probe powering the
+  // "Suggest" affordance in AdminAlbum's ShareLinkPanel. Validates shape
+  // + reserved-word via the shared helper, then checks per-artist
+  // collisions (Task #1310 changed uniqueness from global to per-artist).
+  // Falls back to global check when the album has no primaryArtistId.
+  // Read-only; leaks no data the operator can't already infer when their
+  // save bounces with the same message.
   app.get(
     "/api/admin/albums/:id/share-slug-available",
     requireAdmin,
@@ -23809,16 +23906,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!result.ok) {
         return res.json({ available: false, reason: result.reason });
       }
-      const existing = await storage.getAlbumBySlug(result.slug, {
-        includeHidden: true,
-        includeTrashed: true,
-      });
-      const taken = !!existing && existing.id !== String(req.params.id);
+      const albumId = String(req.params.id);
+      // Task #1310 — check per-artist uniqueness when album has an artist.
+      const thisAlbum = await storage.getAlbumById(albumId, { includeHidden: true });
+      const artistId = thisAlbum?.primaryArtistId ?? null;
+      let taken = false;
+      if (artistId) {
+        const existing = await storage.getAlbumByArtistAndSlug(artistId, result.slug, {
+          includeHidden: true,
+          includeTrashed: true,
+        });
+        taken = !!existing && existing.id !== albumId;
+      }
       return res.json({
         available: !taken,
         slug: result.slug,
         reason: taken
-          ? `"${result.slug}" is already used by another release.`
+          ? `"${result.slug}" is already used by another release from this artist.`
           : undefined,
       });
     },

@@ -4297,3 +4297,41 @@ SQL
 }
 migrate_orders_payment_snapshot dev  "${DATABASE_URL:-}"
 migrate_orders_payment_snapshot prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #1310 — Two-part artist/album share links ──────────────────────────
+# Adds people.artist_share_slug (globally-unique per non-trashed person) and
+# changes albums' share-slug uniqueness from global to per-artist composite.
+# Both sides are idempotent: ADD COLUMN IF NOT EXISTS + CREATE INDEX IF NOT
+# EXISTS + DROP INDEX IF EXISTS. The old global albums_share_slug_unique index
+# is dropped (no data loss — albums.share_slug values are untouched) and
+# replaced with the per-artist composite.
+migrate_task_1310_share_slugs() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1310 share-slug migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+-- Artist share slug column on people
+ALTER TABLE people ADD COLUMN IF NOT EXISTS artist_share_slug text;
+-- Partial unique index: globally unique among non-trashed people
+CREATE UNIQUE INDEX IF NOT EXISTS people_artist_share_slug_unique
+  ON people (artist_share_slug)
+  WHERE artist_share_slug IS NOT NULL AND deleted_at IS NULL;
+-- Drop the old global albums share-slug unique index (no data loss)
+DROP INDEX IF EXISTS albums_share_slug_unique;
+-- Per-artist composite index: unique within each artist's catalog
+CREATE UNIQUE INDEX IF NOT EXISTS albums_artist_share_slug_unique
+  ON albums (primary_artist_id, share_slug)
+  WHERE primary_artist_id IS NOT NULL
+    AND share_slug IS NOT NULL
+    AND deleted_at IS NULL;
+SQL
+  then
+    echo "post-merge: task-1310 share-slug migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-1310 share-slug migration failed on $label (continuing)"
+  fi
+}
+migrate_task_1310_share_slugs dev  "${DATABASE_URL:-}"
+migrate_task_1310_share_slugs prod "${PROD_DATABASE_URL:-}"

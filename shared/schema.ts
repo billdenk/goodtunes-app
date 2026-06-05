@@ -461,15 +461,14 @@ export const albums = pgTable("albums", {
   legacyGogoodsIdUniq: uniqueIndex("albums_legacy_gogoods_id_uniq")
     .on(t.legacyGogoodsId)
     .where(sql`${t.legacyGogoodsId} IS NOT NULL`),
-  // Task #1254 — share-slug uniqueness must exclude soft-deleted rows so
-  // trashing a release frees its slug for re-use (mirrors the vendors
-  // domain fix). drizzle-kit doesn't push WHERE-claused indexes; the
-  // matching partial index lives in scripts/post-merge.sh
-  // (migrate_softdelete_natural_key_uniques) +
-  // scripts/prod-schema-fixups/2026-06-04-task-1254-softdelete-natural-key-uniques.sql.
-  shareSlugUniq: uniqueIndex("albums_share_slug_unique")
-    .on(t.shareSlug)
-    .where(sql`${t.shareSlug} IS NOT NULL AND ${t.deletedAt} IS NULL`),
+  // Task #1310 — album share-slug is now unique PER ARTIST, not globally.
+  // The matching partial composite index lives in scripts/post-merge.sh
+  // (migrate_task_1310_share_slugs) because drizzle-kit doesn't push
+  // WHERE-claused indexes. The old global albums_share_slug_unique index
+  // is dropped there and replaced with this per-artist composite.
+  artistShareSlugUniq: uniqueIndex("albums_artist_share_slug_unique")
+    .on(t.primaryArtistId, t.shareSlug)
+    .where(sql`${t.primaryArtistId} IS NOT NULL AND ${t.shareSlug} IS NOT NULL AND ${t.deletedAt} IS NULL`),
 }));
 
 export const ALBUM_SELL_MODES = ["direct", "shopify"] as const;
@@ -1005,11 +1004,24 @@ export const people = pgTable("people", {
   // AddressAutocompleteField on the Person Identity panel.
   shippingAddressStruct: jsonb("shipping_address_struct").$type<PartnerAddressSnapshot>(),
   legacyGogoodsId: text("legacy_gogoods_id"),
+  // Task #1310 — two-part artist/album share links. The artist "part" of
+  // the URL get.goodtunes.music/<artist>/<album> lives here (per-artist,
+  // stable across all of that artist's releases). Nullable; null means no
+  // clean link set yet. Unique on non-null, soft-delete aware: trashing a
+  // person frees their slug for re-use. The matching partial unique index
+  // lives in scripts/post-merge.sh (migrate_task_1310_share_slugs) because
+  // drizzle-kit doesn't push WHERE-claused indexes reliably.
+  artistShareSlug: text("artist_share_slug"),
   ...softDeleteCols,
 }, (t) => ({
   legacyGogoodsIdUniq: uniqueIndex("people_legacy_gogoods_id_uniq")
     .on(t.legacyGogoodsId)
     .where(sql`${t.legacyGogoodsId} IS NOT NULL`),
+  // Task #1310 — artist share slug must be unique across live (non-trashed)
+  // people rows. Matches the partial index in post-merge.sh.
+  artistShareSlugUniq: uniqueIndex("people_artist_share_slug_unique")
+    .on(t.artistShareSlug)
+    .where(sql`${t.artistShareSlug} IS NOT NULL AND ${t.deletedAt} IS NULL`),
 }));
 
 // Task #190 — Band ↔ member roster. One row per (band, member) pair;

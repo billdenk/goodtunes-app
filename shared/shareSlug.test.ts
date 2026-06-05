@@ -6,7 +6,9 @@ import { dirname, join } from "node:path";
 import {
   normalizeShareSlug,
   validateShareSlug,
+  shareUrlForSlugs,
   RESERVED_SLUGS,
+  SHARE_SLUG_MIN,
 } from "./shareSlug";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -45,10 +47,19 @@ test("validateShareSlug rejects reserved words (matrix)", () => {
     "login",
     "admin",
     "welcome-invitee",
+    "g",
   ]) {
     const r = validateShareSlug(reserved);
     assert.equal(r.ok, false, `expected "${reserved}" to be reserved/rejected`);
   }
+});
+
+// Task #1310 — shareUrlForSlugs builds the two-part URL
+test("shareUrlForSlugs builds the correct two-part URL", () => {
+  assert.equal(
+    shareUrlForSlugs("nightbirde", "its-ok"),
+    "https://get.goodtunes.music/nightbirde/its-ok",
+  );
 });
 
 // Drift guard: every literal single-segment <Route path="/x"> in App.tsx must
@@ -75,5 +86,34 @@ test("every single-segment App.tsx route is a reserved slug", () => {
     missing,
     [],
     `App.tsx single-segment routes missing from RESERVED_SLUGS: ${missing.join(", ")}`,
+  );
+});
+
+// Task #1310 — Drift guard: every literal first-segment of a two-segment
+// App.tsx route (e.g. /album/:id → "album") must also be in RESERVED_SLUGS
+// so an artist share slug can never shadow a real route. If this fails, add
+// the missing path(s) to RESERVED_SLUGS in shared/shareSlug.ts.
+test("every two-segment App.tsx route prefix is a reserved slug", () => {
+  const appTsx = readFileSync(
+    join(here, "..", "client", "src", "App.tsx"),
+    "utf8",
+  );
+  // Match routes where the second segment starts with ":" (a param), capturing
+  // the literal first segment. E.g. path="/album/:id" → "album".
+  const re = /path="\/([^/":]+)\/:/g;
+  const prefixes = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(appTsx)) !== null) {
+    const seg = m[1].toLowerCase();
+    // Only segments that could ever pass slug validation need to be reserved.
+    // Segments shorter than SHARE_SLUG_MIN can never be valid artist slugs
+    // so they are implicitly safe — but we reserve them anyway for clarity.
+    prefixes.add(seg);
+  }
+  const missing = [...prefixes].filter((p) => !RESERVED_SLUGS.has(p));
+  assert.deepEqual(
+    missing,
+    [],
+    `App.tsx two-segment route prefixes missing from RESERVED_SLUGS: ${missing.join(", ")}`,
   );
 });

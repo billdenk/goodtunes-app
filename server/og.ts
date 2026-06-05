@@ -348,17 +348,24 @@ export async function injectOgForUrl(
     return injectDefaultOg(template, req);
   }
 
-  // Task #965 — clean per-release share link. A single-segment path that
-  // isn't a reserved word may be a release share slug. Normalize it the same
-  // way the resolver does, skip reserved words (real routes / infra paths),
-  // and try the by-slug album OG. On no-match fall through to the branded
-  // default card. Multi-segment paths never reach here.
-  const slugMatch = pathOnly.match(/^\/([^/]+)\/?$/);
-  if (slugMatch) {
-    const slug = normalizeShareSlug(decodeURIComponent(slugMatch[1]));
-    if (slug && !RESERVED_SLUGS.has(slug)) {
-      const out = await injectAlbumOgBySlug(template, req, slug);
-      if (out) return out;
+  // Task #1310 — two-part artist/album share link
+  // (get.goodtunes.music/<artist>/<album>). Must be checked BEFORE the
+  // single-segment slug check so the two-segment path wins when both
+  // segments are non-reserved. Both segments are normalized; if either
+  // is reserved we fall through to the default.
+  const twoSegMatch = pathOnly.match(/^\/([^/]+)\/([^/]+)\/?$/);
+  if (twoSegMatch) {
+    const artistSeg = normalizeShareSlug(decodeURIComponent(twoSegMatch[1]));
+    const albumSeg = normalizeShareSlug(decodeURIComponent(twoSegMatch[2]));
+    if (artistSeg && !RESERVED_SLUGS.has(artistSeg) && albumSeg && !RESERVED_SLUGS.has(albumSeg)) {
+      const artist = await storage.getPersonByArtistShareSlug(artistSeg);
+      if (artist) {
+        const album = await storage.getAlbumByArtistAndSlug(artist.id, albumSeg);
+        if (album && !album.isPrepping) {
+          const out = await injectAlbumOgBySlug(template, req, album.shareSlug ?? albumSeg);
+          if (out) return out;
+        }
+      }
     }
   }
 

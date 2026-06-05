@@ -1,4 +1,5 @@
 // Task #965 — clean per-release share links on get.goodtunes.music/<slug>.
+// Task #1310 — two-part artist/album share links: get.goodtunes.music/<artist>/<album>.
 // One source of truth for slug normalization + validation so the admin
 // editor (client), the PUT validator (server), and the public resolver
 // all agree on what a legal slug is.
@@ -7,6 +8,10 @@
 // slug. These are either real top-level routes in client/src/App.tsx,
 // server-served paths, or words we want to keep open for future routes.
 // Keep this list lowercase; matching is done against the normalized slug.
+// NOTE: Every first segment of a two-segment route in App.tsx (e.g. /album/:id,
+// /artist/:slug, /g/:shortId) must also be in this set so an artist share slug
+// can never shadow a real route — enforced by the drift-guard test in
+// shared/shareSlug.test.ts.
 export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   // server / infra paths
   "api",
@@ -72,6 +77,10 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "manager",
   "press",
   "presses",
+  // Task #1310 — /g/:shortId (cert provenance short-link; first segment
+  // must be reserved even though "g" can't pass the min-length slug check,
+  // so the drift-guard test never flags it as missing).
+  "g",
   // admin
   "admin",
   // misc
@@ -92,14 +101,21 @@ export const SHARE_SLUG_MIN = 2;
 export const SHARE_SLUG_MAX = 64;
 
 // Canonical host that fronts the clean per-release share links
-// (get.goodtunes.music/<slug>). One source of truth so the admin editor,
+// (get.goodtunes.music/<artist>/<album>). One source of truth so the admin editor,
 // the fan copy-link buttons, and OG/unfurl all build the same URL.
 export const SHARE_LINK_HOST = "get.goodtunes.music";
 
-// Build the clean public share URL for a saved slug. Callers should only
-// pass an already-saved slug (normalize first if it came from raw input).
+// Build the clean public share URL for a saved single slug (legacy — prefer
+// shareUrlForSlugs for new two-part links). Callers should only pass an
+// already-saved slug (normalize first if it came from raw input).
 export function shareUrlForSlug(slug: string): string {
   return `https://${SHARE_LINK_HOST}/${slug}`;
+}
+
+// Task #1310 — Build the two-part public share URL from the artist slug
+// and album slug. Both should already be saved/normalized before calling.
+export function shareUrlForSlugs(artistSlug: string, albumSlug: string): string {
+  return `https://${SHARE_LINK_HOST}/${artistSlug}/${albumSlug}`;
 }
 
 // Normalize any operator input into a URL-safe slug:

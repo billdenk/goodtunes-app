@@ -166,23 +166,24 @@ function Storefront() {
   return <AlbumDetail albumId={launchAlbumId} />;
 }
 
-// Task #965 — clean per-release share link. get.goodtunes.music/<slug> (and
-// /<slug> on any host) resolves a release via the PUBLIC by-slug endpoint
-// (no login wall), primes the React Query cache under ["/api/albums", id]
-// so AlbumDetail renders the same preview-and-buy page it shows for
-// /album/:id without an authed refetch, then mounts AlbumDetail. A slug that
-// doesn't resolve to a buy-eligible release shows the standard not-found.
-function ShareSlug() {
-  const params = useParams<{ slug: string }>();
-  const slug = params.slug ?? "";
+// Task #1310 — two-part artist/album share link
+// (get.goodtunes.music/<artist>/<album>). Resolves via the PUBLIC two-part
+// endpoint (no login wall), primes the React Query cache under
+// ["/api/albums", id] so AlbumDetail renders without an authed refetch.
+// A path that doesn't resolve to a buy-eligible release shows not-found.
+function ShareSlugTwo() {
+  const params = useParams<{ artistSlug: string; albumSlug: string }>();
+  const artistSlug = params.artistSlug ?? "";
+  const albumSlug = params.albumSlug ?? "";
+  const cacheKey = `${artistSlug}/${albumSlug}`;
   const { data, isLoading, isError } = useQuery<{ id: string } | null>({
-    queryKey: ["/api/public/album-by-slug", slug],
-    enabled: !!slug,
+    queryKey: ["/api/public/album-by-slug", cacheKey],
+    enabled: !!(artistSlug && albumSlug),
     retry: false,
     staleTime: Infinity,
     queryFn: async () => {
       const r = await fetch(
-        `/api/public/album-by-slug/${encodeURIComponent(slug)}`,
+        `/api/public/album-by-slug/${encodeURIComponent(artistSlug)}/${encodeURIComponent(albumSlug)}`,
         { credentials: "include" },
       );
       if (r.status === 404) return null;
@@ -661,11 +662,13 @@ function Router() {
         <Route path="/admin">
           <Redirect to="/admin/dashboard" />
         </Route>
-        {/* Task #965 — clean per-release share link. MUST stay below every
-            literal single-segment route above (server reserved-word list
-            mirrors these) so /collection, /store, /search, /artist, etc.
-            win; falls through to the public by-slug resolver otherwise. */}
-        <Route path="/:slug" component={ShareSlug} />
+        {/* Task #1310 — two-part artist/album share link. MUST stay below
+            every literal two-segment route above (e.g. /album/:id,
+            /artist/:slug, /instrument/:id) so those win; falls through to
+            the public two-part resolver otherwise. Both segments are
+            validated as non-reserved by the server before the album
+            resolves. */}
+        <Route path="/:artistSlug/:albumSlug" component={ShareSlugTwo} />
         <Route path="/">
           {isStoreHost() ? (
             <Redirect to="/store" />

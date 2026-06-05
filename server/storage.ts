@@ -142,6 +142,12 @@ export interface IStorage {
   // PUT uniqueness check passes includeHidden+includeTrashed so a slug
   // can't silently collide with a hidden/trashed row).
   getAlbumBySlug(slug: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean }): Promise<AlbumWithLabel | undefined>;
+  // Task #1310 — two-part artist/album share link resolver. Looks up the
+  // artist by their artistShareSlug on the people table, then finds an album
+  // by (primary_artist_id, share_slug). Same buy-eligibility gating as
+  // getAlbumBySlug unless opts override.
+  getPersonByArtistShareSlug(artistSlug: string): Promise<import("../shared/schema").Person | undefined>;
+  getAlbumByArtistAndSlug(artistId: string, albumSlug: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean }): Promise<AlbumWithLabel | undefined>;
   // Returns the set of album IDs that have at least one explicit song.
   // Used by the /api/albums + /api/albums/:id routes to derive the
   // album-level "E" badge from per-song flags without a per-album
@@ -1047,6 +1053,35 @@ export class DbStorage implements IStorage {
     if (row.albums.isHidden && !opts?.includeHidden) return undefined;
     // Sunrise gate, mirrored from getAlbumById — a future-dated album
     // reads as not-found for fans until its date arrives.
+    if (
+      !opts?.includeHidden &&
+      row.albums.goodTunesReleaseDate &&
+      row.albums.goodTunesReleaseDate > todayISODate()
+    ) {
+      return undefined;
+    }
+    return { ...row.albums, label: row.labels ?? null };
+  }
+  // Task #1310 — look up an artist person by their artist share slug (the
+  // first segment of the two-part get.goodtunes.music/<artist>/<album> URL).
+  async getPersonByArtistShareSlug(artistSlug: string): Promise<import("../shared/schema").Person | undefined> {
+    const [p] = await db
+      .select()
+      .from(people)
+      .where(and(eq(people.artistShareSlug, artistSlug), isNull(people.deletedAt)));
+    return p;
+  }
+  // Task #1310 — resolve an album by (artist id, album share slug). Same
+  // gating as getAlbumBySlug (hidden / trashed / sunrise) unless opts override.
+  async getAlbumByArtistAndSlug(artistId: string, albumSlug: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean }): Promise<AlbumWithLabel | undefined> {
+    const [row] = await db
+      .select()
+      .from(albums)
+      .leftJoin(labels, and(eq(albums.labelId, labels.id), isNull(labels.deletedAt)))
+      .where(and(eq(albums.primaryArtistId, artistId), eq(albums.shareSlug, albumSlug)));
+    if (!row) return undefined;
+    if (row.albums.deletedAt && !opts?.includeTrashed) return undefined;
+    if (row.albums.isHidden && !opts?.includeHidden) return undefined;
     if (
       !opts?.includeHidden &&
       row.albums.goodTunesReleaseDate &&
