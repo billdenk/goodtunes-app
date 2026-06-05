@@ -4876,3 +4876,147 @@ SQL
 }
 backfill_task_1319_brave_credits dev  "${DATABASE_URL:-}"
 backfill_task_1319_brave_credits prod "${PROD_DATABASE_URL:-}"
+
+# Task #1329 — Stamp SPIN Promo cohort lifecycle dates (sunrise + sunset).
+# Every SPIN Promo album (is_spin_promo=true, not soft-deleted) except
+# Crashing Dream (Deluxe) gets:
+#   good_tunes_release_date = '2024-08-28'  (sunrise — consistent window open)
+#   streaming_release_date  = GREATEST('2024-09-28', last paid-order date)
+# For albums with no paid orders the sunset lands on 9/28/24; for the ~10
+# that kept selling it lands on their real last-sale date. Idempotent: re-run
+# on a DB that already has the marker is a no-op.
+backfill_task_1329_spin_dates() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1329 SPIN dates on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+  v_crashing_dream constant text := '9c4273fc-43ac-4441-a013-b6f2ee0cf8ad';
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_1329_spin_lifecycle_dates'
+  ) THEN
+    -- Compute per-album last paid-order date and stamp both lifecycle columns.
+    -- Cohort = SPIN Promo, active, excluding Crashing Dream (Deluxe).
+    WITH last_sale AS (
+      SELECT
+        o.album_id,
+        TO_CHAR(MAX(o.created_at), 'YYYY-MM-DD') AS last_sale_date
+      FROM orders o
+      WHERE o.status IN ('paid', 'shipped', 'complete', 'completed')
+      GROUP BY o.album_id
+    )
+    UPDATE albums a
+    SET
+      good_tunes_release_date = '2024-08-28',
+      streaming_release_date  = GREATEST(
+        '2024-09-28',
+        COALESCE(ls.last_sale_date, '2024-09-28')
+      )
+    FROM last_sale ls
+    RIGHT JOIN (
+      SELECT id FROM albums
+      WHERE is_spin_promo = true
+        AND deleted_at IS NULL
+        AND id <> v_crashing_dream
+    ) cohort ON cohort.id = ls.album_id
+    WHERE a.id = cohort.id;
+
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_1329_spin_lifecycle_dates');
+    RAISE NOTICE 'task-1329 SPIN dates backfill applied: % albums updated', v_count;
+  ELSE
+    RAISE NOTICE 'task-1329 SPIN dates backfill already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1329 SPIN dates backfill ok on $label"
+    echo "$out" | grep -i 'task-1329' || true
+  else
+    echo "post-merge: WARNING — task-1329 SPIN dates backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_1329_spin_dates dev  "${DATABASE_URL:-}"
+backfill_task_1329_spin_dates prod "${PROD_DATABASE_URL:-}"
+
+# Task #1329 — Stamp Nick Carter catalog sunset dates.
+# Every Nick Carter album (primary_artist_id = known UUID, active) that has
+# at least one paid order gets streaming_release_date = its last paid-order
+# date. Albums with zero paid orders are left untouched (Love Life Tragedy
+# already has a hand-set date of 2025-05-15). good_tunes_release_date is
+# never touched — those are real release dates.
+backfill_task_1329_nick_dates() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1329 Nick dates on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+  v_nick constant text := '7675d47c-a04b-4936-992e-eeb29c77f645';
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_1329_nick_lifecycle_dates'
+  ) THEN
+    -- Set each Nick album's sunset to its last paid-order date.
+    -- Albums with zero paid orders are excluded (INNER JOIN) — their existing
+    -- streaming_release_date (or null) is preserved unchanged.
+    WITH last_sale AS (
+      SELECT
+        o.album_id,
+        TO_CHAR(MAX(o.created_at), 'YYYY-MM-DD') AS last_sale_date
+      FROM orders o
+      WHERE o.status IN ('paid', 'shipped', 'complete', 'completed')
+      GROUP BY o.album_id
+    )
+    UPDATE albums a
+    SET streaming_release_date = ls.last_sale_date
+    FROM last_sale ls
+    WHERE a.id = ls.album_id
+      AND a.primary_artist_id = v_nick
+      AND a.deleted_at IS NULL;
+
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_1329_nick_lifecycle_dates');
+    RAISE NOTICE 'task-1329 Nick dates backfill applied: % albums updated', v_count;
+  ELSE
+    RAISE NOTICE 'task-1329 Nick dates backfill already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1329 Nick dates backfill ok on $label"
+    echo "$out" | grep -i 'task-1329' || true
+  else
+    echo "post-merge: WARNING — task-1329 Nick dates backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_1329_nick_dates dev  "${DATABASE_URL:-}"
+backfill_task_1329_nick_dates prod "${PROD_DATABASE_URL:-}"
