@@ -4335,3 +4335,272 @@ SQL
 }
 migrate_task_1310_share_slugs dev  "${DATABASE_URL:-}"
 migrate_task_1310_share_slugs prod "${PROD_DATABASE_URL:-}"
+
+# Task #1319 — Enter Nightbirde's 'Still Got Dreams' credits onto the
+# Hope + Love 7" Duos. Creates People records for the production/creative
+# team, inserts album-wide credits on both the Hope Duo
+# (b250a5a5-98cc-4673-9903-ab39e5278d8c) and Love Duo
+# (373ab2b4-9c24-448b-837f-66903bbb81aa), and attaches per-song
+# songwriter/performer credits to the specific tracks called out in the
+# credit document. Jane Marczewski reuses her existing "Nightbirde" Person
+# record (3ca615d6-7c04-422f-8dab-3f89607e648e). All inserts are guarded by
+# NOT EXISTS on (album_id/song_id, name, role, deleted_at IS NULL) so
+# re-runs are safe and later admin edits won't be overwritten.
+backfill_task_1319_nightbirde_credits() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1319 nightbirde credits backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_jane_id    text := '3ca615d6-7c04-422f-8dab-3f89607e648e';
+  v_geoff_id   text;
+  v_amber_id   text;
+  v_rice_id    text;
+  v_dan_id     text;
+  v_nika_id    text;
+  v_aaron_id   text;
+  v_jennifer_id text;
+  v_sidumo_id  text;
+  v_abbey_id   text;
+  v_katelyn_id text;
+  v_konata_id  text;
+  v_hope_id    text := 'b250a5a5-98cc-4673-9903-ab39e5278d8c';
+  v_love_id    text := '373ab2b4-9c24-448b-837f-66903bbb81aa';
+  v_empire_id  text := 'c65d351d-270c-400d-8e9e-1471ca9cf340';
+  v_haisy_id   text := '4a0fb064-1afa-4214-91b0-ea5ddb01b72f';
+  v_laisy_id   text := '4fdf33f8-69f5-4abf-b8af-075eb153cab7';
+  v_sgd_id     text := 'eb1af405-a7f5-43d8-8e63-8a86dcd578d8';
+  v_pos        integer;
+  r            record;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_1319_nightbirde_credits'
+  ) THEN
+
+    -- ── Step 1: People (match on name; insert if not already present) ──────
+    SELECT id INTO v_geoff_id   FROM people WHERE name = 'Geoff Duncan'               AND deleted_at IS NULL LIMIT 1;
+    IF v_geoff_id   IS NULL THEN v_geoff_id   := gen_random_uuid()::text;
+      INSERT INTO people (id, name) VALUES (v_geoff_id,   'Geoff Duncan');               END IF;
+
+    SELECT id INTO v_amber_id   FROM people WHERE name = 'Amber Stoneman'             AND deleted_at IS NULL LIMIT 1;
+    IF v_amber_id   IS NULL THEN v_amber_id   := gen_random_uuid()::text;
+      INSERT INTO people (id, name) VALUES (v_amber_id,   'Amber Stoneman');             END IF;
+
+    SELECT id INTO v_rice_id    FROM people WHERE name = 'Nicholas "Rice" Daniels'    AND deleted_at IS NULL LIMIT 1;
+    IF v_rice_id    IS NULL THEN v_rice_id    := gen_random_uuid()::text;
+      INSERT INTO people (id, name) VALUES (v_rice_id,    'Nicholas "Rice" Daniels');    END IF;
+
+    SELECT id INTO v_dan_id     FROM people WHERE name = 'Dan Shike'                  AND deleted_at IS NULL LIMIT 1;
+    IF v_dan_id     IS NULL THEN v_dan_id     := gen_random_uuid()::text;
+      INSERT INTO people (id, name) VALUES (v_dan_id,     'Dan Shike');                  END IF;
+
+    SELECT id INTO v_nika_id    FROM people WHERE name = 'Nika Duncan'                AND deleted_at IS NULL LIMIT 1;
+    IF v_nika_id    IS NULL THEN v_nika_id    := gen_random_uuid()::text;
+      INSERT INTO people (id, name) VALUES (v_nika_id,    'Nika Duncan');                END IF;
+
+    SELECT id INTO v_aaron_id   FROM people WHERE name = 'Aaron Wagner'               AND deleted_at IS NULL LIMIT 1;
+    IF v_aaron_id   IS NULL THEN v_aaron_id   := gen_random_uuid()::text;
+      INSERT INTO people (id, name) VALUES (v_aaron_id,   'Aaron Wagner');               END IF;
+
+    SELECT id INTO v_jennifer_id FROM people WHERE name = 'Jennifer Wagner'           AND deleted_at IS NULL LIMIT 1;
+    IF v_jennifer_id IS NULL THEN v_jennifer_id := gen_random_uuid()::text;
+      INSERT INTO people (id, name) VALUES (v_jennifer_id, 'Jennifer Wagner');           END IF;
+
+    SELECT id INTO v_sidumo_id  FROM people WHERE name = 'Sidumo Nyamezele'           AND deleted_at IS NULL LIMIT 1;
+    IF v_sidumo_id  IS NULL THEN v_sidumo_id  := gen_random_uuid()::text;
+      INSERT INTO people (id, name) VALUES (v_sidumo_id,  'Sidumo Nyamezele');           END IF;
+
+    SELECT id INTO v_abbey_id   FROM people WHERE name = 'Abbey James'                AND deleted_at IS NULL LIMIT 1;
+    IF v_abbey_id   IS NULL THEN v_abbey_id   := gen_random_uuid()::text;
+      INSERT INTO people (id, name) VALUES (v_abbey_id,   'Abbey James');                END IF;
+
+    SELECT id INTO v_katelyn_id FROM people WHERE name = 'Katelyn Marczewski'         AND deleted_at IS NULL LIMIT 1;
+    IF v_katelyn_id IS NULL THEN v_katelyn_id := gen_random_uuid()::text;
+      INSERT INTO people (id, name) VALUES (v_katelyn_id, 'Katelyn Marczewski');         END IF;
+
+    SELECT id INTO v_konata_id  FROM people WHERE name = 'Konata Small'               AND deleted_at IS NULL LIMIT 1;
+    IF v_konata_id  IS NULL THEN v_konata_id  := gen_random_uuid()::text;
+      INSERT INTO people (id, name) VALUES (v_konata_id,  'Konata Small');               END IF;
+
+    -- ── Step 2: Album-wide credits on BOTH Hope Duo + Love Duo ─────────────
+    FOR r IN (SELECT id AS aid FROM albums WHERE id IN (v_hope_id, v_love_id) AND deleted_at IS NULL) LOOP
+      v_pos := 0;
+
+      -- Production
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, v_geoff_id, 'Geoff Duncan', 'Lead Producer', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'Geoff Duncan' AND role = 'Lead Producer' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, v_geoff_id, 'Geoff Duncan', 'Engineer, Recording & Post Production', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'Geoff Duncan' AND role = 'Engineer, Recording & Post Production' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, v_amber_id, 'Amber Stoneman', 'Associate Producer', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'Amber Stoneman' AND role = 'Associate Producer' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, v_rice_id, 'Nicholas "Rice" Daniels', 'Assistant Associate Producer', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'Nicholas "Rice" Daniels' AND role = 'Assistant Associate Producer' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, v_dan_id, 'Dan Shike', 'Mastering Engineer', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'Dan Shike' AND role = 'Mastering Engineer' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      -- Additional Recording & Engineering
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, v_nika_id, 'Nika Duncan', 'Background Vocals', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'Nika Duncan' AND role = 'Background Vocals' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      -- Art & Creative Direction
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, v_amber_id, 'Amber Stoneman', 'Creative Director; Album Art & Music Direction', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'Amber Stoneman' AND role = 'Creative Director; Album Art & Music Direction' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, v_rice_id, 'Nicholas "Rice" Daniels', 'Assistant Creative Director', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'Nicholas "Rice" Daniels' AND role = 'Assistant Creative Director' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, v_abbey_id, 'Abbey James', E'Album Art\'s Original Photos', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'Abbey James' AND role = E'Album Art\'s Original Photos' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, v_amber_id, 'Amber Stoneman', 'Album Merchandise Creative Direction & Design', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'Amber Stoneman' AND role = 'Album Merchandise Creative Direction & Design' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, v_rice_id, 'Nicholas "Rice" Daniels', 'Album Merchandise Creative Direction & Design', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'Nicholas "Rice" Daniels' AND role = 'Album Merchandise Creative Direction & Design' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, v_katelyn_id, 'Katelyn Marczewski', 'Album Merchandise Creative Direction & Design', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'Katelyn Marczewski' AND role = 'Album Merchandise Creative Direction & Design' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      -- Administration
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, v_rice_id, 'Nicholas "Rice" Daniels', 'Album Administrator', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'Nicholas "Rice" Daniels' AND role = 'Album Administrator' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      -- Non-person entities (person_id intentionally NULL)
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, NULL, 'Nightbirde LLC', 'Record Label', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'Nightbirde LLC' AND role = 'Record Label' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, NULL, 'Jane Marczewski Publishing', 'Publishing', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'Jane Marczewski Publishing' AND role = 'Publishing' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT r.aid, NULL, 'The Nightbirde Foundation & The Marczewski Family', 'Honorable Mentions', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = r.aid AND name = 'The Nightbirde Foundation & The Marczewski Family' AND role = 'Honorable Mentions' AND deleted_at IS NULL);
+    END LOOP;
+
+    -- ── Step 3: Songwriter credit for Jane (Nightbirde) on ALL songs ────────
+    -- Applies to every non-deleted song on both Duos. Idempotent via
+    -- NOT EXISTS on (song_id, name, role, deleted_at IS NULL).
+    FOR r IN (
+      SELECT s.id AS sid
+      FROM songs s
+      WHERE s.album_id IN (v_hope_id, v_love_id)
+        AND s.deleted_at IS NULL
+    ) LOOP
+      INSERT INTO track_writers (song_id, person_id, name, role, position)
+        SELECT r.sid, v_jane_id, 'Nightbirde', 'Songwriter', 0
+        WHERE NOT EXISTS (
+          SELECT 1 FROM track_writers
+          WHERE song_id = r.sid AND name = 'Nightbirde' AND role = 'Songwriter' AND deleted_at IS NULL
+        );
+    END LOOP;
+
+    -- ── Step 4: Song-specific credits ──────────────────────────────────────
+
+    -- "Empire" (Hope Duo): Konata Small — Songwriter
+    INSERT INTO track_writers (song_id, person_id, name, role, position)
+      SELECT v_empire_id, v_konata_id, 'Konata Small', 'Songwriter', 1
+      WHERE EXISTS (SELECT 1 FROM songs WHERE id = v_empire_id)
+        AND NOT EXISTS (SELECT 1 FROM track_writers WHERE song_id = v_empire_id AND name = 'Konata Small' AND role = 'Songwriter' AND deleted_at IS NULL);
+
+    -- "All I See Is You" (Hope Duo): Aaron Wagner + Jennifer Wagner — Songwriter
+    INSERT INTO track_writers (song_id, person_id, name, role, position)
+      SELECT v_haisy_id, v_aaron_id, 'Aaron Wagner', 'Songwriter', 1
+      WHERE EXISTS (SELECT 1 FROM songs WHERE id = v_haisy_id)
+        AND NOT EXISTS (SELECT 1 FROM track_writers WHERE song_id = v_haisy_id AND name = 'Aaron Wagner' AND role = 'Songwriter' AND deleted_at IS NULL);
+
+    INSERT INTO track_writers (song_id, person_id, name, role, position)
+      SELECT v_haisy_id, v_jennifer_id, 'Jennifer Wagner', 'Songwriter', 2
+      WHERE EXISTS (SELECT 1 FROM songs WHERE id = v_haisy_id)
+        AND NOT EXISTS (SELECT 1 FROM track_writers WHERE song_id = v_haisy_id AND name = 'Jennifer Wagner' AND role = 'Songwriter' AND deleted_at IS NULL);
+
+    -- "All I See Is You" (Hope Duo): Aaron Wagner — Additional Production & Engineering
+    INSERT INTO track_performers (song_id, person_id, name, role, position)
+      SELECT v_haisy_id, v_aaron_id, 'Aaron Wagner', 'Additional Production & Engineering', 0
+      WHERE EXISTS (SELECT 1 FROM songs WHERE id = v_haisy_id)
+        AND NOT EXISTS (SELECT 1 FROM track_performers WHERE song_id = v_haisy_id AND name = 'Aaron Wagner' AND role = 'Additional Production & Engineering' AND deleted_at IS NULL);
+
+    -- "All I See Is You" (Love Duo): Aaron Wagner + Jennifer Wagner — Songwriter
+    INSERT INTO track_writers (song_id, person_id, name, role, position)
+      SELECT v_laisy_id, v_aaron_id, 'Aaron Wagner', 'Songwriter', 1
+      WHERE EXISTS (SELECT 1 FROM songs WHERE id = v_laisy_id)
+        AND NOT EXISTS (SELECT 1 FROM track_writers WHERE song_id = v_laisy_id AND name = 'Aaron Wagner' AND role = 'Songwriter' AND deleted_at IS NULL);
+
+    INSERT INTO track_writers (song_id, person_id, name, role, position)
+      SELECT v_laisy_id, v_jennifer_id, 'Jennifer Wagner', 'Songwriter', 2
+      WHERE EXISTS (SELECT 1 FROM songs WHERE id = v_laisy_id)
+        AND NOT EXISTS (SELECT 1 FROM track_writers WHERE song_id = v_laisy_id AND name = 'Jennifer Wagner' AND role = 'Songwriter' AND deleted_at IS NULL);
+
+    -- "All I See Is You" (Love Duo): Aaron Wagner — Additional Production & Engineering
+    INSERT INTO track_performers (song_id, person_id, name, role, position)
+      SELECT v_laisy_id, v_aaron_id, 'Aaron Wagner', 'Additional Production & Engineering', 0
+      WHERE EXISTS (SELECT 1 FROM songs WHERE id = v_laisy_id)
+        AND NOT EXISTS (SELECT 1 FROM track_performers WHERE song_id = v_laisy_id AND name = 'Aaron Wagner' AND role = 'Additional Production & Engineering' AND deleted_at IS NULL);
+
+    -- "Still Got Dreams" (Hope Duo): Sidumo Nyamezele — Choir Director
+    INSERT INTO track_performers (song_id, person_id, name, role, position)
+      SELECT v_sgd_id, v_sidumo_id, 'Sidumo Nyamezele', 'Choir Director', 0
+      WHERE EXISTS (SELECT 1 FROM songs WHERE id = v_sgd_id)
+        AND NOT EXISTS (SELECT 1 FROM track_performers WHERE song_id = v_sgd_id AND name = 'Sidumo Nyamezele' AND role = 'Choir Director' AND deleted_at IS NULL);
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_1319_nightbirde_credits');
+    RAISE NOTICE 'task-1319 backfill applied: Nightbirde credits for Hope + Love 7" Duos';
+  ELSE
+    RAISE NOTICE 'task-1319 backfill already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1319 nightbirde credits backfill ok on $label"
+    echo "$out" | grep -i 'task-1319' || true
+  else
+    echo "post-merge: WARNING — task-1319 nightbirde credits backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_1319_nightbirde_credits dev  "${DATABASE_URL:-}"
+backfill_task_1319_nightbirde_credits prod "${PROD_DATABASE_URL:-}"
