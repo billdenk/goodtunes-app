@@ -72,7 +72,7 @@ function formatAddress(a: StripeAddressSnapshot | null | undefined): string | nu
 // Display labels for the payment-instrument snapshot captured from Stripe.
 const CARD_BRAND_LABELS: Record<string, string> = {
   visa: "Visa", mastercard: "Mastercard", amex: "Amex", discover: "Discover",
-  diners: "Diners", jcb: "JCB", unionpay: "UnionPay",
+  diners: "Diners", jcb: "JCB", unionpay: "UnionPay", cartes_bancaires: "Cartes Bancaires",
 };
 const WALLET_LABELS: Record<string, string> = {
   apple_pay: "Apple Pay", google_pay: "Google Pay", samsung_pay: "Samsung Pay", link: "Link",
