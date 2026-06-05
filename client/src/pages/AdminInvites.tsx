@@ -80,7 +80,7 @@ export function AdminInvites() {
   // Task #351 — Team-invite shape: optional Identity/Manager/Team role
   // + target Person (search the People catalog) + optional pre-flighted
   // album draft to attach so the invitee lands in the editor.
-  const [inviteRole, setInviteRole] = useState<"" | "identity" | "manager" | "team">("");
+  const [inviteRole, setInviteRole] = useState<"" | "identity" | "manager" | "team" | "label">("");
   const [targetPersonId, setTargetPersonId] = useState<string | null>(null);
   const [targetPersonName, setTargetPersonName] = useState<string>("");
   const [preFlightedAlbumId, setPreFlightedAlbumId] = useState<string | null>(null);
@@ -404,6 +404,7 @@ export function AdminInvites() {
                   <option value="identity">Identity (this person IS the artist)</option>
                   <option value="manager">Manager (manages the artist)</option>
                   <option value="team">Team (band/team member — credits + gear only)</option>
+                  <option value="label">Label (the artist's record label — recognition only)</option>
                 </select>
               </div>
             </div>
@@ -717,6 +718,19 @@ export function AdminInvites() {
   );
 }
 
+// Normalizes raw invite_role column values to human-readable labels for
+// every invite list surface in this file. Add new roles here to keep
+// display consistent across the review queue and any future invite lists.
+const INVITE_ROLE_DISPLAY: Record<string, string> = {
+  identity: "Identity",
+  manager: "Manager",
+  team: "Team",
+  label: "Label",
+  npo_ambassador: "Ambassador",
+  npo_staff: "Non-profit staff",
+  press_staff: "Press staff",
+};
+
 // Task #351 — Claimed-Person + anti-solicitation review queue.
 // Super-admin only; the GET endpoint 403s for non-super so this hides
 // itself silently on lower-tier admin accounts.
@@ -770,7 +784,7 @@ function ReviewQueuePanel() {
             <div className="min-w-0 flex-1">
               <div className="font-medium text-slate-900 truncate" data-testid={`text-review-email-${inv.id}`}>{inv.email}</div>
               <div className="text-xs text-slate-500 mt-0.5">
-                {inv.inviteRole || inv.role}
+                {inv.inviteRole ? (INVITE_ROLE_DISPLAY[inv.inviteRole] ?? inv.inviteRole) : inv.role}
                 {inv.targetPersonName && <> · <span className="font-medium text-slate-700">{inv.targetPersonName}</span></>}
                 {inv.targetSpotifyId && <> · <span className="text-amber-700">Spotify-claimed</span></>}
                 {inv.targetIsGroup && <> · <span className="text-amber-700">group</span></>}

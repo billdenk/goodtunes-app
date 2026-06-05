@@ -45,7 +45,7 @@ interface Props {
 // Invite sub-roles, in the order the task asks for them. Each maps onto
 // the existing team-invite `inviteRole` value; the role-to-verb defaults
 // behind each are unchanged (see docs/roles-and-permissions.md).
-const INVITE_ROLES: Array<{ value: "manager" | "team" | "identity"; label: string; hint: string }> = [
+const INVITE_ROLES: Array<{ value: "manager" | "team" | "identity" | "label"; label: string; hint: string }> = [
   {
     value: "manager",
     label: "Manager",
@@ -60,6 +60,11 @@ const INVITE_ROLES: Array<{ value: "manager" | "team" | "identity"; label: strin
     value: "identity",
     label: "Identity",
     hint: "This person IS the artist — full control of the profile.",
+  },
+  {
+    value: "label",
+    label: "Label",
+    hint: "The artist's record label — recognition only, no editing permissions.",
   },
 ];
 
@@ -76,7 +81,7 @@ export function InviteToArtistPanel({ personId, personName }: Props) {
 
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"manager" | "team" | "identity">("manager");
+  const [inviteRole, setInviteRole] = useState<"manager" | "team" | "identity" | "label">("manager");
   const [welcomeNote, setWelcomeNote] = useState("");
 
   // Reuse the same query key the global Invites page uses so a send here

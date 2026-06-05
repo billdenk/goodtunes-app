@@ -18786,12 +18786,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
     // Task #351 — per-user override grants for artist team/manager tiers.
+    // "label" maps to [] intentionally (recognition only); add verbs here
+    // in a single place when Label edit permissions are opened up later.
     if (ir && invite.role === "artist" && invite.roleScopeId) {
       const verbsToGrant = ir === "team"
         ? ["edit_credits_and_gear"]
         : ir === "manager"
           ? ["edit_metadata", "edit_credits_and_gear", "upload_masters", "map_shopify", "manage_payouts", "invite_subusers"]
-          : [];
+          : ir === "label"
+            ? [] // recognition only — no edit permissions for now
+            : [];
       for (const verb of verbsToGrant) {
         await db.execute(sql`
           INSERT INTO partner_permission_overrides (scope_kind, scope_id, user_id, verb, granted, updated_by_user_id, updated_at)
@@ -20651,7 +20655,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // an optional album draft to attach so the landing page deep-links
     // into the album editor instead of an empty dashboard.
     const inviteRoleRaw = req.body?.inviteRole ? String(req.body.inviteRole) : null;
-    const inviteRole = (inviteRoleRaw === "identity" || inviteRoleRaw === "manager" || inviteRoleRaw === "team")
+    const inviteRole = (inviteRoleRaw === "identity" || inviteRoleRaw === "manager" || inviteRoleRaw === "team" || inviteRoleRaw === "label")
       ? inviteRoleRaw : null;
     const targetPersonId = req.body?.targetPersonId ? String(req.body.targetPersonId) : null;
     const preFlightedAlbumId = req.body?.preFlightedAlbumId ? String(req.body.preFlightedAlbumId) : null;
@@ -21901,6 +21905,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       identity: "Artist (Identity)",
       manager: "Manager",
       team: "Team member",
+      label: "Label",
     };
     const ir = (invite as any).inviteRole as string | null;
     res.json({

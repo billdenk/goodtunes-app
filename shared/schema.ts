@@ -3764,15 +3764,17 @@ export const insertAdminInviteSchema = createInsertSchema(adminInvites).omit({
   referrerKind: z.enum(["artist", "label", "non_profit", "manufacturer", "ambassador"]).optional().nullable(),
   referrerScopeId: z.string().optional().nullable(),
   welcomeNote: z.string().max(1000).optional().nullable(),
-  inviteRole: z.enum(["identity", "manager", "team", "npo_ambassador", "npo_staff", "press_staff"]).optional().nullable(),
+  inviteRole: z.enum(["identity", "manager", "team", "label", "npo_ambassador", "npo_staff", "press_staff"]).optional().nullable(),
   targetPersonId: z.string().optional().nullable(),
   preFlightedAlbumId: z.string().optional().nullable(),
 });
 
 // Task #351 — Roles a Team invite can take. Identity = "I am this
 // artist", Manager = "I manage this artist", Team = "I'm a member of
-// this band/team". Drives accept-time wiring + landing chrome.
-export const INVITE_ROLES = ["identity", "manager", "team"] as const;
+// this band/team", Label = "this artist's record label (recognition
+// only — no edit permissions; add verbs here to open it up later)".
+// Drives accept-time wiring + landing chrome.
+export const INVITE_ROLES = ["identity", "manager", "team", "label"] as const;
 export type InviteRole = (typeof INVITE_ROLES)[number];
 
 // Task #545 — Non-profit invite sub-roles. Stored on the same
