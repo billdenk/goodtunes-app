@@ -104,7 +104,16 @@ function AdminAlbumEngagementInner() {
             </section>
 
             <section className="rounded-xl border border-slate-200 bg-white p-5">
-              <h2 className="text-[15px] font-semibold text-slate-900 mb-3">Recent buyers</h2>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h2 className="text-[15px] font-semibold text-slate-900">Recent buyers</h2>
+                <Link
+                  href={`/admin/albums/${albumId}/buyers`}
+                  className="text-xs font-medium hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
+                  data-testid="link-view-all-buyers"
+                >
+                  View all buyers →
+                </Link>
+              </div>
               {data.recentBuyers.length === 0 && (
                 <div className="text-slate-400 text-[13px] py-2">No purchases yet.</div>
               )}

@@ -7,6 +7,7 @@ import {
   Upload,
   ImageIcon,
   User as UserIcon,
+  Users,
   Globe,
   Music as MusicIcon,
   RefreshCw,
@@ -1922,6 +1923,16 @@ function ReleasesPanel({
           <p className="text-slate-400 text-[11.5px]">{subline}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {releases.length > 0 && (
+            <Link
+              href={`/admin/people/${person.id}/buyers`}
+              className="px-2.5 h-8 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors inline-flex items-center gap-1.5 text-xs font-medium"
+              data-testid="link-buyer-roster"
+            >
+              <Users className="w-3.5 h-3.5" />
+              Buyers
+            </Link>
+          )}
           {searchOpen && (
             <input
               ref={searchInputRef}

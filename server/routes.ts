@@ -13513,6 +13513,173 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.status(201).json(row);
   });
 
+  // ─── Artist buyer roster (admin god-view) ─────────────────────────
+  // Returns all fans who bought any album where this person is the
+  // primary artist. Admins see full email + name (no PII trimming).
+  // Includes headline KPIs (total orders / distinct fans / revenue) and
+  // a per-album breakdown, plus a paginated flat order list.
+  app.get("/api/admin/people/:id/buyers", requireAdmin, async (req, res) => {
+    const personId = String(req.params.id);
+    const limit = Math.min(Number(req.query.limit) || 500, 2000);
+    const offset = Number(req.query.offset) || 0;
+    const albumId = req.query.albumId ? String(req.query.albumId) : null;
+    const REVENUE_STATUSES = `'paid','shipped','complete','completed'`;
+
+    const artistAlbums = await db.execute<{ id: string; title: string; artwork: string | null }>(sql`
+      SELECT id, title, artwork FROM albums
+      WHERE primary_artist_id = ${personId}
+        AND deleted_at IS NULL
+      ORDER BY title ASC
+    `);
+    const albumIds = ((artistAlbums as any).rows ?? []).map((r: any) => r.id as string);
+
+    if (albumIds.length === 0) {
+      return res.json({ kpis: { totalOrders: 0, distinctFans: 0, totalCents: 0 }, albums: [], orders: [], total: 0 });
+    }
+
+    const { pgArray } = await import("./lib/pgArray");
+    const albumFilter = albumId ? sql`o.album_id = ${albumId}` : sql`o.album_id = ANY(${pgArray(albumIds)})`;
+
+    const [kpisRows, perAlbumRows, orderRows, totalRow] = await Promise.all([
+      db.execute<any>(sql`
+        SELECT
+          COUNT(*)::text AS total_orders,
+          COUNT(DISTINCT o.customer_id)::text AS distinct_fans,
+          COALESCE(SUM(o.total_cents), 0)::text AS total_cents
+        FROM orders o
+        WHERE ${albumFilter}
+          AND o.status IN (${sql.raw(REVENUE_STATUSES)})
+      `),
+      db.execute<any>(sql`
+        SELECT a.id AS album_id, a.title, a.artwork,
+          COUNT(o.id)::text AS orders,
+          COUNT(DISTINCT o.customer_id)::text AS fans,
+          COALESCE(SUM(o.total_cents), 0)::text AS revenue_cents
+        FROM albums a
+        LEFT JOIN orders o ON o.album_id = a.id AND o.status IN (${sql.raw(REVENUE_STATUSES)})
+        WHERE a.id = ANY(${pgArray(albumIds)}) AND a.deleted_at IS NULL
+        GROUP BY a.id, a.title, a.artwork
+        ORDER BY COALESCE(SUM(o.total_cents), 0) DESC NULLS LAST
+      `),
+      db.execute<any>(sql`
+        SELECT o.id, o.created_at, o.status, o.total_cents, o.buyer_name, o.buyer_email,
+          o.customer_id, o.album_id, a.title AS album_title,
+          o.shipping_address->>'city' AS city,
+          o.shipping_address->>'state' AS state,
+          o.shipping_address->>'country' AS country,
+          cu.email AS fan_email, cu.display_name, cu.real_name
+        FROM orders o
+        JOIN albums a ON a.id = o.album_id
+        LEFT JOIN customer_users cu ON cu.id = o.customer_id
+        WHERE ${albumFilter}
+          AND o.status IN (${sql.raw(REVENUE_STATUSES)})
+        ORDER BY o.created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `),
+      db.execute<any>(sql`
+        SELECT COUNT(*)::text AS total
+        FROM orders o
+        WHERE ${albumFilter}
+          AND o.status IN (${sql.raw(REVENUE_STATUSES)})
+      `),
+    ]);
+
+    const kRow = (kpisRows as any).rows?.[0] ?? {};
+    return res.json({
+      kpis: {
+        totalOrders: Number(kRow.total_orders ?? 0),
+        distinctFans: Number(kRow.distinct_fans ?? 0),
+        totalCents: Number(kRow.total_cents ?? 0),
+      },
+      albums: ((perAlbumRows as any).rows ?? []).map((r: any) => ({
+        albumId: r.album_id,
+        title: r.title,
+        artwork: r.artwork,
+        orders: Number(r.orders),
+        fans: Number(r.fans),
+        revenueCents: Number(r.revenue_cents),
+      })),
+      orders: ((orderRows as any).rows ?? []).map((r: any) => ({
+        orderId: r.id,
+        createdAt: r.created_at,
+        status: r.status,
+        totalCents: Number(r.total_cents),
+        albumId: r.album_id,
+        albumTitle: r.album_title,
+        buyerName: r.display_name?.trim() || r.real_name?.trim() || r.buyer_name || null,
+        buyerEmail: r.fan_email || r.buyer_email || null,
+        customerId: r.customer_id,
+        city: r.city,
+        state: r.state,
+        country: r.country,
+      })),
+      total: Number(((totalRow as any).rows?.[0]?.total) ?? 0),
+    });
+  });
+
+  // Per-album full buyer list (admin god-view). Same as above but scoped
+  // to a single album — used by AdminAlbumEngagement "View all buyers".
+  app.get("/api/admin/albums/:id/buyers", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.id);
+    const limit = Math.min(Number(req.query.limit) || 200, 2000);
+    const offset = Number(req.query.offset) || 0;
+    const REVENUE_STATUSES = `'paid','shipped','complete','completed'`;
+
+    const [kpisRows, orderRows, totalRow] = await Promise.all([
+      db.execute<any>(sql`
+        SELECT
+          COUNT(*)::text AS total_orders,
+          COUNT(DISTINCT o.customer_id)::text AS distinct_fans,
+          COALESCE(SUM(o.total_cents), 0)::text AS total_cents
+        FROM orders o
+        WHERE o.album_id = ${albumId}
+          AND o.status IN (${sql.raw(REVENUE_STATUSES)})
+      `),
+      db.execute<any>(sql`
+        SELECT o.id, o.created_at, o.status, o.total_cents, o.buyer_name, o.buyer_email,
+          o.customer_id,
+          o.shipping_address->>'city' AS city,
+          o.shipping_address->>'state' AS state,
+          o.shipping_address->>'country' AS country,
+          cu.email AS fan_email, cu.display_name, cu.real_name
+        FROM orders o
+        LEFT JOIN customer_users cu ON cu.id = o.customer_id
+        WHERE o.album_id = ${albumId}
+          AND o.status IN (${sql.raw(REVENUE_STATUSES)})
+        ORDER BY o.created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `),
+      db.execute<any>(sql`
+        SELECT COUNT(*)::text AS total
+        FROM orders o
+        WHERE o.album_id = ${albumId}
+          AND o.status IN (${sql.raw(REVENUE_STATUSES)})
+      `),
+    ]);
+
+    const kRow = (kpisRows as any).rows?.[0] ?? {};
+    return res.json({
+      kpis: {
+        totalOrders: Number(kRow.total_orders ?? 0),
+        distinctFans: Number(kRow.distinct_fans ?? 0),
+        totalCents: Number(kRow.total_cents ?? 0),
+      },
+      orders: ((orderRows as any).rows ?? []).map((r: any) => ({
+        orderId: r.id,
+        createdAt: r.created_at,
+        status: r.status,
+        totalCents: Number(r.total_cents),
+        buyerName: r.display_name?.trim() || r.real_name?.trim() || r.buyer_name || null,
+        buyerEmail: r.fan_email || r.buyer_email || null,
+        customerId: r.customer_id,
+        city: r.city,
+        state: r.state,
+        country: r.country,
+      })),
+      total: Number(((totalRow as any).rows?.[0]?.total) ?? 0),
+    });
+  });
+
   app.put("/api/admin/band-members/:rowId", requireAdmin, async (req, res) => {
     const id = String(req.params.rowId);
     const patch: any = {};

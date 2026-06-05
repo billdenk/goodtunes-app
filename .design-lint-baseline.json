@@ -9667,22 +9667,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "<p className=\"text-[13px] text-slate-500 mb-4\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "className=\"mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressPanel.tsx",
     "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "<p className=\"text-[13px] text-slate-500 mb-4\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
     "snippet": "<label className=\"text-[12px] text-slate-600\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "className=\"mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -14736,8 +14736,18 @@
   },
   {
     "rule": "admin-link-missing-shared-treatment",
+    "file": "client/src/pages/AdminAlbumBuyers.tsx",
+    "snippet": "<Link"
+  },
+  {
+    "rule": "admin-link-missing-shared-treatment",
     "file": "client/src/pages/AdminAlbumEngagement.tsx",
     "snippet": "<Link href={`/admin/albums/${albumId}`} className=\"text-[12px] text-slate-500 hover:text-slate-700\">"
+  },
+  {
+    "rule": "admin-link-missing-shared-treatment",
+    "file": "client/src/pages/AdminAlbumEngagement.tsx",
+    "snippet": "<Link"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14782,7 +14792,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbumEngagement.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-3\">Recent buyers</h2>"
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Recent buyers</h2>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14898,6 +14908,11 @@
     "rule": "naked-icon-button",
     "file": "client/src/pages/AdminAlbums.tsx",
     "snippet": "<button type=\"button\" onClick={closeSearch} className=\"text-slate-400 hover:text-slate-700\" data-testid=\"button-close-search\" aria-label=\"Close search\" > <X className=\"w-3.5 h-3.5\" /> </button>"
+  },
+  {
+    "rule": "admin-link-missing-shared-treatment",
+    "file": "client/src/pages/AdminArtistBuyers.tsx",
+    "snippet": "<Link"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
@@ -17203,11 +17218,6 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AdminShopify.tsx",
     "snippet": "<div className=\"w-9 h-9 rounded-md bg-[#319ED8] text-white flex items-center justify-center text-[13px] font-bold shrink-0\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminShopify.tsx",
-    "snippet": "<button onClick={() => navigate(\"/admin\")} className=\"text-[12px] text-slate-500 hover:text-slate-700\">"
   },
   {
     "rule": "hardcoded-font-size",

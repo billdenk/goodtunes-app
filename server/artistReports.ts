@@ -146,9 +146,15 @@ async function resolveArtistScope(req: Request): Promise<ArtistScope | { error: 
 // the orders schema haven't shipped to the live DB yet (#48 forward-
 // declared them); when they land, the scope widens to honor per-order
 // payout-owner overrides without changing this filter's call sites.
+//
+// Revenue statuses: 'paid','shipped','complete','completed' all represent
+// a successful transaction. 'refunded' is included so the CASE WHEN
+// deduction in KPI queries works correctly. The former filter omitted
+// 'complete'/'completed' causing all gogoods-origin orders to be silently
+// excluded from Nick's and other artists' totals.
 function ordersFilter(scope: ArtistScope) {
   return sql`
-    o.status IN ('paid','shipped','refunded')
+    o.status IN ('paid','shipped','complete','completed','refunded')
     AND o.album_id = ANY(${pgArray(scope.albumIds)})
   `;
 }
@@ -306,7 +312,7 @@ async function summaryHandler(req: Request, res: Response) {
           FROM orders o
           JOIN customer_users cu ON cu.id = o.customer_id
           WHERE o.album_id = ANY(${pgArray(scope.albumIds)}::text[])
-            AND o.status = 'paid'
+            AND o.status IN ('paid','shipped','complete','completed')
             AND o.created_at >= ${range.from} AND o.created_at < ${range.to}
           GROUP BY cu.id, cu.email
           ORDER BY SUM(o.total_cents) DESC
@@ -493,7 +499,7 @@ async function topAlbumsHandler(req: Request, res: Response) {
       COUNT(DISTINCT o.customer_id) FILTER (WHERE o.status <> 'refunded')::text AS buyers
     FROM albums a
     LEFT JOIN orders o ON o.album_id = a.id
-      AND o.status IN ('paid','shipped','refunded')
+      AND o.status IN ('paid','shipped','complete','completed','refunded')
       AND o.created_at >= ${range.from} AND o.created_at < ${range.to}
     WHERE a.id = ANY(${pgArray(scope.albumIds)})
     GROUP BY a.id, a.title, a.artist, a.artwork

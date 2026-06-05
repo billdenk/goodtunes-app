@@ -147,7 +147,7 @@ function scopedAlbumFilter(albumIds: string[] | null, albumCol: any) {
 
 async function getPaidOrders(ctx: ReportContext, albumIds: string[] | null) {
   const filters = [
-    eq(orders.status, "paid"),
+    inArray(orders.status, ["paid", "shipped", "complete", "completed"]),
     gte(orders.createdAt, ctx.from),
     lte(orders.createdAt, ctx.to),
   ];
@@ -315,7 +315,7 @@ export async function shopifyRedemption(ctx: ReportContext) {
 export async function topFans(ctx: ReportContext, limit = 25) {
   const s = await resolveScope(ctx);
   const filters: any[] = [
-    eq(orders.status, "paid"),
+    inArray(orders.status, ["paid", "shipped", "complete", "completed"]),
     gte(orders.createdAt, ctx.from),
     lte(orders.createdAt, ctx.to),
   ];
@@ -372,7 +372,7 @@ export async function topFans(ctx: ReportContext, limit = 25) {
 export async function fanMap(ctx: ReportContext) {
   const s = await resolveScope(ctx);
   const filters: any[] = [
-    eq(orders.status, "paid"),
+    inArray(orders.status, ["paid", "shipped", "complete", "completed"]),
     gte(orders.createdAt, ctx.from),
     lte(orders.createdAt, ctx.to),
   ];

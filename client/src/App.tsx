@@ -44,6 +44,8 @@ import { AdminAlbums } from "@/pages/AdminAlbums";
 import { AdminAlbum } from "@/pages/AdminAlbum";
 import { AdminPeople } from "@/pages/AdminPeople";
 import { AdminPerson } from "@/pages/AdminPerson";
+import { AdminArtistBuyers } from "@/pages/AdminArtistBuyers";
+import { AdminAlbumBuyers } from "@/pages/AdminAlbumBuyers";
 import AdminNonProfit from "@/pages/AdminNonProfit";
 import { AdminNonProfits } from "@/pages/AdminNonProfits";
 import { AdminCustomAddons } from "@/pages/AdminCustomAddons";
@@ -542,6 +544,9 @@ function Router() {
         <Route path="/admin/albums/:id/engagement">
           <ProtectedRoute component={AdminAlbumEngagement} />
         </Route>
+        <Route path="/admin/albums/:id/buyers">
+          <ProtectedRoute component={AdminAlbumBuyers} />
+        </Route>
         <Route path="/admin/albums/:id">
           <ProtectedRoute component={AdminAlbum} />
         </Route>
@@ -550,6 +555,9 @@ function Router() {
         </Route>
         <Route path="/admin/albums">
           <ProtectedRoute component={AdminAlbums} />
+        </Route>
+        <Route path="/admin/people/:id/buyers">
+          <ProtectedRoute component={AdminArtistBuyers} />
         </Route>
         <Route path="/admin/people/:id">
           <ProtectedRoute component={AdminPerson} />

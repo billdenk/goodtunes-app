@@ -1845,7 +1845,8 @@ export function registerShopifyRoutes(app: Express) {
       .where(eq(orders.albumId, albumId))
       .orderBy(desc(orders.createdAt));
 
-    const paid = orderRows.filter((o) => o.status === "paid");
+    const REVENUE_STATUSES = new Set(["paid", "shipped", "complete", "completed"]);
+    const paid = orderRows.filter((o) => REVENUE_STATUSES.has(o.status));
     const refunded = orderRows.filter((o) => o.status === "refunded");
     const directCount = paid.filter((o) => o.origin === "direct").length;
     const shopifyCount = paid.filter((o) => o.origin.startsWith("shopify:")).length;

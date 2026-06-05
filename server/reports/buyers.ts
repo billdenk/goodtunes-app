@@ -74,7 +74,7 @@ export async function buyerRoster(
     LEFT JOIN customer_users cu ON cu.id = o.customer_id
     LEFT JOIN profile_photos pp ON pp.user_id = o.customer_id
     WHERE ${scopeFilter}
-      AND o.status IN ('paid','shipped')
+      AND o.status IN ('paid','shipped','complete','completed')
       AND o.created_at >= ${from} AND o.created_at < ${to}
     ORDER BY o.created_at DESC
     LIMIT ${limit}
@@ -147,7 +147,7 @@ export async function buyerMap(
     SELECT o.shipping_address AS shipping_address, o.customer_id
     FROM orders o
     WHERE ${scopeFilter}
-      AND o.status IN ('paid','shipped')
+      AND o.status IN ('paid','shipped','complete','completed')
       AND o.created_at >= ${from} AND o.created_at < ${to}
   `);
   const groups = new Map<
