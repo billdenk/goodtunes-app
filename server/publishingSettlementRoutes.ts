@@ -26,7 +26,16 @@ import {
 
 type AdminGuard = (req: Request, res: Response, next: Function) => unknown;
 
-/** Sum of approved pressing-run quantities for an album (the settlement basis). */
+/**
+ * Settlement basis = units PRESSED for the album.
+ *
+ * Primary source is the sum of APPROVED pressing_order_requests quantities
+ * (runs placed through the in-app pressing pipeline). When that is zero —
+ * i.e. the album was pressed offline and never went through the pipeline
+ * (e.g. Nick Carter's catalog, where Memphis billed the Double LP across two
+ * purchase orders) — fall back to the operator-recorded
+ * `albums.mechanical_units_pressed`. Null/absent fallback resolves to 0.
+ */
 async function resolveUnitsPressed(albumId: string): Promise<number> {
   const [row] = await db
     .select({ total: sql<number>`coalesce(sum(${pressingOrderRequests.quantity}), 0)` })
@@ -37,7 +46,15 @@ async function resolveUnitsPressed(albumId: string): Promise<number> {
         eq(pressingOrderRequests.status, "approved"),
       ),
     );
-  return Number(row?.total ?? 0);
+  const approved = Number(row?.total ?? 0);
+  if (approved > 0) return approved;
+
+  const [albumRow] = await db
+    .select({ units: albums.mechanicalUnitsPressed })
+    .from(albums)
+    .where(eq(albums.id, albumId))
+    .limit(1);
+  return Math.max(0, Number(albumRow?.units ?? 0));
 }
 
 /** Album ids that carry at least one non-deleted publishing split. */
@@ -57,7 +74,16 @@ export function registerPublishingSettlementRoutes(app: Express, requireAdmin: A
       const rateMicros = await getMechanicalRateMicros();
       const albumIds = await albumIdsWithPublishingSplits();
       if (albumIds.length === 0) {
-        return res.json({ rateMicros, totalCents: 0, albums: [] });
+        return res.json({
+          rateMicros,
+          totalCents: 0,
+          payees: [],
+          payeeCount: 0,
+          unpaidPayees: 0,
+          allocationIssueCount: 0,
+          missingSplitCount: 0,
+          albums: [],
+        });
       }
 
       const albumRows = await db
@@ -66,7 +92,27 @@ export function registerPublishingSettlementRoutes(app: Express, requireAdmin: A
         .where(inArray(albums.id, albumIds));
       const metaById = new Map(albumRows.map((a) => [a.id, a]));
 
+      // Accumulate each payee's RAW micros across every album so we can round
+      // ONCE per payee at the catalog level. A payee (e.g. Hipgnosis, whose
+      // share spans the Double LP and several singles) is cut a single check,
+      // so the settlement basis is the sum of their micros rounded once — not
+      // the sum of per-album rounded cents, which lets penny drift compound.
+      type CatalogPayee = {
+        payeeKey: string;
+        ownerKind: "organization" | "person" | null;
+        ownerId: string | null;
+        displayName: string;
+        payToName: string | null;
+        amountMicros: number;
+        lineCount: number;
+        hasPayoutAccount: boolean;
+        payoutsEnabled: boolean;
+      };
+      const payeeByKey = new Map<string, CatalogPayee>();
+
       const items = [];
+      let allocationIssueTotal = 0;
+      let missingSplitTotal = 0;
       for (const albumId of albumIds) {
         const unitsPressed = await resolveUnitsPressed(albumId);
         const settlement = await computeAlbumPublishingSettlement(albumId, {
@@ -75,6 +121,8 @@ export function registerPublishingSettlementRoutes(app: Express, requireAdmin: A
         });
         const meta = metaById.get(albumId);
         const unpaidPayees = settlement.payees.filter((p) => !p.payoutsEnabled).length;
+        allocationIssueTotal += settlement.allocationIssues.length;
+        missingSplitTotal += settlement.songsMissingSplits.length;
         items.push({
           albumId,
           title: meta?.title ?? albumId,
@@ -87,11 +135,54 @@ export function registerPublishingSettlementRoutes(app: Express, requireAdmin: A
           allocationIssueCount: settlement.allocationIssues.length,
           missingSplitCount: settlement.songsMissingSplits.length,
         });
+        for (const p of settlement.payees) {
+          const existing = payeeByKey.get(p.payeeKey);
+          if (existing) {
+            existing.amountMicros += p.amountMicros;
+            existing.lineCount += p.lineCount;
+            existing.hasPayoutAccount = existing.hasPayoutAccount || p.hasPayoutAccount;
+            existing.payoutsEnabled = existing.payoutsEnabled || p.payoutsEnabled;
+          } else {
+            payeeByKey.set(p.payeeKey, {
+              payeeKey: p.payeeKey,
+              ownerKind: p.ownerKind,
+              ownerId: p.ownerId,
+              displayName: p.displayName,
+              payToName: p.payToName,
+              amountMicros: p.amountMicros,
+              lineCount: p.lineCount,
+              hasPayoutAccount: p.hasPayoutAccount,
+              payoutsEnabled: p.payoutsEnabled,
+            });
+          }
+        }
       }
 
+      const payees = Array.from(payeeByKey.values())
+        .map(({ amountMicros, ...rest }) => ({
+          ...rest,
+          amountCents: Math.round(amountMicros / 10_000),
+        }))
+        .sort((a, b) => b.amountCents - a.amountCents);
+
+      // The catalog payout total is the sum of the per-payee rounded amounts —
+      // what actually leaves the bank. It can differ from the sum of per-album
+      // subtotals by a cent or two purely from rounding granularity; this
+      // per-payee figure is the authoritative one.
+      const totalCents = payees.reduce((s, p) => s + p.amountCents, 0);
+      const unpaidPayees = payees.filter((p) => !p.payoutsEnabled).length;
+
       items.sort((a, b) => b.totalCents - a.totalCents);
-      const totalCents = items.reduce((s, a) => s + a.totalCents, 0);
-      return res.json({ rateMicros, totalCents, albums: items });
+      return res.json({
+        rateMicros,
+        totalCents,
+        payees,
+        payeeCount: payees.length,
+        unpaidPayees,
+        allocationIssueCount: allocationIssueTotal,
+        missingSplitCount: missingSplitTotal,
+        albums: items,
+      });
     } catch (err) {
       console.error("[publishing-settlements]", err);
       return res.status(500).json({ message: "Failed to compute publishing settlements" });

@@ -46,6 +46,14 @@ export interface SettlementPayee {
   /** Administrator the money routes to, when different from displayName. */
   payToName: string | null;
   amountCents: number;
+  /**
+   * Raw accumulated micro-dollars BEFORE rounding to cents. Exposed so a
+   * catalog-wide roll-up can sum a payee's micros across every album and
+   * round ONCE (the real payment basis — each payee is cut a single check),
+   * instead of summing per-album rounded cents and letting penny drift
+   * compound. Within a single album, amountCents = round(amountMicros).
+   */
+  amountMicros: number;
   /** Number of per-song split lines rolled into this payee. */
   lineCount: number;
   /** Onboarding status of the resolved payout target. */
@@ -200,6 +208,7 @@ export async function computeAlbumPublishingSettlement(
         displayName,
         payToName,
         amountCents: 0,
+        amountMicros: 0,
         lineCount: 0,
         hasPayoutAccount: false,
         payoutsEnabled: false,
@@ -209,10 +218,14 @@ export async function computeAlbumPublishingSettlement(
     microsByPayee.set(key, (microsByPayee.get(key) ?? 0) + owedMicros);
     p.lineCount += 1;
   }
-  // Round each payee's accumulated micros to cents exactly once.
+  // Round each payee's accumulated micros to cents exactly once, and keep the
+  // raw micros so a catalog roll-up can re-aggregate across albums.
   for (const [key, micros] of Array.from(microsByPayee)) {
     const p = byPayee.get(key);
-    if (p) p.amountCents = Math.round(micros / (MICROS_PER_DOLLAR / 100));
+    if (p) {
+      p.amountMicros = micros;
+      p.amountCents = Math.round(micros / (MICROS_PER_DOLLAR / 100));
+    }
   }
 
   // ── Onboarding status for each resolved payout target ───────────────────

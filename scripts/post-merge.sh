@@ -253,9 +253,12 @@ migrate_shipping_rates dev  "${DATABASE_URL:-}"
 migrate_shipping_rates prod "${PROD_DATABASE_URL:-}"
 
 # Publishing-payout settlement columns — `organizations.pay_to_org_id`
-# (administered-by routing, e.g. Songs of Kaotic → Hipgnosis) and
-# `payout_settings.mechanical_rate_micros` (statutory $0.127/unit default).
-# Both live in shared/schema.ts; apply here so the dev→prod publish diff
+# (administered-by routing, e.g. Songs of Kaotic → Hipgnosis),
+# `payout_settings.mechanical_rate_micros` (statutory $0.127/unit default),
+# and `albums.mechanical_units_pressed` (operator-recorded pressing count, the
+# settlement-basis fallback for runs pressed offline that never went through
+# the in-app pressing_order_requests pipeline — e.g. Nick Carter's catalog).
+# All three live in shared/schema.ts; apply here so the dev→prod publish diff
 # stays empty and the schema-drift guard passes on both DBs. Idempotent.
 migrate_publishing_payouts() {
   local label="$1" url="$2"
@@ -269,6 +272,8 @@ ALTER TABLE IF EXISTS organizations
   ADD COLUMN IF NOT EXISTS pay_to_org_id varchar;
 ALTER TABLE IF EXISTS payout_settings
   ADD COLUMN IF NOT EXISTS mechanical_rate_micros integer NOT NULL DEFAULT 127000;
+ALTER TABLE IF EXISTS albums
+  ADD COLUMN IF NOT EXISTS mechanical_units_pressed integer;
 COMMIT;
 SQL
   then
@@ -279,6 +284,31 @@ SQL
 }
 migrate_publishing_payouts dev  "${DATABASE_URL:-}"
 migrate_publishing_payouts prod "${PROD_DATABASE_URL:-}"
+
+# Nick Carter "Love Life Tragedy" mechanical publishing splits — loads the
+# authoritative songwriter/publisher splits + administered-by routing + the
+# 500-unit offline pressing count so the admin Publishing view settles the
+# real mechanical liability ($1,777.99 across 18 payees) instead of $0. The
+# data is prod-only (Nick's catalog never exists in dev), so the script
+# self-gates: in dev it finds no in-scope songs and exits without writing.
+# Idempotent + marker-guarded (post_merge_data_backfills) so a later operator
+# edit to a split survives the next merge. Runs AFTER the column migration
+# above (it writes albums.mechanical_units_pressed). Synchronous + fast
+# (~80 rows); no backgrounding needed.
+backfill_nick_publishing() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping nick-publishing backfill on $label (no URL set)"
+    return 0
+  fi
+  if DATABASE_URL="$url" npx tsx scripts/backfill-nick-publishing.ts; then
+    echo "post-merge: nick-publishing backfill ok on $label"
+  else
+    echo "post-merge: WARNING — nick-publishing backfill failed on $label (continuing)"
+  fi
+}
+backfill_nick_publishing dev  "${DATABASE_URL:-}"
+backfill_nick_publishing prod "${PROD_DATABASE_URL:-}"
 
 # Real fan shipping — seed Spinney Media's April-2026 rate card. base_cents
 # is Spinney's own published rate; markup_cents is the flat $1.00 GoodTunes

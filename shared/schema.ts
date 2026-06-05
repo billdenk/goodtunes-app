@@ -446,6 +446,16 @@ export const albums = pgTable("albums", {
   // happened before this task landed do NOT retroactively contribute.
   pressPoolAccruedCents: integer("press_pool_accrued_cents").notNull().default(0),
   pressPoolReleasedCents: integer("press_pool_released_cents").notNull().default(0),
+  // Operator-recorded units PRESSED for the mechanical publishing
+  // settlement, used ONLY when this album's pressing didn't run through
+  // the in-app pressing_order_requests pipeline (e.g. Nick Carter's
+  // catalog was pressed offline — Memphis billed the Double LP across two
+  // purchase orders). The settlement basis is the sum of APPROVED
+  // pressing_order_requests when any exist; this column is the fallback
+  // for offline runs so the Publishing view shows the real owed total
+  // instead of $0. NULL = no offline run recorded (basis stays 0 unless
+  // approved pressing orders exist). Never auto-imported.
+  mechanicalUnitsPressed: integer("mechanical_units_pressed"),
   // Artist opt-in for the early cut (gate #2 of three). Default OFF —
   // the artist ticks the SellPanel checkbox after seeing the cost
   // breakdown for their currently-picked POR tier. We record WHICH

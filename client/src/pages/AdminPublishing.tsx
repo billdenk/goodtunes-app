@@ -30,6 +30,21 @@ const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 type SettlementsList = {
   rateMicros: number;
   totalCents: number;
+  payeeCount: number;
+  unpaidPayees: number;
+  allocationIssueCount: number;
+  missingSplitCount: number;
+  payees: {
+    payeeKey: string;
+    ownerKind: "organization" | "person" | null;
+    ownerId: string | null;
+    displayName: string;
+    payToName: string | null;
+    amountCents: number;
+    lineCount: number;
+    hasPayoutAccount: boolean;
+    payoutsEnabled: boolean;
+  }[];
   albums: {
     albumId: string;
     title: string;
@@ -127,11 +142,17 @@ function CatalogList() {
 
         {!isError && (
           <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid="stat-total-owed">
                 <div className="text-xs uppercase tracking-wide text-slate-500">Total owed</div>
                 <div className="mt-1 text-2xl font-semibold text-slate-900">
                   {data ? dollars(data.totalCents) : "—"}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid="stat-payees">
+                <div className="text-xs uppercase tracking-wide text-slate-500">Payees</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">
+                  {data ? data.payeeCount : "—"}
                 </div>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid="stat-albums">
@@ -147,6 +168,66 @@ function CatalogList() {
                 </div>
               </div>
             </div>
+
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-sm font-semibold text-slate-900">Payees</h2>
+                <p className="text-xs text-slate-500">
+                  Each payee is settled once across the catalog — the amount they're actually paid.
+                </p>
+              </div>
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
+                      <th className="px-4 py-2.5 font-medium">Payee</th>
+                      <th className="px-4 py-2.5 text-right font-medium">Lines</th>
+                      <th className="px-4 py-2.5 text-right font-medium">Owed</th>
+                      <th className="px-4 py-2.5 font-medium">Payout</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {isLoading && (
+                      <tr>
+                        <td className="px-4 py-6 text-slate-400" colSpan={4}>
+                          Loading…
+                        </td>
+                      </tr>
+                    )}
+                    {!isLoading && data && data.payees.length === 0 && (
+                      <tr>
+                        <td className="px-4 py-6 text-slate-500" colSpan={4}>
+                          No payees yet. Add publishing splits with non-zero shares to settle the catalog.
+                        </td>
+                      </tr>
+                    )}
+                    {data?.payees.map((p) => (
+                      <tr
+                        key={p.payeeKey}
+                        className="border-b border-slate-100 last:border-0"
+                        data-testid={`row-catalog-payee-${p.payeeKey}`}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-slate-900">{p.displayName}</div>
+                          {p.payToName && (
+                            <div className="text-xs text-slate-500">administered by {p.payToName}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-700">{p.lineCount}</td>
+                        <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-900">
+                          {dollars(p.amountCents)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <PayoutStatusPill has={p.hasPayoutAccount} enabled={p.payoutsEnabled} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <h2 className="text-sm font-semibold text-slate-900">Releases</h2>
 
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
               <table className="w-full text-sm">
