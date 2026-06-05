@@ -4604,3 +4604,275 @@ SQL
 }
 backfill_task_1319_nightbirde_credits dev  "${DATABASE_URL:-}"
 backfill_task_1319_nightbirde_credits prod "${PROD_DATABASE_URL:-}"
+
+# ──────────────────────────────────────────────────────────────────────────
+# Task #1320 — Apply the same Still Got Dreams credits to the Brave 7" Duo
+# (4eb162f7-54c3-4083-83e4-3ff07dde5370) once Amber uploads its tracks.
+#
+# The Brave Duo was intentionally excluded from Task #1319 because its audio
+# tracks weren't uploaded yet. This mirrors the album-wide credits onto Brave,
+# adds Jane (Nightbirde)'s Songwriter credit to every Brave track, and lands
+# the per-song credits on the matching Brave songs (Empire → Konata Small;
+# All I See Is You → Aaron + Jennifer Wagner; Still Got Dreams → Sidumo
+# Nyamezele), matching the tracklist by case-insensitive title.
+#
+# Critically, the whole backfill is GATED on Brave actually having tracks: if
+# the album has zero songs the function defers WITHOUT writing the marker, so
+# it re-runs on the next merge until Amber's tracks land — otherwise the marker
+# would be stamped prematurely and the per-track credits would never apply. The
+# 11 People records already exist from Task #1319 and are matched by name (not
+# re-inserted). All inserts are NOT EXISTS-guarded so re-runs are safe and admin
+# edits won't be overwritten.
+backfill_task_1319_brave_credits() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1320 brave credits backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_jane_id     text := '3ca615d6-7c04-422f-8dab-3f89607e648e';
+  v_geoff_id    text;
+  v_amber_id    text;
+  v_rice_id     text;
+  v_dan_id      text;
+  v_nika_id     text;
+  v_aaron_id    text;
+  v_jennifer_id text;
+  v_sidumo_id   text;
+  v_abbey_id    text;
+  v_katelyn_id  text;
+  v_konata_id   text;
+  v_brave_id    text := '4eb162f7-54c3-4083-83e4-3ff07dde5370';
+  v_song_count  integer;
+  v_pos         integer;
+  r             record;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_1319_brave_credits'
+  ) THEN
+
+    -- Gate: only proceed once the Brave Duo exists AND its tracks are uploaded.
+    SELECT count(*) INTO v_song_count
+      FROM songs s
+      WHERE s.album_id = v_brave_id AND s.deleted_at IS NULL;
+
+    IF EXISTS (SELECT 1 FROM albums WHERE id = v_brave_id AND deleted_at IS NULL)
+       AND v_song_count > 0 THEN
+
+      -- ── Step 1: People (match on name; insert only if missing) ────────────
+      SELECT id INTO v_geoff_id    FROM people WHERE name = 'Geoff Duncan'            AND deleted_at IS NULL LIMIT 1;
+      IF v_geoff_id    IS NULL THEN v_geoff_id    := gen_random_uuid()::text;
+        INSERT INTO people (id, name) VALUES (v_geoff_id,    'Geoff Duncan');            END IF;
+
+      SELECT id INTO v_amber_id    FROM people WHERE name = 'Amber Stoneman'          AND deleted_at IS NULL LIMIT 1;
+      IF v_amber_id    IS NULL THEN v_amber_id    := gen_random_uuid()::text;
+        INSERT INTO people (id, name) VALUES (v_amber_id,    'Amber Stoneman');          END IF;
+
+      SELECT id INTO v_rice_id     FROM people WHERE name = 'Nicholas "Rice" Daniels' AND deleted_at IS NULL LIMIT 1;
+      IF v_rice_id     IS NULL THEN v_rice_id     := gen_random_uuid()::text;
+        INSERT INTO people (id, name) VALUES (v_rice_id,     'Nicholas "Rice" Daniels'); END IF;
+
+      SELECT id INTO v_dan_id      FROM people WHERE name = 'Dan Shike'               AND deleted_at IS NULL LIMIT 1;
+      IF v_dan_id      IS NULL THEN v_dan_id      := gen_random_uuid()::text;
+        INSERT INTO people (id, name) VALUES (v_dan_id,      'Dan Shike');               END IF;
+
+      SELECT id INTO v_nika_id     FROM people WHERE name = 'Nika Duncan'             AND deleted_at IS NULL LIMIT 1;
+      IF v_nika_id     IS NULL THEN v_nika_id     := gen_random_uuid()::text;
+        INSERT INTO people (id, name) VALUES (v_nika_id,     'Nika Duncan');             END IF;
+
+      SELECT id INTO v_aaron_id    FROM people WHERE name = 'Aaron Wagner'            AND deleted_at IS NULL LIMIT 1;
+      IF v_aaron_id    IS NULL THEN v_aaron_id    := gen_random_uuid()::text;
+        INSERT INTO people (id, name) VALUES (v_aaron_id,    'Aaron Wagner');            END IF;
+
+      SELECT id INTO v_jennifer_id FROM people WHERE name = 'Jennifer Wagner'         AND deleted_at IS NULL LIMIT 1;
+      IF v_jennifer_id IS NULL THEN v_jennifer_id := gen_random_uuid()::text;
+        INSERT INTO people (id, name) VALUES (v_jennifer_id, 'Jennifer Wagner');         END IF;
+
+      SELECT id INTO v_sidumo_id   FROM people WHERE name = 'Sidumo Nyamezele'        AND deleted_at IS NULL LIMIT 1;
+      IF v_sidumo_id   IS NULL THEN v_sidumo_id   := gen_random_uuid()::text;
+        INSERT INTO people (id, name) VALUES (v_sidumo_id,   'Sidumo Nyamezele');        END IF;
+
+      SELECT id INTO v_abbey_id    FROM people WHERE name = 'Abbey James'             AND deleted_at IS NULL LIMIT 1;
+      IF v_abbey_id    IS NULL THEN v_abbey_id    := gen_random_uuid()::text;
+        INSERT INTO people (id, name) VALUES (v_abbey_id,    'Abbey James');             END IF;
+
+      SELECT id INTO v_katelyn_id  FROM people WHERE name = 'Katelyn Marczewski'      AND deleted_at IS NULL LIMIT 1;
+      IF v_katelyn_id  IS NULL THEN v_katelyn_id  := gen_random_uuid()::text;
+        INSERT INTO people (id, name) VALUES (v_katelyn_id,  'Katelyn Marczewski');      END IF;
+
+      SELECT id INTO v_konata_id   FROM people WHERE name = 'Konata Small'            AND deleted_at IS NULL LIMIT 1;
+      IF v_konata_id   IS NULL THEN v_konata_id   := gen_random_uuid()::text;
+        INSERT INTO people (id, name) VALUES (v_konata_id,   'Konata Small');            END IF;
+
+      -- ── Step 2: Album-wide credits on the Brave Duo ───────────────────────
+      v_pos := 0;
+
+      -- Production
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, v_geoff_id, 'Geoff Duncan', 'Lead Producer', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'Geoff Duncan' AND role = 'Lead Producer' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, v_geoff_id, 'Geoff Duncan', 'Engineer, Recording & Post Production', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'Geoff Duncan' AND role = 'Engineer, Recording & Post Production' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, v_amber_id, 'Amber Stoneman', 'Associate Producer', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'Amber Stoneman' AND role = 'Associate Producer' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, v_rice_id, 'Nicholas "Rice" Daniels', 'Assistant Associate Producer', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'Nicholas "Rice" Daniels' AND role = 'Assistant Associate Producer' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, v_dan_id, 'Dan Shike', 'Mastering Engineer', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'Dan Shike' AND role = 'Mastering Engineer' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      -- Additional Recording & Engineering
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, v_nika_id, 'Nika Duncan', 'Background Vocals', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'Nika Duncan' AND role = 'Background Vocals' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      -- Art & Creative Direction
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, v_amber_id, 'Amber Stoneman', 'Creative Director; Album Art & Music Direction', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'Amber Stoneman' AND role = 'Creative Director; Album Art & Music Direction' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, v_rice_id, 'Nicholas "Rice" Daniels', 'Assistant Creative Director', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'Nicholas "Rice" Daniels' AND role = 'Assistant Creative Director' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, v_abbey_id, 'Abbey James', E'Album Art\'s Original Photos', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'Abbey James' AND role = E'Album Art\'s Original Photos' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, v_amber_id, 'Amber Stoneman', 'Album Merchandise Creative Direction & Design', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'Amber Stoneman' AND role = 'Album Merchandise Creative Direction & Design' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, v_rice_id, 'Nicholas "Rice" Daniels', 'Album Merchandise Creative Direction & Design', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'Nicholas "Rice" Daniels' AND role = 'Album Merchandise Creative Direction & Design' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, v_katelyn_id, 'Katelyn Marczewski', 'Album Merchandise Creative Direction & Design', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'Katelyn Marczewski' AND role = 'Album Merchandise Creative Direction & Design' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      -- Administration
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, v_rice_id, 'Nicholas "Rice" Daniels', 'Album Administrator', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'Nicholas "Rice" Daniels' AND role = 'Album Administrator' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      -- Non-person entities (person_id intentionally NULL)
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, NULL, 'Nightbirde LLC', 'Record Label', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'Nightbirde LLC' AND role = 'Record Label' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, NULL, 'Jane Marczewski Publishing', 'Publishing', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'Jane Marczewski Publishing' AND role = 'Publishing' AND deleted_at IS NULL);
+      v_pos := v_pos + 1;
+
+      INSERT INTO album_credits (album_id, person_id, name, role, position)
+        SELECT v_brave_id, NULL, 'The Nightbirde Foundation & The Marczewski Family', 'Honorable Mentions', v_pos
+        WHERE NOT EXISTS (SELECT 1 FROM album_credits WHERE album_id = v_brave_id AND name = 'The Nightbirde Foundation & The Marczewski Family' AND role = 'Honorable Mentions' AND deleted_at IS NULL);
+
+      -- ── Step 3: Songwriter credit for Jane (Nightbirde) on ALL Brave songs ─
+      FOR r IN (
+        SELECT s.id AS sid
+        FROM songs s
+        WHERE s.album_id = v_brave_id AND s.deleted_at IS NULL
+      ) LOOP
+        INSERT INTO track_writers (song_id, person_id, name, role, position)
+          SELECT r.sid, v_jane_id, 'Nightbirde', 'Songwriter', 0
+          WHERE NOT EXISTS (
+            SELECT 1 FROM track_writers
+            WHERE song_id = r.sid AND name = 'Nightbirde' AND role = 'Songwriter' AND deleted_at IS NULL
+          );
+      END LOOP;
+
+      -- ── Step 4: Song-specific credits (matched by case-insensitive title) ──
+
+      -- "Empire": Konata Small — Songwriter
+      INSERT INTO track_writers (song_id, person_id, name, role, position)
+        SELECT s.id, v_konata_id, 'Konata Small', 'Songwriter', 1
+        FROM songs s
+        WHERE s.album_id = v_brave_id AND s.deleted_at IS NULL
+          AND lower(btrim(s.title)) = 'empire'
+          AND NOT EXISTS (SELECT 1 FROM track_writers WHERE song_id = s.id AND name = 'Konata Small' AND role = 'Songwriter' AND deleted_at IS NULL);
+
+      -- "All I See Is You": Aaron Wagner + Jennifer Wagner — Songwriter
+      INSERT INTO track_writers (song_id, person_id, name, role, position)
+        SELECT s.id, v_aaron_id, 'Aaron Wagner', 'Songwriter', 1
+        FROM songs s
+        WHERE s.album_id = v_brave_id AND s.deleted_at IS NULL
+          AND lower(btrim(s.title)) = 'all i see is you'
+          AND NOT EXISTS (SELECT 1 FROM track_writers WHERE song_id = s.id AND name = 'Aaron Wagner' AND role = 'Songwriter' AND deleted_at IS NULL);
+
+      INSERT INTO track_writers (song_id, person_id, name, role, position)
+        SELECT s.id, v_jennifer_id, 'Jennifer Wagner', 'Songwriter', 2
+        FROM songs s
+        WHERE s.album_id = v_brave_id AND s.deleted_at IS NULL
+          AND lower(btrim(s.title)) = 'all i see is you'
+          AND NOT EXISTS (SELECT 1 FROM track_writers WHERE song_id = s.id AND name = 'Jennifer Wagner' AND role = 'Songwriter' AND deleted_at IS NULL);
+
+      -- "All I See Is You": Aaron Wagner — Additional Production & Engineering
+      INSERT INTO track_performers (song_id, person_id, name, role, position)
+        SELECT s.id, v_aaron_id, 'Aaron Wagner', 'Additional Production & Engineering', 0
+        FROM songs s
+        WHERE s.album_id = v_brave_id AND s.deleted_at IS NULL
+          AND lower(btrim(s.title)) = 'all i see is you'
+          AND NOT EXISTS (SELECT 1 FROM track_performers WHERE song_id = s.id AND name = 'Aaron Wagner' AND role = 'Additional Production & Engineering' AND deleted_at IS NULL);
+
+      -- "Still Got Dreams": Sidumo Nyamezele — Choir Director
+      INSERT INTO track_performers (song_id, person_id, name, role, position)
+        SELECT s.id, v_sidumo_id, 'Sidumo Nyamezele', 'Choir Director', 0
+        FROM songs s
+        WHERE s.album_id = v_brave_id AND s.deleted_at IS NULL
+          AND lower(btrim(s.title)) = 'still got dreams'
+          AND NOT EXISTS (SELECT 1 FROM track_performers WHERE song_id = s.id AND name = 'Sidumo Nyamezele' AND role = 'Choir Director' AND deleted_at IS NULL);
+
+      INSERT INTO post_merge_data_backfills (name) VALUES ('task_1319_brave_credits');
+      RAISE NOTICE 'task-1320 backfill applied: Nightbirde credits for Brave 7" Duo (% tracks)', v_song_count;
+    ELSE
+      RAISE NOTICE 'task-1320 backfill deferred: Brave 7" Duo has no uploaded tracks yet — will retry next merge';
+    END IF;
+  ELSE
+    RAISE NOTICE 'task-1320 backfill already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1320 brave credits backfill ok on $label"
+    echo "$out" | grep -i 'task-1320' || true
+  else
+    echo "post-merge: WARNING — task-1320 brave credits backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_1319_brave_credits dev  "${DATABASE_URL:-}"
+backfill_task_1319_brave_credits prod "${PROD_DATABASE_URL:-}"
