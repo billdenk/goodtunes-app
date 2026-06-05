@@ -1335,6 +1335,15 @@ export const organizations = pgTable(
     // read structured fields without regexing the formatted string.
     // Populated by AddressAutocompleteField on the NPO Identity panel.
     mailingAddressStruct: jsonb("mailing_address_struct").$type<PartnerAddressSnapshot>(),
+    // Publishing-payout routing. When a publisher is administered by
+    // another entity (e.g. "Songs of Kaotic" is paid through "Hipgnosis
+    // Songs Group, LLC" per License #24084), set this to the administrator
+    // org's id. The publishing-settlement engine credits the composition to
+    // THIS org (name on the credit) but routes the money to the pay-to org's
+    // payout account. NULL = the org is paid directly. Loose self-FK on
+    // purpose (no `.references()`): a hard self-FK drifts dev→prod and the
+    // publish diff re-adds/drops it — same failure class as auth_tokens.
+    payToOrgId: varchar("pay_to_org_id"),
     createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => ({
@@ -2617,6 +2626,13 @@ export const payoutSettings = pgTable("payout_settings", {
   defaultPrintVendorId: varchar("default_print_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
   defaultHologramVendorId: varchar("default_hologram_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
   defaultInsertionVendorId: varchar("default_insertion_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
+  // Publishing mechanical-royalty rate, in MICRO-DOLLARS per pressed unit
+  // ($1 = 1,000,000 micros). Default 127,000 = $0.127/unit, the U.S.
+  // statutory Section-115 physical/DPD rate honored in Nick Carter's signed
+  // Hipgnosis license #24084. The publishing-settlement engine computes
+  // owed = rateMicros × unitsPressed × (percentBp / 10000) per split, so
+  // changing the statutory rate here re-prices every open settlement.
+  mechanicalRateMicros: integer("mechanical_rate_micros").notNull().default(127000),
   // Task #550 — gifting window. Fan can convert a kept copy into a
   // gift from their library for this many days after purchase. Default
   // 30; editable on AdminPlatformPricing. The checkout-time gift path
@@ -3227,6 +3243,10 @@ export const PAYOUT_EARMARK_SOURCE_KINDS = [
   "fulfillment_fee",
   "vendor_payout",
   "early_cut",
+  // Mechanical publishing settlement — one earmark per payee per album
+  // pressing run, minted from track_publishing_splits at the statutory
+  // rate × units pressed. sourceRef = `${albumId}:${payeeKey}`.
+  "publishing_mechanical",
 ] as const;
 export type PayoutEarmarkSourceKind = (typeof PAYOUT_EARMARK_SOURCE_KINDS)[number];
 export const PAYOUT_EARMARK_STATUSES = [

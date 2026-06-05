@@ -252,6 +252,34 @@ SQL
 migrate_shipping_rates dev  "${DATABASE_URL:-}"
 migrate_shipping_rates prod "${PROD_DATABASE_URL:-}"
 
+# Publishing-payout settlement columns — `organizations.pay_to_org_id`
+# (administered-by routing, e.g. Songs of Kaotic → Hipgnosis) and
+# `payout_settings.mechanical_rate_micros` (statutory $0.127/unit default).
+# Both live in shared/schema.ts; apply here so the dev→prod publish diff
+# stays empty and the schema-drift guard passes on both DBs. Idempotent.
+migrate_publishing_payouts() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping publishing_payouts migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE IF EXISTS organizations
+  ADD COLUMN IF NOT EXISTS pay_to_org_id varchar;
+ALTER TABLE IF EXISTS payout_settings
+  ADD COLUMN IF NOT EXISTS mechanical_rate_micros integer NOT NULL DEFAULT 127000;
+COMMIT;
+SQL
+  then
+    echo "post-merge: publishing_payouts migration ok on $label"
+  else
+    echo "post-merge: WARNING — publishing_payouts migration failed on $label (continuing)"
+  fi
+}
+migrate_publishing_payouts dev  "${DATABASE_URL:-}"
+migrate_publishing_payouts prod "${PROD_DATABASE_URL:-}"
+
 # Real fan shipping — seed Spinney Media's April-2026 rate card. base_cents
 # is Spinney's own published rate; markup_cents is the flat $1.00 GoodTunes
 # margin kept separate so the fudge stays visible. US + 7 named countries

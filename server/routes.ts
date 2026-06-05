@@ -3,6 +3,7 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
+import { registerPublishingSettlementRoutes } from "./publishingSettlementRoutes";
 import { sql, and, eq, or, ilike, isNull, isNotNull, desc, inArray } from "drizzle-orm";
 import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, TERMS_VERSION } from "@shared/schema";
 import {
@@ -2391,6 +2392,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ─── Admin super-admin grant/revoke ───────────────────────────────
   registerPlacesRoutes(app, requireAdmin);
+  registerPublishingSettlementRoutes(app, requireAdmin);
 
   app.get("/api/admin/admins", requireAdminBearer, async (_req, res) => {
     const list = await storage.listAdmins();

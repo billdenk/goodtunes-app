@@ -25,3 +25,9 @@ description: How publishing/writer-publisher payouts differ from sales payouts, 
 - **Nick's catalog is PROD-ONLY** (zero rows in dev) — publishing data writes target prod via marker-guarded `post-merge.sh` backfill; can't dry-run against his real songs in dev.
 - As of this work: 50 Nick songs in prod, 0 publishing splits, 0 publisher organizations (only 3 non_profit orgs).
 - Sheet has dup/identity issues that MUST be deduped before creating payees: "Concord ANZ" vs "Concord ANZ Pty Ltd"; "Songs From Lenwood" with/without "adm. by Kobalt"; bare "Publishing Designee (BMI)" vs "Publishing Designee of <name>" (Abraham Poythress "Abrham" typo + John Christian Frasca). Two covers (Dirty Laundry → Henley/Woody Creek + Kortchmar/WC Music; Help Me Re-Record → Gerrard/Vice-Maslin) pay outside writers, Nick has no share.
+
+## Settlement money math — round ONCE per payee
+- `computeAlbumPublishingSettlement` accumulates each split line's owed **micros** into a `microsByPayee` map and converts to cents exactly once at finalization (`round(micros / 10000)`). Do NOT round per split line then sum — when one payee carries several lines (Songs of Kaotic spans the whole catalog) the pre-rounded sum drifts a penny or two from the correct aggregate.
+- **Why:** Bill's whole reason for this system is "never sloppy again" — these totals become real payment-account balances; per-line rounding silently mis-states them. Locked by the "penny-drift guard" test in `publishingSettlement.db.test.ts` (3 half-cent lines → 2¢ aggregate, not 3¢).
+- The statutory rate is a single setting (`payout_settings.mechanical_rate_micros`, 127000 = $0.127) passed through as `rateMicros`; the sheet's "$127/song" is a 2× error — never hard-code dollar amounts, the engine is data-driven off splits × units × rate.
+- Per-album `?unitsPressed=N` override is validated `Number.isFinite`, `0 ≤ n ≤ 100M`, truncated to int before entering the math.

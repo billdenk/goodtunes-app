@@ -96,6 +96,7 @@ import { isAnalyticsDebugOverlayEnabled } from "@/lib/analytics";
 import { AdminReports } from "@/pages/AdminReports";
 import { AdminJobs } from "@/pages/AdminJobs";
 import { AdminPlatformPricing } from "@/pages/AdminPlatformPricing";
+import { AdminPublishing } from "@/pages/AdminPublishing";
 import { AdminGoodDeedPricing } from "@/pages/AdminGoodDeedPricing";
 import AdminPayoutsRelease from "@/pages/AdminPayoutsRelease";
 import { AdminDashboard } from "@/pages/AdminDashboard";
@@ -639,6 +640,15 @@ function Router() {
             caller's role isn't super_admin. */}
         <Route path="/admin/platform-pricing">
           <ProtectedRoute component={AdminPlatformPricing} />
+        </Route>
+        {/* Publishing — mechanical-settlement section (list + per-album
+            breakdown). Readable by any admin role; the transparency
+            surface for publishers + the operator's data-quality check. */}
+        <Route path="/admin/publishing/albums/:albumId">
+          <ProtectedRoute component={AdminPublishing} />
+        </Route>
+        <Route path="/admin/publishing">
+          <ProtectedRoute component={AdminPublishing} />
         </Route>
         {/* Task #737 — read-only GoodDeed pricing summary, readable by
             any admin role (Platform pricing above stays super-admin). */}

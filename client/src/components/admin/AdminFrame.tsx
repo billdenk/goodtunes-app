@@ -28,6 +28,7 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Receipt,
+  ScrollText,
   Smartphone,
   Tablet,
   Trash2,
@@ -135,6 +136,7 @@ export type EntityKey =
   | "jobs"
   | "platform-pricing"
   | "gooddeed-pricing"
+  | "publishing"
   | "invites"
   | "invite-tree"
   | "invite-directory"
@@ -882,6 +884,18 @@ export function AdminFrame({
               active={active === "gooddeed-pricing"}
               onClick={() => navigate("/admin/gooddeed-pricing")}
               testId="nav-gooddeed-pricing"
+            />
+
+            {/* Publishing — mechanical-settlement section. Readable by
+                every admin role (the transparency surface for publishers
+                + the operator's per-song data-quality check). No count. */}
+            <SidebarLink
+              icon={ScrollText}
+              label="Publishing"
+              count={-1}
+              active={active === "publishing"}
+              onClick={() => navigate("/admin/publishing")}
+              testId="nav-publishing"
             />
 
             {isSuperAdmin && (
