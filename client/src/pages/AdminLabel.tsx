@@ -493,7 +493,7 @@ export function AdminLabel() {
           <ArtistsPanel
             label={label}
             allPeople={allPeople}
-            onOpenPerson={(id) => navigate(`/admin/people/${id}`)}
+            onOpenPerson={(id) => navigate(`/admin/people/${id}?from=partner&backHref=${encodeURIComponent(`/admin/labels/${label.id}?tab=artists`)}&backName=${encodeURIComponent(label.name)}`)}
           />
         )}
         {tab === "releases" && <ReleasesPanel releases={releases} />}
