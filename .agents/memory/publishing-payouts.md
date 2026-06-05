@@ -21,6 +21,11 @@ description: How publishing/writer-publisher payouts differ from sales payouts, 
 - Publisher-payee onboarding not exposed on org pages; no validation that every split has a payout account before release.
 - No server-side per-payee aggregation across an album/run.
 
+## Confirmed by Bill (for the Nick prod backfill)
+- **Units pressed = 500 for every pressed Nick album** (both Pressing Business and MRP runs were 500). So the catalog roll-up applies 500 units uniformly; per-album figures only differ by song count × splits.
+- **"Songs From Lenwood" pays to Kobalt** (the administrator) — model as administered-by routing: Songs From Lenwood org `payToOrgId` → Kobalt org.
+- **"Wild Heart" and "Take You with Me" (bonus, track 17) splits come from Nick's attorney (Charley) doc**, which Bill is uploading — treat that doc as the authoritative split source and reconcile the workbook against it before writing prod. Do the prod load from Charley's doc, not the workbook alone, to avoid re-doing it.
+
 ## Data reality (Nick Carter catalog)
 - **Nick's catalog is PROD-ONLY** (zero rows in dev) — publishing data writes target prod via marker-guarded `post-merge.sh` backfill; can't dry-run against his real songs in dev.
 - As of this work: 50 Nick songs in prod, 0 publishing splits, 0 publisher organizations (only 3 non_profit orgs).
