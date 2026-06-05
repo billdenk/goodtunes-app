@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { LogOut, ShieldCheck, UserPlus, Heart, Check, UserPen } from "lucide-react";
+import { LogOut, ShieldCheck, UserPlus, Check, UserPen } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -194,14 +194,6 @@ export function AdminUserMenu() {
         >
           <UserPlus className="w-4 h-4 mr-2 text-slate-500" />
           Invite teammate
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => navigate("/admin/earmarked-artists")}
-          data-testid="menu-item-earmarked"
-          className="text-[13px] cursor-pointer text-slate-700 focus:bg-slate-100 focus:text-slate-900"
-        >
-          <Heart className="w-4 h-4 mr-2 text-slate-500" />
-          Earmarked artists
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => navigate("/admin/security")}

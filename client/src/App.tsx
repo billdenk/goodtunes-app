@@ -75,7 +75,6 @@ import { AdminLegacyImageAudit } from "@/pages/AdminLegacyImageAudit";
 import { CertProvenance } from "@/pages/CertProvenance";
 import AdminSecurity from "@/pages/AdminSecurity";
 import { AdminInvites } from "@/pages/AdminInvites";
-import { AdminEarmarkedArtists } from "@/pages/AdminEarmarkedArtists";
 import { AdminPressEarlyCutQueue } from "@/pages/AdminPressEarlyCutQueue";
 import { AdminInviteTree } from "@/pages/AdminInviteTree";
 import { AdminInviteDirectory } from "@/pages/AdminInviteDirectory";
@@ -437,11 +436,6 @@ function Router() {
         </Route>
         <Route path="/admin/invites">
           <ProtectedRoute component={AdminInvites} />
-        </Route>
-        {/* Task #546 — Pre-seeded "earmarked folks" list super-admin
-            curates; artists see these as one-tap invite chips. */}
-        <Route path="/admin/earmarked-artists">
-          <ProtectedRoute component={AdminEarmarkedArtists} />
         </Route>
         {/* Task #533 — Pool-funded early masters cut review queue. */}
         <Route path="/admin/early-cut">
