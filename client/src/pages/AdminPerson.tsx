@@ -19,9 +19,15 @@ import {
   Search,
   X,
   Plus,
+  Link2,
+  Sparkles,
+  Loader2,
+  Copy,
+  Check,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { SiApplemusic, SiSpotify, SiTidal, SiPandora, SiInstagram, SiTiktok, SiX, SiBluesky, SiFacebook } from "react-icons/si";
 import { useAuth } from "@/hooks/useAuth";
@@ -43,6 +49,7 @@ import { PersonSplitsRail } from "@/components/admin/SplitsPanels";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import type { PartnerAddressSnapshot } from "@shared/schema";
+import { normalizeShareSlug, validateShareSlug, SHARE_LINK_HOST } from "@shared/shareSlug";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -157,6 +164,10 @@ interface PersonFull {
   // Sell-panel Presses surface is hard-locked to that press until
   // their first run ships. Super-admin can clear/switch via Identity.
   invitedByPressId: string | null;
+  // Task #1310 / #1313 — artist "part" of the two-part share link
+  // (get.goodtunes.music/<artist>/<album>). Shared across all of this
+  // artist's releases; editable directly from the People admin panel.
+  artistShareSlug?: string | null;
   // Task #665 — contact-led vs artist-led rendering. Server derives
   // `shape` from users.role/role_scope_id, owned albums, discography
   // rows, or the operator-set `isArtistPromoted` flag. The contact
@@ -970,6 +981,229 @@ function RolesPanel({ person }: { person: PersonFull }) {
   );
 }
 
+// Robust copy: the async Clipboard API rejects (or silently hangs) in a
+// cross-origin/unfocused iframe like the Replit workspace preview. Try it,
+// then fall back to a hidden-textarea execCommand so the copy + success
+// feedback still fire.
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to the legacy path below */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+// Task #1313 — Artist URL editor for the People admin panel. Mirrors the
+// artist half of the album page's ShareLinkPanel (AdminAlbum.tsx), but
+// keyed directly off the person row so admins can set/clear an artist's
+// share slug before any albums exist (or when managing an artist with many
+// releases). Saves independently on blur/enter; Suggest + Copy + Clear
+// controls. Uses the same shared/shareSlug validation and the existing
+// PUT /api/admin/people/:id { artistShareSlug } +
+// GET /api/admin/people/:id/artist-share-slug-available endpoints.
+function ArtistUrlPanel({ person }: { person: PersonFull }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const savedSlug = person.artistShareSlug ?? "";
+  const [draft, setDraft] = useState(savedSlug);
+  const [suggesting, setSuggesting] = useState(false);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => { setDraft(savedSlug); }, [savedSlug]);
+
+  const validation = draft.trim() === "" ? null : validateShareSlug(draft);
+  const localError = validation && !validation.ok ? validation.reason : null;
+  const normalized = normalizeShareSlug(draft);
+  const isDirty = normalized !== savedSlug;
+
+  const save = useMutation({
+    mutationFn: async (next: string | null) => {
+      const r = await apiRequest("PUT", `/api/admin/people/${person.id}`, {
+        artistShareSlug: next,
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/people", person.id] });
+      qc.invalidateQueries({ queryKey: ["/api/people", person.id] });
+      qc.invalidateQueries({ queryKey: ["/api/people"] });
+      toast({ title: "Artist URL saved." });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't save artist URL",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+      setDraft(savedSlug);
+    },
+  });
+
+  const commit = () => {
+    if (save.isPending) return;
+    const trimmed = draft.trim();
+    if (trimmed === "") {
+      if (savedSlug !== "") save.mutate(null);
+      return;
+    }
+    if (!validation?.ok) return;
+    if (validation.slug === savedSlug) { setDraft(savedSlug); return; }
+    setDraft(validation.slug);
+    save.mutate(validation.slug);
+  };
+
+  const clear = () => {
+    if (save.isPending) return;
+    setDraft("");
+    if (savedSlug !== "") save.mutate(null);
+  };
+
+  const checkAvailable = async (slug: string): Promise<boolean> => {
+    try {
+      const r = await apiRequest(
+        "GET",
+        `/api/admin/people/${person.id}/artist-share-slug-available?slug=${encodeURIComponent(slug)}`,
+      );
+      const data = await r.json();
+      return !!data.available;
+    } catch { return false; }
+  };
+
+  const suggest = async () => {
+    if (save.isPending || suggesting) return;
+    const v = validateShareSlug(person.name ?? "");
+    if (!v.ok) { toast({ title: "No artist name to suggest from." }); return; }
+    setSuggesting(true);
+    try {
+      for (let n = 1; n <= 9; n++) {
+        const candidate = n === 1 ? v.slug : `${v.slug}-${n}`;
+        const cv = validateShareSlug(candidate);
+        if (!cv.ok) continue;
+        if (await checkAvailable(cv.slug)) { setDraft(cv.slug); return; }
+      }
+      setDraft(v.slug);
+      toast({ title: "Artist slug may be taken", description: "Tweak it before saving." });
+    } finally { setSuggesting(false); }
+  };
+
+  const copyableSlug = savedSlug || (validation?.ok ? validation.slug : "");
+  const copyUrl = copyableSlug ? `https://${SHARE_LINK_HOST}/${copyableSlug}` : "";
+  const copy = async () => {
+    if (!copyUrl) return;
+    const ok = await copyTextToClipboard(copyUrl);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } else {
+      toast({ title: "Couldn't copy", description: copyUrl, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div
+      className="rounded-2xl border border-slate-200 bg-white p-5"
+      data-testid="panel-overview-artist-url"
+    >
+      <div className="flex items-center gap-1.5">
+        <Link2 className="w-4 h-4 text-[color:var(--brand-blue)]" />
+        <span className="text-sm font-semibold text-slate-900">Artist URL</span>
+      </div>
+      <p className="text-xs text-slate-500 mt-1 leading-snug">
+        The artist part of this artist's share links:{" "}
+        <span className="font-medium text-slate-700">{SHARE_LINK_HOST}/<em>artist</em>/<em>album</em></span>.
+        Shared across every one of {person.name}'s releases.
+      </p>
+
+      <div className="mt-3">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs font-medium text-slate-600">Slug</span>
+          <button
+            type="button"
+            onClick={suggest}
+            disabled={save.isPending || suggesting}
+            className="inline-flex items-center gap-1 text-xs font-medium text-[color:var(--brand-blue)] hover:underline disabled:opacity-50 disabled:no-underline"
+            data-testid="button-suggest-artist-url"
+          >
+            {suggesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+            {suggesting ? "Checking…" : "Suggest"}
+          </button>
+        </div>
+        <div className="flex items-center rounded-md border border-slate-200 bg-slate-50 focus-within:border-[color:var(--brand-blue)] overflow-hidden">
+          <span className="pl-2.5 pr-1 text-xs text-slate-400 whitespace-nowrap select-none">
+            {SHARE_LINK_HOST}/
+          </span>
+          <Input
+            value={draft}
+            disabled={save.isPending}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
+            placeholder="nightbirde"
+            className="h-8 border-0 bg-transparent px-1 focus-visible:ring-0 shadow-none"
+            data-testid="input-artist-url"
+          />
+        </div>
+        {localError ? (
+          <p className="text-xs text-rose-600 mt-1" data-testid="text-artist-url-error">{localError}</p>
+        ) : isDirty && normalized ? (
+          <p className="text-xs text-slate-500 mt-1">Saves as <span className="font-medium text-slate-700">{normalized}</span></p>
+        ) : null}
+      </div>
+
+      <div className="mt-3 flex items-center gap-2">
+        {copyUrl ? (
+          <p className="flex-1 text-xs text-slate-500 truncate" data-testid="text-artist-url-full">
+            {copyUrl}
+          </p>
+        ) : (
+          <p className="flex-1 text-xs text-slate-400 italic">
+            Set a slug to get the artist link.
+          </p>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 shrink-0"
+          disabled={!savedSlug || save.isPending}
+          onClick={clear}
+          data-testid="button-clear-artist-url"
+        >
+          <X className="w-4 h-4" />
+          <span className="ml-1.5">Clear</span>
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 shrink-0"
+          disabled={!copyUrl}
+          onClick={copy}
+          data-testid="button-copy-artist-url"
+        >
+          {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+          <span className="ml-1.5">{copied ? "Copied" : "Copy"}</span>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function OverviewPanel({
   person,
   labels,
@@ -1013,6 +1247,7 @@ function OverviewPanel({
           business affiliation here too, so neither role hides the other.
           Hidden entirely for a pure artist with no affiliations. */}
       <AffiliationPanel person={person} hideWhenEmpty />
+      <ArtistUrlPanel person={person} />
       <EditablePanel
         title="Identity"
         testId="panel-overview-identity"
