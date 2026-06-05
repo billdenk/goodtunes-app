@@ -16800,64 +16800,19 @@
     "snippet": "<Link"
   },
   {
-    "rule": "brand-hex-literal",
+    "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "confirmed: \"bg-[#4AFFCA]/15 text-[#4AFFCA]\","
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<main className=\"min-h-screen bg-[#00062B] text-white pb-24\" data-testid=\"page-admin-print-queue\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "tab === t.key ? \"bg-white text-[#00062B]\" : \"bg-white/5 text-white/65 hover:bg-white/10\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"accent-[#4AFFCA]\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-full bg-[#4AFFCA] text-[#00062B] text-[12px] font-semibold disabled:opacity-40\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-full bg-[#319ED8] text-white text-[12px] font-semibold disabled:opacity-40\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "sel ? \"border-[#4AFFCA] bg-[#4AFFCA]/5\" : \"border-white/10 bg-white/5\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"accent-[#4AFFCA] w-4 h-4\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"text-[11px] text-[#319ED8] active:opacity-70\""
+    "snippet": "<h1 className=\"text-[22px] font-semibold text-slate-900\">Print queue</h1>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<h1 className=\"text-[28px] font-bold\">Print queue</h1>"
+    "snippet": "className=\"text-[12px] text-slate-500 hover:text-[color:var(--brand-blue)] hover:underline\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"text-[12px] text-white/55 hover:text-white\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<p className=\"text-white/55 text-[13px] mb-6\">"
+    "snippet": "<p className=\"text-slate-500 text-[13px] mb-6\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16867,17 +16822,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<label className=\"flex items-center gap-2 text-[12px] text-white/65 cursor-pointer\">"
+    "snippet": "<label className=\"flex items-center gap-2 text-[12px] text-slate-600 cursor-pointer\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-full bg-[#4AFFCA] text-[#00062B] text-[12px] font-semibold disabled:opacity-40\""
+    "snippet": "className=\"px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"px-3 py-1.5 rounded-full bg-[#319ED8] text-white text-[12px] font-semibold disabled:opacity-40\""
+    "snippet": "className=\"px-3 py-1.5 rounded-full bg-slate-900 text-white text-[12px] font-semibold hover:bg-slate-800 disabled:opacity-40\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -16887,42 +16842,42 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<span className=\"text-[11px] text-white/55\" data-testid={`gooddeed-${r.id}`}>"
+    "snippet": "<span className=\"text-[11px] text-slate-500\" data-testid={`gooddeed-${r.id}`}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<span className=\"text-[11px] text-white/35\">{r.shippingCountry ?? \"?\"}</span>"
+    "snippet": "<span className=\"text-[11px] text-slate-400\">{r.shippingCountry ?? \"?\"}</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<div className=\"text-[14px] font-medium truncate mt-0.5\">"
+    "snippet": "<div className=\"text-[14px] font-medium text-slate-900 truncate mt-0.5\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<div className=\"text-[12px] text-white/55 truncate\">"
+    "snippet": "<div className=\"text-[12px] text-slate-500 truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"bg-white/10 text-white text-[11px] rounded px-2 py-1\""
+    "snippet": "className=\"bg-white border border-slate-200 text-slate-700 text-[11px] rounded px-2 py-1\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"text-[11px] text-[#319ED8] active:opacity-70\""
+    "snippet": "className=\"text-[11px] text-[color:var(--brand-blue)] hover:underline active:opacity-70\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "className=\"text-[11px] text-white/65 active:opacity-70\""
+    "snippet": "className=\"text-[11px] text-slate-600 hover:text-slate-900 active:opacity-70\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPrintQueue.tsx",
-    "snippet": "<div className=\"text-[11px] text-white/45 mt-4\" data-testid=\"ready-summary\">"
+    "snippet": "<div className=\"text-[11px] text-slate-400 mt-4\" data-testid=\"ready-summary\">"
   },
   {
     "rule": "brand-hex-literal",

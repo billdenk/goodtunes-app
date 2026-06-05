@@ -11,6 +11,7 @@ import { apiRequest, queryClient, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
+import { AdminFrame } from "@/components/admin/AdminFrame";
 
 type QueueRow = {
   id: string;
@@ -44,10 +45,10 @@ const TABS: { key: QueueRow["nameStatus"]; label: string }[] = [
 ];
 
 const STATUS_PILL: Record<QueueRow["nameStatus"], string> = {
-  awaiting: "bg-amber-400/15 text-amber-200",
-  confirmed: "bg-[#4AFFCA]/15 text-[#4AFFCA]",
-  locked_for_print: "bg-indigo-500/20 text-indigo-200",
-  printed: "bg-white/10 text-white/55",
+  awaiting: "bg-amber-100 text-amber-700",
+  confirmed: "bg-emerald-100 text-emerald-700",
+  locked_for_print: "bg-indigo-100 text-indigo-700",
+  printed: "bg-slate-100 text-slate-500",
 };
 
 export function AdminPrintQueue() {
@@ -177,20 +178,20 @@ function AdminPrintQueueInner() {
   );
 
   return (
-    <main className="min-h-screen bg-[#00062B] text-white pb-24" data-testid="page-admin-print-queue">
-      <div className="max-w-[1100px] mx-auto px-5 pt-8">
+    <AdminFrame active="pressing-orders">
+      <div className="max-w-5xl mx-auto py-8" data-testid="page-admin-print-queue">
         <div className="flex items-center justify-between mb-1">
-          <h1 className="text-[28px] font-bold">Print queue</h1>
+          <h1 className="text-[22px] font-semibold text-slate-900">Print queue</h1>
           <Link
             href="/admin/orders"
-            className="text-[12px] text-white/55 hover:text-white"
+            className="text-[12px] text-slate-500 hover:text-[color:var(--brand-blue)] hover:underline"
             data-testid="link-admin-orders"
           >
             ← All orders
           </Link>
         </div>
-        <p className="text-white/55 text-[13px] mb-6">
-          Printable GoodDeed certificates. Confirmed rows are ready to print — batch them into a ZIP of single-page PDFs or one merged PDF, then download. Downloading the batch flips rows to <span className="text-white/85">printed</span>.
+        <p className="text-slate-500 text-[13px] mb-6">
+          Printable GoodDeed certificates. Confirmed rows are ready to print — batch them into a ZIP of single-page PDFs or one merged PDF, then download. Downloading the batch flips rows to <span className="text-slate-900">printed</span>.
         </p>
 
         {/* Tabs */}
@@ -201,7 +202,7 @@ function AdminPrintQueueInner() {
               type="button"
               onClick={() => { setTab(t.key); setSelected(new Set()); }}
               className={`px-3 py-1.5 rounded-full text-[12px] font-semibold ${
-                tab === t.key ? "bg-white text-[#00062B]" : "bg-white/5 text-white/65 hover:bg-white/10"
+                tab === t.key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
               data-testid={`tab-${t.key}`}
             >
@@ -213,12 +214,12 @@ function AdminPrintQueueInner() {
         {/* Batch toolbar */}
         {tab === "confirmed" && (
           <div className="flex items-center gap-2 mb-3" data-testid="batch-toolbar">
-            <label className="flex items-center gap-2 text-[12px] text-white/65 cursor-pointer">
+            <label className="flex items-center gap-2 text-[12px] text-slate-600 cursor-pointer">
               <input
                 type="checkbox"
                 checked={allSelected}
                 onChange={toggleAll}
-                className="accent-[#4AFFCA]"
+                className="accent-[color:var(--brand-blue)]"
                 data-testid="checkbox-select-all"
               />
               Select all {allSelectable.length} ready
@@ -228,7 +229,7 @@ function AdminPrintQueueInner() {
               type="button"
               onClick={() => batchDownload("zip")}
               disabled={selected.size === 0}
-              className="px-3 py-1.5 rounded-full bg-[#4AFFCA] text-[#00062B] text-[12px] font-semibold disabled:opacity-40"
+              className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40"
               data-testid="button-batch-zip"
             >
               Download ZIP ({selected.size})
@@ -237,7 +238,7 @@ function AdminPrintQueueInner() {
               type="button"
               onClick={() => batchDownload("merged_pdf")}
               disabled={selected.size === 0}
-              className="px-3 py-1.5 rounded-full bg-[#319ED8] text-white text-[12px] font-semibold disabled:opacity-40"
+              className="px-3 py-1.5 rounded-full bg-slate-900 text-white text-[12px] font-semibold hover:bg-slate-800 disabled:opacity-40"
               data-testid="button-batch-pdf"
             >
               Download merged PDF ({selected.size})
@@ -245,7 +246,7 @@ function AdminPrintQueueInner() {
           </div>
         )}
 
-        {isLoading && <div className="text-white/55 text-sm" data-testid="loading">Loading…</div>}
+        {isLoading && <div className="text-slate-500 text-sm" data-testid="loading">Loading…</div>}
         {rowsError && (
           <ErrorState
             error={rowsErrorObj}
@@ -255,7 +256,7 @@ function AdminPrintQueueInner() {
           />
         )}
         {!isLoading && !rowsError && visible.length === 0 && (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-white/55" data-testid="empty">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-500" data-testid="empty">
             Nothing here.
           </div>
         )}
@@ -272,7 +273,7 @@ function AdminPrintQueueInner() {
               <div
                 key={r.id}
                 className={`rounded-2xl border p-3 flex items-center gap-3 ${
-                  sel ? "border-[#4AFFCA] bg-[#4AFFCA]/5" : "border-white/10 bg-white/5"
+                  sel ? "border-[color:var(--brand-blue)] bg-[color:var(--brand-blue-soft)]" : "border-slate-200 bg-white"
                 }`}
                 data-testid={`row-cert-${r.id}`}
               >
@@ -281,7 +282,7 @@ function AdminPrintQueueInner() {
                     type="checkbox"
                     checked={sel}
                     onChange={() => toggle(r.id)}
-                    className="accent-[#4AFFCA] w-4 h-4"
+                    className="accent-[color:var(--brand-blue)] w-4 h-4"
                     data-testid={`checkbox-${r.id}`}
                   />
                 )}
@@ -294,14 +295,14 @@ function AdminPrintQueueInner() {
                       {r.nameStatus.replace("_", " ")}
                     </span>
                     {r.goodDeedNumber !== null && (
-                      <span className="text-[11px] text-white/55" data-testid={`gooddeed-${r.id}`}>
+                      <span className="text-[11px] text-slate-500" data-testid={`gooddeed-${r.id}`}>
                         #{r.goodDeedNumber}
                       </span>
                     )}
-                    <span className="text-[11px] text-white/35">{r.shippingCountry ?? "?"}</span>
+                    <span className="text-[11px] text-slate-400">{r.shippingCountry ?? "?"}</span>
                     {r.origin === "legacy:gogoods" && (
                       <span
-                        className="px-2 py-0.5 rounded-full text-xs font-semibold uppercase bg-amber-400/15 text-amber-200"
+                        className="px-2 py-0.5 rounded-full text-xs font-semibold uppercase bg-amber-100 text-amber-700"
                         title="Imported from gogoods.com — fan already has the original physical certificate; don't re-print unless asked."
                         data-testid={`badge-legacy-${r.id}`}
                       >
@@ -309,10 +310,10 @@ function AdminPrintQueueInner() {
                       </span>
                     )}
                   </div>
-                  <div className="text-[14px] font-medium truncate mt-0.5">
-                    {r.confirmedName ?? <span className="text-white/45 italic">No name yet</span>}
+                  <div className="text-[14px] font-medium text-slate-900 truncate mt-0.5">
+                    {r.confirmedName ?? <span className="text-slate-400 italic">No name yet</span>}
                   </div>
-                  <div className="text-[12px] text-white/55 truncate">
+                  <div className="text-[12px] text-slate-500 truncate">
                     {r.albumTitle} — {r.albumArtist} · {r.customerEmail}
                   </div>
                 </div>
@@ -320,7 +321,7 @@ function AdminPrintQueueInner() {
                   <select
                     value={r.paperSize}
                     onChange={(e) => setPaper.mutate({ certId: r.id, paperSize: e.target.value as "letter" | "a4" })}
-                    className="bg-white/10 text-white text-[11px] rounded px-2 py-1"
+                    className="bg-white border border-slate-200 text-slate-700 text-[11px] rounded px-2 py-1"
                     data-testid={`select-paper-${r.id}`}
                   >
                     <option value="letter">Letter</option>
@@ -331,18 +332,18 @@ function AdminPrintQueueInner() {
                       href={previewUrl(r.id)}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-[11px] text-[#319ED8] active:opacity-70"
+                      className="text-[11px] text-[color:var(--brand-blue)] hover:underline active:opacity-70"
                       data-testid={`link-preview-${r.id}`}
                     >
                       Preview
                     </a>
                     {editable && (
                       <>
-                        <span className="text-white/25">·</span>
+                        <span className="text-slate-300">·</span>
                         <button
                           type="button"
                           onClick={() => promptOverrideName(r)}
-                          className="text-[11px] text-white/65 active:opacity-70"
+                          className="text-[11px] text-slate-600 hover:text-slate-900 active:opacity-70"
                           data-testid={`button-override-name-${r.id}`}
                         >
                           Override name
@@ -356,12 +357,12 @@ function AdminPrintQueueInner() {
           })}
         </div>
         {tab === "confirmed" && readyCount > 0 && (
-          <div className="text-[11px] text-white/45 mt-4" data-testid="ready-summary">
+          <div className="text-[11px] text-slate-400 mt-4" data-testid="ready-summary">
             {readyCount} ready certificate(s).
           </div>
         )}
       </div>
-    </main>
+    </AdminFrame>
   );
 }
 
