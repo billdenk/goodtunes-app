@@ -20,6 +20,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { AlbumCard } from "@/components/ui/AlbumCard";
 import { track } from "@/lib/analytics";
 import { useRecordRecent } from "@/hooks/useRecents";
+import { useOwnedAlbumIds } from "@/hooks/useOwnedAlbumIds";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { sheetOpen, sheetClose, scrimFade } from "@/lib/motion";
 
@@ -28,6 +29,9 @@ export function ArtistDetail() {
   const [, navigate] = useLocation();
   const { playSong } = usePlayer();
   const favArtists = useFavoriteArtists();
+  // Task #1292 — fan-only owned-album gate. Admins (shouldFilter=false)
+  // see all of the artist's releases; fans see only albums they own.
+  const { ownedAlbumIds, shouldFilter: ownershipFilter } = useOwnedAlbumIds();
 
   const artistName = useMemo(() => {
     try { return decodeURIComponent(slug || ""); } catch { return slug || ""; }
@@ -57,7 +61,10 @@ export function ArtistDetail() {
   const artistAlbums = useMemo<Album[]>(() => {
     const nameLc = artistName.trim().toLowerCase();
     const staticMatches = ALBUMS.filter(
-      (a) => a.artist.trim().toLowerCase() === nameLc,
+      (a) =>
+        a.artist.trim().toLowerCase() === nameLc &&
+        // Task #1292 — fans only see albums they own; admins see all.
+        (!ownershipFilter || ownedAlbumIds.has(a.id)),
     );
     const seenIds = new Set(staticMatches.map((a) => a.id));
     // Convert DB Album → fan-side Album shape. The fan UI here only
@@ -79,7 +86,9 @@ export function ArtistDetail() {
           // admin-only; they must stay off the public artist page.
           !(a as any).isPrepping &&
           (a.artist ?? "").trim().toLowerCase() === nameLc &&
-          !seenIds.has(a.id),
+          !seenIds.has(a.id) &&
+          // Task #1292 — fans only see albums they own; admins see all.
+          (!ownershipFilter || ownedAlbumIds.has(a.id)),
       )
       .map(
         (a) =>
@@ -97,7 +106,7 @@ export function ArtistDetail() {
           }) as Album,
       );
     return [...staticMatches, ...dbMatches];
-  }, [artistName, dbAlbums]);
+  }, [artistName, dbAlbums, ownershipFilter, ownedAlbumIds]);
 
   // Catalog-wide song list. The artist page's release tiles already union
   // static + DB albums (above), but the play queue was still gathered from
@@ -266,10 +275,29 @@ export function ArtistDetail() {
   // already in the catalog renders above as a full GT tile — we don't
   // want it to appear twice with a streaming handoff fan can use to
   // leave the app.
-  const goodTunesTitles = useMemo(
-    () => new Set(artistAlbums.map((a) => a.title.toLowerCase())),
-    [artistAlbums],
-  );
+  //
+  // Task #1292 — IMPORTANT: derive this exclusion set from the FULL
+  // GoodTunes catalog for this artist (not from the ownership-filtered
+  // artistAlbums). If we used artistAlbums here, unowned GT releases
+  // would not be in the set and could re-surface in the streaming buckets
+  // as "playable on Spotify/Apple Music" tiles — leaking unowned content
+  // through the streaming section even though it's a GoodTunes release.
+  const goodTunesTitles = useMemo(() => {
+    const nameLc = artistName.trim().toLowerCase();
+    const staticTitles = ALBUMS
+      .filter((a) => a.artist.trim().toLowerCase() === nameLc)
+      .map((a) => a.title.toLowerCase());
+    const dbTitles = dbAlbums
+      .filter(
+        (a) =>
+          !a.isHidden &&
+          a.isGoodTunesRelease &&
+          !(a as any).isPrepping &&
+          (a.artist ?? "").trim().toLowerCase() === nameLc,
+      )
+      .map((a) => a.title.toLowerCase());
+    return new Set([...staticTitles, ...dbTitles]);
+  }, [artistName, dbAlbums]);
   const streamingFiltered = useMemo(
     () => streamingAll.filter((r) => !goodTunesTitles.has(r.name.toLowerCase())),
     [streamingAll, goodTunesTitles],

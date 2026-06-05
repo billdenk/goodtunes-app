@@ -11,10 +11,15 @@ import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { IconButton } from "@/components/ui/IconButton";
 import type { Album as DbAlbum, Label } from "@shared/schema";
+import { useOwnedAlbumIds } from "@/hooks/useOwnedAlbumIds";
 
 export function FanLabel() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
+
+  // Task #1292 — fan-only owned-album gate. Admins see all label releases;
+  // fans see only albums they own.
+  const { ownedAlbumIds, shouldFilter: ownershipFilter } = useOwnedAlbumIds();
 
   const { data: label, isLoading: labelLoading, isError: labelError } = useQuery<Label>({
     queryKey: ["/api/labels", id],
@@ -33,7 +38,9 @@ export function FanLabel() {
       // them off the label page. Same rule the artist page uses.
       (a as any).isGoodTunesRelease &&
       // Pre-launch prepping shells stay admin-only.
-      !(a as any).isPrepping,
+      !(a as any).isPrepping &&
+      // Task #1292 — fans only see albums they own; admins see all.
+      (!ownershipFilter || ownedAlbumIds.has(a.id)),
   );
 
   if (!labelLoading && (labelError || !label)) {

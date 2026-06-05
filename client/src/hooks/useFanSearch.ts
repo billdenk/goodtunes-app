@@ -15,6 +15,7 @@ import {
   type Hit,
   type SearchResponse,
 } from "@/components/search/views";
+import { useOwnedAlbumIds } from "@/hooks/useOwnedAlbumIds";
 
 // Shared search state + behaviour (Task #530 + Task #713).
 //
@@ -40,6 +41,9 @@ export function useFanSearch(opts?: { onNavigate?: () => void }) {
   const recordSearchEntity = useRecordSearchEntity();
   const { data: recentSearches } = useRecentSearches();
   const clearRecentSearches = useClearRecentSearches();
+  // Task #1292 — fan-only owned-album filter. Admins see the full
+  // catalog; fans only see albums they own (and songs from those albums).
+  const { ownedAlbumIds, shouldFilter, isReady } = useOwnedAlbumIds();
 
   // Debounce typing → query (300ms) so we don't fire on every keystroke.
   useEffect(() => {
@@ -61,7 +65,32 @@ export function useFanSearch(opts?: { onNavigate?: () => void }) {
     enabled: !!query,
   });
 
-  const r = data?.results;
+  const rawR = data?.results;
+
+  // Task #1292 — for fans, narrow album and song hits to the owned set.
+  // Songs carry albumId so we can filter by parent. Ownership must be
+  // ready (isReady) before we apply the filter to avoid a false empty-state
+  // while /api/my-albums is still in-flight. Admins (shouldFilter=false) see
+  // the unmodified catalog. All other categories (artists, gear, vendors…)
+  // are unaffected — they're not album-gated.
+  const r = useMemo((): typeof rawR => {
+    if (!rawR) return rawR;
+    if (!shouldFilter) return rawR;
+    // Fail closed: while ownership is still loading (or errored and fell back
+    // to an empty set that's already the correct gate), suppress album and
+    // song hits entirely so unowned content never renders, even briefly.
+    if (!isReady) {
+      return { ...rawR, albums: [], songs: [] };
+    }
+    return {
+      ...rawR,
+      albums: (rawR.albums ?? []).filter((h) => ownedAlbumIds.has(h.id)),
+      songs: (rawR.songs ?? []).filter(
+        (h) => h.albumId != null && ownedAlbumIds.has(h.albumId),
+      ),
+    };
+  }, [rawR, shouldFilter, isReady, ownedAlbumIds]);
+
   // Each category is optional-chained on BOTH `r` AND the array itself: a
   // malformed/partial search payload (a category key present but null, or a
   // 200 with a null body) would otherwise crash here with
