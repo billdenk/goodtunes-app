@@ -474,6 +474,11 @@ export function AlbumDetailMobileSurface({
         style={{ paddingBottom: 160 }}
         data-testid="scroll-album"
       >
+        {/* Task #1276 — one continuous navy fill behind the hero, the
+            Play/Shuffle/Buy row, and the track list, so the fixed purple
+            body gradient never shows through the transparent margins
+            between these blocks (the band that used to sit behind Play). */}
+        <div style={{ background: "#00062B" }}>
         <div style={{ background: "#00062B" }}>
           <div className="pt-32 px-6 flex justify-center">
             <div
@@ -584,7 +589,7 @@ export function AlbumDetailMobileSurface({
         </div>
 
         {/* Play / Shuffle / Add bar */}
-        <div className="flex items-center justify-center gap-3 px-5 mt-1 mb-3">
+        <div className="bg-[color:var(--brand-bg)] flex items-center justify-center gap-3 px-5 mt-1 mb-3">
           {/* Shuffle is meaningless when GoodTunes hosts no master, so a
               stream-only album hides it. */}
           {!isStreamOnlyAlbum && (
@@ -1003,6 +1008,7 @@ export function AlbumDetailMobileSurface({
             className="h-px flex-shrink-0"
             style={{ background: "rgba(255,255,255,0.20)" }}
           />
+        </div>
         </div>
 
         {bonusSlot}
