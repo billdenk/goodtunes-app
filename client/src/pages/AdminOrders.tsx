@@ -15,6 +15,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
+import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AlertTriangle, Settings2, RefreshCw, Loader2, Gift } from "lucide-react";
 import type { PayoutSettings, AlbumFormat } from "@shared/schema";
 import { VinylPreview } from "@/components/VinylPreview";
@@ -307,8 +308,8 @@ function AdminOrdersInner() {
   }, [filtered, focusOrderId, didFocus]);
 
   return (
-    <main className="min-h-screen bg-slate-50" data-testid="page-admin-orders">
-      <div className="max-w-5xl mx-auto px-6 py-8">
+    <AdminFrame active="fan-orders">
+      <div className="max-w-5xl mx-auto py-8" data-testid="page-admin-orders">
         <div className="flex items-center justify-between mb-5">
           <div>
             <h1 className="text-[22px] font-semibold text-slate-900">Orders</h1>
@@ -670,7 +671,7 @@ function AdminOrdersInner() {
           })}
         </Card>
       </div>
-    </main>
+    </AdminFrame>
   );
 }
 
