@@ -114,6 +114,7 @@ export function AdminAlbums() {
       year: null as number | null,
       genre: "",
       explicit: "any" as "any" | "explicit" | "clean",
+      spinPromo: false,
     };
     try {
       const p = new URLSearchParams(urlSearch);
@@ -142,6 +143,7 @@ export function AdminAlbums() {
       if (genre) out.genre = genre;
       const ex = p.get("explicit");
       if (ex === "explicit" || ex === "clean") out.explicit = ex;
+      if (p.get("spinPromo") === "1") out.spinPromo = true;
     } catch {
       /* malformed query string — fall through to the defaults */
     }
@@ -177,6 +179,13 @@ export function AdminAlbums() {
   const [explicitFilter, setExplicitFilter] = useState<
     "any" | "explicit" | "clean"
   >(initial.explicit);
+  // Task #1304 — admin-only "SPIN Promo" filter. When on, the grid/list
+  // shows only albums flagged `is_spin_promo = true` (the same purple-disc
+  // badge already rendered on the tile/row). Mirrored to the URL as
+  // `?spinPromo=1` so Bill can bookmark / share the flagged-set view.
+  const [spinPromoOnly, setSpinPromoOnly] = useState<boolean>(
+    initial.spinPromo,
+  );
   // Task #445 — "+ Add Album" opens the "Who's the artist?" dialog first
   // so the new album lands with primaryArtistId already attached instead
   // of "Unknown artist". The dialog stays open (and its actions disabled)
@@ -273,8 +282,9 @@ export function AdminAlbums() {
     if (dateAddedYear !== null) p.set("year", String(dateAddedYear));
     if (genreFilter.trim()) p.set("genre", genreFilter.trim());
     if (explicitFilter !== "any") p.set("explicit", explicitFilter);
+    if (spinPromoOnly) p.set("spinPromo", "1");
     return p.toString();
-  }, [tab, view, search, typeFilter, dateAddedYear, genreFilter, explicitFilter]);
+  }, [tab, view, search, typeFilter, dateAddedYear, genreFilter, explicitFilter, spinPromoOnly]);
 
   // Mirror the serialized list view into the URL with `replace` so refreshes
   // and return navigations land back where the operator was. Early-returns
@@ -389,7 +399,8 @@ export function AdminAlbums() {
     typeFilter.size !== 3 ||
     dateAddedYear !== null ||
     genreFilter !== "" ||
-    explicitFilter !== "any";
+    explicitFilter !== "any" ||
+    spinPromoOnly;
 
   const filtered = useMemo(() => {
     const wantGenre = genreFilter.trim().toLowerCase();
@@ -406,15 +417,17 @@ export function AdminAlbums() {
       }
       if (explicitFilter === "explicit" && !a.isExplicit) return false;
       if (explicitFilter === "clean" && a.isExplicit) return false;
+      if (spinPromoOnly && !a.isSpinPromo) return false;
       return true;
     });
-  }, [searched, typeFilter, dateAddedYear, genreFilter, explicitFilter]);
+  }, [searched, typeFilter, dateAddedYear, genreFilter, explicitFilter, spinPromoOnly]);
 
   const resetFilters = () => {
     setTypeFilter(new Set<AlbumLite["type"]>(["LP", "EP", "Duo"]));
     setDateAddedYear(null);
     setGenreFilter("");
     setExplicitFilter("any");
+    setSpinPromoOnly(false);
   };
 
   const toggleType = (t: AlbumLite["type"]) => {
@@ -654,6 +667,40 @@ export function AdminAlbums() {
                             onClick={() => setExplicitFilter(opt.v)}
                             aria-pressed={active}
                             data-testid={`filter-explicit-${opt.v}`}
+                            className={[
+                              "flex-1 h-8 text-[12px] font-semibold rounded transition-colors",
+                              active
+                                ? "bg-white text-slate-900 shadow-sm"
+                                : "text-slate-500 hover:text-slate-900",
+                            ].join(" ")}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </FilterSection>
+
+                  {/* SPIN Promo — admin-only flag (purple disc badge on the
+                      tile/row). Single toggle: on = show only flagged
+                      titles so Bill can audit the set without opening each
+                      album. Mirrored to the URL as `?spinPromo=1`. */}
+                  <FilterSection label="SPIN Promo">
+                    <div className="inline-flex items-center bg-slate-100 rounded-md p-0.5 w-full">
+                      {(
+                        [
+                          { v: false, label: "Any" },
+                          { v: true, label: "Flagged only" },
+                        ] as const
+                      ).map((opt) => {
+                        const active = spinPromoOnly === opt.v;
+                        return (
+                          <button
+                            key={String(opt.v)}
+                            type="button"
+                            onClick={() => setSpinPromoOnly(opt.v)}
+                            aria-pressed={active}
+                            data-testid={`filter-spin-promo-${opt.v ? "on" : "any"}`}
                             className={[
                               "flex-1 h-8 text-[12px] font-semibold rounded transition-colors",
                               active
