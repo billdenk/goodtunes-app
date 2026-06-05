@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Search, Users, ArrowUp, ArrowDown, ShieldCheck, X } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -31,12 +31,31 @@ import type { CustomerUser } from "@shared/schema";
  * we never ship the full fan list to the client for filtering. Sorting
  * is server-side by signup recency for now; click-through to the
  * detail page is where deeper analysis happens.
+ *
+ * Task #1298 — adds a segmented tab bar (All / Buyers / No sales /
+ * Unclaimed) with server-side filtering and per-tab counts. The active
+ * tab is mirrored into the URL so a filtered view can be bookmarked.
  */
+
+type SegmentKey = "all" | "buyers" | "no_sales" | "unclaimed";
+const SEGMENT_KEYS: SegmentKey[] = ["all", "buyers", "no_sales", "unclaimed"];
+const SEGMENT_LABELS: Record<SegmentKey, string> = {
+  all: "All",
+  buyers: "Buyers",
+  no_sales: "No sales",
+  unclaimed: "Unclaimed",
+};
 
 type CustomerRow = CustomerUser & {
   orderCount: number;
   lifetimeSpendCents: number;
   lastActivityAt: string | null;
+};
+
+type CustomerListResponse = {
+  rows: CustomerRow[];
+  total: number;
+  counts: Record<SegmentKey, number>;
 };
 
 function formatMoney(cents: number): string {
@@ -66,20 +85,52 @@ export function AdminCustomers() {
     return () => document.body.classList.remove("gt-admin");
   }, []);
   const { user, isLoading: authLoading } = useAuth();
-  const [search, setSearch] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [, navigate] = useLocation();
+  const urlSearch = useSearch();
+
+  // Parse initial state from URL on mount only.
+  const initial = useMemo(() => {
+    const out: { tab: SegmentKey; search: string } = { tab: "all", search: "" };
+    try {
+      const p = new URLSearchParams(urlSearch);
+      const t = p.get("tab");
+      if (t && (SEGMENT_KEYS as string[]).includes(t)) out.tab = t as SegmentKey;
+      const q = p.get("q");
+      if (q) out.search = q;
+    } catch { /* malformed — fall through */ }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [tab, setTabState] = useState<SegmentKey>(initial.tab);
+  const [search, setSearch] = useState(initial.search);
+  const [searchOpen, setSearchOpen] = useState(initial.search !== "");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useViewMode("customers", "list");
   const { toast } = useToast();
+
+  // Mirror tab + search into the URL so the view is bookmarkable.
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (tab !== "all") p.set("tab", tab);
+    if (search.trim()) p.set("q", search.trim());
+    const qs = p.toString();
+    navigate(qs ? `?${qs}` : "?", { replace: true });
+  }, [tab, search, navigate]);
+
+  function setTab(next: SegmentKey) {
+    setTabState(next);
+    // Reset pagination when switching tabs.
+    setPages([]);
+    setTotal(0);
+    setOffset(0);
+  }
 
   useEffect(() => {
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
 
-  // Task #256 — "Make admin…" row action. Only super_admin sees it; the
-  // dialog mirrors the role + scope picker from /admin/invites but
-  // POSTs to /promote so the customer's existing credentials carry
-  // over (no second account, no separate invite).
+  // Task #256 — "Make admin…" row action. Only super_admin sees it.
   const { data: meRole } = useQuery<{ role: string }>({
     queryKey: ["/api/me/role"],
     enabled: !!user?.isAdmin,
@@ -88,17 +139,13 @@ export function AdminCustomers() {
   const [promoteFor, setPromoteFor] = useState<{ id: string; name: string; email: string } | null>(null);
 
   // Debounce the search term so each keystroke doesn't hit the server.
-  const [debounced, setDebounced] = useState("");
+  const [debounced, setDebounced] = useState(initial.search);
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search.trim()), 250);
     return () => clearTimeout(t);
   }, [search]);
 
-  // Offset-based pagination. The server caps each request at 500 rows
-  // but supports `offset`, so we accumulate pages here to give admins
-  // a "Load more" button that walks past the per-request cap and lets
-  // them browse the entire fan-account directory. The accumulated
-  // rows + total are reset whenever the search term changes.
+  // Offset-based pagination. Reset on search or tab change.
   const PAGE = 200;
   const [pages, setPages] = useState<CustomerRow[][]>([]);
   const [total, setTotal] = useState(0);
@@ -109,38 +156,45 @@ export function AdminCustomers() {
     setOffset(0);
   }, [debounced]);
 
+  // Per-segment counts returned by the server (always full-dataset, no
+  // search filter applied). Kept as the latest resolved value.
+  const [counts, setCounts] = useState<Record<SegmentKey, number>>({
+    all: 0,
+    buyers: 0,
+    no_sales: 0,
+    unclaimed: 0,
+  });
+
   const {
     isLoading,
     isFetching,
     isError: customersError,
     error: customersErrorObj,
     refetch: refetchCustomers,
-  } = useQuery<{ rows: CustomerRow[]; total: number }>({
-    queryKey: ["/api/admin/customers", { q: debounced, offset }],
+  } = useQuery<CustomerListResponse>({
+    queryKey: ["/api/admin/customers", { q: debounced, offset, segment: tab }],
     enabled: !!user?.isAdmin,
     queryFn: async () => {
       const params = new URLSearchParams();
       if (debounced) params.set("q", debounced);
       params.set("limit", String(PAGE));
       params.set("offset", String(offset));
+      params.set("segment", tab);
       const res = await apiRequest("GET", `/api/admin/customers?${params}`);
-      const json = (await res.json()) as { rows: CustomerRow[]; total: number };
-      // Replace this offset's page in-place so refetches don't duplicate.
+      const json = (await res.json()) as CustomerListResponse;
       setPages((prev) => {
         const next = [...prev];
         next[Math.floor(offset / PAGE)] = json.rows;
         return next;
       });
       setTotal(json.total);
+      if (json.counts) setCounts(json.counts);
       return json;
     },
   });
   const allRows = useMemo(() => pages.flat(), [pages]);
 
-  // Client-side sort over the server payload. The list is capped at
-  // 500 rows server-side so sorting in-browser is cheap; sortable
-  // columns are what the operator actually reaches for first
-  // (lifetime spend, order count, last activity).
+  // Client-side sort over the server payload.
   type SortKey = "name" | "orders" | "lifetime" | "lastActivity" | "signup";
   type SortDir = "asc" | "desc";
   const [sortKey, setSortKey] = useState<SortKey>("lastActivity");
@@ -207,7 +261,7 @@ export function AdminCustomers() {
           title="Customers"
           subtitle={
             debounced
-              ? `${rows.length} match${rows.length === 1 ? "" : "es"} of ${total} fan account${total === 1 ? "" : "s"}`
+              ? `${rows.length} match${rows.length === 1 ? "" : "es"} of ${total} in ${SEGMENT_LABELS[tab].toLowerCase()}`
               : `${total} fan account${total === 1 ? "" : "s"}`
           }
           actions={(<>
@@ -259,6 +313,21 @@ export function AdminCustomers() {
               testIdPrefix="view-mode-customers"
             />
           </>)}
+          belowHeader={(
+            <div className="border-b border-slate-200 flex items-center gap-6 overflow-x-auto mt-3">
+              {SEGMENT_KEYS.map((k) => (
+                <TabBtn
+                  key={k}
+                  active={tab === k}
+                  onClick={() => setTab(k)}
+                  count={counts[k]}
+                  testId={`tab-${k}`}
+                >
+                  {SEGMENT_LABELS[k]}
+                </TabBtn>
+              ))}
+            </div>
+          )}
         />
 
         {isLoading ? (
@@ -277,12 +346,18 @@ export function AdminCustomers() {
           >
             <Users className="w-8 h-8 mx-auto text-slate-300 mb-2" strokeWidth={1.5} />
             <div className="text-slate-700 font-medium">
-              {debounced ? "No matching customers" : "No customers yet"}
+              {debounced ? "No matching customers" : `No customers in ${SEGMENT_LABELS[tab].toLowerCase()}`}
             </div>
             <div className="text-slate-500 text-[13px] mt-1">
               {debounced
                 ? "Try a different name, email, or username."
-                : "Your first fan will show up here once they buy something."}
+                : tab === "all"
+                ? "Your first fan will show up here once they sign up."
+                : tab === "buyers"
+                ? "No customers have purchased yet."
+                : tab === "no_sales"
+                ? "Every customer has at least one order."
+                : "No unclaimed legacy accounts found."}
             </div>
           </div>
         ) : view === "grid" ? (
@@ -420,9 +495,6 @@ export function AdminCustomers() {
                 );
               })}
             </div>
-            {/* Load more: walks the offset forward 200 rows at a time
-                so admins can browse the entire fan directory regardless
-                of size, without infinite scroll. */}
             {rows.length < total && (
               <div className="px-4 py-3 border-t border-slate-100 text-center">
                 <button
@@ -451,6 +523,45 @@ export function AdminCustomers() {
         />
       )}
     </AdminFrame>
+  );
+}
+
+function TabBtn({
+  active,
+  onClick,
+  count,
+  children,
+  testId,
+}: {
+  active: boolean;
+  onClick: () => void;
+  count: number;
+  children: React.ReactNode;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      className={[
+        "relative py-2.5 text-[13.5px] font-semibold transition-colors inline-flex items-center gap-1.5 flex-shrink-0",
+        active ? "text-slate-900" : "text-slate-400 hover:text-slate-700",
+      ].join(" ")}
+    >
+      {children}
+      <span
+        className={[
+          "tabular-nums text-[11.5px] font-bold px-1.5 py-px rounded",
+          active ? "bg-slate-100 text-slate-600" : "bg-slate-50 text-slate-400",
+        ].join(" ")}
+      >
+        {count}
+      </span>
+      {active && (
+        <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
+      )}
+    </button>
   );
 }
 

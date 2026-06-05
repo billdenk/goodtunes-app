@@ -23299,7 +23299,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!ids.length) return res.json({ rows: [], total: 0 });
       artistAlbumIds = ids;
     }
-    const result = await storage.listAdminCustomers({ q, limit, offset, artistAlbumIds });
+    const segmentRaw = typeof req.query.segment === "string" ? req.query.segment : "all";
+    const segment = (["all", "buyers", "no_sales", "unclaimed"] as const).includes(segmentRaw as any)
+      ? (segmentRaw as "all" | "buyers" | "no_sales" | "unclaimed")
+      : "all";
+    const result = await storage.listAdminCustomers({ q, limit, offset, artistAlbumIds, segment });
     res.json(result);
   });
   app.get("/api/admin/customers/:id", requireAdmin, async (req, res) => {

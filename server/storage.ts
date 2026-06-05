@@ -578,9 +578,10 @@ export interface IStorage {
   // List returns each customer's row plus a roll-up (order count + lifetime
   // spend on paid/shipped orders + last activity timestamp). Profile
   // returns the customer + orders + collection items + playlist summaries.
-  listAdminCustomers(opts?: { q?: string; limit?: number; offset?: number; artistAlbumIds?: string[] }): Promise<{
+  listAdminCustomers(opts?: { q?: string; limit?: number; offset?: number; artistAlbumIds?: string[]; segment?: "all" | "buyers" | "no_sales" | "unclaimed" }): Promise<{
     rows: Array<CustomerUser & { orderCount: number; lifetimeSpendCents: number; lastActivityAt: Date | null }>;
     total: number;
+    counts: { all: number; buyers: number; no_sales: number; unclaimed: number };
   }>;
   getAdminCustomerProfile(id: string): Promise<{
     customer: CustomerUser;
@@ -3237,10 +3238,11 @@ export class DbStorage implements IStorage {
   }
 
   // ---- Admin customers directory (Task #131) -------------------------
-  async listAdminCustomers(opts?: { q?: string; limit?: number; offset?: number; artistAlbumIds?: string[] }) {
+  async listAdminCustomers(opts?: { q?: string; limit?: number; offset?: number; artistAlbumIds?: string[]; segment?: "all" | "buyers" | "no_sales" | "unclaimed" }) {
     const q = (opts?.q ?? "").trim().toLowerCase();
     const limit = Math.min(Math.max(opts?.limit ?? 200, 1), 500);
     const offset = Math.max(opts?.offset ?? 0, 0);
+    const segment = opts?.segment ?? "all";
     const artistAlbumIds = opts?.artistAlbumIds;
     const like = `%${q}%`;
     // Per-customer roll-up: order count + lifetime spend on paid/shipped
@@ -3254,11 +3256,28 @@ export class DbStorage implements IStorage {
              OR lower(${customerUsers.username}) LIKE ${like}
              OR lower(coalesce(${customerUsers.realName}, '')) LIKE ${like})`
       : sql`true`;
+    // Exclude merged-away duplicate stubs — these are soft-deleted shadow
+    // rows; only the surviving canonical account should appear anywhere in
+    // the directory or count toward any segment total.
+    const notMergedExpr = sql`${customerUsers.mergedIntoId} IS NULL`;
+    // Segment expressions — applied server-side so filtering is correct
+    // even across pagination. "buyers" and "no_sales" use EXISTS/NOT EXISTS
+    // subqueries so the outer LEFT JOIN order count stays independent.
+    // "unclaimed" = gogoods-imported (legacyGogoodsId set) + no password.
+    const segmentExpr =
+      segment === "buyers"
+        ? sql`EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ${customerUsers.id})`
+        : segment === "no_sales"
+        ? sql`NOT EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ${customerUsers.id})`
+        : segment === "unclaimed"
+        ? sql`(${customerUsers.legacyGogoodsId} IS NOT NULL AND ${customerUsers.password} IS NULL)`
+        : sql`true`;
     // When scoping to an artist's albums, restrict to customers who have
     // at least one order for one of those albums.
-    const whereExpr = artistAlbumIds?.length
-      ? and(textExpr, sql`${customerUsers.id} IN (SELECT customer_id FROM orders WHERE album_id = ANY(${pgArray(artistAlbumIds)}::text[]))`)
-      : textExpr;
+    const baseExpr = artistAlbumIds?.length
+      ? and(notMergedExpr, textExpr, sql`${customerUsers.id} IN (SELECT customer_id FROM orders WHERE album_id = ANY(${pgArray(artistAlbumIds)}::text[]))`)
+      : and(notMergedExpr, textExpr);
+    const whereExpr = and(baseExpr, segmentExpr);
 
     const rows = await db
       .select({
@@ -3280,6 +3299,23 @@ export class DbStorage implements IStorage {
       .from(customerUsers)
       .where(whereExpr);
 
+    // Per-segment counts against the full dataset (no search, no segment
+    // filter) so the tab badges stay stable as the operator types a query.
+    // artistAlbumIds scope still applies so artist-partner views stay bounded.
+    // mergedIntoId IS NULL is always required so merged stubs never inflate counts.
+    const countsBaseExpr = artistAlbumIds?.length
+      ? and(notMergedExpr, sql`${customerUsers.id} IN (SELECT customer_id FROM orders WHERE album_id = ANY(${pgArray(artistAlbumIds)}::text[]))`)
+      : notMergedExpr;
+    const [countsRow] = await db
+      .select({
+        all: sql<number>`count(*)::int`,
+        buyers: sql<number>`count(*) FILTER (WHERE EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ${customerUsers.id}))::int`,
+        no_sales: sql<number>`count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM orders WHERE orders.customer_id = ${customerUsers.id}))::int`,
+        unclaimed: sql<number>`count(*) FILTER (WHERE ${customerUsers.legacyGogoodsId} IS NOT NULL AND ${customerUsers.password} IS NULL)::int`,
+      })
+      .from(customerUsers)
+      .where(countsBaseExpr);
+
     return {
       rows: rows.map((r) => ({
         ...r.customer,
@@ -3288,6 +3324,12 @@ export class DbStorage implements IStorage {
         lastActivityAt: r.lastOrderAt ?? r.customer.createdAt ?? null,
       })),
       total,
+      counts: {
+        all: countsRow?.all ?? 0,
+        buyers: countsRow?.buyers ?? 0,
+        no_sales: countsRow?.no_sales ?? 0,
+        unclaimed: countsRow?.unclaimed ?? 0,
+      },
     };
   }
 
