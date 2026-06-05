@@ -5666,7 +5666,20 @@ function SkuRow({
                 grid is the one control with unpredictable height (one row vs.
                 several); placing it last lets it grow downward without
                 reflowing the Tracks/Retail/Qty/Jacket controls above it. */}
-          {usingCatalog && pickedTier ? (
+          {!isVinyl ? (
+            // Task #1310 — cassette/CD are a single one-color imprint
+            // (J-card prints with the album cover), so they don't get
+            // the vinyl color/tier picker. pickedTier still resolves to
+            // the lone catalog tier, so pricing/rungs flow normally; we
+            // just suppress the swatch UI and the misleading
+            // "no colors set — ask the press" hint.
+            <div
+              className="text-xs text-slate-400"
+              data-testid={`text-one-color-imprint-${format}`}
+            >
+              One-color imprint — the J-card prints with the album cover. No color choices for {ALBUM_FORMAT_LABEL[format].toLowerCase()}.
+            </div>
+          ) : usingCatalog && pickedTier ? (
             <div className="space-y-2">
               <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
                 Color

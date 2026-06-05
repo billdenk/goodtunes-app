@@ -4,11 +4,11 @@
 // have already installed.
 import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ExternalLink, Trash2, CheckCircle2, FlaskConical, Copy, Check } from "lucide-react";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
+import { AdminFrame } from "@/components/admin/AdminFrame";
 
 type Store = {
   id: string;
@@ -31,7 +31,6 @@ export function AdminShopify() {
 
 function AdminShopifyInner() {
   const { toast } = useToast();
-  const [, navigate] = useLocation();
   const [shop, setShop] = useState("");
 
   const { data: cfg } = useQuery<{ configured: boolean; apiKey: string | null; scopes: string }>({
@@ -97,13 +96,8 @@ function AdminShopifyInner() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <div className="max-w-4xl mx-auto px-6 py-8" data-testid="page-admin-shopify">
-        <div className="mb-6">
-          <button onClick={() => navigate("/admin")} className="text-[12px] text-slate-500 hover:text-slate-700">
-            ← Back to admin
-          </button>
-        </div>
+    <AdminFrame active="shopify" contentWidth="narrow">
+      <div data-testid="page-admin-shopify">
         <h1 className="text-2xl font-bold text-slate-900 mb-1">Shopify</h1>
         <p className="text-slate-500 text-sm mb-8">
           Connect a label's Shopify store. Their physical orders flow into GoodTunes and bundled fans land on a "Get your music" CTA.
@@ -310,6 +304,6 @@ Get your music now
           </div>
         </section>
       </div>
-    </main>
+    </AdminFrame>
   );
 }

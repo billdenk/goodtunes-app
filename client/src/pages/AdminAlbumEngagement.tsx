@@ -4,6 +4,7 @@
 import { useRoute, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { AdminErrorBoundary, ErrorState } from "@/components/admin/AdminErrorBoundary";
+import { AdminFrame } from "@/components/admin/AdminFrame";
 
 type Engagement = {
   redemptions: { paid: number; refunded: number; direct: number; shopify: number };
@@ -51,8 +52,8 @@ function AdminAlbumEngagementInner() {
   const songTitle = (id: string) => songs?.find((s) => s.id === id)?.title ?? id.slice(0, 8);
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <div className="max-w-4xl mx-auto px-6 py-8" data-testid="page-album-engagement">
+    <AdminFrame active="albums" contentWidth="narrow">
+      <div data-testid="page-album-engagement">
         <Link href={`/admin/albums/${albumId}`} className="text-[12px] text-slate-500 hover:text-slate-700">
           ← Back to album
         </Link>
@@ -119,6 +120,6 @@ function AdminAlbumEngagementInner() {
           </>
         )}
       </div>
-    </main>
+    </AdminFrame>
   );
 }

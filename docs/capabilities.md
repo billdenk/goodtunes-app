@@ -94,6 +94,7 @@ The admin tooling and operational process that lets a tiny team run the whole bu
 - **Bulk credit editing.** Edit credits across an entire album at once.
 - **Waveform-based preview editing.** Set the 30-second preview window visually against the waveform.
 - **Asset management.** High-res masters, artwork, and bonus content are stored and served securely.
+- **Cassette as a sellable format.** Memphis Record Pressing's cassette pricing is loaded into the press catalog (300 / 500 / 1,000 / 2,000 / 3,000-unit run ladder, retail = cost), so an operator can quote and sell a cassette release the same way as vinyl. Cassette is a single one-color imprint with the J-card printed from the album cover — so the Sell-panel skips the vinyl color picker and shows a "one-color imprint" note instead — and both the operator and fan previews render a **tall cassette case** with the cover as the J-card front. MRP's 7" booklet add-on also gained 300- and 3,000-unit price rungs.
 - **Self-service vendor trash.** Deleting a Maker or Reseller now drops it into a Trash tab on the same admin page instead of erasing it. Admins can Restore a deleted vendor (bringing it and its gear links back) or Purge it permanently behind a confirm dialog. When adding a vendor whose domain is already held by a trashed row, the conflict message links straight to the Trash tab so the operator can restore or purge it on the spot.
 
 ## Operations

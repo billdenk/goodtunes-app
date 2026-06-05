@@ -46,6 +46,64 @@ export function VinylPreview({
 }) {
   // Task #982 — 7" singles have no inner sleeve in real life.
   const showInnerSleeve = format !== "7_inch";
+  // Task #1310 — cassette renders as a tall J-card case, not a vinyl
+  // disc. The J-card is printed both sides with the album cover, so we
+  // show the art in a portrait cassette-case frame with a folded spine
+  // strip on the left and a soft plastic sheen. No disc, no inner
+  // sleeve, no color axis (cassette is a single one-color imprint). The
+  // "cassette peeking out" idea Bill floated is deferred — this is the
+  // flat-art version he asked for first.
+  if (format === "cassette") {
+    const cassetteDims =
+      size === "sm"
+        ? "h-20"
+        : size === "lg"
+          ? "h-44"
+          : size === "xl"
+            ? "h-56"
+            : size === "2xl"
+              ? "h-72"
+              : "h-28";
+    return (
+      <div
+        className={["relative inline-block align-top", cassetteDims].join(" ")}
+        style={{ aspectRatio: "0.68 / 1" }}
+        data-testid="cassette-preview"
+      >
+        <div className="absolute inset-0 overflow-hidden shadow-md border border-black/15 bg-slate-200">
+          {artworkUrl ? (
+            <img
+              src={artworkUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              draggable={false}
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-slate-300 to-slate-400" />
+          )}
+          {/* Folded J-card spine — a thin strip on the left edge that
+              reads as the wrap-around fold (same art, darkened). */}
+          <div className="absolute top-0 bottom-0 left-0" style={{ width: "11%" }} aria-hidden="true">
+            {artworkUrl && (
+              <img src={artworkUrl} alt="" className="w-full h-full object-cover" draggable={false} />
+            )}
+            <div className="absolute inset-0 bg-black/35" />
+            <div className="absolute top-0 bottom-0 right-0 w-px bg-black/40" />
+          </div>
+          {/* Plastic case sheen */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(115deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 22%, rgba(255,255,255,0) 78%, rgba(255,255,255,0.12) 100%)",
+            }}
+            aria-hidden="true"
+          />
+          {jacketOverlay}
+        </div>
+      </div>
+    );
+  }
   // Height drives the scale. The width is derived from the aspect
   // ratio of (jacket footprint + disc peek), so the outer wrapper
   // reserves real layout space for the disc instead of letting it

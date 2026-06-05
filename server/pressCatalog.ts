@@ -1336,19 +1336,21 @@ const PMP_BOOKLET: BookletLadder = {
 const MRP_BOOKLET: BookletLadder = {
   domain: MRP_DOMAIN,
   label: "MRP",
-  // Task #631 — 100/200/300 added as unconfirmed placeholders so the
+  // Task #631 — 100/200 added as unconfirmed placeholders so the
   // booklet ladder reads with the same six-column shape as the per-
   // tier vinyl ladders. snap/lookup filter `confirmed:false` so they
-  // never resolve as $0.
+  // never resolve as $0. Task #1310 — MRP quoted the 300 + 3000 rungs
+  // (May 2026, valid 6/26/26), so both are now confirmed.
   rungs: [
     { qty: 100, unitCents: 0, confirmed: false },
     { qty: 200, unitCents: 0, confirmed: false },
-    { qty: 300, unitCents: 0, confirmed: false },
+    { qty: 300, unitCents: 331, confirmed: true },   // $993.43 / 300   ≈ $3.31 ea
     { qty: 500, unitCents: 224, confirmed: true },   // $1121.43 / 500  ≈ $2.24 ea
     { qty: 1000, unitCents: 144, confirmed: true },  // $1441.43 / 1000 ≈ $1.44 ea
     { qty: 2000, unitCents: 133, confirmed: true },  // $2654.29 / 2000 ≈ $1.33 ea
+    { qty: 3000, unitCents: 121, confirmed: true },  // $3638.57 / 3000 ≈ $1.21 ea
   ],
-  runTotalsCents: { 500: 112143, 1000: 144143, 2000: 265429 },
+  runTotalsCents: { 300: 99343, 500: 112143, 1000: 144143, 2000: 265429, 3000: 363857 },
   spec: "16pp, CMYK 4/4, 150gsm art paper, open-top poly bag + assembly. Standalone add-on — not auto-bundled into 7\" vinyl.",
 };
 
@@ -1604,6 +1606,27 @@ const MRP_EXTRA_JACKETS: ReadonlyArray<{ name: string; formats: AlbumFormat[] }>
   { name: "Old-Style Tip-On Gatefold", formats: ["12_lp", "12_double"] },
 ];
 
+// Task #1310 — MRP's cassette quote (May 2026, valid 6/26/26). Cassette
+// is a single one-color imprint with a J-card printed both sides (=
+// the album cover), so it has NO color/splatter axis — a single tier on
+// the default jacket carries the whole ladder. Per-unit cents are the
+// all-in MRP total (flat $3.20/unit production + per-run setup fee) ÷
+// qty, so the per-run setup amortises into the rung. retail = cost
+// (MRP gives no broker discount; GoodTunes adds no markup).
+//   300  → $1,140   ($960 + $180 setup)  ≈ $3.80 ea
+//   500  → $1,800   ($1,600 + $200 setup) ≈ $3.60 ea
+//   1000 → $3,450   ($3,200 + $250 setup) ≈ $3.45 ea
+//   2000 → $6,750   ($6,400 + $350 setup) ≈ $3.38 ea
+//   3000 → $10,050  ($9,600 + $450 setup) ≈ $3.35 ea
+const MRP_CASSETTE_TIER = "Cassette";
+const MRP_CASSETTE_LADDER: MrpRungSpec[] = [
+  { qty: 300, unitCents: 380, confirmed: true },
+  { qty: 500, unitCents: 360, confirmed: true },
+  { qty: 1000, unitCents: 345, confirmed: true },
+  { qty: 2000, unitCents: 338, confirmed: true },
+  { qty: 3000, unitCents: 335, confirmed: true },
+];
+
 export async function seedMrpCatalog() {
   if (mrpSeedRan) return;
   mrpSeedRan = true;
@@ -1695,6 +1718,21 @@ export async function seedMrpCatalog() {
           await ensureCombo(tier.id, extra.id, placeholderLadder());
           await addMissingRungs(tier.id, extra.id, STANDARD_COMPARISON_QUANTITIES);
         }
+      }
+    }
+
+    // Task #1310 — cassette. Single one-color tier on the default
+    // jacket (J-card = album cover), no color rows. Confirmed ladder
+    // at every rung MRP quoted; addMissingRungs fills the comparison
+    // matrix's 100/200 columns with placeholders so the editor reads
+    // with the same shape as the vinyl formats.
+    await ensureFormat(press.id, "cassette", formats.length);
+    const cassetteTier = await ensureTier(press.id, "cassette", MRP_CASSETTE_TIER, 0);
+    await ensureCombo(cassetteTier.id, defaultJacket.id, MRP_CASSETTE_LADDER as LadderRungSpec[]);
+    await addMissingRungs(cassetteTier.id, defaultJacket.id, STANDARD_COMPARISON_QUANTITIES);
+    for (const r of MRP_CASSETTE_LADDER) {
+      if (r.confirmed && r.unitCents > 0) {
+        await forceRungPrice(cassetteTier.id, defaultJacket.id, r.qty, r.unitCents);
       }
     }
 

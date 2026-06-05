@@ -70,6 +70,7 @@ const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   gear: "catalog",
   "custom-addons": "catalog",
   labels: "partners",
+  shopify: "partners",
   nonprofits: "partners",
   manufacturers: "partners",
   "press-match": "partners",
@@ -122,6 +123,7 @@ export type EntityKey =
   | "vendors"
   | "payouts-release"
   | "labels"
+  | "shopify"
   | "manufacturers"
   | "press-match"
   | "pressing-orders"

@@ -92,11 +92,27 @@ Standalone add-on — **not** auto-bundled into 7" vinyl. Spec: 16pp, CMYK 4/4, 
 
 | Quantity | Total      | Per unit |
 | -------: | ---------: | -------: |
+|      300 |    $993.43 |    $3.31 |
 |      500 |  $1,121.43 |    $2.24 |
 |     1000 |  $1,441.43 |    $1.44 |
 |     2000 |  $2,654.29 |    $1.33 |
+|     3000 |  $3,638.57 |    $1.21 |
 
-Retail = cost on every rung. Per-unit cents = total ÷ qty rounded to the nearest cent. PMP's booklet ladder is unaffected — albums routed to PMP still use PMP's pricing.
+Retail = cost on every rung. Per-unit cents = total ÷ qty rounded to the nearest cent. The 300 + 3000 rungs were quoted in May 2026 (valid through 6/26/26); the 100/200 rungs stay unconfirmed placeholders. PMP's booklet ladder is unaffected — albums routed to PMP still use PMP's pricing.
+
+## Cassette (`cassette`)
+
+MRP's May-2026 cassette quote (valid through 6/26/26). Cassette is a **single one-color imprint** with a **J-card printed both sides = the album cover**, so it has no color/splatter axis: the catalog seeds one `Cassette` tier on the default jacket (no color rows), and the Sell-panel shows a "one-color imprint" caption instead of the vinyl color picker. The right-side / fan preview renders a **tall cassette case** (J-card front = album cover) instead of the disc-peek mock.
+
+| Qty   | Total    | Per unit | (= $3.20/unit + setup) |
+| ----: | -------: | -------: | ---------------------- |
+|   300 |  $1,140  |    $3.80 | $960 + $180 setup      |
+|   500 |  $1,800  |    $3.60 | $1,600 + $200 setup    |
+| 1,000 |  $3,450  |    $3.45 | $3,200 + $250 setup    |
+| 2,000 |  $6,750  |    $3.38 | $6,400 + $350 setup    |
+| 3,000 | $10,050  |    $3.35 | $9,600 + $450 setup    |
+
+Retail = cost on every rung (MRP gives no broker discount; GoodTunes adds no markup). Per-unit cents are the all-in total ÷ qty — the per-run setup fee amortises into the rung, so a smaller run costs more per cassette. All five quoted rungs seed confirmed; the comparison matrix's 100/200 columns seed as unconfirmed placeholders. The "cassette peeking out of its case" mock Bill floated is deferred — the shipped preview is the flat J-card case.
 
 ## Art file requirements
 
