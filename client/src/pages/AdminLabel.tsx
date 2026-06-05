@@ -496,7 +496,12 @@ export function AdminLabel() {
             onOpenPerson={(id) => navigate(`/admin/people/${id}?from=partner&backHref=${encodeURIComponent(`/admin/labels/${label.id}?tab=artists`)}&backName=${encodeURIComponent(label.name)}`)}
           />
         )}
-        {tab === "releases" && <ReleasesPanel releases={releases} />}
+        {tab === "releases" && (
+          <ReleasesPanel
+            releases={releases}
+            onOpenPerson={(id) => navigate(`/admin/people/${id}?from=partner&backHref=${encodeURIComponent(`/admin/labels/${label.id}?tab=releases`)}&backName=${encodeURIComponent(label.name)}`)}
+          />
+        )}
         {tab === "payouts" && (
           <PayoutAccountPanel
             ownerKind="label"
@@ -1423,7 +1428,13 @@ function ArtistsEmptyState({
 
 /* ─── Releases ─────────────────────────────────────────────────────── */
 
-function ReleasesPanel({ releases }: { releases: AlbumLite[] }) {
+function ReleasesPanel({
+  releases,
+  onOpenPerson,
+}: {
+  releases: AlbumLite[];
+  onOpenPerson: (id: string) => void;
+}) {
   if (releases.length === 0) {
     return (
       <Card
@@ -1460,12 +1471,18 @@ function ReleasesPanel({ releases }: { releases: AlbumLite[] }) {
       </div>
       <ul className="divide-y divide-slate-100" data-testid="list-releases">
         {releases.map((a) => (
-          <li key={a.id}>
+          // The whole row links to the album, but a credited artist needs
+          // to be its own click target (→ artist page). Nested anchors are
+          // invalid, so the album Link is an absolute layer behind the
+          // content; the artist button sits above it with pointer-events.
+          <li key={a.id} className="relative">
             <Link
               href={`/admin/albums/${a.id}`}
-              className="flex items-center gap-3.5 px-6 py-3 hover:bg-slate-50 transition-colors"
+              className="absolute inset-0 hover:bg-slate-50 transition-colors"
               data-testid={`row-release-${a.id}`}
-            >
+              aria-label={a.title}
+            />
+            <div className="relative z-10 flex items-center gap-3.5 px-6 py-3 pointer-events-none">
               <div className="w-11 h-11 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex-shrink-0">
                 <img
                   src={a.artwork}
@@ -1485,12 +1502,23 @@ function ReleasesPanel({ releases }: { releases: AlbumLite[] }) {
                   )}
                 </div>
                 <div className="text-slate-400 text-[11.5px] truncate">
-                  {a.artist}
+                  {a.primaryArtistId ? (
+                    <button
+                      type="button"
+                      onClick={() => onOpenPerson(a.primaryArtistId!)}
+                      className="pointer-events-auto hover:text-slate-700 hover:underline"
+                      data-testid={`link-release-artist-${a.id}`}
+                    >
+                      {a.artist}
+                    </button>
+                  ) : (
+                    a.artist
+                  )}
                   {a.year ? ` · ${a.year}` : ""} · {a.type}
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
-            </Link>
+            </div>
           </li>
         ))}
       </ul>
