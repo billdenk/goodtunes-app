@@ -9,6 +9,7 @@
 // per table. Mobile-first single column at <640px, three-column dense
 // layout at desktop breakpoints.
 import { useMemo, useState } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -18,7 +19,7 @@ import {
 } from "recharts";
 // Heart for song-favorite metrics — keeps the artist dashboard's
 // favourites column visually paired with the player's heart action.
-import { Heart, User as UserIcon } from "lucide-react";
+import { Heart, User as UserIcon, Users } from "lucide-react";
 import { RangePicker, CompareToggle } from "@/components/partner/dashboard-controls";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
@@ -148,7 +149,7 @@ export function ArtistDashboard() {
       {tab === "audience" && <AudienceTab qs={qs} />}
       {tab === "catalog" && <CatalogTab qs={qs} />}
       {tab === "orders" && <OrdersTab qs={qs} />}
-      {tab === "buyers" && <BuyersTab qs={qs} />}
+      {tab === "buyers" && <BuyersTab qs={qs} personId={me.data?.personId ?? null} />}
       {tab === "referrals" && <ReferralsTab />}
     </OperatorShell>
   );
@@ -1103,13 +1104,27 @@ export function InviteArtistPanel() {
 }
 
 // Task #938 — scoped buyer roster + "where they live" map, range-aware.
-function BuyersTab({ qs }: { qs: string }) {
+function BuyersTab({ qs, personId }: { qs: string; personId: string | null }) {
   return (
-    <BuyerReport
-      buyersUrl={`/api/artist/buyers?${qs}`}
-      mapUrl={`/api/artist/buyer-map?${qs}`}
-      emptyHint="No buyers of your releases in this range yet."
-    />
+    <>
+      {personId && (
+        <div className="flex justify-end">
+          <Link
+            href={`/admin/people/${personId}/buyers`}
+            className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] ring-1 ring-white/15 px-3 py-1.5 text-xs font-semibold text-fan-primary hover:bg-white/[0.1] transition-colors"
+            data-testid="link-buyer-roster"
+          >
+            <Users className="w-3.5 h-3.5" />
+            View buyer roster
+          </Link>
+        </div>
+      )}
+      <BuyerReport
+        buyersUrl={`/api/artist/buyers?${qs}`}
+        mapUrl={`/api/artist/buyer-map?${qs}`}
+        emptyHint="No buyers of your releases in this range yet."
+      />
+    </>
   );
 }
 
