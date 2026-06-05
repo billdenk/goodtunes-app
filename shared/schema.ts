@@ -234,12 +234,13 @@ export const albums = pgTable("albums", {
   // catalog rows are clean and we don't want to force a per-album decision
   // on every import.
   isExplicit: boolean("is_explicit").notNull().default(false),
-  // Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only legacy)"
-  // marker. Bill flags older digital-only releases one-by-one while he
-  // works through retiring their printing/pressing tabs. Pure CMS tag:
-  // ZERO fan-facing behavior (no Library/lifecycle/playback effect). Meant
-  // to be removed once tagging is done — drop this column + the one UI
-  // block in AdminAlbum/AdminAlbums together.
+  // Admin-only "SPIN Promo (digital-only legacy)" marker. When true, the
+  // admin album page drops all manufacturing surfaces: the Path-to-press
+  // strip, the Package tab, the Physical tab, and the Shopify tab. Only
+  // Overview + Digital remain. Cover-art editing (header thumbnail →
+  // ArtworkPanel dialog) stays reachable on Overview. Deep-linking to a
+  // now-hidden tab (?tab=sell/press/shopify) falls back to Overview.
+  // ZERO fan-facing behavior (no Library/lifecycle/playback effect).
   isSpinPromo: boolean("is_spin_promo").notNull().default(false),
   // Task #965 — clean per-release share slug for get.goodtunes.music/<slug>.
   // Optional; null means the album has no clean link (UUID still works).

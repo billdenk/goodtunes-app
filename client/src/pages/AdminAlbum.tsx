@@ -291,9 +291,19 @@ function visibleTabsFor(
     sellQuoteLockedAt?: string | null;
     isGoodTunesRelease?: boolean;
     isPrepping?: boolean;
+    isSpinPromo?: boolean;
   },
   opts?: { hidePress?: boolean },
 ): { key: Tab; label: string }[] {
+  // SPIN Promo albums are digital-only legacy releases. The Package /
+  // Physical / Shopify manufacturing surfaces are irrelevant and are
+  // dropped entirely — Overview + Digital only.
+  if (album.isSpinPromo) {
+    return [
+      { key: "overview", label: "Overview" },
+      { key: "tracks", label: "Digital" },
+    ];
+  }
   const base: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "sell", label: "Package" },
@@ -791,17 +801,17 @@ export function AdminAlbum() {
     },
   });
 
-  // Task #335 — re-pin the active tab to "sell" whenever a mode/lock
-  // change drops the current tab from the allowed set (e.g. operator
-  // is on Press, hits Change → Shopify; Press disappears, so we send
-  // them back to Sell instead of leaving them on a now-hidden tab).
-  // Must live below the `album` useQuery above to avoid TDZ on
-  // `album` in the dependency array.
+  // Task #335 — re-pin the active tab to "overview" whenever a mode/lock
+  // change (or SPIN-promo toggle) drops the current tab from the allowed
+  // set (e.g. operator is on Press, hits Change → Shopify; Press
+  // disappears, so we send them back to Overview instead of leaving them
+  // on a now-hidden tab). Must live below the `album` useQuery above to
+  // avoid TDZ on `album` in the dependency array.
   useEffect(() => {
     if (!album) return;
     const allowed = visibleTabsFor(album, { hidePress: hidePressSection }).map((t) => t.key);
-    if (!allowed.includes(tab)) setTab(tab === ("bonus" as Tab) ? "tracks" : "sell");
-  }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, tab, album, hidePressSection]);
+    if (!allowed.includes(tab)) setTab("overview");
+  }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, album?.isSpinPromo, tab, album, hidePressSection]);
 
   // Task #674 — Mirror the active tab into the URL (`?tab=`) so a refresh
   // reopens the same tab. Uses `replace` so repeated tab clicks don't
@@ -1084,8 +1094,9 @@ export function AdminAlbum() {
             it's visible from every tab on the album page (not just
             Sell). The stepper adapts by mode — slim 3-stage strip
             for shopify, full 5-stage press flow for direct. Suppressed
-            until the operator picks a sellMode in the modal. */}
-        {album.sellMode && !isArtist && (
+            until the operator picks a sellMode in the modal.
+            SPIN Promo albums are digital-only — no manufacturing flow. */}
+        {album.sellMode && !isArtist && !album.isSpinPromo && (
           <div className="mt-2">
             <PressingOrderStepper
               albumId={album.id}
@@ -1290,7 +1301,7 @@ export function AdminAlbum() {
             allowed set. */}
         {(() => {
           const allowed = new Set(visibleTabsFor(album, { hidePress: hidePressSection }).map((t) => t.key));
-          const safeTab: Tab = allowed.has(tab) ? tab : "sell";
+          const safeTab: Tab = allowed.has(tab) ? tab : "overview";
           return (
             <>
               {safeTab === "overview" && allowed.has("overview") && (
