@@ -3,7 +3,7 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
-import { sql, and, eq, or, ilike, isNull, desc, inArray } from "drizzle-orm";
+import { sql, and, eq, or, ilike, isNull, isNotNull, desc, inArray } from "drizzle-orm";
 import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, TERMS_VERSION } from "@shared/schema";
 import {
   MRP_DOMAIN,
@@ -6555,6 +6555,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .json({ message: e?.message || "Couldn't load genres." });
     }
   });
+
+  // Task #1314 — migration sweep for half-built share links. Task #1310
+  // switched share links to a two-part artist/album shape, so any album that
+  // still has its own `share_slug` set but whose primary artist never got an
+  // `artist_share_slug` now resolves to a dead link. Return that list so the
+  // admin Albums page can surface a "finish these" banner. Read-only.
+  app.get(
+    "/api/admin/albums/incomplete-share-links",
+    requireAdmin,
+    async (_req, res) => {
+      try {
+        const rows = await db
+          .select({
+            id: albums.id,
+            title: albums.title,
+            artist: albums.artist,
+            shareSlug: albums.shareSlug,
+            primaryArtistId: albums.primaryArtistId,
+            artistName: peopleTable.name,
+          })
+          .from(albums)
+          .innerJoin(peopleTable, eq(albums.primaryArtistId, peopleTable.id))
+          .where(
+            and(
+              isNotNull(albums.shareSlug),
+              isNull(peopleTable.artistShareSlug),
+              isNull(albums.deletedAt),
+              isNull(peopleTable.deletedAt),
+            ),
+          );
+        return res.json({ albums: rows });
+      } catch (e: any) {
+        return res
+          .status(500)
+          .json({ message: e?.message || "Couldn't load incomplete share links." });
+      }
+    },
+  );
 
   // Seed a new album from an Apple Music album URL. Mirrors how the
   // artist scrape pulls a discography, but tighter: one URL → one album +

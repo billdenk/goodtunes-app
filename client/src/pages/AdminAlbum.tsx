@@ -2148,20 +2148,42 @@ function ShareLinkPanel({
     } catch { return false; }
   };
 
+  // Find an available artist slug derived from the artist's name. Returns the
+  // first free candidate, or null when there's no name to suggest from.
+  const findAvailableArtistSlug = async (): Promise<string | null> => {
+    const v = validateShareSlug(personData?.name ?? album.artist ?? "");
+    if (!v.ok) return null;
+    for (let n = 1; n <= 9; n++) {
+      const candidate = n === 1 ? v.slug : `${v.slug}-${n}`;
+      const cv = validateShareSlug(candidate);
+      if (!cv.ok) continue;
+      if (await checkArtistAvailable(cv.slug)) return cv.slug;
+    }
+    return v.slug; // all taken — surface the base so the operator can tweak it
+  };
+
   const suggestArtist = async () => {
     if (!artistId || disabled || saveArtist.isPending || artistSuggesting) return;
-    const v = validateShareSlug(personData?.name ?? album.artist ?? "");
-    if (!v.ok) { toast({ title: "No artist name to suggest from." }); return; }
     setArtistSuggesting(true);
     try {
-      for (let n = 1; n <= 9; n++) {
-        const candidate = n === 1 ? v.slug : `${v.slug}-${n}`;
-        const cv = validateShareSlug(candidate);
-        if (!cv.ok) continue;
-        if (await checkArtistAvailable(cv.slug)) { setArtistDraft(cv.slug); return; }
-      }
-      setArtistDraft(v.slug);
-      toast({ title: "Artist slug may be taken", description: "Tweak it before saving." });
+      const slug = await findAvailableArtistSlug();
+      if (!slug) { toast({ title: "No artist name to suggest from." }); return; }
+      setArtistDraft(slug);
+    } finally { setArtistSuggesting(false); }
+  };
+
+  // Task #1314 — one-tap migration fix: an album with its own slug but no
+  // artist slug has a dead share link (two-part links need both halves). This
+  // suggests AND immediately saves the artist slug so the link goes live.
+  const needsArtistMigration = !!(artistId && album.shareSlug && !savedArtistSlug);
+  const suggestAndSaveArtist = async () => {
+    if (!artistId || disabled || saveArtist.isPending || artistSuggesting) return;
+    setArtistSuggesting(true);
+    try {
+      const slug = await findAvailableArtistSlug();
+      if (!slug) { toast({ title: "No artist name to suggest from." }); return; }
+      setArtistDraft(slug);
+      saveArtist.mutate(slug);
     } finally { setArtistSuggesting(false); }
   };
 
@@ -2303,6 +2325,30 @@ function ShareLinkPanel({
         </p>
       ) : (
         <>
+          {/* Task #1314 — migration banner: this album's slug is set but the
+              artist slug is missing, so the two-part link is dead until fixed. */}
+          {needsArtistMigration && (
+            <div
+              className="mt-3 p-2.5 bg-amber-50 rounded-md border border-amber-200"
+              data-testid="banner-share-link-incomplete"
+            >
+              <p className="text-xs text-amber-800 leading-snug">
+                This release has an album URL but no artist URL, so its share link
+                won't work yet. Set an artist URL to finish the link.
+              </p>
+              <button
+                type="button"
+                onClick={suggestAndSaveArtist}
+                disabled={disabled || saveArtist.isPending || artistSuggesting}
+                className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-[color:var(--brand-blue)] hover:underline disabled:opacity-50 disabled:no-underline"
+                data-testid="button-suggest-save-artist-slug"
+              >
+                {artistSuggesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                {artistSuggesting ? "Saving…" : "Suggest & save artist URL"}
+              </button>
+            </div>
+          )}
+
           {/* Artist URL field */}
           <div className="mt-3">
             <div className="flex items-center justify-between mb-1">

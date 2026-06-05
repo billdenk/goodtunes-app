@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, Filter, EyeOff, X, Plus, Disc3, Clock } from "lucide-react";
+import { Search, Filter, EyeOff, X, Plus, Disc3, Clock, AlertTriangle } from "lucide-react";
 import {
   Popover,
   PopoverArrow,
@@ -826,6 +826,12 @@ export function AdminAlbums() {
           )}
         />
 
+        {/* Task #1314 — migration sweep banner. Lists releases whose own
+            share slug is set but whose primary artist never got an artist
+            slug, so their two-part link is dead until the artist URL is set.
+            Each links straight to the album where the one-tap fix lives. */}
+        <IncompleteShareLinksBanner listQuery={listQueryString} />
+
         {/* GRID */}
         {isLoading ? (
           <div className="py-20 flex items-center justify-center">
@@ -876,6 +882,76 @@ export function AdminAlbums() {
 }
 
 /* ─── Pieces ────────────────────────────────────────────────────────── */
+
+// Task #1314 — migration sweep banner for half-built share links. Task #1310
+// switched share links to a two-part artist/album shape; any album whose own
+// `share_slug` is still set but whose primary artist never got an
+// `artist_share_slug` now resolves to a dead link. The endpoint returns those
+// releases; each row deep-links to the album page where the one-tap "Suggest &
+// save artist URL" fix lives. Renders nothing when there's nothing to fix.
+type IncompleteShareLink = {
+  id: string;
+  title: string;
+  artist: string;
+  shareSlug: string | null;
+  primaryArtistId: string | null;
+  artistName: string | null;
+};
+
+function IncompleteShareLinksBanner({ listQuery }: { listQuery: string }) {
+  const [open, setOpen] = useState(false);
+  const { data } = useQuery<{ albums: IncompleteShareLink[] }>({
+    queryKey: ["/api/admin/albums/incomplete-share-links"],
+    staleTime: Infinity,
+  });
+  const items = data?.albums ?? [];
+  if (items.length === 0) return null;
+
+  return (
+    <div
+      className="rounded-lg border border-amber-200 bg-amber-50 p-3"
+      data-testid="banner-incomplete-share-links"
+    >
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-amber-900">
+            {items.length} release{items.length === 1 ? "" : "s"} with an incomplete share link
+          </p>
+          <p className="text-xs text-amber-800 mt-0.5 leading-snug">
+            These have an album URL but their artist never got an artist URL, so
+            the two-part share link won't work yet. Open each release to set (or
+            one-tap suggest) its artist URL.
+          </p>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="mt-1.5 text-xs font-semibold text-amber-900 hover:underline"
+            data-testid="button-toggle-incomplete-share-links"
+          >
+            {open ? "Hide list" : "Show list"}
+          </button>
+          {open && (
+            <ul className="mt-2 space-y-1" data-testid="list-incomplete-share-links">
+              {items.map((a) => (
+                <li key={a.id}>
+                  <Link
+                    href={albumHref(a.id, listQuery)}
+                    className="text-xs text-amber-900 hover:underline"
+                    data-testid={`link-incomplete-share-${a.id}`}
+                  >
+                    <span className="font-medium">{a.title}</span>
+                    <span className="text-amber-700"> — {a.artistName || a.artist}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AlbumTile({ album, href }: { album: AlbumLite; href: string }) {
   const countdown =
