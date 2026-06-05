@@ -17070,7 +17070,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Staging preview: same logic as the single-slug route (full-access email).
     let staging = false;
     {
-      const { getAuthFromRequest } = await import("./auth/session");
       const auth = await getAuthFromRequest(req);
       if (auth?.kind === "admin") staging = true;
       if (!staging && auth?.kind === "customer") {
