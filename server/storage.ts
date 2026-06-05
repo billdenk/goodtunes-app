@@ -37,6 +37,7 @@ import {
   customerUsers,
   type CustomerUser,
   type InsertCustomerUser,
+  type StripeAddressSnapshot,
   adminIdentities,
   customerIdentities,
   type AdminIdentity,
@@ -585,15 +586,17 @@ export interface IStorage {
   // spend on paid/shipped orders + last activity timestamp). Profile
   // returns the customer + orders + collection items + playlist summaries.
   listAdminCustomers(opts?: { q?: string; limit?: number; offset?: number; artistAlbumIds?: string[]; segment?: "all" | "buyers" | "no_sales" | "unclaimed" }): Promise<{
-    rows: Array<CustomerUser & { orderCount: number; lifetimeSpendCents: number; lastActivityAt: Date | null }>;
+    rows: Array<Omit<CustomerUser, "password"> & { password?: string; orderCount: number; lifetimeSpendCents: number; lastActivityAt: Date | null; firstOrderAt: Date | null }>;
     total: number;
     counts: { all: number; buyers: number; no_sales: number; unclaimed: number };
   }>;
   getAdminCustomerProfile(id: string): Promise<{
-    customer: CustomerUser;
-    orders: Array<{ id: string; albumId: string; albumTitle: string; albumArtist: string; totalCents: number; status: string; goodDeedNumber: number | null; createdAt: Date | null; shippedAt: Date | null; paymentCardBrand: string | null; paymentCardLast4: string | null; paymentWalletType: string | null; receiptUrl: string | null }>;
+    customer: Omit<CustomerUser, "password"> & { password?: string };
+    orders: Array<{ id: string; albumId: string; albumTitle: string; albumArtist: string; totalCents: number; status: string; goodDeedNumber: number | null; createdAt: Date | null; shippedAt: Date | null; paymentCardBrand: string | null; paymentCardLast4: string | null; paymentWalletType: string | null; receiptUrl: string | null; origin: string | null; shippingAddress: StripeAddressSnapshot | null; billingAddress: StripeAddressSnapshot | null }>;
     collection: Array<{ id: string; albumId: string; albumTitle: string; albumArtist: string; albumArtwork: string; certificateNumber: number | null; acquiredAt: Date | null }>;
     playlists: Array<{ id: string; name: string; songCount: number; createdAt: Date | null }>;
+    fallbackShippingAddress: StripeAddressSnapshot | null;
+    fallbackBillingAddress: StripeAddressSnapshot | null;
   } | undefined>;
 
   // ---- OAuth identities --------------------------------------------
@@ -3326,6 +3329,7 @@ export class DbStorage implements IStorage {
         orderCount: sql<number>`coalesce(count(${orders.id}), 0)::int`,
         lifetimeSpendCents: sql<number>`coalesce(sum(case when ${orders.status} in ('paid','shipped','complete','completed') then ${orders.totalCents} else 0 end), 0)::int`,
         lastOrderAt: sql<Date | null>`max(${orders.createdAt})`,
+        firstOrderAt: sql<Date | null>`min(${orders.createdAt})`,
       })
       .from(customerUsers)
       .leftJoin(orders, eq(orders.customerId, customerUsers.id))
@@ -3360,9 +3364,16 @@ export class DbStorage implements IStorage {
     return {
       rows: rows.map((r) => ({
         ...r.customer,
+        // Never ship the password hash to the admin client.
+        password: undefined,
         orderCount: r.orderCount,
         lifetimeSpendCents: r.lifetimeSpendCents,
         lastActivityAt: r.lastOrderAt ?? r.customer.createdAt ?? null,
+        // Task #1342 — honest "since" date for legacy/imported fans whose
+        // createdAt is the import timestamp, not a real signup. The client
+        // shows the earliest order date ("Customer since") for imported
+        // accounts instead of presenting the import time as "Joined".
+        firstOrderAt: r.firstOrderAt ?? null,
       })),
       total,
       counts: {
@@ -3393,6 +3404,9 @@ export class DbStorage implements IStorage {
         paymentCardLast4: orders.paymentCardLast4,
         paymentWalletType: orders.paymentWalletType,
         receiptUrl: orders.receiptUrl,
+        origin: orders.origin,
+        shippingAddress: orders.shippingAddress,
+        billingAddress: orders.billingAddress,
       })
       .from(orders)
       .innerJoin(albums, eq(orders.albumId, albums.id))
@@ -3432,11 +3446,23 @@ export class DbStorage implements IStorage {
       .groupBy(playlists.id)
       .orderBy(desc(playlists.createdAt));
 
+    // Task #1342 — address fallback. Imported/legacy fans have no
+    // customer-level Stripe snapshot, but their most recent order usually
+    // carries the shipping (and sometimes billing) address. Surface those
+    // so the detail page can fall back to them and only show "No address
+    // on file" when truly nothing exists anywhere. orderRows is already
+    // sorted newest-first, so the first non-null wins.
+    const fallbackShippingAddress = orderRows.find((o) => o.shippingAddress)?.shippingAddress ?? null;
+    const fallbackBillingAddress = orderRows.find((o) => o.billingAddress)?.billingAddress ?? null;
+
     return {
-      customer: c,
+      // Never ship the password hash to the admin client.
+      customer: { ...c, password: undefined },
       orders: orderRows,
       collection: collectionRows,
       playlists: playlistRows,
+      fallbackShippingAddress,
+      fallbackBillingAddress,
     };
   }
 

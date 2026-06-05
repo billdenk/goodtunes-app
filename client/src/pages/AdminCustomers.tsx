@@ -1,20 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Search, Users, ArrowUp, ArrowDown, ShieldCheck, X } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useQuery } from "@tanstack/react-query";
+import { Search, Users, ArrowUp, ArrowDown, X } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
-import {
-  ROLE_OPTIONS,
-  ROLE_LABEL,
-  SCOPE_CONFIG,
-  ScopePicker,
-} from "@/components/admin/RoleScopePicker";
 import type { CustomerUser } from "@shared/schema";
 
 /**
@@ -50,6 +43,9 @@ type CustomerRow = CustomerUser & {
   orderCount: number;
   lifetimeSpendCents: number;
   lastActivityAt: string | null;
+  // Task #1342 — earliest order date, used as the honest "Customer since"
+  // value for imported fans whose createdAt is just the import timestamp.
+  firstOrderAt: string | null;
 };
 
 type CustomerListResponse = {
@@ -77,6 +73,42 @@ function formatDate(iso: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// Task #1342 — imported/legacy fans carry the import timestamp in
+// `createdAt`, which is not a real signup. An account is "imported" when it
+// has a goGoods legacy id. For those, we show the earliest order date
+// ("Customer since") and fall back to a plain "Imported" tag when there's
+// no order history yet — never the misleading import timestamp.
+function isImported(c: { legacyGogoodsId?: string | null }): boolean {
+  return !!c.legacyGogoodsId;
+}
+
+function effectiveSignupMs(c: CustomerRow): number {
+  const iso = isImported(c)
+    ? c.firstOrderAt
+    : (c.createdAt as unknown as string | null);
+  return iso ? new Date(iso).getTime() : 0;
+}
+
+/** Renders the honest "Signup" cell value for a customer row. */
+function SignupValue({ c }: { c: CustomerRow }) {
+  if (isImported(c)) {
+    if (c.firstOrderAt) {
+      return (
+        <span title="Imported account · earliest order date">
+          <span className="text-slate-400">since </span>
+          {formatDate(c.firstOrderAt)}
+        </span>
+      );
+    }
+    return (
+      <span className="text-slate-400" title="Imported from goGoods — no orders yet">
+        Imported
+      </span>
+    );
+  }
+  return <>{formatDate(c.createdAt as unknown as string | null)}</>;
 }
 
 export function AdminCustomers() {
@@ -107,7 +139,6 @@ export function AdminCustomers() {
   const [searchOpen, setSearchOpen] = useState(initial.search !== "");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useViewMode("customers", "list");
-  const { toast } = useToast();
 
   // Mirror tab + search into the URL so the view is bookmarkable.
   useEffect(() => {
@@ -130,13 +161,9 @@ export function AdminCustomers() {
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
 
-  // Task #256 — "Make admin…" row action. Only super_admin sees it.
-  const { data: meRole } = useQuery<{ role: string }>({
-    queryKey: ["/api/me/role"],
-    enabled: !!user?.isAdmin,
-  });
-  const isSuperAdmin = meRole?.role === "super_admin";
-  const [promoteFor, setPromoteFor] = useState<{ id: string; name: string; email: string } | null>(null);
+  // Task #1342 — "Make admin…" moved off the list (it was a loud per-row
+  // button that also broke the header column alignment). The promote action
+  // now lives as a quiet action on the customer detail page.
 
   // Debounce the search term so each keystroke doesn't hit the server.
   const [debounced, setDebounced] = useState(initial.search);
@@ -166,6 +193,7 @@ export function AdminCustomers() {
   });
 
   const {
+    data,
     isLoading,
     isFetching,
     isError: customersError,
@@ -181,17 +209,26 @@ export function AdminCustomers() {
       params.set("offset", String(offset));
       params.set("segment", tab);
       const res = await apiRequest("GET", `/api/admin/customers?${params}`);
-      const json = (await res.json()) as CustomerListResponse;
-      setPages((prev) => {
-        const next = [...prev];
-        next[Math.floor(offset / PAGE)] = json.rows;
-        return next;
-      });
-      setTotal(json.total);
-      if (json.counts) setCounts(json.counts);
-      return json;
+      return (await res.json()) as CustomerListResponse;
     },
   });
+
+  // Task #1342 — accumulate the paginated pages from the query DATA, not as a
+  // queryFn side-effect. With staleTime:Infinity, navigating back to this
+  // page is a cache hit and the queryFn never runs, so the old side-effect
+  // approach left `pages` empty and the list blank until a hard refresh.
+  // Keying the effect on `data` means it re-populates from cache too.
+  useEffect(() => {
+    if (!data) return;
+    setPages((prev) => {
+      const next = [...prev];
+      next[Math.floor(offset / PAGE)] = data.rows;
+      return next;
+    });
+    setTotal(data.total);
+    if (data.counts) setCounts(data.counts);
+  }, [data, offset]);
+
   const allRows = useMemo(() => pages.flat(), [pages]);
 
   // Client-side sort over the server payload.
@@ -226,9 +263,8 @@ export function AdminCustomers() {
           return (at - bt) * mul;
         }
         case "signup": {
-          const at = a.createdAt ? new Date(a.createdAt as unknown as string).getTime() : 0;
-          const bt = b.createdAt ? new Date(b.createdAt as unknown as string).getTime() : 0;
-          return (at - bt) * mul;
+          // Sort on the same honest "since" value the cell displays.
+          return (effectiveSignupMs(a) - effectiveSignupMs(b)) * mul;
         }
       }
     });
@@ -400,17 +436,6 @@ export function AdminCustomers() {
                         <span>{formatDate(c.lastActivityAt)}</span>
                       </div>
                     </Link>
-                    {isSuperAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => setPromoteFor({ id: c.id, name, email: c.email })}
-                        className="absolute top-1 right-1 w-8 h-8 rounded-full bg-white/90 backdrop-blur ring-1 ring-slate-200 text-[var(--brand-purple)] inline-flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white"
-                        title="Promote this customer to an admin/partner role"
-                        data-testid={`button-promote-${c.id}`}
-                      >
-                        <ShieldCheck className="w-4 h-4" />
-                      </button>
-                    )}
                   </div>
                 );
               })}
@@ -431,7 +456,7 @@ export function AdminCustomers() {
           </div>
         ) : (
           <div className="rounded-lg border border-slate-200 bg-white overflow-hidden" data-testid="list-customers">
-            <div className="hidden sm:grid grid-cols-[1fr_72px_104px_104px_104px] gap-4 px-4 py-2 bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <div className="hidden sm:grid grid-cols-[1fr_64px_96px_112px_112px] gap-4 px-4 py-2 bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               <SortHeader label="Customer" k="name" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="left" />
               <SortHeader label="Orders" k="orders" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
               <SortHeader label="Lifetime" k="lifetime" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} align="right" />
@@ -444,14 +469,14 @@ export function AdminCustomers() {
                 return (
                   <div
                     key={c.id}
-                    className="flex items-stretch hover:bg-slate-50 transition-colors"
+                    className="hover:bg-slate-50 transition-colors"
                     data-testid={`row-customer-${c.id}`}
                   >
                     <Link
                       href={`/admin/customers/${c.id}`}
-                      className="flex-1 min-w-0 block px-4 py-3"
+                      className="block px-4 py-3"
                     >
-                      <div className="sm:grid sm:grid-cols-[1fr_72px_104px_104px_104px] sm:gap-4 sm:items-center">
+                      <div className="sm:grid sm:grid-cols-[1fr_64px_96px_112px_112px] sm:gap-4 sm:items-center">
                         <div className="min-w-0">
                           <div className="text-slate-900 text-[14px] font-medium truncate" data-testid={`text-customer-name-${c.id}`}>
                             {name}
@@ -475,22 +500,10 @@ export function AdminCustomers() {
                         </div>
                         <div className="text-slate-500 text-[12.5px] sm:text-right" data-testid={`text-signup-${c.id}`}>
                           <span className="sm:hidden text-slate-400 text-[11px] uppercase tracking-wide mr-1">Signed up</span>
-                          {formatDate(c.createdAt as unknown as string | null)}
+                          <SignupValue c={c} />
                         </div>
                       </div>
                     </Link>
-                    {isSuperAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => setPromoteFor({ id: c.id, name, email: c.email })}
-                        className="flex items-center gap-1.5 px-3 my-1 mr-2 rounded-md text-sm font-medium text-[var(--brand-purple)] hover:bg-[var(--brand-purple)]/10 transition-colors"
-                        title="Promote this customer to an admin/partner role"
-                        data-testid={`button-promote-${c.id}`}
-                      >
-                        <ShieldCheck className="w-4 h-4" />
-                        <span className="hidden sm:inline">Make admin…</span>
-                      </button>
-                    )}
                   </div>
                 );
               })}
@@ -511,17 +524,6 @@ export function AdminCustomers() {
           </div>
         )}
       </div>
-      {promoteFor && (
-        <PromoteDialog
-          customer={promoteFor}
-          onClose={() => setPromoteFor(null)}
-          onPromoted={() => {
-            toast({ title: `${promoteFor.name} promoted`, description: `Admin access granted.` });
-            setPromoteFor(null);
-            queryClient.invalidateQueries({ queryKey: ["/api/admin/customers"] });
-          }}
-        />
-      )}
     </AdminFrame>
   );
 }
@@ -562,120 +564,6 @@ function TabBtn({
         <span className="absolute -bottom-px left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
       )}
     </button>
-  );
-}
-
-function PromoteDialog({
-  customer,
-  onClose,
-  onPromoted,
-}: {
-  customer: { id: string; name: string; email: string };
-  onClose: () => void;
-  onPromoted: () => void;
-}) {
-  const [role, setRole] = useState("super_admin");
-  const [scopeId, setScopeId] = useState<string | null>(null);
-  const needsScope = !!SCOPE_CONFIG[role];
-  const { toast } = useToast();
-
-  const promote = useMutation({
-    mutationFn: async () => {
-      const r = await apiRequest("POST", `/api/admin/customers/${customer.id}/promote`, {
-        role,
-        roleScopeId: needsScope ? scopeId : null,
-      });
-      return r.json();
-    },
-    onSuccess: () => onPromoted(),
-    onError: (err: any) => {
-      toast({ title: "Could not promote", description: err?.message ?? "Try again." });
-    },
-  });
-
-  const canSubmit = !needsScope || !!scopeId;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-      onClick={onClose}
-      data-testid="dialog-promote-customer"
-    >
-      <div
-        className="w-full max-w-md bg-white rounded-2xl shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">Make admin</h2>
-            <p className="text-xs text-slate-500">
-              {customer.name} &lt;{customer.email}&gt;
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-9 h-9 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-            aria-label="Close"
-            data-testid="button-close-promote"
-          >
-            <X className="w-4 h-4" />
-            <span className="sr-only">Close</span>
-          </button>
-        </div>
-        <div className="px-5 py-4">
-          <p className="text-sm text-slate-600 leading-relaxed mb-3">
-            Grants admin access using <strong>{customer.email}</strong>&apos;s existing
-            password and any linked Google/Apple sign-in. No email is sent.
-          </p>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-            Role
-          </label>
-          <select
-            value={role}
-            onChange={(e) => {
-              setRole(e.target.value);
-              setScopeId(null);
-            }}
-            className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
-            data-testid="select-promote-role"
-          >
-            {ROLE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          {needsScope && (
-            <ScopePicker
-              cfg={SCOPE_CONFIG[role]}
-              value={scopeId}
-              onChange={(id) => setScopeId(id)}
-              testId="promote-scope"
-            />
-          )}
-        </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-[44px] px-4 rounded-md text-sm font-medium text-slate-600 hover:bg-slate-100"
-            data-testid="button-cancel-promote"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={!canSubmit || promote.isPending}
-            onClick={() => promote.mutate()}
-            className="min-h-[44px] px-4 rounded-md text-sm font-semibold bg-[var(--brand-purple)] text-white hover:opacity-90 disabled:bg-slate-300 disabled:cursor-not-allowed disabled:opacity-100"
-            data-testid="button-confirm-promote"
-          >
-            {promote.isPending ? "Promoting…" : `Make ${ROLE_LABEL[role] || role}`}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 

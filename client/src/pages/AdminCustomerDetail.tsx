@@ -7,6 +7,8 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { OrderDetailSheet, originBadge } from "@/components/admin/OrderDetailSheet";
+import { PromoteCustomerDialog } from "@/components/admin/PromoteCustomerDialog";
 import type { CustomerUser, StripeAddressSnapshot } from "@shared/schema";
 
 /**
@@ -18,6 +20,39 @@ import type { CustomerUser, StripeAddressSnapshot } from "@shared/schema";
  * live Stripe dashboard so finance can pull receipts / chargebacks
  * without bouncing through the order list.
  */
+
+/**
+ * Task #1342 (#6) — honest join-date resolution.
+ *
+ * Imported goGoods fans were inserted at import time, so their `createdAt` is
+ * a migration artifact, NOT a real join date — it must never surface as
+ * "Joined …". The honest signals, in order:
+ *   - legacy fan WITH orders → the earliest order date (a true lower bound on
+ *     when they joined), labelled with an "imported from goGoods" note.
+ *   - legacy fan with NO orders → no honest date exists, so render
+ *     "Imported from goGoods" with no date rather than lying.
+ *   - native fan → plain `createdAt`.
+ * Pure + exported so the regression guard can pin it without rendering the
+ * whole page.
+ */
+export type JoinedDisplay =
+  | { kind: "imported-no-date" }
+  | { kind: "joined"; iso: string | null; importedNote: boolean };
+
+export function resolveJoinedDisplay(opts: {
+  legacyGogoodsId: string | null | undefined;
+  createdAt: string | null;
+  earliestOrderAt: string | null;
+}): JoinedDisplay {
+  const { legacyGogoodsId, createdAt, earliestOrderAt } = opts;
+  const isLegacy = Boolean(legacyGogoodsId);
+  if (isLegacy && !earliestOrderAt) return { kind: "imported-no-date" };
+  return {
+    kind: "joined",
+    iso: isLegacy && earliestOrderAt ? earliestOrderAt : createdAt,
+    importedNote: isLegacy && Boolean(earliestOrderAt),
+  };
+}
 
 type Profile = {
   customer: CustomerUser;
@@ -35,6 +70,7 @@ type Profile = {
     paymentCardLast4: string | null;
     paymentWalletType: string | null;
     receiptUrl: string | null;
+    origin: string | null;
   }>;
   collection: Array<{
     id: string;
@@ -52,6 +88,12 @@ type Profile = {
     previewExpiresAt?: string | null;
   }>;
   playlists: Array<{ id: string; name: string; songCount: number; createdAt: string | null }>;
+  // Task #1342 — address fallback for imported/legacy fans with no
+  // customer-level Stripe snapshot. The server pulls the most recent order's
+  // shipping/billing address; the AddressCard renders it with a quiet "from
+  // latest order" note so the operator knows it isn't an on-file address.
+  fallbackShippingAddress: StripeAddressSnapshot | null;
+  fallbackBillingAddress: StripeAddressSnapshot | null;
 };
 
 function formatMoney(cents: number): string {
@@ -63,11 +105,6 @@ function formatDate(iso: string | null): string {
   return Number.isNaN(d.getTime())
     ? "—"
     : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-function formatAddress(a: StripeAddressSnapshot | null | undefined): string | null {
-  if (!a) return null;
-  const parts = [a.line1, a.line2, a.city, a.state, a.postalCode, a.country].filter(Boolean);
-  return parts.length > 0 ? parts.join(", ") : null;
 }
 // Display labels for the payment-instrument snapshot captured from Stripe.
 const CARD_BRAND_LABELS: Record<string, string> = {
@@ -94,6 +131,7 @@ export function AdminCustomerDetail() {
     return () => document.body.classList.remove("gt-admin");
   }, []);
   const { user, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
   const [, params] = useRoute<{ id: string }>("/admin/customers/:id");
   const id = params?.id;
 
@@ -101,6 +139,18 @@ export function AdminCustomerDetail() {
     queryKey: ["/api/admin/customers", id],
     enabled: !!user?.isAdmin && !!id,
   });
+
+  // Task #1342 (#1) — open the shared order Sheet inline instead of bouncing
+  // to the un-drillable /admin/orders?orderId= list.
+  const [openOrderId, setOpenOrderId] = useState<string | null>(null);
+
+  // Task #1342 (#5) — quiet "Make admin…" action, super_admin only.
+  const { data: meRole } = useQuery<{ role: string }>({
+    queryKey: ["/api/me/role"],
+    enabled: !!user?.isAdmin,
+  });
+  const isSuperAdmin = meRole?.role === "super_admin";
+  const [promoteOpen, setPromoteOpen] = useState(false);
 
   if (authLoading) {
     return (
@@ -150,12 +200,25 @@ export function AdminCustomerDetail() {
   // the grid (flagged as Demo), just below the owned ones.
   const ownedCollectionCount = collection.filter((a) => !a.isPreview).length;
   const name = c.realName || c.displayName;
-  const ship = formatAddress(c.shippingAddress);
-  const bill = formatAddress(c.billingAddress);
+  // Task #1342 (#2) — resolve each address to the customer's on-file snapshot,
+  // falling back to the most recent order's address for imported/legacy fans.
+  const shippingResolved = c.shippingAddress ?? data.fallbackShippingAddress;
+  const billingResolved = c.billingAddress ?? data.fallbackBillingAddress;
+  const shippingFromOrder = !c.shippingAddress && !!data.fallbackShippingAddress;
+  const billingFromOrder = !c.billingAddress && !!data.fallbackBillingAddress;
   const REVENUE_STATUSES = new Set(["paid", "shipped", "complete", "completed"]);
   const lifetime = orders
     .filter((o) => REVENUE_STATUSES.has(o.status))
     .reduce((sum, o) => sum + o.totalCents, 0);
+  // Task #1342 (#6) — honest join date. Orders are sorted newest-first, so the
+  // last row is the oldest. See resolveJoinedDisplay for the full rationale.
+  const earliestOrderAt =
+    orders.length > 0 ? orders[orders.length - 1].createdAt : null;
+  const joined = resolveJoinedDisplay({
+    legacyGogoodsId: c.legacyGogoodsId,
+    createdAt: c.createdAt as unknown as string | null,
+    earliestOrderAt,
+  });
 
   return (
     <AdminFrame active="customers" contentWidth="narrow">
@@ -221,22 +284,48 @@ export function AdminCustomerDetail() {
                   )}
                 </span>
               )}
-              <span>Joined {formatDate(c.createdAt as unknown as string | null)}</span>
+              <span data-testid="text-joined">
+                {joined.kind === "imported-no-date" ? (
+                  <span className="text-slate-400">Imported from goGoods</span>
+                ) : (
+                  <>
+                    Joined {formatDate(joined.iso)}
+                    {joined.importedNote ? (
+                      <span className="text-slate-400"> · imported from goGoods</span>
+                    ) : null}
+                  </>
+                )}
+              </span>
             </span>
           }
           actions={
-            c.stripeCustomerId ? (
-              <a
-                href={`https://dashboard.stripe.com/customers/${c.stripeCustomerId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-                data-testid="link-stripe-customer"
-              >
-                Stripe
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            ) : null
+            <div className="flex items-center gap-2">
+              {/* Task #1342 (#5) — quiet, super_admin-only promote action.
+                  Light text, not a loud button, so it stays out of the way
+                  for the common read-only case. */}
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setPromoteOpen(true)}
+                  className="text-sm text-slate-400 hover:text-[var(--brand-blue)] transition-colors"
+                  data-testid="button-make-admin"
+                >
+                  Make admin…
+                </button>
+              )}
+              {c.stripeCustomerId ? (
+                <a
+                  href={`https://dashboard.stripe.com/customers/${c.stripeCustomerId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                  data-testid="link-stripe-customer"
+                >
+                  Stripe
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              ) : null}
+            </div>
           }
         />
 
@@ -254,14 +343,14 @@ export function AdminCustomerDetail() {
           <div className="grid sm:grid-cols-2 gap-3">
             <AddressCard
               kind="Shipping"
-              snapshot={c.shippingAddress}
-              fallback={ship}
+              snapshot={shippingResolved}
+              fromOrder={shippingFromOrder}
               testId="card-shipping-address"
             />
             <AddressCard
               kind="Billing"
-              snapshot={c.billingAddress}
-              fallback={bill}
+              snapshot={billingResolved}
+              fromOrder={billingFromOrder}
               testId="card-billing-address"
             />
           </div>
@@ -281,21 +370,26 @@ export function AdminCustomerDetail() {
                   className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors"
                   data-testid={`row-order-${o.id}`}
                 >
-                  <Link
-                    href={`/admin/orders?orderId=${o.id}`}
-                    className="flex-1 min-w-0 block"
+                  <button
+                    type="button"
+                    onClick={() => setOpenOrderId(o.id)}
+                    className="flex-1 min-w-0 block text-left"
+                    data-testid={`button-open-order-${o.id}`}
                   >
-                    <div className="text-slate-900 text-sm font-medium truncate">
-                      {o.albumTitle}
-                      <span className="text-slate-400"> · </span>
-                      <span className="text-slate-600">{o.albumArtist}</span>
+                    <div className="text-slate-900 text-sm font-medium truncate flex items-center gap-1.5">
+                      <span className="truncate">
+                        {o.albumTitle}
+                        <span className="text-slate-400"> · </span>
+                        <span className="text-slate-600">{o.albumArtist}</span>
+                      </span>
+                      {originBadge(o.origin ?? undefined)}
                     </div>
                     <div className="text-slate-500 text-xs mt-0.5">
                       {formatDate(o.createdAt)}
                       {o.goodDeedNumber != null && <> · Good Deed #{o.goodDeedNumber}</>}
                       {payment && <> · {payment}</>}
                     </div>
-                  </Link>
+                  </button>
                   <div className="text-right flex-shrink-0">
                     <div className="text-slate-900 text-sm font-medium tabular-nums">
                       {formatMoney(o.totalCents)}
@@ -390,6 +484,22 @@ export function AdminCustomerDetail() {
           )}
         </Section>
       </div>
+
+      {/* Task #1342 (#1) — shared order detail Sheet, opened from an order row. */}
+      <OrderDetailSheet orderId={openOrderId} onClose={() => setOpenOrderId(null)} />
+
+      {/* Task #1342 (#5) — promote-to-admin dialog (super_admin only). */}
+      {promoteOpen && (
+        <PromoteCustomerDialog
+          customer={{ id: c.id, name, email: c.email }}
+          onClose={() => setPromoteOpen(false)}
+          onPromoted={() => {
+            toast({ title: `${name} promoted`, description: "Admin access granted." });
+            setPromoteOpen(false);
+            queryClient.invalidateQueries({ queryKey: ["/api/admin/customers", id] });
+          }}
+        />
+      )}
     </AdminFrame>
   );
 }
@@ -961,28 +1071,42 @@ function EmptyRow({ icon: Icon, text }: { icon: React.ComponentType<any>; text: 
 function AddressCard({
   kind,
   snapshot,
-  fallback,
+  fromOrder,
   testId,
 }: {
   kind: string;
   snapshot: StripeAddressSnapshot | null | undefined;
-  fallback: string | null;
+  fromOrder?: boolean;
   testId?: string;
 }) {
+  // Task #1342 (#2) — render whatever address we resolved (customer snapshot,
+  // or the latest order's address as a fallback). A row is "present" when any
+  // line is filled; only show "No address on file" when truly empty.
+  const lines = snapshot
+    ? [
+        snapshot.line1,
+        snapshot.line2,
+        [snapshot.city, snapshot.state, snapshot.postalCode].filter(Boolean).join(", "),
+        snapshot.country,
+      ].filter(Boolean)
+    : [];
+  const hasAddress = !!snapshot && (lines.length > 0 || !!snapshot.name);
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4" data-testid={testId}>
       <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
         <MapPin className="w-3.5 h-3.5" /> {kind}
       </div>
-      {fallback ? (
+      {hasAddress ? (
         <div className="text-slate-700 text-sm leading-snug">
           {snapshot?.name && <div className="font-medium text-slate-900">{snapshot.name}</div>}
-          {snapshot?.line1 && <div>{snapshot.line1}</div>}
-          {snapshot?.line2 && <div>{snapshot.line2}</div>}
-          <div>
-            {[snapshot?.city, snapshot?.state, snapshot?.postalCode].filter(Boolean).join(", ")}
-          </div>
-          {snapshot?.country && <div>{snapshot.country}</div>}
+          {lines.map((line, i) => (
+            <div key={i}>{line}</div>
+          ))}
+          {fromOrder && (
+            <div className="mt-1 text-xs text-slate-400" data-testid={`${testId}-from-order`}>
+              from latest order
+            </div>
+          )}
         </div>
       ) : (
         <div className="text-slate-400 text-sm">No {kind.toLowerCase()} address on file.</div>

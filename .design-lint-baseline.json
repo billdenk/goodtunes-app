@@ -9466,6 +9466,101 @@
   },
   {
     "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "className=\"inline-flex items-center rounded-full bg-[var(--brand-blue)]/10 text-[var(--brand-blue)] text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "className=\"inline-flex items-center rounded-full bg-[#95BF47]/15 text-[#5a7c2c] text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "className=\"inline-flex items-center rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "className=\"inline-flex items-center rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "className={`px-2 py-0.5 rounded-full font-semibold uppercase text-[10px] ${cls}`}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "<div className=\"mt-4 space-y-5 text-[13px]\" data-testid=\"sheet-order-body\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "<span className=\"text-slate-400 text-[12px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "<Link href={`/admin/orders?orderId=${o.id}`} className=\"ml-auto inline-flex items-center gap-1 text-[12px] text-[var(--brand-blue)] hover:underline underline-offset-2\" data-testid=\"link-open-in-orders"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "<Link href={`/admin/albums/${detail.album.id}`} className=\"ml-auto text-[12px] text-[var(--brand-blue)] hover:underline underline-offset-2\" data-testid=\"link-album\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "<Link href={`/admin/customers/${customer.id}`} className=\"ml-auto text-[12px] text-[var(--brand-blue)] hover:underline underline-offset-2\" data-testid=\"link-customer\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "<div className=\"text-slate-500 text-[11.5px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "<span className=\"text-slate-500 text-[11.5px] uppercase tracking-wider font-semibold flex-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "<span className=\"px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-rose-50 text-rose-700\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "<p className=\"text-[11.5px] text-slate-500 mt-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "<label className=\"text-[11.5px] font-semibold uppercase tracking-wider text-slate-500 w-16\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "className=\"text-[11.5px] text-[var(--brand-blue)] hover:underline\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "<label className=\"text-[11.5px] font-semibold uppercase tracking-wider text-slate-500 w-16 mt-1.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "className=\"text-[12.5px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/OrderDetailSheet.tsx",
+    "snippet": "<h3 className=\"text-[11px] font-semibold uppercase tracking-wider text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PartnerPermissionsPanel.tsx",
     "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Partner permissions</h2>"
   },
@@ -12197,11 +12292,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
-    "snippet": "className=\"flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-[15px] text-fan-secondary flex-shrink-0 cursor-not-allowed\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
     "snippet": "className=\"flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-[15px] text-white active:scale-[0.98] transition-transform flex-shrink-0\""
   },
   {
@@ -12273,16 +12363,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
     "snippet": "className=\"h-11 pl-5 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"h-11 px-6 rounded-full inline-flex items-center justify-center font-semibold text-[15px] text-fan-secondary cursor-not-allowed\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"h-11 px-6 rounded-full inline-flex items-center justify-center gap-2 text-white font-semibold text-[15px] transition-transform active:scale-[0.97]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -14967,7 +15047,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminCustomers.tsx",
-    "snippet": "<div className=\"hidden sm:grid grid-cols-[1fr_72px_104px_104px_104px] gap-4 px-4 py-2 bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-500\">"
+    "snippet": "<div className=\"hidden sm:grid grid-cols-[1fr_64px_96px_112px_112px] gap-4 px-4 py-2 bg-slate-50 border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-500\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -15137,21 +15217,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "className=\"inline-flex items-center rounded-full bg-[var(--brand-blue)]/10 text-[var(--brand-blue)] text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "className=\"inline-flex items-center rounded-full bg-[#95BF47]/15 text-[#5a7c2c] text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "className={`px-2 py-0.5 rounded-full font-semibold uppercase text-[10px] ${cls}`}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
     "snippet": "className=\"pl-8 pr-8 h-9 text-[13px]\""
   },
   {
@@ -15223,76 +15288,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminFanOrders.tsx",
     "snippet": "<div className=\"text-[12.5px] text-slate-500 text-right tabular-nums\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<div className=\"mt-4 space-y-5 text-[13px]\" data-testid=\"sheet-order-body\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<span className=\"text-slate-400 text-[12px]\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<Link href={`/admin/orders?orderId=${o.id}`} className=\"ml-auto inline-flex items-center gap-1 text-[12px] text-[var(--brand-blue)] hover:underline underline-offset-2\" data-testid=\"link-open-in-orders"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<Link href={`/admin/albums/${detail.album.id}`} className=\"ml-auto text-[12px] text-[var(--brand-blue)] hover:underline underline-offset-2\" data-testid=\"link-album\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<Link href={`/admin/customers/${customer.id}`} className=\"ml-auto text-[12px] text-[var(--brand-blue)] hover:underline underline-offset-2\" data-testid=\"link-customer\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<div className=\"text-slate-500 text-[11.5px]\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<span className=\"text-slate-500 text-[11.5px] uppercase tracking-wider font-semibold flex-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<span className=\"px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-rose-50 text-rose-700\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<p className=\"text-[11.5px] text-slate-500 mt-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<label className=\"text-[11.5px] font-semibold uppercase tracking-wider text-slate-500 w-16\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "className=\"text-[11.5px] text-[var(--brand-blue)] hover:underline\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<label className=\"text-[11.5px] font-semibold uppercase tracking-wider text-slate-500 w-16 mt-1.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "className=\"text-[12.5px]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminFanOrders.tsx",
-    "snippet": "<h3 className=\"text-[11px] font-semibold uppercase tracking-wider text-slate-500\">"
   },
   {
     "rule": "admin-link-missing-shared-treatment",
