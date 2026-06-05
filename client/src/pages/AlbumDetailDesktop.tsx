@@ -19,18 +19,7 @@ import {
   buildAlbumCreditGroups,
   type AlbumCreditsPayload,
 } from "@/components/ui/AlbumCreditsSheet";
-import { StreamServicePickerSheet } from "@/components/StreamServicePickerSheet";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
-import {
-  getFavoriteStreamingService,
-  setFavoriteStreamingService,
-  handoffUrlForService,
-  openStreamLink,
-  STREAMING_SERVICES,
-  type StreamingServiceId,
-  type StreamLinks,
-} from "@/lib/streamingService";
-import { hasReachedSunset } from "@shared/albumStage";
 import { toast } from "@/hooks/use-toast";
 import {
   useAlbumOwnership,
@@ -177,13 +166,6 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   // instead of the album hero. Picking a result navigates + drops back
   // out of search mode (onNavigate), so it lands on the chosen album.
   const [searchMode, setSearchMode] = useState(false);
-  // Task #1049 — streaming-service handoff for sunset albums. Mirrors the
-  // mobile surface: prefer the fan's saved service, else pop the picker.
-  const [streamPicker, setStreamPicker] = useState<{
-    links: StreamLinks;
-    searchQuery: string;
-    subtitle?: string;
-  } | null>(null);
   const [showBuySheet, setShowBuySheet] = useState(() => {
     if (typeof window === "undefined") return false;
     if (!buyEnabled) return false;
@@ -476,50 +458,6 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
     setShowBuySheet(true);
   };
 
-  // Task #1049 — sunset handoff. When an album has reached its Sunset
-  // date it lives on the streaming services, so we hand the fan off to
-  // their preferred one (or pop the picker on first use). Mirrors the
-  // mobile surface's handleStreamAlbum.
-  const sunsetReached = hasReachedSunset(album?.streamingReleaseDate);
-  const handleStreamHandoff = (
-    links: StreamLinks,
-    searchQuery: string,
-    subtitle?: string,
-  ) => {
-    const fav =
-      (user?.favoriteStreamingService as StreamingServiceId | undefined) ??
-      getFavoriteStreamingService();
-    if (fav) {
-      openStreamLink(handoffUrlForService(fav, links, searchQuery));
-      return;
-    }
-    setStreamPicker({ links, searchQuery, subtitle });
-  };
-  const handleStreamAlbum = () => {
-    handleStreamHandoff(
-      {
-        spotify: album?.spotifyUrl ?? null,
-        apple: album?.appleMusicUrl ?? null,
-        tidal: album?.tidalUrl ?? null,
-        qobuz: album?.qobuzUrl ?? null,
-        deezer: album?.deezerUrl ?? null,
-        pandora: album?.pandoraUrl ?? null,
-      },
-      `${album?.artist ?? ""} ${album?.title ?? ""}`.trim(),
-      album?.title,
-    );
-  };
-  const handlePickStreamService = (svc: StreamingServiceId) => {
-    setFavoriteStreamingService(svc);
-    if (user?.kind === "customer") {
-      updateProfile({ favoriteStreamingService: svc }).catch(() => {});
-    }
-    const picker = streamPicker;
-    setStreamPicker(null);
-    if (picker) {
-      openStreamLink(handoffUrlForService(svc, picker.links, picker.searchQuery));
-    }
-  };
 
   // Fetch buy-options up front so the hero can render the signed-cert
   // chip price without waiting for a hover → modal-mount round-trip.
@@ -728,8 +666,6 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             onBuyBundle={buyEnabled ? handleBuyBundle : undefined}
             signedCertPriceCents={buyEnabled ? signedCertPriceCents : null}
             signedCertSoldOut={signedCertSoldOut}
-            sunsetReached={sunsetReached}
-            onStreamAlbum={handleStreamAlbum}
             lyricsOpen={player.showLyrics && isLgViewport}
             lyrics={lyricsBody}
           />
@@ -925,16 +861,6 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             setShowBuySheet(false);
             setBuyAddons({ signedCert: false });
           }}
-        />
-      )}
-
-      {/* Task #1049 — first-time sunset handoff: pick a streaming service. */}
-      {streamPicker && (
-        <StreamServicePickerSheet
-          available={STREAMING_SERVICES.map((s) => s.id)}
-          subtitle={streamPicker.subtitle}
-          onPick={handlePickStreamService}
-          onClose={() => setStreamPicker(null)}
         />
       )}
 

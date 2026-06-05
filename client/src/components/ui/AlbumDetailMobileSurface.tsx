@@ -102,11 +102,6 @@ export interface AlbumDetailMobileSurfaceProps {
    *  so the primary Play control becomes a "Stream this" handoff and the
    *  Shuffle/Download controls are suppressed. */
   isStreamOnlyAlbum?: boolean;
-  /** Task #1049 — the album's sunset date has arrived: it has left the
-   *  GoodTunes exclusive window for streaming. The Buy control reads
-   *  "Sold Out" and a "Listen on…" handoff is surfaced. Owners keep their
-   *  in-app access; Play stays available. */
-  sunsetReached?: boolean;
   /** Hands the fan off to their chosen streaming service for one track. */
   onStreamSong?: (song: AlbumDetailMobileSurfaceSong) => void;
   /** Hands the fan off to their chosen streaming service for the whole
@@ -172,7 +167,6 @@ export function AlbumDetailMobileSurface({
   onOpenAlbumCredits,
   hasSuperCredits = false,
   isStreamOnlyAlbum = false,
-  sunsetReached = false,
   onStreamSong,
   onStreamAlbum,
   bonusSlot,
@@ -661,23 +655,13 @@ export function AlbumDetailMobileSurface({
               Play
             </button>
           )}
-          {/* Task #1049 — after sunset the album has moved to streaming, so
-              the buy window is closed: a quiet, disabled "Sold Out" replaces
-              the lit Buy CTA. Owners never see either (ownedNums guard). */}
+          {/* Buy CTA. Owners never see it (ownedNums guard). We no longer
+              swap this for a "Sold Out" pill or a "Listen on…" streaming
+              handoff after a sunset date — albums stay a clean Play + Buy
+              surface. (Stream-only releases lead with "Stream this" above.) */}
           {ownedNums.length === 0 &&
             album.priceCents != null &&
-            onOpenBuy &&
-            (sunsetReached ? (
-              <button
-                type="button"
-                disabled
-                className="flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-[15px] text-fan-secondary flex-shrink-0 cursor-not-allowed"
-                style={{ background: "rgba(255,255,255,0.06)" }}
-                data-testid="button-buy-sold-out"
-              >
-                Sold Out
-              </button>
-            ) : (
+            onOpenBuy && (
               <button
                 type="button"
                 onClick={onOpenBuy}
@@ -701,34 +685,7 @@ export function AlbumDetailMobileSurface({
                 </svg>
                 Buy ${(album.priceCents / 100).toFixed(2)}
               </button>
-            ))}
-          {/* Task #1049 — once an album reaches its sunset date it's on the
-              streaming services, so a "Listen on…" handoff appears alongside
-              Play. Stream-only albums already lead with "Stream this", so we
-              don't double it up there. */}
-          {sunsetReached && !isStreamOnlyAlbum && onStreamAlbum && (
-            <button
-              type="button"
-              onClick={onStreamAlbum}
-              className="flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-[15px] text-white active:scale-[0.98] transition-transform flex-shrink-0"
-              style={{ background: "linear-gradient(135deg, var(--brand-purple), var(--brand-blue))" }}
-              data-testid="button-listen-on"
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M7 17L17 7M9 7h8v8" />
-              </svg>
-              Listen on…
-            </button>
-          )}
+            )}
           {hasAlbumCredits && (
             <IconButton
               variant="glass"
