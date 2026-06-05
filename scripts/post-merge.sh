@@ -208,6 +208,184 @@ SQL
 backfill_task_1036_memberships dev  "${DATABASE_URL:-}"
 backfill_task_1036_memberships prod "${PROD_DATABASE_URL:-}"
 
+# Real fan shipping — schema. orders gains a base/markup/charged/band
+# breakdown and a new shipping_rates rate-card table (one row per
+# partner × destination × band). shared/schema.ts declares both; we
+# hand-apply the canonical additive DDL on BOTH dev and prod so the
+# schema-drift guard stays green on a freshly-cloned dev and the publish
+# dev→prod diff stays empty. Idempotent (IF NOT EXISTS).
+migrate_shipping_rates() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping shipping_rates migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE IF EXISTS orders
+  ADD COLUMN IF NOT EXISTS shipping_base_cents    integer,
+  ADD COLUMN IF NOT EXISTS shipping_markup_cents  integer,
+  ADD COLUMN IF NOT EXISTS shipping_charged_cents integer,
+  ADD COLUMN IF NOT EXISTS shipping_band          text;
+CREATE TABLE IF NOT EXISTS shipping_rates (
+  id                     varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  fulfillment_partner_id varchar NOT NULL REFERENCES fulfillment_partners(id) ON DELETE CASCADE,
+  destination            text NOT NULL,
+  band                   text NOT NULL,
+  base_cents             integer NOT NULL,
+  markup_cents           integer NOT NULL DEFAULT 100,
+  currency               text NOT NULL DEFAULT 'usd',
+  source                 text,
+  active                 boolean NOT NULL DEFAULT true,
+  created_at             timestamp DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS shipping_rates_partner_dest_band_uniq
+  ON shipping_rates (fulfillment_partner_id, destination, band);
+COMMIT;
+SQL
+  then
+    echo "post-merge: shipping_rates migration ok on $label"
+  else
+    echo "post-merge: WARNING — shipping_rates migration failed on $label (continuing)"
+  fi
+}
+migrate_shipping_rates dev  "${DATABASE_URL:-}"
+migrate_shipping_rates prod "${PROD_DATABASE_URL:-}"
+
+# Real fan shipping — seed Spinney Media's April-2026 rate card. base_cents
+# is Spinney's own published rate; markup_cents is the flat $1.00 GoodTunes
+# margin kept separate so the fudge stays visible. US + 7 named countries
+# carry their own band1/2/3 rate; "INTL" is the catch-all average for every
+# other destination. Marker-guarded so operator edits to the rate card are
+# never clobbered on a later merge. Spinney partner id is fixed.
+backfill_spinney_shipping_rates() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping spinney rate-card seed on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+  v_spinney constant text := '389bd449-b548-4fee-8e3a-4a5be9191a6a';
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'spinney_rate_card_april_2026'
+  ) AND EXISTS (
+    SELECT 1 FROM fulfillment_partners WHERE id = v_spinney
+  ) THEN
+    INSERT INTO shipping_rates (fulfillment_partner_id, destination, band, base_cents, markup_cents, source)
+    VALUES
+      (v_spinney,'US','band1',687,100,'spinney_chart_april_2026'),
+      (v_spinney,'US','band2',762,100,'spinney_chart_april_2026'),
+      (v_spinney,'US','band3',837,100,'spinney_chart_april_2026'),
+      (v_spinney,'CA','band1',1367,100,'spinney_chart_april_2026'),
+      (v_spinney,'CA','band2',1671,100,'spinney_chart_april_2026'),
+      (v_spinney,'CA','band3',2077,100,'spinney_chart_april_2026'),
+      (v_spinney,'GB','band1',1613,100,'spinney_chart_april_2026'),
+      (v_spinney,'GB','band2',2077,100,'spinney_chart_april_2026'),
+      (v_spinney,'GB','band3',2061,100,'spinney_chart_april_2026'),
+      (v_spinney,'FR','band1',1671,100,'spinney_chart_april_2026'),
+      (v_spinney,'FR','band2',2077,100,'spinney_chart_april_2026'),
+      (v_spinney,'FR','band3',2483,100,'spinney_chart_april_2026'),
+      (v_spinney,'DE','band1',1671,100,'spinney_chart_april_2026'),
+      (v_spinney,'DE','band2',2077,100,'spinney_chart_april_2026'),
+      (v_spinney,'DE','band3',2483,100,'spinney_chart_april_2026'),
+      (v_spinney,'HN','band1',1671,100,'spinney_chart_april_2026'),
+      (v_spinney,'HN','band2',2077,100,'spinney_chart_april_2026'),
+      (v_spinney,'HN','band3',2483,100,'spinney_chart_april_2026'),
+      (v_spinney,'JP','band1',1671,100,'spinney_chart_april_2026'),
+      (v_spinney,'JP','band2',2077,100,'spinney_chart_april_2026'),
+      (v_spinney,'JP','band3',2483,100,'spinney_chart_april_2026'),
+      (v_spinney,'MX','band1',1671,100,'spinney_chart_april_2026'),
+      (v_spinney,'MX','band2',2077,100,'spinney_chart_april_2026'),
+      (v_spinney,'MX','band3',2483,100,'spinney_chart_april_2026'),
+      (v_spinney,'INTL','band1',1671,100,'spinney_chart_april_2026'),
+      (v_spinney,'INTL','band2',2077,100,'spinney_chart_april_2026'),
+      (v_spinney,'INTL','band3',2483,100,'spinney_chart_april_2026')
+    ON CONFLICT (fulfillment_partner_id, destination, band) DO NOTHING;
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    INSERT INTO post_merge_data_backfills (name) VALUES ('spinney_rate_card_april_2026');
+    RAISE NOTICE 'spinney rate-card seed applied: % rows', v_count;
+  ELSE
+    RAISE NOTICE 'spinney rate-card seed already applied (or partner missing) — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: spinney rate-card seed ok on $label"
+    echo "$out" | grep -i 'spinney' || true
+  else
+    echo "post-merge: WARNING — spinney rate-card seed failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_spinney_shipping_rates dev  "${DATABASE_URL:-}"
+backfill_spinney_shipping_rates prod "${PROD_DATABASE_URL:-}"
+
+# PacPack (Pacific Packaging) — Bill & his wife's pre-Spinney in-house
+# fulfillment operation. Create the partner (fixed id, mirrors the row
+# hand-created in prod) and reassign every EasyPost-backfilled historical
+# order to it so the dashboard credits PacPack, not Spinney, for the old
+# fulfillment. Marker-guarded; the UPDATE is a no-op on a fresh dev clone
+# (no easypost-backfilled orders there).
+backfill_pacpack_reassignment() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping pacpack reassignment on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+INSERT INTO fulfillment_partners (id, name, location)
+VALUES ('24a4ab12-7e02-4e4e-a94b-1c165d3dcef3', 'PacPack', 'Dana Point, CA, USA')
+ON CONFLICT (id) DO NOTHING;
+DO $$
+DECLARE
+  v_count integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'pacpack_easypost_reassignment'
+  ) THEN
+    UPDATE orders
+       SET fulfillment_partner_id = '24a4ab12-7e02-4e4e-a94b-1c165d3dcef3'
+     WHERE fulfillment_raw->>'source' = 'easypost_backfill_2026-06'
+       AND fulfillment_partner_id IS DISTINCT FROM '24a4ab12-7e02-4e4e-a94b-1c165d3dcef3';
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    INSERT INTO post_merge_data_backfills (name) VALUES ('pacpack_easypost_reassignment');
+    RAISE NOTICE 'pacpack reassignment applied: % orders', v_count;
+  ELSE
+    RAISE NOTICE 'pacpack reassignment already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: pacpack reassignment ok on $label"
+    echo "$out" | grep -i 'pacpack' || true
+  else
+    echo "post-merge: WARNING — pacpack reassignment failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_pacpack_reassignment dev  "${DATABASE_URL:-}"
+backfill_pacpack_reassignment prod "${PROD_DATABASE_URL:-}"
+
 # Task #1037 — Unified identity P2: link column users.customer_user_id +
 # partial unique index. shared/schema.ts declares the column (no FK on
 # purpose — a relational FK reappears on every publish dev→prod diff, see

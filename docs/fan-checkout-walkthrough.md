@@ -103,12 +103,26 @@ The booklet behaves **differently by format** — this is the trickiest conditio
 - **Only when** the album actually has a 7″ or cassette SKU *and* an active booklet
   add-on. On a 12″-only release the booklet section is hidden entirely.
 
-### 2f. Live price breakdown — *always*
+### 2f. Ship-to country + live price breakdown — *always*
 
+- **"Ship to" country picker** *(physical formats only)*: a dropdown above the
+  breakdown, defaulting to **US**. US plus Canada, the UK, France, Germany, Japan,
+  Mexico, and Honduras have their own rate; every other listed destination falls
+  back to the international ("INTL") average. Digital-only selections hide the
+  picker — no shipping applies.
 - A running breakdown the fan can read before committing: the format line
   (`format × quantity`, folding in "+ booklet" for the 7″ variant), a signed-cert
   line (`cert × count`) when any copies are signed, a separate booklet line for the
-  cassette stacked add-on, and a bold **Total**.
+  cassette stacked add-on, a **Shipping** line, and a bold **Total**.
+- The **Shipping** line is a live server quote (`GET /api/checkout/shipping-quote`,
+  re-fetched whenever the format, country, quantity, or signed-cert/booklet counts
+  change). It's the fulfillment partner's (Spinney) published rate for the chosen
+  country and record weight **plus a flat $1.00**, and it's already folded into the
+  **Total** — so the postage isn't a surprise at the card step. While the quote is
+  in flight the line shows a brief loading state.
+  - **Only when:** if shipping to the chosen country can't be priced, the line
+    shows an "unavailable" message and the checkout button is disabled until the
+    fan picks a serviceable country.
 
 ### 2g. The checkout button — *always, label depends on auth*
 
@@ -121,7 +135,8 @@ The big button at the bottom changes its label based on state:
 - It's disabled until a format is selected.
 
 Small print under the button: *"Shipping & taxes calculated at checkout. Includes
-instant digital access in the player."*
+instant digital access in the player."* (Shipping for the chosen country is already
+shown in the breakdown above before the fan commits; this line is about taxes.)
 
 ---
 
@@ -157,8 +172,11 @@ which returns a client secret; the sheet mounts Stripe's `EmbeddedCheckout` with
 **What the fan sees / fills in (handled by Stripe):**
 
 - **Card details** — required.
-- **Shipping address** — required, restricted to the **9 supported countries**:
-  US, Canada, UK, Australia, Germany, France, Netherlands, Ireland, Japan.
+- **Shipping address** — required, and **locked to the single country the fan
+  picked** in the Buy sheet's "Ship to" selector. Because shipping was priced
+  server-side for that one country, Stripe's `allowed_shipping_countries` is set to
+  just that country — so the address the fan enters always matches the postage they
+  were quoted (no switching to a cheaper/pricier country at the card step).
 - **Billing address** — required.
 - **Phone number** — collected.
 - **Apple Pay / Google Pay** — **only on supported devices/browsers.** Stripe

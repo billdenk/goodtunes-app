@@ -2345,6 +2345,19 @@ export const orders = pgTable("orders", {
   returnedAt: timestamp("returned_at"),
   // Last raw OD payload for admin debugging — small enough to inline.
   fulfillmentRaw: jsonb("fulfillment_raw"),
+  // ─── Shipping & handling charged to the fan ────────────────────────
+  // Snapshot of what we collected for shipping on this order. We store
+  // the fulfillment partner's raw rate (`shipping_base_cents`, e.g.
+  // Spinney's published band price) and OUR markup (`shipping_markup_
+  // cents`, the $1.00 fudge) separately so the breakdown is always
+  // auditable; `shipping_charged_cents` is what the fan actually paid
+  // (base + markup, ×weight overflow). `shipping_band` records which
+  // weight band (band1/band2/band3) resolved. All null for digital
+  // orders and for legacy/imported orders created before this shipped.
+  shippingBaseCents: integer("shipping_base_cents"),
+  shippingMarkupCents: integer("shipping_markup_cents"),
+  shippingChargedCents: integer("shipping_charged_cents"),
+  shippingBand: text("shipping_band"),
   // Task #937 — stamped the moment the branded order-receipt email is
   // claimed for sending. The send is best-effort, but the claim is an
   // atomic conditional UPDATE (… WHERE receipt_email_sent_at IS NULL)
@@ -3440,6 +3453,40 @@ export const fulfillmentPartners = pgTable("fulfillment_partners", {
     .on(table.domain)
     .where(sql`${table.domain} IS NOT NULL AND ${table.deletedAt} IS NULL`),
 }));
+
+// ─── Per-fulfillment-partner shipping rate card ──────────────────────
+// One row per (partner × destination × weight band). `destination` is an
+// ISO-3166-1 alpha-2 country code (e.g. "US", "CA", "GB") for countries
+// the partner publishes a specific rate for, or the literal "INTL" for
+// the catch-all international average applied to every other country.
+// `band` is band1/band2/band3 (Spinney's "up to 8oz / 1lb / 2lb" tiers).
+// `baseCents` is the partner's own published rate; `markupCents` is the
+// GoodTunes margin we add on top (Bill's $1.00 = 100), kept separate so
+// the fudge is always visible. The fan is charged base + markup (with a
+// weight-overflow multiplier on `baseCents` for orders heavier than the
+// top band — see server/shipping.ts). `source` documents where the rate
+// came from (e.g. "spinney_chart_april_2026").
+export const shippingRates = pgTable("shipping_rates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fulfillmentPartnerId: varchar("fulfillment_partner_id")
+    .notNull()
+    .references((): any => fulfillmentPartners.id, { onDelete: "cascade" }),
+  destination: text("destination").notNull(),
+  band: text("band").notNull(),
+  baseCents: integer("base_cents").notNull(),
+  markupCents: integer("markup_cents").notNull().default(100),
+  currency: text("currency").notNull().default("usd"),
+  source: text("source"),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => ({
+  partnerDestBandUniq: uniqueIndex("shipping_rates_partner_dest_band_uniq")
+    .on(t.fulfillmentPartnerId, t.destination, t.band),
+}));
+
+export const insertShippingRateSchema = createInsertSchema(shippingRates).omit({ id: true, createdAt: true });
+export type InsertShippingRate = z.infer<typeof insertShippingRateSchema>;
+export type ShippingRate = typeof shippingRates.$inferSelect;
 
 // One open quote request from a label/artist out to N manufacturers.
 // `albumId` is the album being pressed; the broadcast list (rfqReplies

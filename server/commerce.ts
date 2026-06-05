@@ -15,6 +15,7 @@ import type { Express, Request, Response } from "express";
 import { randomBytes, scrypt as _scrypt, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { db } from "./db";
+import { quoteShipping, normalizeCountry } from "./shipping";
 import {
   albums,
   albumSkus,
@@ -1894,6 +1895,12 @@ export function registerCommerceRoutes(app: Express) {
     // primary artist before charging, and always uses the server-side
     // price (client can't influence the amount).
     customAddonIds: z.array(z.string().min(1)).optional(),
+    // Destination country (ISO-3166-1 alpha-2) the fan picked in the Buy
+    // sheet. Embedded Checkout collects the full shipping address inside
+    // the iframe AFTER we mint the session, so we can't see the country
+    // in time to price shipping — the fan tells us up front and we lock
+    // the session's allowed_countries to it. Defaults to US.
+    shippingCountry: z.string().min(2).max(2).optional(),
   });
   app.post("/api/checkout/session", async (req, res) => {
     const auth = req.headers.authorization;
@@ -2161,6 +2168,51 @@ export function registerCommerceRoutes(app: Express) {
     // its own GoodDeed number and entitlement. Legacy single-copy
     // orders read as `gt_copies = "1"` or `"0"`.
     const copiesMask = copies.map((c) => (c.signedCert ? "1" : "0")).join("");
+
+    // ─── Shipping & handling ─────────────────────────────────────────
+    // Physical orders are charged shipping from the partner rate card
+    // (Spinney) for the country the fan picked in the Buy sheet, plus our
+    // $1 markup. Digital orders ship nothing. We attach the result as a
+    // single Stripe shipping_option and lock the session to that one
+    // country so the address collected inside the iframe can't diverge
+    // from what we priced.
+    const shipCountry = normalizeCountry(parsed.data.shippingCountry);
+    const bookletCount = isBookletBundle ? quantity : (parsed.data.booklet && bookletAddon ? 1 : 0);
+    let shippingQuote: Awaited<ReturnType<typeof quoteShipping>> = null;
+    if (skuKind !== "digital") {
+      try {
+        shippingQuote = await quoteShipping({
+          format: sku.format,
+          quantity,
+          signedCertCount,
+          bookletCount,
+          country: shipCountry,
+        });
+      } catch (e) {
+        console.error("[checkout] shipping quote failed", e);
+      }
+      if (!shippingQuote) {
+        // A physical order MUST carry a real shipping charge. We seed an INTL
+        // catch-all band for the default fulfillment partner, so a null quote
+        // means the partner has no rate card (or the country can't be priced).
+        // Refuse the checkout rather than silently ship for $0 (undercharge).
+        console.warn(`[checkout] no shipping rate for country=${shipCountry} album=${album.id} — refusing checkout`);
+        return res.status(422).json({
+          message: "We can't calculate shipping to that country right now. Please pick a different destination or contact support.",
+        });
+      }
+    }
+    const shippingOptions: Stripe.Checkout.SessionCreateParams.ShippingOption[] | undefined =
+      shippingQuote
+        ? [{
+            shipping_rate_data: {
+              type: "fixed_amount",
+              fixed_amount: { amount: shippingQuote.chargedCents, currency: shippingQuote.currency },
+              display_name: "Shipping & handling",
+            },
+          }]
+        : undefined;
+
     const enrichedMetadata: Record<string, string> = {
       gt_customer_id: customer.id,
       gt_album_id: album.id,
@@ -2180,6 +2232,13 @@ export function registerCommerceRoutes(app: Express) {
       gt_quantity: String(quantity),
       gt_signed_cert_count: String(signedCertCount),
       gt_copies: copiesMask,
+      // Shipping breakdown so materialize can persist base vs. our markup
+      // separately (Stripe only reports the combined shipping_cost total).
+      gt_ship_country: shippingQuote ? shippingQuote.country : "",
+      gt_ship_base: shippingQuote ? String(shippingQuote.baseCents) : "",
+      gt_ship_markup: shippingQuote ? String(shippingQuote.markupCents) : "",
+      gt_ship_charged: shippingQuote ? String(shippingQuote.chargedCents) : "",
+      gt_ship_band: shippingQuote ? shippingQuote.band : "",
     };
     const returnUrl = `${absoluteOrigin(req)}/welcome?session_id={CHECKOUT_SESSION_ID}`;
     let session: Stripe.Checkout.Session;
@@ -2189,7 +2248,14 @@ export function registerCommerceRoutes(app: Express) {
         mode: "payment",
         customer: stripeCustomerId,
         line_items: lineItems,
-        shipping_address_collection: { allowed_countries: ["US", "CA", "GB", "AU", "DE", "FR", "NL", "IE", "JP"] },
+        // When we priced shipping, restrict the Stripe address form to the
+        // exact country the fan picked + selected so the collected address
+        // can't diverge from the rate we charged. Otherwise (digital / no
+        // rate) fall back to the legacy allow-list.
+        shipping_address_collection: shippingQuote
+          ? { allowed_countries: [shipCountry] as any }
+          : { allowed_countries: ["US", "CA", "GB", "AU", "DE", "FR", "NL", "IE", "JP"] },
+        ...(shippingOptions ? { shipping_options: shippingOptions } : {}),
         billing_address_collection: "required",
         phone_number_collection: { enabled: true },
         automatic_tax: { enabled: false },
@@ -2226,6 +2292,39 @@ export function registerCommerceRoutes(app: Express) {
     }
 
     res.json({ clientSecret: session.client_secret, sessionId: session.id });
+  });
+
+  // GET /api/checkout/shipping-quote — live shipping estimate for the Buy
+  // sheet so the displayed total matches what Stripe will charge. Pricing
+  // is non-sensitive (rate card + weight band), so no auth required. The
+  // POST /session route re-prices server-side and is the source of truth.
+  app.get("/api/checkout/shipping-quote", async (req, res) => {
+    const format = typeof req.query.format === "string" ? req.query.format : "";
+    const country = typeof req.query.country === "string" ? req.query.country : "US";
+    const quantity = Math.max(1, parseInt(String(req.query.quantity ?? "1"), 10) || 1);
+    const signedCertCount = Math.max(0, parseInt(String(req.query.certCount ?? "0"), 10) || 0);
+    const bookletCount = Math.max(0, parseInt(String(req.query.bookletCount ?? "0"), 10) || 0);
+    const { classifySkuKind } = await import("./orderDesk");
+    const skuKind = classifySkuKind(format);
+    if (skuKind === "digital") {
+      return res.json({ shippable: false, chargedCents: 0 });
+    }
+    try {
+      const quote = await quoteShipping({ format, quantity, signedCertCount, bookletCount, country });
+      if (!quote) return res.json({ shippable: true, available: false, chargedCents: 0 });
+      res.json({
+        shippable: true,
+        available: true,
+        country: quote.country,
+        band: quote.band,
+        baseCents: quote.baseCents,
+        markupCents: quote.markupCents,
+        chargedCents: quote.chargedCents,
+      });
+    } catch (e) {
+      console.error("[shipping-quote] failed", e);
+      res.status(500).json({ message: "Could not estimate shipping" });
+    }
   });
 
   // GET /api/checkout/session/:id — read for the /welcome page so it can
@@ -2802,6 +2901,14 @@ export async function materializeOrderFromSession(
   const artistSnapshotId = session.metadata?.gt_artist_id || albumRow?.primaryArtistId || null;
   const labelSnapshotId = session.metadata?.gt_label_id || albumRow?.labelId || null;
 
+  // Shipping breakdown. The base/markup split and resolved band come from
+  // the metadata we stamped at session create. The fan-charged total is
+  // computed below once `full` (the expanded session) is fetched. Null
+  // across the board for digital / no-shipping orders.
+  const shipBaseCents = session.metadata?.gt_ship_base ? parseInt(session.metadata.gt_ship_base, 10) || 0 : null;
+  const shipMarkupCents = session.metadata?.gt_ship_markup ? parseInt(session.metadata.gt_ship_markup, 10) || 0 : null;
+  const shipBand = session.metadata?.gt_ship_band || null;
+
   const stripe = deps.stripe ?? (await getStripe());
   // Re-fetch with expansion so addresses/phone are populated even if the
   // original event payload was thin.
@@ -2816,6 +2923,14 @@ export async function materializeOrderFromSession(
       "payment_intent.latest_charge",
     ],
   });
+
+  // Fan-charged shipping is authoritative from Stripe's collected total;
+  // fall back to the metadata estimate if Stripe didn't attach a cost.
+  const shipChargedCents =
+    shipBaseCents === null
+      ? null
+      : (full as any).shipping_cost?.amount_total ??
+        (session.metadata?.gt_ship_charged ? parseInt(session.metadata.gt_ship_charged, 10) || 0 : null);
 
   const piId = typeof full.payment_intent === "string" ? full.payment_intent : full.payment_intent?.id ?? null;
   const stripeCustomerId = typeof full.customer === "string" ? full.customer : full.customer?.id ?? null;
@@ -2950,6 +3065,10 @@ export async function materializeOrderFromSession(
             artistSnapshotId,
             labelSnapshotId,
             fulfillmentStatus: isPaid && skuKind !== "digital" ? "pending" : null,
+            shippingBaseCents: shipBaseCents,
+            shippingMarkupCents: shipMarkupCents,
+            shippingChargedCents: shipChargedCents,
+            shippingBand: shipBand,
           })
           .onConflictDoNothing({ target: orders.stripeCheckoutSessionId })
           .returning();
@@ -3012,6 +3131,10 @@ export async function materializeOrderFromSession(
             artistSnapshotId: order!.artistSnapshotId ?? artistSnapshotId,
             labelSnapshotId: order!.labelSnapshotId ?? labelSnapshotId,
             fulfillmentStatus: order!.fulfillmentStatus ?? (skuKind !== "digital" ? "pending" : null),
+            shippingBaseCents: order!.shippingBaseCents ?? shipBaseCents,
+            shippingMarkupCents: order!.shippingMarkupCents ?? shipMarkupCents,
+            shippingChargedCents: order!.shippingChargedCents ?? shipChargedCents,
+            shippingBand: order!.shippingBand ?? shipBand,
           })
           .where(eq(orders.id, order!.id))
           .returning();

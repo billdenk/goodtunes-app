@@ -150,6 +150,85 @@ function Group({
   );
 }
 
+// Destination countries offered in the shipping selector. The eight in
+// PRICED_COUNTRIES have their own Spinney rate; every other destination prices
+// off the INTL average (the server resolves the band + rate for whatever is
+// sent). Bill's call: ship anywhere, so OTHER_COUNTRIES is the full ISO-3166
+// alpha-2 set minus the priced eight. The server accepts any code regardless.
+const PRICED_COUNTRIES: { code: string; name: string }[] = [
+  { code: "US", name: "United States" },
+  { code: "CA", name: "Canada" },
+  { code: "GB", name: "United Kingdom" },
+  { code: "FR", name: "France" },
+  { code: "DE", name: "Germany" },
+  { code: "JP", name: "Japan" },
+  { code: "MX", name: "Mexico" },
+  { code: "HN", name: "Honduras" },
+];
+
+const ALL_COUNTRIES: { code: string; name: string }[] = [
+  { code: "AF", name: "Afghanistan" }, { code: "AL", name: "Albania" }, { code: "DZ", name: "Algeria" },
+  { code: "AD", name: "Andorra" }, { code: "AO", name: "Angola" }, { code: "AG", name: "Antigua and Barbuda" },
+  { code: "AR", name: "Argentina" }, { code: "AM", name: "Armenia" }, { code: "AU", name: "Australia" },
+  { code: "AT", name: "Austria" }, { code: "AZ", name: "Azerbaijan" }, { code: "BS", name: "Bahamas" },
+  { code: "BH", name: "Bahrain" }, { code: "BD", name: "Bangladesh" }, { code: "BB", name: "Barbados" },
+  { code: "BY", name: "Belarus" }, { code: "BE", name: "Belgium" }, { code: "BZ", name: "Belize" },
+  { code: "BJ", name: "Benin" }, { code: "BM", name: "Bermuda" }, { code: "BT", name: "Bhutan" },
+  { code: "BO", name: "Bolivia" }, { code: "BA", name: "Bosnia and Herzegovina" }, { code: "BW", name: "Botswana" },
+  { code: "BR", name: "Brazil" }, { code: "BN", name: "Brunei" }, { code: "BG", name: "Bulgaria" },
+  { code: "BF", name: "Burkina Faso" }, { code: "BI", name: "Burundi" }, { code: "KH", name: "Cambodia" },
+  { code: "CM", name: "Cameroon" }, { code: "CV", name: "Cape Verde" }, { code: "KY", name: "Cayman Islands" },
+  { code: "TD", name: "Chad" }, { code: "CL", name: "Chile" }, { code: "CN", name: "China" },
+  { code: "CO", name: "Colombia" }, { code: "CR", name: "Costa Rica" }, { code: "HR", name: "Croatia" },
+  { code: "CY", name: "Cyprus" }, { code: "CZ", name: "Czechia" }, { code: "DK", name: "Denmark" },
+  { code: "DM", name: "Dominica" }, { code: "DO", name: "Dominican Republic" }, { code: "EC", name: "Ecuador" },
+  { code: "EG", name: "Egypt" }, { code: "SV", name: "El Salvador" }, { code: "EE", name: "Estonia" },
+  { code: "ET", name: "Ethiopia" }, { code: "FJ", name: "Fiji" }, { code: "FI", name: "Finland" },
+  { code: "GA", name: "Gabon" }, { code: "GM", name: "Gambia" }, { code: "GE", name: "Georgia" },
+  { code: "GH", name: "Ghana" }, { code: "GI", name: "Gibraltar" }, { code: "GR", name: "Greece" },
+  { code: "GL", name: "Greenland" }, { code: "GD", name: "Grenada" }, { code: "GT", name: "Guatemala" },
+  { code: "GY", name: "Guyana" }, { code: "HT", name: "Haiti" }, { code: "HK", name: "Hong Kong" },
+  { code: "HU", name: "Hungary" }, { code: "IS", name: "Iceland" }, { code: "IN", name: "India" },
+  { code: "ID", name: "Indonesia" }, { code: "IQ", name: "Iraq" }, { code: "IE", name: "Ireland" },
+  { code: "IL", name: "Israel" }, { code: "IT", name: "Italy" }, { code: "JM", name: "Jamaica" },
+  { code: "JO", name: "Jordan" }, { code: "KZ", name: "Kazakhstan" }, { code: "KE", name: "Kenya" },
+  { code: "KW", name: "Kuwait" }, { code: "KG", name: "Kyrgyzstan" }, { code: "LA", name: "Laos" },
+  { code: "LV", name: "Latvia" }, { code: "LB", name: "Lebanon" }, { code: "LS", name: "Lesotho" },
+  { code: "LR", name: "Liberia" }, { code: "LI", name: "Liechtenstein" }, { code: "LT", name: "Lithuania" },
+  { code: "LU", name: "Luxembourg" }, { code: "MO", name: "Macau" }, { code: "MG", name: "Madagascar" },
+  { code: "MW", name: "Malawi" }, { code: "MY", name: "Malaysia" }, { code: "MV", name: "Maldives" },
+  { code: "ML", name: "Mali" }, { code: "MT", name: "Malta" }, { code: "MR", name: "Mauritania" },
+  { code: "MU", name: "Mauritius" }, { code: "MD", name: "Moldova" }, { code: "MC", name: "Monaco" },
+  { code: "MN", name: "Mongolia" }, { code: "ME", name: "Montenegro" }, { code: "MA", name: "Morocco" },
+  { code: "MZ", name: "Mozambique" }, { code: "NA", name: "Namibia" }, { code: "NP", name: "Nepal" },
+  { code: "NL", name: "Netherlands" }, { code: "NZ", name: "New Zealand" }, { code: "NI", name: "Nicaragua" },
+  { code: "NE", name: "Niger" }, { code: "NG", name: "Nigeria" }, { code: "MK", name: "North Macedonia" },
+  { code: "NO", name: "Norway" }, { code: "OM", name: "Oman" }, { code: "PK", name: "Pakistan" },
+  { code: "PA", name: "Panama" }, { code: "PG", name: "Papua New Guinea" }, { code: "PY", name: "Paraguay" },
+  { code: "PE", name: "Peru" }, { code: "PH", name: "Philippines" }, { code: "PL", name: "Poland" },
+  { code: "PT", name: "Portugal" }, { code: "QA", name: "Qatar" }, { code: "RO", name: "Romania" },
+  { code: "RW", name: "Rwanda" }, { code: "KN", name: "Saint Kitts and Nevis" }, { code: "LC", name: "Saint Lucia" },
+  { code: "WS", name: "Samoa" }, { code: "SM", name: "San Marino" }, { code: "SA", name: "Saudi Arabia" },
+  { code: "SN", name: "Senegal" }, { code: "RS", name: "Serbia" }, { code: "SC", name: "Seychelles" },
+  { code: "SL", name: "Sierra Leone" }, { code: "SG", name: "Singapore" }, { code: "SK", name: "Slovakia" },
+  { code: "SI", name: "Slovenia" }, { code: "SB", name: "Solomon Islands" }, { code: "ZA", name: "South Africa" },
+  { code: "KR", name: "South Korea" }, { code: "ES", name: "Spain" }, { code: "LK", name: "Sri Lanka" },
+  { code: "SR", name: "Suriname" }, { code: "SE", name: "Sweden" }, { code: "CH", name: "Switzerland" },
+  { code: "TW", name: "Taiwan" }, { code: "TJ", name: "Tajikistan" }, { code: "TZ", name: "Tanzania" },
+  { code: "TH", name: "Thailand" }, { code: "TG", name: "Togo" }, { code: "TO", name: "Tonga" },
+  { code: "TT", name: "Trinidad and Tobago" }, { code: "TN", name: "Tunisia" }, { code: "TR", name: "Turkey" },
+  { code: "TM", name: "Turkmenistan" }, { code: "UG", name: "Uganda" }, { code: "UA", name: "Ukraine" },
+  { code: "AE", name: "United Arab Emirates" }, { code: "UY", name: "Uruguay" }, { code: "UZ", name: "Uzbekistan" },
+  { code: "VU", name: "Vanuatu" }, { code: "VE", name: "Venezuela" }, { code: "VN", name: "Vietnam" },
+  { code: "YE", name: "Yemen" }, { code: "ZM", name: "Zambia" }, { code: "ZW", name: "Zimbabwe" },
+];
+
+// Every destination minus the priced eight, alphabetical, for the second group.
+const PRICED_CODES = new Set(PRICED_COUNTRIES.map((c) => c.code));
+const OTHER_COUNTRIES = ALL_COUNTRIES
+  .filter((c) => !PRICED_CODES.has(c.code))
+  .sort((a, b) => a.name.localeCompare(b.name));
+
 export function BuySheet({
   albumId,
   onClose,
@@ -187,6 +266,17 @@ export function BuySheet({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [stripe, setStripe] = useState<Stripe | null>(null);
+  // Destination + live shipping quote so the displayed total matches what
+  // Stripe will charge (embedded checkout can't surface a country-driven
+  // shipping rate on its own — we price it server-side and lock the
+  // collected country to this one).
+  const [country, setCountry] = useState("US");
+  const [shipping, setShipping] = useState<{
+    shippable?: boolean;
+    available?: boolean;
+    chargedCents?: number;
+  } | null>(null);
+  const [shippingLoading, setShippingLoading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -282,7 +372,50 @@ export function BuySheet({
   const customAddonsList = options?.customAddons ?? [];
   const selectedCustomAddons = customAddonsList.filter((c) => customAddonIds.includes(c.id));
   const customAddonsLineCents = selectedCustomAddons.reduce((sum, c) => sum + c.priceCents, 0);
-  const totalCents = formatLineCents + certLineCents + bookletLineCents + customAddonsLineCents;
+  const itemsTotalCents = formatLineCents + certLineCents + bookletLineCents + customAddonsLineCents;
+
+  // Booklet weight: the 7" set variant ships one booklet per copy; the
+  // cassette stacked add-on is a single booklet. Mirror the server so the
+  // quoted band matches.
+  const bookletCountForShip =
+    bundleAvailable && booklet ? quantity : booklet && bookletAvailable && !bundleAvailable ? 1 : 0;
+
+  // Live shipping estimate. Re-quotes whenever the format, destination,
+  // quantity, or paper-weight inputs (signed certs / booklet) change.
+  useEffect(() => {
+    if (!selectedSku) {
+      setShipping(null);
+      return;
+    }
+    let cancelled = false;
+    setShippingLoading(true);
+    (async () => {
+      try {
+        const params = new URLSearchParams({
+          format: selectedSku.format,
+          country,
+          quantity: String(quantity),
+          certCount: String(certCount),
+          bookletCount: String(bookletCountForShip),
+        });
+        const r = await apiRequest("GET", `/api/checkout/shipping-quote?${params.toString()}`);
+        const j = await r.json();
+        if (!cancelled) setShipping(j);
+      } catch {
+        if (!cancelled) setShipping(null);
+      } finally {
+        if (!cancelled) setShippingLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSku?.format, country, quantity, certCount, bookletCountForShip]);
+
+  const shippingCents =
+    shipping?.shippable && shipping?.available ? shipping.chargedCents ?? 0 : 0;
+  const shippingUnavailable = !!shipping?.shippable && shipping?.available === false;
+  const totalCents = itemsTotalCents + shippingCents;
 
   // If the run is capped, don't let the fan toggle more copies than
   // remain in inventory. The server validates this too — this is just
@@ -331,6 +464,9 @@ export function BuySheet({
         // Server re-validates each is active + targets this album's
         // artist and always uses the stored price.
         customAddonIds: selectedCustomAddons.map((c) => c.id),
+        // Destination drives the server-side shipping quote that becomes
+        // the Stripe shipping_option; allowed_countries is locked to it.
+        shippingCountry: country,
       });
       const j = await r.json();
       if (!j.clientSecret) throw new Error(j?.message ?? "Checkout failed to start");
@@ -770,6 +906,40 @@ export function BuySheet({
                   </div>
                 )}
 
+                {/* Ship-to country — drives the live shipping quote below.
+                    Embedded checkout can't pick a country-based rate on its
+                    own, so we collect it here and lock it server-side. */}
+                <div className="mb-4">
+                  <label
+                    htmlFor="buy-ship-country"
+                    className="block text-fan-secondary text-sm mb-1.5"
+                  >
+                    Ship to
+                  </label>
+                  <select
+                    id="buy-ship-country"
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    className="w-full rounded-2xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-base text-white appearance-none focus:outline-none focus:border-white/25"
+                    data-testid="select-ship-country"
+                  >
+                    <optgroup label="Common destinations" className="bg-[#0d1235]">
+                      {PRICED_COUNTRIES.map((c) => (
+                        <option key={c.code} value={c.code} className="bg-[#0d1235]">
+                          {c.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="All other countries" className="bg-[#0d1235]">
+                      {OTHER_COUNTRIES.map((c) => (
+                        <option key={c.code} value={c.code} className="bg-[#0d1235]">
+                          {c.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+
                 {/* Live breakdown — separate lines so the fan can verify
                     the math before tapping checkout. */}
                 <div className="rounded-2xl bg-white/[0.05] p-4 mb-4 text-[13px]" data-testid="block-breakdown">
@@ -803,6 +973,29 @@ export function BuySheet({
                       </span>
                     </div>
                   ))}
+                  {/* Real shipping — quoted live for the chosen destination
+                      (Spinney rate + GoodTunes markup). The fan pays exactly
+                      this; the server re-prices it as the Stripe shipping
+                      option. */}
+                  <div className="flex items-center justify-between mt-1.5">
+                    <span className="text-fan-secondary">Shipping</span>
+                    <span className="text-fan-primary" data-testid="text-line-shipping">
+                      {shippingLoading
+                        ? "…"
+                        : shippingUnavailable
+                          ? "—"
+                          : dollars(shippingCents)}
+                    </span>
+                  </div>
+                  {shippingUnavailable && (
+                    <p
+                      className="text-xs mt-1.5"
+                      style={{ color: "var(--brand-heart)" }}
+                      data-testid="text-shipping-unavailable"
+                    >
+                      We can't quote shipping to this destination yet — try another country.
+                    </p>
+                  )}
                   <div className="border-t border-white/[0.08] mt-3 pt-3 flex items-center justify-between">
                     <span className="text-white/55">Total</span>
                     <span className="text-[18px] font-bold" data-testid="text-buy-total">
@@ -814,7 +1007,7 @@ export function BuySheet({
                 <button
                   type="button"
                   onClick={beginCheckout}
-                  disabled={!selectedSku || busy}
+                  disabled={!selectedSku || busy || shippingUnavailable}
                   className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 transition-all active:scale-[0.98]"
                   style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
                   data-testid="button-checkout"
@@ -823,11 +1016,13 @@ export function BuySheet({
                     ? "Opening checkout…"
                     : !isCustomerSignedIn
                       ? "Sign in to continue"
-                      : `Checkout — ${dollars(totalCents)}`}
+                      : shippingUnavailable
+                        ? "Choose a shippable destination"
+                        : `Checkout — ${dollars(totalCents)}`}
                 </button>
                 <p className="mt-3 text-white/40 text-[11px] text-center leading-snug">
-                  Shipping & taxes calculated at checkout. Includes instant digital access
-                  in the player.
+                  Shipping shown above; taxes calculated at checkout. Includes instant
+                  digital access in the player.
                 </p>
               </>
             )}
