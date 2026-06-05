@@ -130,8 +130,9 @@ export function AdminCustomerDetail() {
   const name = c.realName || c.displayName;
   const ship = formatAddress(c.shippingAddress);
   const bill = formatAddress(c.billingAddress);
+  const REVENUE_STATUSES = new Set(["paid", "shipped", "complete", "completed"]);
   const lifetime = orders
-    .filter((o) => o.status === "paid" || o.status === "shipped")
+    .filter((o) => REVENUE_STATUSES.has(o.status))
     .reduce((sum, o) => sum + o.totalCents, 0);
 
   return (
@@ -956,6 +957,8 @@ function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = {
     paid: "bg-emerald-50 text-emerald-700",
     shipped: "bg-blue-50 text-blue-700",
+    complete: "bg-emerald-50 text-emerald-700",
+    completed: "bg-emerald-50 text-emerald-700",
     refunded: "bg-rose-50 text-rose-700",
     pending: "bg-amber-50 text-amber-700",
     cancelled: "bg-slate-100 text-slate-600",

@@ -3264,7 +3264,7 @@ export class DbStorage implements IStorage {
       .select({
         customer: customerUsers,
         orderCount: sql<number>`coalesce(count(${orders.id}), 0)::int`,
-        lifetimeSpendCents: sql<number>`coalesce(sum(case when ${orders.status} in ('paid','shipped') then ${orders.totalCents} else 0 end), 0)::int`,
+        lifetimeSpendCents: sql<number>`coalesce(sum(case when ${orders.status} in ('paid','shipped','complete','completed') then ${orders.totalCents} else 0 end), 0)::int`,
         lastOrderAt: sql<Date | null>`max(${orders.createdAt})`,
       })
       .from(customerUsers)
