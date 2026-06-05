@@ -230,13 +230,13 @@ import { WELCOME_BACK_WHATS_NEW } from "@shared/welcomeBack";
 
 export async function sendWelcomeBackEmail(toEmail: string, displayName: string | null, signInUrl: string): Promise<SendResult> {
   const friendly = (displayName ?? "").trim() || "there";
-  const subject = `${friendly}, your GoodTunes player is ready — your gogoods library is inside`;
+  const subject = `${friendly}, GoodTunes just got a major upgrade — your library is inside`;
   const bullets = WELCOME_BACK_WHATS_NEW;
 
   const text = [
     `Hi ${friendly},`,
     ``,
-    `Welcome back. Your gogoods.com purchases just moved into the new GoodTunes player — every album you ever bought is waiting, ready to stream.`,
+    `Welcome back. GoodTunes just got a major upgrade — enhanced features, GoodSync™ lyrics, and playlist capabilities — and the whole library you already own is right here waiting for you.`,
     ``,
     `Tap to open your library (no password — this link signs you in):`,
     signInUrl,
@@ -265,9 +265,9 @@ export async function sendWelcomeBackEmail(toEmail: string, displayName: string 
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
       ${emailLogoImg("color")}
       <div style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">Welcome back</div>
-      <h1 style="font-size: 26px; margin: 12px 0 16px; font-weight: 700; line-height: 1.2;">Hi ${escapeHtml(friendly)}, your player is ready.</h1>
+      <h1 style="font-size: 26px; margin: 12px 0 16px; font-weight: 700; line-height: 1.2;">Hi ${escapeHtml(friendly)}, GoodTunes just got a major upgrade.</h1>
       <p style="font-size: 15px; color: #333; line-height: 1.55; margin: 0 0 20px;">
-        Your gogoods.com purchases just moved into the new <strong>GoodTunes</strong> player — every album you ever bought is waiting, ready to stream.
+        <strong>GoodTunes</strong> just got a major upgrade — enhanced features, GoodSync™ lyrics, and playlist capabilities — and the whole library you already own is right here waiting for you.
       </p>
       <p style="margin: 28px 0;">
         <a href="${signInUrl}" style="display: inline-block; background: linear-gradient(135deg, #1D5E8F, #319ED8); color: #fff; text-decoration: none; padding: 14px 24px; border-radius: 12px; font-weight: 600; font-size: 15px;">Open my GoodTunes player</a>
