@@ -36,15 +36,15 @@ export const WHATS_NEW_CARDS: ReadonlyArray<WhatsNewCard> = [
     body: "Line-by-line lyrics that scroll with the song — the way fans actually want to read along.",
   },
   {
-    key: "signed_gooddeeds",
+    key: "gooddeed_provenance",
     icon: "ShieldCheck",
-    title: "Signed GoodDeeds",
-    body: "Limited, artist-signed certificates of provenance ship with every numbered run.",
+    title: "GoodDeed & Provenance",
+    body: "View your GoodDeed and ownership provenance in the app for every album you own. Buy a physical copy and a limited, artist-signed certificate ships with it.",
   },
   {
-    key: "vendor_chat",
-    icon: "MessageSquare",
-    title: "Chat with the gear",
-    body: "Tap an instrument in a song's credits and ask its maker a question — right inside the app.",
+    key: "super_credits",
+    icon: "Sparkles",
+    title: "SuperCredits™",
+    body: "See every performer and the exact gear behind each track — down to the specific instrument used on that take.",
   },
 ];
