@@ -22,7 +22,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, matchInvitedPressToVendor, type VendorId } from "@shared/vendorSpecs";
+import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, matchInvitedPressToVendor, defaultPreflightVendor, type VendorId } from "@shared/vendorSpecs";
 import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
 import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
 import { VinylOrderPanel } from "@/components/admin/VinylOrderPanel";
@@ -197,37 +197,29 @@ export function PressPanel({
   // the Press tab never lands the operator on a vendor the Sell-tab
   // Printer chip row also refuses to surface. Restore by emptying
   // `HIDDEN_PREFLIGHT_VENDORS`.
+  // Task #1311 — Same endpoint as SellPanel's `invitedPress` query so both tabs
+  // read the artist-level pressing plant from one source of truth.  When a plant
+  // IS set, `matchInvitedPressToVendor` maps its name to a VendorId here, and
+  // SellPanel drives its catalog from the same resolved press — the Physical and
+  // Sell tabs always agree.  When NO plant is set, both fall back to
+  // `defaultPreflightVendor()` (MRP) — the same platform-wide default —
+  // so the two panels cannot diverge in either the set or unset case.
   const { data: invitedPress } = useQuery<{ press: { name: string | null } | null }>({
     queryKey: ["/api/admin/albums", albumId, "invited-press"],
   });
-  const visibleVendors = useMemo(
-    () => Object.values(VENDOR_SPECS).filter((s) => !HIDDEN_PREFLIGHT_VENDORS.has(s.id)),
-    [],
-  );
+  // Task #1311 — Physical tab derives its plant from the SAME resolver as
+  // the Sell panel: invited press → matchInvitedPressToVendor → defaultPreflightVendor().
+  // No per-album override exists; setting the artist's plant on the People page
+  // is the single authoritative control. `HIDDEN_PREFLIGHT_VENDORS` still governs
+  // which vendors appear in generic contexts, but a deliberate artist stamp is
+  // always honored even when the vendor is in that set.
   const defaultVendor: VendorId = useMemo(() => {
-    // Task #736 — the governing stamp wins. If the album's resolved
-    // press matches a known vendor (e.g. Hellbender), honor it for the
-    // package designer EVEN IF that vendor is in HIDDEN_PREFLIGHT_VENDORS.
-    // The hide list only governs which vendors appear as *generic*
-    // pre-meeting defaults; a deliberate per-album stamp must not silently
-    // fall back to MRP. The matched-but-hidden vendor is also injected
-    // into the select options below so the operator can see/keep it.
     const matched = matchInvitedPressToVendor(invitedPress?.press?.name);
     if (matched) return matched;
-    return (visibleVendors[0] ?? Object.values(VENDOR_SPECS)[0]).id;
-  }, [invitedPress, visibleVendors]);
-  // Task #736 — the vendor matched from the album's resolved press, even
-  // when hidden from generic preflight, so it can be merged into the
-  // select options (otherwise the default vendor wouldn't be selectable).
-  const matchedHiddenVendor: VendorId | null = useMemo(() => {
-    const matched = matchInvitedPressToVendor(invitedPress?.press?.name);
-    return matched && HIDDEN_PREFLIGHT_VENDORS.has(matched) ? matched : null;
+    // Same platform-default the Sell panel's mrpDefaults fallback resolves to.
+    return defaultPreflightVendor();
   }, [invitedPress]);
-  // Track the operator's manual pick separately so the invited-press
-  // default doesn't yank their selection out from under them once
-  // the query resolves.
-  const [vendorOverride, setVendorOverride] = useState<VendorId | null>(null);
-  const vendorId: VendorId = vendorOverride ?? defaultVendor;
+  const vendorId: VendorId = defaultVendor;
 
   const [vinylSize, setVinylSize] = useState<'7"' | '10"' | '12"'>('12"');
   const [rpm, setRpm] = useState<33 | 45>(33);
@@ -498,29 +490,17 @@ export function PressPanel({
             non-hidden vendor. */}
         <div className="mb-10" data-testid="section-press-vendor-picker">
           <h2 className="text-base font-semibold text-slate-900 mb-1">Pressing plant</h2>
-          <p className="text-[13px] text-slate-500 mb-4">
-            Pick the plant this album is going to. Drives preflight checks, the art uploader,
-            and the print-ready PDF generator below.
+          <p className="text-xs text-slate-500 mb-4">
+            Drives preflight checks, the art uploader, and the print-ready PDF generator
+            below. Set on the artist&rsquo;s page — changes here automatically.
           </p>
-          <div className="rounded-md border border-slate-200 bg-white p-4">
-            <label className="block text-xs text-slate-600 max-w-xs">
-              Vendor
-              <select
-                value={vendorId}
-                onChange={(e) => setVendorOverride(e.target.value as VendorId)}
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px]"
-                data-testid="select-press-vendor"
-              >
-                {matchedHiddenVendor && !visibleVendors.some((s) => s.id === matchedHiddenVendor) && (
-                  <option key={matchedHiddenVendor} value={matchedHiddenVendor}>
-                    {VENDOR_SPECS[matchedHiddenVendor].label}
-                  </option>
-                )}
-                {visibleVendors.map((s) => (
-                  <option key={s.id} value={s.id}>{s.label}</option>
-                ))}
-              </select>
-            </label>
+          <div className="rounded-md border border-slate-200 bg-white p-4 flex items-center gap-3">
+            <span className="text-sm font-medium text-slate-900" data-testid="press-vendor-label">
+              {VENDOR_SPECS[vendorId]?.label ?? vendorId}
+            </span>
+            <span className="text-xs text-slate-400">
+              {invitedPress?.press?.name ? "artist's plant" : "platform default"}
+            </span>
           </div>
         </div>
 

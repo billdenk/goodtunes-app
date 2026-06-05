@@ -94,7 +94,7 @@ export function InvitedByPressPanel({
       setSelecting(false);
       setQuery("");
       onChanged?.();
-      toast({ title: "Invited-by press updated" });
+      toast({ title: "Pressing plant updated" });
     },
     onError: (e: any) =>
       toast({ title: "Couldn't update", description: e?.message, variant: "destructive" }),
@@ -115,7 +115,7 @@ export function InvitedByPressPanel({
     <div data-testid="panel-invited-by-press">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold text-slate-900 inline-flex items-center gap-1.5">
-          <Lock className="w-3.5 h-3.5 text-slate-400" /> Invited by press
+          <Lock className="w-3.5 h-3.5 text-slate-400" /> Pressing plant
         </h3>
         {isSuperAdmin && current && !selecting && (
           <button
@@ -142,7 +142,7 @@ export function InvitedByPressPanel({
         </div>
       ) : (
         <p className="text-[12.5px] text-slate-500" data-testid="text-no-invited-press">
-          Not press-invited. Their Sell-panel Presses surface shows the full directory.
+          No plant set. Pricing and the Physical tab will use platform defaults.
         </p>
       )}
       {isSuperAdmin && (
@@ -186,7 +186,7 @@ export function InvitedByPressPanel({
               className="text-[12px] text-[color:var(--brand-blue)] hover:underline"
               data-testid="button-change-invited-press"
             >
-              {current ? "Reassign press" : "Assign a press"}
+              {current ? "Change plant" : "Assign plant"}
             </button>
           ) : (
             <div>
@@ -195,7 +195,7 @@ export function InvitedByPressPanel({
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search presses…"
+                  placeholder="Search plants…"
                   className="flex-1 h-8 rounded-md border border-slate-300 px-2 text-[13px] focus:outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
                   data-testid="input-search-invited-press"
                 />

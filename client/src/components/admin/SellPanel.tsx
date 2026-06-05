@@ -2700,6 +2700,11 @@ function SkuRow({
   }, [catalogSig]);
 
   const usingCatalog = !!catalogFormat && !!pickedTier;
+  // Task #1311 — true when an artist's plant is set but its catalog does
+  // NOT include this format (e.g. Hellbender set while wanting cassette
+  // pricing).  Used in the non-vinyl breakdown branch to surface an honest
+  // needsQuote state rather than a silent $0 manufacturing line.
+  const pressSetButFormatUnsupported = !!invitedPressItself && !catalogFormat && !isVinyl;
 
   // Task #385 — quantity rungs the dropdown offers. Catalog flow reads
   // them off the picked tier's price ladder; legacy Hellbender flow
@@ -2939,8 +2944,14 @@ function SkuRow({
     // same stale-write trap we hit on catalog rows, so treat it as
     // absent and fall back to the live placeholder until the operator
     // re-Saves.
+    // Task #1311 — when an artist's plant is set but its catalog doesn't
+    // cover this format, return null so totalCostCents / profitCents /
+    // totalCents all read as "—" (honest unsupported state).  Honor a
+    // previously-saved snapshot: the operator may have a real manual
+    // quote (e.g. a bespoke price) that must stay visible.
     const snapshot = existing?.costSnapshotManufacturingCents ?? null;
     const hasValidSnapshot = snapshot != null && snapshot > 0;
+    if (pressSetButFormatUnsupported && !hasValidSnapshot) return null;
     const manufacturingCents = hasValidSnapshot
       ? snapshot
       : (liveCost?.manufacturingCents ?? 0);
@@ -2968,6 +2979,7 @@ function SkuRow({
     priceCentsForCost,
     mrpDefaultFormat,
     parsedQty,
+    pressSetButFormatUnsupported,
   ]);
 
   const totalCostCents = breakdown
@@ -3156,7 +3168,11 @@ function SkuRow({
   // Task #390 — vinyl Total is now the simple profit × selected qty
   // (estimated-sold chips are gone from the vinyl card). Non-vinyl
   // keeps the legacy fixed×qty (or TBD when unlimited) branch.
-  const totalCents = isVinyl
+  // Task #1311 — non-vinyl formats priced via the invited-press catalog
+  // (e.g. MRP cassette) use parsedQty (rung-snapped) just like vinyl,
+  // so the Total reflects the selected pressing quantity rather than the
+  // legacy free-text input.
+  const totalCents = (isVinyl || usingCatalog)
     ? (profitCents !== null && parsedQty > 0 ? profitCents * parsedQty : null)
     : (qtyMode === "fixed" && profitCents !== null && legacyParsedQty !== null
         ? profitCents * legacyParsedQty
@@ -3221,6 +3237,11 @@ function SkuRow({
       : (stockStr !== storedStock ||
          qtyMode !== initialQtyMode ||
          (qtyMode === "fixed" && legacyParsedQty !== storedQty))) ||
+    // Task #1311 — non-vinyl catalog rows (e.g. MRP cassette) use the
+    // rung-snapped parsedQty from the quantity dropdown, not legacyParsedQty.
+    // Detect changes here so the Save button lights up when the operator
+    // picks a different run size.
+    (!isVinyl && usingCatalog && parsedQty !== storedQty) ||
     (isVinyl && !usingCatalog && (vinylColorId !== storedColor || jacketUpgrade !== storedJacket)) ||
     catalogDirty ||
     trackCountDirty;
@@ -3228,7 +3249,9 @@ function SkuRow({
   const submit = () => {
     const cents = parseDollars(priceStr);
     if (cents === null) return;
-    if (isVinyl) {
+    if (isVinyl || usingCatalog) {
+      // Task #1311 — non-vinyl catalog rows guard the same way as vinyl:
+      // a rung must be picked (parsedQty > 0) before saving.
       if (parsedQty <= 0) return;
     } else if (qtyMode === "fixed" && legacyParsedQty === null) {
       return;
@@ -3249,7 +3272,10 @@ function SkuRow({
         ? null
         : (stockStr.trim() === "" ? null : Math.max(0, Math.floor(Number(stockStr)))),
       active,
-      plannedQuantity: isVinyl
+      // Task #1311 — catalog-priced non-vinyl (e.g. MRP cassette) uses the
+      // rung-snapped parsedQty just like vinyl so the saved quantity matches
+      // what the cost breakdown used during quoting.
+      plannedQuantity: (isVinyl || usingCatalog)
         ? parsedQty
         : (qtyMode === "fixed" ? legacyParsedQty : null),
       // Catalog mode wins: the server resolves picks via pressTierId /
@@ -3645,7 +3671,9 @@ function SkuRow({
   const estimateTableRows = useMemo<
     { qty: number; netCents: number | null }[]
   >(() => {
-    if (!isVinyl || !breakdown || priceCents === null) return [];
+    // Task #1311 — allow estimate rows for non-vinyl formats when catalog
+    // pricing is active (e.g. MRP cassette), mirroring the vinyl path.
+    if ((!isVinyl && !usingCatalog) || !breakdown || priceCents === null) return [];
     const set = new Set<number>();
     for (const q of allPlannedQuantities ?? []) {
       if (q > 0) set.add(q);
@@ -6660,15 +6688,23 @@ function SkuRow({
             </span>
           </div>
           )}
-          {!isArtist && !isVinyl && (
+          {/* Task #1311 — Non-vinyl cost note. Three states:
+              1. Catalog covers this format (usingCatalog): suppress the
+                 generic note; a needsQuote hint fires separately below.
+              2. An invited press exists but its catalog doesn't cover this
+                 format: tell the operator to switch to a capable plant.
+              3. No invited press at all: show a soft placeholder note. */}
+          {!isArtist && !isVinyl && !usingCatalog && (
             <div
               className="text-[11px] text-slate-400 leading-snug -mt-1.5"
               data-testid={`text-cost-nonvinyl-note-${format}`}
             >
-              Quoted manually — Hellbender doesn't press this format.
+              {invitedPressRow?.press && !catalogFormat
+                ? `${invitedPressRow.press.name} doesn't press ${ALBUM_FORMAT_LABEL[format]} — set a ${ALBUM_FORMAT_LABEL[format]}-capable plant on the artist page to get a real cost.`
+                : `Quoted manually — no plant with ${ALBUM_FORMAT_LABEL[format]} pricing is set yet.`}
             </div>
           )}
-          {!isArtist && isVinyl && breakdown?.needsQuote && (
+          {!isArtist && (isVinyl || usingCatalog) && breakdown?.needsQuote && (
             <div
               className="text-xs text-[color:var(--brand-blue)] leading-snug -mt-1.5"
               data-testid={`text-cost-needs-quote-${format}`}
@@ -6717,8 +6753,11 @@ function SkuRow({
 
         {/* Right column — vinyl: Quantity dropdown + Estimated sold +
             Total. Non-vinyl keeps the legacy Sold radio + free-text
-            qty + TBD branch (out of scope for Task #385). */}
-        {isVinyl ? (
+            qty + TBD branch (out of scope for Task #385).
+            Task #1311 — non-vinyl formats with catalog pricing (e.g.
+            MRP cassette) use the vinyl-style rung dropdown + estimates
+            table so the operator can price different run sizes. */}
+        {(isVinyl || usingCatalog) ? (
         <div className="space-y-3">
           <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
             Quantity · Estimated sold · Total
