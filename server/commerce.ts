@@ -2806,7 +2806,15 @@ export async function materializeOrderFromSession(
   // Re-fetch with expansion so addresses/phone are populated even if the
   // original event payload was thin.
   const full = await stripe.checkout.sessions.retrieve(session.id, {
-    expand: ["customer", "payment_intent", "customer_details"],
+    expand: [
+      "customer",
+      "payment_intent",
+      "customer_details",
+      // Expand the instrument + charge so we can snapshot card brand/last4,
+      // the digital-wallet type, and the Stripe-hosted receipt URL.
+      "payment_intent.payment_method",
+      "payment_intent.latest_charge",
+    ],
   });
 
   const piId = typeof full.payment_intent === "string" ? full.payment_intent : full.payment_intent?.id ?? null;
@@ -2814,6 +2822,16 @@ export async function materializeOrderFromSession(
   const buyerEmail = full.customer_details?.email ?? null;
   const buyerName = full.customer_details?.name ?? null;
   const buyerPhone = full.customer_details?.phone ?? null;
+  // Payment-instrument snapshot — only present once the PI has a charged
+  // payment method (paid sessions). Falls back to null on unpaid/pending.
+  const pi = full.payment_intent && typeof full.payment_intent === "object" ? full.payment_intent : null;
+  const pm = pi && typeof pi.payment_method === "object" ? pi.payment_method : null;
+  const piCard = (pm as any)?.card ?? null;
+  const paymentCardBrand = piCard?.brand ?? null;
+  const paymentCardLast4 = piCard?.last4 ?? null;
+  const paymentWalletType = piCard?.wallet?.type ?? null;
+  const piCharge = pi && typeof pi.latest_charge === "object" ? pi.latest_charge : null;
+  const receiptUrl = (piCharge as any)?.receipt_url ?? null;
   const billing = addressFromStripe(full.customer_details?.address ?? null, buyerName);
   const shipping = addressFromStripe(
     (full as any).shipping_details?.address ?? full.shipping_cost ? (full as any).shipping_details?.address : null,
@@ -2923,6 +2941,10 @@ export async function materializeOrderFromSession(
             buyerEmail,
             buyerName,
             buyerPhone,
+            paymentCardBrand,
+            paymentCardLast4,
+            paymentWalletType,
+            receiptUrl,
             goodDeedNumber: firstCertNumber,
             skuKind,
             artistSnapshotId,
@@ -2981,6 +3003,10 @@ export async function materializeOrderFromSession(
             buyerEmail,
             buyerName,
             buyerPhone,
+            paymentCardBrand,
+            paymentCardLast4,
+            paymentWalletType,
+            receiptUrl,
             goodDeedNumber: firstCertNumber,
             skuKind: order!.skuKind ?? skuKind,
             artistSnapshotId: order!.artistSnapshotId ?? artistSnapshotId,

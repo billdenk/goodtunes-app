@@ -31,6 +31,10 @@ type Profile = {
     goodDeedNumber: number | null;
     createdAt: string | null;
     shippedAt: string | null;
+    paymentCardBrand: string | null;
+    paymentCardLast4: string | null;
+    paymentWalletType: string | null;
+    receiptUrl: string | null;
   }>;
   collection: Array<{
     id: string;
@@ -64,6 +68,24 @@ function formatAddress(a: StripeAddressSnapshot | null | undefined): string | nu
   if (!a) return null;
   const parts = [a.line1, a.line2, a.city, a.state, a.postalCode, a.country].filter(Boolean);
   return parts.length > 0 ? parts.join(", ") : null;
+}
+// Display labels for the payment-instrument snapshot captured from Stripe.
+const CARD_BRAND_LABELS: Record<string, string> = {
+  visa: "Visa", mastercard: "Mastercard", amex: "Amex", discover: "Discover",
+  diners: "Diners", jcb: "JCB", unionpay: "UnionPay",
+};
+const WALLET_LABELS: Record<string, string> = {
+  apple_pay: "Apple Pay", google_pay: "Google Pay", samsung_pay: "Samsung Pay", link: "Link",
+};
+function formatPaymentMethod(o: {
+  paymentCardBrand: string | null;
+  paymentCardLast4: string | null;
+  paymentWalletType: string | null;
+}): string | null {
+  const brand = o.paymentCardBrand ? CARD_BRAND_LABELS[o.paymentCardBrand] ?? o.paymentCardBrand : null;
+  const card = brand ? `${brand}${o.paymentCardLast4 ? ` •••• ${o.paymentCardLast4}` : ""}` : null;
+  const wallet = o.paymentWalletType ? WALLET_LABELS[o.paymentWalletType] ?? o.paymentWalletType.replace(/_/g, " ") : null;
+  return [card, wallet].filter(Boolean).join(" · ") || null;
 }
 
 export function AdminCustomerDetail() {
@@ -251,34 +273,50 @@ export function AdminCustomerDetail() {
             <EmptyRow icon={ShoppingBag} text="No orders yet." />
           ) : (
             <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
-              {orders.map((o) => (
-                <Link
+              {orders.map((o) => {
+                const payment = formatPaymentMethod(o);
+                return (
+                <div
                   key={o.id}
-                  href={`/admin/orders?orderId=${o.id}`}
-                  className="block px-4 py-3 hover:bg-slate-50 transition-colors"
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors"
                   data-testid={`row-order-${o.id}`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-slate-900 text-sm font-medium truncate">
-                        {o.albumTitle}
-                        <span className="text-slate-400"> · </span>
-                        <span className="text-slate-600">{o.albumArtist}</span>
-                      </div>
-                      <div className="text-slate-500 text-xs mt-0.5">
-                        {formatDate(o.createdAt)}
-                        {o.goodDeedNumber != null && <> · Good Deed #{o.goodDeedNumber}</>}
-                      </div>
+                  <Link
+                    href={`/admin/orders?orderId=${o.id}`}
+                    className="flex-1 min-w-0 block"
+                  >
+                    <div className="text-slate-900 text-sm font-medium truncate">
+                      {o.albumTitle}
+                      <span className="text-slate-400"> · </span>
+                      <span className="text-slate-600">{o.albumArtist}</span>
                     </div>
-                    <div className="text-right flex-shrink-0">
-                      <div className="text-slate-900 text-sm font-medium tabular-nums">
-                        {formatMoney(o.totalCents)}
-                      </div>
-                      <StatusPill status={o.status} />
+                    <div className="text-slate-500 text-xs mt-0.5">
+                      {formatDate(o.createdAt)}
+                      {o.goodDeedNumber != null && <> · Good Deed #{o.goodDeedNumber}</>}
+                      {payment && <> · {payment}</>}
                     </div>
+                  </Link>
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-slate-900 text-sm font-medium tabular-nums">
+                      {formatMoney(o.totalCents)}
+                    </div>
+                    <StatusPill status={o.status} />
+                    {o.receiptUrl && (
+                      <a
+                        href={o.receiptUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-flex items-center gap-1 text-xs text-slate-500 hover:text-[var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
+                        data-testid={`link-receipt-${o.id}`}
+                      >
+                        Receipt
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
                   </div>
-                </Link>
-              ))}
+                </div>
+                );
+              })}
             </div>
           )}
         </Section>

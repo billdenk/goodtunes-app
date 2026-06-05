@@ -585,7 +585,7 @@ export interface IStorage {
   }>;
   getAdminCustomerProfile(id: string): Promise<{
     customer: CustomerUser;
-    orders: Array<{ id: string; albumId: string; albumTitle: string; albumArtist: string; totalCents: number; status: string; goodDeedNumber: number | null; createdAt: Date | null; shippedAt: Date | null }>;
+    orders: Array<{ id: string; albumId: string; albumTitle: string; albumArtist: string; totalCents: number; status: string; goodDeedNumber: number | null; createdAt: Date | null; shippedAt: Date | null; paymentCardBrand: string | null; paymentCardLast4: string | null; paymentWalletType: string | null; receiptUrl: string | null }>;
     collection: Array<{ id: string; albumId: string; albumTitle: string; albumArtist: string; albumArtwork: string; certificateNumber: number | null; acquiredAt: Date | null }>;
     playlists: Array<{ id: string; name: string; songCount: number; createdAt: Date | null }>;
   } | undefined>;
@@ -3354,6 +3354,10 @@ export class DbStorage implements IStorage {
         goodDeedNumber: orders.goodDeedNumber,
         createdAt: orders.createdAt,
         shippedAt: orders.shippedAt,
+        paymentCardBrand: orders.paymentCardBrand,
+        paymentCardLast4: orders.paymentCardLast4,
+        paymentWalletType: orders.paymentWalletType,
+        receiptUrl: orders.receiptUrl,
       })
       .from(orders)
       .innerJoin(albums, eq(orders.albumId, albums.id))

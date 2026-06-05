@@ -2247,6 +2247,15 @@ export const orders = pgTable("orders", {
   buyerEmail: text("buyer_email"),
   buyerName: text("buyer_name"),
   buyerPhone: text("buyer_phone"),
+  // Payment-instrument snapshot from Stripe, captured at materialization.
+  // brand/last4 come from payment_intent.payment_method.card; walletType
+  // from card.wallet.type ("apple_pay" / "google_pay" / …); receiptUrl is
+  // the Stripe-hosted receipt on the latest charge. All null for
+  // legacy/imported orders that never ran through current materialization.
+  paymentCardBrand: text("payment_card_brand"),
+  paymentCardLast4: text("payment_card_last4"),
+  paymentWalletType: text("payment_wallet_type"),
+  receiptUrl: text("receipt_url"),
   goodDeedNumber: integer("good_deed_number"),
   shippedAt: timestamp("shipped_at"),
   refundedAt: timestamp("refunded_at"),

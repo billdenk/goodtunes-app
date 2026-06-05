@@ -4091,3 +4091,31 @@ SQL
 }
 migrate_softdelete_natural_key_uniques dev  "${DATABASE_URL:-}"
 migrate_softdelete_natural_key_uniques prod "${PROD_DATABASE_URL:-}"
+
+# Admin customer info — Stripe payment snapshot. orders gains 4 nullable
+# text columns (card brand/last4, digital-wallet type, Stripe-hosted
+# receipt URL) declared in shared/schema.ts. drizzle-kit push has been
+# unreliable on additive DDL (see albums-schema-drift.md), so hand-apply
+# on BOTH dev and prod to keep the publish dev->prod diff empty.
+# Idempotent. All null for legacy/imported orders.
+migrate_orders_payment_snapshot() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping orders payment-snapshot migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS payment_card_brand text,
+  ADD COLUMN IF NOT EXISTS payment_card_last4 text,
+  ADD COLUMN IF NOT EXISTS payment_wallet_type text,
+  ADD COLUMN IF NOT EXISTS receipt_url text;
+SQL
+  then
+    echo "post-merge: orders payment-snapshot migration ok on $label"
+  else
+    echo "post-merge: WARNING — orders payment-snapshot migration failed on $label (continuing)"
+  fi
+}
+migrate_orders_payment_snapshot dev  "${DATABASE_URL:-}"
+migrate_orders_payment_snapshot prod "${PROD_DATABASE_URL:-}"
