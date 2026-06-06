@@ -31,6 +31,25 @@ export const isIOS: boolean =
   (/iP(hone|ad|od)/.test(navigator.userAgent) ||
     (navigator.platform === "MacIntel" && (navigator.maxTouchPoints ?? 0) > 1));
 
+/**
+ * True only inside the Capacitor-wrapped native iOS app.
+ *
+ * The native shell can reach a real system-volume API (MPVolumeView /
+ * AVAudioSession) via the SystemVolume plugin, so unlike web iOS we *can*
+ * show a working volume slider that mirrors the hardware volume. Use this
+ * (not `isIOS`) to switch on native-only iOS capabilities.
+ */
+export const isNativeIOS: boolean = isNative && nativePlatform === "ios";
+
+/**
+ * True only on iOS *web* (Mobile Safari / iOS in-app web views) — i.e. iOS
+ * minus the native app. This is the surface where an HTMLMediaElement's
+ * `.volume` is read-only and the hardware buttons own loudness, so an
+ * in-app volume slider is a dead control and gets hidden. Native iOS is
+ * excluded because the SystemVolume plugin makes the slider work there.
+ */
+export const isWebIOS: boolean = isIOS && !isNative;
+
 /** Chat tab + every "Chat with vendor" CTA. */
 export const chatEnabled = !isNative;
 

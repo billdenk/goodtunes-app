@@ -20,7 +20,8 @@ import { IconButton } from "@/components/ui/IconButton";
 import { LyricsIcon } from "@/components/ui/LyricsIcon";
 import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
 import { EASE_OUT } from "@/lib/motion";
-import { isIOS } from "@/lib/platform";
+import { isWebIOS } from "@/lib/platform";
+import { useSystemVolume } from "@/lib/nativeVolume";
 
 /**
  * Apple-Music-style expandable full-screen "Now Playing" surface for the
@@ -113,9 +114,21 @@ export function DesktopNowPlaying() {
   };
 
   const blue = "var(--brand-blue)";
-  const VolumeGlyph = player.muted || player.volume === 0
+
+  // On native iOS the slider reads/writes the phone's hardware volume via the
+  // SystemVolume plugin; elsewhere it drives PlayerContext's in-app volume.
+  const systemVolume = useSystemVolume();
+  const volumeLevel = systemVolume.active
+    ? systemVolume.level ?? player.volume
+    : player.muted
+      ? 0
+      : player.volume;
+  const setVolumeLevel = systemVolume.active
+    ? systemVolume.setLevel
+    : player.setVolume;
+  const VolumeGlyph = volumeLevel === 0
     ? VolumeX
-    : player.volume < 50
+    : volumeLevel < 50
       ? Volume1
       : Volume2;
 
@@ -310,24 +323,36 @@ export function DesktopNowPlaying() {
                 <LyricsIcon />
               </IconButton>
 
-              {/* Volume cluster — hidden on iOS WebKit (iPad Safari), where
-                  audio volume is read-only so the slider would be a dead
-                  control; hardware buttons own loudness there. */}
-              {!isIOS && (
+              {/* Volume cluster — hidden on web iOS (iPad Safari), where audio
+                  volume is read-only so the slider would be a dead control;
+                  hardware buttons own loudness there. On native iOS the
+                  SystemVolume plugin makes it work, so it shows and mirrors the
+                  device's hardware volume (no separate mute — like the phone
+                  player — since the system owns it). */}
+              {!isWebIOS && (
                 <div className="flex items-center gap-2 flex-1 max-w-[200px]">
-                  <IconButton
-                    variant="ghost"
-                    size="md"
-                    label={player.muted ? "Unmute" : "Mute"}
-                    onClick={player.toggleMute}
-                    data-testid="button-now-playing-mute"
-                  >
-                    <VolumeGlyph />
-                  </IconButton>
+                  {systemVolume.active ? (
+                    <span
+                      className="flex items-center justify-center w-9 h-9 text-fan-secondary"
+                      data-testid="icon-now-playing-volume"
+                    >
+                      <VolumeGlyph />
+                    </span>
+                  ) : (
+                    <IconButton
+                      variant="ghost"
+                      size="md"
+                      label={player.muted ? "Unmute" : "Mute"}
+                      onClick={player.toggleMute}
+                      data-testid="button-now-playing-mute"
+                    >
+                      <VolumeGlyph />
+                    </IconButton>
+                  )}
                   <div className="flex-1">
                     <DragBar
-                      pct={player.muted ? 0 : player.volume}
-                      onChange={player.setVolume}
+                      pct={volumeLevel}
+                      onChange={setVolumeLevel}
                       ariaLabel="Volume"
                       live
                     />

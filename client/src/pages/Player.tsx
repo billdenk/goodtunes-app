@@ -8,7 +8,8 @@ import { IconButton } from "@/components/ui/IconButton";
 import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { track } from "@/lib/analytics";
-import { isIOS } from "@/lib/platform";
+import { isWebIOS } from "@/lib/platform";
+import { useSystemVolume } from "@/lib/nativeVolume";
 
 /**
  * Custom pointer-driven progress scrubber for the mobile full-screen player.
@@ -113,11 +114,14 @@ function MobileScrubber({
 }
 
 /**
- * Pointer-driven volume slider for the mobile full-screen player, wired to the
- * shared PlayerContext volume. Same native-range-input problem as the
- * scrubber, plus on iOS the value is read-only — callers gate this behind
- * `!isIOS` so iPhone shows no dead control. Volume is cheap to set, so it
- * tracks the finger live (no defer-to-release).
+ * Pointer-driven volume slider for the mobile full-screen player. Same
+ * native-range-input problem as the scrubber. Callers gate this behind
+ * `!isWebIOS`: on web iOS the audio value is read-only (hardware buttons
+ * own loudness) so the slider is hidden, but on native iOS the SystemVolume
+ * plugin makes it work, so it shows there and mirrors the phone's hardware
+ * volume. `volume`/`setVolume` are supplied by the caller — PlayerContext on
+ * web/Android, the live system volume on native iOS. Volume is cheap to set,
+ * so it tracks the finger live (no defer-to-release).
  */
 function MobileVolume({
   volume,
@@ -213,6 +217,16 @@ export function Player() {
     volume,
     setVolume,
   } = usePlayer();
+
+  // On native iOS the slider mirrors (and drives) the phone's hardware volume
+  // via the SystemVolume plugin; everywhere else it drives PlayerContext's
+  // in-app volume. `active` is only true on native iOS — on web it's false and
+  // we fall straight through to the PlayerContext volume.
+  const systemVolume = useSystemVolume();
+  const volumeLevel = systemVolume.active
+    ? systemVolume.level ?? volume
+    : volume;
+  const setVolumeLevel = systemVolume.active ? systemVolume.setLevel : setVolume;
 
   const [showGoToMenu, setShowGoToMenu] = useState(false);
   const [showLyricsMenu, setShowLyricsMenu] = useState(false);
@@ -587,12 +601,13 @@ export function Player() {
             </div>
             {/* End middle cluster — volume + bottom buttons anchor at bottom. */}
 
-            {/* Volume slider — hidden on iOS, where Safari makes audio
-                volume read-only (hardware buttons own loudness). */}
-            {!isIOS && (
+            {/* Volume slider — hidden on web iOS, where Safari makes audio
+                volume read-only (hardware buttons own loudness). On native
+                iOS it shows and mirrors the phone's hardware volume. */}
+            {!isWebIOS && (
               <MobileVolume
-                volume={volume}
-                setVolume={setVolume}
+                volume={volumeLevel}
+                setVolume={setVolumeLevel}
                 trackBg="rgba(255,255,255,0.22)"
                 leftIconSize={14}
                 rightIconSize={16}
@@ -938,11 +953,12 @@ export function Player() {
                 </button>
               </div>
 
-              {/* Volume slider — hidden on iOS (read-only audio volume). */}
-              {!isIOS && (
+              {/* Volume slider — hidden on web iOS (read-only audio volume);
+                  shown on native iOS mirroring hardware volume. */}
+              {!isWebIOS && (
                 <MobileVolume
-                  volume={volume}
-                  setVolume={setVolume}
+                  volume={volumeLevel}
+                  setVolume={setVolumeLevel}
                   trackBg="rgba(255,255,255,0.25)"
                   leftIconSize={16}
                   rightIconSize={18}
@@ -1190,11 +1206,12 @@ export function Player() {
                 </button>
               </div>
 
-              {/* Volume slider — hidden on iOS (read-only audio volume). */}
-              {!isIOS && (
+              {/* Volume slider — hidden on web iOS (read-only audio volume);
+                  shown on native iOS mirroring hardware volume. */}
+              {!isWebIOS && (
                 <MobileVolume
-                  volume={volume}
-                  setVolume={setVolume}
+                  volume={volumeLevel}
+                  setVolume={setVolumeLevel}
                   trackBg="rgba(255,255,255,0.22)"
                   leftIconSize={14}
                   rightIconSize={16}

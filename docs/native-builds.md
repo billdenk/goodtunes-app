@@ -7,7 +7,9 @@ Product rules baked into the platform layer:
 - **Chat** — web-only for v1. Hidden from BottomNav on native; every "Chat with vendor" CTA is gated; `/chat` deep links bounce to `/collection`.
 - **Downloads** — native only. The web "download" tick is a localStorage flag (no real file). On native the audio bytes are fetched and written to `Documents/goodtunes/songs/<songId>.<ext>` via the Capacitor Filesystem plugin, and `PlayerContext` prefers the on-device file over the network URL so albums play in airplane mode.
 
-Everything is wired through `client/src/lib/platform.ts` (booleans) and `client/src/lib/nativeDownloads.ts` (storage). Don't sprinkle `Capacitor.isNativePlatform()` calls around the app — extend those two files.
+- **Volume** — on iOS *web* the player's volume slider is hidden because Mobile Safari makes audio volume read-only (the hardware buttons own loudness). In the native iOS shell a small Capacitor plugin (`ios/App/App/SystemVolumePlugin.swift`, JS wrapper `client/src/lib/nativeVolume.ts`) reads/writes the device's hardware volume via MPVolumeView + AVAudioSession, so the slider is shown there and mirrors the system volume. The plugin is an **in-tree native file** committed to `ios/App` — it is *not* an npm package, so `cap sync` won't add or remove it; if you ever re-scaffold `ios/`, re-add the Swift file to the Xcode target.
+
+Everything is wired through `client/src/lib/platform.ts` (booleans — `isNativeIOS` / `isWebIOS` gate the volume slider), `client/src/lib/nativeDownloads.ts` (storage), and `client/src/lib/nativeVolume.ts` (system volume). Don't sprinkle `Capacitor.isNativePlatform()` calls around the app — extend those files.
 
 ---
 
