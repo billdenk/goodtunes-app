@@ -258,21 +258,39 @@ body {
 }
 
 body {
-  /* Mobile pages used to paint this gradient inside the 390px column,
-     which left black gutters on wider viewports. Promoting it to body
-     so every fan-facing page is edge-to-edge horizontally. Individual
-     pages may still overlay their own gradient div over the column,
-     but they no longer need to — the body covers the viewport. The
-     admin theme below overrides this with a flat slate bg. */
+  /* The fan gradient is painted by the fixed `body::before` backdrop
+     below, NOT directly on the body box. On an iOS standalone webview
+     (black-translucent status bar + viewport-fit=cover) a body-box
+     background — especially with `background-attachment: fixed` — does
+     not reliably extend into the `safe-area-inset-top` strip, so the
+     WKWebView's WHITE window flashed through behind the status bar after
+     an overscroll and the status-bar tint latched onto it. A
+     `position: fixed` pseudo-element is pinned to the full layout
+     viewport INCLUDING the safe-area insets, so the navy can never miss
+     that strip. Body stays transparent over it (html below is the
+     ultimate navy backstop). The admin theme overrides with a flat bg. */
+  background-color: transparent;
+  color: white;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overscroll-behavior: none;
+}
+
+/* Fixed full-viewport fan backdrop — see the body comment above. Promoted
+   off the body box so it covers the safe-area insets a body background can
+   leave white on iOS standalone. `position: fixed` keeps it non-scrolling
+   (same as the old `background-attachment: fixed`) and edge-to-edge across
+   wide viewports. z-index:-1 sits it behind all transparent fan content. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background-color: #00062B;
   background-image:
     radial-gradient(ellipse 130% 80% at 75% -10%, rgba(127,16,167,0.30) 0%, transparent 60%),
     radial-gradient(ellipse 110% 70% at 20% 110%, rgba(49,158,216,0.22) 0%, transparent 65%),
     linear-gradient(180deg, #0a0d4a 0%, #00062B 55%, #00041f 100%);
-  background-attachment: fixed;
-  color: white;
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  overscroll-behavior: none;
 }
 
 /* The admin route opts into a light Apple/Stripe-style theme. The fan
@@ -334,6 +352,12 @@ body.gt-admin {
   --brand-blue: #1f7fb8;
   --brand-blue-hover: #1a6ea0;
   --brand-blue-soft: rgba(31, 127, 184, 0.10);
+}
+
+/* Admin runs the light slate theme on the body box — kill the fan navy
+   backdrop so it never bleeds behind the admin shell or its insets. */
+body.gt-admin::before {
+  display: none;
 }
 
 /* Admin-auth autofill override.
