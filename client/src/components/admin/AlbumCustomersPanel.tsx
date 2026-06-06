@@ -11,6 +11,7 @@ import {
   ArrowDown,
   ArrowUpDown,
   Check,
+  Download,
 } from "lucide-react";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { apiRequest } from "@/lib/queryClient";
@@ -145,6 +146,7 @@ export function AlbumCustomersPanel({ albumId }: { albumId: string }) {
   const [offset, setOffset] = useState(0);
   const [rows, setRows] = useState<OrderRow[]>([]);
   const [total, setTotal] = useState(0);
+  const [exporting, setExporting] = useState(false);
 
   // Debounce the search box so we don't fire a request per keystroke.
   useEffect(() => {
@@ -185,6 +187,36 @@ export function AlbumCustomersPanel({ albumId }: { albumId: string }) {
   }, [data, offset]);
 
   const kpis = data?.kpis;
+
+  // Build the same search/sort params as the table, minus pagination, and
+  // tack on format=csv. The server exports the WHOLE filtered roster.
+  async function handleExport() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const p = new URLSearchParams({ format: "csv" });
+      if (search) p.set("search", search);
+      if (sortKey !== "date" || sortDir !== "desc") {
+        p.set("sort", sortKey);
+        p.set("dir", sortDir);
+      }
+      const res = await apiRequest(
+        "GET",
+        `/api/admin/albums/${albumId}/buyers?${p.toString()}`,
+      );
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `album-${albumId}-customers.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   function handleSort(col: SortKey) {
     if (col === sortKey) {
@@ -245,26 +277,38 @@ export function AlbumCustomersPanel({ albumId }: { albumId: string }) {
               </span>
             )}
           </h2>
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-md px-2.5 h-8">
-            <Search className="w-3.5 h-3.5 text-slate-400" />
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search name, email, city…"
-              className="w-48 text-sm bg-transparent outline-none placeholder:text-slate-400"
-              data-testid="input-search-customers"
-            />
-            {searchInput && (
-              <button
-                type="button"
-                onClick={() => setSearchInput("")}
-                className="text-slate-400 hover:text-slate-700"
-                data-testid="button-clear-search-customers"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-md px-2.5 h-8">
+              <Search className="w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search name, email, city…"
+                className="w-48 text-sm bg-transparent outline-none placeholder:text-slate-400"
+                data-testid="input-search-customers"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput("")}
+                  className="text-slate-400 hover:text-slate-700"
+                  data-testid="button-clear-search-customers"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={exporting || total === 0}
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              data-testid="button-export-customers"
+            >
+              <Download className="w-3.5 h-3.5" />
+              {exporting ? "Exporting…" : "Export CSV"}
+            </button>
           </div>
         </div>
         <div className="overflow-x-auto">
