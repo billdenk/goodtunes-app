@@ -67,8 +67,10 @@ export const LYRICS_RAIL_WIDTH = 360;
 
 /**
  * Total right padding fan pages apply (and the right channel inset the dock
- * reserves) so content + the floating dock clear the lyrics rail card:
- *   RAIL_INSET (12) + LYRICS_RAIL_WIDTH (360) + RAIL_GAP (12) = 384
+ * reserves) so content + the floating dock clear the persistent lyrics rail.
+ * The rail is now anchored flush to the right window edge (no outer inset on
+ * that side — Apple-style edge treatment, Task #1571), so the clearance is
+ * just the rail width plus the content gap:
+ *   LYRICS_RAIL_WIDTH (360) + RAIL_GAP (12) = 372
  */
-export const LYRICS_RAIL_CONTENT_OFFSET =
-  RAIL_INSET + LYRICS_RAIL_WIDTH + RAIL_GAP;
+export const LYRICS_RAIL_CONTENT_OFFSET = LYRICS_RAIL_WIDTH + RAIL_GAP;
