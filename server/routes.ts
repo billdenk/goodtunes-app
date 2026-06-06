@@ -8720,10 +8720,127 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   }
 
+  // Sniff a downloaded file's first bytes for a ZIP signature. All zip
+  // variants start with "PK" (0x50 0x4B) — local-file-header
+  // (PK\x03\x04), empty archive (PK\x05\x06), or spanned (PK\x07\x08).
+  // This is the fallback for single-file share links whose URL filename
+  // lost (or never carried) the `.zip` extension.
+  async function fileLooksLikeZip(filePath: string): Promise<boolean> {
+    const fsp = await import("node:fs/promises");
+    try {
+      const fd = await fsp.open(filePath, "r");
+      try {
+        const buf = Buffer.alloc(4);
+        const { bytesRead } = await fd.read(buf, 0, 4, 0);
+        return bytesRead >= 2 && buf[0] === 0x50 && buf[1] === 0x4b;
+      } finally {
+        await fd.close();
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  // Open an already-downloaded zip via its central directory and extract
+  // only the entries the keep-filter accepts into `sessionDir`. Shared by
+  // BOTH the folder importer (which downloads Dropbox's generated folder
+  // zip) and the single-file importer (when the shared file IS a zip), so
+  // a shared `.zip` imports exactly like a shared folder.
+  //
+  // Why `unzipper.Open.file` (central directory) instead of streaming
+  // `unzipper.Parse`: see the long note on `streamDropboxFolderEntries`.
+  // The central directory is the authoritative entry list and immune to
+  // the nested-zip local-header confusion that breaks forward-scanning.
+  // We read only the TOP-LEVEL directory — no recursion into nested zips.
+  //
+  // Enforces the same per-entry (`MAX_DROPBOX_ENTRY_BYTES`) and total
+  // (`MAX_DROPBOX_UNCOMPRESSED_BYTES`) caps as the folder path. Does NOT
+  // clean up `sessionDir` on failure — the caller owns that so it can run
+  // its own cleanup on every error path. On an unopenable / truncated zip
+  // it throws `invalidZipMessage` so each caller can phrase it for its
+  // own context (folder vs. single-file).
+  async function extractKeptZipEntries(
+    zipPath: string,
+    sessionDir: string,
+    shouldKeep: (filename: string) => boolean,
+    invalidZipMessage: string,
+  ): Promise<{
+    entries: Array<{ filename: string; tmpPath: string; size: number }>;
+    skipped: string[];
+  }> {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const { Transform } = await import("node:stream");
+    const { pipeline } = await import("node:stream/promises");
+    const unzipper = (await import("unzipper")).default;
+
+    let directory: Awaited<ReturnType<typeof unzipper.Open.file>>;
+    try {
+      directory = await unzipper.Open.file(zipPath);
+    } catch (err: any) {
+      const msg = String(err?.message || "");
+      if (/invalid signature|FILE_ENDED|end of central directory|END header|not a valid zip/i.test(msg)) {
+        throw new Error(invalidZipMessage);
+      }
+      throw err;
+    }
+
+    const entries: Array<{ filename: string; tmpPath: string; size: number }> = [];
+    // Filenames the keep-filter rejected (wrong extension, hidden files, etc.).
+    // Reported back to the caller so admins can see exactly what the
+    // importer ignored — turns "where did my tracks go?" into a glance.
+    const skipped: string[] = [];
+    let totalUncompressed = 0;
+
+    for (const file of directory.files) {
+      if (file.type === "Directory") continue;
+      const entryPath: string = file.path || "";
+      const filename = basenameOf(entryPath);
+      if (!shouldKeep(filename)) {
+        // Hide noise files admins never care about (Finder/Dropbox
+        // metadata, resource forks). Real files that were rejected
+        // still surface in the report.
+        if (!/^\._|^\.DS_Store$|^Thumbs\.db$|^desktop\.ini$/i.test(filename)) {
+          skipped.push(filename);
+        }
+        continue;
+      }
+      // Per-entry cap enforced by a counting Transform.
+      const safeName = filename.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+      const tmpPath = path.join(sessionDir, `${randomUUID()}-${safeName}`);
+      let size = 0;
+      const cap = new Transform({
+        transform(chunk, _enc, cb) {
+          size += chunk.length;
+          if (size > MAX_DROPBOX_ENTRY_BYTES) {
+            cb(new Error(`"${filename}" is too large (over ${Math.round(MAX_DROPBOX_ENTRY_BYTES / (1024 * 1024))} MB).`));
+            return;
+          }
+          cb(null, chunk);
+        },
+      });
+      await pipeline(file.stream(), cap, fs.createWriteStream(tmpPath));
+      totalUncompressed += size;
+      if (totalUncompressed > MAX_DROPBOX_UNCOMPRESSED_BYTES) {
+        throw new Error(`That folder's total size is over ${Math.round(MAX_DROPBOX_UNCOMPRESSED_BYTES / (1024 * 1024 * 1024))} GB. Split it into two imports.`);
+      }
+      entries.push({ filename, tmpPath, size });
+    }
+
+    return { entries, skipped };
+  }
+
   // Download a single Dropbox file share to a tempfile and return it
   // wrapped in the same shape as `streamDropboxFolderEntries`. Same
   // SSRF protections (manual redirects + host re-validation) and the
   // same per-entry size cap. Memory stays at ~64 KB chunks.
+  //
+  // When the shared file is itself a `.zip` (the common case when someone
+  // downloads a folder and re-shares it as one zipped file), we crack it
+  // open through the SAME central-directory path the folder importer uses
+  // and apply the caller's keep-filter to the entries INSIDE the zip — so
+  // a shared zip-of-audio imports exactly like a shared folder. A plain
+  // single file (e.g. one `.wav`) still imports as one track.
   async function streamDropboxSingleFileEntry(
     fileUrl: string,
     shouldKeep: (filename: string) => boolean,
@@ -8757,16 +8874,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     url.searchParams.set("dl", "1");
 
     const filename = filenameFromDropboxFileUrl(fileUrl);
-    if (!shouldKeep(filename)) {
-      await cleanup();
-      return { entries: [], skipped: [filename], cleanup: async () => {} };
-    }
+    // We deliberately DON'T apply the keep-filter to the filename up
+    // front: a `.zip` would fail an audio/lyrics filter, but we still
+    // want to crack it open. So download first, then decide whether it's
+    // a zip to extract or a plain single file to keep/skip. The download
+    // is bounded by the same per-entry cap, so a non-zip non-kept single
+    // file is the only (rare) case that downloads before being skipped.
 
     const maxHops = 5;
     const timeoutMs = 30 * 60_000;
     const ac = new AbortController();
     const deadlineTimer = setTimeout(() => ac.abort(), timeoutMs);
     let response: Awaited<ReturnType<typeof fetch>> | null = null;
+    let tmpPath = "";
+    let size = 0;
     try {
       let current = url;
       for (let hop = 0; hop <= maxHops; hop++) {
@@ -8791,11 +8912,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!response.body) throw new Error("Dropbox sent an empty response.");
 
       const safeName = filename.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-      const tmpPath = path.join(sessionDir, `${randomUUID()}-${safeName}`);
+      tmpPath = path.join(sessionDir, `${randomUUID()}-${safeName}`);
       const clHeader = response.headers.get("content-length");
       const totalBytes = clHeader ? Number(clHeader) || null : null;
       let lastReported = 0;
-      let size = 0;
       const cap = new Transform({
         transform(chunk, _enc, cb) {
           size += chunk.length;
@@ -8816,7 +8936,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await pipeline(Readable.fromWeb(response.body as any), cap, fs.createWriteStream(tmpPath));
       try { opts.onDownloadProgress?.(size, totalBytes ?? size); } catch {}
       clearTimeout(deadlineTimer);
-      return { entries: [{ filename, tmpPath, size }], skipped: [], cleanup };
     } catch (err: any) {
       clearTimeout(deadlineTimer);
       try { ac.abort(); } catch {}
@@ -8824,6 +8943,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (ac.signal.aborted) throw new Error("Dropbox took too long to respond.");
       throw err;
     }
+
+    // The shared file is a zip when its name ends in `.zip` OR — only
+    // when the URL filename carries NO extension at all — its first bytes
+    // carry the ZIP signature. The PK sniff is a strict fallback for
+    // extension-less links, NOT a general content check: many supported
+    // single-file formats (.docx, .xlsx, .pptx, .odt, …) are themselves
+    // ZIP containers and start with the same PK bytes, so sniffing a file
+    // that already has a known extension would wrongly unpack a real
+    // single-file `.docx` lyric doc into its inner XML and break import.
+    const ext = extOf(filename);
+    const isZip = ext === ".zip" || (ext === "" && (await fileLooksLikeZip(tmpPath)));
+    if (isZip) {
+      let result: { entries: Array<{ filename: string; tmpPath: string; size: number }>; skipped: string[] };
+      try {
+        result = await extractKeptZipEntries(
+          tmpPath,
+          sessionDir,
+          shouldKeep,
+          "Couldn't open that .zip — it may be corrupted or only partly uploaded. Try re-downloading the folder from Dropbox and re-sharing it.",
+        );
+      } catch (err) {
+        await cleanup();
+        throw err;
+      }
+      // Drop the downloaded zip; we already have the extracted tempfiles.
+      try { await fsp.unlink(tmpPath); } catch {}
+      return { entries: result.entries, skipped: result.skipped, cleanup };
+    }
+
+    // Plain single file: keep it as one entry when the caller wants this
+    // file type, otherwise report it skipped (same outcome as before, the
+    // caller surfaces "No audio files in that link" etc.).
+    if (!shouldKeep(filename)) {
+      await cleanup();
+      return { entries: [], skipped: [filename], cleanup: async () => {} };
+    }
+    return { entries: [{ filename, tmpPath, size }], skipped: [], cleanup };
   }
 
   // Folder-or-file dispatcher. Both `import-tracks-from-dropbox` and
@@ -8963,16 +9119,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const path = await import("node:path");
     const { Transform } = await import("node:stream");
     const { pipeline } = await import("node:stream/promises");
-    const unzipper = (await import("unzipper")).default;
 
     const sessionDir = await fsp.mkdtemp(path.join(os.tmpdir(), "gt-dropbox-"));
     const zipPath = path.join(sessionDir, "folder.zip");
-    const entries: Array<{ filename: string; tmpPath: string; size: number }> = [];
-    // Filenames the keep-filter rejected (wrong extension, hidden files, etc.).
-    // Reported back to the caller so admins can see exactly what the
-    // importer ignored — turns "where did my tracks go?" into a glance.
-    const skipped: string[] = [];
-    let totalUncompressed = 0;
 
     const cleanup = async () => {
       try { await fsp.rm(sessionDir, { recursive: true, force: true }); } catch {}
@@ -9037,56 +9186,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     cancel();
 
     // Phase 2: open via central directory and extract only the entries
-    // the keep-filter accepts. Open.file throws on truncated / non-zip
-    // bodies, which is how we surface the "you pasted a single file
-    // instead of a folder" case to admins.
-    let directory: Awaited<ReturnType<typeof unzipper.Open.file>>;
+    // the keep-filter accepts (shared with the single-file zip path).
+    // `extractKeptZipEntries` throws on truncated / non-zip bodies, which
+    // is how we surface the "you pasted a single file instead of a
+    // folder" case to admins.
+    let result: { entries: Array<{ filename: string; tmpPath: string; size: number }>; skipped: string[] };
     try {
-      directory = await unzipper.Open.file(zipPath);
-    } catch (err: any) {
-      await cleanup();
-      const msg = String(err?.message || "");
-      if (/invalid signature|FILE_ENDED|end of central directory|END header|not a valid zip/i.test(msg)) {
-        throw new Error("That link points to a single file, not a folder. Use the folder's share link instead (or click Upload file to import a single document).");
-      }
-      throw err;
-    }
-
-    try {
-      for (const file of directory.files) {
-        if (file.type === "Directory") continue;
-        const entryPath: string = file.path || "";
-        const filename = basenameOf(entryPath);
-        if (!shouldKeep(filename)) {
-          // Hide noise files admins never care about (Finder/Dropbox
-          // metadata, resource forks). Real files that were rejected
-          // still surface in the report.
-          if (!/^\._|^\.DS_Store$|^Thumbs\.db$|^desktop\.ini$/i.test(filename)) {
-            skipped.push(filename);
-          }
-          continue;
-        }
-        // Per-entry cap enforced by a counting Transform.
-        const safeName = filename.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-        const tmpPath = path.join(sessionDir, `${randomUUID()}-${safeName}`);
-        let size = 0;
-        const cap = new Transform({
-          transform(chunk, _enc, cb) {
-            size += chunk.length;
-            if (size > MAX_DROPBOX_ENTRY_BYTES) {
-              cb(new Error(`"${filename}" is too large (over ${Math.round(MAX_DROPBOX_ENTRY_BYTES / (1024 * 1024))} MB).`));
-              return;
-            }
-            cb(null, chunk);
-          },
-        });
-        await pipeline(file.stream(), cap, fs.createWriteStream(tmpPath));
-        totalUncompressed += size;
-        if (totalUncompressed > MAX_DROPBOX_UNCOMPRESSED_BYTES) {
-          throw new Error(`That folder's total size is over ${Math.round(MAX_DROPBOX_UNCOMPRESSED_BYTES / (1024 * 1024 * 1024))} GB. Split it into two imports.`);
-        }
-        entries.push({ filename, tmpPath, size });
-      }
+      result = await extractKeptZipEntries(
+        zipPath,
+        sessionDir,
+        shouldKeep,
+        "That link points to a single file, not a folder. Use the folder's share link instead (or click Upload file to import a single document).",
+      );
     } catch (err) {
       await cleanup();
       throw err;
@@ -9094,7 +9205,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     // Drop the downloaded zip; we already have the extracted tempfiles.
     try { await fsp.unlink(zipPath); } catch {}
-    return { entries, skipped, cleanup };
+    return { entries: result.entries, skipped: result.skipped, cleanup };
   }
   // Turn an artist-supplied filename into a clean track title.
   //
