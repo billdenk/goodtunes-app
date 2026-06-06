@@ -106,7 +106,6 @@ export function DesktopSearchView({ onNavigate }: { onNavigate?: () => void }) {
         {draft && (
           <IconButton
             variant="ghost"
-            size="sm"
             label="Clear search"
             className="mr-1 text-fan-secondary hover:text-white"
             onClick={() => {
