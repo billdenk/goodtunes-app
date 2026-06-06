@@ -34,3 +34,15 @@ legacy `/s/`). A change to the dispatcher changes every importer at once.
 
 - **Invariants every edit must preserve:** SSRF host re-validation on every redirect hop,
   per-entry + total size caps, and temp-dir cleanup on EVERY failure path.
+
+- **Pure zip helpers live in `server/dropboxZip.ts`, not `routes.ts`.** `extOf`,
+  `basenameOf`, `fileLooksLikeZip`, `extractKeptZipEntries` + the `MAX_DROPBOX_*` caps were
+  hoisted out so they're unit-testable without booting the 21k-line `routes.ts` (which would
+  open DB/stripe handles and leave lingering timers that hang `tsx --test`). `routes.ts`
+  imports them; the SSRF/download/dispatcher code stays in `routes.ts`.
+  **Why:** importing `routes.ts` in a test is infeasible. **How to apply:** add/keep zip
+  tests against `dropboxZip.ts` (`server/dropboxZip.test.ts`); `extractKeptZipEntries` takes
+  an optional 5th `caps:{maxEntryBytes,maxTotalBytes}` test seam so the size-limit paths can
+  be exercised without 500 MB / 10 GB fixtures (prod callers omit it → real constants).
+  Metadata-hiding (`._*`/.DS_Store/Thumbs.db/desktop.ini) only runs on the REJECTED branch,
+  so an AppleDouble `._x.wav` is KEPT by an audio filter (use a non-audio `._x.txt` to test hiding).
