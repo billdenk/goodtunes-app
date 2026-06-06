@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useState, type ReactNode, type ErrorInfo } from "react";
+import { Component, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type ErrorInfo } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -316,6 +316,77 @@ interface CustomersResp {
   total: number;
 }
 
+// Task #1498 — keep the operator dashboard above the fold. The shared
+// AdminFrame content wrapper is a plain block (it has a fixed
+// `pb-[120px]`), so the dashboard's flex chain never gets a definite
+// height to fill — that's why the Trend chart + Recent activity push
+// below the fold. Rather than change the shared wrapper (which would
+// touch every admin page), the dashboard measures the space between its
+// own top and the bottom of the viewport and constrains itself to that.
+// A negative bottom margin cancels the wrapper's bottom padding so the
+// content can reach the bottom of the screen instead of leaving a
+// ~120px dead band. Disabled below the desktop breakpoint or when the
+// window is too short to fit everything legibly — there it falls back
+// to the natural vertical scroll.
+const FIT_MIN_WIDTH = 1024; // Tailwind lg — below this we stack + scroll.
+const FIT_MIN_HEIGHT = 520; // Below this the panels would be crushed.
+const FIT_BOTTOM_GAP = 24; // Breathing room above the viewport bottom.
+
+function useFitToViewport(enabled: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<{ height: number; marginBottom: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!enabled) {
+      setFit((prev) => (prev === null ? prev : null));
+      return;
+    }
+    const el = ref.current;
+    if (!el) return;
+
+    const compute = () => {
+      if (window.innerWidth < FIT_MIN_WIDTH) {
+        setFit((prev) => (prev === null ? prev : null));
+        return;
+      }
+      const top = el.getBoundingClientRect().top;
+      const parent = el.parentElement;
+      const padBottom = parent
+        ? parseFloat(getComputedStyle(parent).paddingBottom) || 0
+        : 0;
+      const available = window.innerHeight - top - FIT_BOTTOM_GAP;
+      if (available < FIT_MIN_HEIGHT) {
+        setFit((prev) => (prev === null ? prev : null));
+        return;
+      }
+      const next = { height: available, marginBottom: -padBottom };
+      setFit((prev) =>
+        prev && prev.height === next.height && prev.marginBottom === next.marginBottom
+          ? prev
+          : next,
+      );
+    };
+
+    compute();
+    window.addEventListener("resize", compute);
+    // Banners (auto-sync / Mux health) mount/unmount above us inside the
+    // <main> scroll container, which shifts our top — recompute when the
+    // main column's direct children change so we stay exactly one screen.
+    const main = el.closest("main");
+    let mo: MutationObserver | undefined;
+    if (main) {
+      mo = new MutationObserver(compute);
+      mo.observe(main, { childList: true });
+    }
+    return () => {
+      window.removeEventListener("resize", compute);
+      mo?.disconnect();
+    };
+  }, [enabled]);
+
+  return { ref, fit };
+}
+
 export function AdminDashboard() {
   const [range, setRange] = useState<RangeKey>(() => {
     if (typeof window === "undefined") return "30d";
@@ -396,6 +467,10 @@ export function AdminDashboard() {
   const isSuperAdmin = role?.role === "super_admin";
   const isArtist = isArtistEarly;
 
+  // Task #1498 — the operator dashboard fits one screen; the artist
+  // variant has no Trend chart and keeps its natural scroll.
+  const { ref: fitRef, fit } = useFitToViewport(!isArtist);
+
   return (
     <AdminFrame active="dashboard">
       {/* Task #1217 — DashboardContentBoundary wraps the entire content
@@ -408,7 +483,11 @@ export function AdminDashboard() {
           or, if AdminFrame itself were involved, to AdminShellErrorBoundary
           which removes the sidebar entirely. */}
       <DashboardContentBoundary>
-        <div className="flex flex-col gap-5 min-h-full">
+        <div
+          ref={fitRef}
+          className={`flex flex-col gap-5 ${fit ? "overflow-hidden" : "min-h-full"}`}
+          style={fit ? { height: fit.height, marginBottom: fit.marginBottom } : undefined}
+        >
           <SectionBoundary section="page-header">
             <AdminPageHeader
               title="Dashboard"
@@ -819,7 +898,7 @@ function PrimaryChart({
           })}
         </div>
       </div>
-      <div className="flex-1 min-h-[260px] flex flex-col">
+      <div className="flex-1 min-h-[180px] flex flex-col">
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
           Loading…
@@ -1044,12 +1123,17 @@ function ActivityFeed({ orders, customers, className = "" }: { orders: OrderRow[
   }, [orders, customers]);
 
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white p-5 ${className}`} data-testid="dashboard-activity-feed">
-      <h3 className="text-sm font-semibold text-slate-700 mb-3">Recent activity</h3>
+    <div className={`rounded-xl border border-slate-200 bg-white p-5 flex flex-col ${className}`} data-testid="dashboard-activity-feed">
+      <h3 className="text-sm font-semibold text-slate-700 mb-3 flex-shrink-0">Recent activity</h3>
       {items.length === 0 ? (
         <p className="text-sm text-slate-400 py-10 text-center">Nothing yet.</p>
       ) : (
-        <ul className="space-y-2.5">
+        // Task #1498 — when the dashboard is height-constrained to fit one
+        // screen, the feed scrolls inside its own panel (flex-1 min-h-0 +
+        // overflow-y-auto) rather than stretching the whole page. The
+        // negative margin lets rows reach the panel edges while keeping the
+        // scrollbar tucked against the card padding.
+        <ul className="space-y-2.5 flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
           {items.map((it, i) => (
             <li key={i} data-testid={`activity-${it.kind}-${i}`}>
               <Link
