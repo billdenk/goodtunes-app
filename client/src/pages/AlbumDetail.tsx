@@ -176,17 +176,23 @@ type OrderLite = {
 
 export function AlbumDetail({ albumId }: { albumId?: string } = {}) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
-  // iOS native (including iPad — the app ships universal,
-  // TARGETED_DEVICE_FAMILY="1,2") must always render the mobile shell.
-  // The desktop surface is preview-first for non-owners and surfaces
-  // Buy CTAs; both violate App Review 3.1.1 if shown in the iOS app.
-  // The mobile shell already respects `buyEnabled` everywhere.
-  const surface =
-    isDesktop && buyEnabled ? (
-      <AlbumDetailDesktop albumId={albumId} />
-    ) : (
-      <AlbumDetailMobile albumId={albumId} />
-    );
+  // Surface choice is width-only so an iPad running the native app gets the
+  // SAME desktop chrome (left rail + hero + tracklist) it gets in a desktop
+  // browser. This mirrors `useDesktopShell`, which already lets the
+  // storefront/Collection rail show on native iPad — without this the iPad
+  // app dropped to the phone shell the instant a fan opened an album, even
+  // though every other tab kept the rail ("it's like I'm going to the
+  // iPhone"). App Review 3.1.1 stays satisfied because the desktop surface
+  // hides every purchase CTA when `buyEnabled` is false (native), exactly
+  // like the mobile shell: the Buy pill is gated on `onBuyBundle`, the
+  // signed-cert add-on chip on `signedCertPriceCents`, and BuySheet on
+  // `buyEnabled`. Native iPhone keeps the mobile shell purely on width
+  // (<768px), TARGETED_DEVICE_FAMILY="1,2" notwithstanding.
+  const surface = isDesktop ? (
+    <AlbumDetailDesktop albumId={albumId} />
+  ) : (
+    <AlbumDetailMobile albumId={albumId} />
+  );
   // FanPreviewProvider keeps the fan-preview lens wiring intact (read via
   // useFanPreview, still toggleable through the `?fan=1` URL flag); the visible
   // floating toggle pill has been removed.

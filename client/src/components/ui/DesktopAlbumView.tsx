@@ -752,8 +752,11 @@ export function DesktopAlbumView({
                   />
                   {/* Buy pill. We no longer swap this for a "Sold Out" pill or
                       a "Listen on…" streaming handoff after a sunset date — the
-                      album stays a clean Play + Buy surface. */}
-                  {album.priceCents != null && (
+                      album stays a clean Play + Buy surface. Gated on
+                      `onBuyBundle` (undefined on native, where buying is
+                      disabled) so the iOS app never surfaces a purchase CTA —
+                      App Review 3.1.1, matching the mobile shell. */}
+                  {onBuyBundle && album.priceCents != null && (
                     <BuyPricePill
                       priceLabel={formatPrice(album.priceCents)}
                       signedCertPriceCents={signedCertPriceCents}
