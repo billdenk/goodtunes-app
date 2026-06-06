@@ -223,10 +223,19 @@ export function AlbumDesktopTrackRow({
             <IconButton
               variant="ghost"
               size="md"
+              noHoverBg
               label={`More options for ${title}`}
               data-testid={`button-track-more-${trackNumber}`}
               onClick={(e) => e.stopPropagation()}
-              className="-mr-2 text-fan-secondary hover:text-white"
+              className={[
+                "-mr-2 text-fan-secondary hover:text-white",
+                // No grey circle on hover — emphasize the dots instead:
+                // they brighten to white (above), thicken their stroke,
+                // and nudge up a hair, easing back on mouse-leave.
+                "[&>svg]:transition-[transform,stroke-width] [&>svg]:duration-150",
+                "[&>svg]:[stroke-width:2] hover:[&>svg]:[stroke-width:2.75]",
+                "hover:[&>svg]:scale-110",
+              ].join(" ")}
             >
               <MoreHorizontal strokeWidth={2} />
             </IconButton>

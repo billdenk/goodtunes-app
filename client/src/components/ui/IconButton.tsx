@@ -41,6 +41,14 @@ export interface IconButtonProps
    * Sets aria-label automatically.
    */
   label: string;
+  /**
+   * Opt out of the ghost/glass hover background chip. The button keeps
+   * its size, touch target, and active scale — only the hover-fill is
+   * suppressed so the caller can emphasize the glyph itself instead.
+   * Scoped escape hatch; the default hover chip is unchanged for
+   * everyone else.
+   */
+  noHoverBg?: boolean;
 }
 
 const SIZE_CLASSES: Record<IconButtonSize, string> = {
@@ -88,6 +96,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       type = "button",
       style,
       children,
+      noHoverBg = false,
       onMouseEnter,
       onMouseLeave,
       ...rest
@@ -96,7 +105,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
   ) => {
     const [hover, setHover] = useState(false);
     const inlineBg =
-      variant === "glass" || variant === "ghost"
+      !noHoverBg && (variant === "glass" || variant === "ghost")
         ? (hover ? HOVER_BG[variant] : REST_BG[variant])
         : undefined;
     return (
