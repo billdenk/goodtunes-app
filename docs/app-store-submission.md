@@ -11,7 +11,8 @@ For the build-time mechanics (Xcode archive, Android Studio bundle, signing) see
 | Field | Value | Notes |
 |---|---|---|
 | App name | **GoodTunes** | Reserved on App Store Connect and Play Console |
-| Bundle id (iOS) / Application id (Android) | `fm.goodtunes.player` | Set in `capacitor.config.ts` — do not change after first submission |
+| Bundle id (iOS) | `Io.GoGoods.music` | Matches the existing App Store Connect app (Apple ID `6448246869`); set in `capacitor.config.ts` + the Xcode project — Apple does not allow changing it |
+| Application id (Android) | `fm.goodtunes.player` | Separate Play identity; set in `android/app/build.gradle` |
 | Marketing version | matches the web build (`package.json`) | Bump for every TestFlight / Internal Testing release |
 | Build number (iOS `CFBundleVersion` / Android `versionCode`) | monotonically-increasing integer | Apple + Google both reject duplicates |
 | Category | **Music** | Primary on both stores |
@@ -91,7 +92,7 @@ We want a fan tapping `https://goodtunes.music/album/xyz` on a phone with the ap
 
 **iOS** — Apple's Associated Domains (already wired):
 1. The entitlements file at `ios/App/App/App.entitlements` declares `applinks:goodtunes.music` + `applinks:my.goodtunes.music` and is wired into both Debug and Release build settings (`CODE_SIGN_ENTITLEMENTS = App/App.entitlements`).
-2. The server serves the AASA file at `https://goodtunes.music/.well-known/apple-app-site-association`. The committed file at `public/.well-known/apple-app-site-association` carries a `REPLACE_WITH_TEAM_ID` sentinel; the route in `server/routes.ts` substitutes the real Team ID from the **`APPLE_TEAM_ID`** environment variable at request time. ✅ **`APPLE_TEAM_ID` is set** (global Replit secret), so the route serves valid JSON (`appIDs: ["<TeamID>.fm.goodtunes.player"]`, `application/json`, 200) on every host that reaches the deployment.
+2. The server serves the AASA file at `https://goodtunes.music/.well-known/apple-app-site-association`. The committed file at `public/.well-known/apple-app-site-association` carries a `REPLACE_WITH_TEAM_ID` sentinel; the route in `server/routes.ts` substitutes the real Team ID from the **`APPLE_TEAM_ID`** environment variable at request time. ✅ **`APPLE_TEAM_ID` is set** (global Replit secret), so the route serves valid JSON (`appIDs: ["<TeamID>.Io.GoGoods.music"]`, `application/json`, 200) on every host that reaches the deployment.
 3. Paths handled: every path on `goodtunes.music` (the AASA components entry is `/*`). The web SPA router already handles unknown paths, so handing the whole namespace to the app keeps fans in-app on any deep link.
 
 **Android** — App Links via `assetlinks.json` (already wired):

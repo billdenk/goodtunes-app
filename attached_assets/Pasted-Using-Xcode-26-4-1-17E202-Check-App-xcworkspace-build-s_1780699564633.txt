@@ -1,0 +1,34 @@
+Using Xcode 26.4.1 (17E202)
+Check App.xcworkspace build settings
+Execute "xcodebuild -workspace ios/App/App.xcworkspace -scheme App -showBuildSettings"
+
+Archive App.xcworkspace
+Execute "xcodebuild -workspace ios/App/App.xcworkspace -scheme App -archivePath /Users/builder/clone/build/ios/xcarchive/App_cd35f9ai.xcarchive archive COMPILER_INDEX_STORE_ENABLE=NO CODE_SIGN_STYLE=Manual"
+
+
+❌  /Users/builder/clone/ios/App/App.xcodeproj: error: "App" requires a provisioning profile with the Associated Domains and Push Notifications features. Select a provisioning profile in the Signing & Capabilities editor. (in target 'App' from project 'App')
+
+
+    Run script build phase '[CP] Embed Pods Frameworks' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'App' from project 'App')
+Failed to archive ios/App/App.xcworkspace
+
+
+Build failed :|
+Step 8 script `Build the signed .ipa` exited with status code 65
+Using Xcode 26.4.1 (17E202)
+Check App.xcworkspace build settings
+Execute "xcodebuild -workspace ios/App/App.xcworkspace -scheme App -showBuildSettings"
+
+Archive App.xcworkspace
+Execute "xcodebuild -workspace ios/App/App.xcworkspace -scheme App -archivePath /Users/builder/clone/build/ios/xcarchive/App_cd35f9ai.xcarchive archive COMPILER_INDEX_STORE_ENABLE=NO CODE_SIGN_STYLE=Manual"
+
+
+❌  /Users/builder/clone/ios/App/App.xcodeproj: error: "App" requires a provisioning profile with the Associated Domains and Push Notifications features. Select a provisioning profile in the Signing & Capabilities editor. (in target 'App' from project 'App')
+
+
+    Run script build phase '[CP] Embed Pods Frameworks' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'App' from project 'App')
+Failed to archive ios/App/App.xcworkspace
+
+
+Build failed :|
+Step 8 script `Build the signed .ipa` exited with status code 65

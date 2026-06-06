@@ -4194,7 +4194,7 @@ INSERT INTO customer_users
 VALUES
   ('cust-appreview-demo', 'appreview', 'appreview@goodtunes.music',
    'App Review', 'App Review',
-   'bd6050acbefd1bf6df93220a84e76fc7cd376f30eb170621d717e62cf8d995c9869547c85aae04b7f4a64555ce12b856faade5395f24ffbb422cec42a9a44199.cc71c63e72c1bff523eeeff876899081',
+   '214c5160deb18127ed0ac2ebf660ee4518323494fd17017992b32f15c636d0d6b8ae9715af5c4fa83a607d3347699fa3bcc1236d095605a43705a3e9b4f3fdb9.e14b9982ffe04c43a45bf14f30de2773',
    'appreview', 'appreview@goodtunes.music',
    now(), now(), now(), now(), '2026-05-31', now())
 ON CONFLICT (id) DO NOTHING;
@@ -4278,6 +4278,20 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO user_albums (id, user_id, album_id, is_preview)
 VALUES ('ua-appreview-sampler', 'cust-appreview-demo', 'album-sampler', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- Task #1336 — also grant the REAL "Love Life Tragedy" album (Nick Carter)
+-- so the App Review reviewer logs into a full GoodTunes release WITH bonus
+-- videos (2) + bonus photos (2) + 17 fully-playable Mux tracks, not just the
+-- 3-track Sampler. LLT is prod-only data, so this is an INSERT…SELECT keyed on
+-- the confirmed prod album id: it grants ownership on prod where the row
+-- exists, and silently no-ops on a fresh dev clone where it doesn't. Ownership
+-- via a real user_albums row (is_preview=false) is exactly what the playback +
+-- bonus-content gate checks, so audio/video/photos all unlock with no Buy/Chat.
+INSERT INTO user_albums (id, user_id, album_id, is_preview)
+SELECT 'ua-appreview-llt', 'cust-appreview-demo', a.id, false
+FROM albums a
+WHERE a.id = '4ee3d6b9-d01f-4573-b1d6-c60951c67211'
 ON CONFLICT (id) DO NOTHING;
 
 COMMIT;

@@ -1,0 +1,30 @@
+Initialize new keychain to store code signing certificates at /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_02_2vz16.keychain-db
+Create keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_02_2vz16.keychain-db
+Set keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_02_2vz16.keychain-db timeout to "no timeout"
+Set keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_02_2vz16.keychain-db to system default keychain
+Unlock keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_02_2vz16.keychain-db
+DIAG: incoming .p12 size =     3245 bytes
+DIAG: openssl = OpenSSL 3.6.2 7 Apr 2026 (Library: OpenSSL 3.6.2 7 Apr 2026)
+DIAG: decrypted incoming .p12 with -legacy
+DIAG: private key FOUND in decrypted PEM
+DIAG: re-exported .p12 with AES-256 PBE
+Add certificates to keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_02_2vz16.keychain-db
+Searching for files matching /private/tmp/dist_cert.p12
+Add certificate /private/tmp/dist_cert.p12 to keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_02_2vz16.keychain-db
+Cannot save Signing Certificates without certificate private key
+Configure code signing settings
+Searching for files matching /Users/builder/Library/Developer/Xcode/UserData/Provisioning Profiles/*.mobileprovision
+Searching for files matching /Users/builder/Library/Developer/Xcode/UserData/Provisioning Profiles/*.provisionprofile
+Searching for files matching /Users/builder/Library/MobileDevice/Provisioning Profiles/*.mobileprovision
+Searching for files matching /Users/builder/Library/MobileDevice/Provisioning Profiles/*.provisionprofile
+List available code signing certificates in keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_02_2vz16.keychain-db
+Searching for files matching /Users/builder/clone/**/*.xcodeproj
+Completed configuring code signing settings
+Did not find matching provisioning profiles for code signing!
+Generated options for exporting the project
+ - Method: ad-hoc
+ - Provisioning Profiles: []
+ - Signing Certificate: 
+ - Signing Style: manual
+ - Team Id: 
+Saved export options to /Users/builder/export_options.plist

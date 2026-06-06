@@ -1,22 +1,26 @@
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { isNative } from "@/lib/platform";
 
 /**
  * True when the customer storefront should render its desktop chrome
  * (fixed left sidebar instead of the floating bottom-nav pill, wider
  * content area, multi-column grids).
  *
- * Web only — Capacitor-wrapped iOS/Android always stay on the mobile
- * shell regardless of viewport width (task #547: "iOS native still
- * uses the mobile layout").
+ * Width-driven only. Originally this was forced OFF inside the
+ * Capacitor-wrapped native apps (task #547: "iOS native still uses the
+ * mobile layout") back when the native binary bundled a phone-only
+ * payload. The native apps now load the live player site directly
+ * (capacitor.config.ts `server.url`), and that site runs on iPad too —
+ * so an iPad in the app must get the SAME desktop chrome (left rail +
+ * right lyrics rail + immersive player) it gets in a desktop browser,
+ * otherwise the iPad "thinks it's the iPhone." Buy/Chat stay hidden on
+ * native regardless — those are gated separately in lib/platform.ts.
  *
  * Threshold matches Tailwind's `lg` breakpoint (1024px). Tablet
  * (768–1023) keeps the bottom-nav pill but pages widen their content
  * container + reflow grids to a multi-column rhythm.
  */
 export function useDesktopShell(): boolean {
-  const lg = useMediaQuery("(min-width: 1024px)");
-  return lg && !isNative;
+  return useMediaQuery("(min-width: 1024px)");
 }
 
 /**
@@ -25,8 +29,7 @@ export function useDesktopShell(): boolean {
  * crossing into the desktop sidebar layout.
  */
 export function useTabletShell(): boolean {
-  const md = useMediaQuery("(min-width: 768px)");
-  return md && !isNative;
+  return useMediaQuery("(min-width: 768px)");
 }
 
 /** Width of the desktop sidebar (px). Pages offset their content by

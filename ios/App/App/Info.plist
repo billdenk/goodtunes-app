@@ -62,6 +62,15 @@
                 <key>NSAllowsArbitraryLoads</key>
                 <false/>
         </dict>
+        <!-- Export-compliance: GoodTunes uses only standard, exempt encryption
+             (HTTPS/TLS to goodtunes.music + Mux/Stripe/Object Storage; no
+             proprietary or non-standard crypto). Declaring this as false
+             auto-answers Apple's encryption question so every uploaded build
+             goes straight to TestFlight testers instead of being held in
+             "Missing Compliance" (which also fails Codemagic's auto-distribute
+             step). If a custom crypto algorithm is ever added, revisit this. -->
+        <key>ITSAppUsesNonExemptEncryption</key>
+        <false/>
         <!-- Intentionally NOT declaring NSUserTrackingUsageDescription:
              we don't use IDFA / cross-app tracking. Adding the key
              without using it is an App Review guideline 5.1.2 rejection

@@ -1,0 +1,49 @@
+Creating new Signing Certificate: certificate type: DISTRIBUTION
+Created Signing Certificate V6PJPH4JUF
+
+Get Profiles for Bundle ID 22572J8CVH
+Found 1 Profile for Bundle ID 22572J8CVH matching specified filters: profileState=ACTIVE, profileType=IOS_APP_STORE.
+Get Profiles for Bundle ID R9V7Z6JM4U
+Did not find any Profiles for Bundle ID R9V7Z6JM4U matching specified filters: profileState=ACTIVE, profileType=IOS_APP_STORE.
+
+Found 1 stale profiles: 7374XUSRW6.
+These profiles are expired with invalid status and cannot be used or seen in Apple Developer Portal. Requesting information about such provisioning profiles causes unnecessarily slow-downs of the action. Get rid of them and speed up future action invocations by using optional flag --delete-stale-profiles.
+
+Did not find any Profiles that contain Signing Certificate Apple Distribution: GoGoods Inc. (V6PJPH4JUF)
+Found 1 Device matching specified filters: platform=IOS, status=ENABLED.
+Found 2 Signing Certificates matching specified filters: certificateType=DISTRIBUTION,IOS_DISTRIBUTION.
+Get Bundle ID 22572J8CVH
+Creating new Profile: name: 'GoGoods ios_app_store 1780703726', profile type: IOS_APP_STORE, bundle id: 22572J8CVH, certificates: ['66K7B9F57Z', 'V6PJPH4JUF']
+Created Profile 5ATXB2C9J8
+Get Bundle ID R9V7Z6JM4U
+Creating new Profile: name: 'XC Io GoGoods music ios-app ios_app_store 1780703727', profile type: IOS_APP_STORE, bundle id: R9V7Z6JM4U, certificates: ['66K7B9F57Z', 'V6PJPH4JUF']
+Created Profile T24MSL4TLB
+
+Saved Signing Certificate Apple Distribution: GoGoods Inc. (V6PJPH4JUF) to /Users/builder/Library/Developer/Xcode/UserData/Certificates/DISTRIBUTION_V6PJPH4JUF_5w9jcrrq.p12
+Saved Profile IOS_APP_STORE GoGoods ios_app_store 1780703726 (5ATXB2C9J8) to '/Users/builder/Library/Developer/Xcode/UserData/Provisioning Profiles/IOS_APP_STORE_5ATXB2C9J8_8i2wijiz.mobileprovision'
+Saved Profile IOS_APP_STORE XC Io GoGoods music ios-app ios_app_store 1780703727 (T24MSL4TLB) to '/Users/builder/Library/Developer/Xcode/UserData/Provisioning Profiles/IOS_APP_STORE_T24MSL4TLB_fym2ofu2.mobileprovision'
+Add certificates to keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_2sop0xcr.keychain-db
+Searching for files matching /Users/builder/Library/Developer/Xcode/UserData/Certificates/*.p12
+Searching for files matching /Users/builder/Library/MobileDevice/Certificates/*.p12
+Add certificate /Users/builder/Library/Developer/Xcode/UserData/Certificates/DISTRIBUTION_V6PJPH4JUF_5w9jcrrq.p12 to keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_2sop0xcr.keychain-db
+security: SecKeychainItemImport: Unable to decode the provided data.
+1 key imported.
+1 certificate imported.
+Configure code signing settings
+Searching for files matching /Users/builder/Library/Developer/Xcode/UserData/Provisioning Profiles/*.mobileprovision
+Searching for files matching /Users/builder/Library/Developer/Xcode/UserData/Provisioning Profiles/*.provisionprofile
+Searching for files matching /Users/builder/Library/MobileDevice/Provisioning Profiles/*.mobileprovision
+Searching for files matching /Users/builder/Library/MobileDevice/Provisioning Profiles/*.provisionprofile
+List available code signing certificates in keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_2sop0xcr.keychain-db
+Searching for files matching /Users/builder/clone/**/*.xcodeproj
+Completed configuring code signing settings
+ - Using profile "GoGoods ios_app_store 1780703726" [efb44a24-09e5-4a42-95dd-3a2c43d0b00a] for target "App" [Debug] from project "App"
+ - Using profile "GoGoods ios_app_store 1780703726" [efb44a24-09e5-4a42-95dd-3a2c43d0b00a] for target "App" [Release] from project "App"
+Generated options for exporting the project
+ - Method: app-store
+ - Provisioning Profiles:
+     - Io.GoGoods.music: GoGoods ios_app_store 1780703726
+ - Signing Certificate: Apple Distribution
+ - Signing Style: manual
+ - Team Id: UA7CR568RQ
+Saved export options to /Users/builder/export_options.plist

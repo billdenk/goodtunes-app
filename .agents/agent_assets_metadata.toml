@@ -167,3 +167,15 @@ id = "V5RT9KwTWxoGOERIZ_vgb"
 uri = "file://docs/fan-checkout-walkthrough.md"
 type = "text"
 title = "Fan checkout — screen-by-screen walkthrough"
+
+[[outputs]]
+id = "nBMaqAzmxF1L9VLl-ClU6"
+uri = "file://.local/goodtunes-ios-for-github.tar.gz"
+type = "unspecified"
+title = "GoodTunes iOS files for GitHub (ios/ + package.json + lockfile + capacitor.config.ts)"
+
+[[outputs]]
+id = "RD-4mYsX_gM7o090d3w66"
+uri = "file://codemagic.yaml"
+type = "unspecified"
+title = "codemagic.yaml (beta group → GoGoods Test Group)"

@@ -141,12 +141,24 @@ function MobileMiniPlayer() {
   const morphTransition = reduceMotion
     ? "all 260ms cubic-bezier(0.32, 0.72, 0, 1)"
     : "all 340ms cubic-bezier(0.34, 1.3, 0.5, 1)";
+  // `env(safe-area-inset-bottom)` mirrors DOCK_BOTTOM in BottomNav: 0 on a
+  // normal browser (web layout unchanged) and the real home-indicator
+  // height inside the iOS native webview, so the player + dock lift
+  // together above the home indicator instead of tucking behind it.
   const containerStyle: React.CSSProperties = hidden
-    ? { bottom: 12, left: 70, right: 70, transition: morphTransition }
-    : { bottom: 79, transition: morphTransition };
+    ? {
+        bottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
+        left: 70,
+        right: 70,
+        transition: morphTransition,
+      }
+    : {
+        bottom: "calc(90px + env(safe-area-inset-bottom, 0px))",
+        transition: morphTransition,
+      };
 
   return (
-    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-30 pointer-events-none">
+    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-[45] pointer-events-none">
     <div className={`pointer-events-auto ${containerClass}`} style={containerStyle}>
       <div
         className="relative cursor-pointer active:scale-[0.98] transition-transform"

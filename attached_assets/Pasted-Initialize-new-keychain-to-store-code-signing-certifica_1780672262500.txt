@@ -1,0 +1,29 @@
+Initialize new keychain to store code signing certificates at /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_z8ba65tp.keychain-db
+Create keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_z8ba65tp.keychain-db
+Set keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_z8ba65tp.keychain-db timeout to "no timeout"
+Set keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_z8ba65tp.keychain-db to system default keychain
+Unlock keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_z8ba65tp.keychain-db
+base64: stdin: (null): error decoding base64 input stream
+Add certificates to keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_z8ba65tp.keychain-db
+Searching for files matching /private/tmp/dist_cert.p12
+Add certificate /private/tmp/dist_cert.p12 to keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_z8ba65tp.keychain-db
+security: SecKeychainItemImport: Unable to decode the provided data.
+security: SecKeychainItemImport: One or more parameters passed to a function were not valid.
+Unable to add certificate /private/tmp/dist_cert.p12 to keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_z8ba65tp.keychain-db
+Cannot save Signing Certificates without certificate private key
+Configure code signing settings
+Searching for files matching /Users/builder/Library/Developer/Xcode/UserData/Provisioning Profiles/*.mobileprovision
+Searching for files matching /Users/builder/Library/Developer/Xcode/UserData/Provisioning Profiles/*.provisionprofile
+Searching for files matching /Users/builder/Library/MobileDevice/Provisioning Profiles/*.mobileprovision
+Searching for files matching /Users/builder/Library/MobileDevice/Provisioning Profiles/*.provisionprofile
+List available code signing certificates in keychain /Users/builder/Library/codemagic-cli-tools/keychains/05-06-26_z8ba65tp.keychain-db
+Searching for files matching /Users/builder/clone/**/*.xcodeproj
+Completed configuring code signing settings
+Did not find matching provisioning profiles for code signing!
+Generated options for exporting the project
+ - Method: ad-hoc
+ - Provisioning Profiles: []
+ - Signing Certificate: 
+ - Signing Style: manual
+ - Team Id: 
+Saved export options to /Users/builder/export_options.plist

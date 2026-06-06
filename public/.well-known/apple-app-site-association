@@ -3,7 +3,7 @@
     "apps": [],
     "details": [
       {
-        "appIDs": ["REPLACE_WITH_TEAM_ID.fm.goodtunes.player"],
+        "appIDs": ["REPLACE_WITH_TEAM_ID.Io.GoGoods.music"],
         "components": [
           {
             "/": "/*",

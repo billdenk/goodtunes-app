@@ -1,0 +1,239 @@
+# Codemagic cloud build pipeline for the GoodTunes Capacitor apps.
+#
+# Plain-English runbook (what each button does, Bill's one-time setup, the
+# one-button App Store submit, and the manual-Mac fallback) lives in
+# docs/codemagic-builds.md. Read that first if you're the operator.
+#
+# Three workflows:
+#   ios-testflight      — day-to-day: build + sign + ship to TestFlight (auto build number).
+#   ios-appstore-submit — the "push the button" workflow: build + ship + SUBMIT to Apple review.
+#   android-internal    — optional/disabled: signed .aab → Play internal testing.
+#
+# All three are MANUAL by default — they only run when started from the
+# Codemagic UI/API (no `triggering:` block), so nothing reaches Apple/Google
+# without a deliberate click. Optional auto-trigger examples are commented out
+# inside each workflow.
+#
+# No secrets are hardcoded here. iOS signing uses an App Store Connect API key
+# that Bill pastes into Codemagic once (referenced below as the
+# `app_store_connect` integration named "GoodTunes ASC API key"). The numeric
+# App Store "App Apple ID" and the Android signing/Play credentials are likewise
+# supplied through Codemagic environment-variable groups, never committed.
+
+definitions:
+  # Reusable environment runtime block for the two iOS workflows.
+  ios_env: &ios_env
+    node: 20
+    xcode: latest
+    cocoapods: default
+
+  # Reusable build steps shared by both iOS workflows: web payload → Capacitor
+  # sync → CocoaPods → managed signing → auto build number → signed .ipa.
+  ios_build_scripts: &ios_build_scripts
+    - name: Install npm dependencies
+      script: npm ci
+    - name: Build the web payload (dist/public)
+      script: npm run build
+    - name: Sync Capacitor into the iOS project
+      script: npx cap sync ios
+    - name: Install CocoaPods dependencies
+      script: |
+        cd ios/App
+        pod install
+    - name: Set up iOS code signing (managed cert from our private key + fetch/create the profile)
+      script: |
+        # WHY THIS SHAPE: an App Store archive must be signed with a distribution
+        # certificate's PRIVATE KEY. Hand-exporting a .p12 (cert + key) from macOS
+        # Keychain Access and importing it on the cloud Mac proved unreliable — the
+        # certificate loaded but its private key would not pair, so signing failed
+        # with "Cannot save Signing Certificates without certificate private key"
+        # (even after re-encoding the .p12 from legacy RC2/3DES to modern AES).
+        #
+        # Instead we let the App Store Connect API manage the certificate, but we
+        # supply our OWN PERSISTENT private key so the SAME certificate is reused on
+        # every build. CERTIFICATE_PRIVATE_KEY is a base64-encoded PEM RSA private
+        # key stored as a SECURE env var in the `apple_app` group. See
+        # docs/codemagic-builds.md → "Distribution certificate" for how to make it.
+        #
+        # `fetch-signing-files --create`:
+        #   * if a distribution certificate matching this private key already exists
+        #     in App Store Connect it is reused; otherwise a new one is created and
+        #     signed with this key (so we always hold the matching private key);
+        #   * the App Store provisioning profile is fetched or created. The profile
+        #     inherits the App ID's capabilities, so Associated Domains + Push
+        #     Notifications MUST be enabled on the `Io.GoGoods.music` identifier in
+        #     the Apple Developer portal (one-time; see the runbook).
+        # `keychain add-certificates` then loads the fetched cert+key into the
+        # keychain and `use-profiles` points the Xcode project at the profile.
+        keychain initialize
+        echo "$CERTIFICATE_PRIVATE_KEY" | base64 --decode > /tmp/cert_key.pem
+        echo "DIAG: private key file size = $(wc -c < /tmp/cert_key.pem) bytes"
+        echo "DIAG: private key header = $(head -n 1 /tmp/cert_key.pem)"
+        app-store-connect fetch-signing-files "Io.GoGoods.music" \
+          --type IOS_APP_STORE \
+          --certificate-key @file:/tmp/cert_key.pem \
+          --create
+        rm -f /tmp/cert_key.pem
+        keychain add-certificates
+        xcode-project use-profiles
+    - name: Set the marketing version and auto-increment the build number
+      script: |
+        cd ios/App
+        # TWO different numbers, do not confuse them:
+        #
+        # 1) MARKETING VERSION (CFBundleShortVersionString) — the human-facing
+        #    "3.0.1" customers see on the App Store. Apple REQUIRES every new
+        #    build to carry a version HIGHER than the latest version already on
+        #    the store, otherwise the upload is rejected (error 90062/90478).
+        #    The iOS project shipped pinned at 1.0, which is below the live 3.0,
+        #    so we stamp it here. *** BUMP THIS ONE LINE for each new release ***
+        #    (e.g. 3.0.2, 3.1, 4.0). It must always exceed the current store
+        #    version.
+        agvtool new-marketing-version 3.0.1
+        #
+        # 2) BUILD NUMBER (CFBundleVersion) — an internal counter that must be
+        #    unique per upload. APP_STORE_APPLE_ID is the numeric App Apple ID
+        #    from App Store Connect (App Information → General Information →
+        #    Apple ID), set in the Codemagic "apple_app" variable group. We take
+        #    whatever Apple already has and add 1, so duplicates are impossible
+        #    even across machines. This is automatic — you never touch it.
+        LATEST_BUILD_NUMBER=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" || echo "0")
+        agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
+    - name: Build the signed .ipa
+      script: |
+        xcode-project build-ipa \
+          --workspace "ios/App/App.xcworkspace" \
+          --scheme "App"
+
+  ios_artifacts: &ios_artifacts
+    - build/ios/ipa/*.ipa
+    - /tmp/xcodebuild_logs/*.log
+    - ios/App/build/App.xcarchive
+
+workflows:
+  # ---------------------------------------------------------------------------
+  # iOS → TestFlight (day-to-day). Builds, signs, uploads to TestFlight.
+  # Does NOT submit to App Store review.
+  # ---------------------------------------------------------------------------
+  ios-testflight:
+    name: iOS → TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: GoodTunes ASC API key
+    environment:
+      <<: *ios_env
+      groups:
+        - apple_app # provides APP_STORE_APPLE_ID
+    # NOTE: no declarative `ios_signing:` block on purpose — signing is done
+    # manually in the "Set up iOS code signing" script above so we can pass
+    # `--create` (the declarative block only fetches and fails when no profile
+    # exists yet). The `app_store_connect` integration above still authorizes it.
+    # triggering:                 # optional: auto-build on a pushed tag.
+    #   events: [tag]             # e.g. `git tag testflight-1.4 && git push --tags`
+    #   tag_patterns:
+    #     - pattern: "testflight-*"
+    #       include: true
+    scripts: *ios_build_scripts
+    artifacts: *ios_artifacts
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Ship to TestFlight. submit_to_app_store is intentionally absent /
+        # false here — TestFlight only. Use ios-appstore-submit for review.
+        submit_to_testflight: true
+        # Auto-add the build to your internal TestFlight tester group(s).
+        # This name must match an existing group in App Store Connect →
+        # TestFlight → Internal Testing EXACTLY (case- and space-sensitive),
+        # or the post-upload "App Store distribution" step fails with the build
+        # already uploaded. "GoGoods Test Group" is the real group that holds
+        # the internal testers.
+        beta_groups:
+          - GoGoods Test Group
+
+  # ---------------------------------------------------------------------------
+  # iOS → App Store review ("push the button"). Same build, but it also SUBMITS
+  # the build for Apple review. This is the single deliberate trigger Bill
+  # clicks when a build is ready to go to the public store.
+  # ---------------------------------------------------------------------------
+  ios-appstore-submit:
+    name: iOS → App Store (submit for review)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: GoodTunes ASC API key
+    environment:
+      <<: *ios_env
+      groups:
+        - apple_app # provides APP_STORE_APPLE_ID
+    # NOTE: no declarative `ios_signing:` block on purpose — see the matching
+    # note in the ios-testflight workflow. Signing runs in the shared script
+    # with `--create`; the `app_store_connect` integration authorizes it.
+    scripts: *ios_build_scripts
+    artifacts: *ios_artifacts
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        # The one-button bit: hand the build to App Store review automatically.
+        submit_to_app_store: true
+        # Phased release rolls the update out to a widening % of users over 7
+        # days once Apple approves it. Set to false to release to everyone at
+        # once on approval.
+        release_type: AFTER_APPROVAL
+        phased_release: true
+        # cancel_previous_submissions avoids "you already have a build in
+        # review" errors if Bill clicks twice.
+        cancel_previous_submissions: true
+
+  # ---------------------------------------------------------------------------
+  # Android → Play internal testing. OPTIONAL / DISABLED BY DEFAULT.
+  # It only runs if you start it manually in Codemagic. Leave it untouched
+  # until Bill wants Android builds; everything below is ready to go once the
+  # `google_play` + `keystore_reference` credentials are set in Codemagic.
+  # ---------------------------------------------------------------------------
+  android-internal:
+    name: Android → Play internal testing (optional)
+    instance_type: linux_x2
+    max_build_duration: 60
+    environment:
+      groups:
+        - google_play # provides GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+      android_signing:
+        - goodtunes_keystore # keystore reference uploaded in Codemagic
+      node: 20
+    # Intentionally no `triggering:` block — manual only, so it stays dormant
+    # until you choose to run it.
+    scripts:
+      - name: Install npm dependencies
+        script: npm ci
+      - name: Build the web payload (dist/public)
+        script: npm run build
+      - name: Sync Capacitor into the Android project
+        script: npx cap sync android
+      - name: Auto-increment versionCode from the latest Play build
+        script: |
+          # GCLOUD_SERVICE_ACCOUNT_CREDENTIALS is the Play service-account JSON
+          # (set in the google_play group). Take whatever Play already has on
+          # the internal track and add 1 so duplicates are impossible.
+          LATEST_BUILD_NUMBER=$(google-play get-latest-build-number \
+            --package-name "fm.goodtunes.player" \
+            --tracks internal || echo "0")
+          NEW_BUILD_NUMBER=$(($LATEST_BUILD_NUMBER + 1))
+          # android/app/build.gradle hardcodes `versionCode 1`; patch it in
+          # place for this build so the .aab carries the fresh number.
+          sed -i.bak "s/versionCode .*/versionCode $NEW_BUILD_NUMBER/" \
+            android/app/build.gradle
+      - name: Build the signed .aab
+        script: |
+          cd android
+          ./gradlew bundleRelease
+    artifacts:
+      - android/app/build/outputs/**/*.aab
+      - android/app/build/outputs/**/mapping.txt
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        # Submit straight to the internal testing track (testers, not public).
+        submit_as_draft: false

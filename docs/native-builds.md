@@ -1,5 +1,7 @@
 # Native builds — iOS (TestFlight) + Android (Play internal testing)
 
+> **Day-to-day, builds run in the cloud — no Mac required.** [`codemagic-builds.md`](./codemagic-builds.md) is the operator cheat-sheet: Codemagic builds + signs on cloud Macs, ships to TestFlight, and has a one-button App Store submit. The Xcode/Android-Studio steps below are now the **manual fallback** (if Codemagic is down) and the reference for how the native projects are wired.
+
 The GoodTunes native apps are **Capacitor wrappers** around the same React + Vite app that ships at `goodtunes.app`. There is no separate codebase. One change-set updates web, iOS, and Android together; the only difference is which surfaces are visible (see `client/src/lib/platform.ts`).
 
 Product rules baked into the platform layer:
@@ -30,7 +32,7 @@ npx cap sync
 
 ### iOS — bundle id, signing, icons
 
-- Bundle id: `fm.goodtunes.player` (set in `capacitor.config.ts`).
+- Bundle id: `Io.GoGoods.music` (set in `capacitor.config.ts`; must match the existing App Store Connect record, Apple ID `6448246869`).
 - Open `ios/App/App.xcworkspace` in Xcode.
 - Signing & Capabilities tab → Team = the existing GoodTunes Apple Developer team. Let Xcode auto-manage signing.
 - App icon: drop the GoodTunes mark into `ios/App/App/Assets.xcassets/AppIcon.appiconset`. Use the brand `#00062B` bg.

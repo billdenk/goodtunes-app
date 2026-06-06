@@ -36,6 +36,7 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "forgot-password",
   "reset-password",
   "set-password",
+  "delete-account",
   "verify",
   "welcome",
   "welcome-back",

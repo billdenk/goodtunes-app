@@ -247,6 +247,14 @@ body {
      the visible viewport instead of drifting with a trackpad swipe. */
   overflow-x: hidden;
   overscroll-behavior-x: none;
+  /* Pin the document background to brand navy. The body below paints the
+     gradient, but `body` is a finite box — the safe-area strips behind a
+     black-translucent status bar / home indicator and any overscroll
+     bounce expose the ELEMENT under it. In a plain browser that's the
+     same navy; inside the iOS Capacitor webview the default is WHITE, so
+     without this the app flashed white bands at the very top + bottom of
+     every page. Keep it on html so it backs the whole viewport. */
+  background-color: #00062B;
 }
 
 body {

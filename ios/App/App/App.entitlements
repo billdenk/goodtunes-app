@@ -15,10 +15,11 @@
     </array>
     <!-- Task #535 — Push entitlement declared now so the binary asks
          Apple for the right provisioning, even though we don't send any
-         payloads yet (that wiring is a follow-up task). Default to the
-         development APS environment; Xcode's Release scheme automatically
-         swaps this to "production" when archiving for the App Store. -->
+         payloads yet (that wiring is a follow-up task). Must be
+         "production" for TestFlight / App Store distribution builds:
+         Xcode does NOT auto-swap this value, and a "development" value is
+         rejected at upload (ITMS-90163 invalid aps-environment). -->
     <key>aps-environment</key>
-    <string>development</string>
+    <string>production</string>
 </dict>
 </plist>

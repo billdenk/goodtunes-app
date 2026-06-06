@@ -1,0 +1,186 @@
+# Codemagic cloud build pipeline for the GoodTunes Capacitor apps.
+#
+# Plain-English runbook (what each button does, Bill's one-time setup, the
+# one-button App Store submit, and the manual-Mac fallback) lives in
+# docs/codemagic-builds.md. Read that first if you're the operator.
+#
+# Three workflows:
+#   ios-testflight      — day-to-day: build + sign + ship to TestFlight (auto build number).
+#   ios-appstore-submit — the "push the button" workflow: build + ship + SUBMIT to Apple review.
+#   android-internal    — optional/disabled: signed .aab → Play internal testing.
+#
+# All three are MANUAL by default — they only run when started from the
+# Codemagic UI/API (no `triggering:` block), so nothing reaches Apple/Google
+# without a deliberate click. Optional auto-trigger examples are commented out
+# inside each workflow.
+#
+# No secrets are hardcoded here. iOS signing uses an App Store Connect API key
+# that Bill pastes into Codemagic once (referenced below as the
+# `app_store_connect` integration named "GoodTunes ASC API key"). The numeric
+# App Store "App Apple ID" and the Android signing/Play credentials are likewise
+# supplied through Codemagic environment-variable groups, never committed.
+
+definitions:
+  # Reusable environment runtime block for the two iOS workflows.
+  ios_env: &ios_env
+    node: 20
+    xcode: latest
+    cocoapods: default
+
+  # Reusable build steps shared by both iOS workflows: web payload → Capacitor
+  # sync → CocoaPods → managed signing → auto build number → signed .ipa.
+  ios_build_scripts: &ios_build_scripts
+    - name: Install npm dependencies
+      script: npm ci
+    - name: Build the web payload (dist/public)
+      script: npm run build
+    - name: Sync Capacitor into the iOS project
+      script: npx cap sync ios
+    - name: Install CocoaPods dependencies
+      script: |
+        cd ios/App
+        pod install
+    - name: Apply managed signing profiles (from the App Store Connect API key)
+      script: xcode-project use-profiles
+    - name: Auto-increment the build number from the latest TestFlight build
+      script: |
+        cd ios/App
+        # APP_STORE_APPLE_ID is the numeric App Apple ID from App Store Connect
+        # (App Information → General Information → Apple ID). Set it in the
+        # Codemagic "apple_app" variable group. We take whatever Apple already
+        # has and add 1, so duplicates are impossible even across machines.
+        LATEST_BUILD_NUMBER=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" || echo "0")
+        agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
+    - name: Build the signed .ipa
+      script: |
+        xcode-project build-ipa \
+          --workspace "ios/App/App.xcworkspace" \
+          --scheme "App"
+
+  ios_artifacts: &ios_artifacts
+    - build/ios/ipa/*.ipa
+    - /tmp/xcodebuild_logs/*.log
+    - ios/App/build/App.xcarchive
+
+workflows:
+  # ---------------------------------------------------------------------------
+  # iOS → TestFlight (day-to-day). Builds, signs, uploads to TestFlight.
+  # Does NOT submit to App Store review.
+  # ---------------------------------------------------------------------------
+  ios-testflight:
+    name: iOS → TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: GoodTunes ASC API key
+    environment:
+      <<: *ios_env
+      groups:
+        - apple_app # provides APP_STORE_APPLE_ID
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: fm.goodtunes.player
+    # triggering:                 # optional: auto-build on a pushed tag.
+    #   events: [tag]             # e.g. `git tag testflight-1.4 && git push --tags`
+    #   tag_patterns:
+    #     - pattern: "testflight-*"
+    #       include: true
+    scripts: *ios_build_scripts
+    artifacts: *ios_artifacts
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Ship to TestFlight. submit_to_app_store is intentionally absent /
+        # false here — TestFlight only. Use ios-appstore-submit for review.
+        submit_to_testflight: true
+        # Auto-add the build to your internal TestFlight tester group(s).
+        # Rename to match the group you create in App Store Connect.
+        beta_groups:
+          - GoodTunes Internal
+
+  # ---------------------------------------------------------------------------
+  # iOS → App Store review ("push the button"). Same build, but it also SUBMITS
+  # the build for Apple review. This is the single deliberate trigger Bill
+  # clicks when a build is ready to go to the public store.
+  # ---------------------------------------------------------------------------
+  ios-appstore-submit:
+    name: iOS → App Store (submit for review)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: GoodTunes ASC API key
+    environment:
+      <<: *ios_env
+      groups:
+        - apple_app # provides APP_STORE_APPLE_ID
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: fm.goodtunes.player
+    scripts: *ios_build_scripts
+    artifacts: *ios_artifacts
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        # The one-button bit: hand the build to App Store review automatically.
+        submit_to_app_store: true
+        # Phased release rolls the update out to a widening % of users over 7
+        # days once Apple approves it. Set to false to release to everyone at
+        # once on approval.
+        release_type: AFTER_APPROVAL
+        phased_release: true
+        # cancel_previous_submissions avoids "you already have a build in
+        # review" errors if Bill clicks twice.
+        cancel_previous_submissions: true
+
+  # ---------------------------------------------------------------------------
+  # Android → Play internal testing. OPTIONAL / DISABLED BY DEFAULT.
+  # It only runs if you start it manually in Codemagic. Leave it untouched
+  # until Bill wants Android builds; everything below is ready to go once the
+  # `google_play` + `keystore_reference` credentials are set in Codemagic.
+  # ---------------------------------------------------------------------------
+  android-internal:
+    name: Android → Play internal testing (optional)
+    instance_type: linux_x2
+    max_build_duration: 60
+    environment:
+      groups:
+        - google_play # provides GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+      android_signing:
+        - goodtunes_keystore # keystore reference uploaded in Codemagic
+      node: 20
+    # Intentionally no `triggering:` block — manual only, so it stays dormant
+    # until you choose to run it.
+    scripts:
+      - name: Install npm dependencies
+        script: npm ci
+      - name: Build the web payload (dist/public)
+        script: npm run build
+      - name: Sync Capacitor into the Android project
+        script: npx cap sync android
+      - name: Auto-increment versionCode from the latest Play build
+        script: |
+          # GCLOUD_SERVICE_ACCOUNT_CREDENTIALS is the Play service-account JSON
+          # (set in the google_play group). Take whatever Play already has on
+          # the internal track and add 1 so duplicates are impossible.
+          LATEST_BUILD_NUMBER=$(google-play get-latest-build-number \
+            --package-name "fm.goodtunes.player" \
+            --tracks internal || echo "0")
+          NEW_BUILD_NUMBER=$(($LATEST_BUILD_NUMBER + 1))
+          # android/app/build.gradle hardcodes `versionCode 1`; patch it in
+          # place for this build so the .aab carries the fresh number.
+          sed -i.bak "s/versionCode .*/versionCode $NEW_BUILD_NUMBER/" \
+            android/app/build.gradle
+      - name: Build the signed .aab
+        script: |
+          cd android
+          ./gradlew bundleRelease
+    artifacts:
+      - android/app/build/outputs/**/*.aab
+      - android/app/build/outputs/**/mapping.txt
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        # Submit straight to the internal testing track (testers, not public).
+        submit_as_draft: false

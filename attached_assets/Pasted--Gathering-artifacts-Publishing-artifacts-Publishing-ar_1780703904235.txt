@@ -1,0 +1,99 @@
+
+== Gathering artifacts ==
+
+== Publishing artifacts ==
+
+Publishing artifact App.ipa
+Publishing artifact goodtunes-app_17_artifacts.zip
+Publishing App.ipa to App Store Connect
+> app-store-connect publish --path /Users/builder/clone/build/ios/ipa/App.ipa
+
+Publish "/Users/builder/clone/build/ios/ipa/App.ipa" to App Store Connect
+App name: GoodTunes
+Bundle identifier: Io.GoGoods.music
+Certificate expires: 2027-06-05T14:27:34.000+0000
+Distribution type: App Store
+Min OS version: 13.0
+Provisioned devices: N/A
+Provisions all devices: No
+Supported platforms: iPhoneOS
+Version code: 50
+Version: 1.0
+
+Upload "/Users/builder/clone/build/ios/ipa/App.ipa" to App Store Connect
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+26.30.4 (173004)
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+2026-06-05 23:57:38.415 ERROR: [ContentDelivery.Uploader.73F074540] 
+=======================================
+UPLOAD FAILED with 2 errors
+=======================================
+2026-06-05 23:57:38.422 ERROR: [altool.1038EAD20] ExitFailure (31)
+{
+  "os-version" : "Version 26.4.1 (Build 25E253)",
+  "product-errors" : [
+    {
+      "code" : 90062,
+      "message" : "This bundle is invalid. The value for key CFBundleShortVersionString [1.0] in the Info.plist file must contain a higher version than that of the previously approved version [2.0.2]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring",
+      "underlying-errors" : [
+        {
+          "code" : -19241,
+          "message" : "A server error occurred.",
+          "underlying-errors" : [
+
+          ],
+          "user-info" : {
+            "NSLocalizedDescription" : "A server error occurred.",
+            "code" : "90062",
+            "description" : "This bundle is invalid. The value for key CFBundleShortVersionString [1.0] in the Info.plist file must contain a higher version than that of the previously approved version [2.0.2]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring"
+          }
+        }
+      ],
+      "user-info" : {
+        "NSLocalizedDescription" : "This bundle is invalid. The value for key CFBundleShortVersionString [1.0] in the Info.plist file must contain a higher version than that of the previously approved version [2.0.2]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring",
+        "NSLocalizedFailureReason" : "The server’s response was: ‘{\n    code = 90062;\n    description = \"This bundle is invalid. The value for key CFBundleShortVersionString [1.0] in the Info.plist file must contain a higher version than that of the previously approved version [2.0.2]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring\";\n}’.",
+        "NSUnderlyingError" : "Error Domain=IrisAPI Code=-19241 \"A server error occurred.\" UserInfo={code=90062, NSLocalizedDescription=A server error occurred., description=This bundle is invalid. The value for key CFBundleShortVersionString [1.0] in the Info.plist file must contain a higher version than that of the previously approved version [2.0.2]. Please find more information about CFBundleShortVersionString at https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring}",
+        "iris-code" : "90062"
+      }
+    },
+    {
+      "code" : 90478,
+      "message" : "Invalid Version. The build with the version “2.0.2” can’t be imported because a later version has been closed for new build submissions. Choose a different version number.",
+      "underlying-errors" : [
+        {
+          "code" : -19241,
+          "message" : "A server error occurred.",
+          "underlying-errors" : [
+
+          ],
+          "user-info" : {
+            "NSLocalizedDescription" : "A server error occurred.",
+            "code" : "90478",
+            "description" : "Invalid Version. The build with the version “2.0.2” can’t be imported because a later version has been closed for new build submissions. Choose a different version number."
+          }
+        }
+      ],
+      "user-info" : {
+        "NSLocalizedDescription" : "Invalid Version. The build with the version “2.0.2” can’t be imported because a later version has been closed for new build submissions. Choose a different version number.",
+        "NSLocalizedFailureReason" : "The server’s response was: ‘{\n    code = 90478;\n    description = \"Invalid Version. The build with the version \\U201c2.0.2\\U201d can\\U2019t be imported because a later version has been closed for new build submissions. Choose a different version number.\";\n}’.",
+        "NSUnderlyingError" : "Error Domain=IrisAPI Code=-19241 \"A server error occurred.\" UserInfo={code=90478, NSLocalizedDescription=A server error occurred., description=Invalid Version. The build with the version “2.0.2” can’t be imported because a later version has been closed for new build submissions. Choose a different version number.}",
+        "iris-code" : "90478"
+      }
+    }
+  ],
+  "tool-path" : "/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources",
+  "tool-version" : "26.30.4 (173004)"
+}
+
+Failed to upload archive at "/Users/builder/clone/build/ios/ipa/App.ipa"
+Failed to publish /Users/builder/clone/build/ios/ipa/App.ipa
+
+Failed to publish App.ipa to App Store Connect.
+
+Build failed :|
+
+
+Publishing failed :|
+Failed to publish App.ipa to App Store Connect.
