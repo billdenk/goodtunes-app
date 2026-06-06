@@ -15,7 +15,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import {
-  AlbumCreditsModal,
+  AlbumCreditsPage,
   buildAlbumCreditGroups,
   type AlbumCreditsPayload,
 } from "@/components/ui/AlbumCreditsSheet";
@@ -933,7 +933,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
       )}
 
       {showAlbumCredits && effectiveOwned && hasAnyCredits && album ? (
-        <AlbumCreditsModal
+        <AlbumCreditsPage
           album={album as unknown as PlayerAlbum}
           albumTitle={album.title}
           artist={album.artist}
@@ -941,7 +941,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
           onClose={() => setShowAlbumCredits(false)}
         />
       ) : creditsForSong && effectiveOwned && album ? (
-        <AlbumCreditsModal
+        <AlbumCreditsPage
           album={album as unknown as PlayerAlbum}
           albumTitle={creditsForSong.title}
           artist={`${album.artist} · ${album.title}`}

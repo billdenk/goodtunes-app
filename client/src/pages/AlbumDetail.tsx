@@ -1094,11 +1094,13 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
             albumTitle={album.title}
             artist={album.artist}
             credits={apiAlbumCredits ?? {}}
-            onOpenPerson={(personId, role) => {
+            album={album}
+            resolveInstrument={(iid) => (iid ? instrumentsById.get(iid) : undefined)}
+            resolvePersonContext={(personId, role) => {
               const person = peopleById.get(personId);
-              if (!person) return;
+              if (!person) return null;
               // Lead with the song this person actually performs/writes on so
-              // the Music tab opens with context. Production-only credits
+              // the profile opens with context. Production-only credits
               // (Mastered by, A&R, …) won't match any track — those open from
               // album + person alone, leading with About and the role as the
               // subtitle, instead of dead-ending.
@@ -1109,9 +1111,18 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
                   c?.writers.some((w) => w.personId === personId)
                 );
               });
-              setShowAlbumCredits(false);
-              setPerformerSheet({ person, song: ctxSong, contextLabel: role });
-              track("credits_person_clicked", { personId, albumId: album.id });
+              const lookupId = person.id.startsWith("unlinked-") ? undefined : person.id;
+              return {
+                person,
+                role,
+                song: ctxSong,
+                currentSongCredits: ctxSong ? getCredits(ctxSong.id) : undefined,
+                otherTracks: ctxSong
+                  ? getTracksForPerformer({ personId: lookupId }).filter(
+                      ({ song: s }) => s.id !== ctxSong.id,
+                    )
+                  : [],
+              };
             }}
             onClose={() => setShowAlbumCredits(false)}
           />

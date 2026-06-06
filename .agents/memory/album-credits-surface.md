@@ -5,7 +5,7 @@ description: How the fan album-credits surface aggregates + when it shows; deskt
 
 # Album credits surface
 
-The fan album-credits surface (mobile `AlbumCreditsSheet` + desktop `AlbumCreditsModal`, both in `AlbumCreditsSheet.tsx`) renders Apple's three broad buckets, built by the shared `buildAlbumCreditGroups(payload)`:
+The fan album-credits surface (mobile `AlbumCreditsSheet` + desktop `AlbumCreditsPage`, both in `AlbumCreditsSheet.tsx`) renders Apple's three broad buckets, built by the shared `buildAlbumCreditGroups(payload)`:
 - **Performing Artists** ← every song's `bySongId[*].performers`
 - **Composition & Lyrics** ← every song's `bySongId[*].writers`
 - **Production & Engineering** ← album-level `production`
@@ -19,3 +19,12 @@ Each person is deduped within a group; their distinct role strings are joined (f
 **Why:** Bill asked credits to look like Apple and be shown "after someone buys"; that maps to the desktop modal. Mobile's SuperCredits teaser is a deliberate pre-purchase selling point and was preserved.
 
 **How to apply:** changing the gate on one platform does NOT imply the other. If you ever unify gating, confirm with Bill first — the split is by design.
+
+## One shared list↔person slider (Apple-style)
+Both surfaces drive a single `CreditsSlider` that horizontally slides a tapped person's `PerformerProfileContent` in OVER the credits list (Apple push), back caret top-left, list keeps its own close. Container never resizes between views.
+- **Mobile** `AlbumCreditsSheet`: `SheetShell variant="fixed"`, `showCloseOnPerson={false}` (X hidden on the person view — back caret only). Caller passes `resolvePersonContext(personId, role)` returning the contextual `CreditsPersonView` (real Person + lead-in song the person played on + otherTracks); null = unknown person.
+- **Desktop** `AlbumCreditsPage` (renamed from `AlbumCreditsModal`): breathable full page (`fixed inset-0`, bg `var(--brand-bg)`, max-w-680 centered), `showCloseOnPerson` (persistent corner X), self-manages its exit fade via internal `open` + `AnimatePresence onExitComplete={onClose}` so call sites keep the plain `{cond && <AlbumCreditsPage/>}` mount. Opens person About-first (synthesized Person, no track context).
+
+Rows: quiet dark pill cards (`bg-white/[0.04] rounded-2xl`), NO white hairlines. Trailing chevron `›` (text-fan-faint) renders ONLY on tappable rich-profile rows (gated by `personProfileIsRich`), nothing on dead rows — the chevron's presence IS the "more here" signal (approved by Bill). `usePersonGearDrilldown` overlay MUST render OUTSIDE the framer-transformed panel/page wrapper (its sub-sheets are position:fixed).
+
+**Why:** Task #1547 — Apple dark pills + slide-in person view; killed the centered desktop modal box and the separate mobile PerformerSheet hop for album credits (per-track mobile "Song Credits" still uses the old PerformerSheet, intentionally out of scope).
