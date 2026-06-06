@@ -272,8 +272,8 @@ function RecentRow({
             ) : null}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-white text-sm font-semibold truncate leading-tight">{row.title}</p>
-            <p className="text-white/45 text-xs truncate leading-tight mt-0.5">
+            <p className="text-fan-primary text-sm font-semibold truncate leading-tight">{row.title}</p>
+            <p className="text-fan-secondary text-xs truncate leading-tight mt-0.5">
               {KIND_LABEL[row.entityKind] ?? row.entityKind}
               {row.subtitle ? ` · ${row.subtitle}` : ""}
             </p>
@@ -284,7 +284,7 @@ function RecentRow({
               section headers + the row-level recency both read at a
               glance. */}
           <span
-            className="text-white/40 text-[11px] flex-shrink-0 mr-1 tabular-nums"
+            className="text-fan-faint text-[11px] flex-shrink-0 mr-1 tabular-nums"
             data-testid={`text-recent-time-${row.id}`}
           >
             {timestamp}
@@ -332,8 +332,8 @@ function RecentCard({
           ) : null}
         </div>
         <div className="min-w-0 px-0.5">
-          <p className="text-white text-sm font-semibold truncate leading-tight">{row.title}</p>
-          <p className="text-white/45 text-xs truncate leading-tight mt-0.5">
+          <p className="text-fan-primary text-sm font-semibold truncate leading-tight">{row.title}</p>
+          <p className="text-fan-secondary text-xs truncate leading-tight mt-0.5">
             {KIND_LABEL[row.entityKind] ?? row.entityKind}
             {timestamp ? ` · ${timestamp}` : ""}
           </p>

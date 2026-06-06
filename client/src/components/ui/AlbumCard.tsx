@@ -365,16 +365,16 @@ export function AlbumCard({
   // ── metadata line ───────────────────────────────────────────────────
   const meta = compact ? (
     <div className="mt-1.5">
-      <p className="text-white text-[11px] font-normal truncate leading-tight text-left" data-testid={`text-album-title-${album.id}`}>{album.title}</p>
-      <p className="text-white/45 text-[10px] truncate leading-tight text-left mt-0.5">{subtitle ?? album.artist}</p>
+      <p className="text-fan-primary text-[11px] font-normal truncate leading-tight text-left" data-testid={`text-album-title-${album.id}`}>{album.title}</p>
+      <p className="text-fan-secondary text-[10px] truncate leading-tight text-left mt-0.5">{subtitle ?? album.artist}</p>
     </div>
   ) : (
     <div className="mt-2 px-0.5">
       <div className="flex items-center gap-2.5 min-w-0">
-        <p className="flex-1 min-w-0 text-white text-[15px] font-normal leading-tight truncate" data-testid={`text-album-title-${album.id}`}>{album.title}</p>
+        <p className="flex-1 min-w-0 text-fan-primary text-[15px] font-normal leading-tight truncate" data-testid={`text-album-title-${album.id}`}>{album.title}</p>
         {album.isExplicit && <ExplicitBadge />}
       </div>
-      <p className="text-[13px] font-normal truncate mt-0.5" style={{ color: "rgba(255,255,255,0.55)" }}>{subtitle ?? album.artist}</p>
+      <p className="text-fan-secondary text-[13px] font-normal truncate mt-0.5">{subtitle ?? album.artist}</p>
     </div>
   );
 
@@ -546,8 +546,8 @@ export function AlbumCard({
       >
         <div className="w-11 h-11 flex-shrink-0">{artwork}</div>
         <button type="button" onClick={handleNavigate} className="flex-1 min-w-0 text-left active:opacity-60 transition-opacity">
-          <p className="text-white text-sm font-normal truncate leading-tight">{album.title}</p>
-          <p className="text-white/45 text-xs truncate leading-tight mt-0.5">{subtitle ?? album.artist}</p>
+          <p className="text-fan-primary text-sm font-normal truncate leading-tight">{album.title}</p>
+          <p className="text-fan-secondary text-xs truncate leading-tight mt-0.5">{subtitle ?? album.artist}</p>
         </button>
         {canHover && hasMenuActions ? (
           <IconButton

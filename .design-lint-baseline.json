@@ -12055,16 +12055,6 @@
     "snippet": "className=\"w-10 h-1 rounded-full mx-auto mb-5\""
   },
   {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/ui/AlbumCard.tsx",
-    "snippet": "<p className=\"text-white/45 text-[10px] truncate leading-tight text-left mt-0.5\">{subtitle ?? album.artist}</p>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/ui/AlbumCard.tsx",
-    "snippet": "<p className=\"text-white/45 text-xs truncate leading-tight mt-0.5\">{subtitle ?? album.artist}</p>"
-  },
-  {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumCard.tsx",
     "snippet": "className=\"text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1\""
@@ -12077,22 +12067,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumCard.tsx",
-    "snippet": "<p className=\"text-white text-[11px] font-normal truncate leading-tight text-left\" data-testid={`text-album-title-${album.id}`}>{album.title}</p>"
+    "snippet": "<p className=\"text-fan-primary text-[11px] font-normal truncate leading-tight text-left\" data-testid={`text-album-title-${album.id}`}>{album.title}</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumCard.tsx",
-    "snippet": "<p className=\"text-white/45 text-[10px] truncate leading-tight text-left mt-0.5\">{subtitle ?? album.artist}</p>"
+    "snippet": "<p className=\"text-fan-secondary text-[10px] truncate leading-tight text-left mt-0.5\">{subtitle ?? album.artist}</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumCard.tsx",
-    "snippet": "<p className=\"flex-1 min-w-0 text-white text-[15px] font-normal leading-tight truncate\" data-testid={`text-album-title-${album.id}`}>{album.title}</p>"
+    "snippet": "<p className=\"flex-1 min-w-0 text-fan-primary text-[15px] font-normal leading-tight truncate\" data-testid={`text-album-title-${album.id}`}>{album.title}</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumCard.tsx",
-    "snippet": "<p className=\"text-[13px] font-normal truncate mt-0.5\" style={{ color: \"rgba(255,255,255,0.55)\" }}>{subtitle ?? album.artist}</p>"
+    "snippet": "<p className=\"text-fan-secondary text-[13px] font-normal truncate mt-0.5\">{subtitle ?? album.artist}</p>"
   },
   {
     "rule": "fan-text-tone",
@@ -21595,16 +21585,6 @@
     "snippet": "<Star size={18} className=\"text-white/35\" fill=\"currentColor\" data-testid={`icon-recent-fallback-${row.id}`} />"
   },
   {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/Recents.tsx",
-    "snippet": "<p className=\"text-white/45 text-xs truncate leading-tight mt-0.5\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/Recents.tsx",
-    "snippet": "className=\"text-white/40 text-[11px] flex-shrink-0 mr-1 tabular-nums\""
-  },
-  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Recents.tsx",
     "snippet": "className=\"text-[#319ED8] text-[14px] font-semibold active:opacity-60\""
@@ -21617,7 +21597,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Recents.tsx",
-    "snippet": "className=\"text-white/40 text-[11px] flex-shrink-0 mr-1 tabular-nums\""
+    "snippet": "className=\"text-fan-faint text-[11px] flex-shrink-0 mr-1 tabular-nums\""
   },
   {
     "rule": "player-touch-target-too-small",
