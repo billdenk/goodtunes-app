@@ -412,9 +412,11 @@ function FanScreen({
   return (
     <main className="h-screen w-full flex justify-center overflow-hidden lg:justify-start lg:pl-[260px]">
       <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1200px] lg:mx-auto h-screen text-fan-primary flex flex-col">
-        <header className="absolute top-0 inset-x-0 z-20 flex items-end justify-between px-5 pt-14 pb-3 pointer-events-none">
-          <div className="flex items-end gap-2 min-w-0">
-            {leading && <div className="pointer-events-auto pb-0.5">{leading}</div>}
+        <header className="absolute top-0 inset-x-0 z-20 px-5 pt-14 pb-3 pointer-events-none">
+          {leading && (
+            <div className="pointer-events-auto absolute left-4 top-3">{leading}</div>
+          )}
+          <div className="flex items-end justify-between gap-2">
             <h1
               ref={titleRef}
               className="text-fan-primary text-[34px] font-bold leading-none tracking-tight will-change-[opacity,transform]"
@@ -422,12 +424,12 @@ function FanScreen({
             >
               {title}
             </h1>
+            {trailing && (
+              <div ref={trailingRef} className="pointer-events-auto will-change-[opacity,transform] flex-shrink-0">
+                {trailing}
+              </div>
+            )}
           </div>
-          {trailing && (
-            <div ref={trailingRef} className="pointer-events-auto will-change-[opacity,transform]">
-              {trailing}
-            </div>
-          )}
         </header>
 
         <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
@@ -865,7 +867,6 @@ export function CollectionArtists() {
       ),
     [artists, sortBy],
   );
-  const anyFavorited = sorted.some((a) => favArtists.has(a.name));
 
   return (
     <FanScreen
@@ -911,26 +912,30 @@ export function CollectionArtists() {
               style={{ borderBottom: idx < visibleArtists.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}
               data-testid={`row-artist-${artist.name}`}
             >
-              {anyFavorited && (
-                <div className="w-4 flex-shrink-0 flex items-center justify-center">
-                  {isFav && (
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,255,255,0.55)" aria-label="Favorited">
+              <div className="relative flex-shrink-0">
+                <img
+                  src={photo ?? artist.albums[0].artwork}
+                  alt={artist.name}
+                  loading="lazy"
+                  decoding="async"
+                  className="w-12 h-12 rounded-full object-cover"
+                  style={{
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    ...(photo ? { objectPosition: "50% 20%" } : {}),
+                  }}
+                />
+                {isFav && (
+                  <span
+                    className="absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full"
+                    style={{ background: "var(--brand-bg)" }}
+                    aria-label="Favorited"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,255,255,0.55)">
                       <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                     </svg>
-                  )}
-                </div>
-              )}
-              <img
-                src={photo ?? artist.albums[0].artwork}
-                alt={artist.name}
-                loading="lazy"
-                decoding="async"
-                className="w-12 h-12 rounded-full object-cover flex-shrink-0"
-                style={{
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  ...(photo ? { objectPosition: "50% 20%" } : {}),
-                }}
-              />
+                  </span>
+                )}
+              </div>
               <div className="flex-1 min-w-0">
                 <p className="text-fan-primary text-sm font-semibold truncate leading-tight">{artist.name}</p>
                 <p className="text-fan-secondary text-xs truncate leading-tight mt-0.5">
