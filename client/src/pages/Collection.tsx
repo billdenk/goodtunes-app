@@ -478,10 +478,10 @@ export function Home() {
     <FanScreen title="Home" trailing={<AccountAvatar />} fadeTrailing>
       <div className="px-5 pb-4">
         {myAlbumsLoading && albums.length === 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4" data-testid="skeleton-albums">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5" data-testid="skeleton-albums">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="flex flex-col gap-2">
-                <div className="aspect-square rounded-2xl animate-pulse" style={{ background: "rgba(255,255,255,0.08)" }} />
+                <div className="aspect-square rounded-lg animate-pulse" style={{ background: "rgba(255,255,255,0.08)" }} />
                 <div className="h-3 rounded animate-pulse w-3/4" style={{ background: "rgba(255,255,255,0.08)" }} />
                 <div className="h-2.5 rounded animate-pulse w-1/2" style={{ background: "rgba(255,255,255,0.06)" }} />
               </div>
@@ -495,7 +495,7 @@ export function Home() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5">
               {albums.slice(0, visibleCount).map((album) => (
                 <AlbumCard
                   key={album.id}

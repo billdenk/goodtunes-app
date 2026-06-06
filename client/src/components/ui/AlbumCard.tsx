@@ -220,7 +220,7 @@ export function AlbumCard({
   // corner controls, so they show a single centered Play on hover. Row mode
   // surfaces the "…" as a trailing control in the row instead.
   const overlayCompact = compact || mode === "row";
-  const radius = mode === "row" ? "rounded-md" : "rounded-2xl";
+  const radius = mode === "row" ? "rounded-md" : "rounded-lg";
   const playingShadow = isCurrentlyPlaying
     ? "0 0 0 2px var(--brand-blue), 0 4px 20px rgba(0,0,0,0.4)"
     : "0 4px 20px rgba(0,0,0,0.4)";
@@ -232,7 +232,7 @@ export function AlbumCard({
         <>
           <div
             aria-hidden
-            className="absolute inset-0 rounded-2xl overflow-hidden"
+            className="absolute inset-0 rounded-lg overflow-hidden"
             style={{ transform: "rotate(-6deg) translate(-6px, -4px) scale(0.94)", boxShadow: "0 4px 16px rgba(0,0,0,0.45)", zIndex: 0 }}
           >
             <img src={album.artwork} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover opacity-85" />
@@ -240,7 +240,7 @@ export function AlbumCard({
           {ownedCount > 2 && (
             <div
               aria-hidden
-              className="absolute inset-0 rounded-2xl overflow-hidden"
+              className="absolute inset-0 rounded-lg overflow-hidden"
               style={{ transform: "rotate(5deg) translate(6px, -3px) scale(0.96)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 1 }}
             >
               <img src={album.artwork} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover opacity-90" />
@@ -368,13 +368,13 @@ export function AlbumCard({
   // ── metadata line ───────────────────────────────────────────────────
   const meta = compact ? (
     <div className="mt-1.5">
-      <p className="text-white text-[11px] font-semibold truncate leading-tight text-left" data-testid={`text-album-title-${album.id}`}>{album.title}</p>
+      <p className="text-white text-[11px] font-normal truncate leading-tight text-left" data-testid={`text-album-title-${album.id}`}>{album.title}</p>
       <p className="text-white/45 text-[10px] truncate leading-tight text-left mt-0.5">{subtitle ?? album.artist}</p>
     </div>
   ) : (
     <div className="mt-2 px-0.5">
       <div className="flex items-center gap-2.5 min-w-0">
-        <p className="flex-1 min-w-0 text-white text-[15px] font-semibold leading-tight truncate" data-testid={`text-album-title-${album.id}`}>{album.title}</p>
+        <p className="flex-1 min-w-0 text-white text-[15px] font-normal leading-tight truncate" data-testid={`text-album-title-${album.id}`}>{album.title}</p>
         {album.isExplicit && <ExplicitBadge />}
       </div>
       <p className="text-[13px] font-normal truncate mt-0.5" style={{ color: "rgba(255,255,255,0.55)" }}>{subtitle ?? album.artist}</p>
@@ -542,7 +542,7 @@ export function AlbumCard({
       >
         <div className="w-11 h-11 flex-shrink-0">{artwork}</div>
         <button type="button" onClick={handleNavigate} className="flex-1 min-w-0 text-left active:opacity-60 transition-opacity">
-          <p className="text-white text-sm font-semibold truncate leading-tight">{album.title}</p>
+          <p className="text-white text-sm font-normal truncate leading-tight">{album.title}</p>
           <p className="text-white/45 text-xs truncate leading-tight mt-0.5">{subtitle ?? album.artist}</p>
         </button>
         {canHover && hasMenuActions ? (

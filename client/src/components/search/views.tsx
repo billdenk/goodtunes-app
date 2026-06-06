@@ -364,7 +364,7 @@ export function SearchEntityRow({
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-fan-primary text-sm font-semibold truncate leading-tight">{title}</p>
+        <p className="text-fan-primary text-sm font-normal truncate leading-tight">{title}</p>
         <p className="text-fan-secondary text-xs truncate leading-tight mt-0.5">{type}</p>
       </div>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.3">

@@ -545,7 +545,7 @@ export function ArtistDetail() {
           {hasGtReleases && (
             <div className="px-5 mt-9">
               <h2 className="text-fan-primary text-xl font-bold tracking-tight mb-3">GoodTunes&reg; Releases</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5">
                 {artistAlbums.map((album) => (
                   <div key={album.id} data-testid={`artist-album-${album.id}`}>
                     <AlbumCard

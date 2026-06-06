@@ -12087,7 +12087,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumCard.tsx",
-    "snippet": "<p className=\"text-white text-[11px] font-semibold truncate leading-tight text-left\" data-testid={`text-album-title-${album.id}`}>{album.title}</p>"
+    "snippet": "<p className=\"text-white text-[11px] font-normal truncate leading-tight text-left\" data-testid={`text-album-title-${album.id}`}>{album.title}</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -12097,7 +12097,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumCard.tsx",
-    "snippet": "<p className=\"flex-1 min-w-0 text-white text-[15px] font-semibold leading-tight truncate\" data-testid={`text-album-title-${album.id}`}>{album.title}</p>"
+    "snippet": "<p className=\"flex-1 min-w-0 text-white text-[15px] font-normal leading-tight truncate\" data-testid={`text-album-title-${album.id}`}>{album.title}</p>"
   },
   {
     "rule": "hardcoded-font-size",
