@@ -462,11 +462,96 @@ function synthPersonView(e: CreditEntry, role: string): CreditsPersonView {
   };
 }
 
-/* ── Mobile bottom-sheet credits ─────────────────────────────────────────
+/* ── Mobile bottom-sheet credits host ────────────────────────────────────
    A fixed-height sheet that slides the person profile in over the credits
    list (no separate PerformerSheet, no X on the person view). Preserves the
    rich-profile gate and the contextual song lead-in via `resolvePersonContext`
-   so the profile opens on the track the person actually played on. */
+   so the profile opens on the track the person actually played on. Shared by
+   the album-credits and per-song "Song Credits" surfaces — they differ only
+   in the eyebrow/title/subtitle and which groups they feed in. */
+function CreditsSheetHost({
+  ariaLabel,
+  testId,
+  eyebrow,
+  title,
+  subtitle,
+  groups,
+  albumId,
+  album,
+  trackExtra,
+  resolveInstrument,
+  resolvePersonContext,
+  onClose,
+}: {
+  ariaLabel: string;
+  testId: string;
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  groups: CreditGroup[];
+  /** Current album id — lets the rich-profile gate count a track on THIS
+   *  album as not-rich, matching the desktop page. */
+  albumId?: string;
+  /** Full album — needed to host the in-place person view. */
+  album: Album;
+  /** Extra analytics props merged into the credits_person_clicked event
+   *  (e.g. the contextual songId for the per-song surface). */
+  trackExtra?: Record<string, unknown>;
+  resolveInstrument: (instrumentId?: string) => Instrument | undefined;
+  /** Resolves the contextual person view (real Person + lead-in song +
+   *  other-tracks) for a tapped credit. Returns null if the person is
+   *  unknown. */
+  resolvePersonContext: (personId: string, role: string) => CreditsPersonView | null;
+  onClose: () => void;
+}) {
+  const [selected, setSelected] = useState<CreditsPersonView | null>(null);
+
+  // Gear/vendor/in-app-browser sub-stack for the person view. Its X tears the
+  // whole stack down (returns past everything to the album); each sub-sheet's
+  // own back chevron still pops one level. Rendered OUTSIDE the SheetShell
+  // (its panel is framer-transformed, which would break the sub-sheets'
+  // position:fixed).
+  const gear = usePersonGearDrilldown(() => {
+    setSelected(null);
+    onClose();
+  });
+
+  const openPerson = (personId: string, role: string) => {
+    const view = resolvePersonContext(personId, role);
+    if (!view) return;
+    track("credits_person_clicked", { personId, albumId: album.id, ...trackExtra });
+    setSelected(view);
+  };
+
+  return (
+    <>
+      <SheetShell
+        ariaLabel={ariaLabel}
+        testId={testId}
+        onClose={onClose}
+        variant="fixed"
+      >
+        <CreditsSlider
+          groups={groups}
+          eyebrow={eyebrow}
+          title={title}
+          subtitle={subtitle}
+          currentAlbumId={albumId}
+          album={album}
+          selected={selected}
+          onOpenPerson={openPerson}
+          onBack={() => setSelected(null)}
+          onClose={onClose}
+          resolveInstrument={resolveInstrument}
+          onOpenInstrument={gear.openInstrument}
+          showCloseOnPerson={false}
+        />
+      </SheetShell>
+      {gear.overlay}
+    </>
+  );
+}
+
 export function AlbumCreditsSheet({
   albumId,
   albumTitle,
@@ -493,51 +578,70 @@ export function AlbumCreditsSheet({
   onClose: () => void;
 }) {
   const groups = useMemo(() => buildAlbumCreditGroups(credits), [credits]);
-  const [selected, setSelected] = useState<CreditsPersonView | null>(null);
-
-  // Gear/vendor/in-app-browser sub-stack for the person view. Its X tears the
-  // whole stack down (returns past everything to the album); each sub-sheet's
-  // own back chevron still pops one level. Rendered OUTSIDE the SheetShell
-  // (its panel is framer-transformed, which would break the sub-sheets'
-  // position:fixed).
-  const gear = usePersonGearDrilldown(() => {
-    setSelected(null);
-    onClose();
-  });
-
-  const openPerson = (personId: string, role: string) => {
-    const view = resolvePersonContext(personId, role);
-    if (!view) return;
-    track("credits_person_clicked", { personId, albumId: album.id });
-    setSelected(view);
-  };
-
   return (
-    <>
-      <SheetShell
-        ariaLabel={`Credits for ${albumTitle}`}
-        testId="sheet-album-credits"
-        onClose={onClose}
-        variant="fixed"
-      >
-        <CreditsSlider
-          groups={groups}
-          eyebrow="Album Credits"
-          title={albumTitle}
-          subtitle={artist}
-          currentAlbumId={albumId}
-          album={album}
-          selected={selected}
-          onOpenPerson={openPerson}
-          onBack={() => setSelected(null)}
-          onClose={onClose}
-          resolveInstrument={resolveInstrument}
-          onOpenInstrument={gear.openInstrument}
-          showCloseOnPerson={false}
-        />
-      </SheetShell>
-      {gear.overlay}
-    </>
+    <CreditsSheetHost
+      ariaLabel={`Credits for ${albumTitle}`}
+      testId="sheet-album-credits"
+      eyebrow="Album Credits"
+      title={albumTitle}
+      subtitle={artist}
+      groups={groups}
+      albumId={albumId}
+      album={album}
+      resolveInstrument={resolveInstrument}
+      resolvePersonContext={resolvePersonContext}
+      onClose={onClose}
+    />
+  );
+}
+
+/* ── Mobile per-song "Song Credits" ──────────────────────────────────────
+   Same dark pill cards + in-place slide-in person view as the album credits
+   sheet, but scoped to a single track. `credits` is a single-song payload
+   (one `bySongId` entry, no album-level production) so `buildAlbumCreditGroups`
+   yields just this song's Performing Artists / Composition & Lyrics groups.
+   The contextual song is always the current track, so the person profile
+   opens on the song they actually played on. */
+export function SongCreditsSheet({
+  songId,
+  songTitle,
+  albumId,
+  albumTitle,
+  artist,
+  credits,
+  album,
+  resolveInstrument,
+  resolvePersonContext,
+  onClose,
+}: {
+  songId: string;
+  songTitle: string;
+  albumId?: string;
+  albumTitle: string;
+  artist: string;
+  /** Single-song credits payload (one bySongId entry). */
+  credits: AlbumCreditsPayload;
+  album: Album;
+  resolveInstrument: (instrumentId?: string) => Instrument | undefined;
+  resolvePersonContext: (personId: string, role: string) => CreditsPersonView | null;
+  onClose: () => void;
+}) {
+  const groups = useMemo(() => buildAlbumCreditGroups(credits), [credits]);
+  return (
+    <CreditsSheetHost
+      ariaLabel={`Credits for ${songTitle}`}
+      testId="sheet-credits"
+      eyebrow="Song Credits"
+      title={songTitle}
+      subtitle={`${artist} · ${albumTitle}`}
+      groups={groups}
+      albumId={albumId}
+      album={album}
+      trackExtra={{ songId }}
+      resolveInstrument={resolveInstrument}
+      resolvePersonContext={resolvePersonContext}
+      onClose={onClose}
+    />
   );
 }
 
