@@ -19,6 +19,7 @@ import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { popBounce } from "@/lib/motion";
 import { formatReleaseDateLong } from "@shared/albumStage";
 import { trackPlaybackState } from "@shared/trackPlayback";
+import { streamingHandoffEnabled } from "@/lib/platform";
 
 // Height (px) of the top ChromeScrim band. The scrim is rendered at this
 // height and the album-options menu is clamped to open strictly below it so
@@ -612,7 +613,11 @@ export function AlbumDetailMobileSurface({
           )}
           {isStreamOnlyAlbum ? (
             /* Task #734 — the master lives on a streaming service, so the
-               primary control hands the fan off instead of playing in-app. */
+               primary control hands the fan off instead of playing in-app.
+               Task #1406 — the public streaming handoff is off for the Apple
+               build (streamingHandoffEnabled). A stream-only album then has
+               no in-app master to play, so it simply shows no primary CTA. */
+            streamingHandoffEnabled ? (
             <button
               type="button"
               onClick={onStreamAlbum}
@@ -634,6 +639,7 @@ export function AlbumDetailMobileSurface({
               </svg>
               Stream this
             </button>
+            ) : null
           ) : (
             <button
               type="button"
@@ -810,6 +816,11 @@ export function AlbumDetailMobileSurface({
               >
                 <button
                   type="button"
+                  // Task #1406 — with the public streaming handoff off for the
+                  // Apple build, a stream-only track has nothing to play, so the
+                  // row is rendered non-interactive (disabled) rather than a
+                  // dead tappable control.
+                  disabled={song.streamOnly && !streamingHandoffEnabled}
                   onClick={() => {
                     if (song.streamOnly) {
                       // Per-track handoff on credited albums; otherwise the
@@ -820,7 +831,7 @@ export function AlbumDetailMobileSurface({
                       onPlaySong?.(song);
                     }
                   }}
-                  className="flex items-center gap-4 flex-1 min-w-0 h-full text-left"
+                  className="flex items-center gap-4 flex-1 min-w-0 h-full text-left disabled:cursor-default"
                 >
                   <div className="flex-shrink-0 flex items-center gap-1.5">
                     <div className="w-3 flex items-center justify-center">
@@ -854,7 +865,7 @@ export function AlbumDetailMobileSurface({
                             />
                           ))}
                         </div>
-                      ) : song.streamOnly ? (
+                      ) : song.streamOnly && streamingHandoffEnabled ? (
                         <svg
                           width="15"
                           height="15"

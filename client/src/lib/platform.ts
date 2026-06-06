@@ -40,3 +40,39 @@ export const nativeDownloadsEnabled = isNative;
  * keeps the Buy buttons.
  */
 export const buyEnabled = !(isNative && nativePlatform === "ios");
+
+/**
+ * Orders & order-tracking entry point (Account "My Orders" row → /orders).
+ * Web-only for the first native build: the in-app Orders/Library cards
+ * aren't built yet, so native fans check orders on the web. Widen this
+ * (or drop the `!isNative`) once the native Orders surface ships.
+ */
+export const ordersEnabled = !isNative;
+
+/* ───────────────────── Apple App Store build content gates ──────────────────
+ * Task #1406 — tonight's iOS submission hides a handful of fan surfaces that
+ * aren't review-ready: dead links, half-built flows, and external streaming
+ * handoffs we're keeping out of this build. Each is its own named flag so
+ * re-enabling a surface is a one-line change — nothing here is deleted, and
+ * the admin/CMS streaming tools are unaffected.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Public streaming-service handoffs: the Account "Streaming Service" picker,
+ * artist external-discography "How to Play", and album/song "Stream on…"
+ * buttons. Flip to `true` to bring the public streaming handoff back.
+ * (Admin/CMS streaming management does NOT read this flag.)
+ */
+export const streamingHandoffEnabled: boolean = false;
+
+/** Account "Notifications" row — no settings screen behind it yet. */
+export const notificationsEnabled: boolean = false;
+
+/** Account "About GoodTunes®" row — no destination yet. */
+export const aboutEnabled: boolean = false;
+
+/** Account "Linked Accounts" section (unlink / Link Google · Apple). */
+export const linkedAccountsEnabled: boolean = false;
+
+/** Account "Set a password" / magic-link opt-in panel. */
+export const setPasswordEnabled: boolean = false;

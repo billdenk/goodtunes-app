@@ -28,7 +28,7 @@ import {
 } from "@/lib/fanRail";
 import { subscribeChats, totalUnread } from "@/lib/chatStore";
 import { ARTIST_PHOTOS, type Album, type Song } from "@/data/musicData";
-import { Disc3, Music2, Mic2, Users, ListMusic, LayoutGrid, List } from "lucide-react";
+import { Disc3, Music2, Mic2, Users, ListMusic, LayoutGrid, List, Star, Bookmark } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { popBounce } from "@/lib/motion";
 
@@ -575,10 +575,36 @@ export function Collection() {
   const { previewAlbumIds, myAlbumsLoading, recentlyAdded, openAlbum } = useFanLibrary();
   const [visibleCount, setVisibleCount] = useState(60);
 
-  const rows: { label: string; icon: typeof Music2; href: string; testId: string }[] = [
+  // Task #1406 — Favorite Artists + Bookmarks moved OFF the Account page
+  // onto the Collection landing (they're saved-content, not settings). We
+  // mirror the counts Account used to show: favorite artists from the
+  // favorites hook, bookmarked gear from the same localStorage key the
+  // Bookmarks page reads.
+  const favArtists = useFavoriteArtists();
+  const [bookmarkCount, setBookmarkCount] = useState(0);
+  useEffect(() => {
+    const load = () => {
+      try {
+        const raw = localStorage.getItem("gt:bookmarked-instruments");
+        const arr = raw ? JSON.parse(raw) : [];
+        setBookmarkCount(Array.isArray(arr) ? arr.length : 0);
+      } catch { setBookmarkCount(0); }
+    };
+    load();
+    window.addEventListener("focus", load);
+    window.addEventListener("storage", load);
+    return () => {
+      window.removeEventListener("focus", load);
+      window.removeEventListener("storage", load);
+    };
+  }, []);
+
+  const rows: { label: string; icon: typeof Music2; href: string; testId: string; count?: number }[] = [
     { label: "Songs", icon: Music2, href: COLLECTION_SONGS_HREF, testId: "row-library-songs" },
     { label: "Artists", icon: Users, href: COLLECTION_ARTISTS_HREF, testId: "row-library-artists" },
     { label: "Playlists", icon: ListMusic, href: "/playlists", testId: "row-library-playlists" },
+    { label: "Favorite Artists", icon: Star, href: "/account/favorite-artists", testId: "row-library-favorite-artists", count: favArtists.ordered.length },
+    { label: "Bookmarks", icon: Bookmark, href: "/account/bookmarks", testId: "row-library-bookmarks", count: bookmarkCount },
   ];
 
   return (
@@ -601,6 +627,9 @@ export function Collection() {
               >
                 <Icon className="w-[22px] h-[22px] text-[color:var(--brand-blue)] flex-shrink-0" strokeWidth={2} />
                 <span className="flex-1 text-fan-primary text-[17px] font-medium">{r.label}</span>
+                {r.count !== undefined && (
+                  <span className="text-fan-faint text-sm tabular-nums" data-testid={`${r.testId}-count`}>{r.count}</span>
+                )}
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" opacity="0.3">
                   <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthKind } from "@/hooks/useAuthKind";
@@ -10,7 +10,14 @@ import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { clearLocalAnalytics } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 import { ChevronLeft, Pencil } from "lucide-react";
-import { useFavoriteArtists } from "@/hooks/useFavorites";
+import {
+  ordersEnabled,
+  streamingHandoffEnabled,
+  notificationsEnabled,
+  aboutEnabled,
+  linkedAccountsEnabled,
+  setPasswordEnabled,
+} from "@/lib/platform";
 import {
   STREAMING_SERVICES,
   getFavoriteStreamingService,
@@ -369,13 +376,6 @@ export function Account() {
   // the dedicated /account/edit page.
   const photoUrl = user?.photoUrl ?? null;
 
-  // Counts for the two "Your Collections" rows. Both surfaces below get
-  // their own full-page list view (FavoriteArtists / Bookmarks) — Account
-  // just shows the count and pushes a child screen, Apple-Settings-style,
-  // so this page stays scannable as we add more collection types.
-  const favArtists = useFavoriteArtists();
-  const favoriteArtistCount = favArtists.ordered.length;
-
   // Task #74 — "My Orders" card pulls a thin summary off the same
   // /api/orders endpoint the Orders page uses. We surface the count
   // plus a one-line current status (fulfillment first if it's a
@@ -400,24 +400,6 @@ export function Account() {
     if (latestOrder.status === "paid") return "Latest: Paid · digital ready";
     return `Latest: ${latestOrder.status}`;
   })();
-  const [bookmarkCount, setBookmarkCount] = useState<number>(0);
-  useEffect(() => {
-    const load = () => {
-      try {
-        const raw = localStorage.getItem("gt:bookmarked-instruments");
-        const arr = raw ? JSON.parse(raw) : [];
-        setBookmarkCount(Array.isArray(arr) ? arr.length : 0);
-      } catch { setBookmarkCount(0); }
-    };
-    load();
-    window.addEventListener("focus", load);
-    window.addEventListener("storage", load);
-    return () => {
-      window.removeEventListener("focus", load);
-      window.removeEventListener("storage", load);
-    };
-  }, []);
-
   return (
     <main className="relative h-screen w-full flex justify-center overflow-hidden lg:pl-[260px]">
       <section className="relative w-full max-w-[390px] md:max-w-[640px] lg:max-w-[820px] lg:mx-auto h-screen text-fan-primary flex flex-col">
@@ -476,16 +458,14 @@ export function Account() {
               naturally disappears once a name is saved or dismissed. */}
           {showAddNamePrompt && <AddNameBanner userId={user!.id} />}
 
-          {/* Your Collections — two rows that push to dedicated list pages.
-              Keeps Account a hub instead of a feed; new collection types
-              (Followed Labels, Saved Gear, Stations…) slot in here without
-              bloating the top-level Account screen. */}
-          {/* My Orders — Task #74. Sits above Your Collections because
-              an in-flight record purchase ("where's my vinyl?") is the
-              most time-sensitive thing the fan can land on; collections
-              are evergreen. Hidden entirely when the customer has never
-              placed an order so a brand-new profile stays clean. */}
-          {orderCount > 0 && (
+          {/* My Orders — Task #74. An in-flight record purchase ("where's
+              my vinyl?") is the most time-sensitive thing the fan can land
+              on. Hidden when the customer has never placed an order so a
+              brand-new profile stays clean, and (Task #1406) web-only for
+              now — the first native build has no Orders surface yet, so the
+              row is gated behind `ordersEnabled`. Favorite Artists +
+              Bookmarks moved OFF Account to the Collection landing. */}
+          {ordersEnabled && orderCount > 0 && (
             <>
               <p className="text-fan-faint text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">My Orders</p>
               <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
@@ -516,95 +496,66 @@ export function Account() {
             </>
           )}
 
-          <p className="text-fan-faint text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Your Collections</p>
-          <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
-            {([
-              {
-                label: "Favorite Artists",
-                count: favoriteArtistCount,
-                onClick: () => navigate("/account/favorite-artists"),
-                icon: (
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="#319ED8" aria-hidden="true">
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                  </svg>
-                ),
-                testId: "row-favorite-artists",
-              },
-              {
-                label: "Bookmarks",
-                count: bookmarkCount,
-                onClick: () => navigate("/account/bookmarks"),
-                icon: (
-                  <svg width="15" height="17" viewBox="0 0 24 24" fill="#4AFFCA" stroke="#4AFFCA" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                  </svg>
-                ),
-                testId: "row-bookmarks",
-              },
-            ] as const).map(({ label, count, onClick, icon, testId }, i, arr) => (
-              <button
-                key={label}
-                type="button"
-                onClick={onClick}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-white/[0.06] ${i < arr.length - 1 ? "border-b" : ""}`}
-                style={i < arr.length - 1 ? { borderColor: "rgba(255,255,255,0.07)" } : undefined}
-                data-testid={testId}
-              >
-                <span className="w-5 flex items-center justify-center flex-shrink-0">{icon}</span>
-                <span className="flex-1 text-fan-primary text-base">{label}</span>
-                <span className="text-fan-faint text-sm tabular-nums" data-testid={`${testId}-count`}>{count}</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
-                  <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            ))}
-          </div>
-
-          {/* Settings rows — moved here from EditAccount so they sit on the
-              Account page itself, not inside the Edit Profile flow.
-              Listening History used to live as its own top-level group; it
-              now lives INSIDE Privacy (Apple-style: tap Privacy → push a
-              sub-screen that groups everything privacy-related — listening
-              history + the public Privacy Policy link). */}
+          {/* Settings — Task #1406 gates several rows for the Apple build:
+              Streaming Service (public streaming handoff is off this build),
+              Notifications and About GoodTunes® (no destinations yet).
+              Privacy always stays. Rows are composed from a filtered list so
+              the rounded card's dividers/spacing stay correct for ANY flag
+              combination — flip the flags in lib/platform.ts to bring a row
+              back. Listening History lives INSIDE Privacy (tap Privacy → a
+              sub-screen grouping listening history + the Privacy Policy
+              link). */}
           <p className="text-fan-faint text-xs uppercase tracking-widest font-medium mb-2 mt-2 ml-1">Settings</p>
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
-            {/* Task #734 — favorite streaming service. Tapping pushes a
-                sub-screen to pick/clear the service GoodTunes hands off to
-                when a fan streams a non-hosted track. */}
-            <button
-              type="button"
-              onClick={() => setShowStreaming(true)}
-              className="w-full flex items-center justify-between px-4 py-3.5 text-left active:bg-white/[0.06] border-b"
-              style={{ borderColor: "rgba(255,255,255,0.07)" }}
-              data-testid="row-streaming-service"
-            >
-              <span className="text-fan-primary text-base">Streaming Service</span>
-              <span className="flex items-center gap-1.5">
-                <span className="text-fan-secondary text-base" data-testid="text-streaming-service-current">
-                  {favService ? serviceLabel(favService) : "Not set"}
-                </span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
-                  <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </span>
-            </button>
-            {([
-              { label: "Notifications", onClick: undefined },
-              { label: "Privacy", onClick: () => setShowPrivacy(true) },
-              { label: "About GoodTunes®", onClick: undefined },
-            ] as const).map(({ label, onClick }, i, arr) => (
+            {(
+              [
+                streamingHandoffEnabled && {
+                  label: "Streaming Service",
+                  onClick: () => setShowStreaming(true),
+                  testId: "row-streaming-service",
+                  right: (
+                    <span className="text-fan-secondary text-base" data-testid="text-streaming-service-current">
+                      {favService ? serviceLabel(favService) : "Not set"}
+                    </span>
+                  ),
+                },
+                notificationsEnabled && {
+                  label: "Notifications",
+                  onClick: undefined,
+                  testId: "row-notifications",
+                },
+                {
+                  label: "Privacy",
+                  onClick: () => setShowPrivacy(true),
+                  testId: "row-privacy",
+                },
+                aboutEnabled && {
+                  label: "About GoodTunes®",
+                  onClick: undefined,
+                  testId: "row-about-goodtunes-",
+                },
+              ].filter(Boolean) as Array<{
+                label: string;
+                onClick?: () => void;
+                testId: string;
+                right?: ReactNode;
+              }>
+            ).map((row, i, arr) => (
               <button
-                key={label}
+                key={row.testId}
                 type="button"
-                onClick={onClick}
+                onClick={row.onClick}
                 className={`w-full flex items-center justify-between px-4 py-3.5 text-left active:bg-white/[0.06] ${i < arr.length - 1 ? "border-b" : ""}`}
                 style={i < arr.length - 1 ? { borderColor: "rgba(255,255,255,0.07)" } : undefined}
-                data-testid={`row-${label.toLowerCase().replace(/[^a-z]/g, "-")}`}
+                data-testid={row.testId}
               >
-                <span className="text-fan-primary text-base">{label}</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
-                  <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <span className="text-fan-primary text-base">{row.label}</span>
+                <span className="flex items-center gap-1.5">
+                  {row.right}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.35">
+                    <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
               </button>
             ))}
           </div>
@@ -613,7 +564,9 @@ export function Account() {
             <PrivateRelayBanner relayEmail={user.email} />
           )}
 
-          <LinkedProvidersPanel />
+          {/* Task #1406 — Linked Accounts hidden for the Apple build
+              (linkedAccountsEnabled) until Apple Sign-In ships. */}
+          {linkedAccountsEnabled && <LinkedProvidersPanel />}
 
           {/* Task #400 — Fan-initiated account merge. If a fan signed up
               on the new player and *then* discovered their imported
@@ -623,8 +576,9 @@ export function Account() {
 
           {/* Task #873 — Passwordless is the default (email magic links).
               A fan who'd rather have a password can opt in here; we reuse
-              the reset-password flow and email a secure link. */}
-          <PasswordPanel />
+              the reset-password flow and email a secure link.
+              Task #1406 — hidden for the Apple build (setPasswordEnabled). */}
+          {setPasswordEnabled && <PasswordPanel />}
 
           <div className="rounded-2xl overflow-hidden mb-6" style={{ background: "rgba(255,255,255,0.05)" }}>
             <button
@@ -668,7 +622,7 @@ export function Account() {
               className="text-inherit no-underline hover:no-underline"
               data-testid="link-hidden-admin"
             >
-              Version 1.00
+              Version 3.0.1
             </a>
           </p>
           </div>
@@ -927,13 +881,25 @@ function PrivacySheet({
 }) {
   return (
     <div
-      className="absolute inset-0 z-[60] flex flex-col"
-      style={{ background: "#00062B" }}
+      className="absolute inset-0 z-[60] flex flex-col md:items-center md:justify-center md:p-6 md:bg-black/60"
       role="dialog"
       aria-modal="true"
       aria-label="Privacy"
       data-testid="sheet-privacy"
     >
+      {/* Task #1406 — Privacy stays in this build. On phones it's the
+          existing full-screen push; on tablet/desktop it presents as a
+          centered, rounded Apple-style modal over a dim backdrop (tap the
+          backdrop to dismiss). */}
+      <div
+        aria-hidden="true"
+        onClick={onClose}
+        className="hidden md:block md:absolute md:inset-0"
+      />
+      <div
+        className="relative flex flex-col flex-1 w-full md:flex-none md:max-w-[440px] md:max-h-[78vh] md:rounded-3xl md:overflow-hidden md:shadow-2xl"
+        style={{ background: "#00062B" }}
+      >
       <div className="relative flex items-center justify-center pt-12 pb-3 px-4">
         <button
           type="button"
@@ -1020,6 +986,7 @@ function PrivacySheet({
         <p className="text-fan-faint text-xs leading-relaxed px-1">
           Opens goodtunes.music/privacy in your browser.
         </p>
+      </div>
       </div>
     </div>
   );

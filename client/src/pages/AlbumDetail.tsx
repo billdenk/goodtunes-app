@@ -46,7 +46,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { ChromeScrim } from "@/components/ui/ChromeScrim";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { ChevronLeft, Share, MoreHorizontal, Lock } from "lucide-react";
-import { buyEnabled, nativeDownloadsEnabled } from "@/lib/platform";
+import { buyEnabled, nativeDownloadsEnabled, streamingHandoffEnabled } from "@/lib/platform";
 import { downloadSong, removeDownload, listDownloadedSongs } from "@/lib/nativeDownloads";
 import { track } from "@/lib/analytics";
 import Hls from "hls.js";
@@ -937,7 +937,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
         </AnimatePresence>
 
         <AnimatePresence>
-          {streamPicker && (
+          {streamPicker && streamingHandoffEnabled && (
             <StreamServicePickerSheet
               available={STREAMING_SERVICES.map((s) => s.id)}
               subtitle={streamPicker.subtitle}

@@ -15,6 +15,7 @@ import {
   type StreamLinks,
   type StreamingServiceId,
 } from "@/lib/streamingService";
+import { streamingHandoffEnabled } from "@/lib/platform";
 import { X, ChevronRight, ChevronLeft } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { AlbumCard } from "@/components/ui/AlbumCard";
@@ -559,7 +560,10 @@ export function ArtistDetail() {
             </div>
           )}
 
-          {streamingBuckets.length > 0 && (
+          {/* Task #1406 — external-discography "How to Play" / streaming
+              handoff is off for the Apple build (streamingHandoffEnabled).
+              GoodTunes releases above this section are unaffected. */}
+          {streamingHandoffEnabled && streamingBuckets.length > 0 && (
             <div className="mt-9" data-testid="section-streaming">
               <div className="px-5 mb-3">
                 <p className="text-fan-secondary text-[11px] uppercase tracking-[0.14em] font-semibold">
@@ -795,7 +799,7 @@ export function ArtistDetail() {
       </section>
 
       <AnimatePresence>
-        {howToPlay && (
+        {streamingHandoffEnabled && howToPlay && (
           <HowToPlaySheet
             release={howToPlay}
             artistName={artistName}
