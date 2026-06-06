@@ -88,21 +88,24 @@ export const TOP_RESULTS_PER_SECTION = 3;
 export function RecentSearchedList({
   rows,
   onPickEntity,
-  onPickQuery,
   onClear,
 }: {
   rows: RecentSearchRow[];
   onPickEntity: (row: RecentSearchRow) => void;
-  onPickQuery: (q: string) => void;
+  // Accepted for caller compatibility but unused: fans no longer see
+  // bare typed-query rows (Task #1517). Raw queries are still recorded
+  // server-side for analytics; they're just hidden from this list.
+  onPickQuery?: (q: string) => void;
   onClear: () => void;
 }) {
-  // Split entity rows from text queries — they share one table so
-  // Clear wipes both at once, but render them as two visual groups
-  // (Apple Music puts the rich rows above the plain query rows).
+  // Only show rows for results the fan actually tapped into (rich
+  // entity rows with a thumbnail). Plain typed-query rows are recorded
+  // on the backend but never rendered here, so a fan who only ever
+  // typed searches sees the resting empty state instead of a list of
+  // bare query terms.
   const entityRows = rows.filter((r) => r.entityKind && r.entityId);
-  const queryRows = rows.filter((r) => !r.entityKind);
 
-  if (rows.length === 0) {
+  if (entityRows.length === 0) {
     return (
       <div className="px-5 pt-6">
         <p className="text-fan-secondary text-sm">Search albums, songs, gear, vendors and more.</p>
@@ -135,23 +138,6 @@ export function RecentSearchedList({
           />
         ))}
       </div>
-      {queryRows.length > 0 && (
-        <div className="mt-3">
-          <div className="-mx-5">
-            {queryRows.slice(0, 10).map((tr) => (
-              <SearchEntityRow
-                key={tr.queryNorm}
-                thumbUrl={null}
-                title={tr.displayQuery}
-                type="Search"
-                isRound={false}
-                onClick={() => onPickQuery(tr.displayQuery)}
-                testId={`row-recent-query-${tr.queryNorm}`}
-              />
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
