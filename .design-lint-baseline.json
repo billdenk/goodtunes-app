@@ -12032,11 +12032,6 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/components/StorefrontSidebar.tsx",
-    "snippet": "<div className=\"text-white/45 text-xs truncate\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/StorefrontSidebar.tsx",
     "snippet": "className=\"cursor-pointer text-white/90 focus:bg-white/10 focus:text-white\""
   },
   {
@@ -12138,11 +12133,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumDesktopSidebar.tsx",
     "snippet": "<div className=\"text-fan-primary text-[13px] font-semibold truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/AlbumDesktopSidebar.tsx",
-    "snippet": "<div className=\"text-fan-secondary text-[11.5px] truncate\">{user.email}</div>"
   },
   {
     "rule": "player-touch-target-too-small",
@@ -12395,6 +12385,11 @@
     "snippet": ": \"text-white/70 hover:text-white hover:bg-white/[0.06]\""
   },
   {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/ui/FanScreen.tsx",
+    "snippet": "className=\"text-fan-primary text-[34px] font-bold leading-none tracking-tight will-change-[opacity,transform]\""
+  },
+  {
     "rule": "brand-hex-literal",
     "file": "client/src/components/ui/PlayerDock.tsx",
     "snippet": "<Music2 className=\"w-[18px] h-[18px] text-[#319ED8]\" />"
@@ -12638,16 +12633,6 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Account.tsx",
     "snippet": "<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#319ED8\" strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\" aria-hidden=\"true\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"#319ED8\" aria-hidden=\"true\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Account.tsx",
-    "snippet": "<svg width=\"15\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"#4AFFCA\" stroke=\"#4AFFCA\" strokeWidth=\"1.5\" strokeLinecap=\"round\" strokeLinejoin=\"round\" aria-hidden=\"true\">"
   },
   {
     "rule": "brand-hex-literal",
@@ -19127,11 +19112,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Collection.tsx",
-    "snippet": "className=\"text-fan-primary text-[34px] font-bold leading-none tracking-tight will-change-[opacity,transform]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Collection.tsx",
     "snippet": "<span className=\"flex-1 text-fan-primary text-[17px] font-medium\">{r.label}</span>"
   },
   {
@@ -19907,11 +19887,6 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/pages/Login.tsx",
-    "snippet": "<span className=\"text-white/55 text-xs leading-tight mt-0.5\">Tap to bring your library over</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/Login.tsx",
     "snippet": "className=\"w-full py-3 text-white/55 hover:text-white/80 text-sm\""
   },
   {
@@ -20592,11 +20567,6 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/pages/Player.tsx",
-    "snippet": "? \"text-white/55 active:text-white\""
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/Player.tsx",
     "snippet": ": \"text-white/20 cursor-not-allowed\""
   },
   {
@@ -21188,11 +21158,6 @@
     "rule": "fan-text-tone",
     "file": "client/src/pages/Recents.tsx",
     "snippet": "className=\"text-white/40 text-[11px] flex-shrink-0 mr-1 tabular-nums\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Recents.tsx",
-    "snippet": "<h1 className=\"text-white text-[34px] font-bold leading-none tracking-tight\" data-testid=\"text-page-title\">Recents</h1>"
   },
   {
     "rule": "hardcoded-font-size",

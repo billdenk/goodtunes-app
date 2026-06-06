@@ -2,8 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Star } from "lucide-react";
-import { BottomNav } from "@/components/BottomNav";
-import { MiniPlayer } from "@/components/MiniPlayer";
+import { FanScreen } from "@/components/ui/FanScreen";
 import { useFanRecents, useRemoveRecent, useClearRecents } from "@/hooks/useRecents";
 import type { FanRecent } from "@shared/schema";
 
@@ -105,11 +104,11 @@ export function RecentsPage() {
   );
 
   return (
-    <main className="h-screen w-full flex justify-center overflow-hidden bg-[var(--brand-bg)] lg:justify-start lg:pl-[284px]">
-      <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1100px] lg:mx-auto h-screen text-white flex flex-col">
-        <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3 lg:pb-9">
-          <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Recents</h1>
-          {totalShown > 0 && (
+    <>
+      <FanScreen
+        title="Recents"
+        trailing={
+          totalShown > 0 ? (
             <button
               type="button"
               onClick={() => setConfirmClear(true)}
@@ -118,96 +117,91 @@ export function RecentsPage() {
             >
               Clear All
             </button>
-          )}
-        </header>
-
-        <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
-          {loading && (
-            <p className="text-white/45 text-sm text-center mt-8">Loading…</p>
-          )}
-          {!loading && totalShown === 0 && (
-            <div className="text-center mt-16 px-6">
-              <p className="text-white/55 text-sm">Nothing here yet.</p>
-              <p className="text-white/35 text-xs mt-1">Albums, songs, and gear you open will show up here.</p>
-            </div>
-          )}
-
-          {(["today", "yesterday", "week", "earlier"] as const).map((k) => {
-            const rows = grouped[k];
-            if (rows.length === 0) return null;
-            return (
-              <div key={k} className="mb-5 lg:mb-8">
-                <div className="px-5 mb-2 lg:mb-4">
-                  <h2 className="text-white text-[15px] font-bold">{SECTION_LABELS[k]}</h2>
-                </div>
-                {/* Phone — swipe-to-remove list. Hidden at lg+ (TD), where the
-                    grid below leads instead. */}
-                <div className="px-5 lg:hidden">
-                  {rows.map((row) => (
-                    <RecentRow
-                      key={row.id}
-                      row={row}
-                      timestamp={relativeTime(new Date(row.lastAt as any), new Date())}
-                      onOpen={() => navigate(row.href)}
-                      onRemove={() => remove.mutate(row.id)}
-                    />
-                  ))}
-                </div>
-                {/* TD (lg+) — Apple-Music artwork-forward grid, matching the
-                    Collection / Home grids. Phone never renders this. */}
-                <div className="px-5 hidden lg:grid grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-4 gap-y-6">
-                  {rows.map((row) => (
-                    <RecentCard
-                      key={row.id}
-                      row={row}
-                      timestamp={relativeTime(new Date(row.lastAt as any), new Date())}
-                      onOpen={() => navigate(row.href)}
-                      onRemove={() => remove.mutate(row.id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {confirmClear && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center">
-            <div className="absolute inset-0 bg-black/60" onClick={() => setConfirmClear(false)} />
-            <div className="relative w-full max-w-[390px] bg-[#0D1B4B] rounded-t-3xl pt-3 pb-6 z-10">
-              <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
-              <div className="px-5 pb-2">
-                <h3 className="text-white text-base font-semibold mb-1">Clear all recents?</h3>
-                <p className="text-white/55 text-sm">This removes every entry from your Recents tab. It doesn't delete anything else.</p>
-              </div>
-              <div className="flex gap-2 px-5 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setConfirmClear(false)}
-                  className="flex-1 py-3 rounded-xl text-sm font-semibold text-white"
-                  style={{ background: "rgba(255,255,255,0.10)" }}
-                  data-testid="button-cancel-clear"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { clearAll.mutate(); setConfirmClear(false); }}
-                  className="flex-1 py-3 rounded-xl text-sm font-semibold text-white"
-                  style={{ background: "#FF5470" }}
-                  data-testid="button-confirm-clear"
-                >
-                  Clear All
-                </button>
-              </div>
-            </div>
+          ) : undefined
+        }
+      >
+        {loading && (
+          <p className="text-white/45 text-sm text-center mt-8">Loading…</p>
+        )}
+        {!loading && totalShown === 0 && (
+          <div className="text-center mt-16 px-6">
+            <p className="text-white/55 text-sm">Nothing here yet.</p>
+            <p className="text-white/35 text-xs mt-1">Albums, songs, and gear you open will show up here.</p>
           </div>
         )}
 
-        <MiniPlayer />
-        <BottomNav />
-      </section>
-    </main>
+        {(["today", "yesterday", "week", "earlier"] as const).map((k) => {
+          const rows = grouped[k];
+          if (rows.length === 0) return null;
+          return (
+            <div key={k} className="mb-5 lg:mb-8">
+              <div className="px-5 mb-2 lg:mb-4">
+                <h2 className="text-white text-[15px] font-bold">{SECTION_LABELS[k]}</h2>
+              </div>
+              {/* Phone — swipe-to-remove list. Hidden at lg+ (TD), where the
+                  grid below leads instead. */}
+              <div className="px-5 lg:hidden">
+                {rows.map((row) => (
+                  <RecentRow
+                    key={row.id}
+                    row={row}
+                    timestamp={relativeTime(new Date(row.lastAt as any), new Date())}
+                    onOpen={() => navigate(row.href)}
+                    onRemove={() => remove.mutate(row.id)}
+                  />
+                ))}
+              </div>
+              {/* TD (lg+) — Apple-Music artwork-forward grid, matching the
+                  Collection / Home grids. Phone never renders this. */}
+              <div className="px-5 hidden lg:grid grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-4 gap-y-6">
+                {rows.map((row) => (
+                  <RecentCard
+                    key={row.id}
+                    row={row}
+                    timestamp={relativeTime(new Date(row.lastAt as any), new Date())}
+                    onOpen={() => navigate(row.href)}
+                    onRemove={() => remove.mutate(row.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </FanScreen>
+
+      {confirmClear && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setConfirmClear(false)} />
+          <div className="relative w-full max-w-[390px] bg-[#0D1B4B] rounded-t-3xl pt-3 pb-6 z-10">
+            <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
+            <div className="px-5 pb-2">
+              <h3 className="text-white text-base font-semibold mb-1">Clear all recents?</h3>
+              <p className="text-white/55 text-sm">This removes every entry from your Recents tab. It doesn't delete anything else.</p>
+            </div>
+            <div className="flex gap-2 px-5 pt-4">
+              <button
+                type="button"
+                onClick={() => setConfirmClear(false)}
+                className="flex-1 py-3 rounded-xl text-sm font-semibold text-white"
+                style={{ background: "rgba(255,255,255,0.10)" }}
+                data-testid="button-cancel-clear"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => { clearAll.mutate(); setConfirmClear(false); }}
+                className="flex-1 py-3 rounded-xl text-sm font-semibold text-white"
+                style={{ background: "#FF5470" }}
+                data-testid="button-confirm-clear"
+              >
+                Clear All
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
