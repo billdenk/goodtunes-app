@@ -71,6 +71,7 @@ import {
   MRP_DOMAIN,
 } from "./pressCatalog";
 import { registerPressPortalRoutes } from "./pressPortal";
+import { grantLltBonusIfEligible } from "./lltBonus";
 import { hasReachedSunset } from "@shared/albumStage";
 import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -3190,6 +3191,10 @@ export async function materializeOrderFromSession(
       .insert(userAlbums)
       .values({ userId: customerId, albumId })
       .onConflictDoNothing();
+    // Task #1460 — owning a qualifying Nick Carter LLT release also
+    // unlocks the shared "Love Life Tragedy (Bonus)" album. No-op for any
+    // other album; idempotent (skips if already owned).
+    await grantLltBonusIfEligible(db, customerId, albumId);
     // Decrement stock — guarded by `wasAlreadyPaid` so concurrent
     // materializations of the same session don't double-decrement.
     // Task #549 — multi-quantity orders subtract N, not 1.

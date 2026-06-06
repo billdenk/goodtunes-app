@@ -390,6 +390,67 @@ SQL
 backfill_spinney_shipping_rates dev  "${DATABASE_URL:-}"
 backfill_spinney_shipping_rates prod "${PROD_DATABASE_URL:-}"
 
+# Task #1460 — Auto-grant the "Love Life Tragedy (Bonus)" album to every
+# existing owner of the Nick Carter "Love Life Tragedy (Double Album)".
+# ONLY fans who paid for the Double Album qualify — owning one of the six
+# standalone "- LLT (Single Series)" singles does NOT (they're their own
+# thing; the "Bonus" is the Double Album's bonus-track edition for buyers).
+# The double album is soft-deleted in prod but its ownership rows still
+# entitle. One-time backfill of existing owners; the forward rule (new
+# purchases) lives in server/lltBonus.ts. Marker-guarded so operator changes
+# are never clobbered, idempotent via the user_albums (user_id, album_id)
+# unique index, and a no-op on a fresh dev clone (Nick's catalog is
+# prod-only). Only real owners (is_preview = false) are granted; the
+# qualifying-release id MUST stay in lock-step with LLT_RELEASE_ALBUM_IDS /
+# LLT_BONUS_ALBUM_ID in server/lltBonus.ts.
+backfill_task_1460_llt_bonus() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1460 llt bonus grant on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+  v_bonus constant text := '4ee3d6b9-d01f-4573-b1d6-c60951c67211';
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_1460_llt_bonus_grant'
+  ) THEN
+    INSERT INTO user_albums (user_id, album_id)
+    SELECT DISTINCT ua.user_id, v_bonus
+    FROM user_albums ua
+    WHERE ua.is_preview = false
+      AND ua.album_id = '0da0fccf-292f-4259-82d1-f95a59eb45c0' -- Love Life Tragedy (Double Album)
+    ON CONFLICT (user_id, album_id) DO NOTHING;
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_1460_llt_bonus_grant');
+    RAISE NOTICE 'task-1460 llt bonus grant applied: % rows', v_count;
+  ELSE
+    RAISE NOTICE 'task-1460 llt bonus grant already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1460 llt bonus grant ok on $label"
+    echo "$out" | grep -i 'llt bonus' || true
+  else
+    echo "post-merge: WARNING — task-1460 llt bonus grant failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_1460_llt_bonus dev  "${DATABASE_URL:-}"
+backfill_task_1460_llt_bonus prod "${PROD_DATABASE_URL:-}"
+
 # PacPack (Pacific Packaging) — Bill & his wife's pre-Spinney in-house
 # fulfillment operation. Create the partner (fixed id, mirrors the row
 # hand-created in prod) and reassign every EasyPost-backfilled historical

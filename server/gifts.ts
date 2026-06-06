@@ -24,6 +24,7 @@ import { randomBytes } from "crypto";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "./db";
 import { storage } from "./storage";
+import { grantLltBonusIfEligible } from "./lltBonus";
 import {
   gifts,
   orders,
@@ -562,6 +563,10 @@ export function registerGiftRoutes(app: Express) {
             await tx.insert(userAlbums).values({ userId: me.userId, albumId: order.albumId });
           }
         }
+
+        // Task #1460 — the claimer now owns this album; if it's a
+        // qualifying LLT release, unlock the bonus album for them too.
+        await grantLltBonusIfEligible(tx, me.userId, order.albumId);
 
         const [claimer] = await tx.select().from(customerUsers).where(eq(customerUsers.id, me.userId));
         if (claimer && !claimer.realName) {

@@ -34,6 +34,7 @@ import {
   type ShopifyPushSnapshot,
 } from "@shared/schema";
 import { lookupSignedCertRung } from "@shared/signedCertLadder";
+import { grantLltBonusIfEligible } from "./lltBonus";
 import { z } from "zod";
 import { storage } from "./storage";
 
@@ -568,6 +569,8 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // unlock; if they were a stub, /redeem promotes them by collecting a
   // password or OAuth.
   await db.insert(userAlbums).values({ userId: customerId, albumId }).onConflictDoNothing();
+  // Task #1460 — qualifying LLT release also unlocks the bonus album.
+  await grantLltBonusIfEligible(db, customerId, albumId);
 
   // Mint the redemption code last so an incomplete materialize doesn't
   // leak a code that can't be resolved.
@@ -1073,6 +1076,8 @@ export function registerShopifyRoutes(app: Express) {
     if (order.customerId !== a.userId) {
       await db.update(orders).set({ customerId: a.userId }).where(eq(orders.id, order.id));
       await db.insert(userAlbums).values({ userId: a.userId, albumId: order.albumId }).onConflictDoNothing();
+      // Task #1460 — qualifying LLT release also unlocks the bonus album.
+      await grantLltBonusIfEligible(db, a.userId, order.albumId);
     }
     await db
       .update(shopifyRedemptionCodes)
@@ -1190,6 +1195,8 @@ export function registerShopifyRoutes(app: Express) {
       quantity: 1,
     });
     await db.insert(userAlbums).values({ userId: customerId, albumId }).onConflictDoNothing();
+    // Task #1460 — qualifying LLT release also unlocks the bonus album.
+    await grantLltBonusIfEligible(db, customerId, albumId);
     const code = generateRedemptionCode();
     await db.insert(shopifyRedemptionCodes).values({ code, orderId: order.id });
     res.json({ code, orderId: order.id, reused: false });
