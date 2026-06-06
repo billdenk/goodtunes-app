@@ -30,10 +30,36 @@ description: How post-deploy 0A000 "cached plan" 500s are auto-recovered and how
 
 **Why centralize at `pool.query`:** drizzle's `db.select()`/`db.execute()` and all
 direct `pool.query()` calls route through it, so every non-transactional caller
-benefits for free. **Transactions are intentionally NOT retried** — they run on a
-dedicated checked-out client (not `pool.query`), and a mid-tx retry would silently
-re-run against a rolled-back transaction. Callback-style `pool.query` calls pass
-through untouched (none exist today, but the guard keeps it safe).
+benefits for free. Callback-style `pool.query` calls pass through untouched (none
+exist today, but the guard keeps it safe).
+
+## Transactions ARE retried too (transaction-level, not statement-level)
+`db.transaction(...)` does NOT route through the patched `pool.query` — drizzle
+runs every statement of a tx on one dedicated checked-out client. A warm pooled
+connection holding a stale plan therefore 500s the FIRST transactional write
+after a publish with no recovery (this was the NPO donation-split "Save split"
+500: `PUT /api/admin/albums/:id/npo-beneficiaries`, a DELETE + ON CONFLICT upsert
+inside `db.transaction`).
+
+Fix lives in `server/db.ts`: `transactionWithRetry(fn, config?, deps?)` plus a
+module-level monkey-patch of `(db as any).transaction` that routes ALL callers
+through it (no call-site changes, mirrors the `pool.query` patch). Key points:
+- **Retry the WHOLE transaction, never a single statement.** A failed tx has
+  already ROLLED BACK (nothing committed), so replaying the entire callback once
+  cannot double-apply writes. A mid-tx statement retry would silently re-run
+  against a dead/rolled-back tx — that's why statement-level retry is unsafe here.
+- Each attempt checks out its OWN client and binds `drizzle(client, {schema})` to
+  it — `drizzle(client)` uses that client directly and leaves release to us, the
+  only way to DESTROY (`client.release(true)`) the poisoned connection instead of
+  returning it to the pool the way `db.transaction` does on rollback.
+- Bounded to ONE retry. A second cached-plan failure also destroys its connection
+  but surfaces as a real error (no infinite loop).
+- `deps` is a test seam (`connect` + `runOnClient`) defaulting to the real pool;
+  regression tests in `server/db.errors.test.ts` assert: retry-once-then-succeed
+  (connect twice, first `release(true)`), non-cached-plan errors NOT retried
+  (connect once, `release(false)`), and a second 0A000 surfaces (both destroyed).
+- Won't reproduce in dev (fresh connections never hold a stale plan); rely on the
+  design + tests, not a local repro.
 
 ## Real error → alerts/logs (server/index.ts)
 The express error handler stashes `describeDbError(err)` on `res.locals.dbError`.

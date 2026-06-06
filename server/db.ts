@@ -1,5 +1,6 @@
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
+import type { PgTransactionConfig } from "drizzle-orm/pg-core";
 import * as schema from "@shared/schema";
 
 if (!process.env.DATABASE_URL) {
@@ -121,8 +122,11 @@ export function isCachedPlanError(err: unknown): boolean {
 // Drizzle's normal queries and `db.execute()` route through `pool.query`,
 // so wrapping it here covers every non-transactional caller centrally.
 // Queries inside an explicit transaction run on a dedicated checked-out
-// client (not pool.query) and are intentionally NOT retried here — a
-// mid-transaction retry would silently re-run against a rolled-back tx.
+// client (not pool.query), so they are NOT retried here. We must never
+// retry a single statement mid-transaction — that would re-run against a
+// rolled-back tx. Instead, transactions get their OWN top-level retry that
+// re-runs the ENTIRE callback once on a fresh connection (see
+// `transactionWithRetry` + the `db.transaction` patch below).
 const originalPoolQuery = pool.query.bind(pool);
 (pool as any).query = function patchedQuery(this: unknown, ...args: any[]) {
   // Callback-style callers manage their own flow; never rewrite those.
@@ -159,3 +163,96 @@ const originalPoolQuery = pool.query.bind(pool);
 } as typeof pool.query;
 
 export const db = drizzle(pool, { schema });
+
+// ─── Transaction-level cached-plan self-heal ─────────────────────────
+//
+// The `pool.query` patch above can't cover an explicit transaction: a
+// transaction runs every statement on ONE checked-out client, and retrying
+// a single statement mid-transaction would silently re-run it against a
+// rolled-back tx. So after a publish runs `ALTER TABLE … ADD COLUMN`, the
+// first transactional write on a warm pooled connection holding a stale
+// plan throws 0A000 ("cached plan must not change result type") with no
+// retry — exactly the NPO donation-split Save 500 (Task #1354).
+//
+// We retry at the TRANSACTION level instead: when the FIRST attempt fails
+// with the cached-plan error, the whole transaction has already ROLLED BACK
+// (nothing committed), so re-running the entire callback once cannot
+// double-apply writes. We destroy the connection carrying the stale plan
+// (so the pool can't hand it back) and replay the callback once on a fresh
+// connection. Bounded to a single retry — any second failure surfaces as a
+// real error.
+//
+// Each attempt runs on a client we check out ourselves and bind a drizzle
+// instance to (`drizzle(client)` uses that client directly and leaves the
+// release to us — verified against drizzle-orm/node-postgres), which is the
+// only way to DESTROY the poisoned connection rather than return it to the
+// pool the way `db.transaction` does on rollback.
+
+// The `tx` object drizzle hands the transaction callback (independent of
+// the callback's return type), derived from the real `db.transaction` so it
+// stays in lock-step with the schema/driver.
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+type TransactionDeps = {
+  connect: () => Promise<PoolClient>;
+  runOnClient: <T>(
+    client: PoolClient,
+    fn: (tx: DbTransaction) => Promise<T>,
+    config?: PgTransactionConfig,
+  ) => Promise<T>;
+};
+
+const defaultTransactionDeps: TransactionDeps = {
+  connect: () => pool.connect(),
+  runOnClient: (client, fn, config) =>
+    drizzle(client, { schema }).transaction(fn, config),
+};
+
+export async function transactionWithRetry<T>(
+  fn: (tx: DbTransaction) => Promise<T>,
+  config?: PgTransactionConfig,
+  // Test seam — defaults to a real checked-out client per attempt.
+  deps: TransactionDeps = defaultTransactionDeps,
+): Promise<T> {
+  const client = await deps.connect();
+  let poisoned = false;
+  try {
+    return await deps.runOnClient(client, fn, config);
+  } catch (err) {
+    if (!isCachedPlanError(err)) throw err;
+    // Destroy the connection carrying the stale plan, then replay the whole
+    // (already rolled-back) transaction once on a fresh connection.
+    poisoned = true;
+    client.release(true);
+    console.warn(
+      "[db] cached-plan mismatch (0A000) inside transaction — recycled connection and retrying transaction once",
+    );
+    const fresh = await deps.connect();
+    let freshPoisoned = false;
+    try {
+      return await deps.runOnClient(fresh, fn, config);
+    } catch (err2) {
+      // A second cached-plan failure still poisons its connection — destroy
+      // it too, but don't retry again: this surfaces as a real error.
+      if (isCachedPlanError(err2)) freshPoisoned = true;
+      throw err2;
+    } finally {
+      fresh.release(freshPoisoned);
+    }
+  } finally {
+    if (!poisoned) client.release();
+  }
+}
+
+// Route every `db.transaction(...)` caller through the retry path centrally,
+// mirroring the `pool.query` patch above so all transactional writers get
+// the same post-deploy resilience with no call-site changes. The retry runs
+// the callback on its own `drizzle(client)` instance, so this never recurses
+// into the patched method.
+(db as any).transaction = function patchedTransaction(
+  this: unknown,
+  fn: (tx: DbTransaction) => Promise<unknown>,
+  config?: PgTransactionConfig,
+) {
+  return transactionWithRetry(fn, config);
+};

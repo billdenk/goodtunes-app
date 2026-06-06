@@ -16,7 +16,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { describeDbError, isCachedPlanError } from "./db";
+import { describeDbError, isCachedPlanError, transactionWithRetry } from "./db";
 
 // A drizzle DrizzleQueryError look-alike: a wrapper Error whose `.cause` is
 // the real pg error. This mirrors exactly what reaches the express error
@@ -111,4 +111,105 @@ test("isCachedPlanError: false for other DB errors and plain errors", () => {
   assert.equal(isCachedPlanError(drizzleWrap(pgError({ code: "23505", message: "dup" }))), false);
   assert.equal(isCachedPlanError(new Error("nope")), false);
   assert.equal(isCachedPlanError(null), false);
+});
+
+// ── transactionWithRetry ─────────────────────────────────────────────
+// Task #1354 — a transaction whose FIRST attempt fails with the post-deploy
+// "cached plan" (0A000) error must replay the WHOLE callback once on a fresh
+// connection. A failed tx has fully rolled back, so re-running is safe; the
+// poisoned connection is destroyed (release(true)) so the pool can't hand it
+// back. Any non-cached-plan error is NOT retried.
+
+// A fake PoolClient that records how it was released (true = destroyed).
+function fakeClient(releases: Array<{ id: number; destroy: boolean }>, id: number) {
+  return {
+    id,
+    release(destroy?: boolean) {
+      releases.push({ id, destroy: !!destroy });
+    },
+  } as any;
+}
+
+test("transactionWithRetry: replays the whole tx once on a fresh connection after a 0A000 error", async () => {
+  const releases: Array<{ id: number; destroy: boolean }> = [];
+  let nextId = 0;
+  const connected: any[] = [];
+  let attempts = 0;
+  const cachedPlan = drizzleWrap(
+    pgError({ code: "0A000", message: "cached plan must not change result type" }),
+  );
+
+  const result = await transactionWithRetry<string>(
+    async () => "committed",
+    undefined,
+    {
+      connect: async () => {
+        const c = fakeClient(releases, nextId++);
+        connected.push(c);
+        return c;
+      },
+      runOnClient: async (_client, fn) => {
+        attempts++;
+        if (attempts === 1) throw cachedPlan; // first warm connection is poisoned
+        return fn({} as any); // fresh connection commits
+      },
+    },
+  );
+
+  assert.equal(result, "committed");
+  assert.equal(attempts, 2); // retried exactly once
+  assert.equal(connected.length, 2); // the retry got a fresh connection
+  // Poisoned connection destroyed; the retry connection returned cleanly.
+  assert.deepEqual(releases, [
+    { id: 0, destroy: true },
+    { id: 1, destroy: false },
+  ]);
+});
+
+test("transactionWithRetry: does NOT retry a non-cached-plan error", async () => {
+  const releases: Array<{ id: number; destroy: boolean }> = [];
+  let nextId = 0;
+  let attempts = 0;
+  const dup = drizzleWrap(pgError({ code: "23505", message: "duplicate key" }));
+
+  await assert.rejects(
+    transactionWithRetry(async () => "unused", undefined, {
+      connect: async () => fakeClient(releases, nextId++),
+      runOnClient: async () => {
+        attempts++;
+        throw dup;
+      },
+    }),
+    /Failed query/,
+  );
+
+  assert.equal(attempts, 1); // never retried
+  // Single connection, returned to the pool (not destroyed).
+  assert.deepEqual(releases, [{ id: 0, destroy: false }]);
+});
+
+test("transactionWithRetry: a second 0A000 surfaces (only one retry) and destroys both connections", async () => {
+  const releases: Array<{ id: number; destroy: boolean }> = [];
+  let nextId = 0;
+  let attempts = 0;
+  const cachedPlan = drizzleWrap(
+    pgError({ code: "0A000", message: "cached plan must not change result type" }),
+  );
+
+  await assert.rejects(
+    transactionWithRetry(async () => "unused", undefined, {
+      connect: async () => fakeClient(releases, nextId++),
+      runOnClient: async () => {
+        attempts++;
+        throw cachedPlan; // both connections poisoned
+      },
+    }),
+    /Failed query/,
+  );
+
+  assert.equal(attempts, 2); // one retry, then surfaced
+  assert.deepEqual(releases, [
+    { id: 0, destroy: true },
+    { id: 1, destroy: true },
+  ]);
 });
