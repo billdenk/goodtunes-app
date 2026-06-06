@@ -4,6 +4,7 @@ import { useReducedMotion } from "framer-motion";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
 import { useDesktopShell, STOREFRONT_CONTENT_OFFSET } from "@/hooks/useDesktopShell";
 import { PlayerDock } from "@/components/ui/PlayerDock";
+import { PlayerNameLinks } from "@/components/ui/PlayerNameLinks";
 
 // MiniPlayer splits by shell:
 //   * lg+ web desktop — the full-width bottom PlayerDock (storefront
@@ -153,7 +154,15 @@ function MobileMiniPlayer() {
             />
             <div className="flex-1 min-w-0">
               <p className="text-fan-primary text-[13px] font-semibold truncate leading-tight">{currentSong.title}</p>
-              <p className="text-fan-secondary text-[11px] truncate leading-tight">{currentSong.album.artist}</p>
+              <PlayerNameLinks
+                artist={currentSong.album.artist}
+                albumId={currentSong.album.id}
+                albumTitle={currentSong.album.title}
+                className="leading-tight"
+                segmentClassName="text-fan-secondary text-[11px]"
+                separatorClassName="text-fan-secondary/60 text-[11px]"
+                testIdPrefix="mini-subtitle"
+              />
             </div>
             <button
               type="button"
@@ -184,7 +193,15 @@ function MobileMiniPlayer() {
 
             <div className="flex-1 min-w-0">
               <p className="text-fan-primary text-[14px] font-semibold truncate leading-snug">{currentSong.title}</p>
-              <p className="text-fan-secondary text-[12px] truncate leading-snug">{currentSong.album.artist}</p>
+              <PlayerNameLinks
+                artist={currentSong.album.artist}
+                albumId={currentSong.album.id}
+                albumTitle={currentSong.album.title}
+                className="leading-snug"
+                segmentClassName="text-fan-secondary text-[12px]"
+                separatorClassName="text-fan-secondary/60 text-[12px]"
+                testIdPrefix="mini-subtitle"
+              />
             </div>
 
             <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>

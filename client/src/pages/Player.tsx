@@ -7,6 +7,7 @@ import { LyricsIcon } from "@/components/ui/LyricsIcon";
 import { IconButton } from "@/components/ui/IconButton";
 import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
+import { PlayerNameLinks } from "@/components/ui/PlayerNameLinks";
 import { track } from "@/lib/analytics";
 import { isWebIOS } from "@/lib/platform";
 import { useSystemVolume } from "@/lib/nativeVolume";
@@ -228,7 +229,6 @@ export function Player() {
     : volume;
   const setVolumeLevel = systemVolume.active ? systemVolume.setLevel : setVolume;
 
-  const [showGoToMenu, setShowGoToMenu] = useState(false);
   const [showLyricsMenu, setShowLyricsMenu] = useState(false);
   const [, navigate] = useLocation();
   const reduceMotion = useReducedMotion();
@@ -297,11 +297,6 @@ export function Player() {
   const goToMenuAnimate: Transition = reduceMotion
     ? { duration: 0.15 }
     : { type: "spring", stiffness: 520, damping: 22, mass: 0.8 };
-  const goToFromMenu = (path: string) => {
-    setShowGoToMenu(false);
-    setShowPlayer(false);
-    navigate(path);
-  };
   // Same nav, but from the lyrics-overlay ⋯ menu — also dismiss the overlay.
   const goToFromLyricsMenu = (path: string) => {
     setShowLyricsMenu(false);
@@ -429,77 +424,20 @@ export function Player() {
             {/* Title row — favorite + more, à la Apple Music */}
             <div className="w-full flex items-center justify-between mb-6 gap-3">
               <div className="flex-1 min-w-0 relative">
-                <button
-                  type="button"
-                  onClick={() => setShowGoToMenu((v) => !v)}
-                  className="block w-full text-left active:opacity-60 transition-opacity"
-                  aria-haspopup="menu"
-                  aria-expanded={showGoToMenu}
-                  data-testid="button-song-title-menu"
-                >
-                  <h2 className="text-white text-xl font-bold leading-snug truncate">{currentSong.title}</h2>
-                  <p className="text-white/55 text-sm mt-0.5 truncate">{currentSong.album.artist}</p>
-                </button>
-
-                <AnimatePresence>
-                  {showGoToMenu && (
-                    <>
-                      {/* Tap-anywhere-else catcher to dismiss the menu. */}
-                      <button
-                        type="button"
-                        aria-label="Close menu"
-                        onClick={() => setShowGoToMenu(false)}
-                        className="fixed inset-0 z-40"
-                        data-testid="backdrop-goto-menu"
-                      />
-                      <motion.div
-                        role="menu"
-                        className="absolute left-0 top-full mt-2 z-50 min-w-[230px] max-w-[280px] rounded-2xl overflow-hidden"
-                        style={{
-                          background: "rgba(28,30,38,0.97)",
-                          boxShadow: "0 18px 50px rgba(0,0,0,0.55)",
-                          transformOrigin: "top left",
-                        }}
-                        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.8, y: -6 }}
-                        animate={{ opacity: 1, scale: 1, y: 0, transition: goToMenuAnimate }}
-                        exit={reduceMotion ? { opacity: 0, transition: { duration: 0.12 } } : { opacity: 0, scale: 0.92, y: -4, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }}
-                      >
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => goToFromMenu(`/album/${currentSong.album.id}`)}
-                          className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-white/10 transition-colors"
-                          data-testid="button-goto-album"
-                        >
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.7" className="flex-shrink-0">
-                            <circle cx="12" cy="12" r="9" />
-                            <circle cx="12" cy="12" r="2.5" />
-                          </svg>
-                          <span className="flex-1 min-w-0">
-                            <span className="block text-white text-sm font-semibold leading-tight">Go to Album</span>
-                            <span className="block text-white/50 text-xs truncate mt-0.5">{currentSong.album.title}</span>
-                          </span>
-                        </button>
-                        <div className="h-px bg-white/10 mx-4" />
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => goToFromMenu(`/artist/${encodeURIComponent(currentSong.album.artist)}`)}
-                          className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-white/10 transition-colors"
-                          data-testid="button-goto-artist"
-                        >
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.7" strokeLinejoin="round" className="flex-shrink-0">
-                            <path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.2l1-5.8L3.5 9.2l5.9-.9L12 3z" />
-                          </svg>
-                          <span className="flex-1 min-w-0">
-                            <span className="block text-white text-sm font-semibold leading-tight">Go to Artist</span>
-                            <span className="block text-white/50 text-xs truncate mt-0.5">{currentSong.album.artist}</span>
-                          </span>
-                        </button>
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
+                <h2 className="text-white text-xl font-bold leading-snug truncate">{currentSong.title}</h2>
+                {/* Apple-Music tappable subtitle — artist + album each route to
+                    their own page (and dismiss Now Playing), replacing the old
+                    tap-the-title "Go to Album / Go to Artist" pop-up menu. */}
+                <PlayerNameLinks
+                  artist={currentSong.album.artist}
+                  albumId={currentSong.album.id}
+                  albumTitle={currentSong.album.title}
+                  onNavigate={() => setShowPlayer(false)}
+                  className="mt-0.5"
+                  segmentClassName="text-white/55 text-sm"
+                  separatorClassName="text-white/35 text-sm"
+                  testIdPrefix="player-subtitle"
+                />
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <IconButton

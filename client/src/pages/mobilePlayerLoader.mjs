@@ -17,8 +17,14 @@ const ASSET_RE = /\.(svg|png|jpe?g|gif|webp|avif|ico|mp3|wav|mp4|webm)$/i;
 
 const PLATFORM_STUB_SOURCE = `
 let isIOS = false;
-export { isIOS };
-export function __setTestIsIOS(v) { isIOS = v; }
+let isWebIOS = false;
+export { isIOS, isWebIOS };
+// In jsdom tests isNative is always false, so the real isWebIOS (= isIOS &&
+// !isNative) collapses to isIOS. Flip both together off the one setter so a
+// test toggling iOS exercises BOTH the isIOS-gated and the isWebIOS-gated
+// player controls (the volume block is gated on !isWebIOS).
+export function __setTestIsIOS(v) { isIOS = v; isWebIOS = v; }
+export const isNativeIOS = false;
 export const isNative = false;
 export const nativePlatform = "web";
 export const chatEnabled = true;

@@ -11567,7 +11567,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/MiniPlayer.tsx",
-    "snippet": "<p className=\"text-fan-secondary text-[11px] truncate leading-tight\">{currentSong.album.artist}</p>"
+    "snippet": "segmentClassName=\"text-fan-secondary text-[11px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/MiniPlayer.tsx",
+    "snippet": "separatorClassName=\"text-fan-secondary/60 text-[11px]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -11577,7 +11582,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/MiniPlayer.tsx",
-    "snippet": "<p className=\"text-fan-secondary text-[12px] truncate leading-snug\">{currentSong.album.artist}</p>"
+    "snippet": "segmentClassName=\"text-fan-secondary text-[12px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/MiniPlayer.tsx",
+    "snippet": "separatorClassName=\"text-fan-secondary/60 text-[12px]\""
   },
   {
     "rule": "fan-text-tone",
@@ -20972,17 +20982,12 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/pages/Player.tsx",
-    "snippet": "<p className=\"text-white/55 text-sm mt-0.5 truncate\">{currentSong.album.artist}</p>"
+    "snippet": "segmentClassName=\"text-white/55 text-sm\""
   },
   {
     "rule": "fan-text-tone",
     "file": "client/src/pages/Player.tsx",
-    "snippet": "<span className=\"block text-white/50 text-xs truncate mt-0.5\">{currentSong.album.title}</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/Player.tsx",
-    "snippet": "<span className=\"block text-white/50 text-xs truncate mt-0.5\">{currentSong.album.artist}</span>"
+    "snippet": "separatorClassName=\"text-white/35 text-sm\""
   },
   {
     "rule": "fan-text-tone",
@@ -21003,6 +21008,16 @@
     "rule": "fan-text-tone",
     "file": "client/src/pages/Player.tsx",
     "snippet": "<p className=\"text-white/65 text-[13px] leading-tight truncate\">{currentSong.album.artist}</p>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/Player.tsx",
+    "snippet": "<span className=\"block text-white/50 text-xs truncate mt-0.5\">{currentSong.album.title}</span>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/Player.tsx",
+    "snippet": "<span className=\"block text-white/50 text-xs truncate mt-0.5\">{currentSong.album.artist}</span>"
   },
   {
     "rule": "fan-text-tone",
