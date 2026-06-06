@@ -116,12 +116,15 @@ import { ShopifyPanel } from "@/components/admin/ShopifyPanel";
 import { AlbumCustomersPanel } from "@/components/admin/AlbumCustomersPanel";
 import { AlbumDashboardPanel } from "@/components/admin/AlbumDashboardPanel";
 import { NewAlbumModeDialog } from "@/components/admin/NewAlbumModeDialog";
-import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import {
-  PATH_TO_PRESS_NAVIGATE_EVENT,
-  scrollAndFlash,
-  type PathToPressNavigateDetail,
-} from "@/lib/pathToPressNav";
+  deriveSectionCompleteness,
+  sectionTooltip,
+  type SectionState,
+  type SectionStatus,
+  type UploadValidationLite,
+  type PressingOrderLite,
+  type ShopifyPushLite,
+} from "@/lib/sectionCompleteness";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import {
   Dialog,
@@ -353,6 +356,32 @@ function visibleTabsFor(
     return withCustomers([...base, { key: "shopify", label: "Shopify" }]);
   }
   return withCustomers(base);
+}
+
+// Task #1530 — three-state completeness dot that rides each section tab.
+// empty = hollow gray ring (nothing started); in-progress = quiet slate
+// fill (some work done); complete = filled brand mint. Mint is reserved
+// for "complete" ONLY per the design system's accent restraint.
+function SectionDot({
+  state,
+  "data-testid": testId,
+}: {
+  state: SectionState;
+  "data-testid"?: string;
+}) {
+  const cls =
+    state === "complete"
+      ? "bg-[color:var(--brand-mint)]"
+      : state === "in-progress"
+        ? "bg-slate-400"
+        : "border border-slate-300 bg-transparent";
+  return (
+    <span
+      aria-hidden="true"
+      data-testid={testId}
+      className={["inline-block h-[7px] w-[7px] rounded-full", cls].join(" ")}
+    />
+  );
 }
 
 // Legacy "Migrate to Mux" admin action — removed 2026-05 once auto-ingest
@@ -712,105 +741,55 @@ export function AdminAlbum() {
     },
   });
 
-  // Task #335 — SKU feed for the top-of-page Path-to-press stepper so
-  // its stage-completion mirrors real state (package / price / qty /
-  // upload preflight). SellPanel queries the same key so both stay in
-  // sync via the TanStack cache.
+  // Task #1530 — SKU feed for the per-section completeness dots on the
+  // tab bar (Package dot mirrors quote-lock state). SellPanel queries the
+  // same key so both stay in sync via the TanStack cache.
   const { data: albumSkus } = useQuery<{ skus: any[]; addons: any[] }>({
     queryKey: ["/api/admin/albums", albumId, "skus"],
     enabled: !!album?.sellMode,
   });
 
-  // Task #454 — Path-to-press chip navigation. The chips live in
-  // <PressingOrderStepper> above the tabs; they dispatch a window
-  // CustomEvent and this listener routes the page to the right tab +
-  // anchors the `art` chip on the album-header cover thumbnail. The
-  // in-Sell anchors (package / price / quantity / submit) are handled
-  // by SellPanel's own listener once we switch into the Sell tab — the
-  // pending-key slot in pathToPressNav.ts bridges the gap on tabs that
-  // haven't mounted SellPanel yet.
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const key = (e as CustomEvent<PathToPressNavigateDetail>).detail?.key;
-      if (!key) return;
-      if (key === "art") {
-        // "Upload art" in the Path-to-press strip means *press-ready*
-        // jacket / label / hype-sticker files — not the digital cover
-        // thumbnail in the page header. Task #611 — the Physical tab
-        // is always visible in direct mode now, so we land on the
-        // Press preflight dropzone. Shopify mode has no `press` tab
-        // (label fulfills the physical product themselves; there is
-        // no plant preflight to run) — route to the always-visible
-        // Sell tab's cover-art editor instead, which is the closest
-        // real-art surface the slim Shopify panel exposes.
-        if (album?.sellMode === "shopify") {
-          // Shopify mode has no `press` tab (label fulfills the
-          // physical product themselves; there is no plant preflight
-          // to run). The closest real "edit the art" surface is the
-          // album-cover button in the page header, which is always
-          // mounted regardless of which tab is active — just flash it.
-          const el = document.querySelector(
-            '[data-testid="button-edit-album-cover"]',
-          ) as HTMLElement | null;
-          if (el) scrollAndFlash(el, { focus: true });
-          return;
-        }
-        setTab("press");
-        const tryAnchor = (attempt: number) => {
-          const panel = document.querySelector(
-            '[data-testid="panel-upload-validations-art"]',
-          ) as HTMLElement | null;
-          if (panel) {
-            // input-preflight-file is a hidden <input type="file">, so
-            // focusing it scrolls to nothing. Prefer the visible upload
-            // button; otherwise just flash the panel without stealing
-            // focus.
-            const button = panel.querySelector(
-              '[data-testid="button-preflight-upload"]',
-            ) as HTMLElement | null;
-            scrollAndFlash(button ?? panel, { focus: !!button });
-            return;
-          }
-          if (attempt < 8) window.setTimeout(() => tryAnchor(attempt + 1), 40);
-        };
-        requestAnimationFrame(() => tryAnchor(0));
-        return;
-      }
-      // Slim Shopify variant: "Masters on file" jumps to the Tracks
-      // tab; "Cover art" is handled above; "Live on Shopify" goes to
-      // the Sell tab where the slim panel's publish CTA lives.
-      const isShopify = album?.sellMode === "shopify";
-      if (isShopify && key === "package") {
-        setTab("tracks");
-        // Wait for the tracks panel to mount, then flash + focus a
-        // masters-related control inside it (not just the tab button).
-        // Prefer the toggle that opens the Add-track / upload-masters
-        // tray; fall back to the empty-state Add-first-track CTA, and
-        // finally to the panel itself.
-        const tryAnchor = (attempt: number) => {
-          const focusable = document.querySelector(
-            '[data-testid="button-toggle-add-track"], [data-testid="button-add-first-track"], [data-testid="button-bulk-add-tracks-empty"]',
-          ) as HTMLElement | null;
-          const panel =
-            (document.querySelector('[data-testid="panel-tracks"]') ??
-              document.querySelector(
-                '[data-testid="panel-tracks-empty"]',
-              )) as HTMLElement | null;
-          if (focusable || panel) {
-            scrollAndFlash(focusable ?? panel, { focus: !!focusable });
-            return;
-          }
-          if (attempt < 8) window.setTimeout(() => tryAnchor(attempt + 1), 40);
-        };
-        requestAnimationFrame(() => tryAnchor(0));
-        return;
-      }
-      // Everything else lives in the Sell tab.
-      setTab("sell");
-    };
-    window.addEventListener(PATH_TO_PRESS_NAVIGATE_EVENT, handler);
-    return () => window.removeEventListener(PATH_TO_PRESS_NAVIGATE_EVENT, handler);
-  }, [album?.sellMode]);
+  // Task #1530 — feeds for the section-completeness dots. Each is gated by
+  // the album's sell mode so we don't fire press/Shopify queries on
+  // albums that have no such section. All reuse keys the panels already
+  // query, so the cache keeps them in sync with the relocated affordances.
+  const isDirectMode = album?.sellMode === "direct" && !album?.isSpinPromo;
+  const isShopifyMode = album?.sellMode === "shopify" && !album?.isSpinPromo;
+  const { data: pressValidations } = useQuery<UploadValidationLite[]>({
+    queryKey: ["/api/admin/albums", albumId, "upload-validations"],
+    enabled: isDirectMode,
+  });
+  const { data: pressingOrder } = useQuery<PressingOrderLite>({
+    queryKey: ["/api/admin/albums", albumId, "pressing-order"],
+    enabled: isDirectMode,
+  });
+  const { data: shopifyPushStatus } = useQuery<ShopifyPushLite>({
+    queryKey: ["/api/admin/albums", albumId, "shopify-push"],
+    enabled: isShopifyMode,
+  });
+  const { data: shopifyMappings } = useQuery<any[]>({
+    queryKey: ["/api/admin/albums", albumId, "shopify-mappings"],
+    enabled: isShopifyMode,
+  });
+  const completeness = useMemo(() => {
+    if (!album) return null;
+    return deriveSectionCompleteness({
+      album,
+      skus: albumSkus?.skus ?? [],
+      validations: pressValidations ?? null,
+      pressingOrder: pressingOrder ?? null,
+      shopifyPush: shopifyPushStatus ?? null,
+      shopifyMappings: shopifyMappings ?? [],
+    });
+  }, [
+    album,
+    albumSkus,
+    pressValidations,
+    pressingOrder,
+    shopifyPushStatus,
+    shopifyMappings,
+  ]);
+
 
   // Task #440 — Promote ("Mark as released") / Demote ("Move back to
   // prepping"). Rides the same PUT endpoint as every other album edit, so
@@ -1197,52 +1176,58 @@ export function AdminAlbum() {
           </div>
         </div>
 
-        {/* Task #335 — Path-to-press strip lives ABOVE the tab bar so
-            it's visible from every tab on the album page (not just
-            Sell). The stepper adapts by mode — slim 3-stage strip
-            for shopify, full 5-stage press flow for direct. Suppressed
-            until the operator picks a sellMode in the modal.
-            SPIN Promo albums are digital-only — no manufacturing flow. */}
-        {album.sellMode && !isArtist && !album.isSpinPromo && (
-          <div className="mt-2">
-            <PressingOrderStepper
-              albumId={album.id}
-              skus={albumSkus?.skus ?? []}
-              mode={album.sellMode === "shopify" ? "shopify" : "direct"}
-              onChangeMode={() => setModeDialogOpen(true)}
-            />
-          </div>
-        )}
-
         {/* TABS — Overview/Tracks/Bonus on the LEFT, gray trash icon
             on the RIGHT, both riding the same hairline. The trash hover
             reveals a "Delete" label on its left (Apple-Mac toolbar
-            pattern). Opens a rose-tinted confirm sheet per replit.md. */}
+            pattern). Opens a rose-tinted confirm sheet per replit.md.
+            Task #1530 — each section tab carries a three-state
+            completeness dot (empty / in-progress / complete) derived
+            client-side; the old Path-to-press strip above the bar is
+            gone and its submit action moved into the Physical/Shopify
+            tabs. */}
         <div
           className="flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-album"
         >
           <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
-            {visibleTabsFor(album, { hidePress: hidePressSection }).map((t) => (
-              <button
-                key={t.key}
-                onClick={(e) =>
-                  anchorScrollToElement(e.currentTarget, () => setTab(t.key))
-                }
-                className={[
-                  "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
-                  tab === t.key
-                    ? "text-slate-900"
-                    : "text-slate-400 hover:text-slate-700",
-                ].join(" ")}
-                data-testid={`tab-${t.key}`}
-              >
-                {t.label}
-                {tab === t.key && (
-                  <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
-                )}
-              </button>
-            ))}
+            {visibleTabsFor(album, { hidePress: hidePressSection }).map((t) => {
+              const status = (completeness as any)?.[t.key] as
+                | SectionStatus
+                | undefined;
+              const isActive = tab === t.key;
+              const labelColor = isActive
+                ? "text-slate-900"
+                : status?.state === "complete"
+                  ? "text-slate-600 hover:text-slate-800"
+                  : status?.state === "in-progress"
+                    ? "text-slate-500 hover:text-slate-800"
+                    : "text-slate-400 hover:text-slate-700";
+              return (
+                <button
+                  key={t.key}
+                  onClick={(e) =>
+                    anchorScrollToElement(e.currentTarget, () => setTab(t.key))
+                  }
+                  title={status ? sectionTooltip(t.label, status) : undefined}
+                  className={[
+                    "relative pb-2.5 inline-flex items-center gap-1.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
+                    labelColor,
+                  ].join(" ")}
+                  data-testid={`tab-${t.key}`}
+                >
+                  {status && (
+                    <SectionDot
+                      state={status.state}
+                      data-testid={`dot-${t.key}-${status.state}`}
+                    />
+                  )}
+                  {t.label}
+                  {isActive && (
+                    <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
+                  )}
+                </button>
+              );
+            })}
           </div>
           {/* Delete Options dropdown — replaces the standalone trashcan.
               Same visual chrome as the Tracks-tab "Advanced" menu so the
@@ -1466,12 +1451,16 @@ export function AdminAlbum() {
                   songs={album.songs}
                   physicalFormat={album.physicalFormat ?? null}
                   vinylFormat={(album.vinylFormat as any) ?? null}
+                  readyToSend={completeness?.pressReadyToSend ?? false}
+                  sendBlockers={completeness?.press.missing ?? []}
                 />
               )}
               {safeTab === "shopify" && allowed.has("shopify") && (
                 <ShopifyPanel
                   albumId={album.id}
                   album={album}
+                  readyToPush={completeness?.shopifyReadyToPush ?? false}
+                  pushBlockers={completeness?.shopify.missing ?? []}
                   onJumpToTab={(t) => {
                     if (t === "overview") setArtworkEditorOpen(true);
                     else setTab(t as Tab);

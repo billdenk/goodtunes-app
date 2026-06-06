@@ -111,10 +111,17 @@ export function ShopifyPanel({
   albumId,
   album,
   onJumpToTab,
+  readyToPush = false,
+  pushBlockers = [],
 }: {
   albumId: string;
   album?: ShopifyPanelAlbum;
   onJumpToTab?: (tab: ShopifyJumpTab) => void;
+  // Task #1530 — completeness gating for the push action. `readyToPush`
+  // is true only when Overview + Digital read complete (masters on file);
+  // `pushBlockers` name what's still outstanding for the quiet helper note.
+  readyToPush?: boolean;
+  pushBlockers?: string[];
 }) {
   const { toast } = useToast();
   const { data: mappings, isLoading } = useQuery<Mapping[]>({
@@ -441,14 +448,35 @@ export function ShopifyPanel({
                 <button
                   type="button"
                   onClick={() => push.mutate({})}
-                  disabled={push.isPending || pushStatus.album.priceCents == null || (pushStatus.stores.length > 1 && !pushStoreId)}
-                  className="h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-medium hover:bg-[var(--brand-blue-hover)] disabled:opacity-50 inline-flex items-center gap-1.5"
+                  disabled={push.isPending || !readyToPush || pushStatus.album.priceCents == null || (pushStatus.stores.length > 1 && !pushStoreId)}
+                  title={
+                    readyToPush
+                      ? undefined
+                      : "Finish Overview + Digital (masters on file) before pushing."
+                  }
+                  className="h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-medium hover:bg-[var(--brand-blue-hover)] disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
                   data-testid="button-push-to-shopify"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   {push.isPending ? "Pushing…" : pushStatus.push ? "Re-push as draft" : "Push as draft"}
                 </button>
               </div>
+              {!readyToPush && pushBlockers.length > 0 && (
+                <ul
+                  className="mt-3 space-y-1 border-t border-slate-100 pt-3"
+                  data-testid="push-blockers"
+                >
+                  {pushBlockers.map((b, i) => (
+                    <li
+                      key={i}
+                      className="text-[12px] text-slate-500 flex items-center gap-1.5"
+                    >
+                      <span className="inline-block h-[5px] w-[5px] rounded-full bg-slate-300" />
+                      {b}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </div>

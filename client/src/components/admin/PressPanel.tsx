@@ -20,7 +20,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { formatUsdCents } from "@shared/money";
-import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2 } from "lucide-react";
+import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2, Send, AlertCircle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, matchInvitedPressToVendor, defaultPreflightVendor, type VendorId } from "@shared/vendorSpecs";
@@ -151,11 +151,146 @@ function EarlyCutPoolReadout({ albumId }: { albumId: string }) {
   );
 }
 
+// Task #1530 — the relocated "Go to Press" affordance. Quiet by design:
+// while the album isn't ready it shows a muted helper line naming what's
+// outstanding (no loud CTA); once every section reads complete the submit
+// turns on. After submission it mirrors the strip's old status states
+// (Awaiting review / Approved / Rejected note + resubmit).
+function GoToPressAction({
+  status,
+  rejectionNote,
+  readyToSend,
+  blockers,
+  isPending,
+  onSubmit,
+}: {
+  status: string | null;
+  rejectionNote: string | null;
+  readyToSend: boolean;
+  blockers: string[];
+  isPending: boolean;
+  onSubmit: () => void;
+}) {
+  const pending = status === "pending";
+  const approved = status === "approved";
+  const rejected = status === "rejected";
+
+  if (pending || approved) {
+    return (
+      <div
+        className="mb-6 rounded-lg border border-slate-200 bg-white p-4 flex items-center justify-between gap-3"
+        data-testid="gotopress-action"
+      >
+        <div className="min-w-0">
+          <div className="text-[14px] font-semibold text-slate-900">
+            {approved ? "Approved — going to press" : "Sent to GoodTunes"}
+          </div>
+          <div className="text-[12px] text-slate-500">
+            {approved
+              ? "GoodTunes approved this run; it's headed to the plant."
+              : "Awaiting GoodTunes review — you'll see it flip to Approved here."}
+          </div>
+        </div>
+        <span
+          className={[
+            "shrink-0 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border",
+            approved
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+              : "bg-amber-50 text-amber-700 border-amber-200",
+          ].join(" ")}
+          data-testid="badge-pressing-status"
+        >
+          {approved ? "Approved" : "Awaiting review"}
+        </span>
+      </div>
+    );
+  }
+
+  // Not yet sent (or rejected → resubmit). Submit is enabled only when
+  // every section reads complete.
+  return (
+    <div
+      className="mb-6 rounded-lg border border-slate-200 bg-white p-4"
+      data-testid="gotopress-action"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[14px] font-semibold text-slate-900">
+            {rejected ? "Resubmit to GoodTunes" : "Send the order to GoodTunes"}
+          </div>
+          <div className="text-[12px] text-slate-500">
+            {readyToSend
+              ? "Everything's ready — send this run to GoodTunes for review."
+              : "Finish the sections below before this run can be sent."}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={!readyToSend || isPending}
+          title={
+            readyToSend
+              ? "Send this run to GoodTunes for review."
+              : "Complete every section first."
+          }
+          className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-semibold hover:bg-[var(--brand-blue-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+          data-testid="button-go-to-press"
+        >
+          {isPending ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Send className="w-3.5 h-3.5" />
+          )}
+          {rejected ? "Resubmit" : "Go to Press"}
+        </button>
+      </div>
+
+      {!readyToSend && blockers.length > 0 && (
+        <ul
+          className="mt-3 space-y-1 border-t border-slate-100 pt-3"
+          data-testid="gotopress-blockers"
+        >
+          {blockers.map((b, i) => (
+            <li
+              key={i}
+              className="text-[12px] text-slate-500 flex items-center gap-1.5"
+            >
+              <span className="inline-block h-[5px] w-[5px] rounded-full bg-slate-300" />
+              {b}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {rejected && (
+        <div className="mt-3 rounded-md border border-[color:var(--brand-heart)]/40 bg-[color:var(--brand-heart)]/5 p-3 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-[color:var(--brand-heart)] flex-shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <div className="text-[12.5px] font-semibold text-slate-900">
+              GoodTunes asked for changes
+            </div>
+            {rejectionNote && (
+              <div className="text-[12px] text-slate-700 mt-0.5">
+                “{rejectionNote}”
+              </div>
+            )}
+            <div className="text-[11.5px] text-slate-500 mt-1">
+              Make the change and resubmit — your prior request is archived.
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PressPanel({
   albumId,
   songs,
   physicalFormat,
   vinylFormat,
+  readyToSend = false,
+  sendBlockers = [],
 }: {
   albumId: string;
   songs: PressPanelSong[];
@@ -164,6 +299,13 @@ export function PressPanel({
   // physical format hide the block; the rest of the panel stays).
   physicalFormat?: "single_lp" | "double_lp" | "seven_inch" | "cassette" | null;
   vinylFormat?: VinylFormat | null;
+  // Task #1530 — completeness gating for the relocated Go-to-Press
+  // affordance. `readyToSend` is true only when every section reads
+  // complete + preflight is clean + masters are on file; `sendBlockers`
+  // are the human phrases naming what's still outstanding (shown as a
+  // quiet helper note while the submit is disabled).
+  readyToSend?: boolean;
+  sendBlockers?: string[];
 }) {
   const showVinylSides = !!physicalFormat && physicalFormat !== "cassette";
   const { toast } = useToast();
@@ -312,10 +454,60 @@ export function PressPanel({
     });
   }
 
+  // Task #1530 — the "Go to Press" submit + status lives here now (the
+  // old top-of-page Path-to-press strip is gone). Same endpoint + query
+  // key the strip used, so an order submitted from either surface keeps
+  // its status in sync. The submit is gated on `readyToSend` (every
+  // section complete + preflight clean + masters on file).
+  const { data: pressingOrder } = useQuery<{
+    status?: string | null;
+    rejectionNote?: string | null;
+  } | null>({
+    queryKey: ["/api/admin/albums", albumId, "pressing-order"],
+  });
+  const submitMutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest(
+        "POST",
+        `/api/admin/albums/${albumId}/pressing-order`,
+        {},
+      );
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/albums", albumId, "pressing-order"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/pressing-orders"],
+      });
+      toast({
+        title: "Order sent to GoodTunes.",
+        description: "You'll see it switch to Approved once GoodTunes reviews it.",
+      });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't submit",
+        description: e?.message || "Try again.",
+        variant: "destructive",
+      });
+    },
+  });
+  const orderStatus = pressingOrder?.status ?? null;
+
   return (
     <div className="py-6" data-testid="panel-press">
       <div>
         <MastersApprovalBanner albumId={albumId} />
+        <GoToPressAction
+          status={orderStatus}
+          rejectionNote={pressingOrder?.rejectionNote ?? null}
+          readyToSend={readyToSend}
+          blockers={sendBlockers}
+          isPending={submitMutation.isPending}
+          onSubmit={() => submitMutation.mutate()}
+        />
         {/* Task #533 — pool-funded early-cut ledger readout. */}
         <EarlyCutPoolReadout albumId={albumId} />
         {/* ── Masters on file ─────────────────────────────────────────── */}

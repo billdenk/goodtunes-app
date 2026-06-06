@@ -9742,6 +9742,46 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "<div className=\"text-[12px] text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "\"shrink-0 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "className=\"shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-semibold hover:bg-[var(--brand-blue-hover)] disabled:opacity-50 disabled:cur"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "className=\"text-[12px] text-slate-500 flex items-center gap-1.5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "<div className=\"text-[12.5px] font-semibold text-slate-900\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "<div className=\"text-[12px] text-slate-700 mt-0.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "<div className=\"text-[11.5px] text-slate-500 mt-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
     "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900 mb-1\">Masters on file</h2>"
   },
   {
@@ -10437,7 +10477,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
-    "snippet": "className=\"h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-medium hover:bg-[var(--brand-blue-hover)] disabled:opacity-50 inline-flex items-center gap-1.5\""
+    "snippet": "className=\"h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12px] font-medium hover:bg-[var(--brand-blue-hover)] disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"text-[12px] text-slate-500 flex items-center gap-1.5\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -13617,7 +13662,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "\"relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors\","
+    "snippet": "\"relative pb-2.5 inline-flex items-center gap-1.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors\","
   },
   {
     "rule": "hardcoded-font-size",
@@ -21753,11 +21798,6 @@
     "rule": "fan-text-tone",
     "file": "client/src/pages/Search.tsx",
     "snippet": "<p className=\"text-white/45 text-sm text-center mt-8\" data-testid=\"text-search-empty\">No results for \"{query}\"</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Search.tsx",
-    "snippet": "<h1 className=\"text-white text-[34px] font-bold leading-none tracking-tight\" data-testid=\"text-page-title\">Search</h1>"
   },
   {
     "rule": "player-touch-target-too-small",
