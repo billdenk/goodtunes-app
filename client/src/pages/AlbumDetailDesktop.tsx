@@ -54,9 +54,9 @@ import { track } from "@/lib/analytics";
 
 /** Left inset of the desktop album content channel, used to center the
  *  PlayerDock between the rails: AlbumDesktopSidebar sits 12px from the
- *  window edge, is 220px wide, and the outer flex adds a 12px gap →
- *  12 + 220 + 12 = 244. */
-const ALBUM_DOCK_CHANNEL_LEFT = 244;
+ *  window edge, is 260px wide (matching the storefront rail), and the
+ *  outer flex adds a 12px gap → 12 + 260 + 12 = 284. */
+const ALBUM_DOCK_CHANNEL_LEFT = 284;
 
 type ApiSong = {
   id: string;

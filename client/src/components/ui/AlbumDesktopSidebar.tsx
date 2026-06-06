@@ -1,10 +1,20 @@
 import { useLocation } from "wouter";
+import { Settings, LogOut } from "lucide-react";
 import { FanRailNav } from "@/components/ui/FanRailNav";
+import { useAuth } from "@/hooks/useAuth";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import {
   FAN_DOCK_CLEARANCE,
   COMPACT_DOCK_BREAKPOINT,
+  STOREFRONT_SIDEBAR_WIDTH,
 } from "@/hooks/useDesktopShell";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 /* Brand tokens — kept inline so the primitive is self-contained and can
    live in the mockup sandbox via re-export (the sandbox alias can't
@@ -32,6 +42,15 @@ export type AlbumDesktopSidebarUser = {
  * _shared.tsx`. The mockup sandbox keeps its own hand-maintained copy;
  * the shared nav items live in FanRailNav so this rail and the
  * storefront rail stay identical.
+ *
+ * Task #1566 — this wrapper is reconciled with StorefrontSidebar so the
+ * rail looks fixed in place as the fan moves between the album page and
+ * every other tab: same 260px width, same logo/header + nav padding, and
+ * a bottom account chip at full parity (w-11 avatar, name + "View
+ * profile" subtitle, account dropdown). The only intentional divergence
+ * is the layout mechanism — this rail sits in the album flex layout with
+ * a stretch margin (rather than the storefront's fixed top/left card) and
+ * bakes the safe-area + always-on compact-dock clearance into the footer.
  */
 export function AlbumDesktopSidebar({
   user,
@@ -47,6 +66,7 @@ export function AlbumDesktopSidebar({
   onSearch?: () => void;
 }) {
   const [, navigate] = useLocation();
+  const { logout } = useAuth();
   // The album-detail page always mounts its compact dock (it never
   // collapses), and below COMPACT_DOCK_BREAKPOINT (iPad width) that dock
   // goes edge-to-edge over this rail. Reserve room above the bottom-pinned
@@ -57,8 +77,11 @@ export function AlbumDesktopSidebar({
   const dockNarrow = useMediaQuery(
     `(max-width: ${COMPACT_DOCK_BREAKPOINT - 1}px)`,
   );
-  const footerPadBottom = `calc(${
-    dockNarrow ? FAN_DOCK_CLEARANCE : 24
+  // Match the storefront chip's `mb-4` (16px) resting gap, swapping in the
+  // dock clearance when the always-on compact dock is in its edge-to-edge
+  // (iPad) regime, and always honoring the device safe-area inset.
+  const chipMarginBottom = `calc(${
+    dockNarrow ? FAN_DOCK_CLEARANCE : 16
   }px + env(safe-area-inset-bottom, 0px))`;
   // A logged-out visitor (no fan/admin session) landing on a shared
   // Preview & Purchase link sees a stripped rail: just the GoodTunes
@@ -66,11 +89,28 @@ export function AlbumDesktopSidebar({
   // Collection/Search nav + account footer are meaningless until they
   // have an account, so we hide them rather than dead-end.
   const loggedIn = !!user;
+
+  const accountName = user?.displayName || user?.email || "Account";
+  const avatarInitials = (user?.displayName || user?.email || "?")
+    .split(" ")
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  const handleSignOut = async () => {
+    try {
+      await logout();
+    } finally {
+      navigate("/login");
+    }
+  };
+
   return (
     <aside
       className="flex flex-col flex-shrink-0 text-fan-primary overflow-hidden"
       style={{
-        width: 220,
+        width: STOREFRONT_SIDEBAR_WIDTH,
         background: RAIL_CARD_BG,
         backdropFilter: "blur(24px) saturate(180%)",
         WebkitBackdropFilter: "blur(24px) saturate(180%)",
@@ -82,10 +122,8 @@ export function AlbumDesktopSidebar({
       }}
       data-testid="desktop-sidebar"
     >
-      <div className="px-5 pt-6 pb-8">
-        {/* Real GoodTunes brand mark (white wordmark, "Powered by GoGoodr"
-            tagline baked into the asset) — replaces the prior stacked
-            "Good / Tunes" text so the rail reads as the actual brand. */}
+      {/* Brand — white wordmark, matches StorefrontSidebar's px-5 pt-6 pb-5 */}
+      <div className="px-5 pt-6 pb-5">
         <img
           src="/goodtunes-logo-white-sm.png"
           alt="GoodTunes®"
@@ -97,7 +135,7 @@ export function AlbumDesktopSidebar({
       </div>
 
       {loggedIn && (
-        <nav className="px-2">
+        <nav className="px-3">
           <FanRailNav
             active={searchActive ? { kind: "search" } : null}
             onSearch={onSearch}
@@ -108,36 +146,85 @@ export function AlbumDesktopSidebar({
       <div className="flex-1" />
 
       {loggedIn ? (
-        <div className="px-4 pt-4" style={{ paddingBottom: footerPadBottom }}>
-          <div className="flex items-center gap-3 px-1">
+        /* Account footer — mirrors StorefrontSidebar's identity chip +
+           dropdown so the rail reads identically across tabs. */
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             <button
               type="button"
-              onClick={() => navigate("/account")}
-              className="flex items-center gap-3 min-w-0 flex-1 rounded-lg -mx-1 px-1 py-1 text-left hover:bg-white/[0.06] transition-colors"
-              data-testid="button-open-account"
+              className="flex items-center gap-3 mx-3 mb-4 px-3 py-2.5 rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)] hover:bg-white/[0.06]"
+              style={{ marginBottom: chipMarginBottom }}
+              data-testid="sidebar-account"
             >
               <div
-                className="w-10 h-10 rounded-full flex-shrink-0 overflow-hidden bg-white/[0.18] ring-1 ring-white/30"
-                aria-hidden
+                className="relative w-11 h-11 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0"
+                style={{
+                  background: "rgba(255,255,255,0.10)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                }}
               >
                 {user?.avatarUrl ? (
-                  <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+                  <img
+                    src={user.avatarUrl}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-fan-primary text-[13px] font-semibold">
-                    {(user?.displayName || user?.email || "?").slice(0, 1).toUpperCase()}
-                  </div>
+                  <span className="text-white text-xs font-semibold">
+                    {avatarInitials}
+                  </span>
                 )}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-fan-primary text-[13px] font-semibold truncate">
-                  {user?.displayName || "Guest"}
+              <div className="flex-1 min-w-0 text-left">
+                <div className="text-white text-sm font-semibold truncate">
+                  {accountName}
+                </div>
+                <div className="text-fan-faint text-xs truncate">
+                  View profile
                 </div>
               </div>
             </button>
-          </div>
-        </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            side="top"
+            align="start"
+            sideOffset={8}
+            className="w-60 border-0 bg-[rgba(20,24,52,0.92)] text-white shadow-2xl backdrop-blur-xl"
+            style={{
+              WebkitBackdropFilter: "blur(24px) saturate(180%)",
+            }}
+            data-testid="menu-sidebar-account"
+          >
+            <div className="px-2 py-2">
+              <div
+                className="text-white text-sm font-semibold truncate"
+                data-testid="text-account-name"
+              >
+                {accountName}
+              </div>
+            </div>
+            <DropdownMenuSeparator className="bg-white/10" />
+            <DropdownMenuItem
+              onClick={() => navigate("/account")}
+              data-testid="menu-item-account-settings"
+              className="cursor-pointer text-fan-primary focus:bg-white/10 focus:text-white"
+            >
+              <Settings className="w-4 h-4 mr-2 text-fan-secondary" />
+              Account settings
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-white/10" />
+            <DropdownMenuItem
+              onClick={handleSignOut}
+              data-testid="menu-item-sign-out"
+              className="cursor-pointer text-[color:var(--brand-pink)] focus:bg-[rgba(255,84,112,0.14)] focus:text-[color:var(--brand-pink)]"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       ) : (
-        <div className="px-4 pt-4" style={{ paddingBottom: footerPadBottom }}>
+        <div className="px-4 pt-4" style={{ paddingBottom: chipMarginBottom }}>
           <button
             type="button"
             onClick={() => {
