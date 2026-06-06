@@ -1,4 +1,4 @@
-import { useLocation, useSearch } from "wouter";
+import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Settings, LogOut } from "lucide-react";
@@ -24,11 +24,11 @@ const goodTunesWordmark = "/goodtunes-logo-white-sm.png";
 // the floating BottomNav pill at lg+ (≥1024px). Web only — Capacitor
 // native shell stays on the bottom-nav pill regardless of viewport.
 //
-// Routes covered: /collection, /search, /recents, /playlists, /account*,
-// /artist/:slug, /favorite-artists, /bookmarks. /album/* keeps its own
-// pre-existing desktop layout (AlbumDetailDesktop renders its own
-// sidebar) so we skip mounting here on that route to avoid a double
-// sidebar.
+// Routes covered: /home, /collection (+ /collection/songs|artists), /search,
+// /recents, /playlists, /account*, /artist/:slug, /favorite-artists,
+// /bookmarks. /album/* keeps its own pre-existing desktop layout
+// (AlbumDetailDesktop renders its own sidebar) so we skip mounting here on
+// that route to avoid a double sidebar.
 
 interface UserPlaylist {
   id: string;
@@ -38,6 +38,7 @@ interface UserPlaylist {
 }
 
 const STOREFRONT_ROUTE_PREFIXES = [
+  "/home",
   "/collection",
   "/search",
   "/recents",
@@ -57,7 +58,6 @@ export function shouldRenderStorefrontSidebar(location: string): boolean {
 
 export function StorefrontSidebar() {
   const [location, navigate] = useLocation();
-  const searchStr = useSearch();
   const { user, logout } = useAuth();
   const isDesktop = useDesktopShell();
   const [, setTick] = useState(0);
@@ -77,7 +77,7 @@ export function StorefrontSidebar() {
 
   const isAccount = location.startsWith("/account");
 
-  const railActive = computeRailActive(location, searchStr);
+  const railActive = computeRailActive(location);
 
   const avatarInitials = (user?.displayName || user?.username || "?")
     .split(" ")

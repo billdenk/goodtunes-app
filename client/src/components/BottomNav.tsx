@@ -36,9 +36,10 @@ export const DOCK_BOTTOM = "12px";
  */
 export const NAV_CLEARANCE = 170;
 
-// Task #530 — Apple-style split nav: a labeled three-tab pillow on the
-// left (Collection · Playlists · Recents) + a standalone search circle
-// on the right.
+// Task #530 / #1376 — Apple-style split nav: a labeled three-tab pillow on
+// the left (Home · Collection · Recents) + a standalone search circle on the
+// right. Playlists is no longer a top-level tab — it folds under Collection
+// (the Apple-Library landing list).
 //
 // Task #713 — the right circle is now an *inline* search control. At
 // rest it's a circle the exact height of the pillow (flex-stretch +
@@ -200,9 +201,16 @@ export function BottomNav() {
 
   if (isDesktop) return null;
 
-  const isLibrary =
-    location === "/collection" || location === "/" || location.startsWith("/album");
-  const isPlaylists = location.startsWith("/playlist");
+  // Home owns the owned-albums grid (`/home`), the bare root redirect, and
+  // album detail (albums are opened from the Home grid).
+  const isHome =
+    location === "/home" || location === "/" || location.startsWith("/album");
+  // Collection owns the Apple-Library landing + its Songs/Artists detail
+  // views, and Playlists folds under it now that it's lost its own tab.
+  const isCollection =
+    location === "/collection" ||
+    location.startsWith("/collection/") ||
+    location.startsWith("/playlist");
   const isRecents = location.startsWith("/recents");
 
   const onToggleSearch = () => {
@@ -219,19 +227,22 @@ export function BottomNav() {
     }
   };
 
+  // Apple-style house for Home. Hollow stroke when inactive, heavier stroke
+  // when active (matches the Recents clock's active/inactive treatment).
+  const homeIcon = (active: boolean) => (
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? "2.2" : "1.8"} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 10.7L12 3.5l9 7.2" />
+      <path d="M5.2 9.4V20.5h4.6v-6.3h4.4v6.3h4.6V9.4" />
+    </svg>
+  );
+
+  // Stacked bars (an Apple-Library "collection" mark) for Collection.
   const collectionIcon = (active: boolean) => (
     <svg width="25" height="25" viewBox="0 0 24 24" fill="currentColor">
       <rect x="3" y="3" width="4" height="18" rx="1" opacity={active ? 1 : 0.7} />
       <rect x="9" y="3" width="3" height="18" rx="1" opacity={active ? 1 : 0.7} />
       <rect x="14" y="3" width="7" height="11" rx="1" opacity={active ? 1 : 0.7} />
       <rect x="14" y="16" width="7" height="5" rx="1" opacity={active ? 1 : 0.7} />
-    </svg>
-  );
-
-  const playlistsIcon = (active: boolean) => (
-    <svg width="25" height="25" viewBox="0 0 24 24" fill="none">
-      <path d="M3 6h18M3 10h14M3 14h8" stroke="currentColor" strokeWidth={active ? "2.2" : "1.8"} strokeLinecap="round" />
-      <path d="M17 14v6M14 17h6" stroke="currentColor" strokeWidth={active ? "2.2" : "1.8"} strokeLinecap="round" />
     </svg>
   );
 
@@ -284,9 +295,9 @@ export function BottomNav() {
   // is hidden AND search isn't open.
   const toggleSize = hidden && !searchOpen ? 48 : dockHVal;
 
-  let activeIcon: (a: boolean) => ReactNode = collectionIcon;
-  let activeLabel = "Collection";
-  if (isPlaylists) { activeIcon = playlistsIcon; activeLabel = "Playlists"; }
+  let activeIcon: (a: boolean) => ReactNode = homeIcon;
+  let activeLabel = "Home";
+  if (isCollection) { activeIcon = collectionIcon; activeLabel = "Collection"; }
   else if (isRecents) { activeIcon = recentsIcon; activeLabel = "Recents"; }
 
   return (
@@ -424,8 +435,8 @@ export function BottomNav() {
                   : { scale: { type: "spring", stiffness: 460, damping: 28, mass: 0.9 }, opacity: { duration: 0.14 } }
               }
             >
-              <NavItem label="Collection" active={isLibrary} onClick={() => navigate("/collection")} icon={collectionIcon} testId="nav-collection" />
-              <NavItem label="Playlists" active={isPlaylists} onClick={() => navigate("/playlists")} icon={playlistsIcon} testId="nav-playlists" align="center" />
+              <NavItem label="Home" active={isHome} onClick={() => navigate("/home")} icon={homeIcon} testId="nav-home" />
+              <NavItem label="Collection" active={isCollection} onClick={() => navigate("/collection")} icon={collectionIcon} testId="nav-collection" align="center" />
               <NavItem label="Recents" active={isRecents} onClick={() => navigate("/recents")} icon={recentsIcon} testId="nav-recents" align="right" />
             </motion.nav>
           )}

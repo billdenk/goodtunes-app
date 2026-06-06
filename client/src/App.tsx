@@ -19,7 +19,12 @@ import { apiRequest } from "@/lib/queryClient";
 import { AccessNotAuthorizedDialog } from "@/components/AccessNotAuthorizedDialog";
 import { Player } from "@/pages/Player";
 import { Login } from "@/pages/Login";
-import { Collection } from "@/pages/Collection";
+import {
+  Home,
+  Collection,
+  CollectionSongs,
+  CollectionArtists,
+} from "@/pages/Collection";
 import { AlbumDetail } from "@/pages/AlbumDetail";
 import { AlbumDetailMobileSkeleton, AlbumNotFound } from "@/components/ui/AlbumDetailSkeleton";
 import { InstrumentDetail } from "@/pages/InstrumentDetail";
@@ -273,6 +278,7 @@ function Router() {
       return <Redirect to="/account" />;
     }
     if (kind === "admin" && (
+      location.startsWith("/home") ||
       location.startsWith("/collection") ||
       // Admins reach the shared profile editor from their account menu;
       // /account/edit is intentionally exempt from the customer-surface block.
@@ -466,6 +472,17 @@ function Router() {
         {/* Public invite-accept page — recipient sets username + password
             using a token-bound email + role. No auth required. */}
         <Route path="/invite/:token" component={AcceptInvite} />
+        <Route path="/home">
+          <ProtectedRoute component={Home} />
+        </Route>
+        {/* Task #1376 — Collection landing (Apple-Library list) + its
+            dedicated Songs / Artists detail views. */}
+        <Route path="/collection/songs">
+          <ProtectedRoute component={CollectionSongs} />
+        </Route>
+        <Route path="/collection/artists">
+          <ProtectedRoute component={CollectionArtists} />
+        </Route>
         <Route path="/collection">
           <ProtectedRoute component={Collection} />
         </Route>

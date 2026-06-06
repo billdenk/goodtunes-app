@@ -9147,17 +9147,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/EditablePanel.tsx",
+    "snippet": "className=\"w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:bord"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/EditablePanel.tsx",
     "snippet": "className=\"w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:bor"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/EditablePanel.tsx",
     "snippet": "className=\"w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/EditablePanel.tsx",
-    "snippet": "className=\"w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:bord"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14707,21 +14707,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"text-[12px] font-semibold px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"text-[12px] font-semibold px-3 py-1.5 rounded-md bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"text-[12px] font-semibold px-3 py-1.5 rounded-md bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 disabled:opacity-50\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "className=\"px-5 py-6 text-[13px] text-slate-500\""
   },
   {
@@ -19212,17 +19197,27 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Collection.tsx",
-    "snippet": "<h1 ref={titleRef} className=\"text-fan-primary text-[34px] font-bold leading-none tracking-tight will-change-[opacity,transform]\" data-testid=\"text-page-title\">Collection</h1>"
+    "snippet": "<div className=\"px-3.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-fan-faint\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Collection.tsx",
-    "snippet": "<div className=\"px-3.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-fan-faint\">"
+    "snippet": "className=\"text-fan-primary text-[34px] font-bold leading-none tracking-tight will-change-[opacity,transform]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Collection.tsx",
+    "snippet": "<span className=\"flex-1 text-fan-primary text-[17px] font-medium\">{r.label}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Collection.tsx",
+    "snippet": "<h2 className=\"text-fan-primary text-[22px] font-bold tracking-tight mb-4\" data-testid=\"text-recently-added\">"
   },
   {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/Collection.tsx",
-    "snippet": "className=\"relative w-9 h-9 rounded-full overflow-hidden flex items-center justify-center active:opacity-70 pointer-events-auto will-change-[opacity,transform]\""
+    "snippet": "className=\"relative w-9 h-9 rounded-full overflow-hidden flex items-center justify-center active:opacity-70\""
   },
   {
     "rule": "player-touch-target-too-small",

@@ -2,14 +2,21 @@ import { type ReactNode } from "react";
 import { useLocation } from "wouter";
 import {
   Search,
-  Disc3,
+  Home as HomeIcon,
+  Library,
   Music2,
   Users,
   ListMusic,
   Clock,
   type LucideIcon,
 } from "lucide-react";
-import { collectionTabHref, type FanRailActive } from "@/lib/fanRail";
+import {
+  HOME_HREF,
+  COLLECTION_HREF,
+  COLLECTION_SONGS_HREF,
+  COLLECTION_ARTISTS_HREF,
+  type FanRailActive,
+} from "@/lib/fanRail";
 
 // Task #1074 — single source of truth for the desktop fan rail's nav
 // items so the album-page rail (AlbumDesktopSidebar) and the storefront
@@ -17,16 +24,16 @@ import { collectionTabHref, type FanRailActive } from "@/lib/fanRail";
 // same Apple-Music rounded highlight. Each rail keeps its own brand
 // header + account footer; only this middle nav is shared.
 //
-// Task #1139 — grouped into Apple-Music-style sections: a top group
-// (Search, no header), a "Library" header over Albums/Songs/Artists/
-// Recents, and a "Playlists" header over the Playlists destination
-// (plus, on the storefront rail, the fan's own playlists folded in via
-// the `playlistsSlot` below).
+// Task #1376 — mirrors the mobile dock restructure: a top group
+// (Search, Home, Collection, Recents — no header), a "Library" header
+// over the Collection detail destinations (Songs, Artists), and a
+// "Playlists" header over the Playlists destination (plus, on the
+// storefront rail, the fan's own playlists folded in via `playlistsSlot`).
 
-// Task #1081 — the URL→active-state logic + tab types now live in
-// `@/lib/fanRail` (pure, testable). Re-export the types so existing
+// Task #1081 — the URL→active-state logic + types now live in
+// `@/lib/fanRail` (pure, testable). Re-export the type so existing
 // `from "@/components/ui/FanRailNav"` imports keep working.
-export type { CollectionTab, FanRailActive } from "@/lib/fanRail";
+export type { FanRailActive } from "@/lib/fanRail";
 
 function Row({
   active,
@@ -88,11 +95,11 @@ export function FanRailNav({
   playlistsSlot?: ReactNode;
 }) {
   const [, navigate] = useLocation();
-  const isCollection = active?.kind === "collection";
 
   return (
     <div>
-      {/* Top group — Search, no header. */}
+      {/* Top group — the primary destinations, no header. Mirrors the
+          mobile dock (Home · Collection · Recents) plus Search. */}
       <div className="space-y-0.5">
         <Row
           testId="rail-search"
@@ -101,33 +108,19 @@ export function FanRailNav({
           active={active?.kind === "search"}
           onClick={() => (onSearch ? onSearch() : navigate("/search"))}
         />
-      </div>
-
-      {/* Library group — Albums / Songs / Artists / Recents. The header
-          replaces the old standalone "Collection" parent row; the
-          destinations sit directly under it (de-indented). */}
-      <GroupHeader>Library</GroupHeader>
-      <div className="space-y-0.5">
         <Row
-          testId="rail-collection-albums"
-          icon={Disc3}
-          label="Albums"
-          active={isCollection && active.tab === "albums"}
-          onClick={() => navigate(collectionTabHref("albums"))}
+          testId="rail-home"
+          icon={HomeIcon}
+          label="Home"
+          active={active?.kind === "home"}
+          onClick={() => navigate(HOME_HREF)}
         />
         <Row
-          testId="rail-collection-songs"
-          icon={Music2}
-          label="Songs"
-          active={isCollection && active.tab === "songs"}
-          onClick={() => navigate(collectionTabHref("songs"))}
-        />
-        <Row
-          testId="rail-collection-artists"
-          icon={Users}
-          label="Artists"
-          active={isCollection && active.tab === "artists"}
-          onClick={() => navigate(collectionTabHref("artists"))}
+          testId="rail-collection"
+          icon={Library}
+          label="Collection"
+          active={active?.kind === "collection"}
+          onClick={() => navigate(COLLECTION_HREF)}
         />
         <Row
           testId="rail-recents"
@@ -135,6 +128,26 @@ export function FanRailNav({
           label="Recents"
           active={active?.kind === "recents"}
           onClick={() => navigate("/recents")}
+        />
+      </div>
+
+      {/* Library group — the Collection detail destinations (Songs,
+          Artists), de-indented under their header. */}
+      <GroupHeader>Library</GroupHeader>
+      <div className="space-y-0.5">
+        <Row
+          testId="rail-collection-songs"
+          icon={Music2}
+          label="Songs"
+          active={active?.kind === "songs"}
+          onClick={() => navigate(COLLECTION_SONGS_HREF)}
+        />
+        <Row
+          testId="rail-collection-artists"
+          icon={Users}
+          label="Artists"
+          active={active?.kind === "artists"}
+          onClick={() => navigate(COLLECTION_ARTISTS_HREF)}
         />
       </div>
 
