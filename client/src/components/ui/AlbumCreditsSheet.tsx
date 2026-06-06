@@ -697,8 +697,11 @@ export function AlbumCreditsPage({
 
   // Gear sub-stack for the person view. Its X closes the whole page (returns
   // past the entire stack); each sub-sheet's back chevron pops one level.
-  // Rendered as a top-level sibling, OUTSIDE the page's animated wrapper.
-  const gear = usePersonGearDrilldown(requestClose);
+  // `contained` makes the gear/vendor/in-app-browser panes slide in INSIDE the
+  // credits card (clipped to its rounded bounds, rails + dimmed page still
+  // visible behind), matching the person drill-down — instead of a
+  // full-viewport takeover. So the overlay is rendered as a child of the card.
+  const gear = usePersonGearDrilldown(requestClose, { contained: true });
 
   const openPerson = (personId: string, role: string) => {
     const entry = groups.flatMap((g) => g.entries).find((e) => e.personId === personId);
@@ -757,11 +760,14 @@ export function AlbumCreditsPage({
                 showCloseOnPerson
                 surfaceBg="var(--brand-bg)"
               />
+              {/* In-card gear/vendor/in-app-browser panes. Rendered inside the
+                  card (which is `relative overflow-hidden`) so the contained
+                  sub-sheets' `absolute inset-0` pins + clips to the card. */}
+              {gear.overlay}
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-      {gear.overlay}
     </>
   );
 }

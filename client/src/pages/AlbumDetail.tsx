@@ -1673,12 +1673,20 @@ export function SheetShell({
   testId,
   onClose,
   variant = "bottom",
+  contained = false,
   children,
 }: {
   ariaLabel: string;
   testId: string;
   onClose: () => void;
   variant?: "bottom" | "full" | "fixed";
+  /* When true, a `full` sheet renders as an in-card slide-in pane —
+     `absolute` to its positioned ancestor (the desktop credits card)
+     instead of `fixed` to the viewport, sliding in horizontally like the
+     person view rather than up from the bottom. The fan rails + dimmed
+     album page stay visible behind the card. Only meaningful with
+     `variant="full"`; ignored otherwise. */
+  contained?: boolean;
   children: ReactNode;
 }) {
   const reduce = !!useReducedMotion();
@@ -1734,10 +1742,16 @@ export function SheetShell({
     containerClass = "relative w-full max-w-[390px] z-10 rounded-t-3xl pt-3 pb-8 max-h-[88vh] overflow-y-auto scrollbar-hide";
   }
 
+  // In-card mode: pin to the positioned ancestor (the credits card) and
+  // slide horizontally so the gear stack reads like the person drill-down,
+  // not a bottom sheet. Otherwise the sheet is fixed to the viewport.
+  const offscreen = contained ? { x: "100%" } : { y: "100%" };
+  const onscreen = contained ? { x: 0 } : { y: 0 };
+
   return (
     <SheetDismissProvider value={dismiss}>
       <div
-        className={`fixed inset-0 z-[78] flex justify-center ${isFull ? "items-stretch" : "items-end"}`}
+        className={`${contained ? "absolute inset-0 z-30" : "fixed inset-0 z-[78]"} flex justify-center ${isFull ? "items-stretch" : "items-end"}`}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
@@ -1761,8 +1775,8 @@ export function SheetShell({
         <motion.div
           className={containerClass}
           style={{ background: "rgb(20, 24, 48)", boxShadow: isFull ? "none" : "0 -16px 40px rgba(0,0,0,0.6)" }}
-          initial={{ y: "100%" }}
-          animate={{ y: closing ? "100%" : 0 }}
+          initial={offscreen}
+          animate={closing ? offscreen : onscreen}
           transition={closing ? sheetClose(reduce) : sheetOpen(reduce)}
           onAnimationComplete={() => { if (closing) (finalRef.current ?? onClose)(); }}
         >
@@ -2243,10 +2257,18 @@ function PerformerSheet({
 // rendered OUTSIDE any framer-transformed ancestor (a transform turns the
 // sub-sheets' `position: fixed` into absolute), so the desktop modal renders it
 // as a top-level sibling of its animated box.
-export function usePersonGearDrilldown(onCloseAll: () => void): {
+export function usePersonGearDrilldown(
+  onCloseAll: () => void,
+  /* When `contained` is true the gear stack (instrument / vendor / in-app
+     browser) renders as in-card slide-in panes for the desktop credits card
+     instead of full-viewport overlays. The mobile album page omits it, so it
+     defaults to the existing full-screen presentation. */
+  opts?: { contained?: boolean },
+): {
   openInstrument: (instrument: Instrument, tuningNotes?: string, attribution?: { personId: string; songId: string }) => void;
   overlay: React.ReactNode;
 } {
+  const contained = !!opts?.contained;
   const [instrumentSheet, setInstrumentSheet] = useState<{ instrument: Instrument; tuningNotes?: string; attribution?: { personId: string; songId: string } } | null>(null);
   const [vendorSheet, setVendorSheet] = useState<{ vendor: InstrumentVendor; instrument: Instrument } | null>(null);
   const [inAppBrowser, setInAppBrowser] = useState<{ url: string; title: string; logoUrl?: string } | null>(null);
@@ -2310,6 +2332,7 @@ export function usePersonGearDrilldown(onCloseAll: () => void): {
         logoUrl={inAppBrowser.logoUrl}
         onClose={() => setInAppBrowser(null)}
         onCloseAll={closeAllSheets}
+        contained={contained}
       />
     );
   } else if (vendorSheet) {
@@ -2326,6 +2349,7 @@ export function usePersonGearDrilldown(onCloseAll: () => void): {
         }}
         onClose={() => setVendorSheet(null)}
         onCloseAll={closeAllSheets}
+        contained={contained}
       />
     );
   } else if (instrumentSheet) {
@@ -2340,6 +2364,7 @@ export function usePersonGearDrilldown(onCloseAll: () => void): {
         onOpenVendor={(vendor) => setVendorSheet({ vendor, instrument: instrumentSheet.instrument })}
         onClose={() => setInstrumentSheet(null)}
         onCloseAll={closeAllSheets}
+        contained={contained}
       />
     );
   }
@@ -2507,6 +2532,7 @@ function InstrumentSheet({
   onOpenVendor,
   onClose,
   onCloseAll,
+  contained = false,
 }: {
   instrument: Instrument;
   tuningNotes?: string;
@@ -2517,6 +2543,9 @@ function InstrumentSheet({
   onOpenVendor: (vendor: InstrumentVendor) => void;
   onClose: () => void;
   onCloseAll: () => void;
+  /* Render as an in-card slide-in pane (desktop credits card) instead of a
+     full-viewport overlay. Forwarded to SheetShell. */
+  contained?: boolean;
 }) {
   // SuperCredits-derived list of artists who've played this instrument on
   // a track. Anchored on instrument.id (not vendor.id), so it works for
@@ -2594,7 +2623,7 @@ function InstrumentSheet({
   };
 
   return (
-    <SheetShell ariaLabel={instrument.name} testId="sheet-instrument" variant="full" onClose={onClose}>
+    <SheetShell ariaLabel={instrument.name} testId="sheet-instrument" variant="full" contained={contained} onClose={onClose}>
       {/* Apple-style top bar: back chevron on left (this is a sub-sheet from credits),
           Share + Bookmark on right. shrink-0 so it stays pinned. Top padding respects safe area.
           Background is the shared ChromeScrim (soft navy gradient fade, no hard
@@ -2878,6 +2907,7 @@ function VendorSheet({
   onOpenInstrument,
   onClose,
   onCloseAll,
+  contained = false,
 }: {
   vendor: InstrumentVendor;
   instrument: Instrument;
@@ -2887,6 +2917,8 @@ function VendorSheet({
   onOpenInstrument: (instrument: Instrument) => void;
   onClose: () => void;
   onCloseAll: () => void;
+  /* Render as an in-card slide-in pane instead of a full-viewport overlay. */
+  contained?: boolean;
 }) {
   const [tab, setTab] = useState<"about" | "instruments" | "artists">("about");
 
@@ -2975,7 +3007,7 @@ function VendorSheet({
   };
 
   return (
-    <SheetShell ariaLabel={vendor.name} testId="sheet-vendor" variant="full" onClose={onClose}>
+    <SheetShell ariaLabel={vendor.name} testId="sheet-vendor" variant="full" contained={contained} onClose={onClose}>
       {/* Top bar: floating back chevron + actions over the hero (Apple Music artist page).
           NOTE: `overflow-x-hidden` is intentional — when only overflow-y is set
           the browser computes overflow-x as `auto` too, which let the whole
@@ -3321,12 +3353,15 @@ function InAppBrowserSheet({
   logoUrl,
   onClose,
   onCloseAll,
+  contained = false,
 }: {
   url: string;
   title: string;
   logoUrl?: string;
   onClose: () => void;
   onCloseAll: () => void;
+  /* Render as an in-card slide-in pane instead of a full-viewport overlay. */
+  contained?: boolean;
 }) {
   const dismiss = useSheetDismiss();
   // Validate https. We refuse to render anything we can't safely embed/open.
@@ -3346,7 +3381,7 @@ function InAppBrowserSheet({
   };
 
   return (
-    <SheetShell ariaLabel={`${title} — in-app browser`} testId="sheet-inapp-browser" variant="full" onClose={onClose}>
+    <SheetShell ariaLabel={`${title} — in-app browser`} testId="sheet-inapp-browser" variant="full" contained={contained} onClose={onClose}>
       {/* Top bar — close on left, vendor logo + domain center, "open in browser" on right */}
       <div
         className="sticky top-0 z-20 flex items-center gap-2 px-3 py-2 border-b border-white/8"
