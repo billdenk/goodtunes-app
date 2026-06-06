@@ -87,6 +87,8 @@ Buy direct from the artist, get a numbered GoodDeed collectible, share or gift i
 
 - **Gifting.** Fans can buy an album as a gift for someone else. The recipient gets a unique link to claim their GoodDeed and add the album to their library.
 
+- **Delete your account from inside the app.** Every fan can permanently delete their GoodTunes account from **Account → Privacy → Delete My Account** (behind a plain-language confirm). Deleting removes their profile and personal data — favorites, playlists, library, and sign-in (password and any Google/Apple links) — and signs them out everywhere; past orders are retained for legal and accounting records. This satisfies Apple's and Google's requirement that an app offering account creation also lets users delete their account in-app.
+
 ---
 
 # For the operator / investor

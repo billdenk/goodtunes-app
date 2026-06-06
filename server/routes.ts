@@ -808,6 +808,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // In-app account deletion — required for App Store review (guideline
+  // 5.1.1(v): an app that supports account creation must let the user
+  // initiate account deletion from within the app) and Google Play's
+  // account-deletion policy. Anonymizes the fan row in place (orders /
+  // financial records are retained for legal reasons) and tears down the
+  // session + bearer token so the account becomes unrecoverable and
+  // sign-in-impossible. The UI entry point is Account → Privacy → Delete
+  // My Account.
+  app.delete("/api/customer/me", requireCustomer, async (req, res) => {
+    const id = req.session.userId!;
+    try {
+      await storage.deleteCustomerAccount(id);
+    } catch (err) {
+      console.error("[account-delete] failed", err);
+      return res.status(500).json({ message: "Could not delete your account. Please try again." });
+    }
+    // Belt-and-suspenders: deleteCustomerAccount already revoked every
+    // bearer token; also tear down the current session + cookie.
+    await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
+    res.clearCookie("connect.sid", { path: "/" });
+    return res.json({ ok: true });
+  });
+
   app.get("/api/me", requireAuth, async (req, res) => {
     if (req.session.kind === "customer") {
       const c = await storage.getCustomer(req.session.userId!);

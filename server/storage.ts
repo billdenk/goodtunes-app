@@ -597,6 +597,7 @@ export interface IStorage {
   getCustomerByEmail(email: string): Promise<CustomerUser | undefined>;
   createCustomer(user: InsertCustomerUser): Promise<CustomerUser>;
   updateCustomer(id: string, data: Partial<CustomerUser>): Promise<CustomerUser | undefined>;
+  deleteCustomerAccount(id: string): Promise<void>;
 
   // ---- Admin customers directory (Task #131) -----------------------
   // Read-only directory of fan accounts for the admin Customers section.
@@ -3482,6 +3483,58 @@ export class DbStorage implements IStorage {
     const { id: _i, createdAt: _c, ...rest } = data as any;
     const [c] = await db.update(customerUsers).set(rest).where(eq(customerUsers.id, id)).returning();
     return c;
+  }
+  // In-app account deletion (App Store guideline 5.1.1(v) + Google Play's
+  // account-deletion requirement). We anonymize the row in place rather
+  // than hard-deleting it: orders and other financial records reference
+  // `customer_users.id` and are retained for legal/accounting reasons, so a
+  // hard delete would either orphan them or fail on FK constraints. Instead
+  // we strip every PII column, null the password, drop all OAuth identities,
+  // revoke every bearer token, and wipe personal content (favorites,
+  // playlists, library grants). The result is an unrecoverable, sign-in-
+  // impossible row (random unguessable email, no password, no identity).
+  async deleteCustomerAccount(id: string): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Revoke every bearer token so no cached token re-authenticates.
+      await tx.delete(authTokens).where(eq(authTokens.customerUserId, id));
+      // Drop OAuth links so the account can't be reached via Google/Apple.
+      await tx.delete(customerIdentities).where(eq(customerIdentities.userId, id));
+      // Personal content: playlists (+ their songs), favorites, library.
+      const pls = await tx
+        .select({ id: playlists.id })
+        .from(playlists)
+        .where(eq(playlists.userId, id));
+      const plIds = pls.map((p) => p.id);
+      if (plIds.length) {
+        await tx.delete(playlistSongs).where(inArray(playlistSongs.playlistId, plIds));
+        await tx.delete(playlists).where(eq(playlists.userId, id));
+      }
+      await tx.delete(songFavorites).where(eq(songFavorites.userId, id));
+      await tx.delete(artistFavorites).where(eq(artistFavorites.userId, id));
+      await tx.delete(userAlbums).where(eq(userAlbums.userId, id));
+      // Anonymize the surviving row. `deleted-<id>` is deterministic so a
+      // double-submit is idempotent and never collides on the unique
+      // email/username indexes.
+      await tx
+        .update(customerUsers)
+        .set({
+          username: `deleted-${id}`,
+          email: `deleted-${id}@deleted.invalid`,
+          displayName: "Deleted account",
+          realName: null,
+          password: null,
+          phone: null,
+          phoneE164: null,
+          phoneVerifiedAt: null,
+          billingAddress: null,
+          shippingAddress: null,
+          handle: null,
+          contactEmail: null,
+          contactPhone: null,
+          favoriteStreamingService: null,
+        })
+        .where(eq(customerUsers.id, id));
+    });
   }
 
   // ---- Admin customers directory (Task #131) -------------------------

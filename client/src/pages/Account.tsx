@@ -343,6 +343,28 @@ export function Account() {
     navigate("/login");
   };
 
+  // In-app account deletion (App Store 5.1.1(v) + Google Play). Calls the
+  // anonymize-and-revoke endpoint, then clears the local bearer token and
+  // any cached query data before sending the fan back to the login screen.
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(false);
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    setDeleteError(false);
+    try {
+      await apiRequest("DELETE", "/api/customer/me");
+    } catch {
+      setDeleting(false);
+      setDeleteError(true);
+      return;
+    }
+    setAuthToken(null);
+    queryClient.clear();
+    setDeleting(false);
+    navigate("/login");
+  };
+
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
 
@@ -652,6 +674,12 @@ export function Account() {
             clearing={clearing}
             clearedToast={clearedToast}
             onClearHistory={handleClearHistory}
+            confirmDelete={confirmDelete}
+            setConfirmDelete={setConfirmDelete}
+            deleting={deleting}
+            deleteError={deleteError}
+            onDeleteAccount={handleDeleteAccount}
+            isCustomer={user?.kind === "customer"}
           />
         )}
 
@@ -884,6 +912,12 @@ function PrivacySheet({
   clearing,
   clearedToast,
   onClearHistory,
+  confirmDelete,
+  setConfirmDelete,
+  deleting,
+  deleteError,
+  onDeleteAccount,
+  isCustomer,
 }: {
   onClose: () => void;
   confirmClear: boolean;
@@ -891,6 +925,12 @@ function PrivacySheet({
   clearing: boolean;
   clearedToast: boolean;
   onClearHistory: () => void;
+  confirmDelete: boolean;
+  setConfirmDelete: (v: boolean) => void;
+  deleting: boolean;
+  deleteError: boolean;
+  onDeleteAccount: () => void;
+  isCustomer: boolean;
 }) {
   return (
     <div
@@ -999,6 +1039,58 @@ function PrivacySheet({
         <p className="text-fan-faint text-xs leading-relaxed px-1">
           Opens goodtunes.music/privacy in your browser.
         </p>
+
+        {isCustomer && (
+          <>
+            <p className="text-fan-faint text-xs uppercase tracking-widest font-medium mb-2 mt-6 ml-1">Account</p>
+            <div className="rounded-2xl overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
+              <p className="px-4 pt-3 pb-2 text-fan-secondary text-xs leading-snug">
+                Permanently delete your GoodTunes account and personal data. This removes your profile, favorites, playlists, and library. Past orders are kept for legal and accounting records. This can't be undone.
+              </p>
+              {!confirmDelete ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="w-full py-3.5 text-left px-4 text-base active:bg-white/[0.06] border-t"
+                  style={{ borderColor: "rgba(255,255,255,0.07)", color: "var(--brand-heart)" }}
+                  data-testid="button-delete-account"
+                >
+                  Delete My Account
+                </button>
+              ) : (
+                <div className="px-4 py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+                  <p className="text-fan-primary text-sm mb-3">Permanently delete your account? You'll be signed out and won't be able to sign back in.</p>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(false)}
+                      disabled={deleting}
+                      className="flex-1 py-3 rounded-2xl border border-white/20 text-fan-secondary text-sm font-medium disabled:opacity-50"
+                      data-testid="button-cancel-delete-account"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onDeleteAccount}
+                      disabled={deleting}
+                      className="flex-1 py-3 rounded-2xl font-semibold text-sm text-white disabled:opacity-50"
+                      style={{ background: "#FF5470" }}
+                      data-testid="button-confirm-delete-account"
+                    >
+                      {deleting ? "Deleting..." : "Delete Account"}
+                    </button>
+                  </div>
+                  {deleteError && (
+                    <p className="text-[var(--brand-heart)] text-xs mt-3" data-testid="text-delete-account-error">
+                      Something went wrong. Please try again.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
       </div>
     </div>

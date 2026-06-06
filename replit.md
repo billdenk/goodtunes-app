@@ -34,6 +34,7 @@ Read the doc that matches your task before changing code:
 - **[docs/analytics.md](./docs/analytics.md)** — typed event registry, envelope (device/session/user/platform/geo), `/api/events` ingest, PostHog forwarding (`POSTHOG_API_KEY`/`POSTHOG_HOST`), admin debug overlay, `songs.playlist_count` denorm.
 - **[docs/vendors/](./docs/vendors/)** — pressing-vendor reference docs (MRP, PMP, Hellbender): art/audio specs, packaging, color catalogs, templates, turn time, submission method. Source of truth for upload validation and print-PDF generation.
 - **[docs/roadmap.md](./docs/roadmap.md)** — auth plan, AWS integration, DRM ladder, mobile RN port, play analytics, artist upload portal, Micro-Sponsorships economics, streaming-service handoff, muso.ai evaluation, verified-artist outreach, lyrics data plan. Read this for anything labelled "planned" or "deferred."
+- **[docs/store-review-readiness.md](./docs/store-review-readiness.md)** — pre-submission App Store + Play compliance audit: prioritized A (fixed in repo) / B (operator/infra) / C (device-only) findings, in-app account deletion, Android target-API-35 gap. Pair with `app-store-submission.md` + `native-builds.md`.
 
 ## User preferences
 
