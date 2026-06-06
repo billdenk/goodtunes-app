@@ -12,8 +12,15 @@ import {
   ArrowUpDown,
   Check,
   Download,
+  ChevronDown,
 } from "lucide-react";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { apiRequest } from "@/lib/queryClient";
 
 type Kpis = { totalOrders: number; distinctFans: number; totalCents: number };
@@ -190,11 +197,14 @@ export function AlbumCustomersPanel({ albumId }: { albumId: string }) {
 
   // Build the same search/sort params as the table, minus pagination, and
   // tack on format=csv. The server exports the WHOLE filtered roster.
-  async function handleExport() {
+  // `variant="fulfillment"` adds the full mailing address captured at
+  // checkout so operators can ship straight off the export.
+  async function handleExport(variant?: "fulfillment") {
     if (exporting) return;
     setExporting(true);
     try {
       const p = new URLSearchParams({ format: "csv" });
+      if (variant) p.set("variant", variant);
       if (search) p.set("search", search);
       if (sortKey !== "date" || sortDir !== "desc") {
         p.set("sort", sortKey);
@@ -208,7 +218,7 @@ export function AlbumCustomersPanel({ albumId }: { albumId: string }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `album-${albumId}-customers.csv`;
+      a.download = `album-${albumId}-${variant === "fulfillment" ? "fulfillment" : "customers"}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -299,16 +309,44 @@ export function AlbumCustomersPanel({ albumId }: { albumId: string }) {
                 </button>
               )}
             </div>
-            <button
-              type="button"
-              onClick={handleExport}
-              disabled={exporting || total === 0}
-              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              data-testid="button-export-customers"
-            >
-              <Download className="w-3.5 h-3.5" />
-              {exporting ? "Exporting…" : "Export CSV"}
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  disabled={exporting || total === 0}
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  data-testid="button-export-customers"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  {exporting ? "Exporting…" : "Export CSV"}
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuItem
+                  onClick={() => handleExport()}
+                  data-testid="button-export-summary"
+                >
+                  <div className="flex flex-col">
+                    <span className="font-medium">Summary</span>
+                    <span className="text-xs text-slate-500">
+                      Fan, email, location, GoodDeed, amount
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleExport("fulfillment")}
+                  data-testid="button-export-fulfillment"
+                >
+                  <div className="flex flex-col">
+                    <span className="font-medium">Fulfillment</span>
+                    <span className="text-xs text-slate-500">
+                      Adds full shipping address for mailing
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         <div className="overflow-x-auto">

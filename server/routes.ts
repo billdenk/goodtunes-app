@@ -13838,12 +13838,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Task #1504 — CSV export of the WHOLE search/sort-filtered roster (not
     // just the loaded rows). Columns mirror the Customers tab: fan name,
     // email, location, purchase date, GoodDeed, amount.
+    //
+    // Task #1507 — a `variant=fulfillment` flavour adds the full mailing
+    // address captured at checkout (recipient name, line1/line2, city, state,
+    // postal code, country) plus an Order type column so operators can ship
+    // straight off the export. Digital orders have no shipping snapshot, so
+    // their address cells stay blank and Order type reads "Digital".
     if (String(req.query.format ?? "").toLowerCase() === "csv") {
+      const fulfillment =
+        String(req.query.variant ?? "").toLowerCase() === "fulfillment";
       const exportRows = await db.execute<any>(sql`
         SELECT o.id, o.created_at, o.total_cents, o.buyer_name, o.buyer_email,
+          o.shipping_address->>'name' AS ship_name,
+          o.shipping_address->>'line1' AS line1,
+          o.shipping_address->>'line2' AS line2,
           o.shipping_address->>'city' AS city,
           o.shipping_address->>'state' AS state,
+          o.shipping_address->>'postalCode' AS postal_code,
           o.shipping_address->>'country' AS country,
+          (o.shipping_address IS NOT NULL) AS has_shipping,
           cu.email AS fan_email, cu.display_name, cu.real_name,
           ${hasGoodDeedExpr} AS has_good_deed
         FROM orders o
@@ -13858,26 +13871,62 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const s = v == null ? "" : String(v);
         return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
       };
-      const header = ["Fan", "Email", "Location", "Purchase date", "GoodDeed", "Amount"];
+      const truthy = (v: unknown) => v === true || v === "t" || v === "true";
+      const header = fulfillment
+        ? [
+            "Fan",
+            "Email",
+            "Order type",
+            "Recipient",
+            "Address line 1",
+            "Address line 2",
+            "City",
+            "State",
+            "Postal code",
+            "Country",
+            "Purchase date",
+            "GoodDeed",
+            "Amount",
+          ]
+        : ["Fan", "Email", "Location", "Purchase date", "GoodDeed", "Amount"];
       const lines = [header.join(",")];
       for (const r of ((exportRows as any).rows ?? [])) {
         const name = r.display_name?.trim() || r.real_name?.trim() || r.buyer_name || r.fan_email || r.buyer_email || "Anonymous";
         const email = r.fan_email || r.buyer_email || "";
-        const location = [r.city, r.state, r.country].filter(Boolean).join(", ");
         const date = r.created_at ? new Date(r.created_at).toISOString().slice(0, 10) : "";
-        const goodDeed =
-          r.has_good_deed === true || r.has_good_deed === "t" || r.has_good_deed === "true"
-            ? "Yes"
-            : "No";
+        const goodDeed = truthy(r.has_good_deed) ? "Yes" : "No";
         const amount = (Number(r.total_cents) / 100).toFixed(2);
-        lines.push([name, email, location, date, goodDeed, amount].map(csvCell).join(","));
+        if (fulfillment) {
+          const isPhysical = truthy(r.has_shipping);
+          const recipient = isPhysical ? r.ship_name?.trim() || r.buyer_name || "" : "";
+          lines.push(
+            [
+              name,
+              email,
+              isPhysical ? "Physical" : "Digital",
+              recipient,
+              r.line1 || "",
+              r.line2 || "",
+              r.city || "",
+              r.state || "",
+              r.postal_code || "",
+              r.country || "",
+              date,
+              goodDeed,
+              amount,
+            ].map(csvCell).join(","),
+          );
+        } else {
+          const location = [r.city, r.state, r.country].filter(Boolean).join(", ");
+          lines.push([name, email, location, date, goodDeed, amount].map(csvCell).join(","));
+        }
       }
       // Prepend a UTF-8 BOM so Excel reads accented names correctly.
       const csv = "\uFEFF" + lines.join("\r\n") + "\r\n";
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename="album-${albumId}-customers.csv"`,
+        `attachment; filename="album-${albumId}-${fulfillment ? "fulfillment" : "customers"}.csv"`,
       );
       return res.send(csv);
     }
