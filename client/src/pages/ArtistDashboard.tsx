@@ -35,7 +35,11 @@ type Kpis = {
   topTrack: { song_id: string; title: string; plays: string } | null;
   topAlbum: { album_id: string; title: string; revenue: string } | null;
 };
-type Summary = { range: Range; compare: Range | null; current: Kpis; previous: Kpis | null };
+type Lifetime = {
+  grossCents: number; units: number; orders: number; buyers: number;
+  refundedCents: number; plays: number; listeners: number;
+};
+type Summary = { range: Range; compare: Range | null; current: Kpis; previous: Kpis | null; lifetime?: Lifetime | null };
 type Timeseries = {
   range: Range;
   revenue: { day: string; skuKind: string; revenueCents: number }[];
@@ -226,6 +230,30 @@ function Kpi({ label, value, sub, prev, testId }: { label: string; value: string
   );
 }
 
+// Task #1334 — All-time "since launch" headline. Lives ABOVE the
+// range-windowed KPI grid and is visually distinct (mint accent, "All
+// time" eyebrow) so the lifetime figures are never confused with the
+// date-range numbers below. Reconciles with the buyer-roster totals at
+// /admin/people/:id/buyers.
+function LifetimeBanner({ data }: { data?: Lifetime | null }) {
+  return (
+    <section
+      className="rounded-2xl bg-[color:var(--brand-mint)]/[0.06] ring-1 ring-[color:var(--brand-mint)]/25 p-4 sm:p-5"
+      data-testid="lifetime-banner"
+    >
+      <p className="text-xs uppercase tracking-wider font-semibold text-[color:var(--brand-mint)] mb-3" data-testid="lifetime-label">
+        All time · since launch
+      </p>
+      <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Kpi label="Gross revenue" value={data ? dollars(data.grossCents) : "—"} sub={data && data.refundedCents ? `${dollars(data.refundedCents)} refunded` : undefined} testId="lifetime-gross" />
+        <Kpi label="Orders" value={data ? compact(data.orders) : "—"} sub={data ? `${compact(data.buyers)} unique fan${data.buyers === 1 ? "" : "s"}` : undefined} testId="lifetime-orders" />
+        <Kpi label="Units sold" value={data ? compact(data.units) : "—"} testId="lifetime-units" />
+        <Kpi label="Total plays" value={data ? compact(data.plays) : "—"} sub={data ? `${compact(data.listeners)} listeners` : undefined} testId="lifetime-plays" />
+      </section>
+    </section>
+  );
+}
+
 // ─── Tabs ─────────────────────────────────────────────────────────────
 function OverviewTab({ qs }: { qs: string }) {
   const summary = useQuery<Summary>({ queryKey: ["/api/artist/summary", qs] });
@@ -233,9 +261,17 @@ function OverviewTab({ qs }: { qs: string }) {
   const geo = useQuery<GeoPayload & { range: Range }>({ queryKey: ["/api/artist/geo", qs] });
   const cur = summary.data?.current;
   const prev = summary.data?.previous ?? null;
+  const lifetime = summary.data?.lifetime ?? null;
 
   return (
     <>
+      <LifetimeBanner data={lifetime} />
+
+      <div className="flex items-baseline justify-between">
+        <p className="text-xs uppercase tracking-wider font-semibold text-fan-faint" data-testid="kpi-range-label">
+          Selected date range
+        </p>
+      </div>
       <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3" data-testid="kpi-grid">
         <Kpi label="Gross revenue" value={cur ? dollars(cur.grossCents) : "—"} sub={cur && cur.refundedCents ? `${dollars(cur.refundedCents)} refunded` : undefined} prev={cur ? { cur: cur.grossCents, prev: prev?.grossCents ?? null } : null} testId="kpi-gross" />
         <Kpi label="Artist share" value={cur ? dollars(cur.artistShareCents) : "—"} prev={cur ? { cur: cur.artistShareCents, prev: prev?.artistShareCents ?? null } : null} testId="kpi-artist-share" />

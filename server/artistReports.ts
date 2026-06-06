@@ -256,6 +256,74 @@ function emptyKpis() {
   };
 }
 
+// ─── Lifetime (all-time) totals ────────────────────────────────────────
+// Task #1334 — the windowed KPIs above are scoped to the selected date
+// range (default Last 30 days), so an artist never sees a single "since
+// launch" headline on the dashboard itself; the all-time figures only
+// surfaced once they drilled into the buyer roster
+// (`/admin/people/:id/buyers`, which is unbounded). This returns the same
+// metrics with NO date bound so the Overview tab can show a lifetime
+// banner alongside the range window.
+//
+// Reconciliation: the buyer-roster KPI query counts orders with status
+// IN ('paid','shipped','complete','completed') and SUMs total_cents over
+// the artist's albums. We mirror that exactly (non-refunded only, same
+// status set via `o.status <> 'refunded'` against `ordersFilter`) so the
+// lifetime orders / fans / gross reconcile with that page.
+export type LifetimeTotals = {
+  grossCents: number;
+  units: number;
+  orders: number;
+  buyers: number;
+  refundedCents: number;
+  plays: number;
+  listeners: number;
+};
+
+async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotals> {
+  const empty: LifetimeTotals = {
+    grossCents: 0, units: 0, orders: 0, buyers: 0,
+    refundedCents: 0, plays: 0, listeners: 0,
+  };
+  if (scope.albumIds.length === 0 && scope.songIds.length === 0) return empty;
+
+  const revRow = scope.albumIds.length ? await db.execute<{
+    gross: string; units: string; buyers: string; refunded: string;
+  }>(sql`
+    SELECT
+      COALESCE(SUM(CASE WHEN o.status <> 'refunded' THEN o.total_cents ELSE 0 END), 0)::text AS gross,
+      COUNT(*) FILTER (WHERE o.status <> 'refunded')::text AS units,
+      COUNT(DISTINCT o.customer_id) FILTER (WHERE o.status <> 'refunded')::text AS buyers,
+      COALESCE(SUM(CASE WHEN o.status = 'refunded' THEN o.total_cents ELSE 0 END), 0)::text AS refunded
+    FROM orders o
+    WHERE ${ordersFilter(scope)}
+  `) : ({ rows: [{ gross: "0", units: "0", buyers: "0", refunded: "0" }] } as any);
+  const rev = (revRow as any).rows?.[0] ?? { gross: "0", units: "0", buyers: "0", refunded: "0" };
+
+  const playRow = scope.songIds.length ? await db.execute<{
+    starts: string; listeners: string;
+  }>(sql`
+    SELECT
+      COUNT(*) FILTER (WHERE e.name = 'play_start')::text AS starts,
+      COUNT(DISTINCT COALESCE(e.user_id, e.session_id))
+        FILTER (WHERE e.name = 'play_start')::text AS listeners
+    FROM analytics_events e
+    WHERE ${playsFilter(scope)}
+  `) : ({ rows: [{ starts: "0", listeners: "0" }] } as any);
+  const p = (playRow as any).rows?.[0] ?? { starts: "0", listeners: "0" };
+
+  const units = Number(rev.units);
+  return {
+    grossCents: Number(rev.gross),
+    units,
+    orders: units,
+    buyers: Number(rev.buyers),
+    refundedCents: Number(rev.refunded),
+    plays: Number(p.starts),
+    listeners: Number(p.listeners),
+  };
+}
+
 // ─── Endpoints ─────────────────────────────────────────────────────────
 async function meHandler(req: Request, res: Response) {
   const scope = await resolveArtistScope(req);
@@ -302,9 +370,10 @@ async function summaryHandler(req: Request, res: Response) {
   const scope = await resolveArtistScope(req);
   if ("error" in scope) return res.status(scope.status).json({ message: scope.error });
   const { range, compare } = parseRange(req);
-  const [kpis, previous, topFansRows, npoCents] = await Promise.all([
+  const [kpis, previous, lifetime, topFansRows, npoCents] = await Promise.all([
     computeKpis(scope, range),
     compare ? computeKpis(scope, compare) : Promise.resolve(null),
+    computeLifetime(scope),
     scope.albumIds.length
       ? db.execute<{ email: string; total_cents: string }>(sql`
           SELECT cu.email,
@@ -335,7 +404,7 @@ async function summaryHandler(req: Request, res: Response) {
     totalCents: Number(r.total_cents),
   }));
   const npoPayout = Number(((npoCents as any).rows?.[0]?.total) ?? 0);
-  return res.json({ range, compare, current: kpis, previous, topFans, npoPayout });
+  return res.json({ range, compare, current: kpis, previous, lifetime, topFans, npoPayout });
 }
 
 async function timeseriesHandler(req: Request, res: Response) {
