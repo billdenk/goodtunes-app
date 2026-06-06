@@ -137,12 +137,17 @@ function WelcomeBackPill() {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="w-full flex items-center justify-between gap-3 rounded-2xl bg-[#0B1437]/85 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.45)] px-4 py-3 text-left transition-colors hover:bg-[#0E1A45]/90 active:bg-[#0E1A45]"
+            className="w-full flex items-center justify-between gap-3 rounded-2xl border border-white/[0.08] backdrop-blur-xl px-4 py-3 text-left transition-all hover:border-white/[0.16] active:scale-[0.99]"
+            style={{
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)), rgba(var(--brand-bg-rgb), 0.88)",
+              boxShadow: "0 14px 34px -16px rgba(var(--brand-bg-rgb), 0.95)",
+            }}
             data-testid="button-welcomeback-pill"
           >
             <span className="flex flex-col min-w-0">
-              <span className="text-white text-sm font-semibold leading-tight">Customer prior to June 2026?</span>
-              <span className="text-fan-secondary text-xs leading-tight mt-0.5">Tap to take your experience, to 12</span>
+              <span className="text-fan-primary text-sm font-semibold leading-tight">Customer prior to June 2026?</span>
+              <span className="text-fan-secondary text-xs leading-tight mt-0.5">This refresh goes to twelve.</span>
             </span>
             <svg
               width="20"
