@@ -192,7 +192,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   // button, swipe-down) pops our entry back off so Back still works
   // normally afterwards. lg side-panel + <768 mobile never mount this
   // overlay, so they're untouched.
-  const mdLyricsOpen = player.showLyrics && !isLgViewport && !searchMode;
+  const mdLyricsOpen = player.showLyrics && !isLgViewport;
   useEffect(() => {
     if (!mdLyricsOpen) return;
     window.history.pushState({ gtLyricsOverlay: true }, "");
@@ -638,7 +638,8 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
       />
 
       <div className="relative flex-1 min-w-0 flex flex-col h-full overflow-hidden">
-        <main className="flex-1 overflow-y-auto">
+        <div className="flex-1 min-h-0 flex overflow-hidden">
+        <main className="flex-1 min-w-0 overflow-y-auto">
           {searchMode ? (
             <DesktopSearchView onNavigate={() => setSearchMode(false)} />
           ) : (
@@ -682,6 +683,53 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
           )}
         </main>
 
+        {/* lg search lyrics rail. The album page's own lg lyrics panel
+            lives inside DesktopAlbumView, which is swapped out for
+            DesktopSearchView while searching — so the dock mic would have
+            nothing to open. This sibling aside mirrors that panel (same
+            shared `lyricsBody`, same 360px width the dock reserves as its
+            right channel) so the karaoke rail opens beside the search
+            results too. lg-only; md/portrait falls through to the overlay
+            below. No backdrop-filter here — the card is a plain translucent
+            surface, so it never stacks a second blur over the chrome. */}
+        <AnimatePresence initial={false}>
+          {searchMode && player.showLyrics && isLgViewport && (
+            <motion.aside
+              key="search-lyrics-panel"
+              className="hidden lg:flex justify-end flex-shrink-0 overflow-hidden self-start"
+              style={{
+                height: `calc(100dvh - 116px - env(safe-area-inset-bottom, 0px))`,
+              }}
+              initial={reduceMotion ? false : { width: 0 }}
+              animate={{ width: LYRICS_PANEL_WIDTH }}
+              exit={{ width: 0 }}
+              transition={
+                reduceMotion
+                  ? { duration: 0 }
+                  : { type: "spring", stiffness: 420, damping: 44, mass: 0.9 }
+              }
+              aria-label="Lyrics"
+              data-testid="panel-lyrics-search"
+            >
+              <div
+                className="flex-shrink-0 h-full py-8 pr-8 pl-2 flex flex-col"
+                style={{ width: LYRICS_PANEL_WIDTH }}
+              >
+                <div
+                  className="flex-1 min-h-0 rounded-2xl overflow-hidden flex flex-col"
+                  style={{
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div className="flex-1 min-h-0 flex flex-col">{lyricsBody}</div>
+                </div>
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+        </div>
+
         {/* Medium-width (768–1023) lyrics overlay. The lg side panel is
             mounted only at lg (lyricsOpen is gated on isLgViewport), so on
             portrait tablets / narrow split windows we cover the content
@@ -691,7 +739,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             lyrics toggle — stays reachable while reading. Reuses the SAME
             `lyricsBody` (shared SyncedLyrics, props only). */}
         <AnimatePresence initial={false}>
-          {player.showLyrics && !isLgViewport && !searchMode && (
+          {player.showLyrics && !isLgViewport && (
             <motion.div
               key="lyrics-overlay-md"
               className="lg:hidden absolute inset-0 z-30 flex flex-col"

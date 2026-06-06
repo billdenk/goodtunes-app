@@ -66,10 +66,13 @@ export function DesktopSearchView({ onNavigate }: { onNavigate?: () => void }) {
       className="max-w-[720px] mx-auto lg:max-w-none lg:mx-0 2xl:max-w-[1100px] 2xl:mx-auto px-6 lg:px-12 py-6 lg:py-8"
       data-testid="desktop-search-view"
     >
-      {/* Top-anchored search box (no redundant page header — the sidebar
-          already labels this surface "Search", Apple-Music style). */}
+      {/* Compact, Apple-Music-sized search pill. Rather than spanning the
+          full content width, it's a small rounded pill anchored toward the
+          right/center of the content area (ml-auto) with a plain "Search"
+          placeholder — matching Apple Music's top-right search field. The
+          ranked results below still flow full-width. */}
       <div
-        className="relative flex items-center"
+        className="relative flex items-center ml-auto w-full max-w-[300px]"
         style={{
           background: "rgba(255,255,255,0.08)",
           borderRadius: 999,
@@ -77,7 +80,7 @@ export function DesktopSearchView({ onNavigate }: { onNavigate?: () => void }) {
         }}
       >
         <SearchIcon
-          className="ml-4 w-[18px] h-[18px] text-fan-secondary flex-shrink-0"
+          className="ml-3 w-4 h-4 text-fan-secondary flex-shrink-0"
           strokeWidth={2.2}
         />
         <input
@@ -96,16 +99,16 @@ export function DesktopSearchView({ onNavigate }: { onNavigate?: () => void }) {
           data-form-type="other"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Artists, albums, songs, gear, vendors…"
-          className="flex-1 bg-transparent border-0 px-3 py-3.5 text-white placeholder-white/45 text-base focus:outline-none"
+          placeholder="Search"
+          className="flex-1 min-w-0 bg-transparent border-0 px-2.5 py-2 text-white placeholder-white/45 text-sm focus:outline-none"
           data-testid="input-search"
         />
         {draft && (
           <IconButton
             variant="ghost"
-            size="md"
+            size="sm"
             label="Clear search"
-            className="mr-1.5 text-fan-secondary hover:text-white"
+            className="mr-1 text-fan-secondary hover:text-white"
             onClick={() => {
               setDraft("");
               setShowAll(false);
