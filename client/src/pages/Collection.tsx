@@ -432,7 +432,7 @@ function FanScreen({
 
         <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
           <div ref={contentRef}>
-            <div aria-hidden style={{ height: 104, flexShrink: 0 }} />
+            <div aria-hidden style={{ height: 128, flexShrink: 0 }} />
             {children}
           </div>
         </div>
