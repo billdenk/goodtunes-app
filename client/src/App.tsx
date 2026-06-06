@@ -551,9 +551,6 @@ function Router() {
         <Route path="/admin/albums/:id/buyers">
           <ProtectedRoute component={AdminAlbumBuyers} />
         </Route>
-        <Route path="/admin/albums/:id/tracks/:trackId">
-          <ProtectedRoute component={AdminAlbum} />
-        </Route>
         <Route path="/admin/albums/:id">
           <ProtectedRoute component={AdminAlbum} />
         </Route>

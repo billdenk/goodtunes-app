@@ -171,7 +171,7 @@ export function useSmartBackCrumb(): SmartBackCrumb | null {
       track = {
         id: trackId,
         name: song.title,
-        href: `/admin/albums/${id}/tracks/${trackId}?tt=credits`,
+        href: `/admin/albums/${id}?track=${trackId}`,
         testId: `link-back-to-track-${trackId}`,
       };
     }
