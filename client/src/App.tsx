@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Switch, Route, useLocation, useParams, Redirect } from "wouter";
 import { AnimatePresence } from "framer-motion";
 import { queryClient } from "./lib/queryClient";
@@ -33,6 +33,7 @@ import { InstrumentDetail } from "@/pages/InstrumentDetail";
 import { Playlists } from "@/pages/Playlists";
 import { Account } from "@/pages/Account";
 import { EditAccount } from "@/pages/EditAccount";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { FavoriteArtists } from "@/pages/FavoriteArtists";
 import { Bookmarks } from "@/pages/Bookmarks";
 import { ArtistDetail } from "@/pages/ArtistDetail";
@@ -219,6 +220,30 @@ function Router() {
   const { user, isLoading } = useAuth();
   const [location] = useLocation();
   const kind = useAuthKind();
+  // Task #1557 — the shared profile editor (/account/edit) presents as a
+  // centered card floating over the screen the user came from on
+  // tablet/desktop. We keep that origin screen mounted behind the scrim by
+  // overriding the Switch's location to the previous (non-edit) path while
+  // EditAccount renders as a sibling overlay on top. Phone keeps the editor
+  // as a normal full-screen route (no override, no overlay).
+  const editAsCard = useMediaQuery("(min-width: 768px)");
+  const editOverlayActive = editAsCard && location === "/account/edit";
+  // Remember the last real (non-edit) location so we can render it behind the
+  // card. Updated during render (idempotent). On a cold load straight to
+  // /account/edit there's no prior page, so fall back to the kind's home hub.
+  const editFallbackBg = kind === "admin" ? "/admin/dashboard" : "/account";
+  const prevLocationRef = useRef<string>(editFallbackBg);
+  if (location !== "/account/edit") {
+    prevLocationRef.current = location;
+  }
+  // Guard against background paths that only redirect (bare /admin, "/") —
+  // rendering one of those behind the card would bounce the URL off
+  // /account/edit and tear the overlay down.
+  const prevBg = prevLocationRef.current;
+  const editBackground =
+    prevBg && prevBg !== "/account/edit" && prevBg !== "/admin" && prevBg !== "/"
+      ? prevBg
+      : editFallbackBg;
   // Track in-app navigation so back-aware surfaces (e.g. the album back
   // pill) can return the fan to the exact page they came from.
   useTrackInAppNavigation();
@@ -342,7 +367,7 @@ function Router() {
 
   return (
     <>
-      <Switch>
+      <Switch location={editOverlayActive ? editBackground : location}>
         {/* Task #284 — Friendly error landing for OAuth callback failures
             and any future surface that wants to bounce to a full-page
             error card. Public route. */}
@@ -727,6 +752,11 @@ function Router() {
           {user ? <Redirect to="/admin" /> : <Redirect to="/login" />}
         </Route>
       </Switch>
+      {/* Task #1557 — tablet/desktop renders the profile editor as a card
+          overlay above the preserved origin screen (the Switch above is
+          pinned to that origin while this is active). Phone keeps it as the
+          /account/edit route inside the Switch. */}
+      {editOverlayActive && <EditAccount />}
       <PlayerOverlay />
       {/* Task #536 — gates itself on /api/me/whats-new (recognized
           customer + version behind current) so it's safe to mount

@@ -1,13 +1,22 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Camera, Check, X } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthKind } from "@/hooks/useAuthKind";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { scrimFade } from "@/lib/motion";
 import { IconButton } from "@/components/ui/IconButton";
 
 export function EditAccount() {
   const { user, updateProfile, updatePhoto, removePhoto, isUpdatePending, updateError } = useAuth();
   const [, navigate] = useLocation();
+  // Phone reads as a full-screen view; tablet/desktop reads as a centered
+  // Apple-style dialog card floating over a dimmed backdrop (the ~390px
+  // mobile strip looked mis-sized in the large dark area). Same form body
+  // and header controls drive both — only the framing changes.
+  const isCard = useMediaQuery("(min-width: 768px)");
+  const reduceMotion = useReducedMotion();
   // The editor is shared by the customer profile and the admin account menu.
   // Admins came from the admin shell (and the customer /account hub is blocked
   // on the admin host), so send them back to /admin rather than /account.
@@ -101,39 +110,43 @@ export function EditAccount() {
     } catch {}
   };
 
-  return (
-    <main className="relative h-screen w-full flex justify-center overflow-hidden">
-      <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
-        {/* Header — Apple iOS-photo-picker dismiss/confirm pair. Glass X on
-            the left (cancel, returns to Account without saving) and a
-            solid brand-blue checkmark on the right (save). Both come from
-            the shared IconButton primitive so size, press feedback, and
-            disabled treatment stay consistent with every other circular
-            chip across the player. Replaces the off-styleguide back caret
-            and "Save" text the page used to ship with. */}
-        <header className="relative z-10 flex items-center justify-between px-4 pt-14 pb-3">
-          <IconButton
-            label="Cancel"
-            variant="glass"
-            onClick={() => navigate(backTo)}
-            data-testid="button-cancel"
-          >
-            <X strokeWidth={2.4} />
-          </IconButton>
-          <h1 className="text-white text-[17px] font-semibold" data-testid="text-page-title">Edit Profile</h1>
-          <IconButton
-            label="Save"
-            variant="solid"
-            onClick={handleSave}
-            disabled={isUpdatePending || !isDirty}
-            data-testid="button-save"
-          >
-            <Check strokeWidth={2.8} />
-          </IconButton>
-        </header>
+  // Header — Apple iOS-photo-picker dismiss/confirm pair. Glass X on the
+  // left (cancel, returns to origin without saving) and a solid brand-blue
+  // checkmark on the right (save). Both come from the shared IconButton
+  // primitive so size, press feedback, and disabled treatment stay
+  // consistent with every other circular chip across the player. On phone
+  // the header carries the device safe-area top inset (pt-14); inside the
+  // card it sits on the card's own header (pt-4) balanced to the card width.
+  const header = (
+    <header
+      className={`relative z-10 flex items-center justify-between ${isCard ? "px-5 pt-4 pb-3" : "px-4 pt-14 pb-3"}`}
+    >
+      <IconButton
+        label="Cancel"
+        variant="glass"
+        onClick={() => navigate(backTo)}
+        data-testid="button-cancel"
+      >
+        <X strokeWidth={2.4} />
+      </IconButton>
+      <h1 className="text-white text-[17px] font-semibold" data-testid="text-page-title">Edit Profile</h1>
+      <IconButton
+        label="Save"
+        variant="solid"
+        onClick={handleSave}
+        disabled={isUpdatePending || !isDirty}
+        data-testid="button-save"
+      >
+        <Check strokeWidth={2.8} />
+      </IconButton>
+    </header>
+  );
 
-        <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-10">
-          {/* Photo */}
+  const body = (
+    <div
+      className={`relative z-10 overflow-y-auto scrollbar-hide ${isCard ? "flex-1 min-h-0 pb-6" : "flex-1 pb-10"}`}
+    >
+      {/* Photo */}
           <div className="flex flex-col items-center pt-3 pb-5 px-5">
             <input
               ref={fileInputRef}
@@ -243,8 +256,48 @@ export function EditAccount() {
             )}
 
           </div>
-        </div>
-      </section>
-    </main>
+    </div>
+  );
+
+  // Phone — keep the full-screen view exactly as it shipped.
+  if (!isCard) {
+    return (
+      <main className="relative h-screen w-full flex justify-center overflow-hidden">
+        <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
+          {header}
+          {body}
+        </section>
+      </main>
+    );
+  }
+
+  // Tablet / desktop — centered Apple-style dialog card floating over a
+  // dimmed, lightly blurred backdrop. Tapping the backdrop (or the X)
+  // dismisses back to the origin without saving. Only one blur surface
+  // here (the scrim) — the card itself is opaque, so we stay clear of the
+  // iOS-WebKit stacked-backdrop-blur hazard.
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-6">
+      <motion.div
+        className="absolute inset-0 bg-black/60"
+        style={{ backdropFilter: "blur(6px)" }}
+        onClick={() => navigate(backTo)}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={scrimFade(!!reduceMotion)}
+        data-testid="backdrop-edit-profile"
+      />
+      <motion.section
+        className="relative z-[81] w-full max-w-[440px] max-h-[88vh] text-white flex flex-col rounded-3xl overflow-hidden"
+        style={{ background: "#0D1B4B", boxShadow: "0 24px 60px rgba(0,0,0,0.55)" }}
+        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 8 }}
+        animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
+        transition={reduceMotion ? { duration: 0.14 } : { type: "spring", stiffness: 440, damping: 34, mass: 0.9 }}
+        data-testid="card-edit-profile"
+      >
+        {header}
+        {body}
+      </motion.section>
+    </div>
   );
 }
