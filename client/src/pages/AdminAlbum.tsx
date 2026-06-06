@@ -7091,11 +7091,17 @@ function TrackStatusPill({
   letter,
   status,
 }: {
-  letter: "P" | "W" | "M";
+  letter: "C" | "L" | "S" | "P";
   status: TrackPillStatus;
 }) {
   const long =
-    letter === "P" ? "Performance" : letter === "W" ? "Writers" : "Mechanical";
+    letter === "C"
+      ? "Credits"
+      : letter === "L"
+        ? "Lyrics"
+        : letter === "S"
+          ? "Splits"
+          : "Preview";
   return (
     <span
       className={`w-5 h-5 rounded-md border text-xs font-bold inline-flex items-center justify-center ${trackPillClasses(status)}`}
@@ -7107,24 +7113,56 @@ function TrackStatusPill({
   );
 }
 
-/* Derive the three per-track section statuses from the loaded credit +
-   splits data. Shared by the tap-target row and the track detail page so
-   the chips never disagree. */
+/* Derive the four per-track section statuses (Credits · Lyrics · Splits ·
+   Preview) from the loaded song + credit + splits data. Each status reuses
+   the same logic the expanded section tiles render, so the collapsed-row
+   chips, the row summary, and the expanded tiles never disagree.
+
+   - Credits  = creative credits (writers + performers): filled when both
+                sides are present, partial when only one, empty when neither.
+   - Lyrics   = plain or GoodSync™ synced lyrics present.
+   - Splits   = the publishing split ledger (publishing + mechanical basis
+                points). This is the single consolidation of the old
+                Performance / Writers / Mechanical pills — the detailed
+                P/W/M breakdown still lives inside the expanded Splits
+                editor. Filled when both ledgers total 100%, partial when
+                anything is entered, empty when nothing is.
+   - Preview  = an explicit preview start was set (auto first-30s otherwise). */
 function trackSectionStatuses(
+  song: SongLite,
   credits: SongCreditsLite | null,
   splitTotals: { publishingBp: number; mechanicalBp: number } | null,
 ): {
-  performance: TrackPillStatus;
-  writers: TrackPillStatus;
-  mechanical: TrackPillStatus;
+  credits: TrackPillStatus;
+  lyrics: TrackPillStatus;
+  splits: TrackPillStatus;
+  preview: TrackPillStatus;
 } {
   const performerCount = credits?.performers.length ?? 0;
   const writerCount = credits?.writers.length ?? 0;
+  const creditsStatus: TrackPillStatus =
+    performerCount > 0 && writerCount > 0
+      ? "ok"
+      : performerCount > 0 || writerCount > 0
+        ? "partial"
+        : "empty";
+  const lyricsStatus: TrackPillStatus =
+    song.lyrics || song.syncedLyrics ? "ok" : "empty";
+  const pubBp = splitTotals?.publishingBp ?? 0;
   const mechBp = splitTotals?.mechanicalBp ?? 0;
+  const splitsStatus: TrackPillStatus =
+    pubBp === 10000 && mechBp === 10000
+      ? "ok"
+      : pubBp > 0 || mechBp > 0
+        ? "partial"
+        : "empty";
+  const previewStatus: TrackPillStatus =
+    song.previewStartMs != null ? "ok" : "empty";
   return {
-    performance: performerCount > 0 ? "ok" : "empty",
-    writers: writerCount > 0 ? "ok" : "empty",
-    mechanical: mechBp === 10000 ? "ok" : mechBp > 0 ? "partial" : "empty",
+    credits: creditsStatus,
+    lyrics: lyricsStatus,
+    splits: splitsStatus,
+    preview: previewStatus,
   };
 }
 
@@ -7342,22 +7380,28 @@ function TrackRow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const statuses = trackSectionStatuses(credits, splitTotals);
-  const missingCount =
-    Number(statuses.performance === "empty") +
-    Number(statuses.writers === "empty") +
-    Number(statuses.mechanical === "empty");
-  const anyPartial = [
-    statuses.performance,
-    statuses.writers,
-    statuses.mechanical,
-  ].includes("partial");
-  const summaryText =
-    missingCount === 0 ? "Ready" : missingCount === 3 ? "Empty" : `${missingCount} to fill`;
-  const summaryCls = anyPartial
-    ? "text-amber-700"
-    : missingCount === 0
-      ? "text-emerald-700"
+  const statuses = trackSectionStatuses(song, credits, splitTotals);
+  const sectionStatuses = [
+    statuses.credits,
+    statuses.lyrics,
+    statuses.splits,
+    statuses.preview,
+  ];
+  // "Ready" only when every section is fully filled (ok); "Empty" only when
+  // every section is empty. Anything in between is "N to fill", where N
+  // counts both empty AND partial sections (a partial section still needs
+  // filling to reach Ready).
+  const okCount = sectionStatuses.filter((s) => s === "ok").length;
+  const emptyCount = sectionStatuses.filter((s) => s === "empty").length;
+  const toFill = sectionStatuses.length - okCount;
+  const anyPartial = sectionStatuses.includes("partial");
+  const allOk = okCount === sectionStatuses.length;
+  const allEmpty = emptyCount === sectionStatuses.length;
+  const summaryText = allOk ? "Ready" : allEmpty ? "Empty" : `${toFill} to fill`;
+  const summaryCls = allOk
+    ? "text-emerald-700"
+    : anyPartial
+      ? "text-amber-700"
       : "text-slate-400";
 
   const liCls = [
@@ -7710,13 +7754,14 @@ function TrackRow({
           </span>
         )}
 
-        {/* P/W/M status chips. Each chip opens the row straight to its
-            section: P/W → Credits (performers + writers), M → Splits. */}
+        {/* C/L/S/P status chips. Each chip opens the row straight to its
+            section: C → Credits, L → Lyrics, S → Splits (the publishing
+            P/W/M detail), P → Preview. */}
         {!expanded && (
           <div
             className="flex items-center gap-1 flex-shrink-0"
             role="group"
-            aria-label="Section status (Performance · Writers · Mechanical)"
+            aria-label="Section status (Credits · Lyrics · Splits · Preview)"
             data-testid={`pills-status-${song.id}`}
           >
             <button
@@ -7726,22 +7771,22 @@ function TrackRow({
                 openSection("credits");
               }}
               className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
-              aria-label={`Edit performers — ${statuses.performance}`}
-              data-testid={`button-section-performance-${song.id}`}
+              aria-label={`Edit credits — ${statuses.credits}`}
+              data-testid={`button-section-credits-${song.id}`}
             >
-              <TrackStatusPill letter="P" status={statuses.performance} />
+              <TrackStatusPill letter="C" status={statuses.credits} />
             </button>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                openSection("credits");
+                openSection("lyrics");
               }}
               className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
-              aria-label={`Edit writers — ${statuses.writers}`}
-              data-testid={`button-section-writers-${song.id}`}
+              aria-label={`Edit lyrics — ${statuses.lyrics}`}
+              data-testid={`button-section-lyrics-${song.id}`}
             >
-              <TrackStatusPill letter="W" status={statuses.writers} />
+              <TrackStatusPill letter="L" status={statuses.lyrics} />
             </button>
             <button
               type="button"
@@ -7750,10 +7795,22 @@ function TrackRow({
                 openSection("splits");
               }}
               className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
-              aria-label={`Edit mechanical splits — ${statuses.mechanical}`}
-              data-testid={`button-section-mechanical-${song.id}`}
+              aria-label={`Edit splits — ${statuses.splits}`}
+              data-testid={`button-section-splits-${song.id}`}
             >
-              <TrackStatusPill letter="M" status={statuses.mechanical} />
+              <TrackStatusPill letter="S" status={statuses.splits} />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openSection("preview");
+              }}
+              className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
+              aria-label={`Edit preview — ${statuses.preview}`}
+              data-testid={`button-section-preview-${song.id}`}
+            >
+              <TrackStatusPill letter="P" status={statuses.preview} />
             </button>
           </div>
         )}
@@ -7952,11 +8009,11 @@ function TrackRow({
             ) : (
               <>
                 <StatusBadge
-                  ok={song.previewStartSec != null}
+                  ok={song.previewStartMs != null}
                   icon={Headphones}
                   label="Preview"
                   subtitle={
-                    song.previewStartSec != null ? "Set" : "Auto (first 30s)"
+                    song.previewStartMs != null ? "Set" : "Auto (first 30s)"
                   }
                   compact
                   onClick={() => setMode("preview")}
@@ -7980,11 +8037,15 @@ function TrackRow({
                   testId={`tile-lyrics-${song.id}`}
                 />
                 <StatusBadge
-                  ok={statuses.performance !== "empty"}
+                  ok={statuses.credits === "ok"}
                   icon={Users}
                   label="Credits"
                   subtitle={
-                    statuses.performance === "empty" ? "None" : "Set"
+                    statuses.credits === "ok"
+                      ? "Set"
+                      : statuses.credits === "partial"
+                        ? "Partial"
+                        : "None"
                   }
                   compact
                   onClick={() => setMode("credits")}
@@ -7992,13 +8053,13 @@ function TrackRow({
                   testId={`tile-credits-${song.id}`}
                 />
                 <StatusBadge
-                  ok={statuses.mechanical === "ok"}
+                  ok={statuses.splits === "ok"}
                   icon={PieChart}
                   label="Splits"
                   subtitle={
-                    statuses.mechanical === "ok"
+                    statuses.splits === "ok"
                       ? "100%"
-                      : statuses.mechanical === "partial"
+                      : statuses.splits === "partial"
                         ? "Partial"
                         : "None"
                   }
