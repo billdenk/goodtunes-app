@@ -458,7 +458,10 @@ export function Player() {
               <button
                 type="button"
                 onClick={() => {
-                  if (currentSong.lyrics) {
+                  if (!currentSong.lyrics) return;
+                  if (showLyrics) {
+                    setShowLyrics(false);
+                  } else {
                     setShowLyrics(true);
                     track("lyrics_opened", { songId: currentSong.id, albumId: currentSong.album?.id });
                   }
@@ -466,11 +469,31 @@ export function Player() {
                 disabled={!currentSong.lyrics}
                 className={`w-11 h-11 flex items-center justify-center transition-colors ${
                   currentSong.lyrics
-                    ? "text-white/55 active:text-white"
+                    ? showLyrics
+                      ? "active:text-white"
+                      : "text-fan-secondary active:text-white"
                     : "text-white/20 cursor-not-allowed"
                 }`}
-                aria-label={currentSong.lyrics ? "Lyrics" : "Lyrics unavailable"}
-                title={currentSong.lyrics ? undefined : "No lyrics available"}
+                style={
+                  currentSong.lyrics && showLyrics
+                    ? { color: "var(--brand-blue)" }
+                    : undefined
+                }
+                aria-pressed={currentSong.lyrics ? showLyrics : undefined}
+                aria-label={
+                  currentSong.lyrics
+                    ? showLyrics
+                      ? "Hide lyrics"
+                      : "Show lyrics"
+                    : "Lyrics unavailable"
+                }
+                title={
+                  currentSong.lyrics
+                    ? showLyrics
+                      ? "Hide lyrics"
+                      : "Show lyrics"
+                    : "No lyrics available"
+                }
                 data-testid="button-lyrics"
               >
                 <LyricsIcon size={22} />
