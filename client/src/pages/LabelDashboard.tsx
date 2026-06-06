@@ -11,6 +11,7 @@
 // catalog/audience/orders match the artist layout.
 
 import { useMemo, useState } from "react";
+import { formatUsd, formatUsdCents } from "@shared/money";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -103,8 +104,8 @@ const C = BRAND;
 
 function colorFor(i: number) { return CHART_STACK_PALETTE[i % CHART_STACK_PALETTE.length]; }
 
-const dollars = (c: number) => `$${(c / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-const dollarsCents = (c: number) => `$${(c / 100).toFixed(2)}`;
+const dollars = (c: number) => formatUsdCents(c, { maximumFractionDigits: 0 });
+const dollarsCents = (c: number) => formatUsdCents(c);
 const compact = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n));
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
@@ -932,7 +933,7 @@ function RevenueChart({ data, loading }: { data: Timeseries["revenue"]; loading:
           <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
           <XAxis dataKey="day" stroke="rgba(255,255,255,0.45)" tick={{ fontSize: 11 }} />
           <YAxis stroke="rgba(255,255,255,0.45)" tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-          <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => `$${Number(v).toFixed(0)}`} />
+          <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => formatUsd(Number(v), { maximumFractionDigits: 0 })} />
           <Bar dataKey="total" fill={C.blue} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
@@ -1006,7 +1007,7 @@ function RevByArtistChart({ data, loading }: { data: RevByArtist | undefined; lo
           <YAxis stroke="rgba(255,255,255,0.45)" tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
           <Tooltip
             contentStyle={tooltipStyle}
-            formatter={(v: any, key: any) => [`$${Number(v).toFixed(0)}`, key === "_others" ? "Others" : (nameById.get(String(key)) ?? key)]}
+            formatter={(v: any, key: any) => [formatUsd(Number(v), { maximumFractionDigits: 0 }), key === "_others" ? "Others" : (nameById.get(String(key)) ?? key)]}
           />
           <Legend wrapperStyle={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }} formatter={(v) => v === "_others" ? "Others" : (nameById.get(String(v)) ?? v)} />
           {top.map((a, i) => (

@@ -39,6 +39,7 @@
 
 import type { AlbumFormat } from "./schema";
 import { ALBUM_FORMAT_LABEL } from "./schema";
+import { formatUsdCents } from "./money";
 
 export const PRICE_WEIGHT = 45;
 export const COLOR_WEIGHT = 25;
@@ -455,7 +456,7 @@ export function scorePressMatches(
     if (isMatch) {
       if (r.unitCents != null && r.unitCents > 0 && bestUnit != null) {
         priceScore = Math.max(0, Math.min(1, bestUnit / r.unitCents));
-        priceNote = `$${(r.unitCents / 100).toFixed(2)}/unit at ${r.snappedQty}`;
+        priceNote = `${formatUsdCents(r.unitCents)}/unit at ${r.snappedQty}`;
         if (r.requiresQuote) priceNote += " (above top rung — custom quote)";
       } else {
         priceScore = NEEDS_QUOTE_PRICE_SUBSCORE;

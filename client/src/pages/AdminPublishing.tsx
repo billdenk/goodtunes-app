@@ -12,6 +12,7 @@
 //
 // Engine: server/publishingSettlement.ts. API: server/publishingSettlementRoutes.ts.
 import { useMemo, useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { Link, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -25,7 +26,7 @@ import {
   FileWarning,
 } from "lucide-react";
 
-const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+const dollars = (cents: number) => formatUsdCents(cents);
 
 type SettlementsList = {
   rateMicros: number;

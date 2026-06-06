@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { formatUsdCents } from "@shared/money";
 
 type LedgerAlbum = {
   albumId: string;
@@ -12,7 +13,7 @@ type LedgerAlbum = {
   paidCents: number;
 };
 
-const fmt = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+const fmt = (cents: number) => formatUsdCents(cents);
 
 export function NpoAlbumLedger({ npoId }: { npoId: string }) {
   const q = useQuery<{ albums: LedgerAlbum[] }>({

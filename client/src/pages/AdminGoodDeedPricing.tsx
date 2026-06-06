@@ -16,6 +16,7 @@
 //   4. Resolved per-cert total at a chosen run size (live recompute
 //      off the cost-stack endpoint).
 import { useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
@@ -33,11 +34,7 @@ import { ExternalLink, Pencil } from "lucide-react";
 type RoleInfo = { role: string; roleScopeId: string | null };
 
 // Thousands separators + cents via Intl, per the task's formatting note.
-const usd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-});
-const dollars = (cents: number) => usd.format(cents / 100);
+const dollars = (cents: number) => formatUsdCents(cents);
 const qtyFmt = new Intl.NumberFormat("en-US");
 
 const QP_RUNGS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];

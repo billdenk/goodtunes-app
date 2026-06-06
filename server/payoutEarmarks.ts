@@ -16,6 +16,7 @@
 import type { Express, Request, Response } from "express";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
+import { formatUsdCents } from "@shared/money";
 import { db } from "./db";
 import {
   PAYOUT_EARMARK_OWNER_KINDS,
@@ -338,7 +339,7 @@ async function applySourceSideEffectsOnRelease(earmark: PayoutEarmark, transferI
         const row = ((r as any).rows ?? [])[0];
         const albumTitle = row?.album_title ?? "an album";
         const pressName = row?.press_name ?? "your account";
-        const dollars = (earmark.amountCents / 100).toFixed(2);
+        const dollars = formatUsdCents(earmark.amountCents, { noSymbol: true });
         const subject = `Payment sent: $${dollars} for ${albumTitle}`;
         const bodyLines = [
           `GoodTunes has transferred payment for your invoice on ${albumTitle}.`,

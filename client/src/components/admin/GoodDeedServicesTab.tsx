@@ -7,6 +7,7 @@
 // own Save so a vendor can publish printing without holding hologram.
 
 import { useEffect, useMemo, useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -55,7 +56,7 @@ const COPY = {
 
 function dollars(cents: number | null | undefined) {
   if (cents == null) return "—";
-  return `$${(cents / 100).toFixed(2)}`;
+  return formatUsdCents(cents);
 }
 function parseDollars(s: string): number | null {
   const n = Number(s);

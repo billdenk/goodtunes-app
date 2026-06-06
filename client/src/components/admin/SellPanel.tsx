@@ -22,6 +22,7 @@
 // pricing plumbing is tracked separately on the roadmap.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { formatUsdCents } from "@shared/money";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
@@ -92,14 +93,10 @@ import { adaptSkuToFormat, type SkuPicks } from "@/lib/skuFormatAdapt";
 import { Package } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
-// Task #393 — Intl-based currency formatter with thousands separators
-// and proper negative handling, replacing the old `$${(c/100).toFixed(2)}`
-// helper. `dollars(123456)` → "$1,234.56", `dollars(-50)` → "-$0.50".
-const DOLLAR_FMT = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-});
-const dollars = (c: number) => DOLLAR_FMT.format(c / 100);
+// Intl-based currency formatter with thousands separators and proper
+// negative handling. `dollars(123456)` → "$1,234.56", `dollars(-50)` → "-$0.50".
+// Routed through the shared formatter (shared/money.ts).
+const dollars = (c: number) => formatUsdCents(c);
 const parseDollars = (v: string): number | null => {
   const n = Number.parseFloat(v.replace(/[^0-9.]/g, ""));
   if (!Number.isFinite(n) || n < 0) return null;
@@ -248,7 +245,7 @@ function EarlyCutOptIn({ albumId }: { albumId: string }) {
     },
     onError: (e: Error) => toast({ title: "Couldn't opt in", description: e.message, variant: "destructive" }),
   });
-  const dollars = (c: number) => `$${(Math.max(0, c) / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const dollars = (c: number) => formatUsdCents(Math.max(0, c), { maximumFractionDigits: 0 });
   if (!data?.tier) return null;
   const t = data.tier;
   const checked = data.artistConsent.appliesToCurrentTier;

@@ -7,6 +7,7 @@
 // against the album's signed_cert min.
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { formatUsdCents } from "@shared/money";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -68,7 +69,7 @@ type Resolved = {
   albumId: string;
 };
 
-const dollars = (c: number | null) => (c == null ? "—" : `$${(c / 100).toFixed(2)}`);
+const dollars = (c: number | null) => (c == null ? "—" : formatUsdCents(c));
 const parseDollars = (v: string): number | null => {
   const n = Number.parseFloat(v.replace(/[^0-9.]/g, ""));
   if (!Number.isFinite(n) || n < 0) return null;
@@ -318,7 +319,7 @@ export function ShopifyPanel({
                   </label>
                   <div className="h-8 px-2 flex items-center text-[13px] text-slate-700 bg-slate-50 rounded-md border border-slate-200">
                     {pushStatus.album.priceCents != null
-                      ? `$${(pushStatus.album.priceCents / 100).toFixed(2)}`
+                      ? formatUsdCents(pushStatus.album.priceCents)
                       : "— set bundle price on Sell tab"}
                   </div>
                 </div>
@@ -360,7 +361,7 @@ export function ShopifyPanel({
                       </div>
                       {pushStatus.cert.minPriceCents != null && (
                         <div className="text-[11px] text-slate-400 mt-1">
-                          Min ${(pushStatus.cert.minPriceCents / 100).toFixed(2)}
+                          Min {formatUsdCents(pushStatus.cert.minPriceCents)}
                         </div>
                       )}
                     </div>
@@ -376,7 +377,7 @@ export function ShopifyPanel({
                   {earnings && (
                     <div className="text-[12px] text-slate-600 leading-snug pt-1" data-testid="text-push-earnings">
                       <span className="font-semibold text-slate-800">Earnings preview</span> · GoodTunes bills{" "}
-                      <span className="font-semibold">${(earnings.wholesaleCents / 100).toFixed(2)}</span>/cert at the{" "}
+                      <span className="font-semibold">{formatUsdCents(earnings.wholesaleCents)}</span>/cert at the{" "}
                       {earnings.rungLabel} rung. At {dollars(liveCertCents)} retail you keep{" "}
                       <span className="font-semibold text-emerald-700">{dollars(liveEarnings?.perCertCents ?? null)}</span>{" "}
                       per cert · <span className="font-semibold">{dollars(liveEarnings?.totalCents ?? null)}</span> total
@@ -731,7 +732,7 @@ function ShopifySalesPanel({ albumId }: { albumId: string }) {
                     {removed
                       ? "Removed in Shopify"
                       : price != null
-                        ? `$${(price / 100).toFixed(2)}`
+                        ? formatUsdCents(price)
                         : "—"}
                   </div>
                 </div>

@@ -9,6 +9,7 @@
 // reusing the existing invited-press flow (PATCH /api/admin/{kind}/:id/
 // invited-press) — no re-entry of anything.
 import { useMemo, useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -32,7 +33,7 @@ import {
 type RoleInfo = { role: string; roleScopeId: string | null };
 type PartnerRow = { id: string; name: string };
 
-const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
+const dollars = (c: number) => formatUsdCents(c);
 
 const FACTOR_META: Record<
   keyof PressMatchResult["factors"],

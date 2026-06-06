@@ -16,6 +16,7 @@
 //    buttons are surfaced automatically by Stripe when the device
 //    supports them.
 import { useEffect, useMemo, useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { useLocation } from "wouter";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import { track } from "@/lib/analytics";
@@ -108,7 +109,7 @@ type CustomAddon = {
 const BOOKLET_FORMATS_FAN: ReadonlySet<string> = new Set(["7_inch", "cassette"]);
 
 const MAX_COPIES_PER_CHECKOUT = 10;
-const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+const dollars = (cents: number) => formatUsdCents(cents);
 
 let stripePromise: Promise<Stripe | null> | null = null;
 async function getStripePromise() {

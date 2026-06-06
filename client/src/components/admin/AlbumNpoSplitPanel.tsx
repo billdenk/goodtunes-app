@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, HeartHandshake } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -41,7 +42,7 @@ type Row = {
   baselineCents: number | null;
 };
 
-const fmt = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+const fmt = (cents: number) => formatUsdCents(cents);
 
 // Per-unit donation amounts the operator can pick, in cents. The cap is
 // $1.00/unit (split across up to 4 NPOs), so quarter steps cover it cleanly.

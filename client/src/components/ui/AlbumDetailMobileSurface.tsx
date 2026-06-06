@@ -8,6 +8,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
+import { formatUsdCents } from "@shared/money";
 import { ChevronLeft, Share, MoreHorizontal, Info, Lock } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
@@ -683,7 +684,7 @@ export function AlbumDetailMobileSurface({
                   <circle cx="20" cy="21" r="1" />
                   <path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" />
                 </svg>
-                Buy ${(album.priceCents / 100).toFixed(2)}
+                Buy {formatUsdCents(album.priceCents)}
               </button>
             )}
           {hasAlbumCredits && (

@@ -22,6 +22,7 @@
 // longer edits it. Source of truth for "what does a cert cost?" is the
 // Wholesale Ladder.
 import { useEffect, useMemo, useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -59,7 +60,7 @@ const FORMAT_COST_FIELDS = [
 ] as const;
 type FormatCostField = (typeof FORMAT_COST_FIELDS)[number]["key"];
 
-const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
+const dollars = (c: number) => formatUsdCents(c);
 const parseDollars = (v: string): number | null => {
   const n = Number.parseFloat(v.replace(/[^0-9.]/g, ""));
   if (!Number.isFinite(n) || n < 0) return null;

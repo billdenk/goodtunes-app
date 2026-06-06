@@ -12,6 +12,7 @@
 // is laid out as a side-by-side comparison column so an artist can read
 // "$35 @ 500 vs. $45 @ 1,000" at a glance.
 import PDFDocument from "pdfkit";
+import { formatUsdCents } from "@shared/money";
 
 // Brand palette (mirrors client/src/index.css + replit.md "Brand").
 const NAVY = "#00062B";
@@ -53,15 +54,9 @@ export type QuotePdfData = {
   options: QuoteOption[];
 };
 
-const DOLLAR_FMT = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-});
 function money(cents: number | null | undefined): string {
   if (cents == null) return "—";
-  const neg = cents < 0;
-  const s = DOLLAR_FMT.format(Math.abs(cents) / 100);
-  return neg ? `-${s}` : s;
+  return formatUsdCents(cents);
 }
 
 function fmtDate(d: Date): string {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { AdminFrame } from "@/components/admin/AdminFrame";
@@ -27,7 +28,7 @@ type Node = {
 
 type TreeResp = { root: { kind: string; id: string }; nodes: Node[] };
 
-const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
+const fmt = (c: number) => formatUsdCents(c);
 
 export function AdminInviteTree() {
   const [, navigate] = useLocation();

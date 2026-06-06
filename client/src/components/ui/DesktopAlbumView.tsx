@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { formatUsdCents } from "@shared/money";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { useHasInAppHistory } from "@/lib/navHistory";
@@ -193,8 +194,7 @@ function formatRuntime(songs: { duration: number }[]): string {
 }
 
 function formatPrice(cents: number): string {
-  const dollars = cents / 100;
-  return dollars % 1 === 0 ? `$${dollars.toFixed(0)}` : `$${dollars.toFixed(2)}`;
+  return formatUsdCents(cents, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
 /**

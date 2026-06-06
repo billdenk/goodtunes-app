@@ -227,6 +227,7 @@ export async function sendCustomerSignupCodeEmail(toEmail: string, code: string,
 // `welcomeEmailSentAt` on success so a future retry batch can target
 // only the un-mailed remainder.
 import { WELCOME_BACK_WHATS_NEW } from "@shared/welcomeBack";
+import { formatUsdCents } from "@shared/money";
 
 export async function sendWelcomeBackEmail(toEmail: string, displayName: string | null, signInUrl: string): Promise<SendResult> {
   const friendly = (displayName ?? "").trim() || "there";
@@ -821,7 +822,7 @@ export async function sendPayoutDigestToBill(
   totalCents: number,
   lines: string[],
 ): Promise<SendResult> {
-  const dollars = (totalCents / 100).toFixed(2);
+  const dollars = formatUsdCents(totalCents, { noSymbol: true });
   const subject = `GoodTunes payouts to release: ${count} held ($${dollars})`;
   const text = [
     `${count} held payout earmark(s) totalling $${dollars} are waiting for your release.`,

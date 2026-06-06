@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { formatUsdCents } from "@shared/money";
 
 /**
  * Shared order-detail Sheet (Task #1342).
@@ -73,7 +74,7 @@ export type AdminOrderDetail = {
   }>;
 };
 
-export const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
+export const dollars = (c: number) => formatUsdCents(c);
 
 export function orderShort(o: { goodDeedNumber: number | null; id: string }) {
   if (o.goodDeedNumber !== null && o.goodDeedNumber !== undefined) {
@@ -456,7 +457,7 @@ function RefundAction({ order }: { order: AdminOrderRow }) {
     onSuccess: (data: { full: boolean; amountCents: number }) => {
       toast({
         title: data.full ? "Refund issued" : "Partial refund issued",
-        description: `$${(data.amountCents / 100).toFixed(2)} returned via ${isShopify ? "Shopify" : "Stripe"}.`,
+        description: `${formatUsdCents(data.amountCents)} returned via ${isShopify ? "Shopify" : "Stripe"}.`,
       });
       setOpen(false);
       setReason("");
@@ -518,7 +519,7 @@ function RefundAction({ order }: { order: AdminOrderRow }) {
           className="text-[11.5px] text-[var(--brand-blue)] hover:underline"
           data-testid="button-refund-full"
         >
-          Full (${(order.totalCents / 100).toFixed(2)})
+          Full ({formatUsdCents(order.totalCents)})
         </button>
       </div>
       <div className="flex items-start gap-2">

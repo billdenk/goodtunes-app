@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { Link, useRoute, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -2422,7 +2423,7 @@ function ReferralSummaryPanel({ kind, id }: { kind: "artist" | "non_profit"; id:
     queryKey: [`/api/admin/partners/${kind}/${id}/referral-summary`],
     retry: false,
   });
-  const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
+  const fmt = (c: number) => formatUsdCents(c);
   if (isLoading) return null;
   if (!data) return null;
   const hasProvenance = !!(data.provenance?.referredBy || data.provenance?.invitedBy);
@@ -2520,7 +2521,7 @@ function ReferralSummaryPanel({ kind, id }: { kind: "artist" | "non_profit"; id:
                 <span className="flex-1 min-w-0 text-slate-700 truncate">{r.artistName ?? "(unknown artist)"}</span>
                 <span className="text-[11px] text-slate-400">{new Date(r.createdAt).toLocaleDateString()}</span>
                 <span className={`text-[10px] uppercase tracking-wide font-semibold ${r.status === "paid" ? "text-[var(--brand-blue)]" : "text-amber-600"}`}>{r.status === "paid" ? "Paid" : "Pending"}</span>
-                <span className="text-slate-900 tabular-nums font-semibold w-16 text-right">${(r.amountCents / 100).toFixed(2)}</span>
+                <span className="text-slate-900 tabular-nums font-semibold w-16 text-right">{formatUsdCents(r.amountCents)}</span>
               </li>
             ))}
           </ul>

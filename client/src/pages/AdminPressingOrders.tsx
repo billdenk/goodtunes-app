@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { CheckCircle2, XCircle, Clock, Factory, ChevronDown } from "lucide-react";
@@ -26,7 +27,7 @@ type Row = PressingOrderRequest & {
   albumArtwork: string | null;
 };
 
-const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
+const dollars = (c: number) => formatUsdCents(c);
 
 export function AdminPressingOrders() {
   const { toast } = useToast();

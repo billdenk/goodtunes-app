@@ -9,6 +9,7 @@
 //   order whose Connect transfer hasn't landed.
 // - Inline settings popover for platformFeePct + certCostCents.
 import { useEffect, useRef, useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -151,7 +152,7 @@ function giftStatus(g: GiftInfo): { label: string; cls: string } {
 
 const STATUSES = ["all", "paid", "shipped", "refunded"] as const;
 type StatusFilter = (typeof STATUSES)[number];
-const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
+const dollars = (c: number) => formatUsdCents(c);
 
 export function AdminOrders() {
   return (

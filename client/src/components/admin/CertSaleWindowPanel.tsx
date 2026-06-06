@@ -10,6 +10,7 @@
 //   - see the true-up ledger row recorded at close (Task #4 engine TBD)
 
 import { useMemo, useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -81,7 +82,7 @@ function fmtDate(iso: string | null): string {
 
 function fmtUSD(cents: number | null | undefined): string {
   if (cents == null) return "—";
-  return `$${(cents / 100).toFixed(2)}`;
+  return formatUsdCents(cents);
 }
 
 const STATUS_BADGES: Record<string, { label: string; cls: string }> = {

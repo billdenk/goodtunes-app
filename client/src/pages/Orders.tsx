@@ -8,6 +8,7 @@
 // (paid → submitted → in fulfillment → shipped → delivered), line items,
 // shipping address, and gift-recipient info.
 import { useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -121,7 +122,7 @@ function OriginBadge({ origin }: { origin: string | undefined }) {
   );
 }
 
-const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
+const dollars = (c: number) => formatUsdCents(c);
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   paid: { label: "Paid", cls: "bg-[#4AFFCA]/15 text-[#4AFFCA]" },
   shipped: { label: "Shipped", cls: "bg-[#319ED8]/15 text-[#319ED8]" },

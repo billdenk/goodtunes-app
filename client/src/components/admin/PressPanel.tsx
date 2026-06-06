@@ -19,6 +19,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { formatUsdCents } from "@shared/money";
 import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -102,7 +103,7 @@ function EarlyCutPoolReadout({ albumId }: { albumId: string }) {
     enabled: !!albumId,
   });
   if (!data?.tier) return null;
-  const dollars = (c: number) => `$${(Math.max(0, c) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const dollars = (c: number) => formatUsdCents(Math.max(0, c), { maximumFractionDigits: 0 });
   const pct = data.pressFloorTotalCents > 0
     ? Math.min(100, Math.round((data.poolAvailableCents / data.pressFloorTotalCents) * 100))
     : 0;

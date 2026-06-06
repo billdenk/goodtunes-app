@@ -9,6 +9,7 @@
 // per table. Mobile-first single column at <640px, three-column dense
 // layout at desktop breakpoints.
 import { useMemo, useState } from "react";
+import { formatUsd, formatUsdCents } from "@shared/money";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -64,8 +65,8 @@ type Audience = {
 const C = BRAND;
 const SKU_COLOR = SKU_COLORS;
 
-const dollars = (c: number) => `$${(c / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-const dollarsCents = (c: number) => `$${(c / 100).toFixed(2)}`;
+const dollars = (c: number) => formatUsdCents(c, { maximumFractionDigits: 0 });
+const dollarsCents = (c: number) => formatUsdCents(c);
 const compact = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n));
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
@@ -556,7 +557,7 @@ function RevenueChart({ data, loading }: { data: Timeseries["revenue"]; loading:
           <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
           <XAxis dataKey="day" stroke="rgba(255,255,255,0.45)" tick={{ fontSize: 11 }} />
           <YAxis stroke="rgba(255,255,255,0.45)" tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-          <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => `$${Number(v).toFixed(0)}`} />
+          <Tooltip contentStyle={tooltipStyle} formatter={(v: any) => formatUsd(Number(v), { maximumFractionDigits: 0 })} />
           <Legend wrapperStyle={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }} />
           {skuKinds.map((sku) => (
             <Bar key={sku} dataKey={sku} stackId="rev" fill={SKU_COLOR[sku] || "rgba(255,255,255,0.4)"} />
@@ -902,7 +903,7 @@ export function InviteArtistPanel() {
     const stats = iv.roleScopeId ? partnerByScope.get(iv.roleScopeId) : undefined;
     if (stats) { totalUnits += stats.units; totalPendingCents += stats.pendingCents; }
   }
-  const fmtMoney = (c: number) => `$${(c / 100).toFixed(2)}`;
+  const fmtMoney = (c: number) => formatUsdCents(c);
   const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
   const pickSuggestion = (s: EarmarkedSuggestion) => {
@@ -1201,7 +1202,7 @@ function ReferralsTab() {
     return <p className="py-10 text-center text-white/45 text-[13px]">Couldn't load referrals.</p>;
   }
   const d = q.data!;
-  const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
+  const fmt = (c: number) => formatUsdCents(c);
   return (
     <>
       <InviteArtistPanel />

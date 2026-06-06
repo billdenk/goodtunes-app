@@ -1,3 +1,5 @@
+import { formatUsdCents } from "@shared/money";
+
 /** Minimal CSV writer. RFC 4180 quoting. No deps. */
 function esc(v: any): string {
   if (v === null || v === undefined) return "";
@@ -15,5 +17,5 @@ export function toCsv(rows: Array<Record<string, any>>, columns?: string[]): str
 }
 
 export function dollarsFromCents(cents: number): string {
-  return (cents / 100).toFixed(2);
+  return formatUsdCents(cents, { noSymbol: true });
 }

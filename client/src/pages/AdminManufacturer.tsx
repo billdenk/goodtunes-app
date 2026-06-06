@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -83,7 +84,7 @@ function PressAutoTriggerConsentPanel({ m }: { m: Manufacturer }) {
     enabled: !!m.id,
   });
   const usd = (c: number) =>
-    `$${(c / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+    formatUsdCents(c, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   const toggle = useMutation({
     mutationFn: async (consent: boolean) => {
       const r = await apiRequest("PATCH", `/api/admin/manufacturers/${m.id}/auto-trigger-consent`, { consent });

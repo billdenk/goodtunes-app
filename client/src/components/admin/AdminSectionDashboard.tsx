@@ -16,6 +16,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { formatUsdCents } from "@shared/money";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
 } from "recharts";
@@ -86,12 +87,10 @@ const LIGHT_TOOLTIP_STYLE = {
 function formatValue(value: number | null, format: KpiFormat): string {
   if (value === null || value === undefined) return "—";
   switch (format) {
-    case "currency": {
-      const dollars = value / 100;
-      return dollars >= 10_000
-        ? `$${Math.round(dollars).toLocaleString()}`
-        : `$${dollars.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    }
+    case "currency":
+      return value >= 1_000_000
+        ? formatUsdCents(value, { maximumFractionDigits: 0 })
+        : formatUsdCents(value);
     case "percent":
       return `${Math.round(value * 100)}%`;
     case "duration":

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Heart, Music as MusicIcon, Mail, Clock, UserPlus, Users, Trash2, Send, Copy, Check, ChevronDown } from "lucide-react";
@@ -81,7 +82,7 @@ type Tree = {
   orphanArtists: TreeArtist[];
 };
 
-const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
+const fmt = (c: number) => formatUsdCents(c);
 
 const BASE_NPO_TABS = modulesForRole("non_profit") as ReadonlyArray<{ id: "dashboard" | "artists" | "buyers" | "invites"; label: string }>;
 type NpoTabId = "dashboard" | "artists" | "buyers" | "invites" | "ledger" | "tree";

@@ -11,6 +11,7 @@
 // "what we owe them for this release."
 
 import { useEffect, useMemo, useState } from "react";
+import { formatUsdCents } from "@shared/money";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -49,7 +50,7 @@ const PATCH_KEY: Record<Service, "printVendorId" | "hologramVendorId" | "inserti
 };
 
 function dollars(c: number) {
-  return `$${(c / 100).toFixed(2)}`;
+  return formatUsdCents(c);
 }
 
 export function SignedCertVendorPanel({ albumId }: { albumId: string }) {
