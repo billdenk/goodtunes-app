@@ -712,6 +712,7 @@ export function AdminInvites() {
             crowd the create form; the GET endpoint 403s for non-super
             admins which simply hides the panel. */}
         <ReviewQueuePanel />
+        <MailFailuresPanel />
         <ReferralFundingPanel />
       </div>
     </AdminFrame>
@@ -736,6 +737,11 @@ const INVITE_ROLE_DISPLAY: Record<string, string> = {
 // itself silently on lower-tier admin accounts.
 function ReviewQueuePanel() {
   const { toast } = useToast();
+  // Task #1570 — when an approve sends the invite email but the send
+  // fails, keep the accept link visible so the operator can copy it and
+  // share it manually (recovery path) instead of re-creating the invite.
+  const [failedApprove, setFailedApprove] = useState<{ email: string; acceptUrl: string; reason: string | null } | null>(null);
+  const [copiedApprove, setCopiedApprove] = useState(false);
   const q = useQuery<Array<{
     id: string; email: string; role: string; inviteRole: string | null;
     targetPersonName: string | null; targetPersonPhoto: string | null;
@@ -748,15 +754,39 @@ function ReviewQueuePanel() {
   const approve = useMutation({
     mutationFn: async (id: string) => {
       const r = await apiRequest("POST", `/api/admin/invites/${id}/approve`);
-      return r.json();
+      return r.json() as Promise<{ ok: boolean; acceptUrl: string; emailDelivered: boolean; reason: string | null }>;
     },
-    onSuccess: () => {
+    onSuccess: (data, id) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/invites/review"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/invites"] });
-      toast({ title: "Invite approved" });
+      // Mirror the create-invite / resend-invite toasts: an honest result
+      // — emailed when it actually went out, "copy link" when it didn't.
+      if (data.emailDelivered) {
+        setFailedApprove(null);
+        toast({ title: "Invite approved — emailed" });
+        return;
+      }
+      const inv = q.data?.find((r) => r.id === id);
+      setFailedApprove({ email: inv?.email ?? "the invitee", acceptUrl: data.acceptUrl, reason: data.reason ?? null });
+      setCopiedApprove(false);
+      toast({
+        title: "Approved — email failed, copy link",
+        description: data.reason
+          ? `Couldn't email it (${data.reason}). Copy the link below and share it manually.`
+          : "Couldn't email it. Copy the link below and share it manually.",
+        variant: "destructive",
+      });
     },
     onError: (e: Error) => toast({ title: "Couldn't approve", description: e.message, variant: "destructive" }),
   });
+  async function copyApproveUrl() {
+    if (!failedApprove) return;
+    try {
+      await navigator.clipboard.writeText(failedApprove.acceptUrl);
+      setCopiedApprove(true);
+      setTimeout(() => setCopiedApprove(false), 1500);
+    } catch {}
+  }
   const reject = useMutation({
     mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
       await apiRequest("POST", `/api/admin/invites/${id}/reject`, { reason });
@@ -766,8 +796,38 @@ function ReviewQueuePanel() {
       toast({ title: "Invite rejected" });
     },
   });
+  // Non-super (403) hides the whole panel — they can't approve anyway.
   if (q.isError) return null;
-  if (q.isLoading || !q.data || q.data.length === 0) return null;
+  const failedBanner = failedApprove ? (
+    <div className="bg-rose-50 border border-rose-200 rounded-xl p-3" data-testid="banner-approve-failed">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs font-semibold text-rose-800">
+          Approved {failedApprove.email} — but the email failed to send
+        </div>
+        <button
+          type="button"
+          onClick={copyApproveUrl}
+          className="text-xs font-semibold text-[var(--brand-blue)] hover:underline flex items-center gap-1 flex-shrink-0"
+          data-testid="button-copy-approve-url"
+        >
+          {copiedApprove ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+          {copiedApprove ? "Copied" : "Copy link"}
+        </button>
+      </div>
+      {failedApprove.reason && (
+        <div className="mt-1 text-xs text-rose-700">{failedApprove.reason}</div>
+      )}
+      <div className="mt-1 text-xs text-slate-700 break-all font-mono">{failedApprove.acceptUrl}</div>
+      <div className="mt-1 text-xs text-slate-500">
+        Share this link manually, or use the Resend button in the Pending list above. See "Recent email failures" below for why it didn't send.
+      </div>
+    </div>
+  ) : null;
+  // Keep the recovery banner visible even after the held queue empties
+  // (approving the last held invite invalidates the review query → empty).
+  if (q.isLoading || !q.data || q.data.length === 0) {
+    return failedBanner ? <div className="mt-8" data-testid="panel-review-queue">{failedBanner}</div> : null;
+  }
   return (
     <div className="mt-8 bg-white border border-amber-200 rounded-2xl p-5" data-testid="panel-review-queue">
       <h2 className="text-sm font-semibold text-slate-900 mb-1">Held for review ({q.data.length})</h2>
@@ -775,6 +835,7 @@ function ReviewQueuePanel() {
         Identity invites for claimed People (linked login, Spotify artist, GoodTunes releases, or groups), and any team invite from a non-super-admin
         whose email isn't on file for the target Person, are held here until approved.
       </p>
+      {failedBanner && <div className="mb-3">{failedBanner}</div>}
       <ul className="divide-y divide-slate-100">
         {q.data.map((inv) => (
           <li key={inv.id} className="flex items-center gap-3 py-3" data-testid={`row-review-${inv.id}`}>
@@ -814,6 +875,59 @@ function ReviewQueuePanel() {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+// Task #1570 — Recent transactional-email send failures, read from the
+// in-memory ring buffer in server/mail.ts. Super-admin only (the GET 403s
+// for non-super, so this hides itself). Per-instance + per-environment:
+// dev and prod keep separate Resend records, so this reflects only what
+// THIS running process tried to send. Read-only; no mutation.
+function MailFailuresPanel() {
+  const q = useQuery<Array<{ ts: string; template: string; recipientDomain: string; reason: string }>>({
+    queryKey: ["/api/admin/mail-failures"],
+    retry: false,
+    refetchInterval: 30_000,
+  });
+  if (q.isError || q.isLoading || !q.data) return null;
+  return (
+    <div className="mt-8 bg-white border border-slate-200 rounded-2xl p-5" data-testid="panel-mail-failures">
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <h2 className="text-sm font-semibold text-slate-900">Recent email failures ({q.data.length})</h2>
+        <button
+          type="button"
+          onClick={() => q.refetch()}
+          disabled={q.isFetching}
+          className="p-2 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 transition-colors"
+          title="Refresh"
+          aria-label="Refresh email failures"
+          data-testid="button-refresh-mail-failures"
+        >
+          <RefreshCw className="w-4 h-4" />
+        </button>
+      </div>
+      <p className="text-xs text-slate-500 mb-3">
+        Transactional emails (invites, codes, receipts) this server tried and failed to send, newest first. Use the reason to fix the cause
+        (e.g. verify the from-address / domain in Resend). This list lives in memory for this environment only and clears on restart.
+      </p>
+      {q.data.length === 0 ? (
+        <div className="text-sm text-slate-500" data-testid="empty-mail-failures">No send failures recorded.</div>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {q.data.slice().reverse().map((f, i) => (
+            <li key={`${f.ts}-${i}`} className="py-2.5" data-testid={`row-mail-failure-${i}`}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-medium text-slate-900 text-sm truncate">
+                  {f.template} <span className="text-slate-400 font-normal">→ @{f.recipientDomain}</span>
+                </div>
+                <div className="text-xs text-slate-400 flex-shrink-0">{new Date(f.ts).toLocaleString()}</div>
+              </div>
+              <div className="text-xs text-rose-700 break-words mt-0.5" data-testid={`text-mail-failure-reason-${i}`}>{f.reason}</div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

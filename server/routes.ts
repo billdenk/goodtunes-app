@@ -22145,7 +22145,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       SET review_status = 'approved', reviewed_by_user_id = ${req.session.userId!}, reviewed_at = NOW()
       WHERE id = ${id}
     `);
-    res.json({ ok: true, acceptUrl, emailDelivered: result.ok });
+    // Task #1570 — return the send-failure reason (additive field) so the
+    // review-queue UI can toast "approved, email failed — copy link" with a
+    // diagnosable reason instead of a misleading "approved" success.
+    res.json({ ok: true, acceptUrl, emailDelivered: result.ok, reason: result.ok ? null : result.reason });
   });
 
   // Reject (and revoke) a held invite.
@@ -22161,6 +22164,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       WHERE id = ${id}
     `);
     res.json({ ok: true });
+  });
+
+  // Task #1570 — Recent transactional-email send failures (in-memory ring
+  // buffer in server/mail.ts). Read-only, super-admin only, per-instance:
+  // it reflects sends attempted by THIS process in THIS environment (dev
+  // and prod are separate Resend records), so an operator can see why an
+  // invite (or any) email didn't go out without reading server logs.
+  app.get("/api/admin/mail-failures", requireAdmin, requireRole("super_admin"), async (_req, res) => {
+    const { getRecentMailFailures } = await import("./mail");
+    res.json(getRecentMailFailures());
   });
 
   // Task #351 — Per-(artist scope, user) permission overrides matrix.
