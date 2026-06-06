@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
+import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { formatUsdCents } from "@shared/money";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
 } from "recharts";
-import { Clock } from "lucide-react";
+import { ArrowUpRight, Clock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { BRAND } from "@/lib/brand-tokens";
 import { cn } from "@/lib/utils";
@@ -140,7 +141,29 @@ export function AdminPartnerDashboard({
         <RangePicker value={preset} onChange={setPreset} testId={`range-picker-${scope}`} />
       </section>
 
-      <KpiGrid kpis={data?.kpis ?? []} loading={isLoading} scope={scope} />
+      <KpiGrid
+        kpis={data?.kpis ?? []}
+        loading={isLoading}
+        scope={scope}
+        ctx={
+          data
+            ? {
+                from: data.range.from.slice(0, 10),
+                to: data.range.to.slice(0, 10),
+                partnerId: data.scope.id,
+                partnerName: data.scope.name,
+                reportsKind:
+                  data.scope.kind === "label"
+                    ? "label"
+                    : data.scope.kind === "artist"
+                      ? "artist"
+                      : data.scope.kind === "npo"
+                        ? "non_profit"
+                        : null,
+              }
+            : null
+        }
+      />
 
       <Card data-testid={`trend-${scope}`}>
         <CardContent className="p-4">
@@ -214,14 +237,69 @@ function RangePicker({
 
 // ─── KPI tiles ──────────────────────────────────────────────────────
 
+// Task #1456 — like the main /admin dashboard, each tile drills into the
+// matching detailed report carrying the dashboard's selected date range.
+// On the per-partner view we also scope the destination to this partner
+// where the target page supports it — only `/admin/reports` reads
+// `?asPartner=…` today, so we only wire tiles whose drill-down can be
+// scoped (reports tabs). Orders/customers have no partner filter, so
+// those tiles stay non-clickable here rather than drilling into a
+// misleading global list. Coming-soon tiles never link.
+type PartnerLinkCtx = {
+  from: string;
+  to: string;
+  partnerId: string;
+  partnerName: string;
+  reportsKind: "label" | "artist" | "non_profit" | null;
+};
+
+function reportsHref(tab: string, ctx: PartnerLinkCtx): string {
+  const p = new URLSearchParams({ tab, from: ctx.from, to: ctx.to });
+  if (ctx.partnerId && ctx.reportsKind) {
+    p.set("asPartner", ctx.partnerId);
+    p.set("asPartnerKind", ctx.reportsKind);
+    if (ctx.partnerName) p.set("asPartnerName", ctx.partnerName);
+  }
+  return `/admin/reports?${p.toString()}`;
+}
+
+function partnerKpiHref(
+  scope: PartnerScopeKind,
+  k: DashboardKpi,
+  ctx: PartnerLinkCtx | null,
+): string | null {
+  if (k.comingSoon || !ctx) return null;
+  switch (scope) {
+    case "label":
+      if (k.id === "gross" || k.id === "orders") return reportsHref("sales", ctx);
+      if (k.id === "newFans") return reportsHref("fans", ctx);
+      if (k.id === "plays") return reportsHref("plays", ctx);
+      return null;
+    case "artist":
+      if (k.id === "orders") return reportsHref("sales", ctx);
+      if (k.id === "newFans") return reportsHref("fans", ctx);
+      if (k.id === "plays") return reportsHref("plays", ctx);
+      return null;
+    case "npo":
+      if (k.id === "pending" || k.id === "paid" || k.id === "refArtists")
+        return reportsHref("referrals", ctx);
+      return null;
+    case "vendor":
+    default:
+      return null;
+  }
+}
+
 function KpiGrid({
   kpis,
   loading,
   scope,
+  ctx,
 }: {
   kpis: DashboardKpi[];
   loading: boolean;
   scope: PartnerScopeKind;
+  ctx: PartnerLinkCtx | null;
 }) {
   if (loading && kpis.length === 0) {
     return (
@@ -243,27 +321,38 @@ function KpiGrid({
       data-testid={`kpi-grid-${scope}`}
     >
       {kpis.map((k) => (
-        <KpiTile key={k.id} k={k} scope={scope} />
+        <KpiTile key={k.id} k={k} scope={scope} href={partnerKpiHref(scope, k, ctx)} />
       ))}
     </section>
   );
 }
 
-function KpiTile({ k, scope }: { k: DashboardKpi; scope: PartnerScopeKind }) {
+function KpiTile({
+  k,
+  scope,
+  href,
+}: {
+  k: DashboardKpi;
+  scope: PartnerScopeKind;
+  href: string | null;
+}) {
   const testId = `kpi-${scope}-${k.id}`;
   const value = formatValue(k.value, k.format);
   const showDelta =
     !k.comingSoon && k.value !== null && k.prior !== null && k.prior !== undefined;
   const delta = showDelta ? deltaPct(k.value as number, k.prior as number) : null;
   const positive = showDelta && (k.value as number) >= (k.prior as number);
-  return (
+  const card = (
     <Card
       data-testid={testId}
       className="transition-shadow duration-200 hover:shadow-md hover:border-slate-300"
     >
       <CardContent className="p-4">
-        <p className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+        <p className="text-xs uppercase tracking-wider text-slate-500 font-semibold flex items-center gap-1">
           {k.label}
+          {href && (
+            <ArrowUpRight className="w-3 h-3 text-slate-300 group-hover:text-[color:var(--brand-blue)] transition-colors" />
+          )}
         </p>
         <p
           className={cn(
@@ -299,6 +388,12 @@ function KpiTile({ k, scope }: { k: DashboardKpi; scope: PartnerScopeKind }) {
         </div>
       </CardContent>
     </Card>
+  );
+  if (!href) return card;
+  return (
+    <Link href={href} className="group block cursor-pointer" data-testid={`${testId}-link`}>
+      {card}
+    </Link>
   );
 }
 

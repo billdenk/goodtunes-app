@@ -120,9 +120,22 @@ interface PartnerSearchResult {
 
 export function AdminReports() {
   const { from, to, setFrom, setTo } = useDateRange();
-  const [asPartner, setAsPartner] = useState("");
-  const [asKind, setAsKind] = useState<PartnerKind>("label");
-  const [asPartnerName, setAsPartnerName] = useState("");
+  // Task #1456 — partner dashboards deep-link here scoped to a single
+  // partner via `?asPartner=<id>&asPartnerKind=<kind>&asPartnerName=<name>`.
+  // Read once on mount (mirrors the `tab` URL-read below); the date range
+  // is already picked up by useDateRange() above.
+  const initialAs = useMemo(() => {
+    if (typeof window === "undefined") return { id: "", kind: "label" as PartnerKind, name: "" };
+    const p = new URLSearchParams(window.location.search);
+    const id = p.get("asPartner") || "";
+    const kindRaw = p.get("asPartnerKind") || "label";
+    const kind: PartnerKind =
+      kindRaw === "artist" || kindRaw === "non_profit" ? kindRaw : "label";
+    return { id, kind, name: p.get("asPartnerName") || "" };
+  }, []);
+  const [asPartner, setAsPartner] = useState(initialAs.id);
+  const [asKind, setAsKind] = useState<PartnerKind>(initialAs.kind);
+  const [asPartnerName, setAsPartnerName] = useState(initialAs.name);
   const [asPartnerImageUrl, setAsPartnerImageUrl] = useState<string | null>(null);
   const qs = useMemo(() => buildQs(from, to, asPartner, asKind), [from, to, asPartner, asKind]);
 

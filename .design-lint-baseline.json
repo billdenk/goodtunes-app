@@ -8855,6 +8855,16 @@
     "snippet": "<p className=\"text-slate-500 text-[12.5px]\">{subtitle}</p>"
   },
   {
+    "rule": "admin-link-missing-shared-treatment",
+    "file": "client/src/components/admin/AdminPartnerDashboard.tsx",
+    "snippet": "<Link href={href} className=\"group block cursor-pointer\" data-testid={`${testId}-link`}>"
+  },
+  {
+    "rule": "admin-link-missing-shared-treatment",
+    "file": "client/src/components/admin/AdminSectionDashboard.tsx",
+    "snippet": "<Link href={href} className=\"group block cursor-pointer\" data-testid={`${testId}-link`}>"
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/AdminUserMenu.tsx",
     "snippet": "className=\"w-8 h-8 rounded-full bg-[var(--brand-blue)] text-white text-[12px] font-semibold flex items-center justify-center tracking-wide overflow-hidden hover:opacity-90 focus:outline-none focus-vis"
@@ -20088,16 +20098,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/LabelDashboard.tsx",
     "snippet": "<span className=\"font-mono text-white/65 text-[11px] w-7\">{r.country}</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "className=\"w-full py-3 text-white/55 hover:text-white/80 text-sm\""
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "<DrawerDescription className=\"text-white/55 text-sm leading-relaxed\">"
   },
   {
     "rule": "fan-text-tone",
