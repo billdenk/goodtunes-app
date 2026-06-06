@@ -16,14 +16,17 @@ import { ChromeScrim } from "@/components/ui/ChromeScrim";
 
 /**
  * Bottom offset shared by all three floating dock elements (collapsed
- * puck, three-tab pillow, search/close toggle). Rests at a flat 12px from
- * the screen bottom so the dock sits tightly stacked under the mini-player
- * (which floats at bottom: 79). Raising the dock with a safe-area inset
- * (the old "+24px" attempt) pushed the tab bar up out of that stack and
- * left it looking detached/crooked, so we keep it at the original 12px.
+ * puck, three-tab pillow, search/close toggle). Rests at a 12px visual
+ * gap from the screen bottom so the dock sits tightly stacked under the
+ * mini-player (which floats at bottom: 79). A fixed "+24px" lift (the old
+ * attempt) pushed the tab bar up out of that stack and left it looking
+ * detached/crooked, so we keep the 12px baseline. We add
+ * `env(safe-area-inset-bottom)` on top of that 12px so the dock clears the
+ * iPhone/iPad home indicator in the native (Capacitor) webview; on plain
+ * web the inset is 0, so the offset stays exactly 12px.
  * Keeping all three on this single value keeps them on one baseline.
  */
-export const DOCK_BOTTOM = "12px";
+export const DOCK_BOTTOM = "calc(12px + env(safe-area-inset-bottom, 0px))";
 
 /**
  * Bottom padding every customer-shell scroll container must reserve so
