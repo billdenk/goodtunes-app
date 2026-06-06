@@ -12340,11 +12340,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       typeof patch.videoUrl === "string" && !!prev && patch.videoUrl !== prev.videoUrl;
     if (videoUrlChanged) {
       // New source file → drop the stale Mux asset so the row re-ingests
-      // from scratch and never serves the old encode.
+      // from scratch and never serves the old encode. Task #1470 — also
+      // reset the retry ladder so a fresh upload isn't born already
+      // capped from the previous file's failures.
       patch.muxAssetId = null;
       patch.muxPlaybackId = null;
       patch.muxStatus = null;
       patch.muxLastError = null;
+      patch.muxRetryCount = 0;
+      patch.muxLastRetryAt = null;
     }
     const v = await storage.updateAlbumVideo(String(req.params.id), patch);
     if (!v) return res.status(404).json({ message: "Video not found" });
@@ -18426,6 +18430,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           muxPlaybackId: asset.playbackId,
           muxStatus: asset.status,
           muxLastError: null,
+          // Task #1470 — clear the persisted retry ladder once we're
+          // playable so any future error starts the backoff from zero.
+          ...(asset.status === "ready"
+            ? { muxRetryCount: 0, muxLastRetryAt: null }
+            : {}),
         });
         console.log(`[mux-video] video=${videoId} asset=${asset.assetId} status=${asset.status}`);
       } catch (err: any) {
@@ -18440,33 +18449,76 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     })();
   }
 
-  // Bonus-video reconcile — lean counterpart to the song sweeps below
-  // (no persisted retry ladder; bonus videos are low-volume). One pass
-  // does two jobs:
+  // Bonus-video reconcile — lean counterpart to the song sweeps below.
+  // One pass does two jobs:
   //   • Heal rows stuck in a non-terminal status because their
   //     `video.asset.ready` webhook never landed (poll Mux for truth).
   //   • Ingest rows that have an /objects video but no Mux asset yet —
   //     the legacy cohort that pre-dates this pipeline, plus any that
   //     errored on a previous attempt.
+  // Task #1470 — errored rows that DO have a real /objects source used to
+  // be re-attempted on every interval forever (unlike songs). They now
+  // ride the same persisted exponential-backoff ladder (BACKFILL_MAX_ATTEMPTS
+  // / nextBackfillDelayMs) on album_videos.mux_retry_count /
+  // mux_last_retry_at, so a permanently-broken master backs off and then
+  // ages out terminally `errored` (admin warning badge + fan "unavailable")
+  // instead of quietly spamming Mux. Never-ingested rows (no asset, status
+  // null) still retry every sweep — there's nothing to back off from yet.
+  function videoRetryGate(
+    v: any,
+    isBoot: boolean,
+  ): { eligible: boolean; reason?: "exhausted" | "backoff" } {
+    if (v.muxStatus !== "errored") return { eligible: true };
+    const attempts = Number(v.muxRetryCount ?? 0);
+    if (attempts >= BACKFILL_MAX_ATTEMPTS) return { eligible: false, reason: "exhausted" };
+    // First-ever retry (no prior stamp) is always eligible. Boot bypasses
+    // the backoff window (but still honours the cap) so a deploy can make
+    // immediate progress on a transient failure.
+    if (attempts > 0 && !isBoot) {
+      const lastAt = v.muxLastRetryAt ? new Date(v.muxLastRetryAt).getTime() : 0;
+      if (Date.now() - lastAt < nextBackfillDelayMs(attempts)) {
+        return { eligible: false, reason: "backoff" };
+      }
+    }
+    return { eligible: true };
+  }
+
   let muxVideoReconcileInFlight = false;
   async function reconcileMuxVideos(reason: string): Promise<void> {
     if (!isMuxConfigured() || muxVideoReconcileInFlight) return;
     muxVideoReconcileInFlight = true;
     try {
+      const isBoot = reason === "boot";
       const all = await storage.listAllAlbumVideos();
       const stuck = all.filter(
         (v: any) => v.muxAssetId && v.muxStatus !== "ready" && v.muxStatus !== "errored",
       );
-      const needIngest = all.filter(
+      const ingestCandidates = all.filter(
         (v: any) =>
           typeof v.videoUrl === "string" &&
           v.videoUrl.startsWith("/objects/") &&
           v.muxStatus !== "ready" &&
           (!v.muxAssetId || v.muxStatus === "errored"),
       );
-      if (stuck.length === 0 && needIngest.length === 0) return;
+      const needIngest: any[] = [];
+      let skippedBackoff = 0;
+      let skippedExhausted = 0;
+      for (const v of ingestCandidates) {
+        const gate = videoRetryGate(v, isBoot);
+        if (gate.eligible) needIngest.push(v);
+        else if (gate.reason === "exhausted") skippedExhausted++;
+        else skippedBackoff++;
+      }
+      if (stuck.length === 0 && needIngest.length === 0) {
+        if (skippedBackoff || skippedExhausted) {
+          console.log(
+            `[mux-video-reconcile:${reason}] nothing eligible (${skippedBackoff} backing off, ${skippedExhausted} retry-capped)`,
+          );
+        }
+        return;
+      }
       console.log(
-        `[mux-video-reconcile:${reason}] ${stuck.length} stuck, ${needIngest.length} to ingest`,
+        `[mux-video-reconcile:${reason}] ${stuck.length} stuck, ${needIngest.length} to ingest (${skippedBackoff} backing off, ${skippedExhausted} retry-capped)`,
       );
       for (const v of stuck) {
         try {
@@ -18480,6 +18532,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               asset.status === "errored"
                 ? (extractMuxAssetError(asset) ?? (v as any).muxLastError ?? "errored")
                 : null,
+            // Clear the ladder the moment we confirm a healthy asset.
+            ...(asset.status === "ready"
+              ? { muxRetryCount: 0, muxLastRetryAt: null }
+              : {}),
           });
         } catch (err: any) {
           console.error(`[mux-video-reconcile:${reason}] heal ${v.id} failed: ${err?.message}`);
@@ -18487,6 +18543,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         await new Promise((r) => setTimeout(r, 150));
       }
       for (const v of needIngest) {
+        // Stamp the attempt for errored retries so subsequent sweeps (and
+        // the next deploy) honour the backoff + cap. Never-ingested rows
+        // (status null) carry no ladder yet — leave their count at 0.
+        if (v.muxStatus === "errored") {
+          try {
+            await storage.updateAlbumVideo(v.id, {
+              muxRetryCount: Number((v as any).muxRetryCount ?? 0) + 1,
+              muxLastRetryAt: new Date(),
+            });
+          } catch (err: any) {
+            console.error(
+              `[mux-video-reconcile:${reason}] failed to stamp retry on ${v.id}: ${err?.message}`,
+            );
+          }
+        }
         maybeIngestVideoToMux(v.id, (v as any).videoUrl);
         await new Promise((r) => setTimeout(r, 250));
       }
@@ -18787,8 +18858,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Legacy cohort (pre-Mux) or a row that errored — kick a lazy
       // ingest so it heals on first view, and report the state so the
       // player can render "preparing" rather than failing silently.
+      // Task #1470 — an errored row with a real source rides the same
+      // bounded backoff ladder as the reconcile sweep, so a fan tapping
+      // a permanently-broken video can't hammer Mux past the cap. The
+      // videoRetryGate stamps nothing itself; stamp the attempt here so
+      // the count advances regardless of which path kicks the ingest.
       if (!video.muxAssetId && hasIngestableSource) {
-        maybeIngestVideoToMux(video.id, video.videoUrl);
+        const gate = videoRetryGate(video, false);
+        if (gate.eligible) {
+          if (video.muxStatus === "errored") {
+            try {
+              await storage.updateAlbumVideo(video.id, {
+                muxRetryCount: Number((video as any).muxRetryCount ?? 0) + 1,
+                muxLastRetryAt: new Date(),
+              });
+            } catch (err: any) {
+              console.error(
+                `[video-playback-url] failed to stamp retry on ${video.id}: ${err?.message}`,
+              );
+            }
+          }
+          maybeIngestVideoToMux(video.id, video.videoUrl);
+        }
       }
       return res.status(409).json({
         message: "No Mux playback for this video",
@@ -18851,8 +18942,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         await storage.updateAlbumVideo(vid.id, {
           muxStatus: vStatus,
           muxPlaybackId: vpb?.id ?? vid.muxPlaybackId,
+          // Task #1470 — clear the persisted retry ladder on success.
           ...(vStatus === "ready"
-            ? { muxLastError: null }
+            ? { muxLastError: null, muxRetryCount: 0, muxLastRetryAt: null }
             : vStatus === "errored"
               ? { muxLastError: "asset.errored (webhook)" }
               : {}),

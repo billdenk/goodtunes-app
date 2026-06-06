@@ -629,6 +629,16 @@ export const albumVideos = pgTable("album_videos", {
   muxPlaybackId: text("mux_playback_id"),
   muxStatus: text("mux_status"),
   muxLastError: text("mux_last_error"),
+  // Task #1470 — persisted Mux auto-retry ladder, mirroring songs'
+  // mux_retry_count / mux_last_retry_at. A bonus video that DOES have an
+  // /objects/ source but whose Mux conversion genuinely errors used to be
+  // re-attempted by the reconcile sweep on every interval forever. These
+  // two columns let reconcileMuxVideos apply exponential backoff and stop
+  // after BACKFILL_MAX_ATTEMPTS, leaving the row terminally `errored`
+  // (admin warning badge + fan "unavailable") instead of spamming Mux.
+  // Both reset to 0/null the moment an ingest succeeds (status → ready).
+  muxRetryCount: integer("mux_retry_count").notNull().default(0),
+  muxLastRetryAt: timestamp("mux_last_retry_at"),
   ...softDeleteCols,
 });
 
