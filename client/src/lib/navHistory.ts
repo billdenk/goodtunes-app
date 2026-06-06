@@ -66,7 +66,7 @@ export function useHasInAppHistory(): boolean {
  */
 export function goBack(
   navigate: (to: string) => void,
-  fallback = "/collection",
+  fallback = "/home",
 ): void {
   if (
     navigatedWithinApp &&

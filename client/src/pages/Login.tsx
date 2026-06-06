@@ -395,8 +395,8 @@ export function Login() {
       // claim screen, not /account.
       // Admin shell (host-based) lands on /admin; everything else goes
       // to the stashed deep-link target (gift claim, buy resume, …) or
-      // /account as a fallback.
-      let dest = isAdmin ? "/admin" : "/account";
+      // /home as a fallback.
+      let dest = isAdmin ? "/admin" : "/home";
       try {
         const stashed = sessionStorage.getItem("gt:postAuthNext");
         if (stashed && stashed.startsWith("/")) {
@@ -472,8 +472,8 @@ export function Login() {
       if (j2.token) setAuthToken(j2.token);
       queryClient.invalidateQueries();
       // Land in the player at the next URL if one was set (Buy flow
-      // sets ?next=/album/<id>), otherwise the standard /account home.
-      const next = new URL(window.location.href).searchParams.get("next") || "/account";
+      // sets ?next=/album/<id>), otherwise the standard /home landing.
+      const next = new URL(window.location.href).searchParams.get("next") || "/home";
       navigate(next);
     } catch (e: any) {
       setVerifyError(e?.message ?? "That code didn't match");
@@ -525,7 +525,7 @@ export function Login() {
         return stashed;
       }
     } catch {}
-    return "/account";
+    return "/home";
   };
 
   const finishCustomer = () => {

@@ -275,7 +275,7 @@ function Router() {
 
   if (isProdHost) {
     if (kind === "customer" && location.startsWith("/admin")) {
-      return <Redirect to="/account" />;
+      return <Redirect to="/home" />;
     }
     if (kind === "admin" && (
       location.startsWith("/home") ||

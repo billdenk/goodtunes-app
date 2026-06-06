@@ -56,7 +56,7 @@ export function GiftClaim() {
       queryClient.invalidateQueries();
       toast({ title: "Gift claimed", description: "Your album is in your library — and the certificate is in your name." });
       if (res.albumId) navigate(`/album/${res.albumId}`);
-      else navigate("/collection");
+      else navigate("/home");
     },
     onError: (e: any) => toast({ title: "Couldn't claim", description: e?.message, variant: "destructive" }),
   });

@@ -158,7 +158,7 @@ export function WelcomeBack() {
       });
       queryClient.invalidateQueries();
       toast({ title: "Welcome back to GoodTunes" });
-      navigate("/collection");
+      navigate("/home");
     } catch (e: any) {
       toast({ title: "Couldn't save", description: e?.message, variant: "destructive" });
     } finally {
