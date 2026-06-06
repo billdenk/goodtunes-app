@@ -2846,19 +2846,71 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   async function uploadFileToObjectStorage(
     tmpPath: string,
     mime: string,
+    // Optional watchdog/liveness for the heavy import path (hi-res
+    // masters upload the served FLAC + archival WAV back-to-back, each
+    // potentially hundreds of MB). `stallMs` aborts a wedged upload;
+    // `onActivity` bubbles byte-flow liveness up to the per-job heartbeat.
+    opts: { stallMs?: number; label?: string; onActivity?: () => void } = {},
   ): Promise<string> {
     const fs = await import("node:fs");
+    const { Transform } = await import("node:stream");
     const { pipeline } = await import("node:stream/promises");
     const { bucketName, objectName, publicUrl } = resolveUploadTarget(mime);
     const file = objectStorageClient.bucket(bucketName).file(objectName);
-    // `resumable: false` matches the buffer path. We're already streaming
-    // the request, so multi-chunk resumable uploads would only add latency.
+
+    // Memory safety for multi-hundred-MB masters: a non-resumable
+    // (single-request) upload can buffer the whole body in memory and
+    // OOM-kill the container (which itself caused the import to "hang"
+    // after a restart). Use a chunked resumable upload above a small
+    // threshold so RAM stays bounded by the chunk size regardless of
+    // file size; keep the fast single-shot path for small files.
+    let useResumable = false;
+    try {
+      const stat = await fs.promises.stat(tmpPath);
+      useResumable = stat.size > 8 * 1024 * 1024; // >8 MB → resumable
+    } catch { /* stat failure → default to single-shot */ }
+
     const writeStream = file.createWriteStream({
       contentType: mime,
       metadata: { cacheControl: "public, max-age=31536000, immutable" },
-      resumable: false,
+      resumable: useResumable,
     });
-    await pipeline(fs.createReadStream(tmpPath), writeStream);
+
+    // Resettable stall guard. The monitor sits between the disk read and
+    // the network write; under backpressure it stops seeing chunks when
+    // the WRITE side stalls, so a network wedge trips the guard. A
+    // steady-but-slow large upload keeps resetting it and is allowed to
+    // finish (no fixed overall deadline).
+    const stallMs = opts.stallMs ?? 0;
+    const ac = new AbortController();
+    let stalled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const arm = () => {
+      if (!stallMs) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { stalled = true; try { ac.abort(); } catch {} }, stallMs);
+    };
+    const monitor = new Transform({
+      transform(chunk, _enc, cb) {
+        arm();
+        try { opts.onActivity?.(); } catch {}
+        cb(null, chunk);
+      },
+    });
+
+    try {
+      arm();
+      await pipeline(fs.createReadStream(tmpPath), monitor, writeStream, { signal: ac.signal });
+    } catch (err) {
+      if (stalled) {
+        throw new Error(
+          `${opts.label ?? "Upload"} stalled — no progress for ${Math.round(stallMs / 1000)}s. Check the connection and try the import again.`,
+        );
+      }
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
     await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
     return publicUrl;
   }
@@ -8306,9 +8358,92 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // streaming-service mastering) and the transcoded FLAC (for
   // `songs.audioUrl` / browser playback). Same caller-cleans-up
   // convention as the video helper.
+  // ---- Per-step watchdogs for the audio import pipeline ----------------
+  // Hi-res masters are the heaviest path in the app: each track runs an
+  // ffprobe, an ffmpeg transcode, two object-storage uploads, and two
+  // more spec probes. Any one of those wedging used to freeze the whole
+  // background import forever (no setProgress, in-memory job stuck
+  // `running`, dialog spins on a stale bar). Each blocking step now gets
+  // a RESETTABLE idle/stall guard — NOT a fixed overall deadline, which
+  // would kill a legitimately long transcode/upload of a big file. A
+  // step that keeps emitting activity (ffmpeg prints progress to stderr
+  // ~1/s; uploads push bytes; ffprobe ends with its JSON) is allowed to
+  // finish; only genuine silence for the window trips the guard.
+  const AUDIO_PROBE_STALL_MS = 60_000;     // ffprobe is a one-shot header read
+  const AUDIO_TRANSCODE_STALL_MS = 120_000; // ffmpeg resets on each stderr progress line
+  const AUDIO_UPLOAD_STALL_MS = 90_000;    // object-storage write resets on each chunk
+
+  // Run an audio subprocess (ffprobe/ffmpeg) under a stall guard.
+  // Collects stdout/stderr and resets the idle timer on EVERY chunk of
+  // either stream; if the child goes silent for `stallMs` it's SIGKILLed
+  // and we reject with an accurate, operator-facing message naming the
+  // step. `onActivity` (optional) fires on each chunk so the per-job
+  // heartbeat upstream knows a long-but-healthy step is still alive.
+  async function runAudioToolWithStallGuard(
+    cmd: string,
+    args: string[],
+    opts: { stallMs: number; label: string; onActivity?: () => void },
+  ): Promise<{ stdout: string; stderr: string }> {
+    const { spawn } = await import("node:child_process");
+    return await new Promise((resolve, reject) => {
+      let child: ReturnType<typeof spawn>;
+      try {
+        child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+      } catch (e) {
+        reject(e);
+        return;
+      }
+      let stdout = "";
+      let stderr = "";
+      let stalled = false;
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const arm = () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          stalled = true;
+          try { child.kill("SIGKILL"); } catch {}
+        }, opts.stallMs);
+        try { opts.onActivity?.(); } catch {}
+      };
+      const disarm = () => { if (timer) { clearTimeout(timer); timer = null; } };
+      arm();
+      child.stdout?.on("data", (c) => { stdout += c.toString(); arm(); });
+      child.stderr?.on("data", (c) => { stderr += c.toString(); arm(); });
+      child.on("error", (err) => {
+        if (settled) return;
+        settled = true;
+        disarm();
+        reject(err);
+      });
+      child.on("close", (code, signal) => {
+        if (settled) return;
+        settled = true;
+        disarm();
+        if (stalled) {
+          reject(new Error(
+            `${opts.label} stalled — no progress for ${Math.round(opts.stallMs / 1000)}s; the file may be corrupt or unreadable.`,
+          ));
+          return;
+        }
+        if (code !== 0) {
+          const tail = stderr.split("\n").slice(-6).join("\n").trim();
+          reject(new Error(
+            `${opts.label} failed (exit ${code}${signal ? `, ${signal}` : ""}): ${tail || "no stderr"}`,
+          ));
+          return;
+        }
+        resolve({ stdout, stderr });
+      });
+    });
+  }
+
   async function transcodeAudioToWebFriendly(
     inputPath: string,
     inputExt: string,
+    // Optional liveness hook — fires on each ffprobe/ffmpeg chunk so a
+    // long-but-healthy transcode keeps the per-job heartbeat fresh.
+    onActivity?: () => void,
   ): Promise<{
     outputPath: string;
     mime: string;
@@ -8330,7 +8465,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
     }
 
-    const { spawn } = await import("node:child_process");
     const fsp = await import("node:fs/promises");
     const os = await import("node:os");
     const path = await import("node:path");
@@ -8339,43 +8473,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // audio stream. `bits_per_raw_sample` is the post-decode value;
     // `bits_per_sample` is the container's claim. They usually
     // match, but `bits_per_raw_sample` is the source of truth for
-    // PCM-in-WAV.
-    const probe = await new Promise<{ codec: string; bps: number; sampleFmt: string }>(
-      (resolve, reject) => {
-        const p = spawn(
-          "ffprobe",
-          [
-            "-v", "error",
-            "-print_format", "json",
-            "-show_streams",
-            inputPath,
-          ],
-          { stdio: ["ignore", "pipe", "pipe"] },
-        );
-        let stdout = "";
-        let stderr = "";
-        p.stdout.on("data", (c) => (stdout += c.toString()));
-        p.stderr.on("data", (c) => (stderr += c.toString()));
-        p.on("error", reject);
-        p.on("close", (code) => {
-          if (code !== 0) return reject(new Error(`ffprobe exited ${code}: ${stderr.trim()}`));
-          try {
-            const json = JSON.parse(stdout);
-            const streams: any[] = json.streams || [];
-            const a = streams.find((s) => s.codec_type === "audio");
-            if (!a) return reject(new Error("No audio stream found."));
-            const bps = Number(a.bits_per_raw_sample || a.bits_per_sample || 0);
-            resolve({
-              codec: String(a.codec_name || ""),
-              bps,
-              sampleFmt: String(a.sample_fmt || ""),
-            });
-          } catch (e: any) {
-            reject(new Error(`ffprobe parse failed: ${e?.message || e}`));
-          }
-        });
-      },
-    );
+    // PCM-in-WAV. Bounded by a stall guard so a corrupt header can't
+    // wedge the import indefinitely.
+    const probe = await (async () => {
+      const { stdout } = await runAudioToolWithStallGuard(
+        "ffprobe",
+        ["-v", "error", "-print_format", "json", "-show_streams", inputPath],
+        { stallMs: AUDIO_PROBE_STALL_MS, label: "Probing audio", onActivity },
+      );
+      try {
+        const json = JSON.parse(stdout);
+        const streams: any[] = json.streams || [];
+        const a = streams.find((s) => s.codec_type === "audio");
+        if (!a) throw new Error("No audio stream found.");
+        const bps = Number(a.bits_per_raw_sample || a.bits_per_sample || 0);
+        return {
+          codec: String(a.codec_name || ""),
+          bps,
+          sampleFmt: String(a.sample_fmt || ""),
+        };
+      } catch (e: any) {
+        if (e?.message === "No audio stream found.") throw e;
+        throw new Error(`ffprobe parse failed: ${e?.message || e}`);
+      }
+    })();
 
     // 16-bit PCM (s16) WAV / AIFF plays everywhere — no transcode.
     const isPcm = /^pcm_/.test(probe.codec);
@@ -8408,17 +8529,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       outputPath,
     ];
     try {
-      await new Promise<void>((resolve, reject) => {
-        const p = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
-        let stderr = "";
-        p.stderr.on("data", (c) => (stderr += c.toString()));
-        p.on("error", reject);
-        p.on("close", (code) => {
-          if (code === 0) return resolve();
-          const tail = stderr.split("\n").slice(-6).join("\n").trim();
-          reject(new Error(`ffmpeg audio transcode failed (exit ${code}): ${tail || "no stderr"}`));
-        });
-      });
+      // ffmpeg prints encoding progress (time=/bitrate=) to stderr ~1/s,
+      // so the stall guard resets continuously on a healthy transcode and
+      // only trips when ffmpeg genuinely wedges. onActivity bubbles that
+      // liveness up to the per-job heartbeat for big multi-minute files.
+      await runAudioToolWithStallGuard(
+        "ffmpeg",
+        args,
+        { stallMs: AUDIO_TRANSCODE_STALL_MS, label: "Transcoding to FLAC", onActivity },
+      );
     } catch (err) {
       try { await fsp.unlink(outputPath); } catch {}
       throw err;
@@ -8451,8 +8570,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     bytes: number | null;
     duration: number | null;
   };
-  async function probeAudioSpecs(filePath: string): Promise<AudioSpecs> {
-    const { spawn } = await import("node:child_process");
+  async function probeAudioSpecs(filePath: string, onActivity?: () => void): Promise<AudioSpecs> {
     const fsp = await import("node:fs/promises");
     const path = await import("node:path");
     const out: AudioSpecs = {
@@ -8473,32 +8591,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (stat.size > 0) out.bytes = stat.size;
     } catch { /* leave null */ }
     try {
-      const json = await new Promise<any>((resolve, reject) => {
-        const p = spawn(
-          "ffprobe",
-          [
-            "-v", "error",
-            "-print_format", "json",
-            "-show_streams",
-            "-show_format",
-            filePath,
-          ],
-          { stdio: ["ignore", "pipe", "pipe"] },
-        );
-        let stdout = "";
-        let stderr = "";
-        p.stdout.on("data", (c) => (stdout += c.toString()));
-        p.stderr.on("data", (c) => (stderr += c.toString()));
-        p.on("error", reject);
-        p.on("close", (code) => {
-          if (code !== 0) return reject(new Error(`ffprobe exited ${code}: ${stderr.trim()}`));
-          try {
-            resolve(JSON.parse(stdout));
-          } catch (e: any) {
-            reject(new Error(`ffprobe parse failed: ${e?.message || e}`));
-          }
-        });
-      });
+      // Bounded by the same stall guard as the transcode probe so a
+      // wedged ffprobe returns (best-effort all-null) instead of
+      // hanging the per-track loop forever. Failures here are non-fatal.
+      const { stdout } = await runAudioToolWithStallGuard(
+        "ffprobe",
+        ["-v", "error", "-print_format", "json", "-show_streams", "-show_format", filePath],
+        { stallMs: AUDIO_PROBE_STALL_MS, label: "Probing audio specs", onActivity },
+      );
+      const json = JSON.parse(stdout);
       const streams: any[] = json.streams || [];
       const a = streams.find((s) => s.codec_type === "audio");
       if (a) {
@@ -9694,7 +9795,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const jobId = startImportJob({
         jobType: "import-tracks-from-dropbox",
         albumId,
-        work: async ({ setProgress }) => {
+        work: async ({ setProgress, heartbeat, signal }) => {
           // Derive trackNumber server-side. Don't trust a client-supplied
           // start — a stale dialog could otherwise create rows that collide
           // with the tail of the existing tracklist.
@@ -9755,8 +9856,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             const errors: Array<{ filename: string; error: string }> = [];
             setProgress({ processed: 0, total: tmpEntries.length, phase: "process" });
 
+            const processedBase = () => created.length + errors.length;
             for (const entry of tmpEntries) {
               const filename = entry.filename;
+              // The per-job stall watchdog aborts the signal when the job
+              // wedges. Stop cleanly between tracks so the watchdog's
+              // "stopped making progress" verdict stands and we fall through
+              // to cleanup() instead of orphaning the remaining tempfiles.
+              if (signal.aborted) {
+                console.error(
+                  `[import-job] import-tracks-from-dropbox (album=${albumId}) aborted before "${filename}" — ${created.length} created, ${errors.length} errored of ${tmpEntries.length}.`,
+                );
+                break;
+              }
               try {
                 const ext = extOf(filename);
                 const mime = AUDIO_MIME_BY_EXT[ext];
@@ -9766,15 +9878,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 // On `passthrough` the helper returns the same tempfile;
                 // on `transcode` it returns a new .flac next to it and
                 // leaves the original in place so we can upload it too.
-                const conv = await transcodeAudioToWebFriendly(entry.tmpPath, ext);
+                setProgress({ processed: processedBase(), total: tmpEntries.length, phase: "process", file: filename, step: "transcoding" });
+                const conv = await transcodeAudioToWebFriendly(entry.tmpPath, ext, heartbeat);
 
                 // Browser-playback URL (always set).
-                const audioUrl = await uploadFileToObjectStorage(conv.outputPath, conv.mime);
+                setProgress({ processed: processedBase(), total: tmpEntries.length, phase: "process", file: filename, step: "uploading" });
+                const audioUrl = await uploadFileToObjectStorage(conv.outputPath, conv.mime, {
+                  stallMs: AUDIO_UPLOAD_STALL_MS,
+                  label: `Uploading "${filename}"`,
+                  onActivity: heartbeat,
+                });
                 // Archival original — only set when we actually
                 // transcoded. The original ext/mime is used so the
                 // download lands as `.wav` (or `.aiff`) on disk.
                 const audioSourceUrl = conv.action === "transcode"
-                  ? await uploadFileToObjectStorage(entry.tmpPath, mime)
+                  ? await uploadFileToObjectStorage(entry.tmpPath, mime, {
+                      stallMs: AUDIO_UPLOAD_STALL_MS,
+                      label: `Uploading master "${filename}"`,
+                      onActivity: heartbeat,
+                    })
                   : null;
                 if (conv.action === "transcode") {
                   // Clean up the FLAC we generated — the original is
@@ -9790,9 +9912,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 // effort; failures just leave the corresponding spec
                 // columns null. Probe BEFORE the optional FLAC unlink
                 // below so the served file still exists on disk.
-                const servedSpecsRow = await probeAudioSpecs(conv.outputPath);
+                setProgress({ processed: processedBase(), total: tmpEntries.length, phase: "process", file: filename, step: "probing" });
+                const servedSpecsRow = await probeAudioSpecs(conv.outputPath, heartbeat);
                 const sourceSpecsRow = conv.action === "transcode"
-                  ? await probeAudioSpecs(entry.tmpPath)
+                  ? await probeAudioSpecs(entry.tmpPath, heartbeat)
                   : null;
 
                 // Duration is best-effort — non-fatal. Prefer the
@@ -9808,6 +9931,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   } catch { /* leave at 0; admin can set it manually */ }
                 }
 
+                setProgress({ processed: processedBase(), total: tmpEntries.length, phase: "process", file: filename, step: "saving" });
                 const song = await storage.createSong({
                   albumId,
                   title: deriveTitleFromFilename(filename),
@@ -9834,9 +9958,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 // path, so every new GoodTunes release flows through here.
                 void maybeIngestToMux(song.id, audioUrl);
                 created.push({ id: song.id, trackNumber, title: song.title, filename, duration });
+                console.log(
+                  `[import-job] import-tracks-from-dropbox (album=${albumId}) added "${filename}" as track ${trackNumber} (${created.length}/${tmpEntries.length}).`,
+                );
                 trackNumber++;
               } catch (e: any) {
-                errors.push({ filename, error: e?.message || "Failed to import" });
+                // One wedged/broken track fails only itself — log loudly and
+                // move on so the rest of the import still lands.
+                const msg = e?.message || "Failed to import";
+                errors.push({ filename, error: msg });
+                console.error(
+                  `[import-job] import-tracks-from-dropbox (album=${albumId}) failed "${filename}": ${msg}`,
+                );
               }
               setProgress({ processed: created.length + errors.length, total: tmpEntries.length, phase: "process" });
             }
@@ -10079,6 +10212,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // plus a 10-minute grace window after completion so a slow poll catches
   // the result. After that the entry is GC'd; clients past that window
   // see 404 and should treat it as "job no longer in flight."
+  // Per-step sub-state surfaced to the dialog so a long-but-healthy
+  // per-track step (transcode / upload) visibly reads as alive instead
+  // of a frozen bar. `file` = the track currently being worked;
+  // `step` = which blocking phase it's in.
+  type ImportProgress = {
+    processed: number;
+    total: number;
+    phase?: "download" | "process";
+    file?: string;
+    step?: "transcoding" | "uploading" | "probing" | "saving";
+  };
   type ImportJobState = {
     jobId: string;
     jobType: string;
@@ -10086,18 +10230,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     status: "running" | "success" | "partial" | "failed";
     startedAt: number;
     finishedAt: number | null;
-    progress: { processed: number; total: number; phase?: "download" | "process" } | null;
+    progress: ImportProgress | null;
     summary: any;
     errorMessage: string | null;
+    // Updated on every setProgress AND every heartbeat() ping (which the
+    // per-track steps fire as they push bytes / emit ffmpeg progress). The
+    // per-job stall watchdog reads this to tell a live import from a wedge.
+    lastHeartbeatAt: number;
   };
   const importJobs = new Map<string, ImportJobState>();
   const IMPORT_JOB_TTL_MS = 10 * 60 * 1000;
+  // If the whole job emits no liveness (no setProgress, no step heartbeat)
+  // for this window it's declared wedged and force-failed. Generous enough
+  // that no healthy step trips it — every watched step emits activity well
+  // inside it (ffprobe ≤60s, ffmpeg ~1/s, uploads per-chunk) — but bounded
+  // so a true freeze can't leave the job `running` forever.
+  const IMPORT_JOB_STALL_MS = 3 * 60 * 1000;
+  const IMPORT_JOB_HEARTBEAT_CHECK_MS = 15 * 1000;
 
   function startImportJob(opts: {
     jobType: string;
     albumId: string | null;
     work: (ctx: {
-      setProgress: (p: { processed: number; total: number; phase?: "download" | "process" }) => void;
+      setProgress: (p: ImportProgress) => void;
+      // Liveness ping for long per-track steps that don't advance the
+      // processed/total count yet (mid-transcode, mid-upload).
+      heartbeat: () => void;
+      // Aborted when the per-job stall watchdog fires; the work loop
+      // checks it between tracks so a wedged job winds down and runs its
+      // own temp-dir cleanup instead of orphaning the tempfiles.
+      signal: AbortSignal;
     }) => Promise<{
       status: "success" | "partial" | "failed";
       summary: any;
@@ -10115,35 +10277,73 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       progress: null,
       summary: null,
       errorMessage: null,
+      lastHeartbeatAt: Date.now(),
     };
     importJobs.set(jobId, state);
     const startedAt = new Date();
+
+    // Per-job stall watchdog. Set `stalledOut` + abort the work signal if
+    // no liveness for IMPORT_JOB_STALL_MS. The message it stamps wins over
+    // whatever the subsequently-aborted work throws, so the toast / audit
+    // row say "stopped making progress" rather than a vague AbortError.
+    const ac = new AbortController();
+    let stalledOut = false;
+    const heartbeatTimer = setInterval(() => {
+      if (state.status !== "running") return;
+      if (Date.now() - state.lastHeartbeatAt > IMPORT_JOB_STALL_MS) {
+        stalledOut = true;
+        state.status = "failed";
+        state.errorMessage =
+          `The import stopped making progress for ${Math.round(IMPORT_JOB_STALL_MS / 1000)}s and was stopped. ` +
+          `Some tracks may have been added — refresh the album to check, then re-import anything missing.`;
+        console.error(
+          `[import-job] ${opts.jobType} (album=${opts.albumId ?? "n/a"}, jobId=${jobId}) stalled — no progress for ${Math.round(IMPORT_JOB_STALL_MS / 1000)}s; aborting.`,
+        );
+        try { ac.abort(); } catch {}
+      }
+    }, IMPORT_JOB_HEARTBEAT_CHECK_MS);
+    heartbeatTimer.unref?.();
+
     void (async () => {
       try {
         const result = await opts.work({
           setProgress: (p) => {
             state.progress = p;
+            state.lastHeartbeatAt = Date.now();
           },
+          heartbeat: () => {
+            state.lastHeartbeatAt = Date.now();
+          },
+          signal: ac.signal,
         });
-        state.status = result.status;
-        state.summary = result.summary ?? null;
-        state.errorMessage = result.errorMessage ?? null;
+        // If the watchdog already force-failed us, keep that verdict —
+        // the work may still return a stale "partial" as it unwinds.
+        if (!stalledOut) {
+          state.status = result.status;
+          state.summary = result.summary ?? null;
+          state.errorMessage = result.errorMessage ?? null;
+        }
       } catch (e: any) {
-        state.status = "failed";
-        // Surface a useful message even when the throw didn't carry one.
-        // Worker exceptions used to land on the client as a generic
-        // "Import failed." with no signal — log the full stack server-side
-        // AND propagate something a human can act on into `errorMessage`.
-        const message =
-          (typeof e?.message === "string" && e.message.trim()) ||
-          (typeof e === "string" && e.trim()) ||
-          (e?.code ? `Import failed (${e.code})` : "Import failed (no error message — check server logs).");
-        state.errorMessage = message;
-        console.error(
-          `[import-job] ${opts.jobType} (album=${opts.albumId ?? "n/a"}, jobId=${jobId}) threw:`,
-          e?.stack || e,
-        );
+        if (!stalledOut) {
+          state.status = "failed";
+          // Surface a useful message even when the throw didn't carry one.
+          // Worker exceptions used to land on the client as a generic
+          // "Import failed." with no signal — log the full stack server-side
+          // AND propagate something a human can act on into `errorMessage`.
+          const message =
+            (typeof e?.message === "string" && e.message.trim()) ||
+            (typeof e === "string" && e.trim()) ||
+            (e?.code ? `Import failed (${e.code})` : "Import failed (no error message — check server logs).");
+          state.errorMessage = message;
+          console.error(
+            `[import-job] ${opts.jobType} (album=${opts.albumId ?? "n/a"}, jobId=${jobId}) threw:`,
+            e?.stack || e,
+          );
+        }
+        // When stalledOut, the watchdog already stamped the message and the
+        // work just unwound after the abort — nothing to add.
       } finally {
+        clearInterval(heartbeatTimer);
         state.finishedAt = Date.now();
         try {
           await storage.recordJobRun({

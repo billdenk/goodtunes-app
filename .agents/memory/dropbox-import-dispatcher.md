@@ -52,6 +52,25 @@ legacy `/s/`). A change to the dispatcher changes every importer at once.
   download paths (single-file + folder) share these helpers — they live in `routes.ts` with
   the SSRF/dispatcher code, NOT `dropboxZip.ts` (download concerns, not pure zip helpers).
 
+- **Per-track processing needs its OWN stall protection — the download stall guard does not cover it.**
+  **Why:** even after the download was fixed, large hi-res imports still hung in the PER-TRACK
+  phase (ffprobe → ffmpeg → uploads → spec probes), leaving the job `running` forever with a
+  frozen dialog and no error. The freeze can be a wedged subprocess, a wedged network write, OR
+  an OOM-kill from buffering a multi-hundred-MB master in one upload request.
+  **How to apply:** protect at two levels and make liveness flow up.
+  - Each blocking step gets a RESETTABLE idle guard (not a fixed deadline — a slow-but-healthy
+    transcode must survive), and uploads must stay memory-bounded for big files (resumable above
+    a small size threshold) or the OOM re-creates the "hang". A tripped step throws an
+    operator-actionable message; spec probes stay best-effort (failure → null columns).
+  - The job-level watchdog declares the whole job failed if NO step emits liveness for a bounded
+    window, and its verdict must WIN over whatever the subsequently-aborted work throws (a flag,
+    not just the abort). Abort is only checked BETWEEN tracks, so a long single step relies on its
+    own step guard; cleanup() must still run on the abort path. One broken track fails only itself.
+  - Client distinguishes a 404 seen AFTER the job was observed `running` (server restarted
+    mid-import — some tracks may have landed, tell the operator to refresh & re-import missing)
+    from a first-poll 404 (likely finished). Progress carries optional `file`+`step` so the dialog
+    proves a long step is alive; keep the server and client progress shapes in sync.
+
 - **Pure zip helpers live in `server/dropboxZip.ts`, not `routes.ts`.** `extOf`,
   `basenameOf`, `fileLooksLikeZip`, `extractKeptZipEntries` + the `MAX_DROPBOX_*` caps were
   hoisted out so they're unit-testable without booting the 21k-line `routes.ts` (which would

@@ -5337,10 +5337,26 @@ type UploadMode = "empty" | "dropbox";
    for the tracks importer) on success/partial; throws on failed or
    timeout. Keep the loop body free of state setters other than
    `onProgress` so consumers control their own UI. */
+type ImportStep = "transcoding" | "uploading" | "probing" | "saving";
+type ImportProgress = {
+  processed: number;
+  total: number;
+  phase?: "download" | "process";
+  file?: string;
+  step?: ImportStep;
+};
+// Operator-facing verb for each per-track blocking phase.
+const IMPORT_STEP_LABEL: Record<ImportStep, string> = {
+  transcoding: "transcoding",
+  uploading: "uploading",
+  probing: "reading specs",
+  saving: "saving",
+};
+
 async function pollImportJob(
   jobId: string,
   opts: {
-    onProgress?: (p: { processed: number; total: number; phase?: "download" | "process" }) => void;
+    onProgress?: (p: ImportProgress) => void;
     pollIntervalMs?: number;
     perRequestTimeoutMs?: number;
     overallTimeoutMs?: number;
@@ -5356,6 +5372,12 @@ async function pollImportJob(
   // First poll happens almost immediately so a tiny import (one file)
   // doesn't sit on the spinner for a full interval before resolving.
   let firstTick = true;
+  // Track whether we ever saw the job alive. A 404 BEFORE we've seen
+  // "running" means the job finished+aged-out (or never registered) —
+  // probably done. A 404 AFTER we watched it run means the server
+  // restarted mid-import and lost the in-memory job: some tracks may
+  // have landed, so the message has to say so honestly.
+  let observedRunning = false;
   while (true) {
     if (Date.now() > deadline) {
       throw new Error("Import is taking longer than expected. It may still be running — check back in a minute.");
@@ -5382,6 +5404,14 @@ async function pollImportJob(
     clearTimeout(timer);
 
     if (res.status === 404) {
+      if (observedRunning) {
+        // We watched it run, then the job vanished — the server restarted
+        // mid-import and dropped the in-memory job. Some tracks may have
+        // been created before the restart.
+        throw new Error(
+          "The import was interrupted (the server restarted). Some tracks may have been added — refresh the album to check, then re-import anything missing.",
+        );
+      }
       // Job entry has aged out of the in-memory map (10 min after
       // completion) without us seeing the terminal state. Rare — only
       // if the tab was backgrounded long enough — but worth a clear
@@ -5394,7 +5424,10 @@ async function pollImportJob(
     }
     const state = await res.json();
     if (state.progress && opts.onProgress) opts.onProgress(state.progress);
-    if (state.status === "running") continue;
+    if (state.status === "running") {
+      observedRunning = true;
+      continue;
+    }
     if (state.status === "failed") {
       throw new Error(state.errorMessage || "Import failed.");
     }
@@ -5477,7 +5510,7 @@ function AddMultipleTracksDialog({
   // Polling progress for the async import job. `processed/total` drives
   // the inline "Importing 3/12…" spinner; null while we're still
   // waiting for the first poll to come back.
-  const [progress, setProgress] = useState<{ processed: number; total: number; phase?: "download" | "process" } | null>(null);
+  const [progress, setProgress] = useState<ImportProgress | null>(null);
 
   const handleConfirmDropbox = async () => {
     if (!folderUrl.trim() || running) return;
@@ -5716,7 +5749,9 @@ function AddMultipleTracksDialog({
                 {!progress
                   ? "Connecting to Dropbox…"
                   : progress.phase === "process"
-                    ? `Importing ${progress.processed} of ${progress.total}…`
+                    ? progress.step
+                      ? `Track ${Math.min(progress.processed + 1, progress.total)} of ${progress.total} — ${IMPORT_STEP_LABEL[progress.step]}…`
+                      : `Importing ${progress.processed} of ${progress.total}…`
                     : "Downloading from Dropbox…"}
               </span>
               {progress && progress.total > 0 && (
@@ -5725,6 +5760,14 @@ function AddMultipleTracksDialog({
                 </span>
               )}
             </div>
+            {/* Filename of the track currently being worked. Reassures the
+                operator a long-but-healthy hi-res transcode/upload is still
+                moving on a specific file rather than wedged. */}
+            {progress?.file && progress.phase === "process" && (
+              <p className="truncate text-xs text-slate-400" data-testid="text-bulk-dropbox-current-file">
+                {progress.file}
+              </p>
+            )}
           </div>
         )}
         {running && mode === "empty" && (
