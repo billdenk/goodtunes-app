@@ -11,6 +11,7 @@ interface LabelLite {
   name: string;
 }
 import {
+  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   EyeOff,
@@ -92,7 +93,6 @@ import { AlbumNpoSplitPanel } from "@/components/admin/AlbumNpoSplitPanel";
 import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
 import { SplitsImportSheet, TrackSplitsEditor } from "@/components/admin/SplitsPanels";
 import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
-import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
@@ -347,6 +347,15 @@ function visibleTabsFor(
 export function AdminAlbum() {
   const { user, isLoading: authLoading } = useAuth();
   const [, params] = useRoute<{ id: string }>("/admin/albums/:id");
+  // Task #1370 — dedicated per-track detail page lives at
+  // `/admin/albums/:id/tracks/:trackId`. It reuses this same component so
+  // the in-file track editors (Audio/Preview/Lyrics/Credits/Splits) are all
+  // in scope without an export cascade; when `trackPageId` is set we render
+  // <AdminTrackPage> instead of the album tab shell.
+  const [, trackParams] = useRoute<{ id: string; trackId: string }>(
+    "/admin/albums/:id/tracks/:trackId",
+  );
+  const trackPageId = trackParams?.trackId ?? null;
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -501,7 +510,7 @@ export function AdminAlbum() {
   // mostly-empty whitespace and removes the centered-then-flush-left
   // layout jump we had when toggling Edit on the old ArtworkPanel.
   const [artworkEditorOpen, setArtworkEditorOpen] = useState(false);
-  const albumId = params?.id ?? "";
+  const albumId = params?.id ?? trackParams?.id ?? "";
 
   useEffect(() => {
     document.body.classList.add("gt-admin");
@@ -901,9 +910,12 @@ export function AdminAlbum() {
   // avoid TDZ on `album` in the dependency array.
   useEffect(() => {
     if (!album) return;
+    // Task #1370 — the dedicated track page is its own route/shell; the
+    // album tab machinery must stay dormant there or it fights the track URL.
+    if (trackPageId) return;
     const allowed = visibleTabsFor(album, { hidePress: hidePressSection }).map((t) => t.key);
     if (!allowed.includes(tab)) setTab("overview");
-  }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, album?.isSpinPromo, tab, album, hidePressSection]);
+  }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, album?.isSpinPromo, tab, album, hidePressSection, trackPageId]);
 
   // Task #674 — Mirror the active tab into the URL (`?tab=`) so a refresh
   // reopens the same tab. Uses `replace` so repeated tab clicks don't
@@ -912,6 +924,10 @@ export function AdminAlbum() {
   // Existing query params (e.g. the `track`/`onboarding` deep links) are
   // preserved so their first-mount precedence still works.
   useEffect(() => {
+    // Task #1370 — never mirror the album `?tab=` onto a `/tracks/:trackId`
+    // URL; doing so rewrites the path back to the album page and kicks the
+    // operator straight out of the dedicated track page on first render.
+    if (trackPageId) return;
     let params: URLSearchParams;
     try {
       params = new URLSearchParams(search);
@@ -922,7 +938,7 @@ export function AdminAlbum() {
     params.set("tab", tab);
     const qs = params.toString();
     navigate(`/admin/albums/${albumId}${qs ? `?${qs}` : ""}`, { replace: true });
-  }, [tab, albumId, search, navigate]);
+  }, [tab, albumId, search, navigate, trackPageId]);
 
   // Auto-open the mode picker once the row arrives without a sellMode.
   // Backfill ran on existing rows, so the modal really only fires for
@@ -982,6 +998,21 @@ export function AdminAlbum() {
             Back to albums
           </Link>
         </div>
+      </AdminFrame>
+    );
+  }
+
+  // Task #1370 — dedicated per-track detail page. Rendered in place of the
+  // album tab shell when the URL is `/admin/albums/:id/tracks/:trackId`, so
+  // the in-file editors (Audio/Preview/Lyrics/Credits/Splits) stay in scope.
+  if (trackPageId) {
+    return (
+      <AdminFrame active="albums" contentWidth="narrow">
+        <AdminTrackPage
+          album={album}
+          trackId={trackPageId}
+          backToAlbumsHref={backToAlbumsHref}
+        />
       </AdminFrame>
     );
   }
@@ -1403,7 +1434,7 @@ export function AdminAlbum() {
                 <TracksPanel
                   album={album}
                   onEdit={openInClassicAdmin}
-                  initialOpenTrackId={initialTrackId}
+                  highlightTrackId={initialTrackId}
                   selectionMode={selectionMode}
                   selectedTrackIds={selectedTrackIds}
                   onToggleTrack={(id) =>
@@ -3308,7 +3339,7 @@ type AdminCreditRole = {
 function TracksPanel({
   album,
   onEdit,
-  initialOpenTrackId,
+  highlightTrackId,
   selectionMode,
   selectedTrackIds,
   onToggleTrack,
@@ -3316,10 +3347,11 @@ function TracksPanel({
   album: AlbumFull;
   onEdit: () => void;
   // When the page was deep-linked with `?track=<id>` (e.g. the smart-back
-  // crumb on a credit-tapped Person page), seed the exclusive-disclosure
-  // hook with that id so the matching row lands already expanded — and
-  // the row itself scrolls into view via the matching prop on TrackRow.
-  initialOpenTrackId: string | null;
+  // crumb on a credit-tapped Person page, or the track detail page's
+  // "Back to tracklist"), the matching row scrolls into view and pulses a
+  // brief highlight. Rows are now tap-targets that navigate to the track
+  // page — there is no inline expansion to seed any more.
+  highlightTrackId: string | null;
   // Multi-select state lives at the page level so the Delete-Options
   // trigger up in the tab strip can re-label itself with the live
   // count. The panel just threads the props down to each TrackRow.
@@ -3372,15 +3404,13 @@ function TracksPanel({
   // snapshot taken before the mutation started.
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropOnId, setDropOnId] = useState<string | null>(null);
+  // Task #1370 — "Find a track…" filter. Narrows the rendered rows by
+  // title (case-insensitive) so a long tracklist stays scannable now that
+  // each row is a tap-target into the dedicated track page.
+  const [trackQuery, setTrackQuery] = useState("");
   // Inline composer for new tracks. Stays open across saves so the user
   // can hammer through a tracklist without clicking "Add track" each time.
   const [adding, setAdding] = useState(false);
-  // Exclusive-disclosure controller for the track list: at most one row
-  // expanded at a time. Opening a row collapses whichever sibling was
-  // previously open (Stripe order-rows pattern). See
-  // `client/src/hooks/useExclusiveDisclosure.ts` and the "Expandable
-  // row lists" subsection of docs/design-system.md.
-  const trackDisclosure = useExclusiveDisclosure<string>(initialOpenTrackId);
   // Tracks-tab "Advanced" menu — bulk-create N rows + album-wide GoodSync.
   // State lives here (not in the menu) so the dialogs survive the menu
   // close-on-select behavior and so `invalidateAlbum` can be passed in.
@@ -3811,6 +3841,13 @@ function TracksPanel({
     );
   }
 
+  const trackQueryTrimmed = trackQuery.trim().toLowerCase();
+  const filtered = trackQueryTrimmed
+    ? sorted.filter((s) =>
+        (s.title ?? "").toLowerCase().includes(trackQueryTrimmed),
+      )
+    : sorted;
+
   return (
     <div className="space-y-5 mb-32">
     <Card
@@ -4009,16 +4046,50 @@ function TracksPanel({
           short (Bill flagged it). Margin-below keeps the card hugging its
           content while still reserving scroll space so the fixed dock
           can't cover the last track or the AddTrackForm. */}
+      {sorted.length > 0 && (
+        <div className="px-5 pt-3.5 pb-1">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={trackQuery}
+              onChange={(e) => setTrackQuery(e.target.value)}
+              placeholder="Find a track…"
+              className="w-full pl-9 pr-9 py-2 rounded-lg border border-slate-200 text-slate-900 text-sm focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+              data-testid="input-track-search"
+            />
+            {trackQuery && (
+              <button
+                type="button"
+                aria-label="Clear track search"
+                title="Clear search"
+                onClick={() => setTrackQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
+                data-testid="button-clear-track-search"
+              >
+                <XIcon className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       <ol>
-        {sorted.map((song, i) => {
+        {trackQueryTrimmed && filtered.length === 0 && (
+          <li
+            className="px-5 py-8 text-center text-slate-400 text-sm"
+            data-testid="empty-track-search"
+          >
+            No tracks match “{trackQuery.trim()}”.
+          </li>
+        )}
+        {filtered.map((song, i) => {
           const songCredits = albumCredits?.bySongId[song.id];
           return (
             <TrackRow
               key={song.id}
               song={song}
               albumId={album.id}
-              onOpen={onEdit}
-              withBorder={i !== sorted.length - 1}
+              withBorder={i !== filtered.length - 1}
               credits={songCredits ?? null}
               splitTotals={albumSplits?.bySongId?.[song.id]?.totals ?? null}
               isDragging={dragId === song.id}
@@ -4033,11 +4104,7 @@ function TracksPanel({
               selectionMode={selectionMode}
               selected={selectedTrackIds.has(song.id)}
               onToggleSelect={onToggleTrack}
-              userExpanded={trackDisclosure.isOpen(song.id)}
-              onSetUserExpanded={(open) =>
-                trackDisclosure.setOpen(song.id, open)
-              }
-              scrollIntoViewOnMount={initialOpenTrackId === song.id}
+              highlightOnMount={highlightTrackId === song.id}
               muxRetry={muxStatus?.retryState?.[song.id] ?? null}
               muxServerNow={muxStatus?.serverNow ?? null}
             />
@@ -7026,10 +7093,65 @@ function StatusBadge({
   );
 }
 
+/* Task #1370 — per-section status pill (Performance · Writers ·
+   Mechanical) shown on each tap-target track row and on the track
+   detail page. Diagnostic only — every section is optional. */
+type TrackPillStatus = "ok" | "partial" | "empty" | "warn";
+
+function trackPillClasses(status: TrackPillStatus): string {
+  return status === "ok"
+    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+    : status === "partial"
+      ? "bg-amber-50 text-amber-700 border-amber-200"
+      : status === "warn"
+        ? "bg-rose-50 text-rose-700 border-rose-200"
+        : "bg-white text-slate-300 border-slate-200";
+}
+
+function TrackStatusPill({
+  letter,
+  status,
+}: {
+  letter: "P" | "W" | "M";
+  status: TrackPillStatus;
+}) {
+  const long =
+    letter === "P" ? "Performance" : letter === "W" ? "Writers" : "Mechanical";
+  return (
+    <span
+      className={`w-5 h-5 rounded-md border text-xs font-bold inline-flex items-center justify-center ${trackPillClasses(status)}`}
+      title={`${long} · ${status}`}
+      data-testid={`pill-${letter.toLowerCase()}-status-${status}`}
+    >
+      {letter}
+    </span>
+  );
+}
+
+/* Derive the three per-track section statuses from the loaded credit +
+   splits data. Shared by the tap-target row and the track detail page so
+   the chips never disagree. */
+function trackSectionStatuses(
+  credits: SongCreditsLite | null,
+  splitTotals: { publishingBp: number; mechanicalBp: number } | null,
+): {
+  performance: TrackPillStatus;
+  writers: TrackPillStatus;
+  mechanical: TrackPillStatus;
+} {
+  const performerCount = credits?.performers.length ?? 0;
+  const writerCount = credits?.writers.length ?? 0;
+  const mechBp = splitTotals?.mechanicalBp ?? 0;
+  return {
+    performance: performerCount > 0 ? "ok" : "empty",
+    writers: writerCount > 0 ? "ok" : "empty",
+    mechanical: mechBp === 10000 ? "ok" : mechBp > 0 ? "partial" : "empty",
+  };
+}
+
 function TrackRow({
   song,
   albumId,
-  onOpen,
   withBorder,
   credits,
   splitTotals,
@@ -7045,15 +7167,12 @@ function TrackRow({
   selectionMode,
   selected,
   onToggleSelect,
-  userExpanded,
-  onSetUserExpanded,
-  scrollIntoViewOnMount,
+  highlightOnMount,
   muxRetry,
   muxServerNow,
 }: {
   song: SongLite;
   albumId: string;
-  onOpen: () => void;
   withBorder: boolean;
   credits: SongCreditsLite | null;
   splitTotals: { publishingBp: number; mechanicalBp: number } | null;
@@ -7067,27 +7186,20 @@ function TrackRow({
   isPlaying: boolean;
   onPlay: (songId: string) => void;
   // Bulk-delete multi-select. When `selectionMode` is true the row
-  // surfaces a checkbox in the drag-handle slot and the operator can
-  // toggle membership via `onToggleSelect`. Editor chevrons + play
-  // still work as before — selection is purely additive chrome.
+  // surfaces a checkbox in the drag-handle slot. Play still works —
+  // selection is purely additive chrome.
   selectionMode: boolean;
   selected: boolean;
   onToggleSelect: (songId: string) => void;
-  // Exclusive-disclosure: open/closed state is owned by TracksPanel via
-  // `useExclusiveDisclosure`, so opening this row collapses whichever
-  // sibling was previously open. See docs/design-system.md ("Expandable
-  // row lists").
-  userExpanded: boolean;
-  onSetUserExpanded: (open: boolean) => void;
-  // True only for the row matched by the page's `?track=<id>` deep
-  // link on initial mount — used to scroll the matched row into view
-  // so the user lands looking at it (smart-back from a credit-tapped
-  // Person page). Mount-only, never re-triggered.
-  scrollIntoViewOnMount: boolean;
-  // Task #369 — auto-retry state from /api/admin/mux-status for this
-  // song (only present when the backfill sweep has touched it). The
-  // server clock comes alongside so we render the countdown against
-  // the same `now` the backoff was scheduled from, not the browser's.
+  // True only for the row matched by the page's `?track=<id>` deep link on
+  // initial mount (smart-back from a credit-tapped Person page, or the
+  // track page's "Back to tracklist"). Scrolls the row into view AND pulses
+  // a brief highlight so the user lands looking at the right row.
+  highlightOnMount: boolean;
+  // Task #369 — auto-retry state from /api/admin/mux-status for this song
+  // (only present when the backfill sweep has touched it). The server clock
+  // comes alongside so the countdown renders against the same `now` the
+  // backoff was scheduled from, not the browser's.
   muxRetry: {
     attempts: number;
     maxAttempts: number;
@@ -7097,70 +7209,28 @@ function TrackRow({
   } | null;
   muxServerNow: number | null;
 }) {
-  const [mode, setMode] = useState<TrackMode>("view");
-  // Seamless tile-expansion: the row collapses into the dot meter at
-  // rest, and pops open into REQUIRED Master + 3-up OPTIONAL tiles when
-  // the artist taps the chevron (or the title). Any time an editor is
-  // open we force-expand so the tile context stays visible while editing.
-  const setUserExpanded = onSetUserExpanded;
-  const expanded = userExpanded || mode !== "view";
-  const inputRef = useRef<HTMLInputElement>(null);
-  const masterChipRef = useRef<HTMLButtonElement>(null);
-  const { toast } = useToast();
+  const [, navigate] = useLocation();
   const qc = useQueryClient();
+  const { toast } = useToast();
 
   const invalidate = async () => {
     await qc.invalidateQueries({ queryKey: ["/api/albums", albumId] });
     await qc.invalidateQueries({ queryKey: ["/api/albums"] });
   };
 
-  // Title rename — fires from the inline title input's onBlur / Enter.
-  // No separate rename mode anymore: the title IS the editor when the
-  // row is expanded (Apple-Music-row pattern, matches the Seamless mockup).
-  const renameMut = useMutation({
-    mutationFn: async (title: string) =>
-      apiRequest("PUT", `/api/admin/songs/${song.id}`, { title }),
-    onSuccess: async () => {
-      await invalidate();
-      toast({ title: "Track renamed" });
-    },
-    onError: (e: any) => {
-      // Roll the input back to the canonical title so the user sees what
-      // actually persisted (or didn't).
-      if (inputRef.current) inputRef.current.value = song.title;
-      toast({
-        title: "Couldn't rename the track",
-        description: e?.message || "Try again in a moment.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const deleteMut = useMutation({
-    mutationFn: async () => apiRequest("DELETE", `/api/admin/songs/${song.id}`),
-    onSuccess: async () => {
-      await invalidate();
-      toast({ title: "Track deleted" });
-    },
-    onError: (e: any) =>
-      toast({
-        title: "Couldn't delete the track",
-        description: e?.message || "Try again in a moment.",
-        variant: "destructive",
-      }),
-  });
-
-  // Task #369 — "Retry now" for an errored Mux ingest. Hits the
-  // existing /mux-ingest route (which also resets the in-memory backoff
-  // counter server-side) and refreshes both the album cache and the
-  // catalog-wide mux-status so the badge + retry tag re-render.
+  // Task #369 — "Retry now" for an errored Mux ingest. Resets the
+  // server-side backoff and re-ingests, then refreshes the album +
+  // catalog-wide mux-status so the badge re-renders.
   const retryMuxMut = useMutation({
     mutationFn: async () =>
       apiRequest("POST", `/api/admin/songs/${song.id}/mux-ingest`),
     onSuccess: async () => {
       await invalidate();
       await qc.invalidateQueries({ queryKey: ["/api/admin/mux-status"] });
-      toast({ title: "Re-ingesting on Mux", description: "We'll update the badge as Mux processes it." });
+      toast({
+        title: "Re-ingesting on Mux",
+        description: "We'll update the badge as Mux processes it.",
+      });
     },
     onError: (e: any) =>
       toast({
@@ -7170,76 +7240,69 @@ function TrackRow({
       }),
   });
 
-  const closeAudio = () => {
-    setMode("view");
-    queueMicrotask(() => masterChipRef.current?.focus());
-  };
+  const goToTrack = () =>
+    navigate(`/admin/albums/${albumId}/tracks/${song.id}`);
 
-  const previewChipRef = useRef<HTMLButtonElement>(null);
-  const closePreview = () => {
-    setMode("view");
-    queueMicrotask(() => previewChipRef.current?.focus());
-  };
+  // Deep-link highlight: when the page was opened with `?track=<id>` and
+  // this is the matched row, glide it into view + pulse a soft brand wash
+  // for a couple seconds so the user lands looking at it.
+  const rowRef = useRef<HTMLLIElement>(null);
+  const [landed, setLanded] = useState(highlightOnMount);
+  useEffect(() => {
+    if (!highlightOnMount) return;
+    const el = rowRef.current;
+    if (!el) return;
+    const t = setTimeout(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+    const fade = setTimeout(() => setLanded(false), 2400);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(fade);
+    };
+    // Mount-only by design — see prop comment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const lyricsChipRef = useRef<HTMLButtonElement>(null);
-  const closeLyrics = () => {
-    setMode("view");
-    queueMicrotask(() => lyricsChipRef.current?.focus());
-  };
-
-  const syncedChipRef = useRef<HTMLButtonElement>(null);
-  const closeSynced = () => {
-    setMode("view");
-    queueMicrotask(() => syncedChipRef.current?.focus());
-  };
-
-  const creditsChipRef = useRef<HTMLButtonElement>(null);
-  const closeCredits = () => {
-    setMode("view");
-    queueMicrotask(() => creditsChipRef.current?.focus());
-  };
+  const statuses = trackSectionStatuses(credits, splitTotals);
+  const missingCount =
+    Number(statuses.performance === "empty") +
+    Number(statuses.writers === "empty") +
+    Number(statuses.mechanical === "empty");
+  const anyPartial = [
+    statuses.performance,
+    statuses.writers,
+    statuses.mechanical,
+  ].includes("partial");
+  const summaryText =
+    missingCount === 0 ? "Ready" : missingCount === 3 ? "Empty" : `${missingCount} to fill`;
+  const summaryCls = anyPartial
+    ? "text-amber-700"
+    : missingCount === 0
+      ? "text-emerald-700"
+      : "text-slate-400";
 
   const liCls = [
-    "group relative flex flex-col transition-colors",
+    "group relative transition-colors",
     withBorder && "border-b border-slate-100",
-    mode !== "view" ? "bg-[var(--brand-blue)]/5" : "",
+    landed ? "bg-[var(--brand-blue)]/5" : "",
     isDragging ? "opacity-40" : "",
   ]
     .filter(Boolean)
     .join(" ");
 
-  // Deep-link scroll: when the page was opened with `?track=<id>` and
-  // this is the matched row, glide it into view on mount. `scroll-mt-24`
-  // on the <li> would also work but the panel sits inside the AdminFrame
-  // scroller — calling scrollIntoView on the element is the most
-  // reliable cross-shell option.
-  const rowRef = useRef<HTMLLIElement>(null);
-  useEffect(() => {
-    if (!scrollIntoViewOnMount) return;
-    const el = rowRef.current;
-    if (!el) return;
-    // Defer a tick so the parent's tab switch + expand state settle
-    // before we measure.
-    const t = setTimeout(() => {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 50);
-    return () => clearTimeout(t);
-    // Mount-only by design — see prop comment.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const muxEncoding =
+    song.muxStatus === "ingesting" || song.muxStatus === "preparing";
 
   return (
     <li
       ref={rowRef}
       className={liCls}
       data-testid={`row-track-${song.id}`}
-      onDragOver={!expanded ? onDragOver : undefined}
-      onDrop={!expanded ? onDrop : undefined}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
       onDragEnd={onDragEnd}
     >
-      {/* Drop-target indicator — thin blue bar at the top of the row
-          the user is currently hovering over while dragging another row.
-          Absolute-positioned so it never shifts the row's layout. */}
       {isDropTarget && (
         <span
           aria-hidden="true"
@@ -7247,22 +7310,24 @@ function TrackRow({
           data-testid={`indicator-drop-${song.id}`}
         />
       )}
+      {/* Whole row is the tap-target → track detail page. Nested controls
+          (drag, play, mux retry, download, checkbox) stopPropagation so
+          they don't also navigate. */}
       <div
-        className={[
-          "flex items-center gap-4 px-5 py-3",
-          mode === "view" && !expanded && "hover:bg-slate-50",
-        ]
-          .filter(Boolean)
-          .join(" ")}
+        role="button"
+        tabIndex={0}
+        onClick={goToTrack}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            goToTrack();
+          }
+        }}
+        className="flex items-center gap-4 px-5 py-3 cursor-pointer hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 focus-visible:ring-inset"
+        data-testid={`button-open-track-${song.id}`}
       >
-        {/* Drag handle — only active while we're in resting view mode so
-            it never fights with the title input or the open editors.
-            Hidden until row-hover to keep the resting row tidy. */}
+        {/* Drag handle / multi-select checkbox */}
         {selectionMode ? (
-          // Multi-select checkbox lives in the drag-handle slot so the
-          // row's left-edge alignment is identical between modes. Always
-          // visible (not hover-revealed) — the operator needs to see
-          // every checkbox at a glance while picking.
           <button
             type="button"
             onClick={(e) => {
@@ -7284,194 +7349,100 @@ function TrackRow({
         ) : (
           <button
             type="button"
-            draggable={!expanded}
-            onDragStart={!expanded ? onDragStart : undefined}
+            draggable
+            onDragStart={onDragStart}
+            onClick={(e) => e.stopPropagation()}
             aria-label="Drag to reorder"
             title="Drag to reorder"
-            className={[
-              "w-3.5 h-5 -ml-1 inline-flex items-center justify-center text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 rounded transition-opacity",
-              !expanded
-                ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-60"
-                : "opacity-0 pointer-events-none",
-            ].join(" ")}
+            className="w-3.5 h-5 -ml-1 inline-flex items-center justify-center text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 rounded transition-opacity opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-60"
             data-testid={`grip-track-${song.id}`}
           >
             <GripVertical className="w-3.5 h-3.5" />
           </button>
         )}
-        {/* Track-number cell doubles as play/pause affordance.
-            • Resting: shows the track number (slate-400, 12px tabular).
-            • Row hover (master exists): swaps in a play triangle.
-            • Currently playing: pause icon in brand blue.
-            • Currently selected but paused: play in brand blue.
-            Apple Music uses this exact pattern — the number IS the play
-            button. Slimmer cell (w-5 / 12px glyph) to match Seamless. */}
-        {/* When the row is expanded we want the track-NUMBER to always
-            stay visible at rest, even if this row is the one currently
-            playing — the expanded editor already advertises "you're
-            editing this track", so re-using the slot as a permanent
-            pause-icon would just hide useful info. Hover still reveals
-            play/pause on top, matching every other row. */}
+
+        {/* Track-number cell doubles as play/pause (Apple-Music pattern). */}
         <div className="w-5 h-5 -ml-1.5 flex-shrink-0 relative">
           <span
             className={[
               "absolute inset-0 inline-flex items-center justify-center text-[12px] tabular-nums font-medium transition-opacity",
               isCurrent ? "text-[var(--brand-blue)]" : "text-slate-400",
               song.audioUrl
-                ? expanded
-                  ? "group-hover:opacity-0"
-                  : isCurrent
-                    ? "opacity-0"
-                    : "group-hover:opacity-0"
+                ? isCurrent
+                  ? "opacity-0"
+                  : "group-hover:opacity-0"
                 : "",
             ].join(" ")}
-            aria-hidden={isCurrent && !expanded ? true : undefined}
+            aria-hidden={isCurrent ? true : undefined}
           >
             {song.trackNumber}
           </span>
-          {song.audioUrl && (() => {
-            // While Mux is still encoding this track, the play affordance
-            // becomes a small spinner: always visible (so the operator
-            // sees at a glance which rows aren't yet streamable), and the
-            // tap still routes through onPlay → handleRowPlay, which fires
-            // a one-shot "Preparing stream…" toast instead of attempting
-            // playback. Once Mux flips to `ready`, the row re-renders and
-            // this branch goes away on its own.
-            const muxEncoding =
-              song.muxStatus === "ingesting" ||
-              song.muxStatus === "preparing";
-            return (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPlay(song.id);
-                }}
-                aria-label={
-                  muxEncoding
-                    ? "Stream preparing"
-                    : isCurrent && isPlaying
-                      ? "Pause track"
-                      : "Play track"
-                }
-                title={
-                  muxEncoding
-                    ? "Preparing stream…"
-                    : isCurrent && isPlaying
-                      ? "Pause"
-                      : "Play"
-                }
-                data-testid={`button-play-track-${song.id}`}
-                className={[
-                  "absolute inset-0 inline-flex items-center justify-center rounded-full transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40",
-                  muxEncoding
-                    ? "opacity-100 text-slate-400 cursor-wait"
-                    : expanded
-                      ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700 hover:text-[var(--brand-blue)]"
-                      : isCurrent
-                        ? "opacity-100 text-[var(--brand-blue)]"
-                        : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700 hover:text-[var(--brand-blue)]",
-                ].join(" ")}
-              >
-                {muxEncoding ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : isCurrent && isPlaying ? (
-                  <Pause className="w-3 h-3 fill-current" />
-                ) : (
-                  <Play className="w-3 h-3 fill-current ml-0.5" />
-                )}
-              </button>
-            );
-          })()}
-        </div>
-
-        {/* Title — plain at rest, inline input when expanded. No more
-            pencil: clicking the title (or the caret) opens the row, and
-            the same input takes the user's edits. Saves on blur / Enter,
-            reverts on Escape. Apple-Music-row sizing (13.5px medium). */}
-        <div className="flex-1 min-w-0">
-          {expanded ? (
-            <div className="flex items-center gap-2.5 min-w-0">
-              {/* `-ml-2` (not `-mx-2`) so the input's hover/focus border
-                  bleeds into the row's left padding for visual alignment
-                  with the displayed title, but the RIGHT edge respects
-                  the flex gap — otherwise the rounded border kisses the
-                  Explicit "E" badge that sits beside it. */}
-              <input
-                ref={inputRef}
-                defaultValue={song.title}
-                aria-label={`Track title — ${song.title}`}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    (e.target as HTMLInputElement).blur();
-                  } else if (e.key === "Escape") {
-                    e.preventDefault();
-                    if (inputRef.current) {
-                      inputRef.current.value = song.title;
-                    }
-                    (e.target as HTMLInputElement).blur();
-                  }
-                }}
-                onBlur={(e) => {
-                  const next = e.target.value.trim();
-                  if (!next) {
-                    e.target.value = song.title;
-                    toast({
-                      title: "Title can't be empty",
-                      variant: "destructive",
-                    });
-                    return;
-                  }
-                  if (next === song.title) return;
-                  renameMut.mutate(next);
-                }}
-                disabled={renameMut.isPending}
-                className="flex-1 min-w-0 pl-2 pr-2 -ml-2 py-0.5 rounded-md text-slate-900 text-[13.5px] font-semibold bg-transparent border border-transparent hover:border-slate-200 focus:border-slate-300 focus:outline-none disabled:opacity-60"
-                data-testid={`input-track-title-${song.id}`}
-              />
-              {song.isExplicit && <ExplicitBadge tone="slate" />}
-            </div>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setUserExpanded(true)}
-                aria-expanded={expanded}
-                className="block w-full text-left"
-                data-testid={`button-open-track-${song.id}`}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div
-                    className={[
-                      "text-[13.5px] font-semibold truncate",
-                      isCurrent ? "text-[var(--brand-blue)]" : "text-slate-900",
-                    ].join(" ")}
-                    data-testid={`text-track-title-${song.id}`}
-                  >
-                    {song.title}
-                  </div>
-                  {song.isExplicit && <ExplicitBadge tone="slate" />}
-                </div>
-              </button>
-            </>
+          {song.audioUrl && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPlay(song.id);
+              }}
+              aria-label={
+                muxEncoding
+                  ? "Stream preparing"
+                  : isCurrent && isPlaying
+                    ? "Pause track"
+                    : "Play track"
+              }
+              title={
+                muxEncoding
+                  ? "Preparing stream…"
+                  : isCurrent && isPlaying
+                    ? "Pause"
+                    : "Play"
+              }
+              data-testid={`button-play-track-${song.id}`}
+              className={[
+                "absolute inset-0 inline-flex items-center justify-center rounded-full transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40",
+                muxEncoding
+                  ? "opacity-100 text-slate-400 cursor-wait"
+                  : isCurrent
+                    ? "opacity-100 text-[var(--brand-blue)]"
+                    : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-slate-700 hover:text-[var(--brand-blue)]",
+              ].join(" ")}
+            >
+              {muxEncoding ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : isCurrent && isPlaying ? (
+                <Pause className="w-3 h-3 fill-current" />
+              ) : (
+                <Play className="w-3 h-3 fill-current ml-0.5" />
+              )}
+            </button>
           )}
         </div>
 
-        {/* Right side: at rest, [Upload master?] + duration + dot meter
-            (Apple's "title … 3:30 ✓✓✓" anatomy). The Upload master CTA
-            lives inline on the right so the title row stays single-line
-            and the track number doesn't end up vertically misaligned
-            against a two-line title block. If a ⋯ menu lands here later,
-            it slots to the right of these — Upload master stays inline
-            with the title, just to its left. */}
-        {!expanded && !song.audioUrl && (
+        {/* Title + explicit badge */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className={[
+                "text-[13.5px] font-semibold truncate",
+                isCurrent ? "text-[var(--brand-blue)]" : "text-slate-900",
+              ].join(" ")}
+              data-testid={`text-track-title-${song.id}`}
+            >
+              {song.title}
+            </div>
+            {song.isExplicit && <ExplicitBadge tone="slate" />}
+          </div>
+        </div>
+
+        {/* Upload-master CTA — only when no master exists yet. Jumps
+            straight to the Files tab of the track page. */}
+        {!song.audioUrl && (
           <button
-            ref={masterChipRef}
             type="button"
-            onClick={() => {
-              setUserExpanded(true);
-              setMode("audio");
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/admin/albums/${albumId}/tracks/${song.id}?tt=files`);
             }}
             className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400/40 flex-shrink-0"
             data-testid={`button-edit-master-${song.id}`}
@@ -7480,603 +7451,728 @@ function TrackRow({
             Upload master
           </button>
         )}
-        {/* Hover-only cluster — Mux state pill + retry countdown +
-            "Retry now" button + per-row master download. Hidden at rest
-            so the row reads like Apple Music (number · title · duration
-            · chevron); revealed on row hover / focus-within, with the
-            same touch-fallback pattern the P/L/C chips use so iPad
-            operators can still see and tap the affordances. The
-            inline-amber Upload-master chip above keeps showing at rest
-            because rows without a master have no Mux pill or download
-            to hide anyway. */}
-        {!expanded && !!song.audioUrl && (
+
+        {/* Hover-only operational cluster — Mux state pill + retry +
+            per-row master download. Hidden at rest so the row reads
+            cleanly; revealed on hover / focus-within (and always-faded
+            on touch). */}
+        {!!song.audioUrl && (
           <div
             className="flex items-center gap-1.5 flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-60 transition-opacity"
             data-testid={`cluster-mux-download-${song.id}`}
           >
-        {/* Task #364 — per-track Mux state pill. Only shown when a
-            master exists (no master → the Upload chip above owns the
-            row). Title carries the captured error reason on hover so
-            the operator doesn't need to open the track row to read it. */}
-        {(() => {
-          const ready = song.muxStatus === "ready" && !!song.muxPlaybackId;
-          const errored = song.muxStatus === "errored";
-          const preparing = !ready && !errored && (!!song.muxAssetId || song.muxStatus === "preparing" || song.muxStatus === "ingesting");
-          const notIngested = !ready && !errored && !preparing;
-          const label = ready ? "Mux" : errored ? "Mux err" : preparing ? "Mux…" : "No Mux";
-          const cls = ready
-            ? "bg-emerald-50 text-emerald-700"
-            : errored
-              ? "bg-rose-50 text-rose-700"
-              : preparing
-                ? "bg-sky-50 text-sky-700"
-                : "bg-amber-50 text-amber-700";
-          const title = ready
-            ? "Streaming via Mux"
-            : errored
-              ? `Mux ingest errored${(song as any).muxLastError ? ` — ${(song as any).muxLastError}` : ""}`
-              : preparing
-                ? "Mux is encoding this master"
-                : "Master not yet ingested to Mux";
-          // Task #369 — Render auto-retry state alongside the badge so
-          // the operator can tell at a glance whether the sweep is
-          // still trying (next retry in Nm), has given up (cap reached
-          // → re-upload), or hasn't been tried yet. "Retry now" only
-          // shows for errored rows; success resets the backoff.
-          const showRetryNow = errored && !retryMuxMut.isPending;
-          const retryLabel = (() => {
-            if (!errored || !muxRetry) return null;
-            if (muxRetry.exhausted) return "retry cap reached — re-upload needed";
-            if (muxRetry.nextRetryAt == null) return null;
-            // Render the countdown against the server's clock to avoid
-            // skew confusion ("retry in -3m" when the laptop is fast).
-            // muxServerNow is captured at fetch time; refetch happens
-            // every 60s so the countdown is at most a minute stale.
-            const nowMs = muxServerNow ?? Date.now();
-            const remainingMs = Math.max(0, muxRetry.nextRetryAt - nowMs);
-            if (remainingMs <= 0) return "next auto-retry pending";
-            const mins = Math.round(remainingMs / 60_000);
-            if (mins >= 60) {
-              const hrs = Math.round(mins / 60);
-              return `next auto-retry in ${hrs}h (attempt ${muxRetry.attempts + 1}/${muxRetry.maxAttempts})`;
-            }
-            return `next auto-retry in ${Math.max(1, mins)}m (attempt ${muxRetry.attempts + 1}/${muxRetry.maxAttempts})`;
-          })();
-          return (
-            <span className="inline-flex items-center gap-1.5 flex-shrink-0">
-              <span
-                className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold ${cls}`}
-                title={title}
-                data-testid={`badge-mux-${song.id}`}
-                data-mux-state={ready ? "ready" : errored ? "errored" : preparing ? "preparing" : "not-ingested"}
-              >
-                {label}
-              </span>
-              {retryLabel && (
-                <span
-                  className={`hidden sm:inline text-xs ${muxRetry?.exhausted ? "text-rose-700 font-medium" : "text-slate-500"}`}
-                  data-testid={`text-mux-retry-${song.id}`}
-                  data-mux-retry-state={muxRetry?.exhausted ? "exhausted" : "scheduled"}
-                >
-                  {retryLabel}
-                </span>
-              )}
-              {showRetryNow && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    retryMuxMut.mutate();
-                  }}
-                  disabled={retryMuxMut.isPending}
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium text-rose-700 hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-400/40 disabled:opacity-60"
-                  title="Reset backoff and re-ingest this master on Mux now"
-                  data-testid={`button-mux-retry-${song.id}`}
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  Retry now
-                </button>
-              )}
-            </span>
-          );
-        })()}
-        {/* Per-row master download — quiet slate icon, only shown when
-            a master actually exists. Same-origin /objects/uploads link
-            with `download` attribute fires the browser save dialog
-            without opening a tab. Replaces the dead Masters tab's
-            "click to play / download" affordance with a single, focused
-            action right where the operator already lives (Tracks). */}
-        {(() => {
-          // Prefer the archival original when the upload pipeline
-          // transcoded the master for browser playback — the operator
-          // almost always wants the 24-bit WAV they uploaded, not the
-          // FLAC proxy. Falls back to audioUrl when no transcode
-          // happened (most modern uploads).
-          const downloadHref = song.audioSourceUrl ?? song.audioUrl!;
-          const downloadExt = downloadHref.match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3";
-          const isOriginal = !!song.audioSourceUrl;
-          return (
-            <a
-              href={downloadHref}
-              download={`${String(song.trackNumber).padStart(2, "0")} ${song.title}${downloadExt}`}
-              onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300 flex-shrink-0"
-              aria-label={`Download master for ${song.title}`}
-              title={isOriginal ? `Download original master (${downloadExt.slice(1).toUpperCase()})` : "Download master"}
-              data-testid={`button-download-master-${song.id}`}
-            >
-              <Download className="w-3.5 h-3.5" />
-            </a>
-          );
-        })()}
-          </div>
-        )}
-            {/* Right-aligned P/L/C status chips — Preview / Lyrics /
-                Credits. Hover-only per the chips mockup: the row stays
-                silent at rest so the eye reads "title · 3:30" cleanly,
-                and chips reveal on hover (or always-faded on touch
-                devices that can't hover, so the affordance is still
-                discoverable). Each chip is still a real button — click
-                expands the row AND jumps to that editor, identical to
-                the old dot meter. Hidden while the row is expanded (the
-                tile grid below carries the same signal) and while
-                master is missing (the inline Upload CTA owns focus). */}
-            {!expanded && !!song.audioUrl && (() => {
-              const previewState: DotState =
-                song.previewStartMs != null ? "custom" : "done";
-              const lyricsState: DotState = song.instrumental
-                ? "instrumental"
-                : (song.syncedLyrics?.length ?? 0) > 0
-                  ? "synced"
-                  : song.lyrics && song.lyrics.trim()
-                    ? "done"
-                    : "empty";
-              const writerCount = credits?.writers.length ?? 0;
-              const performerCount = credits?.performers.length ?? 0;
-              const creditsState: DotState =
-                writerCount > 0 && performerCount > 0
-                  ? "done"
-                  : writerCount > 0 || performerCount > 0
-                    ? "partial"
-                    : "empty";
-              const chipBtn =
-                "inline-flex items-center justify-center rounded-[5px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 transition-transform active:scale-[0.94]";
+            {(() => {
+              const ready = song.muxStatus === "ready" && !!song.muxPlaybackId;
+              const errored = song.muxStatus === "errored";
+              const preparing =
+                !ready &&
+                !errored &&
+                (!!song.muxAssetId ||
+                  song.muxStatus === "preparing" ||
+                  song.muxStatus === "ingesting");
+              const label = ready
+                ? "Mux"
+                : errored
+                  ? "Mux err"
+                  : preparing
+                    ? "Mux…"
+                    : "No Mux";
+              const cls = ready
+                ? "bg-emerald-50 text-emerald-700"
+                : errored
+                  ? "bg-rose-50 text-rose-700"
+                  : preparing
+                    ? "bg-sky-50 text-sky-700"
+                    : "bg-amber-50 text-amber-700";
+              const title = ready
+                ? "Streaming via Mux"
+                : errored
+                  ? `Mux ingest errored${(song as any).muxLastError ? ` — ${(song as any).muxLastError}` : ""}`
+                  : preparing
+                    ? "Mux is encoding this master"
+                    : "Master not yet ingested to Mux";
+              const showRetryNow = errored && !retryMuxMut.isPending;
+              const retryLabel = (() => {
+                if (!errored || !muxRetry) return null;
+                if (muxRetry.exhausted)
+                  return "retry cap reached — re-upload needed";
+                if (muxRetry.nextRetryAt == null) return null;
+                const nowMs = muxServerNow ?? Date.now();
+                const remainingMs = Math.max(0, muxRetry.nextRetryAt - nowMs);
+                if (remainingMs <= 0) return "next auto-retry pending";
+                const mins = Math.round(remainingMs / 60_000);
+                if (mins >= 60) {
+                  const hrs = Math.round(mins / 60);
+                  return `next auto-retry in ${hrs}h (attempt ${muxRetry.attempts + 1}/${muxRetry.maxAttempts})`;
+                }
+                return `next auto-retry in ${Math.max(1, mins)}m (attempt ${muxRetry.attempts + 1}/${muxRetry.maxAttempts})`;
+              })();
               return (
-                <div
-                  className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-60 transition-opacity"
-                  role="group"
-                  aria-label="Track completion (Preview · Lyrics · Credits)"
-                  data-testid={`chips-status-${song.id}`}
-                >
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setUserExpanded(true);
-                      setMode("preview");
-                    }}
-                    className={chipBtn}
-                    aria-label={`Edit preview — ${dotHint("Preview", previewState)}`}
-                    title={dotHint("Preview", previewState)}
-                    data-testid={`dot-preview-${song.id}`}
+                <span className="inline-flex items-center gap-1.5 flex-shrink-0">
+                  <span
+                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold ${cls}`}
+                    title={title}
+                    data-testid={`badge-mux-${song.id}`}
+                    data-mux-state={
+                      ready
+                        ? "ready"
+                        : errored
+                          ? "errored"
+                          : preparing
+                            ? "preparing"
+                            : "not-ingested"
+                    }
                   >
-                    <StatusChip letter="P" state={dotToChip(previewState)} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setUserExpanded(true);
-                      setMode("lyrics");
-                    }}
-                    disabled={lyricsState === "instrumental"}
-                    className={[
-                      chipBtn,
-                      lyricsState === "instrumental" &&
-                        "cursor-default opacity-60",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    aria-label={`Edit lyrics — ${dotHint("Lyrics", lyricsState)}`}
-                    title={dotHint("Lyrics", lyricsState)}
-                    data-testid={`dot-lyrics-${song.id}`}
-                  >
-                    <StatusChip letter="L" state={dotToChip(lyricsState)} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setUserExpanded(true);
-                      setMode("credits");
-                    }}
-                    className={chipBtn}
-                    aria-label={`Edit credits — ${dotHint("Credits", creditsState)}`}
-                    title={dotHint("Credits", creditsState)}
-                    data-testid={`dot-credits-${song.id}`}
-                  >
-                    <StatusChip letter="C" state={dotToChip(creditsState)} />
-                  </button>
-                </div>
+                    {label}
+                  </span>
+                  {retryLabel && (
+                    <span
+                      className={`hidden sm:inline text-xs ${muxRetry?.exhausted ? "text-rose-700 font-medium" : "text-slate-500"}`}
+                      data-testid={`text-mux-retry-${song.id}`}
+                      data-mux-retry-state={
+                        muxRetry?.exhausted ? "exhausted" : "scheduled"
+                      }
+                    >
+                      {retryLabel}
+                    </span>
+                  )}
+                  {showRetryNow && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        retryMuxMut.mutate();
+                      }}
+                      disabled={retryMuxMut.isPending}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium text-rose-700 hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-400/40 disabled:opacity-60"
+                      title="Reset backoff and re-ingest this master on Mux now"
+                      data-testid={`button-mux-retry-${song.id}`}
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Retry now
+                    </button>
+                  )}
+                </span>
               );
             })()}
-        {/* Duration — pinned just to the left of the chevron with the
-            parent flex `gap-4` providing the cushion, so the resting
-            row reads "title … 3:30 ›". The hover-only Mux + download
-            cluster slots in to the left of duration; the P/L/C chips
-            (also hover-only) sit between them. */}
-        {!expanded && (
-          <span
-            className="text-slate-400 text-[12px] tabular-nums flex-shrink-0"
-            data-testid={`text-track-duration-${song.id}`}
-          >
-            {formatDuration(song.duration)}
-          </span>
-        )}
-        {/* Destructive cluster — only surfaced when the row is open.
-            Task #433 — reordered to [Trash | divider | Eye] so Trash
-            sits farthest from the Chevron and the hairline divider
-            still guards a thumb from sliding between destructive and
-            benign affordances. */}
-        {expanded && (
-          <div className="flex items-center flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    `Delete "${song.title}"? This removes the track, its credits, and any uploaded master.`,
-                  )
-                ) {
-                  deleteMut.mutate();
-                }
-              }}
-              disabled={deleteMut.isPending}
-              aria-label="Delete track"
-              title="Delete"
-              className="w-7 h-7 rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600 inline-flex items-center justify-center disabled:opacity-50"
-              data-testid={`button-delete-track-${song.id}`}
-            >
-              {deleteMut.isPending ? (
-                <Spinner className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Trash2 className="w-3.5 h-3.5" />
-              )}
-            </button>
-            <span
-              className="mx-2 h-4 w-px bg-slate-200"
-              aria-hidden="true"
-            />
-            <button
-              type="button"
-              onClick={() =>
-                toast({
-                  title: "Hide track",
-                  description: "Hide / Park is coming soon.",
-                })
-              }
-              aria-label="Hide track"
-              title="Hide track (parks it — reversible)"
-              className="w-7 h-7 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 inline-flex items-center justify-center"
-              data-testid={`button-hide-track-${song.id}`}
-            >
-              <EyeOff className="w-3.5 h-3.5" />
-            </button>
+            {(() => {
+              const downloadHref = song.audioSourceUrl ?? song.audioUrl!;
+              const downloadExt =
+                downloadHref.match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3";
+              const isOriginal = !!song.audioSourceUrl;
+              return (
+                <a
+                  href={downloadHref}
+                  download={`${String(song.trackNumber).padStart(2, "0")} ${song.title}${downloadExt}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-300 flex-shrink-0"
+                  aria-label={`Download master for ${song.title}`}
+                  title={
+                    isOriginal
+                      ? `Download original master (${downloadExt.slice(1).toUpperCase()})`
+                      : "Download master"
+                  }
+                  data-testid={`button-download-master-${song.id}`}
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </a>
+              );
+            })()}
           </div>
         )}
-        {/* Chevron — the canonical expand/collapse affordance. Also
-            reachable by clicking the title. When the row is open we
-            collapse *fully* (mode → view AND userExpanded → false) so
-            an open inline editor can't keep the row pinned open. */}
-        <button
-          type="button"
-          onClick={() => {
-            if (expanded) {
-              setMode("view");
-              setUserExpanded(false);
-            } else {
-              setUserExpanded(true);
-            }
-          }}
-          aria-expanded={expanded}
-          aria-label={expanded ? "Collapse track" : "Expand track"}
-          title={expanded ? "Collapse" : "Expand"}
-          className="flex-shrink-0 w-7 h-7 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/40"
-          data-testid={`button-expand-track-${song.id}`}
+
+        {/* Duration */}
+        <span
+          className="text-slate-400 text-xs tabular-nums flex-shrink-0 w-12 text-right hidden sm:inline"
+          data-testid={`text-track-duration-${song.id}`}
         >
-          <ChevronDown
-            className={[
-              "w-4 h-4 transition-transform",
-              expanded ? "rotate-180" : "",
-            ].join(" ")}
-          />
-        </button>
+          {formatDuration(song.duration)}
+        </span>
+
+        {/* P/W/M status pills (always visible — diagnostic signal) */}
+        <div
+          className="flex items-center gap-1 flex-shrink-0"
+          role="group"
+          aria-label="Section status (Performance · Writers · Mechanical)"
+          data-testid={`pills-status-${song.id}`}
+        >
+          <TrackStatusPill letter="P" status={statuses.performance} />
+          <TrackStatusPill letter="W" status={statuses.writers} />
+          <TrackStatusPill letter="M" status={statuses.mechanical} />
+        </div>
+
+        {/* Right-side summary */}
+        <span
+          className={`text-xs font-medium tabular-nums w-[68px] text-right flex-shrink-0 hidden sm:inline ${summaryCls}`}
+          data-testid={`text-track-summary-${song.id}`}
+        >
+          {summaryText}
+        </span>
+
+        {/* Chevron — makes tappability obvious; the whole row navigates. */}
+        <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+      </div>
+    </li>
+  );
+}
+
+/* ─── Task #1370 — dedicated per-track detail page ───────────────────
+   Replaces the old inline exclusive-disclosure expansion. Rows in the
+   Tracks tab are now tap-targets that navigate here. The page is a
+   styleguide-looking shell (breadcrumb → header → tabs → chip stepper
+   → sticky action bar) that REUSES the existing per-track editors:
+     • Details  — title rename + Explicit + Instrumental + #/duration
+     • Credits  — TrackCreditsPanel + TrackSplitsEditor
+     • Lyrics   — LyricsEditor ⇆ SyncedLyricsEditor
+     • Files    — AudioEditor + PreviewWindowEditor
+   It lives inside AdminAlbum.tsx (not its own file) so all those
+   editors stay in scope without an export cascade. */
+type TrackTab = "details" | "credits" | "lyrics" | "files";
+const TRACK_TABS: { id: TrackTab; label: string }[] = [
+  { id: "details", label: "Details" },
+  { id: "credits", label: "Credits" },
+  { id: "lyrics", label: "Lyrics" },
+  { id: "files", label: "Files" },
+];
+
+function trackChipTone(
+  active: boolean,
+  statuses: ReturnType<typeof trackSectionStatuses>,
+): string {
+  if (active) return "bg-slate-900 text-white border-slate-900";
+  const missing =
+    Number(statuses.performance === "empty") +
+    Number(statuses.writers === "empty") +
+    Number(statuses.mechanical === "empty");
+  if (missing === 0) return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (missing === 3) return "bg-white text-slate-400 border-slate-200";
+  return "bg-amber-50 text-amber-700 border-amber-200";
+}
+
+function AdminTrackPage({
+  album,
+  trackId,
+  backToAlbumsHref,
+}: {
+  album: AlbumFull;
+  trackId: string;
+  backToAlbumsHref: string;
+}) {
+  const [, navigate] = useLocation();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const search = useSearch();
+
+  const sorted = useMemo(
+    () => [...album.songs].sort((a, b) => a.trackNumber - b.trackNumber),
+    [album.songs],
+  );
+  const index = sorted.findIndex((s) => s.id === trackId);
+  const song = index >= 0 ? sorted[index] : null;
+
+  const activeTab: TrackTab = useMemo(() => {
+    const t = new URLSearchParams(search).get("tt");
+    return (TRACK_TABS.some((x) => x.id === t) ? t : "details") as TrackTab;
+  }, [search]);
+
+  // Lyrics sub-mode (plain ⇆ GoodSync™). Defaults to synced when the
+  // track already carries synced cues so the operator lands on the
+  // surface that has data.
+  const [lyricsMode, setLyricsMode] = useState<"plain" | "synced">(
+    (song?.syncedLyrics?.length ?? 0) > 0 ? "synced" : "plain",
+  );
+
+  const invalidate = async () => {
+    await qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
+    await qc.invalidateQueries({ queryKey: ["/api/albums"] });
+  };
+
+  const { data: albumCredits } = useQuery<AlbumCreditsMap>({
+    queryKey: ["/api/albums", album.id, "credits"],
+  });
+  const { data: albumSplits } = useQuery<{
+    bySongId: Record<
+      string,
+      { totals?: { publishingBp: number; mechanicalBp: number } }
+    >;
+  }>({
+    queryKey: ["/api/admin/albums", album.id, "splits"],
+  });
+
+  const renameMut = useMutation({
+    mutationFn: async (title: string) =>
+      apiRequest("PUT", `/api/admin/songs/${trackId}`, { title }),
+    onSuccess: async () => {
+      await invalidate();
+      toast({ title: "Title saved" });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't save title",
+        description: e?.message || "Try again.",
+        variant: "destructive",
+      }),
+  });
+
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const deleteMut = useMutation({
+    mutationFn: async () =>
+      apiRequest("DELETE", `/api/admin/songs/${trackId}`),
+    onSuccess: async () => {
+      await invalidate();
+      toast({ title: "Track deleted" });
+      navigate(`/admin/albums/${album.id}?tab=tracks`);
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Couldn't delete track",
+        description: e?.message || "Try again.",
+        variant: "destructive",
+      }),
+  });
+
+  if (!song) {
+    return (
+      <div className="py-16 text-center" data-testid="empty-track-not-found">
+        <p className="text-slate-500 text-sm">
+          That track is no longer on this album.
+        </p>
+        <Link
+          href={`/admin/albums/${album.id}?tab=tracks`}
+          className="inline-flex items-center gap-1.5 mt-4 text-sm font-semibold text-[var(--brand-blue)] hover:underline"
+          data-testid="link-back-to-tracklist"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to tracklist
+        </Link>
+      </div>
+    );
+  }
+
+  const songCredits = albumCredits?.bySongId[song.id] ?? null;
+  const songTotals = albumSplits?.bySongId?.[song.id]?.totals ?? null;
+  const statuses = trackSectionStatuses(songCredits, songTotals);
+
+  const prev = index > 0 ? sorted[index - 1] : null;
+  const next = index < sorted.length - 1 ? sorted[index + 1] : null;
+
+  const goToTab = (t: TrackTab) =>
+    navigate(`/admin/albums/${album.id}/tracks/${song.id}?tt=${t}`, {
+      replace: true,
+    });
+  const goToTrack = (id: string) =>
+    navigate(
+      `/admin/albums/${album.id}/tracks/${id}${activeTab !== "details" ? `?tt=${activeTab}` : ""}`,
+    );
+  const tracklistHref = `/admin/albums/${album.id}?tab=tracks&track=${song.id}`;
+
+  const tabBtn = (t: { id: TrackTab; label: string }) => {
+    const active = activeTab === t.id;
+    return (
+      <button
+        key={t.id}
+        type="button"
+        onClick={() => goToTab(t.id)}
+        className={[
+          "px-1 pb-2.5 -mb-px text-sm font-semibold border-b-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 rounded-t-sm",
+          active
+            ? "border-[var(--brand-blue)] text-[var(--brand-blue)]"
+            : "border-transparent text-slate-500 hover:text-slate-900",
+        ].join(" ")}
+        aria-current={active ? "page" : undefined}
+        data-testid={`tab-track-${t.id}`}
+      >
+        {t.label}
+      </button>
+    );
+  };
+
+  return (
+    <div className="pb-28" data-testid={`page-track-${song.id}`}>
+      {/* Breadcrumb */}
+      <nav
+        className="flex items-center gap-1.5 text-xs text-slate-400 mb-3"
+        aria-label="Breadcrumb"
+      >
+        <Link
+          href={backToAlbumsHref}
+          className="hover:text-slate-700"
+          data-testid="crumb-albums"
+        >
+          Albums
+        </Link>
+        <ChevronRight className="w-3 h-3" />
+        <Link
+          href={`/admin/albums/${album.id}`}
+          className="hover:text-slate-700 truncate max-w-[180px]"
+          data-testid="crumb-album"
+        >
+          {album.title}
+        </Link>
+        <ChevronRight className="w-3 h-3" />
+        <Link
+          href={`/admin/albums/${album.id}?tab=tracks`}
+          className="hover:text-slate-700"
+          data-testid="crumb-tracks"
+        >
+          Tracks
+        </Link>
+      </nav>
+
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 mb-5">
+        <div className="min-w-0">
+          <div className="text-xs font-medium tracking-[0.04em] uppercase text-slate-400 mb-1">
+            Track {index + 1} of {sorted.length} · {album.title} · {album.artist}
+          </div>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <h1
+              className="text-2xl font-bold text-slate-900 truncate"
+              data-testid="text-track-page-title"
+            >
+              {song.title}
+            </h1>
+            {song.isExplicit && <ExplicitBadge tone="slate" />}
+          </div>
+        </div>
+        {/* Prev / next at the top so the operator can hop tracks without
+            scrolling to the sticky bar. */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <button
+            type="button"
+            disabled={!prev}
+            onClick={() => prev && goToTrack(prev.id)}
+            className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
+            aria-label="Previous track"
+            title={prev ? `Previous: ${prev.title}` : "No previous track"}
+            data-testid="button-prev-track"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            disabled={!next}
+            onClick={() => next && goToTrack(next.id)}
+            className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
+            aria-label="Next track"
+            title={next ? `Next: ${next.title}` : "No next track"}
+            data-testid="button-next-track"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
-      {/* ── Expanded body: REQUIRED Master tile + 3-up OPTIONAL grid,
-          followed by whichever editor is open, then a Track ID footer.
-          Graduated from the Seamless mockup; tile taps reuse the
-          existing inline editors below — zero new editor code, just a
-          tile-based entry point for each one. */}
-      {expanded && (
-        <div className="pl-12 sm:pl-20 pr-8 sm:pr-16 pb-5 -mt-1 space-y-4">
-          <div className="space-y-4">
-            {/* REQUIRED — Master.
-                View mode: a single full-width tile (StatusBadge).
-                Audio mode: the tile transforms into an ExpandedPanel
-                whose header IS the collapse trigger (chevron-up). No
-                separate boxed editor below; the editor body lives
-                inside the same card, flush against the header. */}
+      {/* Chip stepper — jump to any track; color encodes completion. */}
+      <div
+        className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-5 -mx-1 px-1"
+        role="tablist"
+        aria-label="Tracks"
+        data-testid="track-chip-stepper"
+      >
+        {sorted.map((s) => {
+          const active = s.id === song.id;
+          const st = trackSectionStatuses(
+            albumCredits?.bySongId[s.id] ?? null,
+            albumSplits?.bySongId?.[s.id]?.totals ?? null,
+          );
+          return (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => goToTrack(s.id)}
+              className={[
+                "w-7 h-7 flex-shrink-0 inline-flex items-center justify-center rounded-md border text-xs font-bold tabular-nums transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40",
+                trackChipTone(active, st),
+              ].join(" ")}
+              aria-current={active ? "true" : undefined}
+              title={`${s.trackNumber}. ${s.title}`}
+              data-testid={`chip-track-${s.id}`}
+            >
+              {s.trackNumber}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center gap-5 border-b border-slate-200 mb-6">
+        {TRACK_TABS.map(tabBtn)}
+      </div>
+
+      {/* Tab content */}
+      {activeTab === "details" && (
+        <div className="space-y-6" data-testid="panel-track-details">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-5">
             <div>
-              {/* Matches the Optional section's `mb-3.5` below so the
-                  mini-label has the same breathing room before its
-                  tile (Bill: "these two shouldn't be touching"). */}
-              <div className="flex items-center gap-2 mb-3.5">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                  Required
-                </span>
-                <span className="h-px flex-1 bg-slate-200" aria-hidden="true" />
-              </div>
-              {mode === "audio" ? (
-                <ExpandedPanel
-                  icon={Disc3}
-                  label="Master"
-                  sublabel={
-                    <>
-                      <span className="block truncate">
-                        {song.audioUrl
-                          ? "Uploaded · tap to collapse"
-                          : "Required to publish"}
-                      </span>
-                      {song.audioUrl && <MasterSpecLine song={song} />}
-                    </>
+              <label
+                htmlFor="input-track-page-title"
+                className="block text-xs font-semibold tracking-[0.04em] uppercase text-slate-400 mb-1.5"
+              >
+                Title
+              </label>
+              <input
+                id="input-track-page-title"
+                defaultValue={song.title}
+                key={song.id}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    (e.target as HTMLInputElement).blur();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    (e.target as HTMLInputElement).value = song.title;
+                    (e.target as HTMLInputElement).blur();
                   }
-                  onCollapse={closeAudio}
-                  testId={`panel-master-${song.id}`}
-                >
-                  <AudioEditor
-                    song={song}
-                    albumId={albumId}
-                    onClose={closeAudio}
-                    onSaved={invalidate}
-                  />
-                </ExpandedPanel>
-              ) : (
-                <StatusBadge
-                  ok={!!song.audioUrl}
-                  icon={Disc3}
-                  label="Master"
-                  subtitle={
-                    <>
-                      <span className="block truncate">
-                        {song.audioUrl
-                          ? "Uploaded · tap to replace"
-                          : "Required to publish"}
-                      </span>
-                      {song.audioUrl && <MasterSpecLine song={song} />}
-                    </>
+                }}
+                onBlur={(e) => {
+                  const nextTitle = e.target.value.trim();
+                  if (!nextTitle) {
+                    e.target.value = song.title;
+                    toast({
+                      title: "Title can't be empty",
+                      variant: "destructive",
+                    });
+                    return;
                   }
-                  severity="required"
-                  size="emphasized"
-                  active={false}
-                  onClick={() => setMode("audio")}
-                  testId={`tile-master-${song.id}`}
-                  buttonRef={masterChipRef}
-                />
-              )}
+                  if (nextTitle === song.title) return;
+                  renameMut.mutate(nextTitle);
+                }}
+                disabled={renameMut.isPending}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-slate-900 text-sm font-medium focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-60"
+                data-testid="input-track-title"
+              />
+              <p className="text-xs text-slate-400 mt-1.5">
+                Saves automatically when you leave the field.
+              </p>
             </div>
 
-            {/* OPTIONAL — Preview / Lyrics / Credits.
-                View mode: 3-up tile grid + quiet trailing GoodSync™ link.
-                Any active mode: the row collapses into ONE full-width
-                ExpandedPanel for the active tile. The other two tiles
-                hide. Tapping the panel header collapses back to the
-                3-up grid. */}
-            <div>
-              <div className="flex items-center gap-2 mb-3.5">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                  Optional
-                </span>
-                <span className="h-px flex-1 bg-slate-200" aria-hidden="true" />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-xs font-semibold tracking-[0.04em] uppercase text-slate-400 mb-1">
+                  Track number
+                </div>
+                <div
+                  className="text-sm font-medium text-slate-900 tabular-nums"
+                  data-testid="text-track-number"
+                >
+                  {song.trackNumber}
+                </div>
               </div>
-              {mode === "preview" && song.audioUrl ? (
-                <ExpandedPanel
-                  icon={Headphones}
-                  label="Preview"
-                  sublabel={
-                    song.previewStartMs != null
-                      ? "Custom 30-sec clip"
-                      : "Auto · first 30 sec"
-                  }
-                  onCollapse={closePreview}
-                  testId={`panel-preview-${song.id}`}
+              <div>
+                <div className="text-xs font-semibold tracking-[0.04em] uppercase text-slate-400 mb-1">
+                  Duration
+                </div>
+                <div
+                  className="text-sm font-medium text-slate-900 tabular-nums"
+                  data-testid="text-track-page-duration"
                 >
-                  <PreviewWindowEditor
-                    song={song}
-                    onClose={closePreview}
-                    onSaved={invalidate}
-                    standalone
-                  />
-                </ExpandedPanel>
-              ) : mode === "lyrics" ? (
-                <ExpandedPanel
-                  icon={FileText}
-                  label="Lyrics"
-                  sublabel={
-                    song.instrumental
-                      ? "Instrumental"
-                      : (song.syncedLyrics?.length ?? 0) > 0
-                        ? `GoodSync™ · ${song.syncedLyrics?.length} cues`
-                        : undefined
-                  }
-                  onCollapse={closeLyrics}
-                  testId={`panel-lyrics-${song.id}`}
-                >
-                  <LyricsEditor
-                    song={song}
-                    onClose={closeLyrics}
-                    onSaved={invalidate}
-                    onUpgradeSync={() => setMode("synced")}
-                  />
-                </ExpandedPanel>
-              ) : mode === "synced" ? (
-                <ExpandedPanel
-                  icon={FileText}
-                  label="GoodSync™"
-                  sublabel={
-                    (song.syncedLyrics?.length ?? 0) > 0
-                      ? `${song.syncedLyrics?.length} cues`
-                      : "Sync lyrics to audio"
-                  }
-                  onCollapse={closeSynced}
-                  testId={`panel-synced-${song.id}`}
-                >
-                  <SyncedLyricsEditor
-                    song={song}
-                    onClose={closeSynced}
-                    onSaved={invalidate}
-                  />
-                </ExpandedPanel>
-              ) : mode === "credits" ? (
-                <ExpandedPanel
-                  icon={Users}
-                  label="Credits"
-                  onCollapse={closeCredits}
-                  testId={`panel-credits-${song.id}`}
-                >
-                  <TrackCreditsPanel
-                    songId={song.id}
-                    albumId={albumId}
-                    credits={credits}
-                  />
-                </ExpandedPanel>
-              ) : mode === "splits" ? (
-                <ExpandedPanel
-                  icon={PieChart}
-                  label="Splits"
-                  sublabel="Publishing + Master Recording"
-                  onCollapse={() => setMode("view")}
-                  testId={`panel-splits-${song.id}`}
-                >
-                  <TrackSplitsEditor
-                    songId={song.id}
-                    songTitle={song.title}
-                    albumId={albumId}
-                  />
-                </ExpandedPanel>
-              ) : (
-                <>
-                  {/* Task #616 — reflowed from 3-up to 2×2 so the 4th
-                      tile (Splits) doesn't squeeze the row to four narrow
-                      columns. Order matches the artist's mental model:
-                      Preview → Lyrics on the top, Credits → Splits on the
-                      bottom (creative pieces first, business pieces next). */}
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <StatusBadge
-                      ok={song.previewStartMs != null}
-                      icon={Headphones}
-                      label="Preview"
-                      subtitle={
-                        song.previewStartMs != null
-                          ? "Custom 30-sec clip"
-                          : "Auto · first 30 sec"
-                      }
-                      severity="soft"
-                      compact
-                      active={false}
-                      onClick={() => {
-                        if (!song.audioUrl) {
-                          toast({
-                            title: "Upload a master first",
-                            description:
-                              "The preview window comes from the master file.",
-                          });
-                          return;
-                        }
-                        setMode("preview");
-                      }}
-                      testId={`tile-preview-${song.id}`}
-                      buttonRef={previewChipRef}
-                    />
-                    <StatusBadge
-                      ok={
-                        song.instrumental ||
-                        (song.syncedLyrics?.length ?? 0) > 0 ||
-                        !!(song.lyrics && song.lyrics.trim())
-                      }
-                      icon={FileText}
-                      label="Lyrics"
-                      subtitle={
-                        song.instrumental
-                          ? "Instrumental"
-                          : (song.syncedLyrics?.length ?? 0) > 0
-                            ? `GoodSync™ · ${song.syncedLyrics?.length} cues`
-                            : undefined
-                      }
-                      severity="soft"
-                      compact
-                      active={false}
-                      onClick={() => setMode("lyrics")}
-                      testId={`tile-lyrics-${song.id}`}
-                      buttonRef={lyricsChipRef}
-                    />
-                    <StatusBadge
-                      ok={
-                        (credits?.writers.length ?? 0) > 0 &&
-                        (credits?.performers.length ?? 0) > 0
-                      }
-                      icon={Users}
-                      label="Credits"
-                      severity="soft"
-                      compact
-                      active={false}
-                      onClick={() => setMode("credits")}
-                      testId={`tile-credits-${song.id}`}
-                      buttonRef={creditsChipRef}
-                    />
-                    {/* Task #616 — Splits tile. Album-level splits query
-                        feeds per-song totals so the dot can reflect the
-                        actual state: green when both Publishing AND Master
-                        sum to 100%; soft/empty otherwise. Subtitle reads
-                        "Not set" when there are no rows, otherwise the two
-                        section percents (e.g. "Pub 100% · Mas 50%"). */}
-                    {(() => {
-                      const pubBp = splitTotals?.publishingBp ?? 0;
-                      const mechBp = splitTotals?.mechanicalBp ?? 0;
-                      const hasAny = pubBp > 0 || mechBp > 0;
-                      const balanced = pubBp === 10000 && mechBp === 10000;
-                      const fmt = (bp: number) => `${(bp / 100).toFixed(0)}%`;
-                      const subtitle = !hasAny
-                        ? "Not set"
-                        : `Pub ${fmt(pubBp)} · Mas ${fmt(mechBp)}`;
-                      return (
-                        <StatusBadge
-                          ok={balanced}
-                          icon={PieChart}
-                          label="Splits"
-                          subtitle={subtitle}
-                          severity="soft"
-                          compact
-                          active={false}
-                          onClick={() => setMode("splits")}
-                          testId={`tile-splits-${song.id}`}
-                        />
-                      );
-                    })()}
-                  </div>
-                </>
-              )}
+                  {formatDuration(song.duration)}
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="pt-1">
-            <span className="text-[11px] text-slate-400">
-              Track ID · {song.id}
-            </span>
+          <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-1">
+            <ExplicitTrackToggle song={song} albumId={album.id} />
+            <InstrumentalToggle song={song} />
+          </div>
+
+          {/* Destructive — kept here so per-track delete survives the move
+              off the old expanded row. */}
+          <div className="rounded-xl border border-rose-200 bg-rose-50/40 p-5">
+            {confirmDelete ? (
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="text-xs text-rose-800">
+                  Delete <span className="font-semibold">{song.title}</span>?
+                  This can't be undone.
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(false)}
+                    disabled={deleteMut.isPending}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60"
+                    data-testid="button-cancel-delete-track"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteMut.mutate()}
+                    disabled={deleteMut.isPending}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-60"
+                    data-testid="button-confirm-delete-track"
+                  >
+                    {deleteMut.isPending ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
+                    Delete track
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-rose-800">
+                    Delete this track
+                  </div>
+                  <div className="text-xs text-rose-700/80">
+                    Removes the track, its credits, splits and master.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-700 border border-rose-300 hover:bg-rose-100 focus:outline-none focus:ring-2 focus:ring-rose-400/40 flex-shrink-0"
+                  data-testid="button-delete-track"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
-    </li>
+
+      {activeTab === "credits" && (
+        <div className="space-y-6" data-testid="panel-track-credits">
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <TrackCreditsPanel
+              songId={song.id}
+              albumId={album.id}
+              credits={songCredits as any}
+            />
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <div className="text-xs font-semibold tracking-[0.04em] uppercase text-slate-400 mb-4">
+              Splits
+            </div>
+            <TrackSplitsEditor
+              songId={song.id}
+              songTitle={song.title}
+              albumId={album.id}
+            />
+          </div>
+        </div>
+      )}
+
+      {activeTab === "lyrics" && (
+        <div className="space-y-4" data-testid="panel-track-lyrics">
+          <div className="inline-flex items-center rounded-lg border border-slate-200 p-0.5 bg-white">
+            <button
+              type="button"
+              onClick={() => setLyricsMode("plain")}
+              className={[
+                "px-3 py-1.5 rounded-md text-xs font-semibold transition-colors focus:outline-none",
+                lyricsMode === "plain"
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-500 hover:text-slate-900",
+              ].join(" ")}
+              data-testid="toggle-lyrics-plain"
+            >
+              Lyrics
+            </button>
+            <button
+              type="button"
+              onClick={() => setLyricsMode("synced")}
+              className={[
+                "px-3 py-1.5 rounded-md text-xs font-semibold transition-colors focus:outline-none",
+                lyricsMode === "synced"
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-500 hover:text-slate-900",
+              ].join(" ")}
+              data-testid="toggle-lyrics-synced"
+            >
+              GoodSync™
+            </button>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            {lyricsMode === "synced" ? (
+              <SyncedLyricsEditor
+                key={song.id}
+                song={song}
+                onClose={() => setLyricsMode("plain")}
+                onSaved={invalidate}
+              />
+            ) : (
+              <LyricsEditor
+                key={song.id}
+                song={song}
+                onClose={() => goToTab("details")}
+                onSaved={invalidate}
+                onUpgradeSync={() => setLyricsMode("synced")}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "files" && (
+        <div className="space-y-6" data-testid="panel-track-files">
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <div className="text-xs font-semibold tracking-[0.04em] uppercase text-slate-400 mb-4">
+              Master audio
+            </div>
+            <AudioEditor
+              key={song.id}
+              song={song}
+              albumId={album.id}
+              onClose={() => goToTab("details")}
+              onSaved={invalidate}
+            />
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <PreviewWindowEditor
+              key={song.id}
+              song={song}
+              onClose={() => goToTab("details")}
+              onSaved={invalidate}
+              standalone
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Sticky action bar — Back to tracklist + prev/next, always reachable. */}
+      <div className="fixed bottom-0 inset-x-0 z-30 border-t border-slate-200 bg-white/90 backdrop-blur-sm">
+        <div className="max-w-[640px] mx-auto px-5 py-3 flex items-center justify-between gap-3">
+          <Link
+            href={tracklistHref}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
+            data-testid="link-back-to-tracklist"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to tracklist
+          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={!prev}
+              onClick={() => prev && goToTrack(prev.id)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
+              data-testid="button-prev-track-bar"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Prev
+            </button>
+            <button
+              type="button"
+              disabled={!next}
+              onClick={() => next && goToTrack(next.id)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--brand-blue)] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
+              data-testid="button-next-track-bar"
+            >
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

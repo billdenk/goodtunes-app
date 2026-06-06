@@ -171,7 +171,7 @@ export function useSmartBackCrumb(): SmartBackCrumb | null {
       track = {
         id: trackId,
         name: song.title,
-        href: `${cfg.href(id)}?track=${trackId}`,
+        href: `/admin/albums/${id}/tracks/${trackId}?tt=credits`,
         testId: `link-back-to-track-${trackId}`,
       };
     }
@@ -181,9 +181,9 @@ export function useSmartBackCrumb(): SmartBackCrumb | null {
     origin: origin!,
     id,
     name,
-    // When a track is in scope BOTH crumb segments deep-link the row
-    // open — tapping "Album" vs "Track" lands the user on the same
-    // expanded row, since either intent is "go back to where I was."
+    // When a track is in scope the "Album" crumb lands on the album with
+    // that row scrolled-to + highlighted (?track=), while the "Track"
+    // sub-crumb (track.href) deep-links the dedicated track page.
     href: track ? `${cfg.href(id)}?track=${track.id}` : cfg.href(id),
     testId: `link-back-to-${cfg.testIdPrefix}-${id}`,
     track,
