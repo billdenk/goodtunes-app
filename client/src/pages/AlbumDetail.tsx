@@ -14,7 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
 import { useAlbumOwnership } from "@/hooks/useAlbumOwnership";
 import { useFullPlaybackAccess } from "@/hooks/useFullPlaybackAccess";
-import { FanPreviewProvider, FanPreviewToggle, useFanPreview } from "@/hooks/useFanPreview";
+import { FanPreviewProvider, useFanPreview } from "@/hooks/useFanPreview";
 import { useAuth } from "@/hooks/useAuth";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
@@ -148,15 +148,10 @@ export function AlbumDetail({ albumId }: { albumId?: string } = {}) {
     ) : (
       <AlbumDetailMobile albumId={albumId} />
     );
-  // FanPreviewProvider + the floating "View as a fan" toggle let privileged
-  // operators flip this page into the locked visitor view; both surfaces read
-  // the lens via useFanPreview().
-  return (
-    <FanPreviewProvider>
-      {surface}
-      <FanPreviewToggle />
-    </FanPreviewProvider>
-  );
+  // FanPreviewProvider keeps the fan-preview lens wiring intact (read via
+  // useFanPreview, still toggleable through the `?fan=1` URL flag); the visible
+  // floating toggle pill has been removed.
+  return <FanPreviewProvider>{surface}</FanPreviewProvider>;
 }
 
 // `albumId` lets a host-aware caller (the store launch storefront) render a
