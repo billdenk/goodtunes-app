@@ -693,18 +693,10 @@ export function AlbumDetailMobileSurface({
                 Buy {formatUsdCents(album.priceCents)}
               </button>
             )}
-          {hasAlbumCredits && (
-            <IconButton
-              variant="glass"
-              size="lg"
-              label="Album credits"
-              onClick={onOpenAlbumCredits}
-              style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
-              data-testid="button-album-credits"
-            >
-              <Info strokeWidth={2} />
-            </IconButton>
-          )}
+          {/* Task #1580 — the album-level credits "i" button is hidden; credits
+              are now per-track only (opened from each track's row). The
+              `hasAlbumCredits`/`onOpenAlbumCredits` wiring stays in place so it
+              can be flipped back on if album-level credits return. */}
           {nativeDownloadsEnabled && !isStreamOnlyAlbum && (
             <button
               type="button"

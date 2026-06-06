@@ -929,6 +929,26 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
           artist={`${album.artist} · ${album.title}`}
           eyebrow="Song Credits"
           credits={scopedCreditsFor(creditsForSong.id)}
+          songHeader={{
+            artwork: album.artwork,
+            songTitle: creditsForSong.title,
+            artistName: album.artist,
+            albumName: album.title,
+            dateLabel: album.year ? String(album.year) : undefined,
+            isPlaying:
+              player.currentSong?.id === creditsForSong.id && player.isPlaying,
+            onTogglePlay: () => {
+              const sid = creditsForSong?.id;
+              if (!sid) return;
+              if (player.currentSong?.id === sid) {
+                player.togglePlay();
+                return;
+              }
+              const playable = playableSongs.find((p) => p.id === sid);
+              if (playable) player.playSong(playable, [playable]);
+            },
+            onOpenAlbum: () => setCreditsForSong(null),
+          }}
           onClose={() => setCreditsForSong(null)}
         />
       ) : null}

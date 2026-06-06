@@ -66,6 +66,26 @@ type CreditEntry = {
 
 type CreditGroup = { title: string; entries: CreditEntry[] };
 
+/* The Apple-song-page header shown above a *per-track* credits surface (the
+   album-credits surface keeps its quiet eyebrow/title/subtitle header). Carries
+   everything the song header needs: the artwork, the song title, the
+   artist · album · date line (album name is a tappable link back to the album),
+   and a Play/Pause control that toggles just this one song. */
+export type CreditsSongHeader = {
+  artwork?: string | null;
+  songTitle: string;
+  artistName: string;
+  albumName: string;
+  /* e.g. a release year — appended after the album name when present. */
+  dateLabel?: string;
+  /* True when THIS song is the one currently playing (flips Play → Pause). */
+  isPlaying: boolean;
+  onTogglePlay: () => void;
+  /* Tapping the album name returns the fan to the album (the credits surface
+     was opened from it, so this is just the surface's own close). */
+  onOpenAlbum: () => void;
+};
+
 /* The profile a credit row drills into — uniform across the mobile sheet and
    the desktop page so the shared slider can host either. The mobile surface
    resolves a real Person plus the contextual song lead-in (so the profile
@@ -274,18 +294,100 @@ function GatedCreditEntry({
   return <CreditPlainRow e={e} />;
 }
 
+/* Apple's song-page header for a per-track credits surface: centered artwork,
+   song title, an artist · album · date line whose album name links back to the
+   album, and a Play/Pause control that toggles just this one song. Rendered in
+   GoodTunes' palette (navy bg inherited, white Play pill, brand-blue album
+   link) instead of Apple's light theme. */
+function SongCreditHeader({ h }: { h: CreditsSongHeader }) {
+  return (
+    <div className="px-5 flex flex-col items-center text-center">
+      {h.artwork && (
+        <img
+          src={h.artwork}
+          alt=""
+          className="w-40 h-40 rounded-2xl object-cover"
+          style={{ boxShadow: "0 16px 40px rgba(0,0,0,0.45)" }}
+          data-testid="img-song-credits-art"
+        />
+      )}
+      <h2
+        className="mt-4 text-fan-primary text-2xl font-bold leading-tight tracking-tight"
+        data-testid="text-song-credits-title"
+      >
+        {h.songTitle}
+      </h2>
+      <p className="mt-1.5 text-fan-secondary text-base leading-snug">
+        <span>{h.artistName}</span>
+        <span aria-hidden className="px-1.5">
+          ·
+        </span>
+        <button
+          type="button"
+          onClick={h.onOpenAlbum}
+          className="text-fan-secondary hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors"
+          data-testid="link-song-credits-album"
+        >
+          {h.albumName}
+        </button>
+        {h.dateLabel && (
+          <>
+            <span aria-hidden className="px-1.5">
+              ·
+            </span>
+            <span>{h.dateLabel}</span>
+          </>
+        )}
+      </p>
+      <button
+        type="button"
+        onClick={h.onTogglePlay}
+        className="mt-5 inline-flex items-center justify-center gap-2.5 h-12 px-10 rounded-full font-semibold text-base active:scale-[0.97] transition-transform"
+        style={{ background: "#fff", color: "var(--brand-bg)" }}
+        aria-label={h.isPlaying ? "Pause song" : "Play song"}
+        data-testid="button-song-credits-play"
+      >
+        {h.isPlaying ? (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="5" width="4" height="14" rx="1" />
+            <rect x="14" y="5" width="4" height="14" rx="1" />
+          </svg>
+        ) : (
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+          >
+            <path d="M8 5.14v14l11-7-11-7z" />
+          </svg>
+        )}
+        {h.isPlaying ? "Pause" : "Play"}
+      </button>
+    </div>
+  );
+}
+
 /* Apple-Music-style grouped credits — a small-caps role label over a single
    quiet dark rounded card ("pill") per group. There are NO bright white
    horizontal rules: groups are separated by spacing and rows are grouped by
-   the dark card alone. Shared by the mobile sheet and the desktop page. */
+   the dark card alone. Shared by the mobile sheet and the desktop page.
+   `multiColumn` (per-track tablet/desktop) flows the role groups into two
+   balanced CSS columns the way Apple's iPad credits page does; mobile leaves it
+   off and stays single-column. */
 function CreditsList({
   groups,
   onOpenPerson,
   currentAlbumId,
+  multiColumn = false,
 }: {
   groups: CreditGroup[];
   onOpenPerson: (personId: string, role: string) => void;
   currentAlbumId?: string;
+  multiColumn?: boolean;
 }) {
   if (groups.length === 0) {
     return (
@@ -295,11 +397,23 @@ function CreditsList({
     );
   }
   return (
-    <div className="px-4 pb-4">
+    <div
+      className={
+        multiColumn
+          ? "px-4 pb-4 sm:[column-count:2] sm:[column-gap:1.25rem]"
+          : "px-4 pb-4"
+      }
+    >
       {groups.map((group, groupIdx) => (
         <section
           key={group.title}
-          className={groupIdx === 0 ? "" : "mt-8"}
+          className={
+            multiColumn
+              ? "break-inside-avoid mb-7"
+              : groupIdx === 0
+                ? ""
+                : "mt-8"
+          }
           data-testid={`row-album-credit-role-${group.title
             .replace(/\s+/g, "-")
             .toLowerCase()}`}
@@ -353,6 +467,8 @@ function CreditsSlider({
   onOpenInstrument,
   showCloseOnPerson,
   surfaceBg,
+  songHeader,
+  multiColumn,
 }: {
   groups: CreditGroup[];
   eyebrow: string;
@@ -379,6 +495,13 @@ function CreditsSlider({
      bleeding through. Each host passes its own surface color (the mobile sheet
      panel vs. the desktop card) so the panes match their container. */
   surfaceBg: string;
+  /* When set, the list view leads with the Apple song-page header (artwork +
+     Play + artist · album · date) instead of the quiet eyebrow/title/subtitle.
+     Per-track surfaces pass it; the album-credits surface leaves it undefined
+     so its header is unchanged. */
+  songHeader?: CreditsSongHeader;
+  /* Flow the role groups into balanced columns (per-track tablet/desktop). */
+  multiColumn?: boolean;
 }) {
   const reduce = !!useReducedMotion();
   const fade = reduce
@@ -436,22 +559,27 @@ function CreditsSlider({
             transition={fade ? fade.transition : SLIDE_SPRING}
           >
             <div className="mx-auto w-full max-w-[680px] pt-16 pb-6">
-              <div className="px-5">
-                <p className="text-[color:var(--brand-blue)] text-xs font-semibold uppercase tracking-wider mb-1">
-                  {eyebrow}
-                </p>
-                <h2 className="text-fan-primary text-2xl sm:text-3xl font-bold leading-tight tracking-tight">
-                  {title}
-                </h2>
-                <p className="text-fan-secondary text-base mt-1 leading-snug">
-                  {subtitle}
-                </p>
-              </div>
-              <div className="mt-4">
+              {songHeader ? (
+                <SongCreditHeader h={songHeader} />
+              ) : (
+                <div className="px-5">
+                  <p className="text-[color:var(--brand-blue)] text-xs font-semibold uppercase tracking-wider mb-1">
+                    {eyebrow}
+                  </p>
+                  <h2 className="text-fan-primary text-2xl sm:text-3xl font-bold leading-tight tracking-tight">
+                    {title}
+                  </h2>
+                  <p className="text-fan-secondary text-base mt-1 leading-snug">
+                    {subtitle}
+                  </p>
+                </div>
+              )}
+              <div className={songHeader ? "mt-7" : "mt-4"}>
                 <CreditsList
                   groups={groups}
                   onOpenPerson={onOpenPerson}
                   currentAlbumId={currentAlbumId}
+                  multiColumn={multiColumn}
                 />
               </div>
             </div>
@@ -494,6 +622,7 @@ function CreditsSheetHost({
   trackExtra,
   resolveInstrument,
   resolvePersonContext,
+  songHeader,
   onClose,
 }: {
   ariaLabel: string;
@@ -502,6 +631,8 @@ function CreditsSheetHost({
   title: string;
   subtitle: string;
   groups: CreditGroup[];
+  /** Apple song-page header for per-track surfaces (album credits omit it). */
+  songHeader?: CreditsSongHeader;
   /** Current album id — lets the rich-profile gate count a track on THIS
    *  album as not-rich, matching the desktop page. */
   albumId?: string;
@@ -559,6 +690,7 @@ function CreditsSheetHost({
           onOpenInstrument={gear.openInstrument}
           showCloseOnPerson={false}
           surfaceBg="rgb(20, 24, 48)"
+          songHeader={songHeader}
         />
       </SheetShell>
       {gear.overlay}
@@ -626,6 +758,7 @@ export function SongCreditsSheet({
   album,
   resolveInstrument,
   resolvePersonContext,
+  songHeader,
   onClose,
 }: {
   songId: string;
@@ -638,6 +771,8 @@ export function SongCreditsSheet({
   album: Album;
   resolveInstrument: (instrumentId?: string) => Instrument | undefined;
   resolvePersonContext: (personId: string, role: string) => CreditsPersonView | null;
+  /** Apple song-page header (artwork + Play + artist · album · date). */
+  songHeader?: CreditsSongHeader;
   onClose: () => void;
 }) {
   const groups = useMemo(() => buildAlbumCreditGroups(credits), [credits]);
@@ -654,6 +789,7 @@ export function SongCreditsSheet({
       trackExtra={{ songId }}
       resolveInstrument={resolveInstrument}
       resolvePersonContext={resolvePersonContext}
+      songHeader={songHeader}
       onClose={onClose}
     />
   );
@@ -675,6 +811,7 @@ export function AlbumCreditsPage({
   artist,
   credits,
   eyebrow = "Album Credits",
+  songHeader,
   onClose,
 }: {
   /** Full album — needed to host the in-place person view's gear/album
@@ -686,6 +823,10 @@ export function AlbumCreditsPage({
   /** Small uppercase label above the title. Defaults to "Album Credits";
    *  the per-track surface passes "Song Credits". */
   eyebrow?: string;
+  /** Apple song-page header for per-track surfaces. When set, the page also
+   *  flows the role groups into balanced columns (tablet/desktop). The
+   *  album-credits surface omits it → unchanged single-column header. */
+  songHeader?: CreditsSongHeader;
   onClose: () => void;
 }) {
   const reduce = !!useReducedMotion();
@@ -734,7 +875,7 @@ export function AlbumCreditsPage({
               data-testid="backdrop-album-credits"
             />
             <motion.div
-              className="relative flex flex-col w-full max-w-[680px] h-[82vh] max-h-[820px] rounded-3xl overflow-hidden shadow-2xl text-fan-primary"
+              className={`relative flex flex-col w-full ${songHeader ? "max-w-[760px]" : "max-w-[680px]"} h-[82vh] max-h-[820px] rounded-3xl overflow-hidden shadow-2xl text-fan-primary`}
               style={{
                 background: "var(--brand-bg)",
                 fontFamily: "system-ui, -apple-system, 'SF Pro Text', sans-serif",
@@ -759,6 +900,8 @@ export function AlbumCreditsPage({
                 onOpenInstrument={gear.openInstrument}
                 showCloseOnPerson
                 surfaceBg="var(--brand-bg)"
+                songHeader={songHeader}
+                multiColumn={!!songHeader}
               />
               {/* In-card gear/vendor/in-app-browser panes. Rendered inside the
                   card (which is `relative overflow-hidden`) so the contained

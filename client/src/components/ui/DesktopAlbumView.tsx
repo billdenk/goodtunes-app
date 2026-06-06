@@ -4,7 +4,7 @@ import { formatUsdCents } from "@shared/money";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Link } from "wouter";
 import { popBounce } from "@/lib/motion";
-import { ChevronRight, Play, Pause, Shuffle, Lock, Share, Info, MoreHorizontal, X, Maximize2 } from "lucide-react";
+import { ChevronRight, Play, Pause, Shuffle, Lock, Share, MoreHorizontal, X, Maximize2 } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { BonusPlayBadge } from "@/components/ui/BonusPlayBadge";
 import { IconButton } from "@/components/ui/IconButton";
@@ -732,18 +732,9 @@ export function DesktopAlbumView({
                       Play
                     </button>
                   )}
-                  {hasAlbumCredits && (
-                    <IconButton
-                      variant="glass"
-                      size="md"
-                      label="Album credits"
-                      onClick={onOpenAlbumCredits}
-                      style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
-                      data-testid="button-album-credits"
-                    >
-                      <Info strokeWidth={2} />
-                    </IconButton>
-                  )}
+                  {/* Task #1580 — album-level credits "i" button hidden; credits
+                      are per-track only. `hasAlbumCredits`/`onOpenAlbumCredits`
+                      wiring stays in place so it can be re-enabled later. */}
                 </>
               ) : (
                 /* Apple-tone preview/buy transport row, mirroring the owned
@@ -770,18 +761,9 @@ export function DesktopAlbumView({
                       onBuy={(opts) => onBuyBundle?.(opts)}
                     />
                   )}
-                  {hasAlbumCredits && (
-                    <IconButton
-                      variant="glass"
-                      size="md"
-                      label="Album credits"
-                      onClick={onOpenAlbumCredits}
-                      style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
-                      data-testid="button-album-credits"
-                    >
-                      <Info strokeWidth={2} />
-                    </IconButton>
-                  )}
+                  {/* Task #1580 — album-level credits "i" button hidden; credits
+                      are per-track only. `hasAlbumCredits`/`onOpenAlbumCredits`
+                      wiring stays in place so it can be re-enabled later. */}
                 </>
               )}
             </div>

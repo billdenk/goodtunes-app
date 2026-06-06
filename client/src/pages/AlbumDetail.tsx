@@ -1099,6 +1099,23 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
             credits={songCreditsPayload(getCredits(creditsForSong.id), creditsForSong.id, peopleById)}
             album={album}
             resolveInstrument={(iid) => (iid ? instrumentsById.get(iid) : undefined)}
+            songHeader={{
+              artwork: album.artwork,
+              songTitle: creditsForSong.title,
+              artistName: album.artist,
+              albumName: album.title,
+              dateLabel: album.year ? String(album.year) : undefined,
+              isPlaying: currentSong?.id === creditsForSong.id && isPlaying,
+              onTogglePlay: () => {
+                if (currentSong?.id === creditsForSong.id) {
+                  togglePlay();
+                } else {
+                  const s = { ...creditsForSong, album };
+                  playSong(s, [s]);
+                }
+              },
+              onOpenAlbum: () => setCreditsForSong(null),
+            }}
             resolvePersonContext={(personId, role) => {
               const person = peopleById.get(personId);
               if (!person) return null;
