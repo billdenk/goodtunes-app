@@ -5756,7 +5756,12 @@ function ImportLyricsFromDropboxDialog({
       errors: Array<{ filename: string; error: string }>;
       ranAt?: string;
       songCount?: number;
-      syncDone?: { synced: number; failed: Array<{ title: string; error: string }> };
+      syncDone?: {
+        synced: number;
+        failed: Array<{ title: string; error: string }>;
+        chorusSet?: number;
+        chorusByAi?: number;
+      };
     }
   >(null);
   // GoodSync™ follow-up state — after a lyrics import lands, Bill wanted
@@ -5771,7 +5776,12 @@ function ImportLyricsFromDropboxDialog({
     null | { current: number; total: number; currentTitle: string }
   >(null);
   const [syncDone, setSyncDone] = useState<
-    null | { synced: number; failed: Array<{ title: string; error: string }> }
+    null | {
+      synced: number;
+      failed: Array<{ title: string; error: string }>;
+      chorusSet?: number;
+      chorusByAi?: number;
+    }
   >(null);
   // "ask-chorus" appears between clicking GoodSync™ and the serial run,
   // mirroring the standalone "GoodSync™ the whole album" wizard.
@@ -5881,6 +5891,11 @@ function ImportLyricsFromDropboxDialog({
     setSyncDone(null);
     const failed: Array<{ title: string; error: string }> = [];
     let synced = 0;
+    // Chorus tally for the result card — how many previews we moved, and
+    // how many of those came from the deterministic [Chorus] marker vs.
+    // the AI fallback. Tracks we couldn't decide are left untouched.
+    let chorusSet = 0;
+    let chorusByAi = 0;
     for (let i = 0; i < matched.length; i++) {
       const m = matched[i];
       setSyncProgress({ current: i + 1, total: matched.length, currentTitle: m.title });
@@ -5908,8 +5923,15 @@ function ImportLyricsFromDropboxDialog({
             const song = songsRef.current.find((s) => s.id === m.songId);
             const lyricsText = updated?.lyrics ?? song?.lyrics ?? null;
             if (cues.length > 0) {
-              const startMs = findChorusStartMs(lyricsText, cues);
-              if (startMs != null) {
+              // Two-tier: deterministic [Chorus] marker first, then the AI
+              // fallback for tracks whose lyrics carry no section labels.
+              const found = await resolveChorusStartMs(
+                m.songId,
+                lyricsText,
+                cues,
+              );
+              if (found != null) {
+                const startMs = found.startMs;
                 const durMs = (song?.duration || 0) * 1000;
                 const endMs = Math.min(
                   startMs + 30_000,
@@ -5920,6 +5942,8 @@ function ImportLyricsFromDropboxDialog({
                     previewStartMs: startMs,
                     previewEndMs: endMs,
                   });
+                  chorusSet++;
+                  if (found.method === "ai") chorusByAi++;
                 }
               }
             }
@@ -5932,7 +5956,11 @@ function ImportLyricsFromDropboxDialog({
       }
     }
     setSyncProgress(null);
-    const doneState = { synced, failed };
+    const doneState = {
+      synced,
+      failed,
+      ...(wantsChorus ? { chorusSet, chorusByAi } : {}),
+    };
     setSyncDone(doneState);
     syncInFlightRef.current = false;
     // Mirror the result into the sticky localStorage summary so a
@@ -6180,6 +6208,36 @@ function ImportLyricsFromDropboxDialog({
                 ))}
               </div>
             )}
+            {syncDone.chorusSet != null && (
+              <div className="text-slate-600 pt-0.5">
+                {syncDone.chorusSet > 0 ? (
+                  <>
+                    Chorus preview set on{" "}
+                    <span className="font-medium text-slate-700">
+                      {syncDone.chorusSet}
+                    </span>{" "}
+                    {syncDone.chorusSet === 1 ? "track" : "tracks"}
+                    {syncDone.chorusByAi != null && syncDone.chorusByAi > 0 && (
+                      <span className="text-slate-400">
+                        {" "}
+                        ({syncDone.chorusByAi} found by AI)
+                      </span>
+                    )}
+                    {syncDone.chorusSet < syncDone.synced && (
+                      <span className="text-slate-400">
+                        {" "}
+                        · the rest kept their existing preview
+                      </span>
+                    )}
+                    .
+                  </>
+                ) : (
+                  <span className="text-slate-400">
+                    No chorus could be confidently found — previews left as-is.
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -6290,6 +6348,7 @@ function GoodSyncAlbumDialog({
   const [failReasons, setFailReasons] = useState<Record<string, { code?: string; message?: string }>>({});
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [chorusSetIds, setChorusSetIds] = useState<Set<string>>(new Set());
+  const [chorusAiIds, setChorusAiIds] = useState<Set<string>>(new Set());
 
   // Eligibility: master uploaded + not flagged instrumental. Lyrics are
   // NOT required — when a track has no Words yet, Scribe transcribes the
@@ -6320,6 +6379,7 @@ function GoodSyncAlbumDialog({
       setFailReasons({});
       setCurrentId(null);
       setChorusSetIds(new Set());
+      setChorusAiIds(new Set());
     }
   }, [open]);
 
@@ -6344,6 +6404,7 @@ function GoodSyncAlbumDialog({
     setStates(initialStates);
     setStep("running");
     const chorusSet = new Set<string>();
+    const chorusAiSet = new Set<string>();
     for (const song of queue) {
       setCurrentId(song.id);
       setStates((prev) => ({ ...prev, [song.id]: "syncing" }));
@@ -6359,11 +6420,15 @@ function GoodSyncAlbumDialog({
           updated?.syncedLyrics ?? [];
         setStates((prev) => ({ ...prev, [song.id]: "synced" }));
         if (wantsChorus && cues.length > 0) {
-          const startMs = findChorusStartMs(
+          // Two-tier: deterministic [Chorus] marker first, then the AI
+          // fallback for tracks whose lyrics carry no section labels.
+          const found = await resolveChorusStartMs(
+            song.id,
             updated?.lyrics ?? song.lyrics,
             cues,
           );
-          if (startMs != null) {
+          if (found != null) {
+            const startMs = found.startMs;
             const durMs = (song.duration || 0) * 1000;
             const endMs = Math.min(
               startMs + 30_000,
@@ -6376,6 +6441,7 @@ function GoodSyncAlbumDialog({
                   previewEndMs: endMs,
                 });
                 chorusSet.add(song.id);
+                if (found.method === "ai") chorusAiSet.add(song.id);
               } catch {
                 /* preview update failure is non-fatal */
               }
@@ -6402,6 +6468,7 @@ function GoodSyncAlbumDialog({
     }
     setCurrentId(null);
     setChorusSetIds(chorusSet);
+    setChorusAiIds(chorusAiSet);
     await onSaved();
     setStep("done");
   };
@@ -6631,23 +6698,36 @@ function GoodSyncAlbumDialog({
               <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
                 <Sparkles className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
                 <p className="text-[12.5px] leading-snug text-slate-600">
-                  Chorus preview set on{" "}
-                  <span className="font-medium text-slate-700">
-                    {chorusSetIds.size}
-                  </span>{" "}
-                  {chorusSetIds.size === 1 ? "track" : "tracks"}.
-                  {failedCount === 0 &&
-                    syncedCount > 0 &&
-                    chorusSetIds.size < syncedCount && (
-                      <>
-                        {" "}
-                        Tracks without a{" "}
-                        <code className="px-1 py-0.5 rounded bg-white border border-slate-200 text-[11px] text-slate-700">
-                          [Chorus]
-                        </code>{" "}
-                        marker kept their existing preview.
-                      </>
-                    )}
+                  {chorusSetIds.size > 0 ? (
+                    <>
+                      Chorus preview set on{" "}
+                      <span className="font-medium text-slate-700">
+                        {chorusSetIds.size}
+                      </span>{" "}
+                      {chorusSetIds.size === 1 ? "track" : "tracks"}
+                      {chorusAiIds.size > 0 && (
+                        <span className="text-slate-400">
+                          {" "}
+                          ({chorusAiIds.size} found by AI)
+                        </span>
+                      )}
+                      .
+                      {failedCount === 0 &&
+                        syncedCount > 0 &&
+                        chorusSetIds.size < syncedCount && (
+                          <>
+                            {" "}
+                            The rest kept their existing preview — no chorus
+                            could be confidently located.
+                          </>
+                        )}
+                    </>
+                  ) : (
+                    <span className="text-slate-500">
+                      No chorus could be confidently found — previews left
+                      as-is.
+                    </span>
+                  )}
                 </p>
               </div>
             )}
@@ -8576,6 +8656,39 @@ function findChorusStartMs(
     if (norm(cues[i].text) === target) return cues[i].timeMs;
   }
   if (sungCount < cues.length) return cues[sungCount].timeMs;
+  return null;
+}
+
+type ChorusMethod = "marker" | "ai";
+
+// Two-tier chorus resolver shared by every "set the preview to the chorus"
+// surface (the inline GoodSync™ follow-up, the album-wide wizard, and the
+// per-track "Find the chorus" action). Tier 1 is the cheap, deterministic
+// `[Chorus]`-marker match (no AI cost). Only when that returns null do we
+// fall back to the server's AI chorus finder, which reads the time-aligned
+// cues even when the lyrics carry no section labels. Returns null (and the
+// caller leaves the preview untouched) when neither tier can decide.
+async function resolveChorusStartMs(
+  songId: string,
+  lyricsText: string | null | undefined,
+  cues: { timeMs: number; text: string }[] | null | undefined,
+): Promise<{ startMs: number; method: ChorusMethod } | null> {
+  const marker = findChorusStartMs(lyricsText, cues);
+  if (marker != null) return { startMs: marker, method: "marker" };
+  if (!cues || cues.length === 0) return null;
+  try {
+    const res = await apiRequest("POST", `/api/admin/songs/${songId}/find-chorus`, {
+      cues,
+      lyrics: lyricsText ?? null,
+    });
+    const body = await res.json().catch(() => null);
+    const ms = body?.previewStartMs;
+    if (typeof ms === "number" && Number.isFinite(ms)) {
+      return { startMs: ms, method: "ai" };
+    }
+  } catch {
+    /* best-effort — AI fallback failure leaves the preview alone */
+  }
   return null;
 }
 
@@ -11271,6 +11384,72 @@ function PinpointLyricsButton({
   );
 }
 
+/* ─── Find the chorus — per-track on-demand chorus locator ───────────
+   Portals a small wand into the ExpandedPanel header (left of the
+   Pinpoint search). Runs the same two-tier resolver the GoodSync
+   surfaces use: deterministic [Chorus] marker first, AI fallback for
+   unlabeled lyrics. On a hit it moves + saves the preview window via
+   the editor's `onFind`; on a miss it leaves the preview untouched and
+   says so honestly. Only mounts when the track has GoodSync™ cues. */
+function FindChorusButton({
+  songId,
+  onFind,
+}: {
+  songId: string;
+  onFind: () => Promise<ChorusMethod | null>;
+}) {
+  const { toast } = useToast();
+  const [finding, setFinding] = useState(false);
+  const headerSlot = useContext(ExpandedPanelHeaderSlotContext);
+  if (!headerSlot) return null;
+
+  const run = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (finding) return;
+    setFinding(true);
+    try {
+      const method = await onFind();
+      if (method === "marker") {
+        toast({
+          title: "Chorus found",
+          description: "Preview moved to the labeled chorus.",
+        });
+      } else if (method === "ai") {
+        toast({
+          title: "Chorus found by AI",
+          description: "Preview moved to the detected chorus — give it a listen.",
+        });
+      } else {
+        toast({
+          title: "Couldn't find the chorus",
+          description:
+            "Preview left as-is — drag the window or pinpoint a line instead.",
+        });
+      }
+    } finally {
+      setFinding(false);
+    }
+  };
+
+  return createPortal(
+    <button
+      type="button"
+      onClick={run}
+      disabled={finding}
+      title="Find the chorus — move the preview to the hook"
+      className="inline-flex items-center justify-center w-6 h-6 rounded-md text-slate-500 hover:text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/40 disabled:opacity-50"
+      data-testid={`button-find-chorus-${songId}`}
+    >
+      {finding ? (
+        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+      ) : (
+        <Wand2 className="w-3.5 h-3.5" />
+      )}
+    </button>,
+    headerSlot,
+  );
+}
+
 function RichPreviewEditor({
   song,
   onSaved,
@@ -11599,6 +11778,39 @@ function RichPreviewEditor({
       data-testid={`preview-window-${song.id}`}
       className="relative space-y-3"
     >
+      {/* Find the chorus — portals a wand into the header (LEFT of the
+          Pinpoint search). Runs the two-tier resolver (labeled [Chorus]
+          marker, then AI fallback) for this one track and, on a hit,
+          moves + saves the preview window to the chorus start. */}
+      {(song.syncedLyrics?.length ?? 0) > 0 && (
+        <FindChorusButton
+          songId={song.id}
+          onFind={async () => {
+            const found = await resolveChorusStartMs(
+              song.id,
+              song.lyrics ?? null,
+              song.syncedLyrics ?? [],
+            );
+            if (found == null) return null;
+            // Snap the window to the chorus, clamped to the track, then
+            // persist exactly like a manual edit (start → +30s, with the
+            // start-of-track === auto-pick null convention preserved).
+            const startSec = Math.max(
+              0,
+              Math.min(TOTAL_SEC - WINDOW_SEC, found.startMs / 1000),
+            );
+            const nextLeft = (startSec / TOTAL_SEC) * 100;
+            setLocked(true);
+            setDraftLeft(nextLeft);
+            setCommittedLeft(nextLeft);
+            const startMs = Math.round(startSec * 1000);
+            if (startMs === 0) saveMut.mutate(null);
+            else saveMut.mutate({ startMs, endMs: startMs + 30000 });
+            return found.method;
+          }}
+        />
+      )}
+
       {/* Pinpoint Lyrics — portals a small search icon into the
           ExpandedPanel header (immediately LEFT of the Reset link
           below — portal order = DOM order). Click opens the search

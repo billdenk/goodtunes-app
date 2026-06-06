@@ -11585,6 +11585,62 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // AI chorus finder — the fallback tier for the "set the preview to the
+  // chorus" flow. The client first tries the cheap, deterministic
+  // `[Chorus]`-marker match (findChorusStartMs); only when that returns
+  // null does it call this route. We take the track's time-aligned cues
+  // (sent fresh by the client after a sync, or read off the song row for
+  // the on-demand per-track action) plus the raw lyrics, ask the model
+  // which cue line the chorus begins on, and map that back to a real cue
+  // timestamp. Best-effort: any failure / low-confidence answer returns
+  // `previewStartMs: null` so the caller leaves the preview untouched
+  // rather than guessing silently.
+  app.post("/api/admin/songs/:id/find-chorus", requireAdminBearer, async (req, res) => {
+    try {
+      const id = String(req.params.id);
+      const song = await storage.getSongById(id);
+      if (!song) return res.status(404).json({ message: "Song not found" });
+
+      const bodyCues = Array.isArray(req.body?.cues) ? req.body.cues : null;
+      const cuesRaw = (bodyCues ?? (song.syncedLyrics as any) ?? []) as Array<{
+        timeMs: number;
+        text: string;
+      }>;
+      const cues = cuesRaw
+        .filter(
+          (c) =>
+            c &&
+            typeof c.timeMs === "number" &&
+            Number.isFinite(c.timeMs) &&
+            typeof c.text === "string",
+        )
+        .map((c) => ({ timeMs: c.timeMs, text: c.text }));
+      if (cues.length === 0) {
+        return res.json({ previewStartMs: null });
+      }
+      const lyrics =
+        typeof req.body?.lyrics === "string"
+          ? req.body.lyrics
+          : (song.lyrics ?? null);
+
+      let previewStartMs: number | null = null;
+      try {
+        const openai = await getOpenAI();
+        const { findChorusCueIndex } = await import("./lib/chorusFinder");
+        const idx = await findChorusCueIndex(cues, lyrics, openai);
+        if (idx != null) previewStartMs = Math.max(0, Math.round(cues[idx].timeMs));
+      } catch (e: any) {
+        // AI not configured / transient failure — leave the preview alone.
+        console.warn(`[find-chorus] AI lookup failed: ${e?.message}`);
+        previewStartMs = null;
+      }
+      return res.json({ previewStartMs });
+    } catch (e: any) {
+      console.warn(`[find-chorus] route error: ${e?.message}`);
+      return res.json({ previewStartMs: null });
+    }
+  });
+
   // Look up lyrics on LRCLIB (https://lrclib.net) by title + artist +
   // album + duration. Free, no key. Returns BOTH plain lyrics and
   // synced LRC; we drop the plain text into `song.lyrics` and parse the
