@@ -135,7 +135,6 @@ test("zero units pressed yields a zero settlement but still flags data", async (
   assert.equal(s.allocationIssues.length, 1);
   assert.equal(s.songsMissingSplits.length, 1);
 });
-
 // Rounding must happen ONCE per payee, on the summed micros — not per split
 // line. Here directOrg carries three half-cent-ish lines whose pre-rounded
 // sum (3¢) differs from the correctly-rounded aggregate (2¢). This is the

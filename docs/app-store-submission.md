@@ -149,3 +149,68 @@ For the first submission, a clean simulator capture of the Library tab, an album
 - **Per release**: bump build number, run the smoke test in `docs/native-builds.md`, upload, update release notes (one line per shipped capability — pull from `docs/capabilities.md`).
 - **Per quarter**: rotate the demo-account password, re-verify the AASA + assetlinks.json files, re-confirm the privacy nutrition labels still match what we collect.
 - **Whenever a new tracker / SDK lands**: update the privacy labels in the same PR as the SDK. The cookie/consent rules in `docs/roadmap.md § Cookie / tracker consent banner` apply on web in parallel.
+
+---
+
+## Pre-submission native sign-in audit (Task #947)
+
+*What the build agent verified from the codebase — June 2026. Nothing below required a device; everything that does is in the TestFlight checklist that follows.*
+
+### 1 — Demo-account seed ✅
+
+`scripts/post-merge.sh` → `seed_task_939_appreview_demo` runs on every merge against **both** dev and prod:
+
+- Customer row `cust-appreview-demo` / `appreview@goodtunes.music` is inserted with a scrypt password hash and `email_verified_at = now()`, `signup_completed_at = now()`, `onboarded_at = now()`, and `terms_accepted_at = now()` — all the flags that could otherwise block the first-login redirect.
+- `ON CONFLICT (id) DO NOTHING` on every row means **a password Bill rotated via the admin reset flow survives a merge** — the seed will never clobber it.
+- The three Sampler songs are copied with `INSERT…SELECT … FROM songs WHERE id = 'song-1-1' / 'song-5-1' / 'song-5-6'` so each environment inherits its own valid Mux IDs (Mux is a shared account — the asset IDs resolve on both dev and prod).
+- `user_albums` row `ua-appreview-sampler` carries `is_preview = false`, so the album lands in Library and plays full-length with no purchase required.
+
+### 2 — In-WebView auth / session flow ✅
+
+The app is a Capacitor WebView wrapping the same SPA that ships at `goodtunes.music`. API calls originate from `capacitor://localhost` (iOS) or `http://localhost` (Android) to `https://my.goodtunes.music` — a cross-origin pair. Two layers ensure the session always reaches the server:
+
+**Layer 1 — Session cookie.** Express session is configured with `sameSite: "none"` and `secure: true` (`server/routes.ts` line 389). `SameSite=None` is the correct setting for a cross-origin Capacitor WebView; without it iOS WKWebView silently drops every cookie.
+
+**Layer 2 — Bearer token (iOS ITP bypass).** On login the server returns a token that the client stores in `localStorage` under `goodtunes_auth_token` (`client/src/lib/queryClient.ts`). Every `apiRequest` call attaches `Authorization: Bearer <token>`. If the cookie session is absent (e.g. after iOS ITP partitions it), the server resolves auth from the Bearer header and re-hydrates the session — so the user stays signed in even when iOS has eaten the cookie.
+
+Both layers are wired and work without any per-platform code path.
+
+### 3 — Buy and Chat surface gates ✅
+
+`client/src/lib/platform.ts` is the single source of truth:
+
+```ts
+export const buyEnabled   = !(isNative && nativePlatform === "ios");  // hidden iOS-only
+export const chatEnabled  = !isNative;                                  // hidden all-native
+```
+
+- iOS native: Buy hidden (App Store guideline 3.1.1), Chat hidden.
+- Android native: Buy visible (Play allows external-payment music apps), Chat hidden.
+- Every gated UI surface reads these booleans — no scattered `Capacitor.isNativePlatform()` calls.
+
+### 4 — Capacitor config ✅
+
+`capacitor.config.ts` has no `server.url` override, which is correct for a production archive — the bundled `dist/public` SPA is loaded by the WebView and all API calls go to `my.goodtunes.music` over the network. `android.allowMixedContent: false` enforces HTTPS-only (required for the `SameSite=None; Secure` cookie to be sent). Splash and status-bar colors are set to `#00062B`.
+
+### 5 — What still needs a real device
+
+| Check | Why it can't be done from the workspace |
+|---|---|
+| Password Bill rotated for this submission signs in | The plaintext is only in App Store Connect / Play Console, not in the repo |
+| WKWebView (iOS 17+) actually sends the `SameSite=None` cookie + Bearer token | Cookie behavior on a real WKWebView vs. a desktop browser can differ |
+| All three Sampler tracks stream to completion | Mux HLS signing requires a live network round-trip to `my.goodtunes.music` |
+| No Buy button or Chat tab appears anywhere in the native shell | Requires a native binary (Capacitor build), not the web preview |
+
+---
+
+## TestFlight checklist — Bill's four steps
+
+*Run this on your iPhone with the latest GoodTunes TestFlight build installed.*
+
+1. **Open TestFlight → GoodTunes → Install** (or Update if it's already installed). Launch the app.
+2. **Sign in** with `appreview@goodtunes.music` and the password you set via the admin reset flow.
+   - The Library tab should appear immediately with **GoodTunes Sampler** visible.
+3. **Play all three tracks full-length** — tap the album, then play each song through to the end (or at least scrub near the end to confirm the track advances). Confirm audio continues with the screen off.
+4. **Confirm no Buy and no Chat** — scroll every screen you can reach; there should be no "Buy", "Purchase", or price pill anywhere, and no Chat tab in the bottom nav.
+
+If every step passes, the demo-account check-box for the App Store / Play Store submission form is done. ✅

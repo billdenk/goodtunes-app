@@ -228,7 +228,6 @@ function CatalogList() {
             </div>
 
             <h2 className="text-sm font-semibold text-slate-900">Releases</h2>
-
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
               <table className="w-full text-sm">
                 <thead>
