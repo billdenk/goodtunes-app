@@ -2460,6 +2460,18 @@ export const orders = pgTable("orders", {
   // so two concurrent materializations (webhook vs. /welcome fetch)
   // can never dispatch two receipts for one order.
   receiptEmailSentAt: timestamp("receipt_email_sent_at"),
+  // Task #1467 — fan-confirmed name for the DIGITAL GoodDeed certificate.
+  // The physical signed-cert add-on confirms its name on a real
+  // `signed_cert_certificates` row; digital-only owners never get one,
+  // so the cert PDF (server/certificates.ts Path 2) synthesizes the
+  // recipient from realName → displayName → username. Imported gogoods
+  // fans in particular may have a username that isn't the name they want
+  // printed. These two columns let a digital owner review + override that
+  // synthesized name without minting a print-queue row. NULL = never
+  // confirmed (fall back to the synthesized name). `certConfirmedAt`
+  // records when. Only read on the no-real-row (digital) cert path.
+  certConfirmedName: text("cert_confirmed_name"),
+  certConfirmedAt: timestamp("cert_confirmed_at"),
   createdAt: timestamp("created_at").defaultNow(),
   legacyGogoodsId: text("legacy_gogoods_id"),
 }, (t) => ({

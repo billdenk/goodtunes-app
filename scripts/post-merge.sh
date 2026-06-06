@@ -793,6 +793,33 @@ SQL
 migrate_orders_receipt_email_sent_at dev  "${DATABASE_URL:-}"
 migrate_orders_receipt_email_sent_at prod "${PROD_DATABASE_URL:-}"
 
+# Task #1467 — fan-confirmed name for the DIGITAL GoodDeed certificate.
+# orders.cert_confirmed_name / cert_confirmed_at let a digital-only owner
+# override the synthesized recipient name on their cert PDF (the physical
+# signed-cert add-on confirms on a signed_cert_certificates row instead).
+# Pre-create on both DBs so the publish dev→prod diff stays empty and a
+# freshly-cloned dev never 500s the digital-name read/confirm endpoint.
+# Additive nullable columns — safe.
+migrate_orders_cert_confirmed_name() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping orders.cert_confirmed_name migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS cert_confirmed_name text,
+  ADD COLUMN IF NOT EXISTS cert_confirmed_at   timestamp;
+SQL
+  then
+    echo "post-merge: orders.cert_confirmed_name migration ok on $label"
+  else
+    echo "post-merge: WARNING — orders.cert_confirmed_name migration failed on $label (continuing)"
+  fi
+}
+migrate_orders_cert_confirmed_name dev  "${DATABASE_URL:-}"
+migrate_orders_cert_confirmed_name prod "${PROD_DATABASE_URL:-}"
+
 # Task #269 — Admin "Forgot password?" reset tokens. Pre-create on both
 # DBs so the publish dev→prod diff doesn't try to invent the table
 # (and so signing in on a freshly-cloned dev DB never 500s the

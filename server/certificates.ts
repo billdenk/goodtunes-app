@@ -414,6 +414,76 @@ export function registerCertificateRoutes(app: Express) {
     res.json({ ok: true });
   });
 
+  // ─── Task #1467 — Fan: review + confirm the DIGITAL cert name ────
+  // Digital-only GoodDeed owners never mint a `signed_cert_certificates`
+  // row, so the cert PDF synthesizes the recipient name (realName →
+  // displayName → username). This pair lets such an owner review and
+  // override that name. Edits live on a lightweight per-order field
+  // (orders.cert_confirmed_name) — we deliberately do NOT mint a real
+  // cert row, which would pollute the admin print queue with a digital
+  // order nobody bought a physical add-on for. The physical signed-cert
+  // confirm flow (/cert/confirm + signed_cert_certificates) is untouched.
+  app.get("/api/orders/:orderId/cert/digital-name", async (req, res) => {
+    const me = await getCustomerAuth(req);
+    if (!me) return res.status(401).json({ message: "Sign in required" });
+    const [o] = await db
+      .select({ order: orders, customer: customerUsers })
+      .from(orders)
+      .innerJoin(customerUsers, eq(customerUsers.id, orders.customerId))
+      .where(eq(orders.id, req.params.orderId));
+    if (!o || o.order.customerId !== me.userId) {
+      return res.status(404).json({ message: "Not found" });
+    }
+    if (!FINALIZED_CERT_ORDER_STATUSES.has(o.order.status) || o.order.goodDeedNumber == null) {
+      return res.status(404).json({ message: "Not found" });
+    }
+    // If a real cert row exists, this is the physical signed-cert path —
+    // its name is owned by /cert/confirm + the print queue, never here.
+    const [realRow] = await db
+      .select({ id: signedCertCertificates.id })
+      .from(signedCertCertificates)
+      .where(eq(signedCertCertificates.orderId, o.order.id));
+    const defaultName =
+      o.customer.realName || o.customer.displayName || o.customer.username;
+    res.json({
+      editable: !realRow,
+      confirmed: !!o.order.certConfirmedName,
+      currentName: o.order.certConfirmedName || defaultName,
+      defaultName,
+    });
+  });
+
+  app.post("/api/orders/:orderId/cert/digital-name", async (req, res) => {
+    const me = await getCustomerAuth(req);
+    if (!me) return res.status(401).json({ message: "Sign in required" });
+    const [o] = await db.select().from(orders).where(eq(orders.id, req.params.orderId));
+    if (!o || o.customerId !== me.userId) {
+      return res.status(404).json({ message: "Not found" });
+    }
+    if (!FINALIZED_CERT_ORDER_STATUSES.has(o.status) || o.goodDeedNumber == null) {
+      return res.status(404).json({ message: "Not found" });
+    }
+    // Refuse on the physical signed-cert path — that name is confirmed
+    // (and one-shot locked) via /cert/confirm, not here.
+    const [realRow] = await db
+      .select({ id: signedCertCertificates.id })
+      .from(signedCertCertificates)
+      .where(eq(signedCertCertificates.orderId, o.id));
+    if (realRow) {
+      return res.status(409).json({
+        message: "This certificate's name is managed through the signed-certificate confirmation step.",
+      });
+    }
+    const raw = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    if (!raw) return res.status(400).json({ message: "A name is required." });
+    if (raw.length > 80) return res.status(400).json({ message: "Name is too long (80 characters max)." });
+    await db
+      .update(orders)
+      .set({ certConfirmedName: raw, certConfirmedAt: new Date() })
+      .where(eq(orders.id, o.id));
+    res.json({ ok: true, confirmedName: raw });
+  });
+
   // ─── Admin print queue ──────────────────────────────────────────
   app.get("/api/admin/print-queue", async (req, res) => {
     const me = await getAdminAuth(req);
@@ -568,8 +638,14 @@ export function registerCertificateRoutes(app: Express) {
       return res.status(404).json({ message: "Not found" });
     }
     const paperSize = paperSizeFromCountry((o.order.shippingAddress as any)?.country ?? null);
+    // Task #1467 — honor the fan-confirmed digital name if they reviewed
+    // it; otherwise fall back to the synthesized realName → displayName →
+    // username default.
     const confirmedName =
-      o.customer.realName || o.customer.displayName || o.customer.username;
+      o.order.certConfirmedName ||
+      o.customer.realName ||
+      o.customer.displayName ||
+      o.customer.username;
     // Synthetic in-memory cert — never written to the DB.
     const syntheticCert: SignedCertCertificate = {
       id: "synthetic",
