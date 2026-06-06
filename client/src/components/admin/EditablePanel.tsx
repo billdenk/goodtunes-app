@@ -5,7 +5,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ArtistPickerField } from "./ArtistPickerField";
-import { Combobox } from "./Combobox";
+import { Combobox, EntityCombobox } from "./Combobox";
 import {
   AddressAutocompleteField,
   type NormalizedAddress,
@@ -32,6 +32,7 @@ export type FieldType =
   | "date"
   | "select"
   | "combobox"
+  | "entity-combobox"
   | "artist-picker"
   | "address";
 
@@ -77,6 +78,25 @@ export interface FieldConfig {
   // value that gets saved as-is (free-text behind the scenes). Used by
   // the album Genre field today.
   optionsEndpoint?: string;
+  // For entity-combobox fields (Task #1378): a searchable picker over
+  // real *records* (labels today) rather than free text. `key` stores
+  // the picked record's **id** (so the wire gets the FK), while the UI
+  // shows the record's name. `entityListEndpoint` GETs the existing
+  // records (`[{id, name, …}]`), `entityCreateEndpoint` POSTs `{ name }`
+  // to mint a new one inline (no navigation away), and `emptyOptionLabel`
+  // names the none/empty row (e.g. "Independent") that clears the FK.
+  // For read-mode display the id→name lookup reuses `options`, so pass a
+  // static `options` list alongside (value=id, label=name + the empty row).
+  entityListEndpoint?: string;
+  entityCreateEndpoint?: string;
+  emptyOptionLabel?: string;
+  // Optional smart-fill: when an entity-combobox picks/creates a record
+  // AND the `autofillKey` field's draft is still empty, prefill it from
+  // `{autofillSiblingKey value} {entity name}` (sibling omitted if blank).
+  // Used for the album Copyright line auto-filling from Year + Label.
+  // Never overwrites a non-empty target; the field stays fully editable.
+  autofillKey?: string;
+  autofillSiblingKey?: string;
   // For address fields (Task #489): the sibling key that holds the
   // structured `PartnerAddressSnapshot`. When the operator picks a
   // Google Places suggestion the panel writes both keys in one PUT —
@@ -365,6 +385,7 @@ export function EditablePanel({
                 field={f}
                 value={(draft[f.key] as string | null | undefined) ?? ""}
                 idValue={f.idKey ? ((draft[f.idKey] as string | null | undefined) ?? "") : ""}
+                draft={draft}
                 onChange={(v) =>
                   setDraft((d) => ({ ...d, [f.key]: v }))
                 }
@@ -384,6 +405,7 @@ export function EditablePanel({
             field={f}
             value={(draft[f.key] as string | null | undefined) ?? ""}
             idValue=""
+            draft={draft}
             onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))}
             patch={patchDraft}
             inputRef={
@@ -553,6 +575,12 @@ function ReadField({
   else if (value && field.type === "select" && field.options) {
     display =
       field.options.find((o) => o.value === value)?.label ?? value;
+  } else if (field.type === "entity-combobox" && field.options) {
+    // Resolve the stored id → record name. The empty/none option (id "")
+    // maps to its label (e.g. "Independent") so an album with no label
+    // reads as its meaningful default, not "Not set".
+    display =
+      field.options.find((o) => o.value === (value ?? ""))?.label ?? value;
   }
   return (
     <div data-testid={testId}>
@@ -575,6 +603,7 @@ function EditInput({
   field,
   value,
   idValue,
+  draft,
   onChange,
   patch,
   inputRef,
@@ -582,6 +611,7 @@ function EditInput({
   field: FieldConfig;
   value: string;
   idValue: string;
+  draft: Record<string, string | PartnerAddressSnapshot | null>;
   onChange: (next: string) => void;
   patch: (
     kv: Record<string, string | PartnerAddressSnapshot | null>,
@@ -666,6 +696,44 @@ function EditInput({
           optionsEndpoint={field.optionsEndpoint}
           placeholder={field.placeholder}
           testId={testId}
+        />
+      </div>
+    );
+  }
+
+  if (field.type === "entity-combobox") {
+    return (
+      <div>
+        {baseLabel}
+        <EntityCombobox
+          value={value}
+          listEndpoint={field.entityListEndpoint!}
+          createEndpoint={field.entityCreateEndpoint!}
+          emptyOptionLabel={field.emptyOptionLabel}
+          placeholder={field.placeholder}
+          testId={testId}
+          onPick={(entity) => {
+            const next: Record<string, string | PartnerAddressSnapshot | null> = {
+              [field.key]: entity?.id ?? "",
+            };
+            // Smart copyright-line fill: only when a real entity was
+            // picked/created AND the target field is still empty — never
+            // clobber a copyright line the operator already wrote. Stays
+            // editable afterward; it's just a draft seed.
+            if (entity && field.autofillKey) {
+              const current =
+                ((draft[field.autofillKey] as string | null | undefined) ?? "").trim();
+              if (!current) {
+                const sib = field.autofillSiblingKey
+                  ? ((draft[field.autofillSiblingKey] as string | null | undefined) ?? "").trim()
+                  : "";
+                next[field.autofillKey] = sib
+                  ? `${sib} ${entity.name}`
+                  : entity.name;
+              }
+            }
+            patch(next);
+          }}
         />
       </div>
     );

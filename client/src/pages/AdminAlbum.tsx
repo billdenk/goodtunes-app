@@ -3012,8 +3012,19 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           {
             key: "labelId",
             label: "Label",
-            type: "select",
+            type: "entity-combobox",
+            placeholder: "Search labels or add new…",
+            // `options` drives the read-mode id→name lookup (incl. the
+            // empty "Independent" row); the live picker fetches its own
+            // list + create from these endpoints.
             options: labelOptions,
+            entityListEndpoint: "/api/labels",
+            entityCreateEndpoint: "/api/admin/labels",
+            emptyOptionLabel: "Independent",
+            // Smart copyright: when a label is picked/created and the
+            // Copyright line is still blank, seed it "{year} {label}".
+            autofillKey: "copyrightLine",
+            autofillSiblingKey: "year",
           },
           {
             key: "copyrightSymbol",
