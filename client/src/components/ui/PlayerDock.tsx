@@ -43,11 +43,14 @@ import { LyricsIcon } from "@/components/ui/LyricsIcon";
  * cover would go and empty title/subtitle text. Apple parity: the dock
  * doesn't resize between idle and playing states, it just lights up.
  *
- * Positioning: `fixed bottom-8` — pins to the browser viewport so the dock
- * floats above page content and stays a consistent distance from the
- * window's bottom edge as the user resizes. Host must reserve ~110px of
- * bottom padding so the dock doesn't cover the last row of scrollable
- * content.
+ * Positioning: `fixed bottom-[calc(2rem+env(safe-area-inset-bottom,0px))]` —
+ * pins to the browser viewport so the dock floats above page content and
+ * stays a consistent distance from the window's bottom edge as the user
+ * resizes. The `env(safe-area-inset-bottom)` term lifts the dock clear of
+ * the iPhone/iPad home indicator inside the Capacitor native webview; on
+ * plain web the inset is 0 so behavior is unchanged. Host must reserve
+ * ~110px of bottom padding so the dock doesn't cover the last row of
+ * scrollable content.
  *
  * This component was graduated from the admin-Tracks-tab Seamless mockup
  * after Bill signed off on the anatomy. The mockup keeps a parallel inline
@@ -422,7 +425,7 @@ export function PlayerDock({
     // the click target.
     if (!hasSelection) {
       return (
-        <div className="fixed left-4 bottom-8 z-40" data-testid="player-dock-mini">
+        <div className="fixed left-4 bottom-[calc(2rem+env(safe-area-inset-bottom,0px))] z-40" data-testid="player-dock-mini">
           <button
             type="button"
             aria-label="Show player"
@@ -443,7 +446,7 @@ export function PlayerDock({
     // Playing state: cover + play/pause + restore chevron — the user
     // already knows it's the player because a track is loaded.
     return (
-      <div className="fixed left-4 bottom-8 z-40" data-testid="player-dock-mini">
+      <div className="fixed left-4 bottom-[calc(2rem+env(safe-area-inset-bottom,0px))] z-40" data-testid="player-dock-mini">
         <div className="rounded-full bg-slate-900/95 backdrop-blur-md text-white shadow-2xl ring-1 ring-white/10 flex items-center gap-1 pl-3 pr-2 py-2">
           <div
             className="w-9 h-9 rounded-lg flex-shrink-0 overflow-hidden"
@@ -510,7 +513,7 @@ export function PlayerDock({
   return (
     <div
       className={[
-        "fixed bottom-8 z-40",
+        "fixed bottom-[calc(2rem+env(safe-area-inset-bottom,0px))] z-40",
         edgeToEdge ? "left-2 right-2" : "left-1/2 -translate-x-1/2",
       ].join(" ")}
       style={wrapperStyle}

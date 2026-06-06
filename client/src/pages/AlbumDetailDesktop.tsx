@@ -748,7 +748,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
           (left:0/right:0 + flex justify-center) so it sits in the same
           horizontal band as the tracklist, matching Apple Music's desktop
           dock placement. */}
-      <div className="fixed left-0 right-0 bottom-4 z-40 flex justify-center pointer-events-none">
+      <div className="fixed left-0 right-0 bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] z-40 flex justify-center pointer-events-none">
         <div className="pointer-events-auto">
           <PlayerDock
             density="compact"
