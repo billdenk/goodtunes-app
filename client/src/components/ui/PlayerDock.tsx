@@ -721,7 +721,7 @@ export function PlayerDock({
                   ? lyricsActive
                     ? "Hide lyrics"
                     : "Show lyrics"
-                  : "Lyrics (coming soon)"
+                  : "Lyrics unavailable"
               }
               onClick={onLyrics}
               disabled={!onLyrics || !hasSelection}

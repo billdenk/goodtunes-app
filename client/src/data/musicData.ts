@@ -390,7 +390,7 @@ export const INSTRUMENTS: Record<string, Instrument> = {
   },
 };
 
-// Per-song credits. Songs not in this map fall back to "Credits coming soon."
+// Per-song credits. Songs not in this map simply render no credits section.
 export const TRACK_CREDITS: Record<string, TrackCredits> = {
   // — When the World Stops —
   "song-1-1": {

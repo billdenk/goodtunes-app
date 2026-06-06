@@ -160,7 +160,7 @@ function AlbumCreditsBody({
                 <span
                   aria-hidden
                   style={{ width: 36, height: 36 }}
-                  className="rounded-full bg-white/[0.14] ring-1 ring-inset ring-white/20 flex-shrink-0 inline-flex items-center justify-center text-xs font-medium text-white/80"
+                  className="rounded-full bg-white/[0.06] flex-shrink-0 inline-flex items-center justify-center text-xs font-medium text-fan-primary"
                 >
                   {initialsOf(e.name)}
                 </span>

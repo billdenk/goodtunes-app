@@ -8795,21 +8795,6 @@
     "snippet": "\"pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0\""
   },
   {
-    "rule": "brand-hex-literal",
-    "file": "client/src/App.tsx",
-    "snippet": "<main className=\"min-h-screen bg-[#00062B] flex items-center justify-center\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/App.tsx",
-    "snippet": "<div className=\"w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin\" />"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/App.tsx",
-    "snippet": "<div className=\"w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin\" />"
-  },
-  {
     "rule": "fan-text-tone",
     "file": "client/src/components/AccessNotAuthorizedDialog.tsx",
     "snippet": "<p className=\"text-base leading-relaxed text-white/75 mb-2\">"
@@ -12130,11 +12115,6 @@
     "snippet": "<h3 className=\"text-xs font-semibold uppercase tracking-[0.08em] text-white/55 mb-3\">"
   },
   {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/ui/AlbumCreditsSheet.tsx",
-    "snippet": "className=\"rounded-full bg-white/[0.14] ring-1 ring-inset ring-white/20 flex-shrink-0 inline-flex items-center justify-center text-xs font-medium text-white/80\""
-  },
-  {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumCreditsSheet.tsx",
     "snippet": "<h2 className=\"text-white text-[22px] font-bold leading-tight tracking-tight\">"
@@ -14112,32 +14092,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"flex-1 min-w-0 pl-2 pr-2 -ml-2 py-0.5 rounded-md text-slate-900 text-[13.5px] font-semibold bg-transparent border border-transparent hover:border-slate-200 focus:border-slate-300 focus:outl"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "\"text-[13.5px] font-semibold truncate\","
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "className=\"inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 text-amber-700 text-[11px] font-semibold hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-400/40 flex-sh"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "className=\"text-slate-400 text-[12px] tabular-nums flex-shrink-0\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<span className=\"text-[10px] font-semibold uppercase tracking-wider text-slate-500\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<span className=\"text-[11px] text-slate-400\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14178,6 +14138,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "className=\"flex-1 flex flex-col items-center justify-center text-center text-[12px] text-slate-500 px-4 py-10 gap-2\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<span className=\"text-[11px] text-slate-400\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14468,6 +14433,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "className=\"px-2.5 h-7 rounded-md bg-[var(--brand-blue)] text-white text-[11.5px] font-semibold hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-1\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<span className=\"text-[10px] font-semibold uppercase tracking-wider text-slate-500\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -14763,11 +14733,6 @@
     "rule": "naked-icon-button",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "<button type=\"button\" aria-label=\"How to share the folder\" className=\"w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-slate-100 inline-flex items-center justify-center flex"
-  },
-  {
-    "rule": "naked-icon-button",
-    "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<button type=\"button\" draggable={!expanded} onDragStart={!expanded ? onDragStart : undefined} aria-label=\"Drag to reorder\" title=\"Drag to reorder\" className={[ \"w-3.5 h-5 -ml-1 inline-flex items-cente"
   },
   {
     "rule": "naked-icon-button",
@@ -17617,11 +17582,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<span className=\"absolute left-0 right-0 -bottom-px h-[2px] rounded-full\" style={{ background: \"#319ED8\" }} />"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "fill={isBookmarked ? \"#4AFFCA\" : \"none\"}"
   },
   {
@@ -17812,52 +17772,27 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<h2 className=\"text-fan-primary text-[26px] font-bold leading-tight tracking-tight mt-4\" data-testid=\"text-performer-name\">{person.name}</h2>"
+    "snippet": "<h2 className=\"text-fan-primary text-[26px] font-bold leading-tight tracking-tight\">{person.name}</h2>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-fan-secondary text-[13px] mt-1.5 truncate max-w-full\" data-testid=\"text-performer-context\">"
+    "snippet": "<p className=\"text-fan-secondary text-[14px] mt-1.5 truncate max-w-full\" data-testid=\"text-performer-context\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"relative h-11 flex items-center text-[15px] font-semibold tracking-tight transition-colors\""
+    "snippet": "className={`text-fan-secondary text-[15px] leading-[1.55] whitespace-pre-line ${bioExpanded ? \"\" : \"line-clamp-3\"}`}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"text-[12px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full\""
+    "snippet": "<h3 className=\"px-5 pb-2 text-fan-primary text-[22px] font-bold leading-tight tracking-tight\">Gear</h3>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"px-5 pt-4 text-fan-primary text-[15px] leading-[1.55] whitespace-pre-line\" data-testid=\"text-performer-bio\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"px-5 pt-4 text-fan-secondary text-[14px]\">No bio yet for {person.name}.</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<span className=\"text-fan-primary text-[15px] font-medium\">View artist profile</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<h3 className=\"px-5 pt-4 pb-2 text-fan-primary text-[18px] font-bold leading-tight tracking-tight\">Played on this song</h3>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<div key={`role-${i}`} className=\"px-5 py-2.5 text-fan-primary text-[14px]\">{perf.role}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-fan-primary text-[15px] font-medium truncate\">{inst.name}</p>"
+    "snippet": "<p className=\"text-fan-primary text-[15px] font-medium truncate\">{g.name}</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -17867,7 +17802,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<h3 className=\"px-5 pt-5 pb-2 text-fan-primary text-[18px] font-bold leading-tight tracking-tight\">Also on {album.title}</h3>"
+    "snippet": "<h3 className=\"px-5 pb-2 text-fan-primary text-[18px] font-bold leading-tight tracking-tight\">Also on {album.title}</h3>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -17903,11 +17838,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<span className=\"text-fan-secondary text-[14px]\">{t.instrumentShortCategory ?? t.instrumentCategory}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-fan-primary text-[15px] font-medium truncate\">{g.name}</p>"
   },
   {
     "rule": "hardcoded-font-size",
