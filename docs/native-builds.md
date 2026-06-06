@@ -45,7 +45,7 @@ npx cap sync
 - App icon: replace `android/app/src/main/res/mipmap-*/ic_launcher*.png` (and the adaptive icon files) with the GoodTunes mark.
 - Splash: edit `android/app/src/main/res/drawable/splash.png` and `values/styles.xml` (`#00062B`).
 
-> **⚠️ target API level — must bump before Play accepts a new app.** `android/variables.gradle` currently pins `compileSdkVersion`/`targetSdkVersion = 34`. Since **31 Aug 2025**, Google Play requires **API level 35 (Android 15)** for new apps and updates; a 34-target `.aab` will be rejected at upload. Bump `compileSdkVersion`/`targetSdkVersion` to `35`. That likely also requires a newer Android Gradle Plugin / Gradle (the repo ships AGP + Gradle 8.2.1 from Capacitor 6.2.1; API 35 generally wants AGP ≥ 8.6 + Gradle ≥ 8.7). This **cannot be verified in the Replit container** (no Android SDK/Gradle) — make the bump on the Mac, then run a clean `./gradlew :app:bundleRelease` and fix any AGP-version fallout before the first Play upload.
+> **⚠️ target API level — version bump done in-repo, build verification still pending.** Google Play requires **API level 35 (Android 15)** for new apps and updates since **31 Aug 2025**; a 34-target `.aab` is rejected at upload. The repo now ships the bump: `android/variables.gradle` pins `compileSdkVersion`/`targetSdkVersion = 35`, `android/build.gradle` carries **AGP 8.7.2**, and `gradle/wrapper/gradle-wrapper.properties` pins **Gradle 8.9** (API 35 wants AGP ≥ 8.6 + Gradle ≥ 8.7; AGP 8.7.x pairs with Gradle 8.9 and keeps the existing JDK 17 source/target). This **cannot be verified in the Replit container** (no Android SDK/Gradle) — on the Mac, run a clean `./gradlew :app:bundleRelease` and fix any AGP-version fallout before the first Play upload.
 
 ---
 

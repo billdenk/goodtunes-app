@@ -48,8 +48,9 @@ unauthenticated, proving registration. Docs in `app-store-submission.md` and
 - `app-store-submission.md` deletion line rewritten to the real in-app path +
   behavior, plus a note that Play also wants a **public deletion URL** on the
   listing (see B3).
-- `native-builds.md` gained an explicit Android **target API 35** warning (see B1)
-  so the build operator can't miss it.
+- Android **target API 35** bump now applied in-repo: `android/variables.gradle`
+  `compileSdkVersion`/`targetSdkVersion = 35`, AGP `8.7.2`, Gradle wrapper `8.9`.
+  All that remains is the Mac-only clean release build (see B1 / C1).
 
 ### A3. Claims re-verified as accurate (no change needed)
 These existing claims were checked against code and hold:
@@ -71,14 +72,15 @@ These existing claims were checked against code and hold:
 
 ## B — Operator / infra (cannot be done by a task agent)
 
-### B1. Bump Android target API to 35 before the first Play upload — **blocking**
-`android/variables.gradle` pins `compileSdkVersion` / `targetSdkVersion = 34`.
-Google Play has required **API level 35 (Android 15)** for new apps and updates
-since **31 Aug 2025**; a 34-target `.aab` is rejected at upload. Bump both to `35`.
-This very likely also forces an **Android Gradle Plugin / Gradle bump** — the repo
-ships AGP + Gradle 8.2.1 (Capacitor 6.2.1), and API 35 generally wants **AGP ≥ 8.6
-+ Gradle ≥ 8.7**. The bump and the resulting clean release build can only be done
-and verified on the Mac (see C1). Documented in `native-builds.md`.
+### B1. Verify the API-35 release build on the Mac — **blocking**
+The version bump itself is **done in-repo**: `android/variables.gradle` now pins
+`compileSdkVersion` / `targetSdkVersion = 35`, `android/build.gradle` carries
+AGP `8.7.2`, and the Gradle wrapper is `8.9` (AGP ≥ 8.6 + Gradle ≥ 8.7 is what
+API 35 wants; this pairing also keeps the existing JDK 17 source/target). Google
+Play has required **API level 35 (Android 15)** for new apps and updates since
+**31 Aug 2025**; a 34-target `.aab` is rejected at upload. What remains can only
+be done on the Mac: run a clean `./gradlew :app:bundleRelease` and fix any
+AGP-version fallout before the first Play upload (see C1).
 
 ### B2. Republish + attach the apex domain so deep links verify
 From `app-store-submission.md` (already documented, still open):
@@ -107,9 +109,9 @@ both consoles verbatim at submission time.
 ## C — Device / Mac-build only (no toolchain in this environment)
 
 - **C1. Clean signed builds.** `npm run build && npx cap sync`, then an Xcode
-  Archive (iOS) and a `./gradlew :app:bundleRelease` (Android, after the API-35
-  bump) — none runnable here. This is also where any AGP-version fallout from B1
-  surfaces.
+  Archive (iOS) and a `./gradlew :app:bundleRelease` (Android, with the API-35
+  bump already in-repo) — none runnable here. This is where any AGP-`8.7.2` /
+  Gradle-`8.9` fallout from B1 surfaces.
 - **C2. App Links / Universal Links verifiers.** `swcutil verify -d goodtunes.music`
   (Apple) and Google's Statement List Tester need a real install after B2.
 - **C3. The full on-device smoke test** in `native-builds.md` (background audio,
