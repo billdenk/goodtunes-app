@@ -97,9 +97,6 @@ export function AlbumDesktopSidebar({
                 <div className="text-fan-primary text-[13px] font-semibold truncate">
                   {user?.displayName || "Guest"}
                 </div>
-                {user?.email && (
-                  <div className="text-fan-secondary text-[11.5px] truncate">{user.email}</div>
-                )}
               </div>
             </button>
           </div>

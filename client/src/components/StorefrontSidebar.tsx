@@ -230,11 +230,6 @@ export function StorefrontSidebar() {
               >
                 {accountName}
               </div>
-              {user?.email && (
-                <div className="text-white/45 text-xs truncate">
-                  {user.email}
-                </div>
-              )}
             </div>
           </div>
           <DropdownMenuSeparator className="bg-white/10" />
