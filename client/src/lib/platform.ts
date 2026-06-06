@@ -17,6 +17,20 @@ export const isNative = Capacitor.isNativePlatform();
 export const nativePlatform: "ios" | "android" | "web" =
   (Capacitor.getPlatform() as "ios" | "android" | "web") ?? "web";
 
+/**
+ * True on iOS WebKit (iPhone/iPad/iPod Safari + iOS in-app web views).
+ *
+ * iOS Safari makes an HTMLMediaElement's `.volume` read-only — assigning to
+ * it is silently ignored and the hardware buttons own loudness — so any
+ * in-app volume slider there is a dead control. Surfaces hide the slider
+ * when this is true rather than show one that does nothing. iPadOS 13+
+ * reports as "MacIntel", so disambiguate it via touch points.
+ */
+export const isIOS: boolean =
+  typeof navigator !== "undefined" &&
+  (/iP(hone|ad|od)/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && (navigator.maxTouchPoints ?? 0) > 1));
+
 /** Chat tab + every "Chat with vendor" CTA. */
 export const chatEnabled = !isNative;
 

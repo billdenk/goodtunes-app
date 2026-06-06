@@ -20,6 +20,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { LyricsIcon } from "@/components/ui/LyricsIcon";
 import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
 import { EASE_OUT } from "@/lib/motion";
+import { isIOS } from "@/lib/platform";
 
 /**
  * Apple-Music-style expandable full-screen "Now Playing" surface for the
@@ -309,25 +310,30 @@ export function DesktopNowPlaying() {
                 <LyricsIcon />
               </IconButton>
 
-              <div className="flex items-center gap-2 flex-1 max-w-[200px]">
-                <IconButton
-                  variant="ghost"
-                  size="md"
-                  label={player.muted ? "Unmute" : "Mute"}
-                  onClick={player.toggleMute}
-                  data-testid="button-now-playing-mute"
-                >
-                  <VolumeGlyph />
-                </IconButton>
-                <div className="flex-1">
-                  <DragBar
-                    pct={player.muted ? 0 : player.volume}
-                    onChange={player.setVolume}
-                    ariaLabel="Volume"
-                    live
-                  />
+              {/* Volume cluster — hidden on iOS WebKit (iPad Safari), where
+                  audio volume is read-only so the slider would be a dead
+                  control; hardware buttons own loudness there. */}
+              {!isIOS && (
+                <div className="flex items-center gap-2 flex-1 max-w-[200px]">
+                  <IconButton
+                    variant="ghost"
+                    size="md"
+                    label={player.muted ? "Unmute" : "Mute"}
+                    onClick={player.toggleMute}
+                    data-testid="button-now-playing-mute"
+                  >
+                    <VolumeGlyph />
+                  </IconButton>
+                  <div className="flex-1">
+                    <DragBar
+                      pct={player.muted ? 0 : player.volume}
+                      onChange={player.setVolume}
+                      ariaLabel="Volume"
+                      live
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               <IconButton
                 variant="ghost"

@@ -20987,12 +20987,7 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/pages/Player.tsx",
-    "snippet": "<span className=\"text-white/40 text-[11px] font-medium\">{formatDuration(currentTime)}</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/Player.tsx",
-    "snippet": "<span className=\"text-white/40 text-[11px] font-medium\">{formatDuration(duration)}</span>"
+    "snippet": "labelClassName=\"text-white/40 text-[11px] font-medium\""
   },
   {
     "rule": "fan-text-tone",
@@ -21012,12 +21007,7 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/pages/Player.tsx",
-    "snippet": "<span className=\"text-white/55 text-[11px] font-medium\">{formatDuration(currentTime)}</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/Player.tsx",
-    "snippet": "<span className=\"text-white/55 text-[11px] font-medium\">-{formatDuration(Math.max(0, duration - currentTime))}</span>"
+    "snippet": "labelClassName=\"text-white/55 text-[11px] font-medium\""
   },
   {
     "rule": "fan-text-tone",
@@ -21057,12 +21047,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Player.tsx",
-    "snippet": "<span className=\"text-white/40 text-[11px] font-medium\">{formatDuration(currentTime)}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Player.tsx",
-    "snippet": "<span className=\"text-white/40 text-[11px] font-medium\">{formatDuration(duration)}</span>"
+    "snippet": "labelClassName=\"text-white/40 text-[11px] font-medium\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -21077,12 +21062,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Player.tsx",
-    "snippet": "<span className=\"text-white/55 text-[11px] font-medium\">{formatDuration(currentTime)}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Player.tsx",
-    "snippet": "<span className=\"text-white/55 text-[11px] font-medium\">-{formatDuration(Math.max(0, duration - currentTime))}</span>"
+    "snippet": "labelClassName=\"text-white/55 text-[11px] font-medium\""
   },
   {
     "rule": "hardcoded-font-size",

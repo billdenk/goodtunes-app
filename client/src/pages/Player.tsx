@@ -8,6 +8,176 @@ import { IconButton } from "@/components/ui/IconButton";
 import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { track } from "@/lib/analytics";
+import { isIOS } from "@/lib/platform";
+
+/**
+ * Custom pointer-driven progress scrubber for the mobile full-screen player.
+ *
+ * Replaces the invisible native `<input type="range">` the player used to lay
+ * over the rail. On iOS Safari a continuous touch-drag over a range input is
+ * swallowed as a scroll/pan gesture, so the scrubber only ever registered a
+ * tap (jump) and never a "rub" (drag-to-seek). Pointer events + pointer
+ * capture + `touch-action: none` give us a real drag target: the fill and the
+ * elapsed/remaining labels track the finger live while dragging, and the
+ * actual `seekTo` fires once the thumb lifts (mirrors the desktop dock and
+ * Spotify's feel). The hit area is a full-height invisible row so a fat-finger
+ * drag along a ~3px rail still registers.
+ */
+function MobileScrubber({
+  currentTime,
+  duration,
+  onSeek,
+  trackBg,
+  railHeightClass,
+  labelWrapClassName,
+  labelClassName,
+  rightLabel = "remaining",
+  testId,
+}: {
+  currentTime: number;
+  duration: number;
+  onSeek: (t: number) => void;
+  trackBg: string;
+  railHeightClass: string;
+  labelWrapClassName: string;
+  labelClassName: string;
+  rightLabel?: "remaining" | "total";
+  testId?: string;
+}) {
+  const hitRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [dragTime, setDragTime] = useState(0);
+
+  const timeFromX = (clientX: number) => {
+    const el = hitRef.current;
+    if (!el || duration <= 0) return 0;
+    const rect = el.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return ratio * duration;
+  };
+
+  const display = dragging ? dragTime : currentTime;
+  const pct = duration > 0 ? Math.max(0, Math.min(100, (display / duration) * 100)) : 0;
+
+  const handleDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (duration <= 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDragging(true);
+    setDragTime(timeFromX(e.clientX));
+  };
+  const handleMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    setDragTime(timeFromX(e.clientX));
+  };
+  const handleUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    const t = timeFromX(e.clientX);
+    setDragging(false);
+    onSeek(t);
+  };
+
+  return (
+    <>
+      <div
+        ref={hitRef}
+        className="relative w-full h-7 flex items-center cursor-pointer touch-none select-none"
+        onPointerDown={handleDown}
+        onPointerMove={handleMove}
+        onPointerUp={handleUp}
+        onPointerCancel={handleUp}
+        data-testid={testId}
+      >
+        <div className={`relative w-full ${railHeightClass} rounded-full overflow-hidden`}>
+          <div className="absolute inset-0 rounded-full" style={{ background: trackBg }} />
+          <div
+            className="absolute left-0 top-0 h-full rounded-full"
+            style={{
+              width: `${pct}%`,
+              background: "white",
+              transition: dragging ? "none" : "width 1s linear",
+            }}
+          />
+        </div>
+      </div>
+      <div className={labelWrapClassName}>
+        <span className={labelClassName}>{formatDuration(display)}</span>
+        <span className={labelClassName}>
+          {rightLabel === "total"
+            ? formatDuration(duration)
+            : `-${formatDuration(Math.max(0, duration - display))}`}
+        </span>
+      </div>
+    </>
+  );
+}
+
+/**
+ * Pointer-driven volume slider for the mobile full-screen player, wired to the
+ * shared PlayerContext volume. Same native-range-input problem as the
+ * scrubber, plus on iOS the value is read-only — callers gate this behind
+ * `!isIOS` so iPhone shows no dead control. Volume is cheap to set, so it
+ * tracks the finger live (no defer-to-release).
+ */
+function MobileVolume({
+  volume,
+  setVolume,
+  trackBg,
+  leftIconSize,
+  rightIconSize,
+  className,
+}: {
+  volume: number;
+  setVolume: (level: number) => void;
+  trackBg: string;
+  leftIconSize: number;
+  rightIconSize: number;
+  className: string;
+}) {
+  const railRef = useRef<HTMLDivElement>(null);
+  const apply = (clientX: number) => {
+    const el = railRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const level = Math.round(
+      Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100)),
+    );
+    setVolume(level);
+  };
+  const handleDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    apply(e.clientX);
+  };
+  const handleMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) apply(e.clientX);
+  };
+  return (
+    <div className={className}>
+      <svg width={leftIconSize} height={leftIconSize} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+      </svg>
+      <div
+        ref={railRef}
+        className="flex-1 relative h-7 flex items-center cursor-pointer touch-none select-none"
+        onPointerDown={handleDown}
+        onPointerMove={handleMove}
+        data-testid="slider-volume"
+      >
+        <div className="relative w-full h-[3px] rounded-full overflow-hidden">
+          <div className="absolute inset-0 rounded-full" style={{ background: trackBg }} />
+          <div
+            className="absolute left-0 top-0 h-full rounded-full"
+            style={{ width: `${volume}%`, background: "white" }}
+          />
+        </div>
+      </div>
+      <svg width={rightIconSize} height={rightIconSize} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+        <path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" />
+      </svg>
+    </div>
+  );
+}
 
 export function Player() {
   const {
@@ -40,9 +210,10 @@ export function Player() {
     isFavorite,
     airPlaySupported,
     showAirPlayPicker,
+    volume,
+    setVolume,
   } = usePlayer();
 
-  const [volume, setVolume] = useState(80);
   const [showGoToMenu, setShowGoToMenu] = useState(false);
   const [showLyricsMenu, setShowLyricsMenu] = useState(false);
   const [, navigate] = useLocation();
@@ -125,7 +296,6 @@ export function Player() {
     navigate(path);
   };
 
-  const progress = duration > 0 ? currentTime / duration : 0;
   const isRepeatActive = repeat !== "none";
   const favorited = isFavorite(currentSong.id);
 
@@ -352,26 +522,17 @@ export function Player() {
 
             {/* Progress bar */}
             <div className="w-full mb-2">
-              <div className="relative w-full h-1 rounded-full overflow-hidden cursor-pointer">
-                <div className="absolute inset-0 rounded-full" style={{ background: "rgba(255,255,255,0.2)" }} />
-                <div
-                  className="absolute left-0 top-0 h-full rounded-full transition-all duration-1000"
-                  style={{ width: `${progress * 100}%`, background: "white" }}
-                />
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 100}
-                  value={currentTime}
-                  onChange={(e) => seekTo(Number(e.target.value))}
-                  className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                  style={{ height: "100%" }}
-                />
-              </div>
-              <div className="flex justify-between mt-2">
-                <span className="text-white/40 text-[11px] font-medium">{formatDuration(currentTime)}</span>
-                <span className="text-white/40 text-[11px] font-medium">{formatDuration(duration)}</span>
-              </div>
+              <MobileScrubber
+                currentTime={currentTime}
+                duration={duration}
+                onSeek={seekTo}
+                trackBg="rgba(255,255,255,0.2)"
+                railHeightClass="h-1"
+                labelWrapClassName="flex justify-between"
+                labelClassName="text-white/40 text-[11px] font-medium"
+                rightLabel="total"
+                testId="rail-scrubber"
+              />
             </div>
 
             {/* Transport — Apple Music: just prev / play / next, centered.
@@ -426,32 +587,18 @@ export function Player() {
             </div>
             {/* End middle cluster — volume + bottom buttons anchor at bottom. */}
 
-            {/* Volume slider */}
-            <div className="w-full flex items-center gap-3 mb-2 flex-shrink-0">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-              </svg>
-              <div className="flex-1 relative h-[3px] rounded-full overflow-hidden cursor-pointer">
-                <div className="absolute inset-0 rounded-full" style={{ background: "rgba(255,255,255,0.22)" }} />
-                <div
-                  className="absolute left-0 top-0 h-full rounded-full"
-                  style={{ width: `${volume}%`, background: "white" }}
-                />
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={volume}
-                  onChange={(e) => setVolume(Number(e.target.value))}
-                  className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                  data-testid="slider-volume"
-                />
-              </div>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                <path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" />
-              </svg>
-            </div>
+            {/* Volume slider — hidden on iOS, where Safari makes audio
+                volume read-only (hardware buttons own loudness). */}
+            {!isIOS && (
+              <MobileVolume
+                volume={volume}
+                setVolume={setVolume}
+                trackBg="rgba(255,255,255,0.22)"
+                leftIconSize={14}
+                rightIconSize={16}
+                className="w-full flex items-center gap-3 mb-2 flex-shrink-0"
+              />
+            )}
 
             {/* Bottom actions: Lyrics · AirPlay · Queue */}
             <div className="w-full flex items-center justify-around pb-1 flex-shrink-0">
@@ -741,25 +888,15 @@ export function Player() {
               data-testid="lyrics-controls"
             >
               {/* Progress bar */}
-              <div className="relative w-full h-[3px] rounded-full overflow-hidden mb-2 cursor-pointer">
-                <div className="absolute inset-0 rounded-full" style={{ background: "rgba(255,255,255,0.25)" }} />
-                <div
-                  className="absolute left-0 top-0 h-full rounded-full"
-                  style={{ width: `${progress * 100}%`, background: "white", transition: "width 1s linear" }}
-                />
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 100}
-                  value={currentTime}
-                  onChange={(e) => seekTo(Number(e.target.value))}
-                  className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                />
-              </div>
-              <div className="flex justify-between mb-5">
-                <span className="text-white/55 text-[11px] font-medium">{formatDuration(currentTime)}</span>
-                <span className="text-white/55 text-[11px] font-medium">-{formatDuration(Math.max(0, duration - currentTime))}</span>
-              </div>
+              <MobileScrubber
+                currentTime={currentTime}
+                duration={duration}
+                onSeek={seekTo}
+                trackBg="rgba(255,255,255,0.25)"
+                railHeightClass="h-[3px]"
+                labelWrapClassName="flex justify-between mb-5"
+                labelClassName="text-white/55 text-[11px] font-medium"
+              />
 
               {/* ◀◀  ▶/⏸  ▶▶ — Apple Music style, no circles */}
               <div className="flex items-center justify-center gap-12 mb-6">
@@ -801,31 +938,17 @@ export function Player() {
                 </button>
               </div>
 
-              {/* Volume slider */}
-              <div className="flex items-center gap-3">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round">
-                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                </svg>
-                <div className="flex-1 relative h-[3px] rounded-full overflow-hidden cursor-pointer">
-                  <div className="absolute inset-0 rounded-full" style={{ background: "rgba(255,255,255,0.25)" }} />
-                  <div
-                    className="absolute left-0 top-0 h-full rounded-full"
-                    style={{ width: `${volume}%`, background: "white" }}
-                  />
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={volume}
-                    onChange={(e) => setVolume(Number(e.target.value))}
-                    className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                  />
-                </div>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round">
-                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                  <path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" />
-                </svg>
-              </div>
+              {/* Volume slider — hidden on iOS (read-only audio volume). */}
+              {!isIOS && (
+                <MobileVolume
+                  volume={volume}
+                  setVolume={setVolume}
+                  trackBg="rgba(255,255,255,0.25)"
+                  leftIconSize={16}
+                  rightIconSize={18}
+                  className="flex items-center gap-3"
+                />
+              )}
             </div>
           </div>
         </div>
@@ -1029,25 +1152,15 @@ export function Player() {
 
             {/* Bottom transport — progress, controls, volume */}
             <div className="relative z-10 px-5 pt-2 pb-6" style={{ background: "linear-gradient(to top, rgba(0,6,43,0.85), rgba(0,6,43,0))" }}>
-              <div className="relative w-full h-[3px] rounded-full overflow-hidden mb-1.5 cursor-pointer">
-                <div className="absolute inset-0 rounded-full" style={{ background: "rgba(255,255,255,0.22)" }} />
-                <div
-                  className="absolute left-0 top-0 h-full rounded-full"
-                  style={{ width: `${progress * 100}%`, background: "white", transition: "width 1s linear" }}
-                />
-                <input
-                  type="range"
-                  min={0}
-                  max={duration || 100}
-                  value={currentTime}
-                  onChange={(e) => seekTo(Number(e.target.value))}
-                  className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                />
-              </div>
-              <div className="flex justify-between mb-3">
-                <span className="text-white/55 text-[11px] font-medium">{formatDuration(currentTime)}</span>
-                <span className="text-white/55 text-[11px] font-medium">-{formatDuration(Math.max(0, duration - currentTime))}</span>
-              </div>
+              <MobileScrubber
+                currentTime={currentTime}
+                duration={duration}
+                onSeek={seekTo}
+                trackBg="rgba(255,255,255,0.22)"
+                railHeightClass="h-[3px]"
+                labelWrapClassName="flex justify-between mb-3"
+                labelClassName="text-white/55 text-[11px] font-medium"
+              />
 
               <div className="flex items-center justify-center gap-14 mb-4">
                 {/* Queue overlay: scan-back (double triangle), play, scan-forward — Apple style */}
@@ -1077,27 +1190,17 @@ export function Player() {
                 </button>
               </div>
 
-              <div className="flex items-center gap-3">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round">
-                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                </svg>
-                <div className="flex-1 relative h-[3px] rounded-full overflow-hidden cursor-pointer">
-                  <div className="absolute inset-0 rounded-full" style={{ background: "rgba(255,255,255,0.22)" }} />
-                  <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${volume}%`, background: "white" }} />
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={volume}
-                    onChange={(e) => setVolume(Number(e.target.value))}
-                    className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                  />
-                </div>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round">
-                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                  <path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" />
-                </svg>
-              </div>
+              {/* Volume slider — hidden on iOS (read-only audio volume). */}
+              {!isIOS && (
+                <MobileVolume
+                  volume={volume}
+                  setVolume={setVolume}
+                  trackBg="rgba(255,255,255,0.22)"
+                  leftIconSize={14}
+                  rightIconSize={16}
+                  className="flex items-center gap-3"
+                />
+              )}
             </div>
           </div>
         </div>
