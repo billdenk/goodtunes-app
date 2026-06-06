@@ -136,12 +136,12 @@ function WelcomeBackPill() {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="w-full flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-[#0B1437]/85 backdrop-blur-md shadow-[0_8px_24px_rgba(0,0,0,0.35)] px-4 py-3 text-left transition-colors hover:bg-[#0E1A45]/90 active:bg-[#0E1A45]"
+            className="w-full flex items-center justify-between gap-3 rounded-2xl bg-[#0B1437]/85 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.45)] px-4 py-3 text-left transition-colors hover:bg-[#0E1A45]/90 active:bg-[#0E1A45]"
             data-testid="button-welcomeback-pill"
           >
             <span className="flex flex-col min-w-0">
               <span className="text-white text-sm font-semibold leading-tight">Customer prior to June 2026?</span>
-              <span className="text-white/55 text-xs leading-tight mt-0.5">Tap to bring your library over</span>
+              <span className="text-fan-secondary text-xs leading-tight mt-0.5">Tap to take your experience, to 12</span>
             </span>
             <svg
               width="20"
