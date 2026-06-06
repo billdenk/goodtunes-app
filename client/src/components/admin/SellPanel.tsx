@@ -59,6 +59,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   ALBUM_FORMATS,
   ALBUM_FORMAT_LABEL,
+  ALBUM_FORMAT_TO_PHYSICAL_FORMAT,
   BOOKLET_ELIGIBLE_FORMATS,
   PHYSICAL_FORMAT_TO_ALBUM_FORMAT,
   type AlbumFormat,
@@ -564,6 +565,25 @@ export function SellPanel({
           `/api/admin/albums/${albumId}/skus/${args.oldFormat}`,
         );
       }
+      // Task #1360 — keep `albums.physicalFormat` in lock-step with a
+      // VINYL format swap so the Tracklist / Side-length panel (which
+      // reads `albums.physicalFormat`, NOT the SKU row) re-derives the
+      // side count + per-side limit (e.g. Single LP → Double LP gives
+      // it four sides A/B/C/D). Only vinyl targets drive the sync:
+      //  - cassette / CD targets are non-vinyl with no side layout, so
+      //    we deliberately DON'T touch `physicalFormat`. That keeps a
+      //    multi-SKU album safe — swapping/adding a non-vinyl SKU must
+      //    never clobber the vinyl side layout the operator set up.
+      //  - across multiple VINYL SKUs the most-recently-swapped vinyl
+      //    format wins (last write tracks the operator's latest pick).
+      const nextPhysical = isVinylFormat(args.target)
+        ? ALBUM_FORMAT_TO_PHYSICAL_FORMAT[args.target]
+        : null;
+      if (nextPhysical && nextPhysical !== physicalFormat) {
+        await apiRequest("PUT", `/api/admin/albums/${albumId}`, {
+          physicalFormat: nextPhysical,
+        });
+      }
       return args;
     },
     onSuccess: (args) => {
@@ -576,6 +596,11 @@ export function SellPanel({
       queryClient.invalidateQueries({
         queryKey: ["/api/admin/albums", albumId, "skus"],
       });
+      // Task #1360 — also invalidate the album DETAIL query so the
+      // Tracklist / Side-length (vinyl-order) panel re-renders with the
+      // freshly-synced `albums.physicalFormat` and re-derives the side
+      // layout without a manual reload.
+      queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId] });
       // Task #654 — only confirm success AFTER the PUT/DELETE pair
       // resolved; the row also bullet-lists each adjustment the
       // adapter made so the carry-over is never silent.

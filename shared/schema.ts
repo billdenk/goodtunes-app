@@ -513,6 +513,23 @@ export const PHYSICAL_FORMAT_TO_ALBUM_FORMAT: Record<
   double_lp: "12_double",
   cassette: "cassette",
 };
+// Reverse of the map above, keyed by the Sell-panel SKU vocabulary
+// (`ALBUM_FORMATS`). Used to keep `albums.physicalFormat` in sync when
+// a vinyl SKU's format is swapped in the Sell panel so the Tracklist /
+// Side-length panel (which reads `albums.physicalFormat`) re-derives
+// the side count + per-side limit. `cd` has no physical-format / vinyl
+// side layout, so it maps to `null` — callers must skip the sync (and
+// must not corrupt `physicalFormat`) for CDs.
+export const ALBUM_FORMAT_TO_PHYSICAL_FORMAT: Record<
+  "7_inch" | "12_lp" | "12_double" | "cassette" | "cd",
+  AlbumPhysicalFormat | null
+> = {
+  "7_inch": "seven_inch",
+  "12_lp": "single_lp",
+  "12_double": "double_lp",
+  cassette: "cassette",
+  cd: null,
+};
 
 // Fingerprint of what was last sent to Shopify on a Push. Re-push
 // fetches the live product and diffs the same shape against this row
