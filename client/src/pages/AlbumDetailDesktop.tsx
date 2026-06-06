@@ -633,6 +633,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             signedCertSoldOut={signedCertSoldOut}
             lyricsOpen={player.showLyrics && isLgViewport}
             lyrics={lyricsBody}
+            onExpandLyrics={() => player.setShowPlayer(true)}
           />
           )}
         </main>

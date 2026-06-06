@@ -4,7 +4,7 @@ import { formatUsdCents } from "@shared/money";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Link } from "wouter";
 import { popBounce } from "@/lib/motion";
-import { ChevronRight, Play, Pause, Shuffle, Lock, Share, Info, MoreHorizontal, X } from "lucide-react";
+import { ChevronRight, Play, Pause, Shuffle, Lock, Share, Info, MoreHorizontal, X, Maximize2 } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { BonusPlayBadge } from "@/components/ui/BonusPlayBadge";
 import { IconButton } from "@/components/ui/IconButton";
@@ -160,6 +160,15 @@ export type DesktopAlbumViewProps = {
   lyricsOpen?: boolean;
   lyrics?: ReactNode;
 
+  /** When supplied, the in-flow lyrics panel reveals an expand control
+   *  (hover on pointer devices, first tap on touch) that opens the
+   *  full-screen Now Playing surface — the in-flow counterpart to the
+   *  persistent DesktopLyricsRail's expand affordance. The host wires this
+   *  to `player.setShowPlayer(true)`. Omitted on surfaces with no
+   *  full-screen player (e.g. the admin preview), where the control stays
+   *  hidden. */
+  onExpandLyrics?: () => void;
+
   /** When true, render the medium-breakpoint (portrait-tablet) sizing
    *  regardless of the actual viewport width. Used by the admin tablet
    *  preview, which renders into a fixed virtual canvas that scales to
@@ -204,6 +213,65 @@ function formatPrice(cents: number): string {
  * now-playing strip, or PlayerDock — those belong to the host so each
  * surface can wire its own chrome.
  */
+
+/**
+ * Expand affordance for the in-flow album lyrics panel — the in-flow
+ * counterpart to the persistent DesktopLyricsRail's expand control. Keep the
+ * two in lock-step: same Maximize2 glyph, "Expand to full-screen player"
+ * aria-label, 44pt (w-11 h-11) touch target, and pointer-hover-vs-touch-tap
+ * reveal pattern. Wraps the karaoke body so hovering (pointer devices) — or a
+ * first tap (touch) — reveals a button whose click opens the full-screen Now
+ * Playing surface via the host's `onExpand` (player.setShowPlayer(true)).
+ * Unlike the rail, the in-flow panel still reflows the album column; this only
+ * adds the control, not the rail's flush edge treatment.
+ */
+function InFlowLyricsExpand({
+  onExpand,
+  children,
+}: {
+  onExpand: () => void;
+  children: ReactNode;
+}) {
+  const [canHover] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(hover: hover)").matches,
+  );
+  const [revealed, setRevealed] = useState(false);
+
+  return (
+    <div
+      className="group/lyrics relative flex-1 min-h-0 flex flex-col"
+      onClick={!canHover ? () => setRevealed(true) : undefined}
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onExpand();
+          setRevealed(false);
+        }}
+        aria-label="Expand to full-screen player"
+        className={[
+          "absolute top-3 right-3 z-10 w-11 h-11 rounded-full flex items-center justify-center transition-opacity duration-150",
+          canHover
+            ? "opacity-0 group-hover/lyrics:opacity-100"
+            : revealed
+              ? "opacity-100"
+              : "opacity-0 pointer-events-none",
+        ].join(" ")}
+        style={{ background: "rgba(0,0,0,0.45)" }}
+        data-testid="button-expand-lyrics-panel"
+      >
+        <Maximize2 className="w-4 h-4 text-white" />
+        <span className="sr-only">Expand</span>
+      </button>
+      {children}
+    </div>
+  );
+}
+
 export function DesktopAlbumView({
   album,
   songs,
@@ -239,6 +307,7 @@ export function DesktopAlbumView({
   onPlayVideo,
   lyricsOpen,
   lyrics,
+  onExpandLyrics,
   compact = false,
 }: DesktopAlbumViewProps) {
   const reduceMotion = useReducedMotion();
@@ -945,8 +1014,17 @@ export function DesktopAlbumView({
                 {/* No title/close header — the dock mic toggles the panel
                     open and closed, so the card is just the lyrics. The
                     shared SyncedLyrics owns its own top padding/fade, so the
-                    karaoke body reads cleanly from the top of the card. */}
-                <div className="flex-1 min-h-0 flex flex-col">{lyrics}</div>
+                    karaoke body reads cleanly from the top of the card. When
+                    the host wires `onExpandLyrics`, the karaoke body also
+                    carries the hover/tap expand affordance (mirrors the
+                    persistent rail) without changing the in-flow reflow. */}
+                {onExpandLyrics ? (
+                  <InFlowLyricsExpand onExpand={onExpandLyrics}>
+                    {lyrics}
+                  </InFlowLyricsExpand>
+                ) : (
+                  <div className="flex-1 min-h-0 flex flex-col">{lyrics}</div>
+                )}
               </div>
             </div>
           </motion.aside>
