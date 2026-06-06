@@ -12286,12 +12286,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/admin/albums/:id/videos", requireAdminBearer, async (req, res) => {
     const albumId = String(req.params.id);
     if (!(await ensureAlbumExists(albumId, res))) return;
+    // Refuse to create a sourceless placeholder row. A blank/empty
+    // videoUrl produces a video the fan can never play and that no Mux
+    // ingest can heal — the exact "stuck Preparing…" state this guards
+    // against. The file upload / URL-import flows always resolve a real
+    // /objects/ (or external) URL before posting, so a blank here is a bug.
+    const rawVideoUrl =
+      typeof req.body?.videoUrl === "string" ? req.body.videoUrl.trim() : "";
+    if (!rawVideoUrl) {
+      return res
+        .status(400)
+        .json({ message: "A video file or source URL is required." });
+    }
     const existing = await storage.listAlbumVideos(albumId);
     const parsed = insertAlbumVideoSchema.safeParse({
       albumId,
       title: req.body?.title ?? "Untitled video",
       description: req.body?.description ?? null,
-      videoUrl: req.body?.videoUrl,
+      videoUrl: rawVideoUrl,
       posterUrl: req.body?.posterUrl ?? null,
       sourceUrl: req.body?.sourceUrl ?? null,
       position: typeof req.body?.position === "number" ? req.body.position : existing.length,
@@ -18521,10 +18533,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const video = await storage.getAlbumVideoById(req.params.id as string);
     if (!video) return res.status(404).json({ message: "Video not found" });
     if (!video.muxPlaybackId) {
+      const hasIngestableSource =
+        typeof video.videoUrl === "string" && video.videoUrl.startsWith("/objects/");
+      // Terminal "unavailable": there is nothing to ever play — no Mux
+      // asset, no ingestable /objects/ source, and therefore no in-flight
+      // ingest possible. These are sourceless placeholder rows (e.g. a
+      // video whose file was never attached). Report a distinct terminal
+      // status so the fan player stops the endless "preparing… tap to
+      // retry" loop and shows an honest "unavailable" treatment instead.
+      if (!video.muxAssetId && !hasIngestableSource) {
+        return res.status(409).json({
+          message: "This video has no playable source",
+          status: "unavailable",
+          lastError: (video as any).muxLastError ?? null,
+        });
+      }
       // Legacy cohort (pre-Mux) or a row that errored — kick a lazy
       // ingest so it heals on first view, and report the state so the
       // player can render "preparing" rather than failing silently.
-      if (!video.muxAssetId && video.videoUrl?.startsWith("/objects/")) {
+      if (!video.muxAssetId && hasIngestableSource) {
         maybeIngestVideoToMux(video.id, video.videoUrl);
       }
       return res.status(409).json({

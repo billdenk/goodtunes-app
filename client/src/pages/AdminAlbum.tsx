@@ -56,6 +56,7 @@ import {
   Wand2,
   Download,
   PieChart,
+  AlertTriangle,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { LyricsGapDots } from "@/components/LyricsGapDots";
@@ -13395,6 +13396,14 @@ interface AlbumVideo {
   posterUrl: string | null;
   sourceUrl: string | null;
   position: number;
+  // Mux pipeline state — admins get the full row (fans get a stripped
+  // payload). Surfaced so the tile can flag rows that will never play:
+  // a sourceless placeholder (empty videoUrl + no Mux asset) or a row
+  // whose encode errored.
+  muxAssetId?: string | null;
+  muxPlaybackId?: string | null;
+  muxStatus?: string | null;
+  muxLastError?: string | null;
 }
 interface AlbumPhoto {
   id: string;
@@ -14036,11 +14045,36 @@ function VideoTile({
   const [errored, setErrored] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Flag rows that fans can never play so the operator notices before a
+  // listener does. Two unrecoverable shapes:
+  //   • sourceless placeholder — no source file AND no Mux asset, so no
+  //     ingest can ever heal it (the fan sees "Video unavailable").
+  //   • errored encode — Mux gave up on the source.
+  const hasSource = !!(video.videoUrl && video.videoUrl.trim());
+  const noMux = !video.muxAssetId && !video.muxPlaybackId;
+  const sourceless = !hasSource && noMux;
+  const encodeFailed = video.muxStatus === "errored";
+  const flag = sourceless
+    ? { label: "No source file", title: "This video has no source file and no Mux asset — fans see “Video unavailable.” Re-upload the video file." }
+    : encodeFailed
+      ? { label: "Encoding failed", title: video.muxLastError ? `Mux encoding failed: ${video.muxLastError}` : "Mux encoding failed for this video. Re-upload or replace the source file." }
+      : null;
+
   return (
     <div
       className="group relative aspect-video rounded-xl overflow-hidden bg-slate-900 ring-1 ring-slate-200 shadow-sm"
       data-testid={`tile-video-${video.id}`}
     >
+      {flag && (
+        <div
+          className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs font-semibold text-amber-900 shadow-sm"
+          title={flag.title}
+          data-testid={`badge-video-flag-${video.id}`}
+        >
+          <AlertTriangle className="w-3 h-3 text-amber-700" />
+          {flag.label}
+        </div>
+      )}
       {playing && !errored ? (
         <video
           ref={videoRef}

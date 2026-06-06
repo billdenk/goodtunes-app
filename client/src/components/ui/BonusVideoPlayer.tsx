@@ -64,7 +64,13 @@ export function BonusVideoPlayer({
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
-  const [phase, setPhase] = useState<"idle" | "loading" | "active" | "preparing" | "error">("idle");
+  // "unavailable" is terminal: the server told us this row has no playable
+  // source and no in-flight ingest, so there's nothing to retry. We stop the
+  // auto-retry backoff and show an honest "Video unavailable" treatment
+  // instead of looping on "Preparing… tap to retry" forever.
+  const [phase, setPhase] = useState<
+    "idle" | "loading" | "active" | "preparing" | "error" | "unavailable"
+  >("idle");
 
   // Watch-through analytics — fire once per quartile, mirroring the audio
   // play funnel. Refs (not state) so the high-frequency timeupdate handler
@@ -141,6 +147,18 @@ export function BonusVideoPlayer({
         credentials: "include",
       });
       if (r.status === 409 || r.status === 503) {
+        // The server distinguishes a still-encoding row (retryable) from a
+        // sourceless/unrecoverable one (terminal) via the body `status`.
+        let body: { status?: string } | null = null;
+        try { body = await r.json(); } catch { /* no JSON body */ }
+        if (body?.status === "unavailable") {
+          // Nothing to play and nothing in flight — stop retrying and show
+          // the honest terminal state.
+          clearRetryTimer();
+          retryCountRef.current = 0;
+          setPhase("unavailable");
+          return;
+        }
         // Not ready yet (still encoding / lazy-ingest just kicked off). Show
         // the preparing caption and quietly auto-retry with backoff a bounded
         // number of times before leaving the fan with the manual retry tap.
@@ -309,17 +327,29 @@ export function BonusVideoPlayer({
           {/* Central control is always live while not playing — in the
               "preparing"/"error" states it doubles as a retry so a fan
               whose lazy-ingest just kicked off can tap again instead of
-              being stuck until reload. */}
-          <button
-            type="button"
-            onClick={() => startPlayback()}
-            disabled={phase === "loading"}
-            className="absolute inset-0 flex items-center justify-center"
-            aria-label={phase === "preparing" || phase === "error" ? `Retry ${video.title}` : `Play ${video.title}`}
-            data-testid={`button-play-album-bonus-${video.id}`}
-          >
-            <BonusPlayBadge loading={phase === "loading"} />
-          </button>
+              being stuck until reload. The terminal "unavailable" state has
+              nothing to retry, so we drop the badge entirely and show only
+              the honest caption below. */}
+          {phase !== "unavailable" && (
+            <button
+              type="button"
+              onClick={() => startPlayback()}
+              disabled={phase === "loading"}
+              className="absolute inset-0 flex items-center justify-center"
+              aria-label={phase === "preparing" || phase === "error" ? `Retry ${video.title}` : `Play ${video.title}`}
+              data-testid={`button-play-album-bonus-${video.id}`}
+            >
+              <BonusPlayBadge loading={phase === "loading"} />
+            </button>
+          )}
+          {phase === "unavailable" && (
+            <div
+              className="absolute inset-x-0 bottom-0 flex items-center justify-center px-3 py-2 text-xs font-medium text-fan-primary bg-black/55 backdrop-blur-sm pointer-events-none"
+              data-testid={`text-album-bonus-video-unavailable-${video.id}`}
+            >
+              Video unavailable
+            </div>
+          )}
           {phase === "preparing" && (
             <div
               className="absolute inset-x-0 bottom-0 flex items-center justify-center px-3 py-2 text-xs font-medium text-fan-primary bg-black/55 backdrop-blur-sm pointer-events-none"

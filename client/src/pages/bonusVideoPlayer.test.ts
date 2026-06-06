@@ -325,6 +325,75 @@ for (const status of [409, 503] as const) {
   });
 }
 
+// Task #1391 — terminal "unavailable" state for sourceless rows.
+//
+// Some album_videos rows have NO media at all (empty videoUrl + no Mux
+// asset) — nothing the lazy-ingest can ever heal. The server now answers
+// the playback-url poll with a 409 carrying `status: "unavailable"`. The
+// tile must treat that as TERMINAL: show an honest "Video unavailable"
+// caption, drop the play/retry badge entirely (there is nothing to retry),
+// and NOT schedule any auto-retry — the exact opposite of the transient
+// "preparing" path above.
+test("unlocked bonus tile: an unavailable playback-url response is terminal — no retry badge, no auto-retry", async () => {
+  nextFetchResponse = {
+    ok: false,
+    status: 409,
+    json: async () => ({ status: "unavailable" }),
+  };
+  const { q, click, settle, teardown } = await mount({ retryDelaysMs: [0, 0] });
+  try {
+    const playBtn = q(`button-play-album-bonus-${VIDEO_ID}`);
+    assert.ok(playBtn, "idle tile renders the play badge button");
+
+    const before = fetchCalls.length;
+    await click(playBtn!);
+    // Pump plenty of frames — if any auto-retry were scheduled it would
+    // fire within these (the backoff is zero-delay).
+    await settle(12);
+
+    // The honest terminal caption is shown.
+    const unavailable = q(`text-album-bonus-video-unavailable-${VIDEO_ID}`);
+    assert.ok(
+      unavailable,
+      "an unavailable response surfaces the terminal caption",
+    );
+    assert.doesNotMatch(
+      unavailable!.textContent ?? "",
+      /retry|preparing/i,
+      "the terminal caption does not invite a retry or claim it is preparing",
+    );
+
+    // Neither the preparing nor the unplayable caption is mislabelled here.
+    assert.equal(
+      q(`text-album-bonus-video-preparing-${VIDEO_ID}`),
+      null,
+      "a terminal row is not reported as still-preparing",
+    );
+    assert.equal(
+      q(`text-album-bonus-video-unplayable-${VIDEO_ID}`),
+      null,
+      "a terminal row is not reported as a transient unplayable",
+    );
+
+    // The play/retry badge is GONE — there is nothing to retry, so we
+    // never strand the fan in the tap-to-retry loop.
+    assert.equal(
+      q(`button-play-album-bonus-${VIDEO_ID}`),
+      null,
+      "the terminal state drops the play/retry badge entirely",
+    );
+
+    // Exactly one poll fired (the manual tap) — no auto-retry was scheduled.
+    const polls = fetchCalls
+      .slice(before)
+      .filter((u) => u.includes(`/api/album-videos/${VIDEO_ID}/playback-url`))
+      .length;
+    assert.equal(polls, 1, "a terminal response schedules no auto-retry");
+  } finally {
+    await teardown();
+  }
+});
+
 // Task #1179 — auto-retry while a clip is still encoding.
 //
 // A 409/503 means Mux hasn't finished encoding yet. Rather than stranding

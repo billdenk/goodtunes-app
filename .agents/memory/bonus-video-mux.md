@@ -20,5 +20,12 @@ Bonus videos (`album_videos`) ingest to Mux (signed asset, `video_quality:"basic
 ## Lazy backfill + retry
 `POST /api/album-videos/:id/playback-url` is PUBLIC (bonus videos are promotional/anon-viewable). When a row has no Mux asset yet (legacy cohort that predates the pipeline) it kicks a lazy ingest and returns 409 `preparing`. The fan tile keeps the central control tappable in `preparing`/`error` (status overlay is `pointer-events-none`) so a fan can retry without reload. Boot + interval `reconcileMuxVideos` heals dropped webhooks / un-ingested rows.
 
+## Terminal "unavailable" vs retryable "preparing"
+Some rows have NO media at all — empty `videoUrl`/`sourceUrl` AND no `muxAssetId`/`muxPlaybackId`. The lazy-ingest can never heal these (nothing to ingest), so 409 `preparing` would loop the fan tile forever. The playback-url route distinguishes them: only kick a lazy ingest + return `preparing` when there's something ingestable (a `/objects/...` source or an existing asset); a truly sourceless row returns 409 with body `{status:"unavailable"}`.
+
+**How to apply:** the fan tile must branch on the JSON **body** `status`, not just the HTTP code — `unavailable` is TERMINAL (clear the retry timer, drop the play/retry badge, show an honest caption), while a 409/503 with no `status` stays the retryable preparing path. Admin CMS flags the same sourceless shape (and `muxStatus:"errored"`) with a warning badge so the operator notices before a fan does. The create endpoint now also rejects empty `videoUrl` (400) so this state can't be minted going forward — but legacy sourceless rows still exist and need re-upload.
+
+**Why:** four bonus videos on *Cold Night – LLT* shipped with empty media rows and looped "Preparing…" forever; re-uploads are operator work, app must fail honestly meanwhile.
+
 ## Analytics
 `shared/analytics.ts` video events: `video_play_start` / `video_progress` (quartiles 25/50/75) / `video_complete` / `video_pause` / `video_seek`, fired from `BonusVideoPlayer` on `AlbumDetail`; each carries `albumId` + `videoId`.
