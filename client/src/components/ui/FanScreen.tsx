@@ -107,7 +107,20 @@ export function FanScreen({
           {leading && (
             <div className="pointer-events-auto absolute left-4 top-3">{leading}</div>
           )}
-          <div className="flex items-end justify-between gap-2">
+          {trailing && (
+            <div
+              ref={trailingRef}
+              className="pointer-events-auto absolute right-5 top-14 will-change-[opacity,transform]"
+            >
+              {trailing}
+            </div>
+          )}
+          {/* Title sits in a fixed-height (36px) row so its vertical position is
+              anchored to the content top regardless of which trailing control is
+              rendered. The trailing slot is absolutely positioned at the same
+              content top, so a taller control (44px IconButton) no longer
+              bottom-shifts the title the way `items-end` against the row did. */}
+          <div className="flex items-end h-9 pr-14">
             <h1
               ref={titleRef}
               className="text-fan-primary text-[34px] font-bold leading-none tracking-tight will-change-[opacity,transform]"
@@ -115,11 +128,6 @@ export function FanScreen({
             >
               {title}
             </h1>
-            {trailing && (
-              <div ref={trailingRef} className="pointer-events-auto will-change-[opacity,transform] flex-shrink-0">
-                {trailing}
-              </div>
-            )}
           </div>
         </header>
 
