@@ -15,7 +15,7 @@ import { track } from "@/lib/analytics";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { useDesktopShell } from "@/hooks/useDesktopShell";
-import { useRecordRecent, useFanRecents } from "@/hooks/useRecents";
+import { useRecordRecent } from "@/hooks/useRecents";
 import { chatEnabled } from "@/lib/platform";
 import { deriveCollectionTab, collectionTabHref } from "@/lib/fanRail";
 import { subscribeChats, totalUnread } from "@/lib/chatStore";
@@ -147,47 +147,6 @@ export function Collection() {
     [songsRaw, dbAlbumIds],
   );
 
-  // Task #782 — the "Recently Played" rail is now backed by the same
-  // server-synced fan_recents that power the Recents tab, instead of the
-  // old in-memory `recentAlbums` list (which reset on reload/logout and
-  // was blank until the fan played a song). We resolve each recent down
-  // to an album so the rail survives reloads + device switches and is
-  // already populated right after login. Both kinds of recent map to an
-  // album: an `album` recent carries the id directly; a `song` recent
-  // (stamped by every play) carries `/album/:id` in its href. Resolving
-  // song recents too is what keeps the live-update-on-play behaviour:
-  // playing a song bumps its album to the front of the rail.
-  const { data: fanRecents, isLoading: recentsLoading } = useFanRecents();
-  const albumById = useMemo(() => {
-    const m = new Map<string, Album>();
-    dbAlbums.forEach((a) => m.set(a.id, a));
-    return m;
-  }, [dbAlbums]);
-  const recentAlbumRail = useMemo(() => {
-    if (!fanRecents) return [] as Array<{ id: string; title: string; artist: string; artwork: string; album?: Album }>;
-    const out: Array<{ id: string; title: string; artist: string; artwork: string; album?: Album }> = [];
-    const seen = new Set<string>();
-    for (const r of fanRecents) {
-      let albumId: string | null = null;
-      if (r.entityKind === "album") {
-        albumId = r.entityId;
-      } else if (r.entityKind === "song") {
-        const m = /^\/album\/([^/?#]+)/.exec(r.href || "");
-        albumId = m ? decodeURIComponent(m[1]) : null;
-      }
-      if (!albumId || seen.has(albumId)) continue;
-      const album = albumById.get(albumId);
-      if (album) {
-        // Only render albums the fan owns — albumById is now scoped to the
-        // owned set so any album not found here is unowned and should not
-        // appear in "Recently Played".
-        seen.add(albumId);
-        out.push({ id: album.id, title: album.title, artist: album.artist, artwork: album.artwork, album });
-      }
-      if (out.length >= 8) break;
-    }
-    return out;
-  }, [fanRecents, albumById]);
 
   // Stamp a fan-recent every time we open an album from Collection (the
   // grid card, the carousel rail, or the song row's parent-album link).
@@ -506,47 +465,6 @@ export function Collection() {
         >
           <div ref={contentRef}>
           <div aria-hidden style={{ height: 104, flexShrink: 0 }} />
-          {recentsLoading ? (
-            <div className="mb-5" data-testid="rail-recent-loading">
-              <div className="flex items-center justify-between px-5 mb-3">
-                <h2 className="text-fan-primary text-base font-bold">Recently Played</h2>
-              </div>
-              <div className="flex gap-3 px-5 overflow-x-auto scrollbar-hide pt-2 pb-2" style={{ marginTop: -8 }}>
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex-shrink-0 flex flex-col" style={{ width: 90 }}>
-                    <div
-                      className="rounded-2xl mb-1.5 animate-pulse"
-                      style={{ width: 90, height: 90, background: "rgba(255,255,255,0.08)" }}
-                    />
-                    <div className="h-2.5 rounded animate-pulse mb-1" style={{ background: "rgba(255,255,255,0.08)" }} />
-                    <div className="h-2 rounded animate-pulse w-2/3" style={{ background: "rgba(255,255,255,0.06)" }} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : recentAlbumRail.length > 0 ? (
-            <div className="mb-5">
-              <div className="flex items-center justify-between px-5 mb-3">
-                <h2 className="text-fan-primary text-base font-bold">Recently Played</h2>
-              </div>
-              <div className="flex gap-3 px-5 overflow-x-auto scrollbar-hide pt-2 pb-2" style={{ marginTop: -8 }}>
-                {recentAlbumRail.map((album) => {
-                  const full = album.album ?? ({ id: album.id, title: album.title, artist: album.artist, artwork: album.artwork } as Album);
-                  return (
-                    <div key={album.id} className="flex-shrink-0" data-testid={`button-recent-album-${album.id}`}>
-                      <AlbumCard
-                        album={full}
-                        compact
-                        width={90}
-                        playable={!!album.album}
-                        onNavigate={() => (album.album ? openAlbum(album.album) : navigate(`/album/${album.id}`))}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
 
           {/* Task #530 — segmented tabs sit inline with the sort
               ("filter") IconButton on the right. The standalone library
