@@ -24,8 +24,8 @@ export { isIOS, isWebIOS };
 // test toggling iOS exercises BOTH the isIOS-gated and the isWebIOS-gated
 // player controls (the volume block is gated on !isWebIOS).
 export function __setTestIsIOS(v) { isIOS = v; isWebIOS = v; }
-export const isNativeIOS = false;
 export const isNative = false;
+export const isNativeIOS = false;
 export const nativePlatform = "web";
 export const chatEnabled = true;
 export const nativeDownloadsEnabled = false;
