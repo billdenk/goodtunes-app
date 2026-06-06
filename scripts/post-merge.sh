@@ -5130,3 +5130,71 @@ SQL
 }
 backfill_task_1329_nick_dates dev  "${DATABASE_URL:-}"
 backfill_task_1329_nick_dates prod "${PROD_DATABASE_URL:-}"
+
+# Task #1459 — Soft-delete the legacy sourceless bonus-video placeholder
+# rows. A historical seed minted ~35 album_videos rows (Nick Carter's LLT
+# single series + Aliza Hava's "Into the Light") with a title but NO media:
+# empty video_url, null source_url, no Mux asset/playback id. The Mux
+# pipeline correctly skips them (nothing to ingest) and the fan/admin
+# surfaces show an honest "unavailable" / "No source file" state — but
+# they're still broken tiles. Bill's call (Task #1459) is to remove the
+# empty slots; he'll re-upload the real footage later as fresh rows. No
+# Dropbox/source URL was ever stored on these rows, so an automated
+# reimport isn't possible.
+#
+# This flips the soft-delete trio (same effect as an admin Delete) so the
+# rows drop out of every list/detail read (all filter deleted_at IS NULL)
+# and land on /admin/trash for the 30-day window before the sweeper purges
+# them. The WHERE clause is self-limiting — it can only ever match a row
+# with NO playable source, never a `ready` row (which carries video_url +
+# asset + playback id). Marker-guarded so a row Bill later restores from
+# trash (to attach footage) isn't re-deleted on the next merge. The data
+# is prod-only (dev clones carry zero album_videos), so dev is a clean
+# no-op. Idempotent.
+backfill_task_1459_sourceless_videos() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1459 sourceless-video cleanup on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_1459_sourceless_videos'
+  ) THEN
+    UPDATE album_videos
+       SET deleted_at = now()
+     WHERE deleted_at IS NULL
+       AND (video_url IS NULL OR btrim(video_url) = '')
+       AND source_url IS NULL
+       AND mux_asset_id IS NULL
+       AND mux_playback_id IS NULL;
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_1459_sourceless_videos');
+    RAISE NOTICE 'task-1459 sourceless-video cleanup applied: % rows soft-deleted', v_count;
+  ELSE
+    RAISE NOTICE 'task-1459 sourceless-video cleanup already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1459 sourceless-video cleanup ok on $label"
+    echo "$out" | grep -i 'task-1459' || true
+  else
+    echo "post-merge: WARNING — task-1459 sourceless-video cleanup failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_1459_sourceless_videos dev  "${DATABASE_URL:-}"
+backfill_task_1459_sourceless_videos prod "${PROD_DATABASE_URL:-}"
