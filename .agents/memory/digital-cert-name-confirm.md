@@ -22,6 +22,10 @@ prefers `certConfirmedName` before the synthesized realName→displayName→user
   CertConfirmationCard flow in client/src/pages/Orders.tsx, untouched.
 - Endpoints gate on auth + ownership + finalized order status + non-null
   goodDeedNumber. Name is trimmed, 1–80 chars.
-- The editor lives in the SHARED CertPdfViewerSheet (used by Orders, AlbumDetail,
-  AlbumDetailDesktop, AlbumCard) and self-gates via the GET endpoint, so all
-  callers get it for free.
+- The editor lives in the SHARED `CertNameConfirmCard` component. It self-gates
+  via the GET endpoint (renders nothing unless editable), so callers drop it in
+  unconditionally. `variant="bar"` = compact row inside CertPdfViewerSheet (used
+  by Orders, AlbumDetail, AlbumDetailDesktop, AlbumCard; pass onSaved to
+  re-render the PDF); `variant="card"` = standalone card on the post-checkout
+  /welcome screen so fresh digital buyers catch a wrong synthesized name before
+  the first download.

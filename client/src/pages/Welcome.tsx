@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { track } from "@/lib/analytics";
 import { VinylPreview } from "@/components/VinylPreview";
+import { CertNameConfirmCard } from "@/components/ui/CertNameConfirmCard";
 import {
   DEFAULT_JACKET_UPGRADE,
   DEFAULT_VINYL_COLOR_ID,
@@ -283,6 +284,13 @@ export function Welcome() {
           }
           return null;
         })()}
+
+        {/* Task #1479 — surface the "name on your certificate" confirm step
+            right here at checkout for fresh digital GoodDeed buyers, so a
+            wrong synthesized name gets caught before the first download.
+            Self-gates to editable (digital-only) orders; physical
+            signed-cert copies keep their operator-driven confirm flow. */}
+        <CertNameConfirmCard orderId={data.order.id} variant="card" />
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5">
           <div className="text-fan-faint text-[11px] uppercase tracking-wider font-semibold mb-3">Order</div>

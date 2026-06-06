@@ -20,9 +20,10 @@
 // untouched — `editable` comes back false for those certs.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { apiRequest, fetchBlob, FetchBlobError } from "@/lib/queryClient";
+import { fetchBlob, FetchBlobError } from "@/lib/queryClient";
 import { SheetClose } from "@/components/ui/SheetChrome";
 import { IconButton } from "@/components/ui/IconButton";
+import { CertNameConfirmCard } from "@/components/ui/CertNameConfirmCard";
 
 interface CertPdfViewerSheetProps {
   /** Owning order id — drives `GET /api/orders/:orderId/cert/pdf`. */
@@ -30,13 +31,6 @@ interface CertPdfViewerSheetProps {
   /** Filename suggested for the saved download. */
   filename?: string;
   onClose: () => void;
-}
-
-interface DigitalNameInfo {
-  editable: boolean;
-  confirmed: boolean;
-  currentName: string;
-  defaultName: string;
 }
 
 export function CertPdfViewerSheet({
@@ -48,13 +42,6 @@ export function CertPdfViewerSheet({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const urlRef = useRef<string | null>(null);
-
-  // Task #1467 — digital cert name editing.
-  const [nameInfo, setNameInfo] = useState<DigitalNameInfo | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   const loadPdf = useCallback(async (signal?: { cancelled: boolean }) => {
     setLoading(true);
@@ -85,19 +72,6 @@ export function CertPdfViewerSheet({
   useEffect(() => {
     const signal = { cancelled: false };
     loadPdf(signal);
-    // Best-effort: fetch whether this digital cert's name is editable.
-    // Physical signed-cert orders come back { editable: false } and we
-    // simply never show the editor.
-    apiRequest("GET", `/api/orders/${orderId}/cert/digital-name`)
-      .then((r) => r.json())
-      .then((info: DigitalNameInfo) => {
-        if (signal.cancelled) return;
-        setNameInfo(info);
-        setDraft(info.currentName ?? "");
-      })
-      .catch(() => {
-        /* non-fatal — the PDF still renders without the editor */
-      });
     return () => {
       signal.cancelled = true;
       if (urlRef.current) {
@@ -127,51 +101,7 @@ export function CertPdfViewerSheet({
     a.remove();
   };
 
-  const handleSaveName = async () => {
-    const trimmed = draft.trim();
-    if (!trimmed) {
-      setSaveError("A name is required.");
-      return;
-    }
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const r = await apiRequest("POST", `/api/orders/${orderId}/cert/digital-name`, {
-        name: trimmed,
-      });
-      const data = await r.json();
-      const saved = (data?.confirmedName as string) ?? trimmed;
-      setNameInfo((prev) =>
-        prev ? { ...prev, currentName: saved, confirmed: true } : prev,
-      );
-      setDraft(saved);
-      setEditing(false);
-      // Re-render the PDF with the confirmed name.
-      await loadPdf();
-    } catch (e: unknown) {
-      let msg = "Couldn't save that name. Please try again.";
-      try {
-        if (e && typeof e === "object" && "message" in e) {
-          const parsed = String((e as { message?: string }).message ?? "");
-          // apiRequest throws "<status>: <json>"; pull the message field.
-          const jsonStart = parsed.indexOf("{");
-          if (jsonStart >= 0) {
-            const body = JSON.parse(parsed.slice(jsonStart));
-            if (body?.message) msg = body.message;
-          } else if (parsed) {
-            msg = parsed;
-          }
-        }
-      } catch {
-        /* keep default */
-      }
-      setSaveError(msg);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const showNameEditor = !!nameInfo?.editable && !loading && !error;
+  const showNameEditor = !loading && !error;
 
   return createPortal(
     <div
@@ -217,88 +147,11 @@ export function CertPdfViewerSheet({
       </div>
 
       {showNameEditor && (
-        <div className="px-4 pb-3" data-testid="cert-name-editor">
-          {!editing ? (
-            <div className="flex items-center gap-3 rounded-xl bg-white/5 border border-white/10 px-3 py-2.5">
-              <div className="flex-1 min-w-0">
-                <div className="text-xs uppercase tracking-wider text-fan-secondary">
-                  Name on certificate
-                </div>
-                <div
-                  className="text-sm font-medium text-white truncate"
-                  data-testid="text-cert-name"
-                >
-                  {nameInfo?.currentName}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setDraft(nameInfo?.currentName ?? "");
-                  setSaveError(null);
-                  setEditing(true);
-                }}
-                className="flex-shrink-0 text-sm font-semibold active:opacity-70"
-                style={{ color: "var(--brand-mint)" }}
-                data-testid="button-edit-cert-name"
-              >
-                Edit
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-3">
-              <label
-                htmlFor="cert-name-input"
-                className="text-xs uppercase tracking-wider text-fan-secondary"
-              >
-                Name on certificate
-              </label>
-              <input
-                id="cert-name-input"
-                type="text"
-                value={draft}
-                maxLength={80}
-                autoFocus
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !saving) handleSaveName();
-                }}
-                placeholder="e.g. Jane Doe"
-                className="bg-white/10 text-white text-base rounded-lg px-3 py-2 outline-none focus:bg-white/15"
-                data-testid="input-cert-name"
-              />
-              {saveError && (
-                <div className="text-xs" style={{ color: "var(--brand-pink)" }} data-testid="text-cert-name-error">
-                  {saveError}
-                </div>
-              )}
-              <div className="flex items-center gap-2 mt-0.5">
-                <button
-                  type="button"
-                  onClick={handleSaveName}
-                  disabled={saving || !draft.trim()}
-                  className="px-3 py-1.5 rounded-full bg-[var(--brand-mint)] text-[var(--brand-bg)] text-sm font-semibold disabled:opacity-50 active:opacity-80"
-                  data-testid="button-save-cert-name"
-                >
-                  {saving ? "Saving…" : "Save name"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditing(false);
-                    setSaveError(null);
-                    setDraft(nameInfo?.currentName ?? "");
-                  }}
-                  disabled={saving}
-                  className="text-sm text-fan-secondary active:opacity-70 disabled:opacity-50"
-                  data-testid="button-cancel-cert-name"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        <CertNameConfirmCard
+          orderId={orderId}
+          variant="bar"
+          onSaved={() => loadPdf()}
+        />
       )}
 
       <div className="relative flex-1 overflow-hidden">
