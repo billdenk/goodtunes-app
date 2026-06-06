@@ -221,21 +221,18 @@ export function StorefrontSidebar() {
           side="top"
           align="start"
           sideOffset={8}
-          className="w-60 border-white/10 bg-[rgba(20,24,52,0.96)] text-white shadow-2xl backdrop-blur-xl"
+          className="w-60 border-0 bg-[rgba(20,24,52,0.92)] text-white shadow-2xl backdrop-blur-xl"
           style={{
             WebkitBackdropFilter: "blur(24px) saturate(180%)",
           }}
           data-testid="menu-sidebar-account"
         >
-          <div className="flex items-center gap-3 px-2 py-2">
-            <Avatar showBadge={false} />
-            <div className="min-w-0">
-              <div
-                className="text-white text-sm font-semibold truncate"
-                data-testid="text-account-name"
-              >
-                {accountName}
-              </div>
+          <div className="px-2 py-2">
+            <div
+              className="text-white text-sm font-semibold truncate"
+              data-testid="text-account-name"
+            >
+              {accountName}
             </div>
           </div>
           <DropdownMenuSeparator className="bg-white/10" />

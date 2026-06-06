@@ -260,7 +260,7 @@ export function Orders() {
 
   return (
     <main className="min-h-screen bg-[#00062B] text-fan-primary pb-24" data-testid="page-orders">
-      <div className="max-w-[440px] mx-auto px-5 pt-8">
+      <div className="max-w-[440px] sm:max-w-[760px] mx-auto px-5 pt-8">
         <h1 className="text-[28px] font-bold mb-1">Your orders</h1>
         <p className="text-fan-secondary text-[13px] mb-6">Records, certificates, and digital access you own.</p>
 
@@ -285,7 +285,7 @@ export function Orders() {
           </div>
         )}
 
-        <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
           {orders?.map((o) => {
             const st = STATUS_LABEL[o.status] ?? STATUS_LABEL.pending;
             const g = o.gift;
@@ -306,7 +306,7 @@ export function Orders() {
             return (
               <div
                 key={o.id}
-                className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                className="rounded-2xl bg-white/5 p-4"
                 data-testid={`row-order-${o.id}`}
               >
                 <Link href={`/album/${o.albumId}`} className="block active:scale-[0.99] transition-transform">
