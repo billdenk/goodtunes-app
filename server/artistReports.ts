@@ -1012,6 +1012,104 @@ async function albumAddonBuyersHandler(req: Request, res: Response) {
   return res.json({ buyers });
 }
 
+// Task #1528 — Download an album's Dashboard data as CSV. One endpoint keyed
+// on ?dataset= so all three on-screen tables (add-on buyers, top songs, city
+// breakdown) share the same resolveAlbumScope auth + sendCsv writer and can
+// never drift from what the dashboard renders. PII guardrail is identical to
+// the on-screen drill-down: only the public display name (or trimmed legal-
+// name fallback) and city/region/country leave here — email/phone/street
+// never do.
+async function albumExportHandler(req: Request, res: Response) {
+  const resolved = await resolveAlbumScope(req, String(req.params.id));
+  if ("error" in resolved) return res.status(resolved.status).json({ message: resolved.error });
+  const { scope, albumTitle } = resolved;
+  const albumId = scope.albumIds[0];
+  const dataset = String(req.query.dataset ?? "").trim();
+
+  // Filename-safe slug of the album title so the download is self-describing.
+  const slug = (albumTitle || "album").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "album";
+
+  if (dataset === "addon-buyers") {
+    // Every add-on buyer on the album, flattened one row per order-line, so a
+    // label can pull the whole add-on roster in a single download (the on-
+    // screen view drills one add-on at a time). Mirrors albumAddonBuyersHandler.
+    const rows = await db.execute<any>(sql`
+      SELECT o.id AS order_id, o.created_at, oi.quantity, oi.sku, oi.label AS addon,
+        o.shipping_address->>'city' AS city,
+        o.shipping_address->>'state' AS region,
+        o.shipping_address->>'country' AS country,
+        cu.display_name, o.buyer_name
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      LEFT JOIN customer_users cu ON cu.id = o.customer_id
+      WHERE o.album_id = ${albumId}
+        AND o.status IN (${ALBUM_REVENUE_STATUSES})
+        AND oi.kind IN ('addon', 'custom_addon')
+      ORDER BY oi.label ASC, o.created_at DESC
+      LIMIT 5000
+    `);
+    const { trimBuyerName } = await import("./reports/buyers");
+    const out = ((rows as any).rows || []).map((r: any) => ({
+      addon: r.addon ?? "",
+      buyer: r.display_name?.trim() ? r.display_name.trim() : trimBuyerName(r.buyer_name),
+      quantity: Number(r.quantity) || 1,
+      date: r.created_at ? new Date(r.created_at).toISOString().slice(0, 10) : "",
+      city: r.city ?? "",
+      region: r.region ?? "",
+      country: r.country ?? "",
+    }));
+    return sendCsv(res, `${slug}-addon-buyers.csv`, out);
+  }
+
+  if (dataset === "top-songs") {
+    // Same compute as the dashboard's "Most popular songs" table.
+    const songRows = scope.songIds.length
+      ? await db.execute<{ song_id: string; title: string; plays: string; completes: string; favorites: string }>(sql`
+          SELECT s.id AS song_id, s.title,
+            COUNT(*) FILTER (WHERE e.name = 'play_start')::text AS plays,
+            COUNT(*) FILTER (WHERE e.name = 'play_complete')::text AS completes,
+            COUNT(*) FILTER (WHERE e.name = 'favorite_song')::text AS favorites
+          FROM songs s
+          LEFT JOIN analytics_events e
+            ON e.payload->>'songId' = s.id
+            AND e.name IN ('play_start', 'play_complete', 'favorite_song')
+          WHERE s.album_id = ${albumId}
+          GROUP BY s.id, s.title
+          ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC, s.title ASC
+        `)
+      : ({ rows: [] } as any);
+    const out = ((songRows as any).rows || []).map((r: any, i: number) => ({
+      rank: i + 1,
+      title: r.title ?? "",
+      plays: Number(r.plays),
+      completes: Number(r.completes),
+      favorites: Number(r.favorites),
+    }));
+    return sendCsv(res, `${slug}-top-songs.csv`, out);
+  }
+
+  if (dataset === "cities") {
+    // Same compute as the dashboard's "Where fans live" table (city-level,
+    // from shipping addresses). Ordered by orders DESC to match the on-screen
+    // list. Coordinates are dropped — the CSV is for spreadsheets, not maps.
+    const { buyerMap } = await import("./reports/buyers");
+    const geo = await buyerMap(sql`o.album_id = ${albumId}`, new Date(0), new Date(Date.now() + 86400_000));
+    const out = (geo.points || [])
+      .slice()
+      .sort((a: any, b: any) => b.orders - a.orders)
+      .map((p: any) => ({
+        city: p.city ?? "",
+        region: p.region ?? "",
+        country: p.country ?? "",
+        orders: p.orders,
+        fans: p.fans,
+      }));
+    return sendCsv(res, `${slug}-cities.csv`, out);
+  }
+
+  return res.status(400).json({ message: "Unknown dataset. Use dataset=addon-buyers|top-songs|cities" });
+}
+
 // ─── CSV ───────────────────────────────────────────────────────────────
 function sendCsv(res: Response, filename: string, rows: any[]): Response {
   res.setHeader("Content-Type", "text/csv");
@@ -1082,4 +1180,6 @@ export async function registerArtistReportRoutes(app: Express): Promise<void> {
   const albumGate = requireRole("artist", "label", "manager", "super_admin", "admin");
   app.get("/api/admin/albums/:id/dashboard", albumGate, albumDashboardHandler);
   app.get("/api/admin/albums/:id/dashboard/addon-buyers", albumGate, albumAddonBuyersHandler);
+  // Task #1528 — CSV downloads for the dashboard tables (addon-buyers|top-songs|cities).
+  app.get("/api/admin/albums/:id/dashboard/export", albumGate, albumExportHandler);
 }

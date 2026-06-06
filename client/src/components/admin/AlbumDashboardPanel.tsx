@@ -14,6 +14,7 @@ import {
   Sparkles,
   UserPlus,
   Repeat,
+  Download,
 } from "lucide-react";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { apiRequest } from "@/lib/queryClient";
@@ -118,20 +119,63 @@ function SectionCard({
   subtitle,
   children,
   testId,
+  action,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   testId?: string;
+  action?: React.ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-hidden" data-testid={testId}>
-      <div className="px-5 py-3.5 border-b border-slate-100">
-        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-        {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+      <div className="px-5 py-3.5 border-b border-slate-100 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+          {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+        </div>
+        {action && <div className="flex-shrink-0">{action}</div>}
       </div>
       {children}
     </div>
+  );
+}
+
+// Light-chrome CSV download link for the white admin surface. A plain GET <a>
+// — the dashboard export endpoints are cookie-authenticated, so the browser
+// sends the admin session automatically. `disabled` greys it out when there's
+// nothing to export yet.
+function CsvDownload({
+  albumId,
+  dataset,
+  testId,
+  disabled,
+}: {
+  albumId: string;
+  dataset: "addon-buyers" | "top-songs" | "cities";
+  testId: string;
+  disabled?: boolean;
+}) {
+  if (disabled) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-xs font-semibold text-slate-300 whitespace-nowrap cursor-not-allowed"
+        data-testid={`button-${testId}-disabled`}
+      >
+        <Download className="w-3.5 h-3.5" strokeWidth={2} />
+        CSV
+      </span>
+    );
+  }
+  return (
+    <a
+      href={`/api/admin/albums/${albumId}/dashboard/export?dataset=${dataset}`}
+      className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand-blue)] hover:underline underline-offset-2 whitespace-nowrap transition-colors"
+      data-testid={`button-${testId}`}
+    >
+      <Download className="w-3.5 h-3.5" strokeWidth={2} />
+      CSV
+    </a>
   );
 }
 
@@ -445,6 +489,14 @@ export function AlbumDashboardPanel({ albumId }: { albumId: string }) {
           title="Add-ons sold"
           subtitle="Tap an add-on to see who bought it"
           testId="section-addons"
+          action={
+            <CsvDownload
+              albumId={albumId}
+              dataset="addon-buyers"
+              testId="export-addon-buyers"
+              disabled={addons.length === 0}
+            />
+          }
         >
           {addons.length === 0 ? (
             <p className="px-5 py-8 text-center text-sm text-slate-400" data-testid="addons-empty">
@@ -469,6 +521,14 @@ export function AlbumDashboardPanel({ albumId }: { albumId: string }) {
             : "Ranked by plays"
         }
         testId="section-top-songs"
+        action={
+          <CsvDownload
+            albumId={albumId}
+            dataset="top-songs"
+            testId="export-top-songs"
+            disabled={topSongs.length === 0}
+          />
+        }
       >
         {topSongs.length === 0 ? (
           <p className="px-5 py-8 text-center text-sm text-slate-400" data-testid="top-songs-empty">
@@ -524,6 +584,14 @@ export function AlbumDashboardPanel({ albumId }: { albumId: string }) {
             : "City-level, from shipping addresses"
         }
         testId="section-geo"
+        action={
+          <CsvDownload
+            albumId={albumId}
+            dataset="cities"
+            testId="export-cities"
+            disabled={geo.points.length === 0}
+          />
+        }
       >
         <div className="p-5 space-y-4">
           {geo.points.length === 0 ? (
