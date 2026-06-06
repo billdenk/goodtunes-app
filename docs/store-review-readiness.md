@@ -92,11 +92,15 @@ From `app-store-submission.md` (already documented, still open):
    `applinks:goodtunes.music` (the apex), so Apple/Google fetch the association from
    the apex host, which currently 404s at the edge.
 
-### B3. Provide a public account-deletion URL for the Play listing
-In-app deletion now exists (A1), but Play's Data safety form also wants a publicly
-reachable deletion instruction/URL. Either publish `goodtunes.music/delete-account`
-describing the in-app steps, or paste the in-app path into the Data safety form's
-deletion-URL field. (Apple has no equivalent URL requirement — in-app is enough.)
+### B3. Provide a public account-deletion URL for the Play listing — **fixed in repo (A)**
+In-app deletion exists (A1), and the public deletion page Play's Data safety form
+wants is now shipped at `goodtunes.music/delete-account` (route in `client/src/App.tsx`,
+page `client/src/pages/DeleteAccount.tsx`). It's a public, host-agnostic page that
+documents the in-app `Account → Privacy → Delete My Account` steps, what data is
+removed vs. retained (orders kept for legal/accounting), and a support email
+fallback. **Operator action remaining:** paste that URL into the Play Data safety
+form's deletion-URL field at submission. (Apple has no equivalent URL requirement —
+in-app is enough.)
 
 ### B4. Demo account + reviewer notes
 The mandatory review demo account and the reviewer notes (web-only purchases, no

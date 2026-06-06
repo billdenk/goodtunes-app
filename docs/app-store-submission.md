@@ -65,7 +65,7 @@ Track-this-user: **No** on every row. We do not share data with third parties fo
 
 Mirror the labels above. Play also asks:
 - **Data encrypted in transit?** Yes (TLS to `goodtunes.music`).
-- **Can users request deletion?** Yes — in-app at **Account → Privacy → Delete My Account**, which calls `DELETE /api/customer/me` (`requireCustomer`). The endpoint anonymizes the fan row in place (scrubs every PII column, nulls the password, drops all OAuth identities, revokes every bearer token, wipes favorites/playlists/library) and tears down the session; orders are retained for legal/accounting records. Play also wants a *public* deletion URL on the store listing — operator should either publish `goodtunes.music/delete-account` describing the in-app path or paste the in-app steps into the Data safety form's deletion-URL field.
+- **Can users request deletion?** Yes — in-app at **Account → Privacy → Delete My Account**, which calls `DELETE /api/customer/me` (`requireCustomer`). The endpoint anonymizes the fan row in place (scrubs every PII column, nulls the password, drops all OAuth identities, revokes every bearer token, wipes favorites/playlists/library) and tears down the session; orders are retained for legal/accounting records. Play also wants a *public* deletion URL on the store listing — this is now shipped at **`goodtunes.music/delete-account`** (`client/src/pages/DeleteAccount.tsx`), a public page documenting the in-app path, what's removed vs. retained, and a support-email fallback. Paste that URL into the Data safety form's deletion-URL field at submission.
 - **Independent security review?** No (mark accordingly; no false claim).
 
 ---

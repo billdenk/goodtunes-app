@@ -80,6 +80,8 @@ import { WelcomeBack } from "@/pages/WelcomeBack";
 // Task #537 — Finish-signup screen for OAuth-minted customer accounts.
 import { FinishSetup } from "@/pages/FinishSetup";
 import { AccountMerge } from "@/pages/AccountMerge";
+// Task #1496 — Public account-deletion page for the Play Store Data safety form.
+import DeleteAccount from "@/pages/DeleteAccount";
 import { AdminWelcomeBack } from "@/pages/AdminWelcomeBack";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
@@ -417,6 +419,10 @@ function Router() {
             the *other* address. Page itself handles the not-signed-in
             case (asks the fan to sign in as the surviving account). */}
         <Route path="/account/merge" component={AccountMerge} />
+        {/* Task #1496 — Public account-deletion explainer linked from the
+            Google Play Data safety form. No auth gate; host-agnostic so it
+            resolves at goodtunes.music/delete-account. */}
+        <Route path="/delete-account" component={DeleteAccount} />
         {/* Admin tool for the wave-1 welcome-back campaign. */}
         <Route path="/admin/welcome-back">
           <ProtectedRoute component={AdminWelcomeBack} />
