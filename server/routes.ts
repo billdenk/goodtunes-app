@@ -17249,15 +17249,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   app.post("/api/favorites/songs", requireCustomer, async (req, res) => {
     const songId = typeof req.body?.songId === "string" ? req.body.songId : "";
+    // The one-shot localStorage→server migration sets this so a legacy id
+    // that points at a never-seeded demo song doesn't fail the whole batch.
+    // An interactive heart-toggle never sets it, so a genuinely non-persisting
+    // write surfaces as an honest error the client can roll back on.
+    const isMigration = req.body?.migration === true;
     if (!songId) return res.status(400).json({ message: "songId required" });
     try {
       await storage.addSongFavorite(req.session.userId!, songId);
     } catch (err: any) {
       // FK violation on songs.id — the client sent a song id that
       // doesn't exist (e.g. legacy localStorage entry pointing at a
-      // demo-data song that was never seeded). Swallow so the one-shot
-      // migration doesn't 500 the whole batch.
-      if (err?.code !== "23503") throw err;
+      // demo-data song that was never seeded).
+      if (err?.code === "23503") {
+        if (isMigration) return res.status(201).json({ ok: true, skipped: true });
+        return res.status(404).json({ message: "song not found" });
+      }
+      throw err;
     }
     return res.status(201).json({ ok: true });
   });

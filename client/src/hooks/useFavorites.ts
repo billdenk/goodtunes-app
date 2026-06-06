@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { track } from "@/lib/analytics";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 // Task #395 — Favorites are now server-backed for signed-in fans (the heart
 // on a song, the star on an artist). Anonymous fans and admin sessions keep
@@ -94,8 +95,12 @@ function useLocalFavoriteSet(key: string) {
 
 type FavoritesKind = "songs" | "artists";
 
+type FavRow = SongFavRow | ArtistFavRow;
+type FavMutationContext = { previous: FavRow[] | null | undefined };
+
 function useServerFavoriteSet(kind: FavoritesKind) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const queryKey = kind === "songs" ? SONGS_QK : ARTISTS_QK;
   const urlBase = kind === "songs" ? "/api/favorites/songs" : "/api/favorites/artists";
   const idField: "songId" | "artistName" = kind === "songs" ? "songId" : "artistName";
@@ -113,6 +118,12 @@ function useServerFavoriteSet(kind: FavoritesKind) {
   const set = useMemo(() => new Set(ordered), [ordered]);
   const has = useCallback((id: string) => set.has(id), [set]);
 
+  const idsFromCache = useCallback((): string[] => {
+    const cached = queryClient.getQueryData<FavRow[] | null>(queryKey);
+    if (!Array.isArray(cached)) return [];
+    return cached.map((row) => (row as any)[idField] as string);
+  }, [queryClient, queryKey, idField]);
+
   const writeOptimistic = useCallback(
     (next: string[]) => {
       // Mirror the legacy shape (rows with createdAt) so cached reads stay
@@ -127,37 +138,64 @@ function useServerFavoriteSet(kind: FavoritesKind) {
     [queryClient, queryKey, idField],
   );
 
-  const addMutation = useMutation({
+  // Roll the cache back to the pre-toggle snapshot and surface an honest
+  // error. Without this, a non-persisting write (e.g. a 401 in an in-app
+  // browser) would silently flicker the heart back via a bare invalidate.
+  const rollback = useCallback(
+    (ctx: FavMutationContext | undefined) => {
+      if (ctx && ctx.previous !== undefined) {
+        queryClient.setQueryData(queryKey, ctx.previous);
+        window.dispatchEvent(new CustomEvent(EVENT_NAME));
+      }
+      toast({
+        title: "Couldn't update favorites",
+        description: "Please make sure you're signed in and try again.",
+        variant: "destructive",
+      });
+    },
+    [queryClient, queryKey, toast],
+  );
+
+  const addMutation = useMutation<void, unknown, string, FavMutationContext>({
     mutationFn: async (id: string) => {
       const body = kind === "songs" ? { songId: id } : { artistName: id };
       await apiRequest("POST", urlBase, body);
     },
-    onError: () => queryClient.invalidateQueries({ queryKey }),
-    onSettled: () => queryClient.invalidateQueries({ queryKey }),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<FavRow[] | null>(queryKey);
+      const prevIds = idsFromCache();
+      if (!prevIds.includes(id)) writeOptimistic([...prevIds, id]);
+      return { previous };
+    },
+    onError: (_err, _id, ctx) => rollback(ctx),
   });
-  const removeMutation = useMutation({
+  const removeMutation = useMutation<void, unknown, string, FavMutationContext>({
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `${urlBase}/${encodeURIComponent(id)}`);
     },
-    onError: () => queryClient.invalidateQueries({ queryKey }),
-    onSettled: () => queryClient.invalidateQueries({ queryKey }),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<FavRow[] | null>(queryKey);
+      writeOptimistic(idsFromCache().filter((x) => x !== id));
+      return { previous };
+    },
+    onError: (_err, _id, ctx) => rollback(ctx),
   });
 
   const add = useCallback(
     (id: string) => {
       if (set.has(id)) return;
-      writeOptimistic([...ordered, id]);
       addMutation.mutate(id);
     },
-    [set, ordered, writeOptimistic, addMutation],
+    [set, addMutation],
   );
   const remove = useCallback(
     (id: string) => {
       if (!set.has(id)) return;
-      writeOptimistic(ordered.filter((x) => x !== id));
       removeMutation.mutate(id);
     },
-    [set, ordered, writeOptimistic, removeMutation],
+    [set, removeMutation],
   );
   const toggle = useCallback(
     (id: string) => {
@@ -196,10 +234,15 @@ function useOneShotMigration(userId: string | undefined) {
       try {
         await Promise.all([
           ...songIds.map((id) =>
-            apiRequest("POST", "/api/favorites/songs", { songId: id }).catch(() => null),
+            apiRequest("POST", "/api/favorites/songs", { songId: id, migration: true }).catch(
+              () => null,
+            ),
           ),
           ...artistNames.map((name) =>
-            apiRequest("POST", "/api/favorites/artists", { artistName: name }).catch(() => null),
+            apiRequest("POST", "/api/favorites/artists", {
+              artistName: name,
+              migration: true,
+            }).catch(() => null),
           ),
         ]);
         writeLocal(SONGS_KEY, []);

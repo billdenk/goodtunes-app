@@ -328,6 +328,13 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
   const { data: apiAlbum, isLoading: isAlbumLoading } = useQuery<ApiAlbum>({
     queryKey: ["/api/albums", id],
     enabled: !!id,
+    // The global default is `staleTime: Infinity`, so once a fan client loads
+    // an album it never refetches and never sees later admin edits (e.g. a
+    // rename). Force a fresh read on every visit to this page so a normal
+    // navigation back reflects the current admin title/metadata without a
+    // hard reload. Scoped to this query — the global default is unchanged.
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const staticAlbum = ALBUMS.find((a) => a.id === id);
   // Task #530 — stamp the album into fan recents whenever the
