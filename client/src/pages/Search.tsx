@@ -4,6 +4,8 @@ import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { useAuth } from "@/hooks/useAuth";
 import { useFanSearch } from "@/hooks/useFanSearch";
+import { useDesktopShell } from "@/hooks/useDesktopShell";
+import { DesktopSearchView } from "@/components/search/DesktopSearchView";
 import {
   RecentSearchedList,
   CompactPreview,
@@ -12,10 +14,20 @@ import {
 
 // Apple-Music-style unified search (Task #530).
 //
-// Desktop /search page. The mobile bottom-dock inline search overlay
-// (Task #713) lives in BottomNav and reuses the same `useFanSearch`
-// hook + view components, so ranking + recents behaviour stays in
-// lock-step across both surfaces.
+// The standalone /search page has two presentations that share the SAME
+// `useFanSearch` hook + view components so ranking + recents stay in
+// lock-step:
+//   * lg+ web desktop — the top-anchored, narrow Apple-style pill from
+//     `DesktopSearchView` (Task #1521). This is byte-identical to the
+//     in-album rail search so reaching Search from either rail lands on
+//     the same look. The global StorefrontSidebar + MiniPlayer dock
+//     provide the surrounding chrome.
+//   * mobile / tablet — the bottom-anchored, full-width keyboard-friendly
+//     bar (built mobile-first, thumb-reachable above the MiniPlayer +
+//     BottomNav cluster).
+//
+// The mobile bottom-dock inline search overlay (Task #713) lives in
+// BottomNav and reuses the same hook + views too.
 //
 // Search-landing history is decoupled from the Recents tab — it lives
 // in fan_recent_searches (text queries + entity taps that happened
@@ -23,6 +35,30 @@ import {
 // and never touches the global Recents tab (fan_recents).
 
 export function SearchPage() {
+  const isDesktop = useDesktopShell();
+  // Desktop/tablet (lg+) reuses the in-album top/narrow pill so the two
+  // surfaces can't drift; phone keeps its own bottom-anchored bar.
+  return isDesktop ? <DesktopSearchPage /> : <MobileSearchPage />;
+}
+
+// lg+ web desktop. The top-anchored narrow pill comes straight from the
+// shared DesktopSearchView (same component the album-page rail mounts), so
+// styling/placement is single-sourced. The global StorefrontSidebar owns
+// the left rail + account chip; MiniPlayer renders the bottom PlayerDock.
+function DesktopSearchPage() {
+  return (
+    <main className="h-screen w-full overflow-hidden bg-[var(--brand-bg)] lg:pl-[284px]">
+      {/* Scrollable content column; bottom padding clears the floating
+          PlayerDock when a song is playing. */}
+      <div className="h-full overflow-y-auto scrollbar-hide pb-40">
+        <DesktopSearchView />
+      </div>
+      <MiniPlayer />
+    </main>
+  );
+}
+
+function MobileSearchPage() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
