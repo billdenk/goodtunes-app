@@ -1,13 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, Filter, EyeOff, X, Plus, Disc3, Clock, AlertTriangle } from "lucide-react";
+import { Search, Filter, EyeOff, X, Plus, Disc3, Clock, AlertTriangle, MoreVertical, Copy } from "lucide-react";
 import {
   Popover,
   PopoverArrow,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -98,6 +104,16 @@ function albumHref(albumId: string, listQuery: string): string {
 
 export function AdminAlbums() {
   const { user, isLoading: authLoading } = useAuth();
+  // Task #1494 — the Duplicate row action is operator-only (the server route
+  // is too): duplicating mints a brand-new draft, not a scoped partner edit,
+  // so partner (artist/label) admins must not see it. Mirror AdminAlbum, which
+  // reads the resolved role off /api/me/role.
+  const { data: adminRoleInfo } = useQuery<{ role: string }>({
+    queryKey: ["/api/me/role"],
+    enabled: !!user?.isAdmin,
+  });
+  const isOperator =
+    adminRoleInfo?.role === "super_admin" || adminRoleInfo?.role === "admin";
   const [, navigate] = useLocation();
   const urlSearch = useSearch();
   // Task #1007 / #1008 — restore the whole list view from the URL so a
@@ -240,6 +256,34 @@ export function AdminAlbums() {
     onError: (err: any) => {
       toast({
         title: "Couldn't create album",
+        description: err?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Task #1494 — Duplicate an album from its row menu. Server clones the
+  // descriptive content + full tracklist/credits (referencing existing
+  // masters) into a fresh Prepping draft with no sales/ownership carried
+  // over; we land the operator straight on the new draft.
+  const duplicateAlbum = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/admin/albums/${id}/duplicate`);
+      return res.json() as Promise<AlbumLite>;
+    },
+    onSuccess: (a) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-albums"] });
+      toast({
+        title: "Album duplicated",
+        description: "Opened the new Prepping draft.",
+      });
+      navigate(`/admin/albums/${a.id}`);
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Couldn't duplicate album",
         description: err?.message || "Please try again.",
         variant: "destructive",
       });
@@ -871,6 +915,11 @@ export function AdminAlbums() {
                 key={a.id}
                 album={a}
                 href={albumHref(a.id, listQueryString)}
+                canDuplicate={isOperator}
+                onDuplicate={(id) => duplicateAlbum.mutate(id)}
+                isDuplicating={
+                  duplicateAlbum.isPending && duplicateAlbum.variables === a.id
+                }
               />
             ))}
           </div>
@@ -1025,7 +1074,19 @@ function AlbumTile({ album, href }: { album: AlbumLite; href: string }) {
   );
 }
 
-function AlbumRow({ album, href }: { album: AlbumLite; href: string }) {
+function AlbumRow({
+  album,
+  href,
+  canDuplicate,
+  onDuplicate,
+  isDuplicating,
+}: {
+  album: AlbumLite;
+  href: string;
+  canDuplicate: boolean;
+  onDuplicate: (id: string) => void;
+  isDuplicating: boolean;
+}) {
   const countdown =
     albumStage(album) === "staged"
       ? sunriseCountdownLabel(album.goodTunesReleaseDate)
@@ -1092,6 +1153,58 @@ function AlbumRow({ album, href }: { album: AlbumLite; href: string }) {
           {album.type}
           {album.year && <> · {album.year}</>}
         </span>
+        {/* Task #1494 — per-row actions menu (Duplicate). Operator-only
+            (the server route enforces it too); partner admins never see it.
+            Trigger lives inside the row anchor, so it preventDefault/
+            stopPropagation to keep the row tap from navigating; the portalled
+            menu sits outside the anchor. Hover-revealed to match the chrome. */}
+        {canDuplicate && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              disabled={isDuplicating}
+              aria-label="Album actions"
+              title="Album actions"
+              className="inline-flex items-center justify-center w-7 h-7 -mr-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 data-[state=open]:bg-slate-100 data-[state=open]:text-slate-700 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 transition-opacity"
+              data-testid={`button-album-actions-${album.id}`}
+            >
+              <span className="sr-only">Album actions</span>
+              <MoreVertical className="w-4 h-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            sideOffset={6}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            className="min-w-[240px] p-1.5 bg-white text-slate-900 border border-slate-200 shadow-lg"
+          >
+            <DropdownMenuItem
+              onSelect={() => onDuplicate(album.id)}
+              disabled={isDuplicating}
+              data-testid={`menu-duplicate-album-${album.id}`}
+              className="gap-2.5 px-2.5 py-2 text-xs cursor-pointer focus:bg-slate-100 focus:text-slate-900 data-[disabled]:opacity-50"
+            >
+              <Copy className="w-4 h-4 text-slate-500" />
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-slate-900">
+                  {isDuplicating ? "Duplicating…" : "Duplicate album"}
+                </div>
+                <div className="text-xs text-slate-500">
+                  Clones into a new Prepping draft.
+                </div>
+              </div>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        )}
       </div>
     </Link>
   );

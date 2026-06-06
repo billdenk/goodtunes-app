@@ -664,6 +664,103 @@ SQL
 backfill_pacpack_reassignment dev  "${DATABASE_URL:-}"
 backfill_pacpack_reassignment prod "${PROD_DATABASE_URL:-}"
 
+# Screaming Trees "Strange Things Happening (Ellensburg Demos 1986-1988)"
+# de-duplication. Two rows describe the SAME 10-track demo set:
+#   * 3ccd21aa… "Strange Things Happening (Ellensburg Demos 1986-1988)" — the
+#     legacy gogoods import. Holds the only REAL sales (GoodDeed #1 + #2, two
+#     paying owners) but is bare on content. Soft-deleted by hand on
+#     2026-06-05.
+#   * f4ce9c70… "Weird Things Happening" — a later hand-rebuild with all the
+#     content work (lyrics, synced lyrics, writers, performers+gear, album
+#     credits, liner notes) but ZERO real sales (only comp grants).
+# Bill's call: keep the content-rich rebuild as the surviving row, move the
+# real sales/ownership onto it, give it the correct title, and leave the bare
+# original soft-deleted. Re-pointing 2 orders + 2 entitlements is far smaller
+# and safer than re-mapping per-track content across song ids.
+# Marker-guarded (true one-time), id-pinned, transactional, and a no-op on any
+# DB that lacks these exact rows (a fresh dev clone) — Screaming Trees catalog
+# is prod-only.
+backfill_strange_things_consolidation() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping strange/weird consolidation on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_strange constant text := '3ccd21aa-50bc-4b37-9590-34c5c2d8530e'; -- bare, has sales, deleted
+  v_weird   constant text := 'f4ce9c70-1d07-4fae-9cdf-8d6b2a61b612'; -- content-rich keeper
+  v_legacy  text;
+  v_orders  integer := 0;
+  v_ents    integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'strange_things_weird_consolidation'
+  ) THEN
+    IF EXISTS (SELECT 1 FROM albums WHERE id = v_strange)
+       AND EXISTS (SELECT 1 FROM albums WHERE id = v_weird) THEN
+
+      -- 1) Move the real GoodDeed sales onto the keeper (numbers ride along).
+      UPDATE orders SET album_id = v_weird WHERE album_id = v_strange;
+      GET DIAGNOSTICS v_orders = ROW_COUNT;
+
+      -- 2) Move the ownership entitlements (cert #1/#2) onto the keeper.
+      UPDATE user_albums SET album_id = v_weird WHERE album_id = v_strange;
+      GET DIAGNOSTICS v_ents = ROW_COUNT;
+
+      -- 3) Transfer the legacy gogoods id so future re-imports dedupe against
+      --    the keeper. The partial-unique index forbids holding it on both
+      --    rows, so free the deleted row first, then stamp the keeper.
+      SELECT legacy_gogoods_id INTO v_legacy FROM albums WHERE id = v_strange;
+      IF v_legacy IS NOT NULL THEN
+        UPDATE albums SET legacy_gogoods_id = NULL WHERE id = v_strange;
+        UPDATE albums SET legacy_gogoods_id = v_legacy
+         WHERE id = v_weird AND legacy_gogoods_id IS NULL;
+      END IF;
+
+      -- 4) Adopt the correct (canonical) title on the keeper.
+      UPDATE albums
+         SET title = 'Strange Things Happening (Ellensburg Demos 1986-1988)'
+       WHERE id = v_weird AND title = 'Weird Things Happening';
+
+      -- 5) Stamp first_sold_at from the moved sales so the post-sale metadata
+      --    lock correctly engages on the keeper.
+      UPDATE albums
+         SET first_sold_at = (SELECT min(created_at) FROM orders WHERE album_id = v_weird)
+       WHERE id = v_weird AND first_sold_at IS NULL;
+
+      -- 6) The old Strange row stays soft-deleted and is now empty of sales.
+
+      INSERT INTO post_merge_data_backfills (name) VALUES ('strange_things_weird_consolidation');
+      RAISE NOTICE 'strange/weird consolidation applied: % orders, % entitlements moved', v_orders, v_ents;
+    ELSE
+      RAISE NOTICE 'strange/weird consolidation skipped — album rows not present on this DB';
+    END IF;
+  ELSE
+    RAISE NOTICE 'strange/weird consolidation already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: strange/weird consolidation ok on $label"
+    echo "$out" | grep -i 'consolidation' || true
+  else
+    echo "post-merge: WARNING — strange/weird consolidation failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_strange_things_consolidation dev  "${DATABASE_URL:-}"
+backfill_strange_things_consolidation prod "${PROD_DATABASE_URL:-}"
+
 # Task #1037 — Unified identity P2: link column users.customer_user_id +
 # partial unique index. shared/schema.ts declares the column (no FK on
 # purpose — a relational FK reappears on every publish dev→prod diff, see

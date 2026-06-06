@@ -169,6 +169,7 @@ export interface IStorage {
   // CMS mutations (admin-only at the route layer).
   createAlbum(data: Omit<Album, "id"> & { id?: string }): Promise<Album>;
   updateAlbum(id: string, data: Partial<Album>): Promise<Album | undefined>;
+  duplicateAlbum(sourceId: string): Promise<Album>;
   deleteAlbum(id: string): Promise<void>;
   createSong(data: Omit<Song, "id"> & { id?: string }): Promise<Song>;
   updateSong(id: string, data: Partial<Song>): Promise<Song | undefined>;
@@ -1186,6 +1187,134 @@ export class DbStorage implements IStorage {
   async createSong(data: Omit<Song, "id"> & { id?: string }): Promise<Song> {
     const [s] = await db.insert(songs).values(data as any).returning();
     return s;
+  }
+
+  // Task #1494 — Clone an album into a fresh Prepping draft. Copies the
+  // descriptive content (album metadata + every track's metadata, audio/Mux
+  // REFERENCE fields, lyrics, and the full credit/split graph) WITHOUT
+  // carrying any sale/ownership state. The copy is descriptive-only by
+  // construction: we build the createAlbum/createSong payloads from a curated
+  // field list, so every column we DON'T list (priceCents, firstSoldAt,
+  // shareSlug, shopify push, cert window/batch, payout overrides,
+  // sellMode/physicalFormat, sellQuoteLockedAt, anticipatedTrackCount, the
+  // live GoodTunes/streaming release dates) defaults to its column default
+  // (null/false) on the new row. No orders, certificates, user_albums, or
+  // live SKUs are touched. Masters are NOT re-uploaded or re-ingested to Mux:
+  // the duplicate references the SAME mux asset / object-storage master as the
+  // source (no new exposure — and the draft is Prepping, so it's not
+  // buy-eligible / not in any fan catalog/slug read until promoted).
+  async duplicateAlbum(sourceId: string): Promise<Album> {
+    const source = await this.getAlbumById(sourceId, { includeHidden: true });
+    if (!source) throw new Error("Source album not found");
+
+    const draft = await this.createAlbum({
+      title: `${source.title} (Copy)`,
+      artist: source.artist,
+      artwork: source.artwork,
+      year: source.year,
+      type: source.type,
+      description: source.description,
+      genre: source.genre,
+      linerNotes: source.linerNotes,
+      labelId: source.labelId,
+      primaryArtistId: source.primaryArtistId,
+      originalReleaseDate: source.originalReleaseDate,
+      copyrightLine: source.copyrightLine,
+      copyrightSymbol: source.copyrightSymbol,
+      appleMusicUrl: source.appleMusicUrl,
+      spotifyUrl: source.spotifyUrl,
+      tidalUrl: source.tidalUrl,
+      qobuzUrl: source.qobuzUrl,
+      deezerUrl: source.deezerUrl,
+      pandoraUrl: source.pandoraUrl,
+      isExplicit: source.isExplicit,
+      isSpinPromo: source.isSpinPromo,
+      isGoodTunesRelease: source.isGoodTunesRelease,
+      // Always lands as a Prepping draft — kept out of every public album
+      // read (fan catalog/buy/search/slug all filter isPrepping=false).
+      isPrepping: true,
+    } as any);
+
+    // Tracks, in track-number order. We copy the audio/Mux REFERENCE fields
+    // verbatim (audioUrl, audioSourceUrl, mux*, audio specs, waveform, preview
+    // window, vinyl side/order, stream links, lyrics, synced lyrics) so the
+    // draft is a faithful, immediately-playable clone — without re-ingesting
+    // to Mux. Only the per-song `legacyGogoodsId` (a unique import key) is
+    // dropped so the unique index can't collide.
+    const srcSongs = await this.getSongsByAlbum(sourceId);
+    for (const src of srcSongs) {
+      const { id: _sid, legacyGogoodsId: _lg, deletedAt: _da, deletedBy: _db, ...songRest } =
+        src as any;
+      const newSong = await this.createSong({
+        ...songRest,
+        albumId: draft.id,
+        legacyGogoodsId: null,
+      } as any);
+
+      // Per-track credits + splits. Strip id / deletedAt / enrichment and
+      // re-point at the new song id; positions are copied verbatim.
+      const [credits, splits] = await Promise.all([
+        this.getSongCredits(src.id),
+        this.getTrackSplits(src.id),
+      ]);
+      for (const w of credits.writers) {
+        await this.createTrackWriter({
+          songId: newSong.id,
+          personId: w.personId,
+          name: w.name,
+          role: w.role,
+          position: w.position,
+        } as any);
+      }
+      for (const p of credits.performers) {
+        await this.createTrackPerformer({
+          songId: newSong.id,
+          personId: p.personId,
+          instrumentId: p.instrumentId,
+          name: p.name,
+          role: p.role,
+          tuningNotes: p.tuningNotes,
+          position: p.position,
+        } as any);
+      }
+      for (const r of splits.publishing) {
+        await this.createTrackPublishingSplit({
+          songId: newSong.id,
+          personId: r.personId,
+          organizationId: r.organizationId,
+          name: r.name,
+          role: r.role,
+          proAffiliation: r.proAffiliation,
+          percentBp: r.percentBp,
+          position: r.position,
+        } as any);
+      }
+      for (const r of splits.mechanical) {
+        await this.createTrackMechanicalSplit({
+          songId: newSong.id,
+          personId: r.personId,
+          organizationId: r.organizationId,
+          name: r.name,
+          role: r.role,
+          percentBp: r.percentBp,
+          position: r.position,
+        } as any);
+      }
+    }
+
+    // Album-wide production credits (Produced by / Mixed by / Mastered by …).
+    const production = await this.listAlbumProductionCredits(sourceId);
+    for (const c of production) {
+      await this.createAlbumProductionCredit({
+        albumId: draft.id,
+        personId: c.personId,
+        name: c.name,
+        role: c.role,
+        position: c.position,
+      } as any);
+    }
+
+    return draft;
   }
 
   // ----- Bonus album content (videos + photos) -----

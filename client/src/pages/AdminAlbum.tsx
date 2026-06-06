@@ -601,6 +601,38 @@ export function AdminAlbum() {
     },
   });
 
+  // Task #1494 — Duplicate this album into a fresh Prepping draft. The server
+  // clones the descriptive content + full tracklist/credits and references the
+  // existing masters (no re-ingest), but carries no sales/ownership state. We
+  // fire immediately (mirrors the "+ Add album" create path — no confirm) and
+  // jump the operator straight into the new draft.
+  const duplicateAlbum = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest(
+        "POST",
+        `/api/admin/albums/${albumId}/duplicate`,
+      );
+      return res.json() as Promise<{ id: string }>;
+    },
+    onSuccess: (a) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-albums"] });
+      toast({
+        title: "Album duplicated",
+        description: "Opened the new Prepping draft.",
+      });
+      navigate(`/admin/albums/${a.id}`);
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't duplicate album",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Task #1363 — probe the publishing data the delete cascade would silently
   // take down (mechanical-settlement splits + units-pressed). Only runs while
   // the operator's delete-confirm dialog is open, so it's free for the common
@@ -1235,6 +1267,32 @@ export function AdminAlbum() {
               pair. In multi-select mode the trigger collapses into a
               "Delete N Tracks" call-to-action (rose-tinted when N>0,
               slate-100 when N=0) plus a Cancel-out-of-selection link. */}
+          <div className="flex items-end gap-1">
+          {/* Task #1494 — Duplicate album. Operator-only (full admins, not
+              partners) and hidden in track-selection mode so the right edge
+              stays a single matched pair with the delete affordance. Fires
+              immediately like "+ Add album" — no confirm — since it only
+              creates a new Prepping draft (nothing destructive). */}
+          {!partnerDelete && !selectionMode && (
+            <button
+              type="button"
+              onClick={() => duplicateAlbum.mutate()}
+              disabled={duplicateAlbum.isPending}
+              aria-label="Duplicate album"
+              title="Duplicate this album as a new Prepping draft (no sales or ownership copied)"
+              className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40 flex-shrink-0"
+              data-testid="button-duplicate-album"
+            >
+              <span className="text-xs font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                {duplicateAlbum.isPending ? "Duplicating…" : "Duplicate"}
+              </span>
+              {duplicateAlbum.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+            </button>
+          )}
           {partnerDelete ? (
             // Task #1250 / #1267 — Artists and labels get a single
             // album-delete affordance (no track multi-select / delete-all
@@ -1382,6 +1440,7 @@ export function AdminAlbum() {
             </DropdownMenu>
             </>
           )}
+          </div>
         </div>
 
         {/* TAB CONTENT — gated on the same allowed-set the tab bar

@@ -6443,6 +6443,50 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Task #1494 — Duplicate an album into a fresh Prepping draft. Clones the
+  // descriptive content (album metadata + full tracklist with per-track
+  // metadata, audio/Mux reference fields, lyrics, and the credit/split graph)
+  // but carries NO sale/ownership state (no orders, certificates, owners,
+  // share slug, live SKUs/pricing, payout overrides, shopify push, or cert
+  // window). The new row lands as isPrepping=true so it never auto-appears to
+  // fans before the operator finishes editing. The heavy lifting lives in
+  // storage.duplicateAlbum so the field-curation rules stay in one place.
+  app.post("/api/admin/albums/:id/duplicate", requireAdmin, async (req, res) => {
+    const sourceId = String(req.params.id);
+    // Operator-only. Duplicating mints a brand-new draft album rather than
+    // editing an existing scoped one, so it is NOT a partner-permission verb —
+    // and because partner (artist/label/…) accounts are also `isAdmin`,
+    // `requireAdmin` alone would let them clone. Gate on the resolved role the
+    // same way DELETE /api/admin/albums/:id does, mirroring the AdminAlbum UI
+    // which hides Duplicate for partner roles.
+    const userId = req.session.userId!;
+    const { getUserRole } = await import("./auth/roles");
+    const role = await getUserRole(userId);
+    const isOperator = role?.role === "super_admin" || role?.role === "admin";
+    if (!isOperator) {
+      return res
+        .status(403)
+        .json({ message: "Only GoodTunes operators can duplicate an album." });
+    }
+    try {
+      const source = await storage.getAlbumById(sourceId, { includeHidden: true });
+      if (!source) {
+        return res.status(404).json({ message: "Album not found" });
+      }
+      const draft = await storage.duplicateAlbum(sourceId);
+      return res.status(201).json(draft);
+    } catch (err: any) {
+      console.error("[admin] POST /api/admin/albums/:id/duplicate failed", {
+        sourceId,
+        message: err?.message,
+        stack: err?.stack,
+      });
+      return res.status(500).json({
+        message: `Couldn't duplicate album: ${err?.message || "unexpected server error"}`,
+      });
+    }
+  });
+
   // One-shot backfill: flips `isGoodTunesRelease=true` on the small,
   // hard-coded list of original GoodTunes releases. Exists because the
   // boolean column shipped to prod with a `false` default, leaving the
