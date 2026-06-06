@@ -158,16 +158,19 @@ function CreditAvatar({ e }: { e: CreditEntry }) {
       <img
         src={e.photoUrl}
         alt=""
-        style={{ width: 38, height: 38 }}
+        style={{ width: 40, height: 40 }}
         className="rounded-full object-cover flex-shrink-0"
       />
     );
   }
+  /* No photo → a solid brand-blue circle with white initials so the row reads
+     as an avatar, not two stray letters floating on the navy bg. Mirrors the
+     admin Edit-Profile initials treatment (brand-blue fill + white initials). */
   return (
     <span
       aria-hidden
-      style={{ width: 38, height: 38 }}
-      className="rounded-full bg-white/[0.06] flex-shrink-0 inline-flex items-center justify-center text-xs font-medium text-fan-primary"
+      style={{ width: 40, height: 40 }}
+      className="rounded-full bg-[var(--brand-blue)] flex-shrink-0 inline-flex items-center justify-center text-xs font-semibold text-white"
     >
       {initialsOf(e.name)}
     </span>
@@ -182,7 +185,7 @@ function CreditLabel({ e }: { e: CreditEntry }) {
         {e.name}
       </span>
       {e.subtitle && (
-        <span className="block text-xs leading-snug text-fan-secondary mt-0.5">
+        <span className="block text-sm leading-snug text-fan-secondary mt-0.5">
           {e.subtitle}
         </span>
       )}
@@ -296,12 +299,14 @@ function CreditsList({
       {groups.map((group, groupIdx) => (
         <section
           key={group.title}
-          className={groupIdx === 0 ? "" : "mt-6"}
+          className={groupIdx === 0 ? "" : "mt-8"}
           data-testid={`row-album-credit-role-${group.title
             .replace(/\s+/g, "-")
             .toLowerCase()}`}
         >
-          <h3 className="px-1 mb-2 text-fan-faint text-xs font-semibold uppercase tracking-[0.08em]">
+          {/* Apple's Credits card uses a calm Title-Case section header (not a
+              tiny tracked all-caps label) above each role group. */}
+          <h3 className="px-1 mb-2.5 text-fan-secondary text-base font-semibold tracking-[-0.005em]">
             {group.title}
           </h3>
           <div className="rounded-2xl bg-white/[0.04] overflow-hidden">
@@ -347,6 +352,7 @@ function CreditsSlider({
   resolveInstrument,
   onOpenInstrument,
   showCloseOnPerson,
+  surfaceBg,
 }: {
   groups: CreditGroup[];
   eyebrow: string;
@@ -368,6 +374,11 @@ function CreditsSlider({
      hides the X on the person view (back caret only) so the credits list keeps
      the single close affordance. */
   showCloseOnPerson: boolean;
+  /* Opaque background painted on BOTH sliding panes so the cross-slide shows
+     exactly one pane at a time — never the outgoing pane or the page behind
+     bleeding through. Each host passes its own surface color (the mobile sheet
+     panel vs. the desktop card) so the panes match their container. */
+  surfaceBg: string;
 }) {
   const reduce = !!useReducedMotion();
   const fade = reduce
@@ -393,7 +404,8 @@ function CreditsSlider({
         {selected ? (
           <motion.div
             key="person"
-            className="absolute inset-0 overflow-y-auto scrollbar-hide"
+            className="absolute inset-0 z-10 overflow-y-auto scrollbar-hide"
+            style={{ background: surfaceBg }}
             initial={fade ? fade.initial : { x: "100%" }}
             animate={fade ? fade.animate : { x: 0 }}
             exit={fade ? fade.exit : { x: "100%" }}
@@ -417,6 +429,7 @@ function CreditsSlider({
           <motion.div
             key="list"
             className="absolute inset-0 overflow-y-auto scrollbar-hide"
+            style={{ background: surfaceBg }}
             initial={fade ? fade.initial : { x: "-25%" }}
             animate={fade ? fade.animate : { x: 0 }}
             exit={fade ? fade.exit : { x: "-25%" }}
@@ -545,6 +558,7 @@ function CreditsSheetHost({
           resolveInstrument={resolveInstrument}
           onOpenInstrument={gear.openInstrument}
           showCloseOnPerson={false}
+          surfaceBg="rgb(20, 24, 48)"
         />
       </SheetShell>
       {gear.overlay}
@@ -646,9 +660,11 @@ export function SongCreditsSheet({
 }
 
 /* ── iPad / desktop credits page ─────────────────────────────────────────
-   Apple opens album credits as a breathable full page on the desktop player
-   (not a centered modal box). Tapping a person slides their profile in with a
-   back caret; nothing resizes between the list and person views. Serves both
+   On the desktop player, album credits open as a centered card floating over
+   the album page — the dimmed backdrop keeps the fan left/right rails visible
+   behind it (mirrors the Edit-Profile centered-card pattern), rather than an
+   opaque full-viewport takeover. Tapping a person slides their profile in with
+   a back caret; nothing resizes between the list and person views. Serves both
    the album credits and the per-track "Song Credits" (via `eyebrow`). The
    page self-manages its close animation — call sites keep their plain
    `{cond && <AlbumCreditsPage/>}` mount; the exit fade plays via
@@ -697,11 +713,7 @@ export function AlbumCreditsPage({
         {open && (
           <motion.div
             key="album-credits-page"
-            className="fixed inset-0 z-[78] flex flex-col text-fan-primary"
-            style={{
-              background: "var(--brand-bg)",
-              fontFamily: "system-ui, -apple-system, 'SF Pro Text', sans-serif",
-            }}
+            className="fixed inset-0 z-[78] flex items-center justify-center p-6"
             role="dialog"
             aria-modal="true"
             aria-label={`Credits for ${albumTitle}`}
@@ -711,21 +723,41 @@ export function AlbumCreditsPage({
             exit={{ opacity: 0 }}
             transition={scrimFade(reduce)}
           >
-            <CreditsSlider
-              groups={groups}
-              eyebrow={eyebrow}
-              title={albumTitle}
-              subtitle={artist}
-              currentAlbumId={album.id}
-              album={album}
-              selected={selected}
-              onOpenPerson={openPerson}
-              onBack={() => setSelected(null)}
-              onClose={requestClose}
-              resolveInstrument={resolveStaticInstrument}
-              onOpenInstrument={gear.openInstrument}
-              showCloseOnPerson
+            {/* Dimmed backdrop — keeps the fan rails visible behind the card;
+                a tap outside the card closes it. */}
+            <div
+              className="absolute inset-0 bg-black/60"
+              onClick={requestClose}
+              data-testid="backdrop-album-credits"
             />
+            <motion.div
+              className="relative flex flex-col w-full max-w-[680px] h-[82vh] max-h-[820px] rounded-3xl overflow-hidden shadow-2xl text-fan-primary"
+              style={{
+                background: "var(--brand-bg)",
+                fontFamily: "system-ui, -apple-system, 'SF Pro Text', sans-serif",
+              }}
+              initial={{ scale: reduce ? 1 : 0.97, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: reduce ? 1 : 0.98, opacity: 0 }}
+              transition={scrimFade(reduce)}
+            >
+              <CreditsSlider
+                groups={groups}
+                eyebrow={eyebrow}
+                title={albumTitle}
+                subtitle={artist}
+                currentAlbumId={album.id}
+                album={album}
+                selected={selected}
+                onOpenPerson={openPerson}
+                onBack={() => setSelected(null)}
+                onClose={requestClose}
+                resolveInstrument={resolveStaticInstrument}
+                onOpenInstrument={gear.openInstrument}
+                showCloseOnPerson
+                surfaceBg="var(--brand-bg)"
+              />
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
