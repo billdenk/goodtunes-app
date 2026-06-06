@@ -5,7 +5,7 @@ import {
   useDragControls,
   useReducedMotion,
 } from "framer-motion";
-import { useParams } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/AlbumDetailSkeleton";
 import { DesktopSearchView } from "@/components/search/DesktopSearchView";
 import { PlayerDock } from "@/components/ui/PlayerDock";
-import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
+import { DesktopLyricsBody } from "@/components/ui/DesktopLyricsBody";
 import {
   DesktopAlbumView,
   LYRICS_PANEL_WIDTH,
@@ -154,6 +154,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const { user, updateProfile } = useAuth();
   const player = usePlayer();
   const reduceMotion = useReducedMotion();
+  const [, navigate] = useLocation();
   // Drag controls for the md lyrics overlay's swipe-to-dismiss. We start
   // the drag from the header grab handle only (dragListener disabled on
   // the sheet) so the swipe never steals pointer/touch events from the
@@ -536,49 +537,10 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   // neighbours blur/fade, auto-scroll, every line the same size. The
   // sizing/padding are tuned down for the 360px side panel; we never edit
   // SyncedLyrics internals.
-  const lyricsBody = (() => {
-    const cs = player.currentSong;
-    if (!cs) {
-      return (
-        <div className="flex-1 min-h-0 flex items-center justify-center px-6">
-          <p className="text-fan-secondary italic text-sm text-center">
-            Pick a track to see its lyrics here.
-          </p>
-        </div>
-      );
-    }
-    const hasPlain = !!cs.lyrics && cs.lyrics.trim().length > 0;
-    const hasSynced = !!cs.syncedLyrics && cs.syncedLyrics.length > 0;
-    if (!hasPlain && !hasSynced) {
-      return (
-        <div className="flex-1 min-h-0 flex flex-col items-center justify-center px-6 text-center">
-          <p className="text-fan-primary font-semibold text-base">
-            No Lyrics Available
-          </p>
-          <p className="text-fan-secondary text-sm mt-1">
-            There aren't any lyrics available for this song.
-          </p>
-        </div>
-      );
-    }
-    return (
-      <SyncedLyrics
-        lyrics={cs.lyrics}
-        duration={player.duration}
-        syncedLyrics={cs.syncedLyrics}
-        currentTime={player.currentTime}
-        onSeek={player.seekTo}
-        writers={(cs as any).writers}
-        active={player.showLyrics}
-        fontSize={22}
-        gapClassName="gap-3"
-        scrollOffsetRatio={0.16}
-        paddingTop="16vh"
-        paddingBottom="24vh"
-        className="flex-1 min-h-0 px-4"
-      />
-    );
-  })();
+  // Shared with the persistent storefront lyrics rail (Task #1523) so the two
+  // surfaces can't drift — reads the current song + player time straight from
+  // context.
+  const lyricsBody = <DesktopLyricsBody />;
 
   // PlayerDock track adapter. Dock shows the artwork as the cover slot
   // when something is playing; otherwise the dock's idle treatment (a
@@ -690,7 +652,11 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
               key="search-lyrics-panel"
               className="hidden lg:flex justify-end flex-shrink-0 overflow-hidden self-start"
               style={{
-                height: `calc(100dvh - 116px - env(safe-area-inset-bottom, 0px))`,
+                // Full-height rail (Task #1523): reaches the bottom like the
+                // left nav rail; the floating dock sits in the gutter to its
+                // left (≥1100) so it never overlaps, and SyncedLyrics' own
+                // bottom padding keeps the text clear at narrower widths.
+                height: `calc(100dvh - 24px - env(safe-area-inset-bottom, 0px))`,
               }}
               initial={reduceMotion ? false : { width: 0 }}
               animate={{ width: LYRICS_PANEL_WIDTH }}
@@ -809,6 +775,21 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
               player.showLyrics && isLgViewport ? LYRICS_PANEL_WIDTH : 0
             }
             track={dockTrack}
+            onTitleActivate={
+              player.currentSong?.album.id != null &&
+              player.currentSong?.album.id !== ""
+                ? () => navigate(`/album/${player.currentSong!.album.id}`)
+                : undefined
+            }
+            onSubtitleActivate={
+              player.currentSong?.album.artist &&
+              player.currentSong.album.artist.trim().length > 0
+                ? () =>
+                    navigate(
+                      `/artist/${encodeURIComponent(player.currentSong!.album.artist)}`,
+                    )
+                : undefined
+            }
             hasSelection={!!player.currentSong}
             playing={player.isPlaying}
             previewMode={player.previewMode}

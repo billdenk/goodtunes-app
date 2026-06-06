@@ -7,6 +7,8 @@ import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { ALBUMS, ARTIST_PHOTOS, type Album } from "@/data/musicData";
 import { IconButton } from "@/components/ui/IconButton";
+import { useLyricsRailOpen } from "@/components/ui/DesktopLyricsRail";
+import { LYRICS_RAIL_CONTENT_OFFSET } from "@/hooks/useDesktopShell";
 
 type PublicPerson = {
   id: string;
@@ -89,8 +91,12 @@ export function FavoriteArtists() {
       .map((name) => artistsByName.get(name) ?? { name, albums: [] as Album[] });
   }, [favArtists.ordered, artistsByName]);
 
+  const railOpen = useLyricsRailOpen();
   return (
-    <main className="relative h-screen w-full flex justify-center overflow-hidden">
+    <main
+      className="relative h-screen w-full flex justify-center overflow-hidden"
+      style={railOpen ? { paddingRight: LYRICS_RAIL_CONTENT_OFFSET } : undefined}
+    >
       <section className="relative w-full max-w-[390px] h-screen text-fan-primary flex flex-col">
         <header className="flex items-center px-4 pt-12 pb-3 flex-shrink-0">
           <IconButton

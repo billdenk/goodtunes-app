@@ -28,6 +28,8 @@ import {
 } from "@/lib/streamingService";
 import { ServiceGlyphBadge } from "@/components/ui/ServiceGlyph";
 import { deriveAccountIdentity } from "@/lib/accountIdentity";
+import { useLyricsRailOpen } from "@/components/ui/DesktopLyricsRail";
+import { LYRICS_RAIL_CONTENT_OFFSET } from "@/hooks/useDesktopShell";
 
 // Task #74 — minimal order shape for the "My Orders" card on the
 // profile. We only need a few fields to render the count + most-recent
@@ -400,8 +402,12 @@ export function Account() {
     if (latestOrder.status === "paid") return "Latest: Paid · digital ready";
     return `Latest: ${latestOrder.status}`;
   })();
+  const railOpen = useLyricsRailOpen();
   return (
-    <main className="relative h-screen w-full flex justify-center overflow-hidden lg:pl-[284px]">
+    <main
+      className="relative h-screen w-full flex justify-center overflow-hidden lg:pl-[284px]"
+      style={railOpen ? { paddingRight: LYRICS_RAIL_CONTENT_OFFSET } : undefined}
+    >
       <section className="relative w-full max-w-[390px] md:max-w-[640px] lg:max-w-[820px] lg:mx-auto h-screen text-fan-primary flex flex-col">
 
         <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">

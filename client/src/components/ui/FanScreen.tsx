@@ -2,6 +2,8 @@ import { useRef, useEffect, type ReactNode } from "react";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
+import { useLyricsRailOpen } from "@/components/ui/DesktopLyricsRail";
+import { LYRICS_RAIL_CONTENT_OFFSET } from "@/hooks/useDesktopShell";
 
 // ---------------------------------------------------------------------------
 // Shared screen chrome — Apple-Music large header + collapsing title, the
@@ -35,6 +37,11 @@ export function FanScreen({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const trailingRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
+  // When the persistent lyrics rail is open (desktop only), reserve its width
+  // on the right so content + the centered dock clear the rail card. railOpen
+  // is already gated on the desktop shell, so the inline padding is only ever
+  // set at lg+ web. (Task #1523)
+  const railOpen = useLyricsRailOpen();
 
   // iOS Safari renderer-OOM / stale-scroll-bounds mitigation: when content
   // grows asynchronously (artwork decodes, "Show more" appends), nudge a
@@ -106,7 +113,10 @@ export function FanScreen({
   }, [fadeTrailing]);
 
   return (
-    <main className="h-screen w-full flex justify-center overflow-hidden lg:justify-start lg:pl-[284px]">
+    <main
+      className="h-screen w-full flex justify-center overflow-hidden lg:justify-start lg:pl-[284px]"
+      style={railOpen ? { paddingRight: LYRICS_RAIL_CONTENT_OFFSET } : undefined}
+    >
       <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1200px] lg:mx-auto h-screen text-fan-primary flex flex-col">
         <header className="absolute top-0 inset-x-0 z-20 px-5 pt-14 pb-3 pointer-events-none">
           {leading && (

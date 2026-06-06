@@ -13,6 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { track } from "@/lib/analytics";
 import { useFavoriteSongs, useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
+import { useLyricsRailOpen } from "@/components/ui/DesktopLyricsRail";
+import { LYRICS_RAIL_CONTENT_OFFSET } from "@/hooks/useDesktopShell";
 
 const FAVORITES_PLAYLIST_ID = "__favorites";
 
@@ -420,9 +422,14 @@ export function Playlists() {
     queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
   };
 
+  const railOpen = useLyricsRailOpen();
+
   if (selectedPlaylist) {
     return (
-      <main className="h-screen w-full flex justify-center overflow-hidden lg:justify-start lg:pl-[284px]">
+      <main
+        className="h-screen w-full flex justify-center overflow-hidden lg:justify-start lg:pl-[284px]"
+        style={railOpen ? { paddingRight: LYRICS_RAIL_CONTENT_OFFSET } : undefined}
+      >
         <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1100px] lg:mx-auto h-screen text-white flex flex-col">
           <div ref={detailScrollRef} className="flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
           <header className="sticky top-0 z-20 flex items-center justify-between px-5 pt-14 pb-3 flex-shrink-0">
@@ -708,7 +715,10 @@ export function Playlists() {
   }
 
   return (
-    <main className="h-screen w-full flex justify-center overflow-hidden lg:justify-start lg:pl-[284px]">
+    <main
+      className="h-screen w-full flex justify-center overflow-hidden lg:justify-start lg:pl-[284px]"
+      style={railOpen ? { paddingRight: LYRICS_RAIL_CONTENT_OFFSET } : undefined}
+    >
       <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1200px] lg:mx-auto h-screen text-white flex flex-col">
         <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3 lg:pb-9">
           <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Playlists</h1>

@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { usePlayer } from "@/context/PlayerContext";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
+import { useLyricsRailOpen } from "@/components/ui/DesktopLyricsRail";
+import { LYRICS_RAIL_CONTENT_OFFSET } from "@/hooks/useDesktopShell";
 import { ALBUMS, SONGS, ARTIST_PHOTOS, type Album, type Song } from "@/data/musicData";
 import { useFavoriteArtists } from "@/hooks/useFavorites";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
@@ -357,6 +359,9 @@ export function ArtistDetail() {
   const hasCoverBanner = Boolean(coverBannerSrc);
   const scrollRef = useRef<HTMLDivElement>(null);
   useScrollHideNav(scrollRef);
+  // Reserve the lyrics rail's width on the right when it's open (desktop only,
+  // Task #1523) so the artist content + dock clear the rail card.
+  const railOpen = useLyricsRailOpen();
 
   // Stamp the artist into fan recents once the photo has resolved. We
   // don't pass a subtitle — the Recents row already prefixes the kind
@@ -416,7 +421,10 @@ export function ArtistDetail() {
   // now-playing controls.
 
   return (
-    <main className="h-screen w-full flex justify-center overflow-hidden relative lg:justify-start lg:pl-[284px]">
+    <main
+      className="h-screen w-full flex justify-center overflow-hidden relative lg:justify-start lg:pl-[284px]"
+      style={railOpen ? { paddingRight: LYRICS_RAIL_CONTENT_OFFSET } : undefined}
+    >
       <section className="relative w-full max-w-[390px] md:max-w-[820px] lg:max-w-[1200px] lg:mx-auto h-screen text-fan-primary flex flex-col">
         <IconButton
           size="md"

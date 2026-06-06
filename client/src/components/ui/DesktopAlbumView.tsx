@@ -964,11 +964,12 @@ export function DesktopAlbumView({
  *  its right channel inset, keeping the dock in the gutter beside the rail. */
 export const LYRICS_PANEL_WIDTH = 360;
 
-/** Vertical room (px) the lyrics rail leaves at the bottom so its content
- *  ends ABOVE the floating PlayerDock rather than behind it. The compact
- *  dock sits `fixed bottom-8` (32px) and ~64px tall, so its top edge is
- *  ~96px up; round up for a clean gutter between the rail and the pill. */
-const LYRICS_DOCK_CLEARANCE = 116;
+/** Vertical inset (px) the lyrics rail leaves at top+bottom so it reads as a
+ *  full-height rail matching the left nav rail (Task #1523): 12px top + 12px
+ *  bottom = 24. The floating dock sits in the gutter to the rail's LEFT
+ *  (≥1100), so no extra bottom clearance is needed; SyncedLyrics' own bottom
+ *  padding keeps the karaoke text above the dock at narrower widths. */
+const LYRICS_DOCK_CLEARANCE = 24;
 
 /* Buy CTA fill — the brand-blue gradient, matching the not-owned Buy
    button on the mobile album surface (AlbumDetailMobileSurface) so the

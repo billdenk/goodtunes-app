@@ -5,6 +5,8 @@ import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { INSTRUMENTS } from "@/data/musicData";
 import { IconButton } from "@/components/ui/IconButton";
+import { useLyricsRailOpen } from "@/components/ui/DesktopLyricsRail";
+import { LYRICS_RAIL_CONTENT_OFFSET } from "@/hooks/useDesktopShell";
 
 const BOOKMARK_KEY = "gt:bookmarked-instruments";
 
@@ -39,8 +41,12 @@ export function Bookmarks() {
 
   const bookmarks = bookmarkIds.map((id) => INSTRUMENTS[id]).filter(Boolean);
 
+  const railOpen = useLyricsRailOpen();
   return (
-    <main className="relative h-screen w-full flex justify-center overflow-hidden">
+    <main
+      className="relative h-screen w-full flex justify-center overflow-hidden"
+      style={railOpen ? { paddingRight: LYRICS_RAIL_CONTENT_OFFSET } : undefined}
+    >
       <section className="relative w-full max-w-[390px] h-screen text-white flex flex-col">
         <header className="flex items-center px-4 pt-12 pb-3 flex-shrink-0">
           <IconButton

@@ -8,6 +8,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { PlayerNameLinks } from "@/components/ui/PlayerNameLinks";
+import { PlayerTitleLink } from "@/components/ui/PlayerTitleLink";
 import { track } from "@/lib/analytics";
 import { isWebIOS } from "@/lib/platform";
 import { useSystemVolume } from "@/lib/nativeVolume";
@@ -424,7 +425,16 @@ export function Player() {
             {/* Title row — favorite + more, à la Apple Music */}
             <div className="w-full flex items-center justify-between mb-6 gap-3">
               <div className="flex-1 min-w-0 relative">
-                <h2 className="text-white text-xl font-bold leading-snug truncate">{currentSong.title}</h2>
+                {/* Apple-Music tappable title — routes to the song's album and
+                    dismisses Now Playing. Plain text when the album link is
+                    missing. */}
+                <PlayerTitleLink
+                  title={currentSong.title}
+                  albumId={currentSong.album.id}
+                  onNavigate={() => setShowPlayer(false)}
+                  className="text-white text-xl font-bold leading-snug truncate"
+                  testId="player-title"
+                />
                 {/* Apple-Music tappable subtitle — artist + album each route to
                     their own page (and dismiss Now Playing), replacing the old
                     tap-the-title "Go to Album / Go to Artist" pop-up menu. */}

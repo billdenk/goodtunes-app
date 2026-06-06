@@ -11607,7 +11607,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/MiniPlayer.tsx",
-    "snippet": "<p className=\"text-fan-primary text-[13px] font-semibold truncate leading-tight\">{currentSong.title}</p>"
+    "snippet": "className=\"text-fan-primary text-[13px] font-semibold truncate leading-tight\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -11622,7 +11622,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/MiniPlayer.tsx",
-    "snippet": "<p className=\"text-fan-primary text-[14px] font-semibold truncate leading-snug\">{currentSong.title}</p>"
+    "snippet": "className=\"text-fan-primary text-[14px] font-semibold truncate leading-snug\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -12148,26 +12148,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumCard.tsx",
     "snippet": "<p className=\"text-fan-secondary text-[13px] font-normal truncate mt-0.5\">{subtitle ?? album.artist}</p>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/ui/AlbumCreditsSheet.tsx",
-    "snippet": "<div className=\"px-5 pb-4 text-white/55 text-sm\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/ui/AlbumCreditsSheet.tsx",
-    "snippet": "<h3 className=\"text-xs font-semibold uppercase tracking-[0.08em] text-white/55 mb-3\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/AlbumCreditsSheet.tsx",
-    "snippet": "<h2 className=\"text-white text-[22px] font-bold leading-tight tracking-tight\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/AlbumCreditsSheet.tsx",
-    "snippet": "className=\"text-[15px] mt-1 leading-snug\""
   },
   {
     "rule": "brand-hex-literal",
@@ -17983,41 +17963,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "{subtitle && <p className=\"text-[15px] mt-1 leading-snug\" style={{ color: \"rgba(235,235,245,0.55)\" }}>{subtitle}</p>}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<h3 className=\"px-5 pt-3 pb-2 text-fan-primary text-[22px] font-bold leading-tight tracking-tight\">Written by</h3>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-fan-primary text-[15px] font-medium truncate\">{w.name}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<span className=\"text-fan-secondary text-[12px]\">{w.role}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<h3 className=\"px-5 pt-3 pb-2 text-fan-primary text-[22px] font-bold leading-tight tracking-tight\">Performed by</h3>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-fan-primary text-[15px] font-semibold truncate\">{person.name}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-[12px] truncate\" style={{ color: \"rgba(235,235,245,0.45)\" }}>{perf.role}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<span className=\"text-fan-secondary text-[14px]\">{shortLabel}</span>"
   },
   {
     "rule": "hardcoded-font-size",

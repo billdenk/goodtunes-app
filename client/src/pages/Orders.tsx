@@ -24,6 +24,8 @@ import { VinylPreview } from "@/components/VinylPreview";
 import { PhoneVerifySheet } from "@/components/PhoneVerifySheet";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { BottomNav } from "@/components/BottomNav";
+import { useLyricsRailOpen } from "@/components/ui/DesktopLyricsRail";
+import { LYRICS_RAIL_CONTENT_OFFSET } from "@/hooks/useDesktopShell";
 import {
   DEFAULT_JACKET_UPGRADE,
   DEFAULT_VINYL_COLOR_ID,
@@ -260,8 +262,13 @@ export function Orders() {
 
   const openOrder = openOrderId ? orders?.find((o) => o.id === openOrderId) ?? null : null;
 
+  const railOpen = useLyricsRailOpen();
   return (
-    <main className="relative h-screen w-full flex justify-center overflow-hidden bg-[var(--brand-bg)] lg:justify-start lg:pl-[284px]" data-testid="page-orders">
+    <main
+      className="relative h-screen w-full flex justify-center overflow-hidden bg-[var(--brand-bg)] lg:justify-start lg:pl-[284px]"
+      style={railOpen ? { paddingRight: LYRICS_RAIL_CONTENT_OFFSET } : undefined}
+      data-testid="page-orders"
+    >
       <section className="relative w-full max-w-[390px] md:max-w-[640px] lg:max-w-[820px] lg:mx-auto h-screen text-fan-primary flex flex-col">
         <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px] px-5">
           <header className="flex items-end justify-between pt-14 pb-3">

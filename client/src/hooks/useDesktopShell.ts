@@ -60,3 +60,15 @@ export const COMPACT_DOCK_BREAKPOINT = 1100;
  */
 export const STOREFRONT_CONTENT_OFFSET =
   RAIL_INSET + STOREFRONT_SIDEBAR_WIDTH + RAIL_GAP;
+
+/** Width of the persistent desktop lyrics rail card (px). Matches the album
+ *  page's in-flow lyrics panel so the two surfaces read identically. */
+export const LYRICS_RAIL_WIDTH = 360;
+
+/**
+ * Total right padding fan pages apply (and the right channel inset the dock
+ * reserves) so content + the floating dock clear the lyrics rail card:
+ *   RAIL_INSET (12) + LYRICS_RAIL_WIDTH (360) + RAIL_GAP (12) = 384
+ */
+export const LYRICS_RAIL_CONTENT_OFFSET =
+  RAIL_INSET + LYRICS_RAIL_WIDTH + RAIL_GAP;

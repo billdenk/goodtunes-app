@@ -115,6 +115,7 @@ import { VendorPortal } from "@/pages/VendorPortal";
 import ErrorPage from "@/pages/ErrorPage";
 import { AdminShellErrorBoundary } from "@/components/admin/AdminShellErrorBoundary";
 import { StorefrontSidebar } from "@/components/StorefrontSidebar";
+import { DesktopLyricsRail } from "@/components/ui/DesktopLyricsRail";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
@@ -766,6 +767,11 @@ function Router() {
           Self-gates on route (storefront paths only) + viewport +
           !native. Mobile/tablet keep the floating BottomNav. */}
       <StorefrontSidebar />
+      {/* Task #1523 — persistent desktop lyrics rail. Self-gates on the same
+          storefront routes + viewport, mirrors the left rail's full height,
+          and stays open across navigation (global PlayerContext.showLyrics).
+          The album page renders its OWN in-flow lyrics panel. */}
+      <DesktopLyricsRail />
       {user?.kind === "admin" && isAnalyticsDebugOverlayEnabled() && <AnalyticsDebugOverlay />}
     </>
   );

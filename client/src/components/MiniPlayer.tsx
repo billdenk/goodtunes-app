@@ -2,9 +2,15 @@ import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
 import { useLocation } from "wouter";
 import { useReducedMotion } from "framer-motion";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
-import { useDesktopShell, STOREFRONT_CONTENT_OFFSET } from "@/hooks/useDesktopShell";
+import {
+  useDesktopShell,
+  STOREFRONT_CONTENT_OFFSET,
+  LYRICS_RAIL_CONTENT_OFFSET,
+} from "@/hooks/useDesktopShell";
 import { PlayerDock } from "@/components/ui/PlayerDock";
 import { PlayerNameLinks } from "@/components/ui/PlayerNameLinks";
+import { PlayerTitleLink } from "@/components/ui/PlayerTitleLink";
+import { useLyricsRailOpen } from "@/components/ui/DesktopLyricsRail";
 
 // MiniPlayer splits by shell:
 //   * lg+ web desktop — the full-width bottom PlayerDock (storefront
@@ -18,15 +24,20 @@ export function MiniPlayer() {
 
 // Desktop storefront now-playing surface — the SAME compact-density bottom
 // PlayerDock the desktop album page uses, centered above the content area and
-// wired to the global player. The lyrics button is intentionally omitted here:
-// storefront pages don't mount the side lyrics panel, so the dock would be a
-// dead control. The album page (AlbumDetailDesktop) renders its OWN dock with
-// lyrics, so it never mounts MiniPlayer and there's no double dock.
+// wired to the global player. The lyrics button toggles the persistent
+// storefront DesktopLyricsRail (Task #1523), and when that rail is open the
+// dock re-centers on the channel between the left sidebar and the rail. The
+// album page (AlbumDetailDesktop) renders its OWN dock, so it never mounts
+// MiniPlayer and there's no double dock.
 function DesktopMiniPlayer() {
   const player = usePlayer();
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
+  const lyricsRailOpen = useLyricsRailOpen();
 
   if (!player.currentSong || location === "/player") return null;
+
+  const albumId = player.currentSong.album.id;
+  const artist = player.currentSong.album.artist;
 
   const dockTrack = {
     title: player.currentSong.title,
@@ -58,12 +69,24 @@ function DesktopMiniPlayer() {
         <PlayerDock
           density="compact"
           // Rail-aware docking: center the pill on the content channel to the
-          // right of the fixed storefront sidebar (STOREFRONT_CONTENT_OFFSET)
-          // rather than the whole window. No lyrics rail on the storefront,
-          // so the right channel inset is 0.
+          // right of the fixed storefront sidebar (STOREFRONT_CONTENT_OFFSET).
+          // When the persistent lyrics rail is open, also reserve its width on
+          // the right so the dock slides into the gutter between the two rails.
           channelLeft={STOREFRONT_CONTENT_OFFSET}
-          channelRight={0}
+          channelRight={lyricsRailOpen ? LYRICS_RAIL_CONTENT_OFFSET : 0}
           track={dockTrack}
+          onTitleActivate={
+            albumId != null && albumId !== ""
+              ? () => navigate(`/album/${albumId}`)
+              : undefined
+          }
+          onSubtitleActivate={
+            artist && artist.trim().length > 0
+              ? () => navigate(`/artist/${encodeURIComponent(artist)}`)
+              : undefined
+          }
+          onLyrics={() => player.setShowLyrics(!player.showLyrics)}
+          lyricsActive={player.showLyrics}
           hasSelection={true}
           playing={player.isPlaying}
           previewMode={player.previewMode}
@@ -153,7 +176,12 @@ function MobileMiniPlayer() {
               style={{ width: 32, height: 32, borderRadius: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}
             />
             <div className="flex-1 min-w-0">
-              <p className="text-fan-primary text-[13px] font-semibold truncate leading-tight">{currentSong.title}</p>
+              <PlayerTitleLink
+                title={currentSong.title}
+                albumId={currentSong.album.id}
+                className="text-fan-primary text-[13px] font-semibold truncate leading-tight"
+                testId="mini-title"
+              />
               <PlayerNameLinks
                 artist={currentSong.album.artist}
                 albumId={currentSong.album.id}
@@ -192,7 +220,12 @@ function MobileMiniPlayer() {
             />
 
             <div className="flex-1 min-w-0">
-              <p className="text-fan-primary text-[14px] font-semibold truncate leading-snug">{currentSong.title}</p>
+              <PlayerTitleLink
+                title={currentSong.title}
+                albumId={currentSong.album.id}
+                className="text-fan-primary text-[14px] font-semibold truncate leading-snug"
+                testId="mini-title"
+              />
               <PlayerNameLinks
                 artist={currentSong.album.artist}
                 albumId={currentSong.album.id}

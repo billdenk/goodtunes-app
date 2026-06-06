@@ -4,7 +4,8 @@ import { MiniPlayer } from "@/components/MiniPlayer";
 import { FanScreen } from "@/components/ui/FanScreen";
 import { useAuth } from "@/hooks/useAuth";
 import { useFanSearch } from "@/hooks/useFanSearch";
-import { useDesktopShell } from "@/hooks/useDesktopShell";
+import { useDesktopShell, LYRICS_RAIL_CONTENT_OFFSET } from "@/hooks/useDesktopShell";
+import { useLyricsRailOpen } from "@/components/ui/DesktopLyricsRail";
 import { DesktopSearchView } from "@/components/search/DesktopSearchView";
 import {
   RecentSearchedList,
@@ -46,8 +47,12 @@ export function SearchPage() {
 // styling/placement is single-sourced. The global StorefrontSidebar owns
 // the left rail + account chip; MiniPlayer renders the bottom PlayerDock.
 function DesktopSearchPage() {
+  const railOpen = useLyricsRailOpen();
   return (
-    <main className="h-screen w-full overflow-hidden bg-[var(--brand-bg)] lg:pl-[284px]">
+    <main
+      className="h-screen w-full overflow-hidden bg-[var(--brand-bg)] lg:pl-[284px]"
+      style={railOpen ? { paddingRight: LYRICS_RAIL_CONTENT_OFFSET } : undefined}
+    >
       {/* Scrollable content column; bottom padding clears the floating
           PlayerDock when a song is playing. */}
       <div className="h-full overflow-y-auto scrollbar-hide pb-40">

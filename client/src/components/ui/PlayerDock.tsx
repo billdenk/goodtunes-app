@@ -88,6 +88,13 @@ export interface PlayerDockProps {
   /** Click-to-seek on the inline scrubber. Called with target seconds.
    *  Omit to make the scrubber visual-only (mock-data mode). */
   onSeek?: (seconds: number) => void;
+  /** When set, the title becomes a tappable link to the song's album (brief
+   *  underline on press). Omit to keep the title plain text — e.g. when the
+   *  album destination doesn't exist (admin contexts). */
+  onTitleActivate?: () => void;
+  /** When set, the subtitle becomes a tappable link to the artist. Omit to
+   *  keep the subtitle plain text when there's no artist destination. */
+  onSubtitleActivate?: () => void;
   /** Lyrics button on the right cluster. Omit to hide the button entirely. */
   onLyrics?: () => void;
   /** When true, the lyrics glyph renders in its active (brand-blue,
@@ -166,6 +173,8 @@ export function PlayerDock({
   onPrev,
   onNext,
   onSeek,
+  onTitleActivate,
+  onSubtitleActivate,
   onLyrics,
   lyricsActive = false,
   onShuffleChange,
@@ -748,12 +757,26 @@ export function PlayerDock({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <div
-                    className={`${D.titleSize} font-semibold truncate leading-tight`}
-                    data-testid="text-track-title"
-                  >
-                    {track.title}
-                  </div>
+                  {onTitleActivate ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onTitleActivate();
+                      }}
+                      className={`${D.titleSize} font-semibold truncate leading-tight text-left max-w-full active:underline underline-offset-2`}
+                      data-testid="text-track-title"
+                    >
+                      {track.title}
+                    </button>
+                  ) : (
+                    <div
+                      className={`${D.titleSize} font-semibold truncate leading-tight`}
+                      data-testid="text-track-title"
+                    >
+                      {track.title}
+                    </div>
+                  )}
                   {previewMode && (
                     <span
                       className="inline-flex items-center px-1.5 h-[14px] rounded-[3px] text-[9.5px] font-bold uppercase tracking-[0.08em] flex-shrink-0"
@@ -764,16 +787,27 @@ export function PlayerDock({
                     </span>
                   )}
                 </div>
-                {track.subtitle && (
-                  <div
-                    className={`${D.subtitleSize} ${
-                      isCompactDensity ? "text-fan-secondary" : "text-fan-secondary"
-                    } truncate leading-tight mt-0.5`}
-                    data-testid="text-track-subtitle"
-                  >
-                    {track.subtitle}
-                  </div>
-                )}
+                {track.subtitle &&
+                  (onSubtitleActivate ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSubtitleActivate();
+                      }}
+                      className={`${D.subtitleSize} text-fan-secondary truncate leading-tight mt-0.5 block text-left max-w-full active:underline underline-offset-2`}
+                      data-testid="text-track-subtitle"
+                    >
+                      {track.subtitle}
+                    </button>
+                  ) : (
+                    <div
+                      className={`${D.subtitleSize} text-fan-secondary truncate leading-tight mt-0.5`}
+                      data-testid="text-track-subtitle"
+                    >
+                      {track.subtitle}
+                    </div>
+                  ))}
               </div>
             </div>
           ) : (
