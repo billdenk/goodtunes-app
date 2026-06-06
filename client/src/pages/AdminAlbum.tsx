@@ -15520,6 +15520,9 @@ function AlbumLineupPanel({
   // the album page.
   const [adding, setAdding] = useState(false);
   const [addQuery, setAddQuery] = useState("");
+  // Styled confirm for the destructive "Clear" action (replaces the
+  // raw window.confirm). Only actually clears on confirm.
+  const [confirmClear, setConfirmClear] = useState(false);
   const { data: allPeople = [] } = useQuery<
     Array<{ id: string; name: string; photoUrl: string | null }>
   >({
@@ -15667,7 +15670,7 @@ function AlbumLineupPanel({
             <p className="text-[11px] text-amber-600 mt-1">{disabledReason}</p>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 flex-shrink-0">
           <button
             type="button"
             onClick={() => {
@@ -15675,7 +15678,7 @@ function AlbumLineupPanel({
               setAddQuery("");
             }}
             disabled={disabled}
-            className="text-[12px] font-semibold px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 whitespace-nowrap"
             data-testid="button-add-lineup-member"
           >
             {adding ? "Cancel" : "Add member"}
@@ -15693,7 +15696,7 @@ function AlbumLineupPanel({
                 )
               }
               disabled={disabled || saveMutation.isPending}
-              className="text-[12px] font-semibold px-3 py-1.5 rounded-md bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-50 whitespace-nowrap"
               data-testid="button-save-lineup"
             >
               Save lineup
@@ -15717,7 +15720,7 @@ function AlbumLineupPanel({
                 );
               }}
               disabled={disabled}
-              className="text-[12px] font-semibold px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 whitespace-nowrap"
               data-testid="button-prefill-lineup"
             >
               Use band's current roster
@@ -15742,30 +15745,65 @@ function AlbumLineupPanel({
                 );
               }}
               disabled={disabled}
-              className="text-[12px] font-semibold px-3 py-1.5 rounded-md bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 disabled:opacity-50"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 disabled:opacity-50 whitespace-nowrap"
               data-testid="button-suggest-lineup"
             >
               Use {suggestion.length} from credits
             </button>
           )}
           {draft.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                if (window.confirm("Clear the per-album lineup? The fan page will fall back to the band's current roster.")) {
-                  setDraft([]);
-                  clearMutation.mutate();
-                }
-              }}
-              disabled={disabled || clearMutation.isPending}
-              className="text-[12px] font-semibold px-3 py-1.5 rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              data-testid="button-clear-lineup"
-            >
-              Clear
-            </button>
+            <>
+              {/* Destructive-action breathing room — hairline divider +
+                  gap so a thumb can't slide from a safe button onto the
+                  demoted Clear. */}
+              <span
+                className="w-px h-5 bg-slate-200 mx-1"
+                aria-hidden="true"
+              />
+              <button
+                type="button"
+                onClick={() => setConfirmClear(true)}
+                disabled={disabled || clearMutation.isPending}
+                className="text-xs font-medium px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 whitespace-nowrap"
+                data-testid="button-clear-lineup"
+              >
+                Clear
+              </button>
+            </>
           )}
         </div>
       </div>
+      {/* Styled confirm for clearing the per-album lineup (replaces the
+          old window.confirm). Plain-English consequence + rose primary. */}
+      <AlertDialog open={confirmClear} onOpenChange={setConfirmClear}>
+        <AlertDialogContent data-testid="dialog-confirm-clear-lineup">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Clear this album's lineup?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the album-specific lineup you set here. {primaryArtist.name}'s
+              fan page will then just show the band's default member list
+              instead of this custom one. You can rebuild it any time.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-clear-lineup">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setDraft([]);
+                clearMutation.mutate();
+              }}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              data-testid="button-confirm-clear-lineup"
+            >
+              Clear lineup
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {adding && (
         <div
           className="px-5 py-4 border-b border-slate-100 bg-slate-50"
