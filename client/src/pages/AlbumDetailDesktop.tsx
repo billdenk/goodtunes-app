@@ -5,7 +5,7 @@ import {
   useDragControls,
   useReducedMotion,
 } from "framer-motion";
-import { useParams, useLocation } from "wouter";
+import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
@@ -50,7 +50,6 @@ import { X } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { CertPdfViewerSheet } from "@/components/ui/CertPdfViewerSheet";
-import { goBack } from "@/lib/navHistory";
 import { track } from "@/lib/analytics";
 
 /** Left inset of the desktop album content channel, used to center the
@@ -152,7 +151,6 @@ type ApiAlbumPhoto = {
 export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const params = useParams<{ id: string }>();
   const id = albumId ?? params.id;
-  const [, navigate] = useLocation();
   const { user, updateProfile } = useAuth();
   const player = usePlayer();
   const reduceMotion = useReducedMotion();
@@ -672,7 +670,6 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             onAddAlbumToPlaylist={() => setShowAlbumPlaylistPicker(true)}
             onDownloadCert={pdfOrder ? openCertPdf : undefined}
             isMultiOwned={isMulti}
-            onBack={() => goBack(navigate)}
             onPlayVideo={effectiveOwned ? setPlayingVideoId : undefined}
             onBuyBundle={buyEnabled ? handleBuyBundle : undefined}
             signedCertPriceCents={buyEnabled ? signedCertPriceCents : null}

@@ -2,10 +2,9 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { formatUsdCents } from "@shared/money";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Link, useLocation } from "wouter";
-import { useHasInAppHistory } from "@/lib/navHistory";
+import { Link } from "wouter";
 import { popBounce } from "@/lib/motion";
-import { ChevronLeft, ChevronRight, Play, Pause, Shuffle, Lock, Share, Info, MoreHorizontal } from "lucide-react";
+import { ChevronRight, Play, Pause, Shuffle, Lock, Share, Info, MoreHorizontal } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { BonusPlayBadge } from "@/components/ui/BonusPlayBadge";
 import { IconButton } from "@/components/ui/IconButton";
@@ -145,10 +144,6 @@ export type DesktopAlbumViewProps = {
    *  more than one copy, else "View Provenance" (matches mobile). */
   isMultiOwned?: boolean;
 
-  /** Override the back-pill destination. Defaults to navigating to
-   *  /collection (mirrors the mobile album surface's back carat). */
-  onBack?: () => void;
-
   /** Clicking (or Enter/Space on) an unlocked bonus-video card calls this
    *  with the video id so the host can open the playback modal — mirrors the
    *  mobile inline tap-to-play. Locked/unowned cards never invoke it. When
@@ -241,7 +236,6 @@ export function DesktopAlbumView({
   onAddAlbumToPlaylist,
   onDownloadCert,
   isMultiOwned = false,
-  onBack,
   onPlayVideo,
   lyricsOpen,
   lyrics,
@@ -276,12 +270,6 @@ export function DesktopAlbumView({
         title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[24px] lg:text-[28px]",
       };
   const { toast } = useToast();
-  const [, navigate] = useLocation();
-  const handleBack = onBack ?? (() => navigate("/collection"));
-  // Only show the back-carat when the fan actually navigated within the app
-  // to get here. Most fans reach an album page directly (share link, deep
-  // link, refresh, new tab), where a back control is a dead end — hide it.
-  const hasInAppHistory = useHasInAppHistory();
   const handleCopyShareLink = async () => {
     // Task #970 — copy the clean per-release share link when the album has
     // a slug so what fans share matches what operators promote.
@@ -349,29 +337,15 @@ export function DesktopAlbumView({
       <div
         className={[cls.column, showLyrics ? "lg:mx-0 lg:ml-auto" : ""].join(" ")}
       >
-        {/* Top chrome row. Back-carat pill on the left, Share + More grouped
-            on the right, both sitting on the same baseline so they read as one
-            row (matching the mobile album surface + Apple Music). The back
-            caret matches the mobile glass IconButton + chevron-left treatment
-            and returns the viewer to where they came from (collection by
-            default, or the originating context if a host passes `onBack`). The
-            album title lives in the hero below. */}
+        {/* Top chrome row. No back-carat on desktop — Apple Music has none on
+            album pages; fans navigate via the sidebar rail (Search / Home /
+            Collection) or the browser back button, and any album is only ~two
+            levels deep. Share + More stay grouped at the right edge. The album
+            title lives in the hero below. */}
         <div className="flex items-start gap-2">
-          {hasInAppHistory && (
-            <IconButton
-              variant="glass"
-              label="Back to collection"
-              onClick={handleBack}
-              data-testid="button-back-album"
-            >
-              <ChevronLeft strokeWidth={2.5} className="-translate-x-[1px]" />
-            </IconButton>
-          )}
-
           {/* Apple-Music top-right chrome: Share + More sit together at the
               right edge of the album header, away from the transport controls
-              (Task #1055). `ml-auto` keeps them right-aligned whether or not
-              the back-carat is present. */}
+              (Task #1055). `ml-auto` keeps them right-aligned. */}
           <div
             className="flex items-center rounded-full ml-auto"
             style={{

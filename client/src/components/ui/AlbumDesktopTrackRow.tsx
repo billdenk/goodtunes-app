@@ -133,14 +133,17 @@ export function AlbumDesktopTrackRow({
           fill="rgba(255,255,255,0.55)"
           aria-hidden
           data-testid={`icon-favorite-row-${trackNumber}`}
-          className="absolute left-0 -ml-1 top-1/2 -translate-y-1/2"
+          className="absolute left-0 -ml-2 top-1/2 -translate-y-1/2"
         >
           <path d="M12 21s-7-4.5-9.5-9C1 9 2.5 5 6.5 5c2 0 3.5 1 5.5 3 2-2 3.5-3 5.5-3 4 0 5.5 4 4 7-2.5 4.5-9.5 9-9.5 9z" />
         </svg>
       )}
 
-      {/* Track number / play affordance / equalizer cell. */}
-      <div className="w-6 relative h-5">
+      {/* Track number / play affordance / equalizer cell. Nudged a touch
+          left (-ml-1) so the resting number + leading heart line up with
+          Apple Music's tighter tracklist gutter; the title rides the same
+          small shift, keeping the number→title gap unchanged. */}
+      <div className="w-6 relative h-5 -ml-1">
         {/* Plain number — visible whenever the row is at rest. Stacked
             absolute + flex-centered + justify-end pr-[1px] so it occupies the
             EXACT same box as the play triangle / equalizer below; otherwise
