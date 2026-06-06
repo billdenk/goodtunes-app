@@ -40,6 +40,20 @@ export const RAIL_INSET = 12;
 export const RAIL_GAP = 12;
 
 /**
+ * Vertical room the bottom-pinned account/avatar must reserve so it
+ * clears the floating compact Player dock when the dock overlaps the
+ * rail. The fan dock is `fixed bottom-8` (32px) and ~60px tall, so its
+ * top edge sits ~92px above the viewport bottom — round up for breathing
+ * room. Only applied when the dock is in its edge-to-edge regime
+ * (viewport < `COMPACT_DOCK_BREAKPOINT`), i.e. iPad-width; on a wide
+ * desktop the dock is centered and never covers the left rail. */
+export const FAN_DOCK_CLEARANCE = 96;
+
+/** Width below which the fan compact dock goes edge-to-edge and overlaps
+ * the left rail (mirrors PlayerDock's COMPACT_BREAKPOINT). */
+export const COMPACT_DOCK_BREAKPOINT = 1100;
+
+/**
  * Total left padding that content pages apply so their content starts
  * flush to the right of the floating rail card:
  *   RAIL_INSET (12) + STOREFRONT_SIDEBAR_WIDTH (260) + RAIL_GAP (12) = 284

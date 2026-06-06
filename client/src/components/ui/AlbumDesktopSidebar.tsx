@@ -1,5 +1,10 @@
 import { useLocation } from "wouter";
 import { FanRailNav } from "@/components/ui/FanRailNav";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import {
+  FAN_DOCK_CLEARANCE,
+  COMPACT_DOCK_BREAKPOINT,
+} from "@/hooks/useDesktopShell";
 
 /* Brand tokens — kept inline so the primitive is self-contained and can
    live in the mockup sandbox via re-export (the sandbox alias can't
@@ -42,6 +47,19 @@ export function AlbumDesktopSidebar({
   onSearch?: () => void;
 }) {
   const [, navigate] = useLocation();
+  // The album-detail page always mounts its compact dock (it never
+  // collapses), and below COMPACT_DOCK_BREAKPOINT (iPad width) that dock
+  // goes edge-to-edge over this rail. Reserve room above the bottom-pinned
+  // account chip so it clears the dock; on a wide desktop the dock is
+  // centered and never overlaps, so we keep the original spacing. Always
+  // add the device safe-area inset so the chip clears the home indicator
+  // in the Capacitor webview.
+  const dockNarrow = useMediaQuery(
+    `(max-width: ${COMPACT_DOCK_BREAKPOINT - 1}px)`,
+  );
+  const footerPadBottom = `calc(${
+    dockNarrow ? FAN_DOCK_CLEARANCE : 24
+  }px + env(safe-area-inset-bottom, 0px))`;
   // A logged-out visitor (no fan/admin session) landing on a shared
   // Preview & Purchase link sees a stripped rail: just the GoodTunes
   // lockup up top and a branded "Log in" CTA pinned to the bottom. The
@@ -90,7 +108,7 @@ export function AlbumDesktopSidebar({
       <div className="flex-1" />
 
       {loggedIn ? (
-        <div className="px-4 pb-6 pt-4">
+        <div className="px-4 pt-4" style={{ paddingBottom: footerPadBottom }}>
           <div className="flex items-center gap-3 px-1">
             <button
               type="button"
@@ -119,7 +137,7 @@ export function AlbumDesktopSidebar({
           </div>
         </div>
       ) : (
-        <div className="px-4 pb-6 pt-4">
+        <div className="px-4 pt-4" style={{ paddingBottom: footerPadBottom }}>
           <button
             type="button"
             onClick={() => {

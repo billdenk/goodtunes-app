@@ -605,6 +605,12 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
     <div
       className="flex gap-3 w-full h-screen overflow-hidden text-fan-primary"
       style={{
+        // `100dvh` (inline) tracks the visible viewport on iPad Safari so
+        // the flex column — and the account chip the rail bottom-pins via
+        // its `flex-1` spacer — doesn't slide under the browser chrome.
+        // Falls back to the `h-screen` (100vh) class on browsers without
+        // dvh support, since the invalid inline value is simply dropped.
+        height: "100dvh",
         background: BRAND_BG,
         fontFamily: "system-ui, -apple-system, 'SF Pro Text', sans-serif",
       }}
