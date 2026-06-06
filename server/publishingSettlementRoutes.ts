@@ -221,4 +221,163 @@ export function registerPublishingSettlementRoutes(app: Express, requireAdmin: A
       return res.status(500).json({ message: "Failed to compute publishing settlement" });
     }
   });
+
+  // Pre-delete impact probe. Surfaces the publishing data that the album's
+  // soft-delete cascade would silently take down with it — the
+  // mechanical-settlement splits (which ride on the album's songs) and the
+  // units-pressed figure — so the delete-confirm dialog can warn the operator
+  // and offer to move it first. Counts use the SAME song→split join the
+  // settlement engine uses, so the numbers match what the payout run sees.
+  app.get("/api/admin/albums/:albumId/publishing-impact", requireAdmin, async (req, res) => {
+    try {
+      const albumId = String(req.params.albumId);
+      const songRows = await db
+        .select({ id: songs.id })
+        .from(songs)
+        .where(and(eq(songs.albumId, albumId), isNull(songs.deletedAt)));
+      const songIds = songRows.map((s) => s.id);
+
+      let splitCount = 0;
+      let songsWithSplits = 0;
+      if (songIds.length) {
+        const splitRows = await db
+          .select({ songId: trackPublishingSplits.songId })
+          .from(trackPublishingSplits)
+          .where(
+            and(
+              inArray(trackPublishingSplits.songId, songIds),
+              isNull(trackPublishingSplits.deletedAt),
+            ),
+          );
+        splitCount = splitRows.length;
+        songsWithSplits = new Set(splitRows.map((r) => r.songId)).size;
+      }
+
+      const unitsPressed = await resolveUnitsPressed(albumId);
+      return res.json({
+        albumId,
+        trackCount: songIds.length,
+        splitCount,
+        songsWithSplits,
+        unitsPressed,
+        hasPublishingData: splitCount > 0 || unitsPressed > 0,
+      });
+    } catch (err) {
+      console.error("[publishing-impact]", err);
+      return res.status(500).json({ message: "Failed to compute publishing impact" });
+    }
+  });
+
+  // Move an album's publishing data onto another album so it survives a
+  // delete. Publishing splits ride on `song_id` (there is no clean
+  // split→target-track match), so the honest, non-lossy move is to re-point
+  // the SONGS that carry non-deleted splits onto the target album — the splits
+  // follow. The operator-recorded units-pressed figure is added onto the
+  // target and cleared from the source. Re-pointing songs can leave duplicate
+  // tracks on the target; reconciling those is the operator's job afterward.
+  app.post("/api/admin/albums/:albumId/move-publishing-data", requireAdmin, async (req, res) => {
+    try {
+      // Re-pointing data across albums is an operator-only action; partner
+      // admins (artist/label) don't get it even though they pass requireAdmin.
+      const userId = (req.session as { userId?: string } | undefined)?.userId;
+      const { getUserRole } = await import("./auth/roles");
+      const info = userId ? await getUserRole(userId) : null;
+      if (!(info?.role === "super_admin" || info?.role === "admin")) {
+        return res
+          .status(403)
+          .json({ message: "Only GoodTunes operators can move publishing data." });
+      }
+
+      const sourceId = String(req.params.albumId);
+      const targetId = String(req.body?.targetAlbumId ?? "").trim();
+      if (!targetId) {
+        return res.status(400).json({ message: "targetAlbumId is required" });
+      }
+      if (targetId === sourceId) {
+        return res
+          .status(400)
+          .json({ message: "Pick a different album to move the publishing data to." });
+      }
+
+      const [source] = await db
+        .select({ id: albums.id, units: albums.mechanicalUnitsPressed })
+        .from(albums)
+        .where(eq(albums.id, sourceId))
+        .limit(1);
+      if (!source) return res.status(404).json({ message: "Album not found" });
+
+      const [target] = await db
+        .select({
+          id: albums.id,
+          units: albums.mechanicalUnitsPressed,
+          deletedAt: albums.deletedAt,
+        })
+        .from(albums)
+        .where(eq(albums.id, targetId))
+        .limit(1);
+      if (!target || target.deletedAt) {
+        return res.status(404).json({ message: "Target album not found or is in the trash." });
+      }
+
+      const songRows = await db
+        .select({ id: songs.id })
+        .from(songs)
+        .where(and(eq(songs.albumId, sourceId), isNull(songs.deletedAt)));
+      const songIds = songRows.map((s) => s.id);
+
+      let carrierIds: string[] = [];
+      let splitCount = 0;
+      if (songIds.length) {
+        const splitRows = await db
+          .select({ songId: trackPublishingSplits.songId })
+          .from(trackPublishingSplits)
+          .where(
+            and(
+              inArray(trackPublishingSplits.songId, songIds),
+              isNull(trackPublishingSplits.deletedAt),
+            ),
+          );
+        splitCount = splitRows.length;
+        carrierIds = Array.from(new Set(splitRows.map((r) => r.songId)));
+      }
+
+      const sourceUnits = Math.max(0, Number(source.units ?? 0));
+      const targetUnits = Math.max(0, Number(target.units ?? 0));
+
+      if (carrierIds.length === 0 && sourceUnits === 0) {
+        return res
+          .status(400)
+          .json({ message: "This album has no publishing data to move." });
+      }
+
+      await db.transaction(async (tx) => {
+        if (carrierIds.length) {
+          await tx
+            .update(songs)
+            .set({ albumId: targetId })
+            .where(inArray(songs.id, carrierIds));
+        }
+        if (sourceUnits > 0) {
+          await tx
+            .update(albums)
+            .set({ mechanicalUnitsPressed: targetUnits + sourceUnits })
+            .where(eq(albums.id, targetId));
+          await tx
+            .update(albums)
+            .set({ mechanicalUnitsPressed: null })
+            .where(eq(albums.id, sourceId));
+        }
+      });
+
+      return res.json({
+        movedSongs: carrierIds.length,
+        movedSplits: splitCount,
+        unitsMoved: sourceUnits,
+        targetAlbumId: targetId,
+      });
+    } catch (err) {
+      console.error("[move-publishing-data]", err);
+      return res.status(500).json({ message: "Failed to move publishing data" });
+    }
+  });
 }

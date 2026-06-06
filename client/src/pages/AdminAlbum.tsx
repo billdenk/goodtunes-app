@@ -128,6 +128,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -458,6 +465,12 @@ export function AdminAlbum() {
   const [artistDeleteSoldOpen, setArtistDeleteSoldOpen] = useState(false);
   const [artistDeleteRequestOpen, setArtistDeleteRequestOpen] = useState(false);
   const [artistDeleteRequested, setArtistDeleteRequested] = useState(false);
+  // Task #1363 — when an album carries publishing data (mechanical-settlement
+  // splits and/or a units-pressed figure), the delete-confirm dialog warns and
+  // offers to move it onto another album first. `moveTargetId` is the picked
+  // destination; the picker only opens once the operator chooses to move.
+  const [showMovePicker, setShowMovePicker] = useState(false);
+  const [moveTargetId, setMoveTargetId] = useState("");
   // Delete-options dropdown (replaces the standalone trashcan). The
   // dropdown can either delete the whole album, prime a multi-select
   // pass over the tracklist, or delete every track in one shot. The
@@ -543,6 +556,85 @@ export function AdminAlbum() {
       });
     },
   });
+
+  // Task #1363 — probe the publishing data the delete cascade would silently
+  // take down (mechanical-settlement splits + units-pressed). Only runs while
+  // the operator's delete-confirm dialog is open, so it's free for the common
+  // case where there's nothing tied to the album.
+  const { data: publishingImpact } = useQuery<{
+    splitCount: number;
+    songsWithSplits: number;
+    unitsPressed: number;
+    hasPublishingData: boolean;
+  }>({
+    queryKey: ["/api/admin/albums", albumId, "publishing-impact"],
+    enabled: !!user?.isAdmin && !!albumId && deleteConfirmOpen,
+  });
+
+  // Candidate destinations for a move. Reuses the admin album list (every
+  // release the operator can see), minus this album. Only fetched once the
+  // operator opts into moving the data.
+  const { data: moveCandidates } = useQuery<
+    Array<{ id: string; title: string; artist: string | null }>
+  >({
+    queryKey: ["/api/albums"],
+    enabled: !!user?.isAdmin && deleteConfirmOpen && showMovePicker,
+  });
+
+  const movePublishingData = useMutation({
+    mutationFn: async (targetAlbumId: string) => {
+      return await apiRequest(
+        "POST",
+        `/api/admin/albums/${albumId}/move-publishing-data`,
+        { targetAlbumId },
+      );
+    },
+    onSuccess: async (res: any) => {
+      const data = await res.json().catch(() => ({}));
+      const parts: string[] = [];
+      if (data.movedSplits)
+        parts.push(
+          `${data.movedSplits} publishing ${data.movedSplits === 1 ? "split" : "splits"}`,
+        );
+      if (data.unitsMoved)
+        parts.push(`${data.unitsMoved.toLocaleString()} units pressed`);
+      toast({
+        title: "Publishing data moved",
+        description: parts.length
+          ? `Moved ${parts.join(" and ")}. You can delete this album now.`
+          : "You can delete this album now.",
+      });
+      // Re-probe so the warning clears and the dialog returns to a plain
+      // delete; refresh both albums so the destination shows the moved tracks.
+      setShowMovePicker(false);
+      setMoveTargetId("");
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/albums", albumId, "publishing-impact"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/albums", albumId] });
+      if (data.targetAlbumId)
+        queryClient.invalidateQueries({
+          queryKey: ["/api/albums", data.targetAlbumId],
+        });
+      queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't move publishing data",
+        description: e?.message || "Try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Reset the move sub-flow whenever the delete dialog closes so a re-open
+  // always starts from the plain warning, never a half-filled picker.
+  useEffect(() => {
+    if (!deleteConfirmOpen) {
+      setShowMovePicker(false);
+      setMoveTargetId("");
+    }
+  }, [deleteConfirmOpen]);
 
   // Task #1250 — Artist request-to-delete. Hits the same DELETE endpoint,
   // which (for partner callers) writes a review-queue request instead of
@@ -1396,6 +1488,101 @@ export function AdminAlbum() {
               This cannot be undone.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Task #1363 — publishing-data guard. The soft-delete cascade
+              silently takes down the mechanical-settlement splits (they ride
+              on the album's songs) and the units-pressed figure. Surface what
+              would be lost and offer to move it onto another album first. */}
+          {publishingImpact?.hasPublishingData && (
+            <div
+              className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2"
+              data-testid="warning-publishing-impact"
+            >
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                <div className="text-sm text-amber-900 space-y-1">
+                  <p className="font-medium">
+                    This album carries mechanical-settlement publishing data.
+                  </p>
+                  <ul className="list-disc pl-4 space-y-0.5 text-amber-800">
+                    {publishingImpact.splitCount > 0 && (
+                      <li data-testid="text-impact-splits">
+                        {publishingImpact.splitCount} publishing{" "}
+                        {publishingImpact.splitCount === 1 ? "split" : "splits"}{" "}
+                        across {publishingImpact.songsWithSplits}{" "}
+                        {publishingImpact.songsWithSplits === 1
+                          ? "track"
+                          : "tracks"}
+                      </li>
+                    )}
+                    {publishingImpact.unitsPressed > 0 && (
+                      <li data-testid="text-impact-units">
+                        {publishingImpact.unitsPressed.toLocaleString()} units
+                        pressed
+                      </li>
+                    )}
+                  </ul>
+                  <p className="text-amber-800">
+                    Deleting removes it from payout runs. Move it to another
+                    album to keep it.
+                  </p>
+                </div>
+              </div>
+
+              {!showMovePicker ? (
+                <Button
+                  type="button"
+                  onClick={() => setShowMovePicker(true)}
+                  disabled={deleteAlbum.isPending}
+                  className="w-full bg-white text-amber-900 border border-amber-300 shadow-sm hover:bg-amber-100 h-9"
+                  data-testid="button-move-publishing-open"
+                >
+                  Move publishing data to another album…
+                </Button>
+              ) : (
+                <div className="space-y-2 pt-1">
+                  <Select
+                    value={moveTargetId}
+                    onValueChange={setMoveTargetId}
+                    disabled={movePublishingData.isPending}
+                  >
+                    <SelectTrigger
+                      className="bg-white border-amber-300 text-slate-900 h-9"
+                      data-testid="select-move-target"
+                    >
+                      <SelectValue placeholder="Choose destination album…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(moveCandidates ?? [])
+                        .filter((a) => a.id !== albumId)
+                        .map((a) => (
+                          <SelectItem
+                            key={a.id}
+                            value={a.id}
+                            data-testid={`option-move-target-${a.id}`}
+                          >
+                            {a.title}
+                            {a.artist ? ` — ${a.artist}` : ""}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    onClick={() => movePublishingData.mutate(moveTargetId)}
+                    disabled={!moveTargetId || movePublishingData.isPending}
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white h-9"
+                    data-testid="button-move-publishing-confirm"
+                  >
+                    {movePublishingData.isPending
+                      ? "Moving…"
+                      : "Move publishing data"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Cancel uses an explicit white/slate secondary because the
               global `outline` shadcn variant resolves to `bg-background`,
               which is the brand navy in this dark-mode-default theme —
@@ -1407,7 +1594,7 @@ export function AdminAlbum() {
             <Button
               type="button"
               onClick={() => setDeleteConfirmOpen(false)}
-              disabled={deleteAlbum.isPending}
+              disabled={deleteAlbum.isPending || movePublishingData.isPending}
               className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-slate-50"
               data-testid="button-delete-album-cancel"
             >
@@ -1416,11 +1603,15 @@ export function AdminAlbum() {
             <Button
               type="button"
               onClick={() => deleteAlbum.mutate()}
-              disabled={deleteAlbum.isPending}
+              disabled={deleteAlbum.isPending || movePublishingData.isPending}
               className="bg-rose-600 hover:bg-rose-700 text-white ml-2"
               data-testid="button-delete-album-confirm"
             >
-              {deleteAlbum.isPending ? "Deleting…" : "Delete album"}
+              {deleteAlbum.isPending
+                ? "Deleting…"
+                : publishingImpact?.hasPublishingData
+                  ? "Delete anyway"
+                  : "Delete album"}
             </Button>
           </DialogFooter>
         </DialogContent>
