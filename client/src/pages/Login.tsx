@@ -137,7 +137,7 @@ function WelcomeBackPill() {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="w-full flex items-center justify-between gap-3 rounded-2xl border border-white/[0.08] backdrop-blur-xl px-4 py-3 text-left transition-all hover:border-white/[0.16] active:scale-[0.99]"
+            className="w-full flex items-center justify-between gap-3 rounded-2xl border border-[rgba(49,158,216,0.28)] backdrop-blur-xl px-4 py-3 text-left transition-all hover:border-[rgba(49,158,216,0.5)] active:scale-[0.99]"
             style={{
               background:
                 "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)), rgba(var(--brand-bg-rgb), 0.88)",
@@ -182,7 +182,7 @@ function WelcomeBackPill() {
               inputMode="email"
               autoCapitalize="none"
               spellCheck={false}
-              className="w-full rounded-2xl border border-white/[0.1] bg-white/[0.05] px-4 py-3.5 text-base text-white placeholder-white/30 transition-all focus:outline-none focus:border-[var(--brand-blue)] focus:bg-white/[0.07] focus:shadow-[0_0_0_4px_var(--brand-blue-soft)]"
+              className="w-full rounded-2xl border border-[rgba(49,158,216,0.45)] bg-[rgba(49,158,216,0.14)] px-4 py-3.5 text-base text-white placeholder-white/45 transition-colors focus:outline-none focus:border-[var(--brand-blue)] focus:bg-[rgba(49,158,216,0.2)]"
               required
               autoFocus
               data-testid="input-welcomeback-sheet-email"
@@ -190,11 +190,8 @@ function WelcomeBackPill() {
             <button
               type="submit"
               disabled={submitting || !email.trim()}
-              className="w-full py-3.5 rounded-full font-semibold text-base text-white transition-all active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
-              style={{
-                background: "linear-gradient(180deg, var(--brand-blue), var(--primarypetrol-blue-02))",
-                boxShadow: "0 14px 30px -14px var(--brand-blue)",
-              }}
+              className={CUSTOMER_CHROME.primaryBtn}
+              style={CUSTOMER_CHROME.primaryBtnStyle}
               data-testid="button-welcomeback-sheet-send"
             >
               {submitting ? "Sending…" : "Send my Magic Link"}
@@ -220,7 +217,7 @@ function WelcomeBackPill() {
           return (
             <Drawer open={open} onOpenChange={handleOpenChange}>
               <DrawerContent
-                className="rounded-t-3xl border border-white/[0.08] text-white backdrop-blur-xl"
+                className="rounded-t-3xl border border-[rgba(49,158,216,0.28)] text-white backdrop-blur-xl"
                 style={{
                   background:
                     "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)), rgba(var(--brand-bg-rgb), 0.88)",
@@ -243,7 +240,7 @@ function WelcomeBackPill() {
         return (
           <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent
-              className="border border-white/[0.08] text-white max-w-[440px] rounded-3xl px-6 py-7 backdrop-blur-xl"
+              className="border border-[rgba(49,158,216,0.28)] text-white max-w-[440px] rounded-3xl px-6 py-7 backdrop-blur-xl"
               style={{
                 background:
                   "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)), rgba(var(--brand-bg-rgb), 0.88)",
@@ -967,7 +964,7 @@ export function Login() {
                     <button
                       type="button"
                       onClick={() => navigate(isAdmin ? "/admin/forgot-password" : "/forgot-password")}
-                      className={`text-xs font-medium hover:underline transition-colors ${isAdmin ? "text-[var(--brand-blue)]" : "text-white/60 hover:text-white/90"}`}
+                      className={`text-xs font-medium hover:underline transition-colors ${isAdmin ? "text-[var(--brand-blue)]" : "text-fan-faint hover:text-fan-secondary"}`}
                       data-testid="link-forgot-password"
                     >
                       Forgot password?
