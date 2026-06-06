@@ -130,27 +130,36 @@ export function buildAlbumCreditGroups(
   return groups;
 }
 
+/* Circular photo (or initials fallback) for a credit, shared by every row
+   variant. */
+function CreditAvatar({ e }: { e: CreditEntry }) {
+  if (e.photoUrl) {
+    return (
+      <img
+        src={e.photoUrl}
+        alt=""
+        style={{ width: 36, height: 36 }}
+        className="rounded-full object-cover flex-shrink-0"
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden
+      style={{ width: 36, height: 36 }}
+      className="rounded-full bg-white/[0.06] flex-shrink-0 inline-flex items-center justify-center text-xs font-medium text-fan-primary"
+    >
+      {initialsOf(e.name)}
+    </span>
+  );
+}
+
 /* Avatar + name + role-subtitle for a single credit, shared by the tappable
-   (button) and plain (non-tappable) row variants. */
+   (button) and plain (non-tappable) row variants of the desktop modal. */
 function CreditFace({ e }: { e: CreditEntry }) {
   return (
     <>
-      {e.photoUrl ? (
-        <img
-          src={e.photoUrl}
-          alt=""
-          style={{ width: 36, height: 36 }}
-          className="rounded-full object-cover flex-shrink-0"
-        />
-      ) : (
-        <span
-          aria-hidden
-          style={{ width: 36, height: 36 }}
-          className="rounded-full bg-white/[0.06] flex-shrink-0 inline-flex items-center justify-center text-xs font-medium text-fan-primary"
-        >
-          {initialsOf(e.name)}
-        </span>
-      )}
+      <CreditAvatar e={e} />
       <span className="flex-1 min-w-0">
         <span className="block truncate text-fan-primary text-sm font-medium leading-tight tracking-[-0.01em]">
           {e.name}
@@ -220,6 +229,156 @@ function GatedCreditEntry({
   return <CreditPlainRow e={e} />;
 }
 
+/* ── Mobile bottom-sheet row variants ────────────────────────────────────
+   Apple's mobile credits stack each group in its own rounded card with the
+   role label set above it in small caps. Rows inside a card are separated by
+   a hairline that's inset past the avatar; the role-subtitle wraps (it isn't
+   truncated like the dense desktop modal). `first` drops the top divider so
+   the card edge stays clean. */
+
+/* Name + wrapping role-subtitle, with the inset top hairline for non-first
+   rows. The border lives on the text column (not the row) so it starts after
+   the avatar, matching Apple. */
+function SheetCreditLabel({ e, first }: { e: CreditEntry; first: boolean }) {
+  return (
+    <span
+      className={`flex-1 min-w-0 py-3 ${
+        first ? "" : "border-t border-white/[0.07]"
+      }`}
+    >
+      <span className="block truncate text-fan-primary text-base font-semibold leading-tight tracking-[-0.01em]">
+        {e.name}
+      </span>
+      {e.subtitle && (
+        <span className="block text-xs leading-snug text-fan-secondary mt-0.5">
+          {e.subtitle}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function SheetCreditButton({
+  e,
+  first,
+  onOpenPerson,
+}: {
+  e: CreditEntry;
+  first: boolean;
+  onOpenPerson: (personId: string, role: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenPerson(e.personId!, e.subtitle)}
+      className="w-full flex items-center gap-3 px-4 text-left transition-colors active:bg-white/[0.05]"
+      data-testid={`link-album-credit-person-${e.personId}`}
+    >
+      <CreditAvatar e={e} />
+      <SheetCreditLabel e={e} first={first} />
+    </button>
+  );
+}
+
+function SheetCreditPlainRow({ e, first }: { e: CreditEntry; first: boolean }) {
+  return (
+    <div
+      className="flex items-center gap-3 px-4"
+      data-testid={`text-album-credit-${e.key}`}
+    >
+      <CreditAvatar e={e} />
+      <SheetCreditLabel e={e} first={first} />
+    </div>
+  );
+}
+
+function SheetGatedCreditEntry({
+  e,
+  first,
+  currentAlbumId,
+  onOpenPerson,
+}: {
+  e: CreditEntry;
+  first: boolean;
+  currentAlbumId?: string;
+  onOpenPerson: (personId: string, role: string) => void;
+}) {
+  const { data } = useQuery<PersonProfileLite>({
+    queryKey: ["/api/people", e.personId, "profile"],
+    enabled: !!e.personId,
+  });
+  if (personProfileIsRich(data, currentAlbumId)) {
+    return <SheetCreditButton e={e} first={first} onOpenPerson={onOpenPerson} />;
+  }
+  return <SheetCreditPlainRow e={e} first={first} />;
+}
+
+/* Apple-Music-style grouped credits for the mobile bottom sheet: a small-caps
+   role label over a single rounded card per group, rows hairline-separated. */
+function SheetCreditsBody({
+  groups,
+  onOpenPerson,
+  gateEmptyPeople = false,
+  currentAlbumId,
+}: {
+  groups: CreditGroup[];
+  onOpenPerson?: (personId: string, role: string) => void;
+  gateEmptyPeople?: boolean;
+  currentAlbumId?: string;
+}) {
+  if (groups.length === 0) {
+    return (
+      <div className="px-5 pb-4 text-fan-secondary text-sm">
+        Production credits for this album haven't been published yet.
+      </div>
+    );
+  }
+  return (
+    <div className="px-4 pb-4">
+      {groups.map((group, groupIdx) => (
+        <section
+          key={group.title}
+          className={groupIdx === 0 ? "" : "mt-6"}
+          data-testid={`row-album-credit-role-${group.title
+            .replace(/\s+/g, "-")
+            .toLowerCase()}`}
+        >
+          <h3 className="px-1 mb-2 text-fan-faint text-xs font-semibold uppercase tracking-[0.08em]">
+            {group.title}
+          </h3>
+          <div className="rounded-2xl bg-white/[0.04] overflow-hidden">
+            {group.entries.map((e, i) => {
+              const first = i === 0;
+              if (e.personId && onOpenPerson) {
+                if (gateEmptyPeople) {
+                  return (
+                    <SheetGatedCreditEntry
+                      key={e.key}
+                      e={e}
+                      first={first}
+                      currentAlbumId={currentAlbumId}
+                      onOpenPerson={onOpenPerson}
+                    />
+                  );
+                }
+                return (
+                  <SheetCreditButton
+                    key={e.key}
+                    e={e}
+                    first={first}
+                    onOpenPerson={onOpenPerson}
+                  />
+                );
+              }
+              return <SheetCreditPlainRow key={e.key} e={e} first={first} />;
+            })}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 function AlbumCreditsBody({
   groups,
   onOpenPerson,
@@ -282,12 +441,16 @@ function AlbumCreditsBody({
 }
 
 export function AlbumCreditsSheet({
+  albumId,
   albumTitle,
   artist,
   credits,
   onOpenPerson,
   onClose,
 }: {
+  /** Current album id — lets the rich-profile gate count a track on THIS
+   *  album as not-rich, matching the desktop card. */
+  albumId?: string;
   albumTitle: string;
   artist: string;
   credits: AlbumCreditsPayload;
@@ -307,7 +470,12 @@ export function AlbumCreditsSheet({
         subtitle={artist}
         onClose={onClose}
       />
-      <AlbumCreditsBody groups={groups} onOpenPerson={onOpenPerson} />
+      <SheetCreditsBody
+        groups={groups}
+        onOpenPerson={onOpenPerson}
+        gateEmptyPeople
+        currentAlbumId={albumId}
+      />
     </SheetShell>
   );
 }

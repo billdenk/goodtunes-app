@@ -1090,6 +1090,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
 
         {showAlbumCredits && albumCreditGroups.length > 0 && (
           <AlbumCreditsSheet
+            albumId={album.id}
             albumTitle={album.title}
             artist={album.artist}
             credits={apiAlbumCredits ?? {}}
