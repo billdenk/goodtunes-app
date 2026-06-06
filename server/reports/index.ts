@@ -83,6 +83,34 @@ async function resolveScope(ctx: ReportContext): Promise<ScopeResolution> {
       label: lbl ? `Label · ${lbl}` : "Label",
     };
   }
+  if (eff.kind === "manager") {
+    // Task #1425 — a manager has NO album column. The album cohort is
+    // derived: every album whose primary artist is on the manager's
+    // roster (people.managerId = manager id). Mirrors the same derivation
+    // used by resolveManagerScope in server/managerReports.ts.
+    const roster = await db
+      .select({ id: people.id })
+      .from(people)
+      .where(eq(people.managerId, eff.id));
+    const rosterIds = roster.map((r) => r.id);
+    const rows = rosterIds.length
+      ? await db
+          .select({ id: albums.id })
+          .from(albums)
+          .where(inArray(albums.primaryArtistId, rosterIds))
+      : [];
+    const mgr = await db
+      .select({ name: sql<string>`${sql.identifier("name")}` })
+      .from(sql`managers`)
+      .where(sql`id = ${eff.id}`)
+      .then((r) => (r[0] as any)?.name as string | undefined);
+    return {
+      albumIds: rows.map((r) => r.id),
+      referredArtistIds: [],
+      perUnitCents: 0,
+      label: mgr ? `Manager · ${mgr}` : "Manager",
+    };
+  }
   // kind === "artist" — narrow to albums where this person is primary
   // artist. Also resolve referral cohort (artists THIS person referred)
   // so the same scope drives both their own report and their referrals.

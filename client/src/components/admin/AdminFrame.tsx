@@ -71,6 +71,7 @@ const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   gear: "catalog",
   "custom-addons": "catalog",
   labels: "partners",
+  managers: "partners",
   shopify: "partners",
   nonprofits: "partners",
   manufacturers: "partners",
@@ -124,6 +125,7 @@ export type EntityKey =
   | "vendors"
   | "payouts-release"
   | "labels"
+  | "managers"
   | "shopify"
   | "manufacturers"
   | "press-match"
@@ -325,6 +327,12 @@ export function AdminFrame({
   const resellerCount = vendors.filter((v) => v.isReseller).length;
   const { data: labels = [] } = useQuery<unknown[]>({
     queryKey: ["/api/labels"],
+    enabled: !!user?.isAdmin,
+  });
+  // Task #1425 — managers are a label-style partner roster; count feeds
+  // the Partners-section nav badge next to Labels.
+  const { data: managers = [] } = useQuery<unknown[]>({
+    queryKey: ["/api/managers"],
     enabled: !!user?.isAdmin,
   });
   // Task #69 — pressing plants + fulfillment warehouses live in the
@@ -720,6 +728,16 @@ export function AdminFrame({
                 active={active === "labels"}
                 onClick={() => navigate("/admin/labels")}
                 testId="nav-labels"
+              />
+              {/* Task #1425 — managers manage multiple acts; same Partners
+                  section as Labels, roster auto-fills from tagged people. */}
+              <SidebarLink
+                icon={Users}
+                label="Managers"
+                count={managers.length}
+                active={active === "managers"}
+                onClick={() => navigate("/admin/managers")}
+                testId="nav-managers"
               />
               {/* Task #230 — NPO partner directory (page existed before
                   but was never linked from the sidebar). */}

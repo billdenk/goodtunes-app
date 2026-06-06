@@ -39,6 +39,7 @@ import { ArtistDetail } from "@/pages/ArtistDetail";
 import { ArtistDashboard } from "@/pages/ArtistDashboard";
 import { NonProfitDashboard } from "@/pages/NonProfitDashboard";
 import { LabelDashboard } from "@/pages/LabelDashboard";
+import { ManagerDashboard } from "@/pages/ManagerDashboard";
 import { FanLabel } from "@/pages/FanLabel";
 import { Chat, ChatThreadPage } from "@/pages/Chat";
 import { SearchPage } from "@/pages/Search";
@@ -64,6 +65,8 @@ import { AdminVendor } from "@/pages/AdminVendor";
 import { AdminLabels } from "@/pages/AdminLabels";
 import AdminTrash from "@/pages/AdminTrash";
 import { AdminLabel } from "@/pages/AdminLabel";
+import { AdminManagers } from "@/pages/AdminManagers";
+import { AdminManager } from "@/pages/AdminManager";
 import { AdminManufacturers } from "@/pages/AdminManufacturers";
 import { AdminManufacturer } from "@/pages/AdminManufacturer";
 import { AdminPressMatch } from "@/pages/AdminPressMatch";
@@ -517,6 +520,11 @@ function Router() {
         <Route path="/label">
           <ProtectedRoute component={LabelDashboard} />
         </Route>
+        {/* Task #1425 — Manager rollup dashboard (label-style roster).
+            Admin/dev hosts only, same as /label. */}
+        <Route path="/manager">
+          <ProtectedRoute component={ManagerDashboard} />
+        </Route>
         {/* Task #661 — Fan-facing label page. Order matters: the
             literal `/label` route above must stay first so the
             label-partner dashboard isn't shadowed by `:id`. */}
@@ -624,6 +632,12 @@ function Router() {
         </Route>
         <Route path="/admin/labels">
           <ProtectedRoute component={AdminLabels} />
+        </Route>
+        <Route path="/admin/managers/:id">
+          <ProtectedRoute component={AdminManager} />
+        </Route>
+        <Route path="/admin/managers">
+          <ProtectedRoute component={AdminManagers} />
         </Route>
         <Route path="/admin/manufacturers/:id">
           <ProtectedRoute component={AdminManufacturer} />

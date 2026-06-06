@@ -95,20 +95,58 @@ async function resolveArtistScope(req: Request): Promise<ArtistScope | { error: 
     `);
     const ok = ((okRow as any).rows?.[0]?.ok) === true;
     if (!ok) return { error: "Artist is not on this label", status: 403 };
+  } else if (info.role === "manager") {
+    // Task #1425 — manager users can drill from the rollup dashboard into a
+    // specific artist on their roster (manager → artist → album → song).
+    // They must pass ?personId=, and the personId must be tagged with this
+    // manager (people.manager_id). There is NO albums.manager_id, so roster
+    // membership is the sole gate — anything else gets 403 so a manager can't
+    // read another act's numbers by guessing person ids.
+    if (!info.roleScopeId) return { error: "Manager account has no manager scope", status: 403 };
+    personId = (req.query.personId as string) || null;
+    if (!personId) return { error: "Manager must pass ?personId= to drill into a roster artist", status: 400 };
+    const okRow = await db.execute<{ ok: boolean }>(sql`
+      SELECT EXISTS (
+        SELECT 1 FROM people WHERE id = ${personId} AND manager_id = ${info.roleScopeId}
+      ) AS ok
+    `);
+    const ok = ((okRow as any).rows?.[0]?.ok) === true;
+    if (!ok) return { error: "Artist is not on this manager's roster", status: 403 };
   } else {
     return { error: "Insufficient role", status: 403 };
   }
 
+  return computeArtistDatasetScope(personId, info.role, info.roleScopeId);
+}
+
+// Dataset narrowing for an already-resolved (role, personId). Split out from
+// resolveArtistScope so the cross-tenant scoping rules can be unit-tested
+// directly (see server/artistReports.scope.db.test.ts) without standing up a
+// session + membership row. The role-resolution / roster-membership gate
+// stays in resolveArtistScope; this function trusts that the caller is
+// allowed to see `personId` and only decides WHICH albums/songs that implies.
+export async function computeArtistDatasetScope(
+  personId: string,
+  role: string,
+  roleScopeId: string | null,
+): Promise<ArtistScope> {
   // Tenant isolation for label drill-through: when the caller is a label
   // user, narrow album scope to albums released on THIS label. Without
   // this clause an artist with a cross-label catalog (signed to label A
   // for one record, label B for another) would leak label B's revenue
   // and orders to a label A operator. The roster-membership check above
   // gates entry; this clause gates the data set.
-  const isLabelCaller = info.role === "label";
+  const isLabelCaller = role === "label";
   const labelClause = isLabelCaller
-    ? sql`AND label_id = ${info.roleScopeId}`
+    ? sql`AND label_id = ${roleScopeId}`
     : sql``;
+  // Roster-partner callers (label OR manager) must never see a roster
+  // artist's guest credits on OTHER artists' albums — that would leak
+  // off-roster catalog/play metrics. There is no albums.manager_id, so a
+  // manager can't get a labelClause-style album narrowing; instead we drop
+  // the credited-song union for them too (see below). Self-view artists and
+  // super-admins keep the full credited union.
+  const isRosterPartnerCaller = role === "label" || role === "manager";
   // Canonical artist album scope (shared with the buyer-roster page
   // GET /api/admin/people/:id/buyers — see server/routes.ts). An artist
   // owns an album when they are its primaryArtistId OR its payout owner,
@@ -134,10 +172,11 @@ async function resolveArtistScope(req: Request): Promise<ArtistScope | { error: 
   const ownedSongIds = ((ownedSongRows as any).rows || []).map((r: any) => r.id);
 
   // Credits union pulls in performer/writer guest appearances on other
-  // artists' albums. For label callers we drop the union so the song
-  // scope can never include a song from an album the label doesn't own.
+  // artists' albums. For roster-partner callers (label OR manager) we drop
+  // the union so the song scope can never include a song from an album the
+  // partner doesn't own / isn't on their roster.
   let credited: string[] = [];
-  if (!isLabelCaller) {
+  if (!isRosterPartnerCaller) {
     const creditRows = await db.execute<{ song_id: string }>(sql`
       SELECT DISTINCT song_id FROM track_performers WHERE person_id = ${personId}
       UNION
@@ -809,10 +848,11 @@ export async function registerArtistReportRoutes(app: Express): Promise<void> {
   // requireRole already 401s without a session and 403s non-admin
   // users (it checks isAdmin via storage.getUser) before evaluating
   // the role, so no separate requireAdmin is needed.
-  // Task #76 — label users may drill into a roster artist via ?personId=.
-  // resolveArtistScope above verifies the personId is on their roster
-  // before returning anything, so role-level inclusion is safe.
-  const gate = requireRole("artist", "label", "super_admin");
+  // Task #76 / #1425 — label and manager users may drill into a roster
+  // artist via ?personId=. resolveArtistScope above verifies the personId
+  // is on their roster before returning anything, so role-level inclusion
+  // is safe.
+  const gate = requireRole("artist", "label", "manager", "super_admin");
 
   app.get("/api/artist/me", gate, meHandler);
   app.get("/api/artist/summary", gate, summaryHandler);

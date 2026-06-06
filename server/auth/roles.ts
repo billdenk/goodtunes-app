@@ -452,7 +452,11 @@ export interface PartnerScope extends UserRoleInfo {
   // Task #524 — non_profit was added so super-admins can also view the
   // Reports surface from a non-profit's perspective (Referrals tab is
   // the relevant one; album-scoped tabs gate out for orgs).
-  viewAs?: { kind: "label" | "artist" | "non_profit"; id: string };
+  // Task #1425 — "manager" added so super-admins can also view the
+  // Reports surface from a manager's perspective. A manager has no album
+  // column; the album cohort is derived from its roster in
+  // server/reports/index.ts (resolveScope).
+  viewAs?: { kind: "label" | "artist" | "non_profit" | "manager"; id: string };
 }
 
 let roleColumnsKnownToExist: boolean | null = null;
@@ -495,7 +499,7 @@ export async function resolveReportScope(req: Request): Promise<PartnerScope | n
     const asKind = String(req.query.asPartnerKind || "").trim();
     if (
       asPartner &&
-      (asKind === "label" || asKind === "artist" || asKind === "non_profit")
+      (asKind === "label" || asKind === "artist" || asKind === "non_profit" || asKind === "manager")
     ) {
       return { ...scope, viewAs: { kind: asKind, id: asPartner } };
     }
@@ -515,15 +519,21 @@ export async function requireReportScope(req: Request, res: Response, next: Next
 // Non-profit impersonation returns null here because orgs don't own
 // albums; album-scoped reports should treat it as an empty cohort
 // (see `effectiveOrgId` + resolveScope in reports/index.ts).
-export function effectiveScopeFilter(scope: PartnerScope): { kind: "label" | "artist"; id: string } | null {
+export function effectiveScopeFilter(scope: PartnerScope): { kind: "label" | "artist" | "manager"; id: string } | null {
   if (scope.viewAs) {
     const v = scope.viewAs;
     if (v.kind === "label") return { kind: "label", id: v.id };
     if (v.kind === "artist") return { kind: "artist", id: v.id };
+    // Task #1425 — manager cohort is derived from its roster in resolveScope.
+    if (v.kind === "manager") return { kind: "manager", id: v.id };
     return null;
   }
   if (scope.role === "label" && scope.roleScopeId) return { kind: "label", id: scope.roleScopeId };
   if (scope.role === "artist" && scope.roleScopeId) return { kind: "artist", id: scope.roleScopeId };
+  // A real manager-role caller must NOT fall through to the null "see
+  // everything" branch (that is the super_admin god-view). Pin them to
+  // their own manager scope so the cohort derivation runs.
+  if (scope.role === "manager" && scope.roleScopeId) return { kind: "manager", id: scope.roleScopeId };
   return null;
 }
 

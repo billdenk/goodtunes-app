@@ -16010,6 +16010,221 @@
     "snippet": "className=\"mt-4 inline-flex items-center justify-center h-9 px-3.5 rounded-md text-[12.5px] font-semibold bg-[var(--brand-blue)] text-white hover:bg-[#2789bf] transition-colors\""
   },
   {
+    "rule": "admin-link-missing-shared-treatment",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<Link"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<div className=\"flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<div className=\"text-slate-400 text-[11px] font-semibold uppercase tracking-wider\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "className=\"text-slate-900 text-[26px] font-bold tracking-tight mt-0.5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<div className=\"flex items-center gap-3 text-slate-500 text-[12.5px] mt-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "\"relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<span className=\"text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900 pr-8\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<DialogDescription className=\"text-[13px] font-normal text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<div className=\"text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<span className=\"text-[12px] text-slate-700 font-semibold\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<div className=\"text-slate-400 text-[10.5px] font-semibold uppercase tracking-wider mb-3\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<div className=\"text-slate-700 text-[13px] font-semibold\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<div className=\"text-slate-400 text-[11.5px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<p className=\"mt-4 text-[11.5px] text-slate-500 leading-relaxed\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "className=\"w-44 text-[13px] bg-transparent outline-none placeholder:text-slate-400\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "className=\"mt-3 w-full text-center text-slate-900 text-[13px] font-semibold truncate px-1\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "className=\"text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<p className=\"text-slate-700 text-[14px] font-semibold\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[12.5px] mt-1 max-w-xs mx-auto\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "className=\"mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<h2 className=\"text-slate-900 text-[14px] font-bold inline-flex items-center gap-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[11.5px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<span className=\"text-slate-900 text-[13.5px] font-semibold truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<span className=\"inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold uppercase tracking-wider flex-shrink-0\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManager.tsx",
+    "snippet": "<div className=\"text-slate-400 text-[11.5px] truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "className=\"w-44 text-[13px] bg-transparent outline-none placeholder:text-slate-400\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "<DialogDescription className=\"text-[13px] text-slate-500 leading-relaxed\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "className=\"w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "className=\"rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "className=\"text-[12px] text-red-600\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "<p className=\"text-[11.5px] text-slate-400\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "className=\"px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "className=\"text-[12.5px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "className=\"text-slate-900 text-[14px] font-semibold leading-tight truncate\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "<div className=\"text-slate-400 text-[11.5px] truncate mt-0.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "className=\"text-slate-900 text-[13.5px] font-semibold truncate group-hover:text-[var(--brand-blue)] transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "<div className=\"text-slate-400 text-[11.5px] truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "<div className=\"text-slate-400 text-[11.5px] truncate flex-shrink-0\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "<p className=\"text-slate-700 text-[14px] font-semibold\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[12.5px] mt-1 max-w-xs\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManagers.tsx",
+    "snippet": "className=\"mt-4 inline-flex items-center justify-center h-9 px-3.5 rounded-md text-[12.5px] font-semibold bg-[var(--brand-blue)] text-white hover:bg-[#2789bf] transition-colors\""
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManufacturer.tsx",
     "snippet": "<div className=\"flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium\">"
@@ -19963,6 +20178,236 @@
     "rule": "fan-text-tone",
     "file": "client/src/pages/Login.tsx",
     "snippet": "<p className=\"mt-5 text-center text-xs leading-relaxed text-white/40\" data-testid=\"text-terms-consent\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<p className=\"text-white/60 text-sm\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<p className=\"text-[11px] uppercase tracking-wider text-white/55 font-semibold\">{label}</p>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "{sub && <span className=\"text-white/55\">{sub}</span>}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<thead className=\"text-white/45 text-[11px] uppercase tracking-wider\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "{roster.isLoading && <tr><td colSpan={7} className=\"py-6 text-center text-white/45\">Loading…</td></tr>}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "{!roster.isLoading && rows.length === 0 && <tr><td colSpan={7} className=\"py-6 text-center text-white/45\">No artists on the roster yet.</td></tr>}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<p className=\"truncate text-white/45 text-[11px]\">{a.albumCount} album{a.albumCount === 1 ? \"\" : \"s\"}</p>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<td className=\"px-2 text-right tabular-nums text-white/70\">{a.albumCount}</td>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "className={`inline-flex items-center gap-1 uppercase tracking-wider ${active ? \"text-white\" : \"text-white/45 hover:text-white/75\"}`}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "{albums.isLoading && <tr><td colSpan={6} className=\"py-6 text-center text-white/45\">Loading…</td></tr>}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "{!albums.isLoading && (albums.data?.albums.length ?? 0) === 0 && <tr><td colSpan={6} className=\"py-6 text-center text-white/45\">No albums in scope.</td></tr>}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<p className=\"truncate text-white/45 text-[11px]\">{a.artist}</p>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "{tracks.isLoading && <tr><td colSpan={6} className=\"py-6 text-center text-white/45\">Loading…</td></tr>}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "{!tracks.isLoading && (tracks.data?.tracks.length ?? 0) === 0 && <tr><td colSpan={6} className=\"py-6 text-center text-white/45\">No plays yet in this window.</td></tr>}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<p className=\"text-white/45 text-[11px] truncate\">{t.albumTitle} · {t.albumArtist}</p>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "{orders.isLoading && <tr><td colSpan={6} className=\"py-6 text-center text-white/45\">Loading…</td></tr>}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "{!orders.isLoading && (orders.data?.orders.length ?? 0) === 0 && <tr><td colSpan={6} className=\"py-6 text-center text-white/45\">No orders in this window.</td></tr>}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<td className=\"py-2 pr-3 whitespace-nowrap text-white/75\">{new Date(o.createdAt).toLocaleDateString()}</td>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<td className=\"px-2 truncate max-w-[160px] text-white/75\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<td className=\"px-2 text-white/65\">{o.country ?? \"—\"}</td>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "{subtitle && <p className=\"text-white/45 text-[12px] mt-0.5\">{subtitle}</p>}"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "pending: \"bg-white/10 text-white/55\","
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "return <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${map[status] ?? \"bg-white/10 text-white/55\"}`}>{status}</span>;"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-white/45 text-[13px]\">No revenue in this window.</p>;"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-white/45 text-[13px]\">No plays in this window.</p>;"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "if (merged.length === 0) return <p className=\"py-10 text-center text-white/45 text-[13px]\">No geo data yet.</p>;"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<div className=\"grid grid-cols-[1fr_60px_60px] gap-2 text-[10px] uppercase tracking-wider text-white/45 font-semibold px-1\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<span className=\"font-mono text-white/65 text-[11px] w-7\">{r.country}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<p className=\"text-[11px] uppercase tracking-wider text-white/55 font-semibold\">{label}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<p className=\"mt-1 text-2xl sm:text-[28px] font-bold tabular-nums\" data-testid={`${testId}-value`}>{value}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<div className=\"mt-1 flex items-center gap-2 text-[11px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<table className=\"w-full text-[13px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<thead className=\"text-white/45 text-[11px] uppercase tracking-wider\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<p className=\"truncate text-white/45 text-[11px]\">{a.albumCount} album{a.albumCount === 1 ? \"\" : \"s\"}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<span className=\"text-[9px] w-2\">{active ? (sortDir === \"asc\" ? \"▲\" : \"▼\") : \"\"}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<p className=\"truncate text-white/45 text-[11px]\">{a.artist}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<p className=\"text-white/45 text-[11px] truncate\">{t.albumTitle} · {t.albumArtist}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<h2 className=\"text-[15px] font-bold\">{title}</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "{subtitle && <p className=\"text-white/45 text-[12px] mt-0.5\">{subtitle}</p>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "return <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${map[status] ?? \"bg-white/10 text-white/55\"}`}>{status}</span>;"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-white/45 text-[13px]\">No revenue in this window.</p>;"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-white/45 text-[13px]\">No plays in this window.</p>;"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "if (merged.length === 0) return <p className=\"py-10 text-center text-white/45 text-[13px]\">No geo data yet.</p>;"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<div className=\"grid grid-cols-[1fr_60px_60px] gap-2 text-[10px] uppercase tracking-wider text-white/45 font-semibold px-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<div key={r.country} className=\"grid grid-cols-[1fr_60px_60px] gap-2 items-center text-[13px]\" data-testid={`geo-row-${r.country}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ManagerDashboard.tsx",
+    "snippet": "<span className=\"font-mono text-white/65 text-[11px] w-7\">{r.country}</span>"
   },
   {
     "rule": "fan-text-tone",

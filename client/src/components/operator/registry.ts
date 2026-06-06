@@ -21,6 +21,7 @@
 export type OperatorRole =
   | "artist"
   | "label"
+  | "manager"
   | "non_profit"
   | "manufacturer"
   | "vendor"
@@ -58,6 +59,14 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "roster",    label: "Roster",    roles: ["label"] },
   { id: "catalog",   label: "Catalog",   roles: ["label"] },
   { id: "orders",    label: "Orders",    roles: ["label"] },
+
+  // Manager shell — `/manager` (ManagerDashboard.tsx). No self-serve
+  // dashboard/PartnerDashboard tab (managers carry no press provenance
+  // and have no /api/partner/manager/dashboard route); reporting only.
+  { id: "overview",  label: "Overview",  roles: ["manager"] },
+  { id: "roster",    label: "Roster",    roles: ["manager"] },
+  { id: "catalog",   label: "Catalog",   roles: ["manager"] },
+  { id: "orders",    label: "Orders",    roles: ["manager"] },
 
   // Non-profit shell — `/non-profit` (NonProfitDashboard.tsx)
   { id: "dashboard", label: "Dashboard",     roles: ["non_profit"] },

@@ -603,6 +603,58 @@ SQL
 migrate_songs_mux_last_error dev  "${DATABASE_URL:-}"
 migrate_songs_mux_last_error prod "${PROD_DATABASE_URL:-}"
 
+# Task #1425 — "Manager" partner type (label-style roster). Creates the
+# `managers` entity table (mirrors labels minus press/Shopify/pricing) and
+# the `people.manager_id` roster link (SET NULL). A manager's catalog is
+# DERIVED from roster people's albums — there is NO albums.manager_id. The
+# domain partial-unique excludes soft-deleted rows; drizzle-kit's db:push
+# doesn't push WHERE-claused indexes, so we pre-create on both DBs to keep
+# the publish dev→prod diff empty and stop /api/managers + the manager
+# dashboard from 500'ing on a freshly-cloned dev. Idempotent (CREATE/ADD/
+# CREATE INDEX all IF NOT EXISTS). Dated copy:
+# scripts/prod-schema-fixups/2026-06-06-task-1425-managers.sql. NOTE: the
+# manager ENTITY is distinct from the teammate sub-role "manager"
+# (memberships.sub_role) — do not conflate.
+migrate_managers() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping managers migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+CREATE TABLE IF NOT EXISTS managers (
+  id               varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  name             text NOT NULL,
+  domain           text,
+  logo_url         text,
+  logo_locked      boolean NOT NULL DEFAULT false,
+  bio              text,
+  location         text,
+  location_address jsonb,
+  website_url      text,
+  instagram_url    text,
+  cover_url        text,
+  created_at            timestamp DEFAULT now(),
+  deleted_at            timestamp,
+  deleted_by_user_id    varchar,
+  deleted_via_parent_id varchar
+);
+ALTER TABLE people
+  ADD COLUMN IF NOT EXISTS manager_id varchar REFERENCES managers(id) ON DELETE SET NULL;
+DROP INDEX IF EXISTS managers_domain_unique;
+CREATE UNIQUE INDEX IF NOT EXISTS managers_domain_unique
+  ON managers (domain)
+  WHERE domain IS NOT NULL AND deleted_at IS NULL;
+SQL
+  then
+    echo "post-merge: managers migration ok on $label"
+  else
+    echo "post-merge: WARNING — managers migration failed on $label (continuing)"
+  fi
+}
+migrate_managers dev  "${DATABASE_URL:-}"
+migrate_managers prod "${PROD_DATABASE_URL:-}"
+
 # Task #370 — Persist the Mux auto-retry ladder on the song row so the
 # BACKFILL_MAX_ATTEMPTS cap survives server restarts. Without these
 # columns the backfill sweep falls back to an in-memory Map and every

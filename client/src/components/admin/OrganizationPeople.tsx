@@ -72,6 +72,7 @@ const PARTNER_ROUTE_BASE: Record<AddPeopleMenuEntityKind, string> = {
   manufacturer: "/admin/manufacturers",
   vendor: "/admin/vendors",
   label: "/admin/labels",
+  manager: "/admin/managers",
   non_profit: "/admin/non-profits",
   fulfillment: "/admin/fulfillment-partners",
 };

@@ -25,6 +25,7 @@ export type TrashEntityType =
   | "band_member"
   | "instrument"
   | "label"
+  | "manager"
   | "vendor"
   | "manufacturer"
   | "fulfillment_partner"
@@ -41,6 +42,7 @@ export const TRASH_ENTITY_TYPES: TrashEntityType[] = [
   "band_member",
   "instrument",
   "label",
+  "manager",
   "vendor",
   "manufacturer",
   "fulfillment_partner",
@@ -62,6 +64,7 @@ const TABLE_NAMES: Record<TrashEntityType, string> = {
   band_member: "band_members",
   instrument: "instruments",
   label: "labels",
+  manager: "managers",
   vendor: "vendors",
   manufacturer: "manufacturers",
   fulfillment_partner: "fulfillment_partners",
@@ -83,6 +86,7 @@ const LABEL_COL: Record<TrashEntityType, string> = {
   band_member: "id",
   instrument: "name",
   label: "name",
+  manager: "name",
   vendor: "name",
   manufacturer: "name",
   fulfillment_partner: "name",

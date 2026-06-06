@@ -4,6 +4,7 @@ export type AdminEntityKind =
   | "vendor"
   | "person"
   | "label"
+  | "manager"
   | "manufacturer"
   | "album"
   | "instrument";
@@ -62,6 +63,15 @@ export async function invalidateAdminEntity(
         return [
           ["/api/labels", id],
           ["/api/labels"],
+          ["/api/albums"],
+          ["/api/people"],
+        ];
+      case "manager":
+        // A manager's catalog is derived from roster people's albums, so
+        // bust albums + people alongside the manager detail/list keys.
+        return [
+          ["/api/managers", id],
+          ["/api/managers"],
           ["/api/albums"],
           ["/api/people"],
         ];

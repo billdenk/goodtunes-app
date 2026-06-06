@@ -45,6 +45,7 @@ export type AddPeopleMenuEntityKind =
   | "manufacturer"
   | "fulfillment"
   | "label"
+  | "manager"
   | "vendor";
 
 const ENTITY_LABEL: Record<AddPeopleMenuEntityKind, string> = {
@@ -52,6 +53,7 @@ const ENTITY_LABEL: Record<AddPeopleMenuEntityKind, string> = {
   manufacturer: "press",
   fulfillment: "fulfillment partner",
   label: "label",
+  manager: "manager",
   vendor: "vendor",
 };
 
@@ -60,6 +62,7 @@ const ENTITY_ROLE: Record<AddPeopleMenuEntityKind, string> = {
   manufacturer: "manufacturer",
   fulfillment: "fulfillment",
   label: "label",
+  manager: "manager",
   vendor: "vendor",
 };
 

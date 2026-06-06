@@ -140,6 +140,7 @@ interface PersonFull {
   coverLocked: boolean;
   bio: string | null;
   labelId: string | null;
+  managerId: string | null;
   appleMusicUrl: string | null;
   spotifyUrl: string | null;
   tidalUrl: string | null;
@@ -204,6 +205,11 @@ interface PersonFull {
 }
 
 interface LabelLite {
+  id: string;
+  name: string;
+}
+
+interface ManagerLite {
   id: string;
   name: string;
 }
@@ -350,6 +356,10 @@ export function AdminPerson() {
   });
   const { data: labels = [] } = useQuery<LabelLite[]>({
     queryKey: ["/api/labels"],
+    enabled: !!user?.isAdmin,
+  });
+  const { data: managers = [] } = useQuery<ManagerLite[]>({
+    queryKey: ["/api/managers"],
     enabled: !!user?.isAdmin,
   });
   // Albums feed for the right-pane preview card. Cheap and already
@@ -597,7 +607,7 @@ export function AdminPerson() {
         {tab === "overview" && (
           person.shape === "contact"
             ? <ContactOverviewPanel person={person} />
-            : <OverviewPanel person={person} labels={labels} />
+            : <OverviewPanel person={person} labels={labels} managers={managers} />
         )}
         {tab === "cover" && <ImageUploadPanel person={person} field="cover" />}
         {tab === "members" && person.isGroup && <MembersPanel person={person} />}
@@ -1209,9 +1219,11 @@ function ArtistUrlPanel({ person }: { person: PersonFull }) {
 function OverviewPanel({
   person,
   labels,
+  managers,
 }: {
   person: PersonFull;
   labels: LabelLite[];
+  managers: ManagerLite[];
 }) {
   // Streaming services (Apple Music / Spotify) now live inline at the
   // bottom of the Overview tab — they used to be their own tab, but
@@ -1227,6 +1239,12 @@ function OverviewPanel({
     ...[...labels]
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((l) => ({ value: l.id, label: l.name })),
+  ];
+  const managerOptions = [
+    { value: "", label: "Unmanaged" },
+    ...[...managers]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((m) => ({ value: m.id, label: m.name })),
   ];
   // Task #190 — group kind options. Free-form on the wire, picker in the UI.
   const groupKindOptions = [
@@ -1258,6 +1276,7 @@ function OverviewPanel({
           name: person.name,
           bio: person.bio,
           labelId: person.labelId ?? "",
+          managerId: person.managerId ?? "",
           // Task #190 — group kind. Empty = solo artist; non-empty value
           // flips `isGroup` true server-side and unlocks the Members tab
           // + the per-album Lineup panel.
@@ -1275,6 +1294,12 @@ function OverviewPanel({
             label: "Label",
             type: "select",
             options: labelOptions,
+          },
+          {
+            key: "managerId",
+            label: "Manager",
+            type: "select",
+            options: managerOptions,
           },
           {
             key: "groupKind",

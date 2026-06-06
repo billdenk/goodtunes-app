@@ -156,6 +156,47 @@ export const labels = pgTable("labels", {
     .where(sql`${table.domain} IS NOT NULL AND ${table.deletedAt} IS NULL`),
 }));
 
+// Task #1425 — Manager ENTITY. A "manager" represents an artist-management
+// company (or a solo manager) that looks after a roster of acts. It mirrors
+// the `labels` entity almost exactly — same paste-a-URL Add flow, same logo
+// curation lock, same soft-delete + domain partial-unique — but managers do
+// NOT carry press/Shopify/pricing fields (out of scope) and there is NO
+// `albums.managerId`: a manager's catalog is derived from the albums of the
+// people on its roster (people.managerId). NOTE: this is a different concept
+// from the teammate sub-role "manager" (memberships.sub_role); the manager
+// ENTITY / role / scope-kind all live in their own columns.
+export const managers = pgTable("managers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  // Canonical apex domain (lowercased, no www) — the dedup key for the
+  // "paste a manager URL" Add flow. Nullable for hand-created rows.
+  // Uniqueness is enforced by the partial index in the table callback
+  // (excludes soft-deleted rows), applied to both DBs via post-merge.sh.
+  domain: text("domain"),
+  logoUrl: text("logo_url"),
+  // Curation lock on `logoUrl`. Mirrors `labels.logoLocked` — automated
+  // enrichment paths skip the write when true; explicit operator Replace
+  // bypasses it.
+  logoLocked: boolean("logo_locked").notNull().default(false),
+  bio: text("bio"),
+  location: text("location"),
+  // Structured snapshot of the Places-picked location (mirrors labels).
+  locationAddress: jsonb("location_address").$type<PartnerAddressSnapshot>(),
+  websiteUrl: text("website_url"),
+  instagramUrl: text("instagram_url"),
+  coverUrl: text("cover_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  ...softDeleteCols,
+}, (table) => ({
+  // Domain uniqueness excludes soft-deleted rows — see labels.domainUniq.
+  // drizzle-kit doesn't push WHERE-claused indexes, so the matching partial
+  // index is hand-applied in scripts/post-merge.sh + the dated
+  // prod-schema-fixups SQL.
+  domainUniq: uniqueIndex("managers_domain_unique")
+    .on(table.domain)
+    .where(sql`${table.domain} IS NOT NULL AND ${table.deletedAt} IS NULL`),
+}));
+
 export const albums = pgTable("albums", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
@@ -891,6 +932,13 @@ export const people = pgTable("people", {
   // "missing". SET NULL on delete keeps the person renderable if the
   // label row is removed.
   labelId: varchar("label_id").references(() => labels.id, { onDelete: "set null" }),
+  // Task #1425 — Optional FK to the artist-management company this act is
+  // signed to. Mirrors `labelId` exactly: `null` means "no manager" (an
+  // explicit choice, not "missing"), SET NULL on delete keeps the person
+  // renderable if the manager row is removed. A manager's roster is the set
+  // of people carrying its id here; the manager's catalog is derived from
+  // those people's albums (there is NO albums.managerId).
+  managerId: varchar("manager_id").references(() => managers.id, { onDelete: "set null" }),
   // Streaming-service handoff. We host the song in-app for the first ~2 weeks,
   // then surface "Listen on Apple Music / Spotify" buttons that point at the
   // artist's canonical page on each service. Same URLs are also the scrape
@@ -3020,6 +3068,11 @@ export const insertLabelSchema = createInsertSchema(labels).omit({ id: true, cre
 export type InsertLabel = z.infer<typeof insertLabelSchema>;
 export type Label = typeof labels.$inferSelect;
 
+// Task #1425 — Manager ENTITY insert/select types. Mirrors the Label pair.
+export const insertManagerSchema = createInsertSchema(managers).omit({ id: true, createdAt: true });
+export type InsertManager = z.infer<typeof insertManagerSchema>;
+export type Manager = typeof managers.$inferSelect;
+
 export const insertJobRunSchema = createInsertSchema(jobRuns).omit({ id: true, finishedAt: true });
 export type InsertJobRun = z.infer<typeof insertJobRunSchema>;
 export type JobRun = typeof jobRuns.$inferSelect;
@@ -3743,7 +3796,7 @@ export type RfqReply = typeof rfqReplies.$inferSelect;
 // organizations table rather than minting a parallel scope table).
 // `org` is kept as a historical alias used in reports code; resolved
 // to `non_profit` by getUserRole().
-export const ADMIN_ROLES = ["super_admin", "admin", "label", "artist", "manufacturer", "fulfillment", "non_profit", "vendor"] as const;
+export const ADMIN_ROLES = ["super_admin", "admin", "label", "artist", "manufacturer", "fulfillment", "non_profit", "vendor", "manager"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
 // ─── Admin invitations ───────────────────────────────────────────────
@@ -4128,7 +4181,7 @@ export const certNameAudits = pgTable("cert_name_audits", {
 // scopeKind ∈ {label, artist, manufacturer, fulfillment}. The middleware
 // resolves the album → scope row (labelId or primaryArtistId) and looks
 // up the row to gate the request.
-export const PARTNER_SCOPE_KINDS = ["label", "artist", "manufacturer", "fulfillment", "vendor"] as const;
+export const PARTNER_SCOPE_KINDS = ["label", "artist", "manufacturer", "fulfillment", "vendor", "manager"] as const;
 export type PartnerScopeKind = (typeof PARTNER_SCOPE_KINDS)[number];
 
 export const PARTNER_PERMISSION_VERBS = [
@@ -4233,6 +4286,10 @@ export const MEMBERSHIP_SCOPE_KINDS = [
   "fulfillment",
   "vendor",
   "non_profit",
+  // Task #1425 — Manager ENTITY scope. Distinct from the teammate sub-role
+  // "manager" (memberships.sub_role); this is the partner-role scope kind,
+  // its scopeId is a managers.id.
+  "manager",
 ] as const;
 export type MembershipScopeKind = (typeof MEMBERSHIP_SCOPE_KINDS)[number];
 

@@ -18,6 +18,8 @@ import {
   type InsertVendor,
   type Label,
   type InsertLabel,
+  type Manager,
+  type InsertManager,
   type AlbumVideo,
   type InsertAlbumVideo,
   type AlbumPhoto,
@@ -82,6 +84,7 @@ import {
   instrumentVendors,
   vendors,
   labels,
+  managers,
   manufacturers,
   fulfillmentPartners,
   rfqs,
@@ -279,6 +282,16 @@ export interface IStorage {
   createLabel(data: InsertLabel & { id?: string }): Promise<Label>;
   updateLabel(id: string, data: Partial<Label>): Promise<Label | undefined>;
   deleteLabel(id: string): Promise<void>;
+
+  // Manager ENTITY CRUD (Task #1425). Each person.managerId points here
+  // (nullable, SET NULL). Mirrors the Label CRUD exactly; managers have
+  // no album column — their catalog is derived from roster people's albums.
+  getManagers(): Promise<Manager[]>;
+  getManagerById(id: string): Promise<Manager | undefined>;
+  getManagerByDomain(domain: string): Promise<Manager | undefined>;
+  createManager(data: InsertManager & { id?: string }): Promise<Manager>;
+  updateManager(id: string, data: Partial<Manager>): Promise<Manager | undefined>;
+  deleteManager(id: string): Promise<void>;
 
   // Vendor ENTITY CRUD (one real-world vendor per row — Carter, Reverb, …).
   // Editing here propagates to every instrument the vendor is attached to.
@@ -1848,6 +1861,48 @@ export class DbStorage implements IStorage {
     // while the label sits in trash; on Purge the existing
     // ON DELETE SET NULL kicks in and clears the credit.
     await softDeleteEntity("label", id, userId ?? null);
+  }
+
+  // ----- Manager ENTITY CRUD (Task #1425) -----------------------------
+  // Byte-for-byte mirror of the Label CRUD above, including the logo
+  // curation-lock guard on update. Managers have no album column; the
+  // roster is people.managerId and the catalog is derived downstream.
+  async getManagers(): Promise<Manager[]> {
+    return await db.select().from(managers)
+      .where(isNull(managers.deletedAt))
+      .orderBy(asc(managers.name));
+  }
+  async getManagerByDomain(domain: string): Promise<Manager | undefined> {
+    const [m] = await db.select().from(managers)
+      .where(and(eq(managers.domain, domain), isNull(managers.deletedAt)));
+    return m;
+  }
+  async getManagerById(id: string): Promise<Manager | undefined> {
+    const [m] = await db.select().from(managers)
+      .where(and(eq(managers.id, id), isNull(managers.deletedAt)));
+    return m;
+  }
+  async createManager(data: InsertManager & { id?: string }): Promise<Manager> {
+    const [m] = await db.insert(managers).values(data as any).returning();
+    return m;
+  }
+  async updateManager(id: string, data: Partial<Manager> & { __bypassLogoLock?: boolean }): Promise<Manager | undefined> {
+    const { id: _i, createdAt: _c, __bypassLogoLock, ...rest } = data as any;
+    // Curation lock guard — see updateLabel for the full contract.
+    if (rest.logoUrl !== undefined && !__bypassLogoLock) {
+      const current = await this.getManagerById(id);
+      if (current?.logoLocked) {
+        delete rest.logoUrl;
+      }
+    }
+    if (Object.keys(rest).length === 0) return this.getManagerById(id);
+    const [m] = await db.update(managers).set(rest).where(eq(managers.id, id)).returning();
+    return m;
+  }
+  async deleteManager(id: string, userId?: string | null): Promise<void> {
+    // Soft-delete. People keep their `manager_id` pointer while the
+    // manager sits in trash; on Purge the ON DELETE SET NULL clears it.
+    await softDeleteEntity("manager", id, userId ?? null);
   }
 
   // ----- Vendor ENTITY CRUD -------------------------------------------

@@ -349,6 +349,12 @@ async function resolveInviterBranding(
       );
       return { photoUrl: (r as any).rows?.[0]?.logo_url ?? null, onBehalfOf: null };
     }
+    if (role.role === "manager") {
+      const r = await db.execute<any>(
+        sql`SELECT logo_url FROM managers WHERE id = ${role.roleScopeId} LIMIT 1`,
+      );
+      return { photoUrl: (r as any).rows?.[0]?.logo_url ?? null, onBehalfOf: null };
+    }
     if (role.role === "non_profit") {
       const r = await db.execute<any>(
         sql`SELECT name, logo_url FROM organizations WHERE id = ${role.roleScopeId} LIMIT 1`,
@@ -472,6 +478,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // the read-only reporting dashboard at /artist.
       if (role === "artist") return "/admin/albums";
       if (role === "label") return "/label";
+      if (role === "manager") return "/manager";
       // Task #245 — vendor partners (a press/printer/holographer quoting
       // their own GoodDeed pricing) land on a dedicated portal that is
       // really just the AdminVendor "GoodDeed Services" tab rebadged.
@@ -7109,6 +7116,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       updates.labelId = normalizedLabelId;
     }
+    if (req.body?.managerId !== undefined) {
+      const normalizedManagerId = req.body.managerId ? String(req.body.managerId) : null;
+      if (normalizedManagerId && !(await storage.getManagerById(normalizedManagerId))) {
+        return res.status(400).json({ message: "Unknown managerId" });
+      }
+      updates.managerId = normalizedManagerId;
+    }
     if (req.body?.isHidden !== undefined) updates.isHidden = !!req.body.isHidden;
     if (req.body?.isGoodTunesRelease !== undefined)
       updates.isGoodTunesRelease = !!req.body.isGoodTunesRelease;
@@ -12454,6 +12468,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     coverLocked: !!p.coverLocked,
     bio: p.bio ?? null,
     labelId: p.labelId ?? null,
+    managerId: p.managerId ?? null,
     appleMusicUrl: p.appleMusicUrl ?? null,
     spotifyUrl: p.spotifyUrl ?? null,
     tidalUrl: p.tidalUrl ?? null,
@@ -12985,6 +13000,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       websiteUrl: opt(b.websiteUrl),
       linkedinUrl: opt(b.linkedinUrl),
       labelId: opt(b.labelId),
+      managerId: opt(b.managerId),
       isGroup: b.isGroup === true || b.isGroup === "true",
       groupKind: opt(b.groupKind),
       // Task #824 — creative-credit tags from the multi-role picker.
@@ -13051,6 +13067,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.websiteUrl !== undefined) updates.websiteUrl = opt(b.websiteUrl);
     if (b.linkedinUrl !== undefined) updates.linkedinUrl = opt(b.linkedinUrl);
     if (b.labelId !== undefined) updates.labelId = opt(b.labelId);
+    if (b.managerId !== undefined) updates.managerId = opt(b.managerId);
     // Task #824 — creative-credit tags. `undefined` (field omitted) leaves
     // the column untouched; an explicit array (incl. []) overwrites.
     {
@@ -14537,6 +14554,122 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ message: "Deleted" });
   });
 
+  // ─── Task #1425 — Manager ENTITY CRUD ─────────────────────────────
+  // Byte-for-byte mirror of the labels CRUD above. Managers have no
+  // album column; their catalogue is derived from roster people's albums
+  // (people.managerId). The partner-edit gate uses scope kind "manager".
+  app.get("/api/managers", async (_req, res) => {
+    return res.json(await storage.getManagers());
+  });
+  app.get("/api/managers/:id", async (req, res) => {
+    const m = await storage.getManagerById(String(req.params.id));
+    if (!m) return res.status(404).json({ message: "Manager not found" });
+    return res.json(m);
+  });
+  app.post("/api/admin/managers", requireAdmin, async (req, res) => {
+    const { name, domain, logoUrl, bio, location, websiteUrl, instagramUrl, coverUrl } = req.body ?? {};
+    if (!name) return res.status(400).json({ message: "name is required" });
+    const normDomain = domain
+      ? String(domain).toLowerCase().replace(/^www\./, "")
+      : null;
+    if (normDomain) {
+      const existing = await storage.getManagerByDomain(normDomain);
+      if (existing) {
+        return res
+          .status(409)
+          .json({ message: "A manager with that domain already exists", manager: existing });
+      }
+    }
+    try {
+      const m = await storage.createManager({
+        name: String(name),
+        domain: normDomain,
+        logoUrl: logoUrl ? String(logoUrl) : null,
+        bio: bio ? String(bio) : null,
+        location: location ? String(location) : null,
+        websiteUrl: websiteUrl ? String(websiteUrl) : null,
+        instagramUrl: instagramUrl ? String(instagramUrl) : null,
+        coverUrl: coverUrl ? String(coverUrl) : null,
+      });
+      return res.status(201).json(m);
+    } catch (err: any) {
+      if (err?.code === "23505") {
+        return res.status(409).json({ message: "A manager with that domain already exists" });
+      }
+      throw err;
+    }
+  });
+  app.put("/api/admin/managers/:id", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    // Manager-scoped partners editing their own profile (bio, logo, links)
+    // need edit_metadata. No album lock — managers aren't sold — but
+    // approval-mode still diverts to the queue. Mirrors labels.
+    {
+      const { partnerEditGate, createPendingChange } = await import("./auth/partnerPermissions");
+      const outcome = await partnerEditGate(req, res, "edit_metadata", { kind: "manager", id });
+      if (outcome === "deny") return;
+      if (outcome === "divert") {
+        const row = await createPendingChange({
+          targetTable: "managers", targetId: id, albumId: null,
+          scopeKind: "manager", scopeId: id,
+          patch: { __op: "update", ...(req.body ?? {}) },
+          submittedByUserId: req.session.userId!,
+        });
+        return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+      }
+    }
+    const { name, domain, logoUrl, bio, location, websiteUrl, instagramUrl, coverUrl } = req.body ?? {};
+    const updates: any = {};
+    if (name !== undefined) updates.name = String(name);
+    if (domain !== undefined) {
+      updates.domain = domain
+        ? String(domain).toLowerCase().replace(/^www\./, "")
+        : null;
+    }
+    if (logoUrl !== undefined) updates.logoUrl = logoUrl ? String(logoUrl) : null;
+    if (req.body?.logoLocked !== undefined) {
+      updates.logoLocked = !(req.body.logoLocked === false || req.body.logoLocked === "false");
+    }
+    if (bio !== undefined) updates.bio = bio ? String(bio) : null;
+    if (location !== undefined) updates.location = location ? String(location) : null;
+    if (req.body?.locationAddress !== undefined) {
+      updates.locationAddress = req.body.locationAddress ?? null;
+    }
+    if (websiteUrl !== undefined) updates.websiteUrl = websiteUrl ? String(websiteUrl) : null;
+    if (instagramUrl !== undefined) updates.instagramUrl = instagramUrl ? String(instagramUrl) : null;
+    if (coverUrl !== undefined) updates.coverUrl = coverUrl ? String(coverUrl) : null;
+    try {
+      const m = await storage.updateManager(id, { ...updates, __bypassLogoLock: true });
+      if (!m) return res.status(404).json({ message: "Manager not found" });
+      return res.json(m);
+    } catch (err: any) {
+      if (err?.code === "23505") {
+        return res.status(409).json({ message: "Another manager is already using that domain" });
+      }
+      throw err;
+    }
+  });
+  app.delete("/api/admin/managers/:id", requireAdmin, async (req, res) => {
+    {
+      const id = String(req.params.id);
+      const { partnerEditGate, createPendingChange } = await import("./auth/partnerPermissions");
+      const outcome = await partnerEditGate(req, res, "edit_metadata", { kind: "manager", id });
+      if (outcome === "deny") return;
+      if (outcome === "divert") {
+        const row = await createPendingChange({
+          targetTable: "managers", targetId: id, albumId: null,
+          scopeKind: "manager", scopeId: id,
+          patch: { __op: "delete" },
+          submittedByUserId: req.session.userId!,
+        });
+        return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+      }
+    }
+    // SET NULL on people.manager_id — roster people stay, manager credit clears.
+    await storage.deleteManager(String(req.params.id), req.session.userId ?? null);
+    return res.json({ message: "Deleted" });
+  });
+
   // ─── Task #69 — Manufacturer & fulfillment partner CRUD + RFQ ──────
   // Both partner types follow the labels CRUD shape. RFQ endpoints are
   // intentionally thin — the polished compare/accept UI lands as a
@@ -15371,6 +15504,91 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (name) {
         name = name
           .replace(/\s*[|·–—-]\s*(?:home|official\s+site|official|records|music|label|the\s+official\s+site).*$/i, "")
+          .trim();
+      }
+      const bio =
+        meta["og:description"] ||
+        meta["twitter:description"] ||
+        meta["description"] ||
+        null;
+
+      return res.json({
+        name,
+        domain: host,
+        logoUrl,
+        bio,
+        websiteUrl: meta["og:url"] || url,
+      });
+    } catch (e: any) {
+      return res.status(502).json({ message: e?.message || "Failed to read page" });
+    }
+  });
+
+  // ─── Task #1425 — Manager paste-a-URL scrape ──────────────────────
+  // Mirror of /api/admin/labels/scrape — same og/apple-touch-icon logic,
+  // same SSRF-safe fetch — so the manager Add dialog reuses the identical
+  // paste-a-URL prefill flow labels have.
+  app.post("/api/admin/managers/scrape", requireAdminBearer, async (req, res) => {
+    const url = String(req.body?.url ?? "").trim();
+    if (!url || !/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ message: "A full https:// manager URL is required" });
+    }
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { return res.status(400).json({ message: "Malformed URL" }); }
+    const host = parsed.hostname.replace(/^www\./, "");
+    if (/(^|\.)instagram\.com$/.test(host) || /(^|\.)facebook\.com$/.test(host)) {
+      return res.status(400).json({
+        message: "Instagram/Facebook pages can't be scraped — paste the manager's website instead, then put the social URL into the Instagram field manually.",
+      });
+    }
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 10_000);
+      const html = await safeFetch(url, {
+        signal: ctrl.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; GoodTunesBot/1.0; +https://goodtunes.app)",
+          "Accept": "text/html,application/xhtml+xml",
+        },
+      }).then((r) => {
+        if (!r.ok) throw new Error(`Page returned ${r.status}`);
+        return r.text();
+      }).finally(() => clearTimeout(t));
+
+      const meta: Record<string, string> = {};
+      const re1 = /<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi;
+      const re2 = /<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']([^"']+)["'][^>]*>/gi;
+      let m: RegExpExecArray | null;
+      while ((m = re1.exec(html))) {
+        const key = m[1].toLowerCase();
+        if (!(key in meta)) meta[key] = decodeEntities(m[2]);
+      }
+      while ((m = re2.exec(html))) {
+        const key = m[2].toLowerCase();
+        if (!(key in meta)) meta[key] = decodeEntities(m[1]);
+      }
+
+      let logoUrl: string | null = null;
+      const touchA = /<link[^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
+      const touchB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]*>/i.exec(html);
+      if (touchA) logoUrl = touchA[1];
+      else if (touchB) logoUrl = touchB[1];
+      if (!logoUrl) {
+        logoUrl = meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
+      }
+      if (!logoUrl) {
+        const iconA = /<link[^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
+        const iconB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]*>/i.exec(html);
+        if (iconA) logoUrl = iconA[1];
+        else if (iconB) logoUrl = iconB[1];
+      }
+      if (logoUrl?.startsWith("//")) logoUrl = `https:${logoUrl}`;
+      if (logoUrl?.startsWith("/")) logoUrl = `${parsed.origin}${logoUrl}`;
+
+      let name = meta["og:title"] || meta["twitter:title"] || null;
+      if (name) {
+        name = name
+          .replace(/\s*[|·–—-]\s*(?:home|official\s+site|official|management|artist\s+management|music|the\s+official\s+site).*$/i, "")
           .trim();
       }
       const bio =
@@ -18975,6 +19193,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const { registerLabelReportRoutes } = await import("./labelReports");
   await registerLabelReportRoutes(app);
 
+  // ─── Task #1425 — Manager rollup reporting dashboard ──────────
+  const { registerManagerReportRoutes } = await import("./managerReports");
+  await registerManagerReportRoutes(app);
+
   // ─── Task #518 — Scoped partner Dashboard tab ─────────────────
   const { registerPartnerDashboardRoutes } = await import("./partnerDashboard");
   await registerPartnerDashboardRoutes(app);
@@ -19177,6 +19399,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const ROLE_LABELS: Record<string, string> = {
     super_admin: "Super Admin",
     label: "Label",
+    manager: "Manager",
     artist: "Artist",
     manufacturer: "Manufacturer",
     fulfillment: "Fulfillment Partner",
@@ -20161,15 +20384,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // older organization_people table because too many reports already
   // join against it.
   // ---------------------------------------------------------------------
-  async function _entityExists(kind: "vendor" | "manufacturer" | "label" | "fulfillment_partner", id: string): Promise<boolean> {
+  async function _entityExists(kind: "vendor" | "manufacturer" | "label" | "manager" | "fulfillment_partner", id: string): Promise<boolean> {
     const r =
       kind === "vendor"        ? await db.execute(sql`SELECT 1 FROM vendors             WHERE id = ${id} LIMIT 1`) :
       kind === "manufacturer"  ? await db.execute(sql`SELECT 1 FROM manufacturers       WHERE id = ${id} LIMIT 1`) :
       kind === "label"         ? await db.execute(sql`SELECT 1 FROM labels              WHERE id = ${id} LIMIT 1`) :
+      kind === "manager"       ? await db.execute(sql`SELECT 1 FROM managers            WHERE id = ${id} LIMIT 1`) :
                                  await db.execute(sql`SELECT 1 FROM fulfillment_partners WHERE id = ${id} LIMIT 1`);
     return ((r as any).rows ?? []).length > 0;
   }
-  function _registerEntityContacts(basePath: string, kind: "vendor" | "manufacturer" | "label" | "fulfillment_partner") {
+  function _registerEntityContacts(basePath: string, kind: "vendor" | "manufacturer" | "label" | "manager" | "fulfillment_partner") {
     app.get(`${basePath}/:id/people`, requireAdmin, async (req, res) => {
       if (!(await _entityExists(kind, req.params.id))) return res.status(404).json({ message: "Not found" });
       // Task #665 — invite-pending chip uses admin_invites left-joined
@@ -20181,8 +20405,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Only the caller who could mint/revoke the invite gets the link.
       const { checkPartnerVerbForScope } = await import("./auth/partnerPermissions");
       const callerRole = await getUserRole(req.session.userId!);
-      const VERB_SCOPE_FOR_KIND: Record<string, "label" | "manufacturer" | "fulfillment" | "vendor"> = {
+      const VERB_SCOPE_FOR_KIND: Record<string, "label" | "manager" | "manufacturer" | "fulfillment" | "vendor"> = {
         label: "label",
+        manager: "manager",
         manufacturer: "manufacturer",
         fulfillment_partner: "fulfillment",
         vendor: "vendor",
@@ -20255,6 +20480,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   _registerEntityContacts("/api/vendors",              "vendor");
   _registerEntityContacts("/api/manufacturers",        "manufacturer");
   _registerEntityContacts("/api/labels",               "label");
+  _registerEntityContacts("/api/managers",             "manager");
   _registerEntityContacts("/api/fulfillment-partners", "fulfillment_partner");
 
   // Canonicalize a LinkedIn URL so re-paste of the same profile (with or
@@ -20386,6 +20612,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       try {
         if (role === "artist") scopeName = (await storage.getPersonById(roleScopeId))?.name ?? null;
         else if (role === "label") scopeName = (await storage.getLabelById(roleScopeId))?.name ?? null;
+        else if (role === "manager") scopeName = (await storage.getManagerById(roleScopeId))?.name ?? null;
         else if (role === "manufacturer") scopeName = (await storage.getManufacturerById(roleScopeId))?.name ?? null;
         else if (role === "fulfillment") scopeName = (await storage.getFulfillmentPartnerById(roleScopeId))?.name ?? null;
         else if (role === "vendor") scopeName = (await storage.getVendorById(roleScopeId))?.name ?? null;
@@ -20425,6 +20652,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       try {
         if (role === "artist") return (await storage.getPersonById(scopeId))?.name ?? null;
         if (role === "label") return (await storage.getLabelById(scopeId))?.name ?? null;
+        if (role === "manager") return (await storage.getManagerById(scopeId))?.name ?? null;
         if (role === "manufacturer") return (await storage.getManufacturerById(scopeId))?.name ?? null;
         if (role === "fulfillment") return (await storage.getFulfillmentPartnerById(scopeId))?.name ?? null;
         if (role === "vendor") return (await storage.getVendorById(scopeId))?.name ?? null;
@@ -20493,8 +20721,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       : allRows;
     const need = (kind: string) =>
       Array.from(new Set(rows.filter((r) => r.role === kind && r.roleScopeId).map((r) => r.roleScopeId!)));
-    const [peopleNeeded, labelsNeeded, mfgNeeded, ffNeeded, vendorNeeded] = [
-      need("artist"), need("label"), need("manufacturer"), need("fulfillment"), need("vendor"),
+    const [peopleNeeded, labelsNeeded, managersNeeded, mfgNeeded, ffNeeded, vendorNeeded] = [
+      need("artist"), need("label"), need("manager"), need("manufacturer"), need("fulfillment"), need("vendor"),
     ];
     const npoIdsScope = Array.from(new Set(rows.filter((r) => r.role === "non_profit" && r.roleScopeId).map((r) => r.roleScopeId!)));
     // Referrer ids — both kinds.
@@ -20502,9 +20730,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const refOrgIds = Array.from(new Set(rows.filter((r: any) => r.referrerKind === "non_profit" && r.referrerScopeId).map((r: any) => r.referrerScopeId as string)));
     const allNpoIds = Array.from(new Set([...npoIdsScope, ...refOrgIds]));
     const allPersonIds = Array.from(new Set([...peopleNeeded, ...refPersonIds]));
-    const [people, labels, mfgs, ffs, npos, vends] = await Promise.all([
+    const [people, labels, managers, mfgs, ffs, npos, vends] = await Promise.all([
       allPersonIds.length ? Promise.all(allPersonIds.map((id) => storage.getPersonById(id))) : [],
       labelsNeeded.length ? Promise.all(labelsNeeded.map((id) => storage.getLabelById(id))) : [],
+      managersNeeded.length ? Promise.all(managersNeeded.map((id) => storage.getManagerById(id))) : [],
       mfgNeeded.length ? Promise.all(mfgNeeded.map((id) => storage.getManufacturerById(id))) : [],
       ffNeeded.length ? Promise.all(ffNeeded.map((id) => storage.getFulfillmentPartnerById(id))) : [],
       allNpoIds.length
@@ -20513,13 +20742,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       vendorNeeded.length ? Promise.all(vendorNeeded.map((id) => storage.getVendorById(id))) : [],
     ]);
     const idx = (arr: any[]) => new Map(arr.filter(Boolean).map((r: any) => [r.id, r]));
-    const peopleIdx = idx(people), labelsIdx = idx(labels), mfgIdx = idx(mfgs), ffIdx = idx(ffs), vendorIdx = idx(vends);
+    const peopleIdx = idx(people), labelsIdx = idx(labels), managersIdx = idx(managers), mfgIdx = idx(mfgs), ffIdx = idx(ffs), vendorIdx = idx(vends);
     const npoIdx = new Map((npos as any[]).map((r) => [r.id, { id: r.id, name: r.name, logoUrl: r.logo_url }]));
     function scopeMeta(role: string, scopeId: string | null) {
       if (!scopeId) return { scopeName: null as string | null, scopeThumbUrl: null as string | null };
       let row: any = null;
       if (role === "artist") row = peopleIdx.get(scopeId);
       else if (role === "label") row = labelsIdx.get(scopeId);
+      else if (role === "manager") row = managersIdx.get(scopeId);
       else if (role === "manufacturer") row = mfgIdx.get(scopeId);
       else if (role === "fulfillment") row = ffIdx.get(scopeId);
       else if (role === "non_profit") row = npoIdx.get(scopeId);
@@ -20580,8 +20810,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // --- Invitee scope identity (role + roleScopeId), same as /invites. ---
     const need = (kind: string) =>
       Array.from(new Set(rows.filter((r) => r.role === kind && r.roleScopeId).map((r) => r.roleScopeId!)));
-    const [labelsNeeded, mfgNeeded, ffNeeded, vendorNeeded] = [
-      need("label"), need("manufacturer"), need("fulfillment"), need("vendor"),
+    const [labelsNeeded, managersNeeded, mfgNeeded, ffNeeded, vendorNeeded] = [
+      need("label"), need("manager"), need("manufacturer"), need("fulfillment"), need("vendor"),
     ];
     const scopeArtistIds = need("artist");
     const npoIdsScope = Array.from(new Set(rows.filter((r) => r.role === "non_profit" && r.roleScopeId).map((r) => r.roleScopeId!)));
@@ -20603,9 +20833,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const allMfgIds = Array.from(new Set([...mfgNeeded, ...refMfgIds]));
     const allNpoIds = Array.from(new Set([...npoIdsScope, ...refOrgIds]));
 
-    const [people, labels, mfgs, ffs, npos, vends] = await Promise.all([
+    const [people, labels, managers, mfgs, ffs, npos, vends] = await Promise.all([
       allPersonIds.length ? Promise.all(allPersonIds.map((id) => storage.getPersonById(id))) : [],
       allLabelIds.length ? Promise.all(allLabelIds.map((id) => storage.getLabelById(id))) : [],
+      managersNeeded.length ? Promise.all(managersNeeded.map((id) => storage.getManagerById(id))) : [],
       allMfgIds.length ? Promise.all(allMfgIds.map((id) => storage.getManufacturerById(id))) : [],
       ffNeeded.length ? Promise.all(ffNeeded.map((id) => storage.getFulfillmentPartnerById(id))) : [],
       allNpoIds.length
@@ -20614,7 +20845,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       vendorNeeded.length ? Promise.all(vendorNeeded.map((id) => storage.getVendorById(id))) : [],
     ]);
     const idx = (arr: any[]) => new Map(arr.filter(Boolean).map((r: any) => [r.id, r]));
-    const peopleIdx = idx(people), labelsIdx = idx(labels), mfgIdx = idx(mfgs), ffIdx = idx(ffs), vendorIdx = idx(vends);
+    const peopleIdx = idx(people), labelsIdx = idx(labels), managersIdx = idx(managers), mfgIdx = idx(mfgs), ffIdx = idx(ffs), vendorIdx = idx(vends);
     const npoIdx = new Map((npos as any[]).map((r) => [r.id, { id: r.id, name: r.name, logoUrl: r.logo_url }]));
 
     // --- Units sold attributed to each referral relationship. ---
@@ -20658,6 +20889,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       let row: any = null;
       if (role === "artist") row = peopleIdx.get(scopeId);
       else if (role === "label") row = labelsIdx.get(scopeId);
+      else if (role === "manager") row = managersIdx.get(scopeId);
       else if (role === "manufacturer") row = mfgIdx.get(scopeId);
       else if (role === "fulfillment") row = ffIdx.get(scopeId);
       else if (role === "non_profit") row = npoIdx.get(scopeId);
@@ -20693,6 +20925,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!scopeId) return { inviteeKind: null, inviteeId: null };
       if (r.role === "artist" && peopleIdx.get(scopeId)) return { inviteeKind: "person", inviteeId: scopeId };
       if (r.role === "label" && labelsIdx.get(scopeId)) return { inviteeKind: "label", inviteeId: scopeId };
+      if (r.role === "manager" && managersIdx.get(scopeId)) return { inviteeKind: "manager", inviteeId: scopeId };
       if (r.role === "manufacturer" && mfgIdx.get(scopeId)) return { inviteeKind: "manufacturer", inviteeId: scopeId };
       if (r.role === "non_profit" && npoIdx.get(scopeId)) return { inviteeKind: "non_profit", inviteeId: scopeId };
       if (r.role === "vendor" && vendorIdx.get(scopeId)) return { inviteeKind: "vendor", inviteeId: scopeId };
@@ -20842,6 +21075,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const SCOPED_ROLES: Record<string, () => Promise<any>> = {
       artist: () => storage.getPersonById(roleScopeId!),
       label: () => storage.getLabelById(roleScopeId!),
+      manager: () => storage.getManagerById(roleScopeId!),
       manufacturer: () => storage.getManufacturerById(roleScopeId!),
       fulfillment: () => storage.getFulfillmentPartnerById(roleScopeId!),
       non_profit: () => orgExists(roleScopeId!),
@@ -20851,6 +21085,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const SCOPE_LABEL: Record<string, string> = {
       artist: "an artist",
       label: "a label",
+      manager: "a manager",
       manufacturer: "a manufacturer",
       fulfillment: "a fulfillment partner",
       non_profit: "a non-profit",
@@ -22307,6 +22542,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const stillExists: Record<string, () => Promise<any>> = {
         artist: () => storage.getPersonById(invite.roleScopeId!),
         label: () => storage.getLabelById(invite.roleScopeId!),
+        manager: () => storage.getManagerById(invite.roleScopeId!),
         manufacturer: () => storage.getManufacturerById(invite.roleScopeId!),
         fulfillment: () => storage.getFulfillmentPartnerById(invite.roleScopeId!),
         non_profit: () => orgExistsForAccept(invite.roleScopeId!),
@@ -22446,6 +22682,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         invite.role === "non_profit" ? "/non-profit"
         : invite.role === "artist" ? "/artist"
         : invite.role === "label" ? "/label"
+        : invite.role === "manager" ? "/manager"
         : "/admin/albums";
     }
 

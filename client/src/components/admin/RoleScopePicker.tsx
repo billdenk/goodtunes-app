@@ -5,6 +5,7 @@ import { ChevronDown, X } from "lucide-react";
 export const ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: "super_admin", label: "Super Admin (full access)" },
   { value: "label", label: "Label" },
+  { value: "manager", label: "Manager" },
   { value: "artist", label: "Artist" },
   { value: "manufacturer", label: "Manufacturer" },
   { value: "fulfillment", label: "Fulfillment Partner" },
@@ -22,6 +23,7 @@ export const SCOPE_CONFIG: Record<
 > = {
   artist: { endpoint: "/api/people", noun: "artist", thumbField: "photoUrl" },
   label: { endpoint: "/api/labels", noun: "label", thumbField: "logoUrl" },
+  manager: { endpoint: "/api/managers", noun: "manager", thumbField: "logoUrl" },
   manufacturer: { endpoint: "/api/manufacturers", noun: "manufacturer", thumbField: "logoUrl" },
   fulfillment: { endpoint: "/api/fulfillment-partners", noun: "fulfillment partner", thumbField: "logoUrl" },
   non_profit: { endpoint: "/api/non-profits", noun: "non-profit", thumbField: "logoUrl" },
