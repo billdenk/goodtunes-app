@@ -7,7 +7,24 @@ import {
 } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Search } from "lucide-react";
+import {
+  Search,
+  FileText,
+  User,
+  Store,
+  Tag,
+  HeartHandshake,
+  Disc3,
+  Guitar,
+  Users,
+  Factory,
+  Truck,
+  Music,
+  ListMusic,
+  ShoppingBag,
+  ClipboardList,
+  type LucideIcon,
+} from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 // Task #336 — Global admin search.
@@ -116,6 +133,28 @@ function pushRecent(userId: string | undefined | null, entry: Recent) {
     window.localStorage.setItem(key, JSON.stringify(next));
   } catch {}
 }
+
+// Apple/Linear-style command palette: type is conveyed by a small
+// monochrome leading icon in a fixed gutter, not by a trailing "Page"
+// chip. Every searchable kind maps to one calm Lucide glyph; the icon
+// gutter keeps recents (mixed types under one header) and live results
+// scannable at a glance.
+const KIND_ICON: Record<SearchResult["kind"], LucideIcon> = {
+  page: FileText,
+  person: User,
+  vendor: Store,
+  label: Tag,
+  nonprofit: HeartHandshake,
+  album: Disc3,
+  gear: Guitar,
+  customer: Users,
+  manufacturer: Factory,
+  fulfillment: Truck,
+  song: Music,
+  playlist: ListMusic,
+  fanOrder: ShoppingBag,
+  pressingOrder: ClipboardList,
+};
 
 // Group order in the dropdown. Pages always sit at the top so an admin
 // hunting for a tab finds it on the first row.
@@ -333,19 +372,23 @@ export function AdminSearchBar({ registerShortcut = true }: { registerShortcut?:
           ) : (
             <>
               {isFetching && debounced && (
-                <div className="px-3 py-1 text-xs uppercase tracking-wider text-slate-400">
+                <div className="px-3 py-1 text-xs font-medium tracking-wide text-slate-400">
                   Searching…
                 </div>
               )}
               {groups.map((g) => (
                 <div key={g.key} data-testid={`group-${g.key}`}>
-                  <div className="px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                  <div className="px-3 pt-2 pb-1 text-xs font-medium tracking-wide text-slate-400">
                     {g.label}
                   </div>
                   <ul className="pb-1">
                     {g.items.map((r) => {
                       flatIndex += 1;
                       const isActive = flatIndex === activeIndex;
+                      // Type is read from the leading icon + section
+                      // header; no per-row "Page" chip or trailing type
+                      // label (Apple/Linear command-palette pattern).
+                      const KindIcon = KIND_ICON[r.kind] ?? FileText;
                       return (
                         <li key={`${r.kind}-${r.id}`}>
                           <button
@@ -356,10 +399,13 @@ export function AdminSearchBar({ registerShortcut = true }: { registerShortcut?:
                             onMouseDown={(e) => { e.preventDefault(); onSelect(r); }}
                             data-testid={`result-${r.kind}-${r.id}`}
                             className={[
-                              "w-full text-left px-3 py-2 flex items-center gap-2 text-sm transition-colors",
+                              "w-full text-left px-3 py-1.5 flex items-center gap-2.5 text-sm transition-colors",
                               isActive ? "bg-slate-100" : "hover:bg-slate-50",
                             ].join(" ")}
                           >
+                            <span className="flex-shrink-0 flex w-4 items-center justify-center text-slate-400">
+                              <KindIcon className="w-4 h-4" />
+                            </span>
                             <span className="flex-1 min-w-0">
                               <span className="block truncate text-slate-900">{r.title}</span>
                               {r.subtitle && (
@@ -368,9 +414,12 @@ export function AdminSearchBar({ registerShortcut = true }: { registerShortcut?:
                                 </span>
                               )}
                             </span>
-                            {r.badge && (
-                              <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-xs font-medium uppercase tracking-wider text-slate-500 bg-slate-100">
-                                {r.badge}
+                            {isActive && (
+                              <span
+                                className="flex-shrink-0 text-slate-400 text-sm leading-none"
+                                aria-hidden="true"
+                              >
+                                ↵
                               </span>
                             )}
                           </button>
