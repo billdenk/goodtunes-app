@@ -52,7 +52,7 @@ export function CertPdfViewerSheet({
             "We couldn't open this certificate. Make sure you're signed in to the account that owns this GoodDeed, then try again.",
           );
         } else if (e instanceof FetchBlobError && e.status === 404) {
-          setError("This certificate isn't available yet. It appears once your order is finalised.");
+          setError("This certificate isn't available yet. It appears once your order is finalized.");
         } else {
           setError("Something went wrong loading your certificate. Please try again in a moment.");
         }

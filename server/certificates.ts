@@ -39,6 +39,10 @@ import { drawGoodDeedPageOnto, type GoodDeedPrintInputs } from "./goodDeedPrintT
 
 // ─── Constants ───────────────────────────────────────────────────────
 const LETTER_COUNTRIES = new Set(["US", "USA", "CA", "CAN", "MX", "MEX"]);
+// Order statuses that count as "finalized" for cert download. "complete"
+// is the legacy gogoods import status; "paid"/"shipped"/"n"/"nd" are the
+// live paid-ish states (mirrors the reports/storage paid-ish filter).
+const FINALIZED_CERT_ORDER_STATUSES = new Set(["paid", "complete", "shipped", "n", "nd"]);
 const SIGNATURE_ASSET = path.resolve(
   process.cwd(),
   "attached_assets",
@@ -508,25 +512,88 @@ export function registerCertificateRoutes(app: Express) {
     res.send(pdf);
   });
 
-  // ─── Task #435 — Fan-facing cert PDF download ───────────────────
+  // ─── Task #435 / #1458 — Fan-facing cert PDF download ───────────
   // Fans hit this from the Orders page "Download certificate" link.
-  // Auth: must own the order. Works for every cert state (legacy
-  // imports land as `printed` straight from the bulk generator, so
-  // gating on `printed` only — like the original Orders link did —
-  // would have hidden new-sale certs that are still `confirmed`).
+  // Auth: must own the order.
+  //
+  // Two paths:
+  //  1. A real `signed_cert_certificates` row exists (physical signed-
+  //     cert add-on). Render from it so the confirmed name, paper size,
+  //     and print-batch state all come from the row. Works for every
+  //     cert state (legacy imports land as `printed`; new sales sit at
+  //     `confirmed`), so we never gate on a single status here.
+  //  2. No row exists. Plain digital GoodDeed orders never mint a row,
+  //     and the legacy bulk generator never populated the table in prod,
+  //     so the row-only path 404'd for every fan. Synthesize the cert
+  //     in-memory from the owned, finalized order — the same approach as
+  //     the admin legacy-cert-preview endpoint — so the digital download
+  //     works for everyone. (Task #1458.)
   app.get("/api/orders/:orderId/cert/pdf", async (req, res) => {
     const me = await getCustomerAuth(req);
     if (!me) return res.status(401).json({ message: "Sign in required" });
+
+    // Path 1 — real row.
     const [row] = await db
       .select({ cert: signedCertCertificates, order: orders })
       .from(signedCertCertificates)
       .innerJoin(orders, eq(orders.id, signedCertCertificates.orderId))
       .where(eq(signedCertCertificates.orderId, req.params.orderId));
-    if (!row || row.order.customerId !== me.userId) {
+    if (row) {
+      if (row.order.customerId !== me.userId) {
+        return res.status(404).json({ message: "Not found" });
+      }
+      const ctx = await loadCertContext(row.cert.id, absoluteOrigin(req));
+      if (!ctx) return res.status(404).json({ message: "Not found" });
+      const pdf = await renderCertPdf(ctx);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="${certFilename(ctx)}"`);
+      res.send(pdf);
+      return;
+    }
+
+    // Path 2 — synthesize from the owned, finalized order.
+    const [o] = await db
+      .select({ order: orders, album: albums, customer: customerUsers })
+      .from(orders)
+      .innerJoin(albums, eq(albums.id, orders.albumId))
+      .innerJoin(customerUsers, eq(customerUsers.id, orders.customerId))
+      .where(eq(orders.id, req.params.orderId));
+    if (!o || o.order.customerId !== me.userId) {
       return res.status(404).json({ message: "Not found" });
     }
-    const ctx = await loadCertContext(row.cert.id, absoluteOrigin(req));
-    if (!ctx) return res.status(404).json({ message: "Not found" });
+    // Only finalized/paid orders with an assigned GoodDeed number have a
+    // cert to show. "complete" is the legacy gogoods import status; "paid"
+    // / "shipped" / "n" / "nd" are the live paid-ish states.
+    if (!FINALIZED_CERT_ORDER_STATUSES.has(o.order.status) || o.order.goodDeedNumber == null) {
+      return res.status(404).json({ message: "Not found" });
+    }
+    const paperSize = paperSizeFromCountry((o.order.shippingAddress as any)?.country ?? null);
+    const confirmedName =
+      o.customer.realName || o.customer.displayName || o.customer.username;
+    // Synthetic in-memory cert — never written to the DB.
+    const syntheticCert: SignedCertCertificate = {
+      id: "synthetic",
+      orderId: o.order.id,
+      copyId: null,
+      shortId: "synthetic" + o.order.id.slice(0, 8),
+      nameStatus: "confirmed",
+      confirmedIdentityKind: "display",
+      confirmedName,
+      paperSize,
+      paperSizeOverridden: false,
+      printBatchId: null,
+      lockedAt: null,
+      printedAt: null,
+      confirmedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const ctx: CertContext = {
+      cert: syntheticCert,
+      order: o.order,
+      album: o.album,
+      origin: absoluteOrigin(req),
+    };
     const pdf = await renderCertPdf(ctx);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${certFilename(ctx)}"`);
