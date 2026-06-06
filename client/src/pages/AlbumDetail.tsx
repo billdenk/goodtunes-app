@@ -19,6 +19,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
+import { CertPdfViewerSheet } from "@/components/ui/CertPdfViewerSheet";
 import { BuySheet } from "@/components/checkout/BuySheet";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { StreamServicePickerSheet } from "@/components/StreamServicePickerSheet";
@@ -584,14 +585,10 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
     (o) => o.albumId === album?.id && !o.refundedAt && (o.cert || o.goodDeedNumber != null),
   );
   const pdfOrder = certOrders[0] ?? null;
-  const downloadPdf = () => {
+  const [showCertPdf, setShowCertPdf] = useState(false);
+  const openCertPdf = () => {
     if (!pdfOrder) return;
-    const a = document.createElement("a");
-    a.href = `/api/orders/${pdfOrder.id}/cert/pdf`;
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    setShowCertPdf(true);
   };
 
   const moreByArtist = album
@@ -872,7 +869,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
           onViewCertificate={() => setShowCert(true)}
           onViewProvenance={handleViewProvenance}
           onAddAlbumToPlaylist={() => setShowAlbumPlaylistPicker(true)}
-          onDownloadCert={pdfOrder ? downloadPdf : undefined}
+          onDownloadCert={pdfOrder ? openCertPdf : undefined}
         >
           {editorialPanel}
         </AlbumDetailMobileSurface>
@@ -896,6 +893,14 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
                 }
               } catch {}
             }}
+          />
+        )}
+
+        {showCertPdf && pdfOrder && (
+          <CertPdfViewerSheet
+            orderId={pdfOrder.id}
+            filename={`GoodDeed-${album.title}.pdf`}
+            onClose={() => setShowCertPdf(false)}
           />
         )}
 

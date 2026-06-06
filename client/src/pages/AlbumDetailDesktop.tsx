@@ -48,6 +48,7 @@ import { PersonDetailSheet, ProvenanceSheet, OwnershipSheet, BonusVideoPlayer } 
 import { X } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
+import { CertPdfViewerSheet } from "@/components/ui/CertPdfViewerSheet";
 import { goBack } from "@/lib/navHistory";
 import { track } from "@/lib/analytics";
 
@@ -309,14 +310,10 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const hasCert = ownedNums.length > 0;
   const isMulti = ownedNums.length > 1;
   const pdfOrder = certOrders[0] ?? null;
-  const downloadPdf = () => {
+  const [showCertPdf, setShowCertPdf] = useState(false);
+  const openCertPdf = () => {
     if (!pdfOrder) return;
-    const a = document.createElement("a");
-    a.href = `/api/orders/${pdfOrder.id}/cert/pdf`;
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    setShowCertPdf(true);
   };
   // Album cast for the GoodDeed sheets (same `as unknown as PlayerAlbum`
   // pattern PersonDetailSheet uses). OwnershipSheet reads ownedCertificates,
@@ -659,7 +656,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             onViewCertificate={effectiveOwned ? () => setShowCert(true) : undefined}
             onViewProvenance={effectiveOwned ? handleViewProvenance : undefined}
             onAddAlbumToPlaylist={() => setShowAlbumPlaylistPicker(true)}
-            onDownloadCert={pdfOrder ? downloadPdf : undefined}
+            onDownloadCert={pdfOrder ? openCertPdf : undefined}
             isMultiOwned={isMulti}
             onBack={() => goBack(navigate)}
             onPlayVideo={effectiveOwned ? setPlayingVideoId : undefined}
@@ -817,6 +814,14 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
           />
         )}
       </AnimatePresence>
+
+      {showCertPdf && pdfOrder && (
+        <CertPdfViewerSheet
+          orderId={pdfOrder.id}
+          filename={`GoodDeed-${album?.title ?? "Certificate"}.pdf`}
+          onClose={() => setShowCertPdf(false)}
+        />
+      )}
 
       {showCert && certAlbum && (
         <GoodDeedCertificate

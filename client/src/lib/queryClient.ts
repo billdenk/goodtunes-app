@@ -44,6 +44,42 @@ export async function apiRequest(
   return res;
 }
 
+// Fetch a binary resource (e.g. the GoodDeed cert PDF) with the fan's
+// Bearer token attached, returning the blob. A plain anchor/navigation
+// can't carry the token (auth is a header, not a cookie), so owners hit
+// "Sign in required" — this helper threads the same auth header that
+// apiRequest uses. Throws an Error tagged with `.status` on a non-OK
+// response so callers can show a friendly 401/403 message.
+export class FetchBlobError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "FetchBlobError";
+    this.status = status;
+  }
+}
+
+export async function fetchBlob(url: string): Promise<Blob> {
+  const res = await fetch(url, {
+    headers: authHeaders(),
+    credentials: "include",
+  });
+  if (!res.ok) {
+    let message = res.statusText;
+    try {
+      const text = await res.text();
+      try {
+        const j = JSON.parse(text);
+        message = j.message ?? text ?? message;
+      } catch {
+        message = text || message;
+      }
+    } catch {}
+    throw new FetchBlobError(res.status, message);
+  }
+  return res.blob();
+}
+
 type UnauthorizedBehavior = "returnNull" | "throw";
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;

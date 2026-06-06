@@ -15,6 +15,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { track } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { CertPdfViewerSheet } from "@/components/ui/CertPdfViewerSheet";
 import { Check, Truck, Package, MapPin, ExternalLink, Award, Clock, Lock, Printer } from "lucide-react";
 import type { StripeAddressSnapshot, AlbumFormat } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
@@ -507,6 +508,7 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
   const [showPicker, setShowPicker] = useState(false);
   const [showRealNameInput, setShowRealNameInput] = useState(false);
   const [realNameDraft, setRealNameDraft] = useState("");
+  const [showPdf, setShowPdf] = useState(false);
   const updateProfile = useMutation({
     mutationFn: async (body: { realName: string }) => {
       const r = await apiRequest("PATCH", "/api/me", body);
@@ -587,17 +589,16 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
                   action) and link out to the public provenance page once
                   the cert is finalised. */}
               <div className="mt-2 flex items-center gap-3 flex-wrap">
-                <a
-                  href={`/api/orders/${order.id}/cert/pdf`}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
+                  onClick={() => setShowPdf(true)}
                   className="inline-flex items-center gap-1 text-xs font-semibold active:opacity-70"
                   style={{ color: "var(--brand-mint)" }}
                   data-testid={`link-cert-download-${order.id}`}
                 >
                   Download GoodDeed
                   <ExternalLink className="w-3 h-3" />
-                </a>
+                </button>
                 {cert.nameStatus === "printed" && (
                   <Link
                     href={`/g/${cert.shortId}`}
@@ -706,6 +707,13 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
             Cancel
           </button>
         </div>
+      )}
+      {showPdf && (
+        <CertPdfViewerSheet
+          orderId={order.id}
+          filename={`GoodDeed-${cert.shortId}.pdf`}
+          onClose={() => setShowPdf(false)}
+        />
       )}
     </div>
   );

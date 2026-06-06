@@ -36,6 +36,7 @@ import { popBounce } from "@/lib/motion";
 import { IconButton } from "@/components/ui/IconButton";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
+import { CertPdfViewerSheet } from "@/components/ui/CertPdfViewerSheet";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { ProvenanceSheet, OwnershipSheet } from "@/pages/AlbumDetail";
 
@@ -174,6 +175,7 @@ export function AlbumCard({
   const [provenanceCertNum, setProvenanceCertNum] = useState<number | null>(null);
   const [showOwnership, setShowOwnership] = useState(false);
   const [showPlaylist, setShowPlaylist] = useState(false);
+  const [showPdf, setShowPdf] = useState(false);
 
   const ownerName = user?.displayName || "GoodTunes Fan";
   const hasMenuActions = playable && (hasCert || !!pdfOrder || albumSongs.length > 0);
@@ -205,14 +207,9 @@ export function AlbumCard({
     else setProvenanceCertNum(ownedNums[0] ?? album.certificateNumber ?? 1);
   };
 
-  const downloadPdf = () => {
+  const openPdf = () => {
     if (!pdfOrder) return;
-    const a = document.createElement("a");
-    a.href = `/api/orders/${pdfOrder.id}/cert/pdf`;
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    setShowPdf(true);
   };
 
   // ── artwork + overlay ───────────────────────────────────────────────
@@ -431,7 +428,7 @@ export function AlbumCard({
               <>
                 <button
                   type="button"
-                  onClick={() => { setMenuOpen(false); downloadPdf(); }}
+                  onClick={() => { setMenuOpen(false); openPdf(); }}
                   className="w-full flex items-center justify-between px-4 py-3 text-sm text-white transition-colors active:bg-white/10"
                   data-testid="menu-download-gooddeed-pdf"
                 >
@@ -530,6 +527,13 @@ export function AlbumCard({
           />
         )}
       </AnimatePresence>
+      {showPdf && pdfOrder && (
+        <CertPdfViewerSheet
+          orderId={pdfOrder.id}
+          filename={`GoodDeed-${album.title}.pdf`}
+          onClose={() => setShowPdf(false)}
+        />
+      )}
     </>
   );
 
