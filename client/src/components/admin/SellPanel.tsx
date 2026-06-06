@@ -1140,6 +1140,16 @@ export function SellPanel({
     [...configuredFormats, ...liveDrafts].find((f) =>
       (BOOKLET_ELIGIBLE_FORMATS as readonly AlbumFormat[]).includes(f),
     ) ?? null;
+  // Task #1423 — the GoodDeed certificate is offered on cassette exactly
+  // like vinyl. It anchors on the primary vinyl row when any vinyl
+  // exists (so vinyl releases are byte-for-byte unchanged), and falls
+  // back to the first cassette row on a cassette-only release so the
+  // pill still has a home. Mirrors the single-anchor pattern that keeps
+  // multiple eligible rows from racing on the addon's plannedQuantity.
+  const primaryGoodDeedFormat: AlbumFormat | null =
+    primaryVinylFormat ??
+    [...configuredFormats, ...liveDrafts].find((f) => f === "cassette") ??
+    null;
 
   return (
     <div className="py-6">
@@ -1279,6 +1289,7 @@ export function SellPanel({
                           livePlatformCostCents={payoutSettings?.certCostCents ?? null}
                           onSaveAddon={upsertAddon.mutate}
                           isPrimaryVinyl={primaryVinylFormat === f}
+                          isPrimaryGoodDeed={primaryGoodDeedFormat === f}
                           bookletAddon={bookletAddon ?? null}
                           isBookletAnchor={primaryBookletFormat === f}
                           bookletEligibleExists={primaryBookletFormat !== null}
@@ -1348,6 +1359,7 @@ export function SellPanel({
                         livePlatformCostCents={payoutSettings?.certCostCents ?? null}
                         onSaveAddon={upsertAddon.mutate}
                         isPrimaryVinyl={primaryVinylFormat === f}
+                        isPrimaryGoodDeed={primaryGoodDeedFormat === f}
                         bookletAddon={bookletAddon ?? null}
                         isBookletAnchor={primaryBookletFormat === f}
                         bookletEligibleExists={primaryBookletFormat !== null}
@@ -2232,6 +2244,7 @@ function SkuRow({
   livePlatformCostCents,
   onSaveAddon,
   isPrimaryVinyl,
+  isPrimaryGoodDeed,
   bookletAddon,
   isBookletAnchor,
   bookletEligibleExists,
@@ -2363,6 +2376,12 @@ function SkuRow({
   // would race-overwrite the same addon's plannedQuantity. SellPanel
   // sets this true on whichever vinyl row is first in the offered list.
   isPrimaryVinyl?: boolean;
+  // Task #1423 — GoodDeed anchor that falls back to cassette when the
+  // release has no vinyl at all. Equals isPrimaryVinyl whenever any
+  // vinyl format exists (so vinyl releases are unchanged); on a
+  // cassette-only release it points at the primary cassette row so the
+  // GoodDeed certificate add-on is still offered, exactly like vinyl.
+  isPrimaryGoodDeed?: boolean;
   // Task #579 — Booklet add-on parallel to signed_cert. The pill is
   // mounted only on the *anchor* SKU row (first 7" vinyl or cassette
   // in the configured-then-draft order), so two booklet-eligible rows
@@ -2722,6 +2741,13 @@ function SkuRow({
   }, [catalogSig]);
 
   const usingCatalog = !!catalogFormat && !!pickedTier;
+  // Task #1423 — a catalog-priced (MRP) cassette renders through the rich
+  // "Design your Package" card that vinyl uses (Tracks · Pricing options ·
+  // Profit · Artist Net · Duplicate · Export quote · GoodDeed), not the
+  // legacy Stock/∞ + estimated-sold-chips branch. The legacy branch stays
+  // for genuinely un-catalog-priced non-vinyl rows (e.g. a CD with no
+  // invited-press pricing). Vinyl rows are unaffected (isVinyl ⊂ useRichCard).
+  const useRichCard = isVinyl || usingCatalog;
   // Task #1311 — true when an artist's plant is set but its catalog does
   // NOT include this format (e.g. Hellbender set while wanting cassette
   // pricing).  Used in the non-vinyl breakdown branch to surface an honest
@@ -3290,7 +3316,7 @@ function SkuRow({
       trackCount: effectiveTrackCount,
       // Task #385 — Stock removed for vinyl only; non-vinyl keeps the
       // per-album inventory cap.
-      stock: isVinyl
+      stock: useRichCard
         ? null
         : (stockStr.trim() === "" ? null : Math.max(0, Math.floor(Number(stockStr)))),
       active,
@@ -3335,7 +3361,10 @@ function SkuRow({
   // rows without a parseable price are no-ops via submit's early-return.
   // Non-vinyl rows keep the explicit SaveLink path and skip this effect.
   useEffect(() => {
-    if (!isVinyl) return;
+    // Task #1423 — catalog cassette rides the same autosave path as vinyl
+    // (the rich card has no visible Save button). Genuinely un-catalog
+    // non-vinyl rows keep the explicit SaveLink path and skip this effect.
+    if (!useRichCard) return;
     if (!dirty) return;
     // Task #433 — locked rows are read-only. Skip autosave so a stale
     // dirty flag from a pre-lock edit can't sneak through and mutate
@@ -3353,7 +3382,7 @@ function SkuRow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     dirty,
-    isVinyl,
+    useRichCard,
     isLocked,
     priceStr,
     parsedQty,
@@ -4487,7 +4516,7 @@ function SkuRow({
       ].join(" ")}
       data-testid={isDraft ? `row-sku-draft-${format}` : `row-sku-${format}`}
     >
-      {isVinyl ? (
+      {useRichCard ? (
         <>
         {/* Task #642 — unified header (collapsed + expanded share the
            same row): cover thumb · title/artist/spec stack on the left,
@@ -4874,7 +4903,7 @@ function SkuRow({
         </div>
       )}
 
-      {expanded && (isVinyl ? (
+      {expanded && (useRichCard ? (
       <>
       <div
         className={isLocked ? "pointer-events-none opacity-60" : "contents"}
@@ -4886,7 +4915,9 @@ function SkuRow({
           Tracks-row REQUIRED/OPTIONAL split. */}
       <div className="flex items-center gap-2 mb-3">
         <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-          Required · Vinyl
+          {/* Task #1423 — the catalog cassette reuses this section; label
+              it with its own format so it doesn't read "Required · Vinyl". */}
+          Required · {isVinyl ? "Vinyl" : ALBUM_FORMAT_LABEL[format]}
         </span>
         <span className="flex-1 h-px bg-slate-200" aria-hidden />
       </div>
@@ -6534,7 +6565,7 @@ function SkuRow({
           eligibility math changed — the pills are unchanged internally,
           only their chrome + placement moved. */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {albumId && onSaveAddon && isPrimaryVinyl ? (
+        {albumId && onSaveAddon && isPrimaryGoodDeed ? (
           <GoodDeedPill
             albumId={albumId}
             artworkUrl={artworkUrl}
