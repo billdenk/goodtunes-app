@@ -9062,9 +9062,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // We deliberately DON'T apply the keep-filter to the filename up
     // front: a `.zip` would fail an audio/lyrics filter, but we still
     // want to crack it open. So download first, then decide whether it's
-    // a zip to extract or a plain single file to keep/skip. The download
-    // is bounded by the same per-entry cap, so a non-zip non-kept single
-    // file is the only (rare) case that downloads before being skipped.
+    // a zip to extract or a plain single file to keep/skip.
+    //
+    // The download cap depends on whether the shared file could be a zip
+    // CONTAINER. A zip of N hi-res masters easily clears the per-file
+    // 500 MB cap in total while every track inside stays well under it,
+    // so bounding the container download by the per-file cap wrongly
+    // rejects the whole import (the bug this fixes). When the name ends
+    // in `.zip` — or carries NO extension at all, so the PK sniff below
+    // might still find a zip — we download up to the 10 GB TOTAL cap the
+    // folder path uses, and let `extractKeptZipEntries` enforce the
+    // per-entry 500 MB / total 10 GB caps on the files INSIDE. A file
+    // with any other known extension can't be a zip we'd unpack (the
+    // sniff is extension-less-only), so it keeps the per-file 500 MB
+    // download cap, and the post-download check below re-applies the
+    // per-file cap to an extension-less file that turns out NOT to be a
+    // zip.
+    const ext = extOf(filename);
+    const mightBeZipContainer = ext === ".zip" || ext === "";
+    const downloadCap = mightBeZipContainer
+      ? MAX_DROPBOX_UNCOMPRESSED_BYTES
+      : MAX_DROPBOX_ENTRY_BYTES;
 
     // Resettable idle/stall timeout — NOT a fixed overall deadline. A
     // steady-but-slow multi-GB hi-res master is allowed to finish; only a
@@ -9094,8 +9112,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           // no-data stall does.
           stall.arm();
           size += chunk.length;
-          if (size > MAX_DROPBOX_ENTRY_BYTES) {
-            cb(new Error(`"${filename}" is too large (over ${Math.round(MAX_DROPBOX_ENTRY_BYTES / (1024 * 1024))} MB).`));
+          if (size > downloadCap) {
+            // A possible zip container is capped at the 10 GB total cap,
+            // so blowing it surfaces the "split it into two imports"
+            // message; a genuine single file is capped at the per-file
+            // 500 MB cap and surfaces the per-file "too large" message.
+            cb(new Error(
+              mightBeZipContainer
+                ? `That archive's total size is over ${Math.round(MAX_DROPBOX_UNCOMPRESSED_BYTES / (1024 * 1024 * 1024))} GB. Split it into two imports.`
+                : `"${filename}" is too large (over ${Math.round(MAX_DROPBOX_ENTRY_BYTES / (1024 * 1024))} MB).`,
+            ));
             return;
           }
           // Throttle progress callbacks to ~64 KB chunks-worth so we
@@ -9128,7 +9154,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // ZIP containers and start with the same PK bytes, so sniffing a file
     // that already has a known extension would wrongly unpack a real
     // single-file `.docx` lyric doc into its inner XML and break import.
-    const ext = extOf(filename);
     const isZip = ext === ".zip" || (ext === "" && (await fileLooksLikeZip(tmpPath)));
     if (isZip) {
       let result: { entries: Array<{ filename: string; tmpPath: string; size: number }>; skipped: string[] };
@@ -9146,6 +9171,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Drop the downloaded zip; we already have the extracted tempfiles.
       try { await fsp.unlink(tmpPath); } catch {}
       return { entries: result.entries, skipped: result.skipped, cleanup };
+    }
+
+    // Not a zip — it's a genuine single file, so the per-file 500 MB
+    // ceiling applies. A file with a known non-zip extension was already
+    // capped at the per-file limit during download, but an extension-less
+    // file was downloaded under the 10 GB container cap (we couldn't rule
+    // out a zip until the PK sniff above). Re-apply the per-file cap to it
+    // now so a giant extension-less single file still gets the per-file
+    // "too large" message rather than slipping through.
+    if (size > MAX_DROPBOX_ENTRY_BYTES) {
+      await cleanup();
+      throw new Error(`"${filename}" is too large (over ${Math.round(MAX_DROPBOX_ENTRY_BYTES / (1024 * 1024))} MB).`);
     }
 
     // Plain single file: keep it as one entry when the caller wants this

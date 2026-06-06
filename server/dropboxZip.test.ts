@@ -234,6 +234,36 @@ describe("extractKeptZipEntries", () => {
     );
   });
 
+  test("imports every entry when the total exceeds the per-entry cap but each entry is under it", async () => {
+    // The bug this guards against: a zip of N masters whose COMBINED size
+    // clears the per-file cap while every individual entry stays under it
+    // must still import all entries. The per-entry cap applies per file,
+    // not to the archive total; only the (much larger) total cap bounds
+    // the sum.
+    const zipPath = await makeZip("under-each-over-total.zip", {
+      "01.wav": Buffer.alloc(800, 1),
+      "02.wav": Buffer.alloc(800, 2),
+      "03.wav": Buffer.alloc(800, 3),
+    });
+    const sessionDir = await freshSessionDir();
+    const { entries, skipped } = await extractKeptZipEntries(
+      zipPath,
+      sessionDir,
+      keepAudio,
+      INVALID_MSG,
+      // Each entry (800 B) is under the per-entry cap; the total (2400 B)
+      // is well over the per-entry cap but under the total cap.
+      { maxEntryBytes: 1024, maxTotalBytes: 1024 * 1024 },
+    );
+
+    assert.equal(entries.length, 3);
+    assert.equal(skipped.length, 0);
+    assert.deepEqual(
+      entries.map((e) => e.filename).sort(),
+      ["01.wav", "02.wav", "03.wav"],
+    );
+  });
+
   test("enforces the total-uncompressed cap across entries", async () => {
     const zipPath = await makeZip("big-total.zip", {
       "a.wav": Buffer.alloc(800, 1),
