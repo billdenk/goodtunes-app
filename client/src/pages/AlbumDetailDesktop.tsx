@@ -603,7 +603,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
 
   return (
     <div
-      className="flex w-full h-screen overflow-hidden text-fan-primary"
+      className="flex gap-3 w-full h-screen overflow-hidden text-fan-primary"
       style={{
         background: BRAND_BG,
         fontFamily: "system-ui, -apple-system, 'SF Pro Text', sans-serif",

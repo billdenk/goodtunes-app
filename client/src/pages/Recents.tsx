@@ -105,7 +105,7 @@ export function RecentsPage() {
   );
 
   return (
-    <main className="h-screen w-full flex justify-center overflow-hidden bg-[var(--brand-bg)] lg:justify-start lg:pl-[260px]">
+    <main className="h-screen w-full flex justify-center overflow-hidden bg-[var(--brand-bg)] lg:justify-start lg:pl-[284px]">
       <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1100px] lg:mx-auto h-screen text-white flex flex-col">
         <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3 lg:pb-9">
           <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Recents</h1>

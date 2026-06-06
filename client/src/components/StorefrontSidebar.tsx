@@ -8,6 +8,7 @@ import { computeRailActive } from "@/lib/fanRail";
 import {
   useDesktopShell,
   STOREFRONT_SIDEBAR_WIDTH,
+  RAIL_INSET,
 } from "@/hooks/useDesktopShell";
 import { chatEnabled } from "@/lib/platform";
 import { subscribeChats, totalUnread } from "@/lib/chatStore";
@@ -130,13 +131,18 @@ export function StorefrontSidebar() {
 
   return (
     <aside
-      className="hidden lg:flex fixed inset-y-0 left-0 z-30 flex-col text-white"
+      className="hidden lg:flex fixed z-30 flex-col text-white overflow-hidden"
       style={{
+        top: RAIL_INSET,
+        left: RAIL_INSET,
+        bottom: RAIL_INSET,
         width: STOREFRONT_SIDEBAR_WIDTH,
         background: "rgba(8, 12, 40, 0.92)",
         backdropFilter: "blur(24px) saturate(180%)",
         WebkitBackdropFilter: "blur(24px) saturate(180%)",
-        borderRight: "1px solid rgba(255,255,255,0.06)",
+        borderRadius: 16,
+        border: "1px solid rgba(255,255,255,0.10)",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.32)",
       }}
       data-testid="storefront-sidebar"
     >

@@ -32,3 +32,17 @@ export function useTabletShell(): boolean {
 /** Width of the desktop sidebar (px). Pages offset their content by
  * this much when the sidebar is mounted. */
 export const STOREFRONT_SIDEBAR_WIDTH = 260;
+
+/** Gap between the window edge and the floating rail card (px). */
+export const RAIL_INSET = 12;
+
+/** Gap between the rail card's right edge and the main content (px). */
+export const RAIL_GAP = 12;
+
+/**
+ * Total left padding that content pages apply so their content starts
+ * flush to the right of the floating rail card:
+ *   RAIL_INSET (12) + STOREFRONT_SIDEBAR_WIDTH (260) + RAIL_GAP (12) = 284
+ */
+export const STOREFRONT_CONTENT_OFFSET =
+  RAIL_INSET + STOREFRONT_SIDEBAR_WIDTH + RAIL_GAP;

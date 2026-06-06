@@ -456,7 +456,7 @@ function FanScreen({
   }, [fadeTrailing]);
 
   return (
-    <main className="h-screen w-full flex justify-center overflow-hidden lg:justify-start lg:pl-[260px]">
+    <main className="h-screen w-full flex justify-center overflow-hidden lg:justify-start lg:pl-[284px]">
       <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1200px] lg:mx-auto h-screen text-fan-primary flex flex-col">
         <header className="absolute top-0 inset-x-0 z-20 px-5 pt-14 pb-3 pointer-events-none">
           {leading && (

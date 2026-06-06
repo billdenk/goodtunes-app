@@ -7,6 +7,13 @@ import { FanRailNav } from "@/components/ui/FanRailNav";
 export const BRAND_BG = "#00062B";
 export const BRAND_BLUE = "#319ED8";
 
+/* Shared floating-card values — must match StorefrontSidebar exactly. */
+const RAIL_CARD_BG = "rgba(8, 12, 40, 0.92)";
+const RAIL_CARD_BORDER_RADIUS = 16;
+const RAIL_CARD_BORDER = "1px solid rgba(255,255,255,0.10)";
+const RAIL_CARD_SHADOW = "0 8px 32px rgba(0,0,0,0.32)";
+const RAIL_INSET = 12;
+
 export type AlbumDesktopSidebarUser = {
   displayName?: string | null;
   email?: string | null;
@@ -43,8 +50,18 @@ export function AlbumDesktopSidebar({
   const loggedIn = !!user;
   return (
     <aside
-      className="flex flex-col flex-shrink-0 h-full text-fan-primary"
-      style={{ width: 220, background: BRAND_BG }}
+      className="flex flex-col flex-shrink-0 text-fan-primary overflow-hidden"
+      style={{
+        width: 220,
+        background: RAIL_CARD_BG,
+        backdropFilter: "blur(24px) saturate(180%)",
+        WebkitBackdropFilter: "blur(24px) saturate(180%)",
+        borderRadius: RAIL_CARD_BORDER_RADIUS,
+        border: RAIL_CARD_BORDER,
+        boxShadow: RAIL_CARD_SHADOW,
+        margin: `${RAIL_INSET}px 0 ${RAIL_INSET}px ${RAIL_INSET}px`,
+        alignSelf: "stretch",
+      }}
       data-testid="desktop-sidebar"
     >
       <div className="px-5 pt-6 pb-8">

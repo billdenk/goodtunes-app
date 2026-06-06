@@ -401,7 +401,7 @@ export function Account() {
     return `Latest: ${latestOrder.status}`;
   })();
   return (
-    <main className="relative h-screen w-full flex justify-center overflow-hidden lg:pl-[260px]">
+    <main className="relative h-screen w-full flex justify-center overflow-hidden lg:pl-[284px]">
       <section className="relative w-full max-w-[390px] md:max-w-[640px] lg:max-w-[820px] lg:mx-auto h-screen text-fan-primary flex flex-col">
 
         <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
