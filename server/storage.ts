@@ -161,6 +161,10 @@ export interface IStorage {
   getSongById(id: string): Promise<Song | undefined>;
   getAllSongs(opts?: { includeHidden?: boolean }): Promise<Song[]>;
   getUserAlbums(userId: string): Promise<(UserAlbum & { album: Album })[]>;
+  // Does this user have a real ownership grant for the album, regardless of
+  // the album's hidden / sunrise / trashed state? Used by the fan album route
+  // so a "View order" link never dead-ends on a 404 for an album they bought.
+  userOwnsAlbum(userId: string, albumId: string): Promise<boolean>;
 
   // CMS mutations (admin-only at the route layer).
   createAlbum(data: Omit<Album, "id"> & { id?: string }): Promise<Album>;
@@ -2984,6 +2988,27 @@ export class DbStorage implements IStorage {
         ),
       ));
     return rows.map((r) => ({ ...r.user_albums, album: r.albums }));
+  }
+
+  // Ownership probe that deliberately skips the isHidden / deletedAt filters
+  // getUserAlbums applies. A fan keeps the right to open an album they truly
+  // own (real purchase/comp, or an unexpired preview) even after it's been
+  // hidden, sunrise-gated, or soft-deleted — that's what the Orders page
+  // "View order" link relies on. Expired previews still read as not-owned.
+  async userOwnsAlbum(userId: string, albumId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: userAlbums.id })
+      .from(userAlbums)
+      .where(and(
+        eq(userAlbums.userId, userId),
+        eq(userAlbums.albumId, albumId),
+        or(
+          eq(userAlbums.isPreview, false),
+          sql`${userAlbums.previewExpiresAt} > now()`,
+        ),
+      ))
+      .limit(1);
+    return !!row;
   }
 
   // Task #909 — does this fan currently have full-playback access to the

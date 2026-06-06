@@ -153,7 +153,7 @@ export function RecentsPage() {
               </div>
               {/* TD (lg+) — Apple-Music artwork-forward grid, matching the
                   Collection / Home grids. Phone never renders this. */}
-              <div className="px-5 hidden lg:grid grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-4 gap-y-6">
+              <div className="px-5 hidden lg:grid grid-cols-4 2xl:grid-cols-5 gap-4 lg:gap-5">
                 {rows.map((row) => (
                   <RecentCard
                     key={row.id}
@@ -322,7 +322,7 @@ function RecentCard({
         data-testid={`card-recent-${row.id}`}
       >
         <div
-          className={`relative w-full aspect-square overflow-hidden flex items-center justify-center ${isRound ? "rounded-full" : "rounded-2xl"}`}
+          className={`relative w-full aspect-square overflow-hidden flex items-center justify-center ${isRound ? "rounded-full" : "rounded-lg"}`}
           style={{ background: "rgba(255,255,255,0.08)", border: isRound ? "1px solid rgba(255,255,255,0.10)" : undefined }}
         >
           {row.thumbUrl ? (

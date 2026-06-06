@@ -22,6 +22,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { buyEnabled } from "@/lib/platform";
 import { VinylPreview } from "@/components/VinylPreview";
 import { PhoneVerifySheet } from "@/components/PhoneVerifySheet";
+import { MiniPlayer } from "@/components/MiniPlayer";
+import { BottomNav } from "@/components/BottomNav";
 import {
   DEFAULT_JACKET_UPGRADE,
   DEFAULT_VINYL_COLOR_ID,
@@ -259,9 +261,12 @@ export function Orders() {
   const openOrder = openOrderId ? orders?.find((o) => o.id === openOrderId) ?? null : null;
 
   return (
-    <main className="min-h-screen bg-[#00062B] text-fan-primary pb-24" data-testid="page-orders">
-      <div className="max-w-[440px] sm:max-w-[760px] mx-auto px-5 pt-8">
-        <h1 className="text-[28px] font-bold mb-1">Your orders</h1>
+    <main className="relative h-screen w-full flex justify-center overflow-hidden bg-[var(--brand-bg)] lg:justify-start lg:pl-[284px]" data-testid="page-orders">
+      <section className="relative w-full max-w-[390px] md:max-w-[640px] lg:max-w-[820px] lg:mx-auto h-screen text-fan-primary flex flex-col">
+        <div className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px] px-5">
+          <header className="flex items-end justify-between pt-14 pb-3">
+            <h1 className="text-fan-primary text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Your orders</h1>
+          </header>
         <p className="text-fan-secondary text-[13px] mb-6">Records, certificates, and digital access you own.</p>
 
         {isLoading && <div className="text-fan-secondary text-sm" data-testid="orders-loading">Loading…</div>}
@@ -476,22 +481,26 @@ export function Orders() {
             );
           })}
         </div>
-      </div>
+        </div>
 
-      <OrderDetailSheet order={openOrder} onClose={() => setOpenOrderId(null)} />
+        <OrderDetailSheet order={openOrder} onClose={() => setOpenOrderId(null)} />
 
-      {/* Task #538 — phone verification sheet, opens whenever a gift
-          mutation comes back with requiresPhoneVerification. */}
-      <PhoneVerifySheet
-        open={verifyPending !== null}
-        reason="gifting"
-        onClose={() => setVerifyPending(null)}
-        onVerified={() => {
-          const retry = verifyPending;
-          setVerifyPending(null);
-          if (retry) retry();
-        }}
-      />
+        {/* Task #538 — phone verification sheet, opens whenever a gift
+            mutation comes back with requiresPhoneVerification. */}
+        <PhoneVerifySheet
+          open={verifyPending !== null}
+          reason="gifting"
+          onClose={() => setVerifyPending(null)}
+          onVerified={() => {
+            const retry = verifyPending;
+            setVerifyPending(null);
+            if (retry) retry();
+          }}
+        />
+
+        <MiniPlayer />
+        <BottomNav />
+      </section>
     </main>
   );
 }

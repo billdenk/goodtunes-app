@@ -26,7 +26,7 @@ const goodTunesWordmark = "/goodtunes-logo-white-sm.png";
 // native shell stays on the bottom-nav pill regardless of viewport.
 //
 // Routes covered: /home, /collection (+ /collection/songs|artists), /search,
-// /recents, /playlists, /account*, /artist/:slug, /favorite-artists,
+// /recents, /playlists, /orders, /account*, /artist/:slug, /favorite-artists,
 // /bookmarks. /album/* keeps its own pre-existing desktop layout
 // (AlbumDetailDesktop renders its own sidebar) so we skip mounting here on
 // that route to avoid a double sidebar.
@@ -44,6 +44,7 @@ const STOREFRONT_ROUTE_PREFIXES = [
   "/search",
   "/recents",
   "/playlists",
+  "/orders",
   "/account",
   "/artist/",
   "/favorite-artists",

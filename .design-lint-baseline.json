@@ -20612,11 +20612,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Orders.tsx",
-    "snippet": "<main className=\"min-h-screen bg-[#00062B] text-fan-primary pb-24\" data-testid=\"page-orders\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Orders.tsx",
     "snippet": "className=\"inline-flex items-center px-4 py-2 rounded-full bg-[#319ED8] text-white text-[13px] font-semibold active:opacity-80\""
   },
   {
@@ -20692,7 +20687,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Orders.tsx",
-    "snippet": "<h1 className=\"text-[28px] font-bold mb-1\">Your orders</h1>"
+    "snippet": "<h1 className=\"text-fan-primary text-[34px] font-bold leading-none tracking-tight\" data-testid=\"text-page-title\">Your orders</h1>"
   },
   {
     "rule": "hardcoded-font-size",

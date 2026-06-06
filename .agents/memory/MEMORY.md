@@ -97,4 +97,8 @@
 - [Exclusive-disclosure row + sub-editor coupling](exclusive-disclosure-mode-coupling.md) — accordion `expanded` must derive SOLELY from the controller flag, not OR'd with local `mode`, or opening a sibling can't collapse a row that has a sub-editor open; reset mode on collapse.
 - [Fan shipping charge](fan-shipping-charge.md) — real shipping from shipping_rates card; base vs $1 markup stay separate cols, markup once/order, recompute server-side, physical no-quote REFUSE (422) never $0, lock Stripe allowed_countries=[picked], persist breakdown in BOTH materialize paths.
 - [ArtistDetail not-found gate](artist-page-notfound-gate.md) — fan artist link works; false "Artist not found" comes from gating on the owned-only artistAlbums; gate exists/not-found on ownership-INDEPENDENT goodTunesTitles + artistPerson.
+<<<<<<< HEAD
 - [Manager partner derived catalog](manager-partner-derived-catalog.md) — manager mirrors label but catalog is DERIVED from roster people (people.manager_id); NO albums.manager_id; not in PAYOUT_OWNER_KINDS; distinct from teammate sub_role 'manager'.
+=======
+- [Fan album route owner-bypass](fan-album-route-owner-bypass.md) — GET /api/albums/:id 404s a fan's OWN album once hidden/sunrise/trashed; re-read with includeHidden/includeTrashed when userOwnsAlbum. Plus: new fan routes need STOREFRONT_ROUTE_PREFIXES + FanScreen shell or they lose the rail.
+>>>>>>> ed9d041 (Fix Orders page chrome + owned-album access; align Playlists/Recents card grids)

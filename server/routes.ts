@@ -17341,8 +17341,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/albums/:id", requireAuth, async (req, res) => {
+    const id = String(req.params.id);
     const includeHidden = await isAdminUser(req);
-    const album = await storage.getAlbumById(String(req.params.id), { includeHidden });
+    let album = await storage.getAlbumById(id, { includeHidden });
+    // Owner-bypass: a fan who actually owns this album (real purchase/comp,
+    // or an unexpired preview) can always open it from their Orders/Library,
+    // even if it's since been hidden, sunrise-gated, or soft-deleted — so the
+    // "View order" link never dead-ends on a 404. Re-read with hidden+trashed
+    // only after we've confirmed ownership, so visibility gating is otherwise
+    // untouched for non-owners.
+    if (!album && req.session.userId && (await storage.userOwnsAlbum(req.session.userId, id))) {
+      album = await storage.getAlbumById(id, { includeHidden: true, includeTrashed: true });
+    }
     if (!album) return res.status(404).json({ message: "Album not found" });
     const songs = await storage.getSongsByAlbum(album.id);
     // Same derivation as the list route — any explicit song lights the
