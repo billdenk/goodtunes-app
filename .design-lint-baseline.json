@@ -18732,12 +18732,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDetail.tsx",
-    "snippet": "<h1 className=\"text-fan-primary text-[28px] font-bold leading-tight tracking-tight text-center\" data-testid=\"text-artist-name\">{artistName}</h1>"
+    "snippet": "<h1 className=\"text-fan-primary text-[28px] lg:text-[40px] font-bold leading-tight tracking-tight text-center lg:text-left\" data-testid=\"text-artist-name\">{artistName}</h1>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDetail.tsx",
-    "snippet": "<h1 className=\"mt-5 text-fan-primary text-[28px] font-bold leading-tight tracking-tight text-center\" data-testid=\"text-artist-name\">"
+    "snippet": "<h1 className=\"text-fan-primary text-[28px] lg:text-[40px] font-bold leading-tight tracking-tight text-center lg:text-left\" data-testid=\"text-artist-name\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -20148,11 +20148,6 @@
     "rule": "fan-text-tone",
     "file": "client/src/pages/Login.tsx",
     "snippet": "<div className={`text-sm ${isAdmin ? \"text-slate-600\" : \"text-white/70\"}`} data-testid=\"text-oauth-hint\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/Login.tsx",
-    "snippet": "className={`text-xs font-medium hover:underline transition-colors ${isAdmin ? \"text-[var(--brand-blue)]\" : \"text-white/60 hover:text-white/90\"}`}"
   },
   {
     "rule": "fan-text-tone",

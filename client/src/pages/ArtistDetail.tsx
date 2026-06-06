@@ -454,8 +454,9 @@ export function ArtistDetail() {
               not a banner. */}
           {blurSrc && (
             <div
-              className="relative w-full lg:max-w-[760px] lg:mx-auto overflow-hidden pointer-events-none"
-              style={{ aspectRatio: hasCoverBanner ? "1 / 1.05" : "1 / 0.82" }}
+              className={`relative w-full overflow-hidden pointer-events-none lg:fixed lg:top-0 lg:left-0 lg:w-screen lg:-z-10 lg:aspect-auto ${
+                hasCoverBanner ? "aspect-[1/1.05] lg:h-[420px]" : "aspect-[1/0.82] lg:h-[360px]"
+              }`}
               aria-hidden
             >
               <img
@@ -479,8 +480,10 @@ export function ArtistDetail() {
             </div>
           )}
           <div
-            className={`flex flex-col items-center px-5 relative lg:max-w-[760px] lg:mx-auto ${
-              blurSrc ? "-mt-28" : "pt-20"
+            className={`flex flex-col items-center px-5 relative lg:max-w-none ${
+              blurSrc
+                ? `-mt-28 lg:mt-0 ${hasCoverBanner ? "lg:pt-[300px]" : "lg:pt-[210px]"}`
+                : "pt-20"
             }`}
           >
             {avatarSrc && (
@@ -507,7 +510,7 @@ export function ArtistDetail() {
                     onClick={handlePlayAll}
                     disabled={songCount === 0}
                     aria-label="Play all songs"
-                    className="absolute bottom-1 right-1 w-14 h-14 rounded-full flex items-center justify-center active:scale-[0.94] transition-transform disabled:opacity-40"
+                    className="absolute bottom-1 right-1 w-14 h-14 rounded-full flex lg:hidden items-center justify-center active:scale-[0.94] transition-transform disabled:opacity-40"
                     style={{ background: "#319ED8", boxShadow: "0 6px 20px rgba(0,0,0,0.45)" }}
                     data-testid="button-play-artist"
                   >
@@ -522,7 +525,7 @@ export function ArtistDetail() {
               <button
                 type="button"
                 onClick={() => navigate(`/label/${artistPerson.label!.id}`)}
-                className="mt-5 -mb-4 inline-flex items-center justify-center min-h-[44px] px-2 active:opacity-70"
+                className="mt-5 -mb-4 inline-flex items-center justify-center min-h-[44px] px-2 active:opacity-70 lg:self-start"
                 data-testid={`link-artist-label-${artistPerson.label.id}`}
               >
                 <span className="text-fan-secondary text-xs uppercase tracking-[0.14em] font-semibold">
@@ -531,25 +534,47 @@ export function ArtistDetail() {
                 </span>
               </button>
             )}
-            {hasGtReleases ? (
-              <button
-                type="button"
-                onClick={() => artistAlbums[0] && navigate(`/album/${artistAlbums[0].id}`)}
-                className="mt-5 flex items-center gap-1 active:opacity-70"
-                data-testid="button-artist-name"
-              >
-                <h1 className="text-fan-primary text-[28px] font-bold leading-tight tracking-tight text-center" data-testid="text-artist-name">{artistName}</h1>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="text-fan-secondary mt-1">
-                  <path d="M9 18l6-6-6-6" />
-                </svg>
-              </button>
-            ) : (
-              <h1 className="mt-5 text-fan-primary text-[28px] font-bold leading-tight tracking-tight text-center" data-testid="text-artist-name">
-                {artistName}
-              </h1>
-            )}
+            {/* Name row. On mobile the name is centered and Play is the FAB
+                that overlaps the avatar above. On the desktop (left-rail)
+                layout we mirror Apple Music's iPad/web hero: the avatar stays
+                centered while the name left-aligns with the release grid and a
+                circular Play button sits to its left. */}
+            <div className="mt-5 flex items-center gap-3 self-stretch justify-center lg:justify-start">
+              {hasGtReleases && (
+                <button
+                  type="button"
+                  onClick={handlePlayAll}
+                  disabled={songCount === 0}
+                  aria-label="Play all songs"
+                  className="hidden lg:flex flex-shrink-0 w-12 h-12 rounded-full items-center justify-center active:scale-[0.94] transition-transform disabled:opacity-40"
+                  style={{ background: "#319ED8", boxShadow: "0 6px 20px rgba(0,0,0,0.45)" }}
+                  data-testid="button-play-artist-hero"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff" style={{ marginLeft: 2 }}>
+                    <path d="M8 5.14v14l11-7-11-7z" />
+                  </svg>
+                </button>
+              )}
+              {hasGtReleases ? (
+                <button
+                  type="button"
+                  onClick={() => artistAlbums[0] && navigate(`/album/${artistAlbums[0].id}`)}
+                  className="flex items-center gap-1 active:opacity-70"
+                  data-testid="button-artist-name"
+                >
+                  <h1 className="text-fan-primary text-[28px] lg:text-[40px] font-bold leading-tight tracking-tight text-center lg:text-left" data-testid="text-artist-name">{artistName}</h1>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" className="text-fan-secondary mt-1 lg:w-6 lg:h-6">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </button>
+              ) : (
+                <h1 className="text-fan-primary text-[28px] lg:text-[40px] font-bold leading-tight tracking-tight text-center lg:text-left" data-testid="text-artist-name">
+                  {artistName}
+                </h1>
+              )}
+            </div>
             {hasGtReleases && (
-              <p className="text-fan-secondary text-xs mt-1.5">
+              <p className="text-fan-secondary text-xs mt-1.5 lg:self-start lg:pl-[60px]">
                 {releaseCount} {releaseCount === 1 ? "release" : "releases"} · {songCount} songs
               </p>
             )}
