@@ -28,11 +28,24 @@ export type FieldType =
   | "url"
   | "textarea"
   | "number"
+  | "currency"
   | "date"
   | "select"
   | "combobox"
   | "artist-picker"
   | "address";
+
+/* Convert an edited dollar string (e.g. "50" or "19.99") to integer
+ * cents for the wire. Currency fields are seeded into the form as a
+ * dollar string ((cents / 100).toFixed(2)) and round-trip back to
+ * integer cents here on save. Returns the raw string untouched when it
+ * isn't a finite number so the server's own validation surfaces the
+ * error instead of us silently nulling/zeroing the price. */
+function dollarsToCents(s: string): number | string {
+  const n = Number(s);
+  if (!Number.isFinite(n)) return s;
+  return Math.round(n * 100);
+}
 
 export interface FieldOption {
   value: string;
@@ -216,16 +229,24 @@ export function EditablePanel({
     mutationFn: async () => {
       // Only send fields whose draft differs from current. Empty strings
       // are sent as null so blanking a field actually clears it.
-      const body: Record<string, string | PartnerAddressSnapshot | null> = {};
-      const diffKey = (k: string) => {
+      const body: Record<string, string | number | PartnerAddressSnapshot | null> = {};
+      const diffKey = (
+        k: string,
+        transform?: (s: string) => string | number,
+      ) => {
         const before = (values[k] as string | null | undefined) ?? "";
         const after = (draft[k] as string | null | undefined) ?? "";
         if (before !== after) {
-          body[k] = (after as string).trim() === "" ? null : (after as string);
+          const trimmed = (after as string).trim();
+          if (trimmed === "") {
+            body[k] = null;
+          } else {
+            body[k] = transform ? transform(trimmed) : trimmed;
+          }
         }
       };
       for (const f of fields) {
-        diffKey(f.key);
+        diffKey(f.key, f.type === "currency" ? dollarsToCents : undefined);
         if (f.idKey) diffKey(f.idKey);
         if (f.addressKey) {
           // Snapshot diff via JSON equality. Blanking the formatted text
@@ -528,6 +549,7 @@ function ReadField({
   // read mode — the difference is just how `value` is rendered.
   let display: string | null = value;
   if (value && field.type === "date") display = formatDateRead(value);
+  else if (value && field.type === "currency") display = `$${value}`;
   else if (value && field.type === "select" && field.options) {
     display =
       field.options.find((o) => o.value === value)?.label ?? value;
@@ -595,6 +617,27 @@ function EditInput({
       )}
     </label>
   );
+
+  if (field.type === "currency") {
+    return (
+      <div>
+        {baseLabel}
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400 text-sm">$</span>
+          <input
+            ref={inputRef as React.RefObject<HTMLInputElement> | undefined}
+            type="text"
+            inputMode="decimal"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={field.placeholder}
+            className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent tabular-nums"
+            data-testid={testId}
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (field.type === "textarea") {
     return (

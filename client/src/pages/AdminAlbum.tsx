@@ -2832,7 +2832,7 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           {
             key: "priceCents",
             label: "Bundle Price (USD)",
-            type: "text",
+            type: "currency",
             placeholder: "19.99",
           },
         ]}
