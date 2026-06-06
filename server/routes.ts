@@ -12476,6 +12476,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // right segment instead of always falling back to "dedicated".
     // null = inherit (resolver falls to the label, then "dedicated").
     pressMode: p.pressMode ?? null,
+    // Task #1310 — the artist half of the two-part share link. It's public
+    // data (it literally appears in get.goodtunes.music/<artist>/<album>),
+    // and the admin Share-link panel reads this projection to show the
+    // canonical saved slug back to the operator after a save.
+    artistShareSlug: p.artistShareSlug ?? null,
   });
   app.get("/api/people", async (req, res) => {
     // Artist admins see only people credited on their own albums/songs.

@@ -2082,15 +2082,15 @@ function ShareLinkPanel({
 
   // ── Artist slug (person.artistShareSlug) ───────────────────────────────
   const artistId = album.primaryArtistId ?? null;
+  // Single source of truth for the bound primary-artist record: use the
+  // shared default fetcher (same queryFn every other observer of this key
+  // uses) so there's no stale/wrong-shape cross-talk with the sibling
+  // queries in AlbumLineupPanel / SellPanel. The server's person
+  // projection now includes artistShareSlug, so the field reads back the
+  // canonical persisted value after a save.
   const { data: personData } = useQuery<{ artistShareSlug?: string | null; name?: string } | null>({
     queryKey: ["/api/people", artistId],
     enabled: !!artistId,
-    staleTime: Infinity,
-    queryFn: async () => {
-      const r = await fetch(`/api/people/${artistId}`, { credentials: "include" });
-      if (!r.ok) return null;
-      return r.json();
-    },
   });
   const savedArtistSlug = personData?.artistShareSlug ?? "";
   const [artistDraft, setArtistDraft] = useState(savedArtistSlug);
@@ -2107,9 +2107,25 @@ function ShareLinkPanel({
       const r = await apiRequest("PUT", `/api/admin/people/${artistId}`, {
         artistShareSlug: next,
       });
-      return r.json();
+      // apiRequest resolves on ANY 2xx, including the 202 the partner-edit
+      // gate returns when an approval-mode edit is diverted to the review
+      // queue (nothing written). Carry the status through so onSuccess can
+      // tell a real write from a pending change.
+      const body = await r.json().catch(() => null);
+      return { status: r.status, body };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      if (result.status === 202) {
+        // Diverted to the review queue — NOT persisted. Leave the draft
+        // showing the still-unsaved value rather than claiming it saved.
+        toast({
+          title: "Sent for review",
+          description:
+            result.body?.message ||
+            "Your artist URL change was sent to GoodTunes for review.",
+        });
+        return;
+      }
       qc.invalidateQueries({ queryKey: ["/api/people", artistId] });
       toast({ title: "Artist URL saved." });
     },
@@ -15230,17 +15246,16 @@ function AlbumLineupPanel({
   // Resolve the primary artist's Person so we can tell whether the
   // bound artist is actually a group; only groups get the "Use band's
   // lineup" default + member picker that draws from the band roster.
+  // Share the default fetcher (not a bespoke queryFn) so this observer of
+  // ["/api/people", id] stays in lock-step with ShareLinkPanel / SellPanel
+  // instead of racing them under the app-wide staleTime: Infinity.
   const { data: primaryArtist } = useQuery<{
     id: string;
     name: string;
     isGroup?: boolean;
+    artistShareSlug?: string | null;
   }>({
     queryKey: ["/api/people", album.primaryArtistId],
-    queryFn: async () => {
-      const r = await fetch(`/api/people/${album.primaryArtistId}`);
-      if (!r.ok) throw new Error(await r.text());
-      return r.json();
-    },
     enabled: !!album.primaryArtistId,
   });
   const { data: bandRoster = [] } = useQuery<BandMemberLite[]>({
