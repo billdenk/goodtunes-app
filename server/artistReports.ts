@@ -172,18 +172,22 @@ async function computeKpis(scope: ArtistScope, r: Range) {
     return emptyKpis();
   }
   const revRow = scope.albumIds.length ? await db.execute<{
-    gross: string; units: string; buyers: string; refunded: string;
+    gross: string; units: string; orders: string; buyers: string; refunded: string;
   }>(sql`
     SELECT
       COALESCE(SUM(CASE WHEN o.status <> 'refunded' THEN o.total_cents ELSE 0 END), 0)::text AS gross,
-      COUNT(*) FILTER (WHERE o.status <> 'refunded')::text AS units,
+      COALESCE(SUM(CASE WHEN o.status <> 'refunded' THEN COALESCE(cc.cnt, 1) ELSE 0 END), 0)::text AS units,
+      COUNT(*) FILTER (WHERE o.status <> 'refunded')::text AS orders,
       COUNT(DISTINCT o.customer_id) FILTER (WHERE o.status <> 'refunded')::text AS buyers,
       COALESCE(SUM(CASE WHEN o.status = 'refunded' THEN o.total_cents ELSE 0 END), 0)::text AS refunded
     FROM orders o
+    LEFT JOIN (
+      SELECT order_id, COUNT(*)::int AS cnt FROM order_copies GROUP BY order_id
+    ) cc ON cc.order_id = o.id
     WHERE ${ordersFilter(scope)}
       AND o.created_at >= ${r.from} AND o.created_at < ${r.to}
-  `) : ({ rows: [{ gross: "0", units: "0", buyers: "0", refunded: "0" }] } as any);
-  const rev = (revRow as any).rows?.[0] ?? { gross: "0", units: "0", buyers: "0", refunded: "0" };
+  `) : ({ rows: [{ gross: "0", units: "0", orders: "0", buyers: "0", refunded: "0" }] } as any);
+  const rev = (revRow as any).rows?.[0] ?? { gross: "0", units: "0", orders: "0", buyers: "0", refunded: "0" };
 
   const playRow = scope.songIds.length ? await db.execute<{
     starts: string; completes: string; listeners: string;
@@ -238,6 +242,7 @@ async function computeKpis(scope: ArtistScope, r: Range) {
     artistShareCents: gross,
     refundedCents: Number(rev.refunded),
     units: Number(rev.units),
+    orders: Number(rev.orders),
     buyers: Number(rev.buyers),
     plays: starts,
     completions: completes,
@@ -251,7 +256,7 @@ async function computeKpis(scope: ArtistScope, r: Range) {
 function emptyKpis() {
   return {
     grossCents: 0, artistShareCents: 0, refundedCents: 0,
-    units: 0, buyers: 0, plays: 0, completions: 0, completionRate: 0,
+    units: 0, orders: 0, buyers: 0, plays: 0, completions: 0, completionRate: 0,
     listeners: 0, topTrack: null, topAlbum: null,
   };
 }
@@ -265,11 +270,14 @@ function emptyKpis() {
 // metrics with NO date bound so the Overview tab can show a lifetime
 // banner alongside the range window.
 //
-// Reconciliation: the buyer-roster KPI query counts orders with status
-// IN ('paid','shipped','complete','completed') and SUMs total_cents over
-// the artist's albums. We mirror that exactly (non-refunded only, same
-// status set via `o.status <> 'refunded'` against `ordersFilter`) so the
-// lifetime orders / fans / gross reconcile with that page.
+// Reconciliation: the buyer-roster page (server/reports/buyers.ts) lists
+// non-refunded orders and, per order, the physical copies it fanned out
+// into via `order_copies` (falling back to a single copy when an order
+// has no copy rows — `copies.length || 1`). We mirror that exactly:
+//   • `orders` = COUNT of non-refunded orders (matches the roster's row count)
+//   • `units`  = SUM of per-order COALESCE(copy_count, 1) (matches the
+//     roster's summed per-order `quantity`)
+// so the lifetime orders / units / fans / gross reconcile with that page.
 export type LifetimeTotals = {
   grossCents: number;
   units: number;
@@ -288,17 +296,21 @@ async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotals> {
   if (scope.albumIds.length === 0 && scope.songIds.length === 0) return empty;
 
   const revRow = scope.albumIds.length ? await db.execute<{
-    gross: string; units: string; buyers: string; refunded: string;
+    gross: string; units: string; orders: string; buyers: string; refunded: string;
   }>(sql`
     SELECT
       COALESCE(SUM(CASE WHEN o.status <> 'refunded' THEN o.total_cents ELSE 0 END), 0)::text AS gross,
-      COUNT(*) FILTER (WHERE o.status <> 'refunded')::text AS units,
+      COALESCE(SUM(CASE WHEN o.status <> 'refunded' THEN COALESCE(cc.cnt, 1) ELSE 0 END), 0)::text AS units,
+      COUNT(*) FILTER (WHERE o.status <> 'refunded')::text AS orders,
       COUNT(DISTINCT o.customer_id) FILTER (WHERE o.status <> 'refunded')::text AS buyers,
       COALESCE(SUM(CASE WHEN o.status = 'refunded' THEN o.total_cents ELSE 0 END), 0)::text AS refunded
     FROM orders o
+    LEFT JOIN (
+      SELECT order_id, COUNT(*)::int AS cnt FROM order_copies GROUP BY order_id
+    ) cc ON cc.order_id = o.id
     WHERE ${ordersFilter(scope)}
-  `) : ({ rows: [{ gross: "0", units: "0", buyers: "0", refunded: "0" }] } as any);
-  const rev = (revRow as any).rows?.[0] ?? { gross: "0", units: "0", buyers: "0", refunded: "0" };
+  `) : ({ rows: [{ gross: "0", units: "0", orders: "0", buyers: "0", refunded: "0" }] } as any);
+  const rev = (revRow as any).rows?.[0] ?? { gross: "0", units: "0", orders: "0", buyers: "0", refunded: "0" };
 
   const playRow = scope.songIds.length ? await db.execute<{
     starts: string; listeners: string;
@@ -312,11 +324,10 @@ async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotals> {
   `) : ({ rows: [{ starts: "0", listeners: "0" }] } as any);
   const p = (playRow as any).rows?.[0] ?? { starts: "0", listeners: "0" };
 
-  const units = Number(rev.units);
   return {
     grossCents: Number(rev.gross),
-    units,
-    orders: units,
+    units: Number(rev.units),
+    orders: Number(rev.orders),
     buyers: Number(rev.buyers),
     refundedCents: Number(rev.refunded),
     plays: Number(p.starts),
