@@ -451,6 +451,165 @@ SQL
 backfill_task_1460_llt_bonus dev  "${DATABASE_URL:-}"
 backfill_task_1460_llt_bonus prod "${PROD_DATABASE_URL:-}"
 
+# Task #1493 — Reconnect orphaned buyers of deleted duplicate albums to the
+# real, content-complete album. When near-duplicate albums were created (some
+# from the old gogoods import) and the empty/duplicate copy was later soft-
+# deleted, the fans who bought (or were granted) the dead copy were left
+# pointing at a soft-deleted row — their purchase + GoodDeed certificate
+# stranded on a dead album. This one-off data rectification carries those
+# buyers onto the live album that actually holds the music/lyrics/video,
+# preserving their certificate, so "you own what you bought" stays true.
+#
+# Confirmed prod situation (see task file): Love Life Tragedy (Double Album)
+# (deleted) -> Love Life Tragedy (Bonus); plus four smaller deleted dupes
+# (Della Chase "Heavy", J.P. Hopfelt's L.A. Vintage Rock, Screaming Trees
+# "Strange Things Happening", Big Mouth Barry "Shut The Hell Up (Explicit).")
+# each with a live same-artist content match. None of these deleted albums
+# carry order_copies / signed_cert_certificates / referral_credits, so only
+# user_albums (ownership + cert) and orders (provenance + GoodDeed number)
+# need to move. The deliberate two-edition releases (Mendelson "After The
+# Party", Sixpence "Rosemary Hill" + Signature Editions) and the standalone
+# LLT Single Series are deliberately NOT in the pair list and stay untouched.
+#
+# Marker-guarded + idempotent (runs once per DB), a no-op on a fresh dev
+# clone (Nick's catalog + gogoods data are prod-only). Order repoints skip
+# any GoodDeed-number that already exists on the live album (a duplicate
+# gogoods import) so per-album (album_id, good_deed_number) uniqueness holds.
+backfill_task_1493_reconnect_orphans() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1493 reconnect orphans on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_double  constant text := '0da0fccf-292f-4259-82d1-f95a59eb45c0'; -- LLT (Double Album), soft-deleted
+  v_bonus   constant text := '4ee3d6b9-d01f-4573-b1d6-c60951c67211'; -- LLT (Bonus), live
+  -- Each pair maps a soft-deleted duplicate album to its live, content-
+  -- complete equivalent for the same artist.
+  v_pairs   constant text[] := ARRAY[
+    '0da0fccf-292f-4259-82d1-f95a59eb45c0=>4ee3d6b9-d01f-4573-b1d6-c60951c67211', -- LLT Double -> LLT Bonus
+    '1597e09d-f49e-4b87-8f6f-ea92a33086b7=>bcc1b906-465b-4047-9f3a-024496f595ed', -- Della Chase "Heavy" -> "Della Chase"
+    '83d28879-f25b-4830-8dab-6e295c1c85e1=>676ae89a-6979-4c7d-86d7-45f124288f61', -- J.P. Hopfelt's L.A. Vintage Rock -> "L.A. Vintage Rock"
+    '3ccd21aa-50bc-4b37-9590-34c5c2d8530e=>f4ce9c70-1d07-4fae-9cdf-8d6b2a61b612', -- Screaming Trees "Strange Things..." -> "Weird Things Happening"
+    '411ff888-82c3-4600-b79f-d6895bfc7dca=>b8570d3d-23f7-48dc-8209-f6d8ff47144c'  -- Big Mouth Barry "Shut The Hell Up (Explicit)." -> live Explicit
+  ];
+  v_handled text[] := ARRAY[]::text[];
+  v_pair    text;
+  v_del     text;
+  v_live    text;
+  v_staff   integer := 0;
+  v_cons    integer := 0;
+  v_moved   integer := 0;
+  v_ord     integer := 0;
+  v_rep     RECORD;
+BEGIN
+  IF EXISTS (SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_1493_reconnect_orphaned_buyers') THEN
+    RAISE NOTICE 'task-1493 reconnect orphaned buyers already applied — skipping';
+    RETURN;
+  END IF;
+
+  -- Step 3 (run FIRST, while the dead Double rows still exist so the
+  -- "never bought the Double" signature is meaningful): remove the unbacked
+  -- free Bonus grants held by accounts that never purchased the Double Album.
+  -- Signature = a cert-less Bonus row whose user has no entitlement on the
+  -- Double Album (the four internal admin/staff comps — billdenk-style real
+  -- buyers all carry a certificate). Confirmed by signature, not hard IDs.
+  DELETE FROM user_albums b
+  WHERE b.album_id = v_bonus
+    AND b.certificate_number IS NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM user_albums d WHERE d.album_id = v_double AND d.user_id = b.user_id
+    );
+  GET DIAGNOSTICS v_staff = ROW_COUNT;
+  RAISE NOTICE 'task-1493 removed % unbacked Bonus grant(s)', v_staff;
+
+  -- Steps 1, 2 & 4: for each deleted->live pair, consolidate ownership and
+  -- repoint orders onto the live album, carrying the GoodDeed certificate.
+  FOREACH v_pair IN ARRAY v_pairs LOOP
+    v_del  := split_part(v_pair, '=>', 1);
+    v_live := split_part(v_pair, '=>', 2);
+
+    -- (a) Buyer ALREADY owns the live album: carry the certificate onto the
+    --     live row if it has none (COALESCE keeps an existing live cert),
+    --     prefer the original purchase date, keep "owned" if either row is
+    --     owned, then drop the now-redundant deleted-album row.
+    UPDATE user_albums l
+       SET certificate_number = COALESCE(l.certificate_number, d.certificate_number),
+           acquired_at        = COALESCE(d.acquired_at, l.acquired_at),
+           is_preview         = (l.is_preview AND d.is_preview)
+      FROM user_albums d
+     WHERE l.album_id = v_live AND d.album_id = v_del AND l.user_id = d.user_id;
+    DELETE FROM user_albums d
+     WHERE d.album_id = v_del
+       AND EXISTS (SELECT 1 FROM user_albums l WHERE l.album_id = v_live AND l.user_id = d.user_id);
+    GET DIAGNOSTICS v_cons = ROW_COUNT;
+
+    -- (b) Buyer does NOT yet own the live album: move the entitlement row
+    --     wholesale (it carries its own certificate + acquired_at + id).
+    UPDATE user_albums SET album_id = v_live WHERE album_id = v_del;
+    GET DIAGNOSTICS v_moved = ROW_COUNT;
+
+    -- (c) Repoint orders onto the live album so order history + certificate
+    --     provenance read against it. Skip any order whose GoodDeed number
+    --     already exists on the live album (a duplicate gogoods import) so
+    --     per-album GoodDeed uniqueness is never violated.
+    UPDATE orders o SET album_id = v_live
+     WHERE o.album_id = v_del
+       AND (o.good_deed_number IS NULL
+            OR NOT EXISTS (
+              SELECT 1 FROM orders e WHERE e.album_id = v_live AND e.good_deed_number = o.good_deed_number
+            ));
+    GET DIAGNOSTICS v_ord = ROW_COUNT;
+
+    RAISE NOTICE 'task-1493 pair % -> %: % consolidated, % moved, % order(s) repointed',
+                 v_del, v_live, v_cons, v_moved, v_ord;
+    v_handled := array_append(v_handled, v_del);
+  END LOOP;
+
+  -- Step 5: generic safety sweep — REPORT (never auto-fix) any OTHER soft-
+  -- deleted album that still has order-backed owned entitlements, so the
+  -- operator can confirm the correct live target by hand instead of the
+  -- script guessing. (No album titled "RainTree(s)" exists in prod — flag
+  -- for operator confirmation of the exact title if one is still expected.)
+  FOR v_rep IN
+    SELECT a.id, a.title, a.artist, COUNT(DISTINCT ua.user_id) AS buyers
+      FROM albums a
+      JOIN user_albums ua ON ua.album_id = a.id AND ua.is_preview = false
+      JOIN orders o ON o.album_id = a.id AND o.status IN ('complete','paid','shipped')
+     WHERE a.deleted_at IS NOT NULL
+       AND NOT (a.id = ANY(v_handled))
+     GROUP BY a.id, a.title, a.artist
+     ORDER BY buyers DESC
+  LOOP
+    RAISE NOTICE 'task-1493 UNRESOLVED soft-deleted album with order-backed buyers: % — % / % (% buyer(s)) — needs operator confirmation',
+                 v_rep.id, v_rep.artist, v_rep.title, v_rep.buyers;
+  END LOOP;
+
+  INSERT INTO post_merge_data_backfills (name) VALUES ('task_1493_reconnect_orphaned_buyers');
+  RAISE NOTICE 'task-1493 reconnect orphaned buyers applied';
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1493 reconnect orphans ok on $label"
+    echo "$out" | grep -i 'task-1493' || true
+  else
+    echo "post-merge: WARNING — task-1493 reconnect orphans failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_1493_reconnect_orphans dev  "${DATABASE_URL:-}"
+backfill_task_1493_reconnect_orphans prod "${PROD_DATABASE_URL:-}"
+
 # PacPack (Pacific Packaging) — Bill & his wife's pre-Spinney in-house
 # fulfillment operation. Create the partner (fixed id, mirrors the row
 # hand-created in prod) and reassign every EasyPost-backfilled historical
