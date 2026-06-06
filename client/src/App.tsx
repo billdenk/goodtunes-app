@@ -26,7 +26,7 @@ import {
   CollectionArtists,
 } from "@/pages/Collection";
 import { AlbumDetail } from "@/pages/AlbumDetail";
-import { AlbumDetailMobileSkeleton, AlbumNotFound } from "@/components/ui/AlbumDetailSkeleton";
+import { AlbumDetailMobileSkeleton, AlbumNotFound, FanAppLoader } from "@/components/ui/AlbumDetailSkeleton";
 import { InstrumentDetail } from "@/pages/InstrumentDetail";
 import { Playlists } from "@/pages/Playlists";
 import { Account } from "@/pages/Account";
@@ -114,14 +114,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    return (
-      <main className="min-h-screen bg-[#00062B] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-6">
-          <img src="/goodtunes-logo-white-sm.png" alt="GoodTunes" className="w-40 max-w-[45vw] h-auto opacity-50" />
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
-        </div>
-      </main>
-    );
+    return <FanAppLoader />;
   }
 
   // Preserve the admin/customer distinction on the dev URL — visiting
@@ -331,14 +324,7 @@ function Router() {
   }
 
   if (isLoading) {
-    return (
-      <main className="min-h-screen bg-[#00062B] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-6">
-          <img src="/goodtunes-logo-white-sm.png" alt="GoodTunes" className="w-40 max-w-[45vw] h-auto opacity-50" />
-          <div className="w-6 h-6 border-2 border-[#319ED8] border-t-transparent rounded-full animate-spin" />
-        </div>
-      </main>
-    );
+    return <FanAppLoader />;
   }
 
   return (
