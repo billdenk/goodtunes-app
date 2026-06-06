@@ -18,6 +18,8 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { AccessNotAuthorizedDialog } from "@/components/AccessNotAuthorizedDialog";
 import { Player } from "@/pages/Player";
+import { DesktopNowPlaying } from "@/components/ui/DesktopNowPlaying";
+import { useTabletShell } from "@/hooks/useDesktopShell";
 import { Login } from "@/pages/Login";
 import {
   Home,
@@ -146,12 +148,20 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
 function PlayerOverlay() {
   const { showPlayer } = usePlayer();
-  // AnimatePresence keeps <Player> mounted while its exit (slide-down)
-  // animation plays so closing eases back to the mini-player instead of
+  // Tablet+ web shells (md≥768, never native/phone) get the Apple-Music-style
+  // full-screen DesktopNowPlaying; the phone shell keeps the mobile Player.
+  const tabletPlus = useTabletShell();
+  // AnimatePresence keeps the surface mounted while its exit (slide-down)
+  // animation plays so closing eases back to the dock/mini-player instead of
   // vanishing. The open animation rides the motion.div's initial/animate.
   return (
     <AnimatePresence>
-      {showPlayer && <Player key="now-playing" />}
+      {showPlayer &&
+        (tabletPlus ? (
+          <DesktopNowPlaying key="now-playing-desktop" />
+        ) : (
+          <Player key="now-playing" />
+        ))}
     </AnimatePresence>
   );
 }

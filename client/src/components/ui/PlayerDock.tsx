@@ -14,6 +14,7 @@ import {
   ChevronDown,
   ChevronUp,
   Music2,
+  Maximize2,
 } from "lucide-react";
 import { LyricsIcon } from "@/components/ui/LyricsIcon";
 
@@ -102,6 +103,12 @@ export interface PlayerDockProps {
    *  omitted the dock paints a brand-gradient placeholder. */
   coverNode?: ReactNode;
 
+  /** When provided (and something is playing), the cover gains an
+   *  expand affordance that opens the full-screen Now Playing surface:
+   *  a hover-reveal Maximize overlay on pointer devices, two-tap on
+   *  touch (first tap reveals the control, second triggers expand). */
+  onExpand?: () => void;
+
   /** Initial volume level (0–100). Defaults to 65. */
   defaultVolume?: number;
   /** Initial muted state. Defaults to false. */
@@ -149,6 +156,7 @@ export function PlayerDock({
   onRepeatChange,
   onVolumeChange,
   coverNode,
+  onExpand,
   defaultVolume = 65,
   defaultMuted = false,
   forceCompact,
@@ -222,6 +230,17 @@ export function PlayerDock({
   // out while elapsed + remaining time labels fade in flush with the
   // bar's edges. Left/right icon clusters stay sharp.
   const [scrubHover, setScrubHover] = useState(false);
+
+  // Cover expand affordance (only when `onExpand` is wired). On pointer
+  // devices the Maximize overlay reveals on hover; on touch the first tap
+  // reveals it and the second triggers expand (two-tap).
+  const [canHover] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(hover: hover)").matches,
+  );
+  const [coverRevealed, setCoverRevealed] = useState(false);
 
   // Manual hide/show — collapses the dock to a small corner pill.
   // Independent of the auto-compact responsive breakpoint above.
@@ -638,8 +657,46 @@ export function PlayerDock({
               ].join(" ")}
               aria-hidden={scrubHover}
             >
-              <div className={`${D.cover} flex-shrink-0 rounded-md overflow-hidden`}>
+              <div
+                className={`${D.cover} relative flex-shrink-0 rounded-md overflow-hidden group/expand`}
+                onClick={
+                  onExpand && !canHover
+                    ? () => {
+                        if (coverRevealed) {
+                          onExpand();
+                          setCoverRevealed(false);
+                        } else {
+                          setCoverRevealed(true);
+                        }
+                      }
+                    : undefined
+                }
+              >
                 {coverNode ?? emptyCover}
+                {onExpand && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onExpand();
+                      setCoverRevealed(false);
+                    }}
+                    aria-label="Expand to full-screen player"
+                    className={[
+                      "absolute inset-0 flex items-center justify-center transition-opacity duration-150",
+                      canHover
+                        ? "opacity-0 group-hover/expand:opacity-100"
+                        : coverRevealed
+                          ? "opacity-100"
+                          : "opacity-0 pointer-events-none",
+                    ].join(" ")}
+                    style={{ background: "rgba(0,0,0,0.45)" }}
+                    data-testid="button-expand-player"
+                  >
+                    <Maximize2 className="w-4 h-4 text-white" />
+                    <span className="sr-only">Expand</span>
+                  </button>
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 min-w-0">

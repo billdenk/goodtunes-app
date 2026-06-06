@@ -44,6 +44,11 @@ interface PlayerState {
    *  the album without playing through full songs. Independent of the
    *  per-song `isPreviewable` flag; the host decides when to switch on. */
   previewMode: boolean;
+  /** Output volume level, 0–100. Applied to the hidden audio element so the
+   *  full-screen desktop Now Playing volume slider drives real playback. */
+  volume: number;
+  /** True when output is muted (volume preserved so unmute restores it). */
+  muted: boolean;
 }
 
 interface PlayerContextValue extends PlayerState {
@@ -67,6 +72,10 @@ interface PlayerContextValue extends PlayerState {
   playNext: (song: PlayerSong) => void;
   playLast: (song: PlayerSong) => void;
   setPreviewMode: (on: boolean) => void;
+  /** Sets output volume (0–100). Unmutes when the new level is > 0. */
+  setVolume: (level: number) => void;
+  /** Toggles mute, preserving the prior volume level. */
+  toggleMute: () => void;
   /** Opens the native iOS AirPlay device picker for the hidden audio
    *  element. No-op when no target is available or the API is absent. */
   showAirPlayPicker: () => void;
@@ -97,6 +106,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [showQueue, setShowQueue] = useState(false);
   const [autoplay, setAutoplay] = useState(true);
   const [previewMode, setPreviewModeState] = useState(false);
+  const [volume, setVolumeState] = useState(100);
+  const [muted, setMuted] = useState(false);
   const [airPlayAvailable, setAirPlayAvailable] = useState(false);
   const [airPlaySupported, setAirPlaySupported] = useState(false);
   const favSongs = useFavoriteSongs();
@@ -181,6 +192,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     a.preload = "metadata";
     audioRef.current = a;
   }
+
+  // Apply the output volume/mute to the persistent hidden audio element.
+  // Runs whenever either changes; the element is created once above so a
+  // single effect keeps it in sync for the lifetime of the provider.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (a) a.volume = muted ? 0 : volume / 100;
+  }, [volume, muted]);
 
   // Per-play analytics milestones. Reset whenever the current song changes
   // (or restarts via repeat-one). `started`/`hit30`/`completed` ensure each
@@ -384,6 +403,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const setPreviewMode = useCallback((on: boolean) => {
     setPreviewModeState(on);
   }, []);
+
+  const setVolume = useCallback((level: number) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(level)));
+    setVolumeState(clamped);
+    if (clamped > 0) setMuted(false);
+  }, []);
+
+  const toggleMute = useCallback(() => setMuted((m) => !m), []);
 
   const handlePrev = useCallback(() => {
     const ct = currentTimeRef.current;
@@ -858,6 +885,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         playLast,
         previewMode,
         setPreviewMode,
+        volume,
+        muted,
+        setVolume,
+        toggleMute,
         airPlayAvailable,
         airPlaySupported,
         showAirPlayPicker,

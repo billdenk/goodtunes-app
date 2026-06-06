@@ -73,6 +73,7 @@ function DesktopMiniPlayer() {
             }
           }}
           coverNode={dockCover}
+          onExpand={() => player.setShowPlayer(true)}
         />
       </div>
     </div>

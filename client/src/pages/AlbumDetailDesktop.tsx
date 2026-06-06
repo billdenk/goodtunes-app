@@ -785,6 +785,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             onLyrics={() => player.setShowLyrics(!player.showLyrics)}
             lyricsActive={player.showLyrics}
             coverNode={dockCover}
+            onExpand={() => player.setShowPlayer(true)}
           />
         </div>
       </div>
