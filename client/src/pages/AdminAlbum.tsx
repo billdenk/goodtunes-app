@@ -15192,11 +15192,8 @@ type LineupRow = {
   memberId: string;
   roles: string[] | null;
   displayOrder: number;
-  person: {
-    id: string;
-    name: string;
-    photoUrl: string | null;
-  } | null;
+  memberName: string;
+  memberPhotoUrl: string | null;
 };
 type BandMemberLite = {
   id: string;
@@ -15401,8 +15398,8 @@ function AlbumLineupPanel({
           memberId: r.memberId,
           roles: r.roles,
           displayOrder: r.displayOrder,
-          personName: r.person?.name ?? "(unknown)",
-          photoUrl: r.person?.photoUrl ?? null,
+          personName: r.memberName ?? "(unknown)",
+          photoUrl: r.memberPhotoUrl ?? null,
         })),
       );
       setHydrated(true);
