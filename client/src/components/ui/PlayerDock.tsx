@@ -136,6 +136,19 @@ export interface PlayerDockProps {
    * 30-second cap; this prop is the visible badge only.
    */
   previewMode?: boolean;
+  /**
+   * Desktop rail-aware docking. When BOTH are provided and the dock is in
+   * its wide (non-edge-to-edge) regime, the pill centers within the content
+   * channel `[channelLeft, windowWidth − channelRight]` instead of the whole
+   * browser window — so it sits in the gutter between the left nav rail and
+   * the right lyrics rail, shifting + resizing (with a smooth transition)
+   * when the right rail opens or closes. Both are px insets from the
+   * respective window edges. Ignored in the edge-to-edge compact regime
+   * (narrow widths keep the existing full-bleed dock that overlaps the
+   * left rail — see the iPad rail/dock-overlap note).
+   */
+  channelLeft?: number;
+  channelRight?: number;
 }
 
 /** Width-in-pixels below which the dock auto-switches to compact (edge-to-
@@ -165,6 +178,8 @@ export function PlayerDock({
   forceCompact,
   density = "default",
   previewMode = false,
+  channelLeft,
+  channelRight,
 }: PlayerDockProps) {
   const playable = track.playable;
   const isCompactDensity = density === "compact";
@@ -504,6 +519,32 @@ export function PlayerDock({
     ? { width: "min(640px, calc(100% - 32px))" }
     : undefined;
 
+  // ── Rail-aware docking ─────────────────────────────────────────────
+  // When the host supplies the content-channel insets AND the dock is in
+  // its wide regime (not edge-to-edge), center the pill within the channel
+  // `[channelLeft, windowWidth − channelRight]` instead of the whole window
+  // — so it floats in the gutter between the left nav rail and the right
+  // lyrics rail, and slides/resizes when the right rail opens or closes.
+  // Edge-to-edge (narrow) keeps the existing full-bleed behavior so the
+  // iPad rail/dock overlap is unchanged. The CSS transition on left/width
+  // (motion-reduce safe) makes the re-center read as one smooth shift.
+  const channelMode =
+    !edgeToEdge && channelLeft != null && channelRight != null;
+  const channelWidth = channelMode
+    ? windowWidth - channelLeft! - channelRight!
+    : 0;
+  // Gutter the pill keeps on each side of the channel when the channel is
+  // narrower than the pill's natural cap (e.g. lyrics open on a non-huge
+  // desktop), so it never grazes either rail.
+  const CHANNEL_GUTTER = 24;
+  const pillCapPx = isCompactDensity ? 660 : 760;
+  const rootStyle = channelMode
+    ? {
+        left: channelLeft! + channelWidth / 2,
+        width: `min(${pillCapPx}px, ${Math.max(0, channelWidth - CHANNEL_GUTTER * 2)}px)`,
+      }
+    : wrapperStyle;
+
   // Clamp slider handle inside the rail so the knob never hangs off the
   // end-caps at 0% / 100%. Handle is 10px wide → -5px centers it on the
   // tick. Architect flagged this as a polish item during the mockup phase.
@@ -514,9 +555,13 @@ export function PlayerDock({
     <div
       className={[
         "fixed bottom-[calc(2rem+env(safe-area-inset-bottom,0px))] z-40",
-        edgeToEdge ? "left-2 right-2" : "left-1/2 -translate-x-1/2",
+        edgeToEdge
+          ? "left-2 right-2"
+          : channelMode
+          ? "-translate-x-1/2 transition-[left,width] duration-300 ease-out motion-reduce:transition-none"
+          : "left-1/2 -translate-x-1/2",
       ].join(" ")}
-      style={wrapperStyle}
+      style={rootStyle}
       data-testid="player-dock"
     >
       {/* Symmetric vertical padding (`D.pillPy`) keeps every transport

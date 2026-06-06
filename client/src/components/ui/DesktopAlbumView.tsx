@@ -858,7 +858,17 @@ export function DesktopAlbumView({
         {showLyrics && !compact && (
           <motion.aside
             key="lyrics-panel"
-            className="hidden lg:flex justify-end flex-shrink-0 overflow-hidden sticky top-0 self-start h-screen"
+            // Bounded, self-contained scroll panel (Apple parity): the rail
+            // is `sticky top-0` but its height stops short of the bottom by
+            // `LYRICS_DOCK_CLEARANCE` (+ the iOS safe-area inset) so its
+            // content ends ABOVE the floating PlayerDock instead of running
+            // full-height behind it / below the fold. The inner SyncedLyrics
+            // viewport is this card, so the active line + neighbours stay
+            // visible within the panel.
+            className="hidden lg:flex justify-end flex-shrink-0 overflow-hidden sticky top-0 self-start"
+            style={{
+              height: `calc(100dvh - ${LYRICS_DOCK_CLEARANCE}px - env(safe-area-inset-bottom, 0px))`,
+            }}
             initial={reduceMotion ? false : { width: 0 }}
             animate={{ width: LYRICS_PANEL_WIDTH }}
             exit={{ width: 0 }}
@@ -898,8 +908,16 @@ export function DesktopAlbumView({
 
 /** Fixed pixel width of the desktop lyrics panel. The aside animates its
  *  own width between 0 and this value; the inner card is pinned to it so
- *  the slide reads as an edge reveal rather than a squash. */
-const LYRICS_PANEL_WIDTH = 360;
+ *  the slide reads as an edge reveal rather than a squash. Exported so the
+ *  host (AlbumDetailDesktop) can feed the same width to the PlayerDock as
+ *  its right channel inset, keeping the dock in the gutter beside the rail. */
+export const LYRICS_PANEL_WIDTH = 360;
+
+/** Vertical room (px) the lyrics rail leaves at the bottom so its content
+ *  ends ABOVE the floating PlayerDock rather than behind it. The compact
+ *  dock sits `fixed bottom-8` (32px) and ~64px tall, so its top edge is
+ *  ~96px up; round up for a clean gutter between the rail and the pill. */
+const LYRICS_DOCK_CLEARANCE = 116;
 
 /* Buy CTA fill — the brand-blue gradient, matching the not-owned Buy
    button on the mobile album surface (AlbumDetailMobileSurface) so the

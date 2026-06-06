@@ -40,6 +40,7 @@ import { PlayerDock } from "@/components/ui/PlayerDock";
 import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
 import {
   DesktopAlbumView,
+  LYRICS_PANEL_WIDTH,
   type DesktopAlbumSong,
 } from "@/components/ui/DesktopAlbumView";
 import type { PlayerSong } from "@/context/PlayerContext";
@@ -51,6 +52,12 @@ import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { CertPdfViewerSheet } from "@/components/ui/CertPdfViewerSheet";
 import { goBack } from "@/lib/navHistory";
 import { track } from "@/lib/analytics";
+
+/** Left inset of the desktop album content channel, used to center the
+ *  PlayerDock between the rails: AlbumDesktopSidebar sits 12px from the
+ *  window edge, is 220px wide, and the outer flex adds a 12px gap →
+ *  12 + 220 + 12 = 244. */
+const ALBUM_DOCK_CHANNEL_LEFT = 244;
 
 type ApiSong = {
   id: string;
@@ -752,6 +759,15 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
         <div className="pointer-events-auto">
           <PlayerDock
             density="compact"
+            // Rail-aware docking: center the pill on the content channel
+            // between the left nav rail (AlbumDesktopSidebar: 12px inset +
+            // 220px wide + 12px flex gap = 244) and the right lyrics rail
+            // (its 360px width, only while open at lg) — not the whole
+            // window. The dock slides + resizes when lyrics open/close.
+            channelLeft={ALBUM_DOCK_CHANNEL_LEFT}
+            channelRight={
+              player.showLyrics && isLgViewport ? LYRICS_PANEL_WIDTH : 0
+            }
             track={dockTrack}
             hasSelection={!!player.currentSong}
             playing={player.isPlaying}

@@ -2,7 +2,7 @@ import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
 import { useLocation } from "wouter";
 import { useReducedMotion } from "framer-motion";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
-import { useDesktopShell } from "@/hooks/useDesktopShell";
+import { useDesktopShell, STOREFRONT_CONTENT_OFFSET } from "@/hooks/useDesktopShell";
 import { PlayerDock } from "@/components/ui/PlayerDock";
 
 // MiniPlayer splits by shell:
@@ -56,6 +56,12 @@ function DesktopMiniPlayer() {
       <div className="pointer-events-auto">
         <PlayerDock
           density="compact"
+          // Rail-aware docking: center the pill on the content channel to the
+          // right of the fixed storefront sidebar (STOREFRONT_CONTENT_OFFSET)
+          // rather than the whole window. No lyrics rail on the storefront,
+          // so the right channel inset is 0.
+          channelLeft={STOREFRONT_CONTENT_OFFSET}
+          channelRight={0}
           track={dockTrack}
           hasSelection={true}
           playing={player.isPlaying}
