@@ -113,6 +113,7 @@ import { PlayerDock } from "@/components/ui/PlayerDock";
 import { SellPanel } from "@/components/admin/SellPanel";
 import { PressPanel } from "@/components/admin/PressPanel";
 import { ShopifyPanel } from "@/components/admin/ShopifyPanel";
+import { AlbumCustomersPanel } from "@/components/admin/AlbumCustomersPanel";
 import { NewAlbumModeDialog } from "@/components/admin/NewAlbumModeDialog";
 import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import {
@@ -286,7 +287,7 @@ interface SongLite {
   vinylOrder?: number | null;
 }
 
-type Tab = "overview" | "tracks" | "sell" | "press" | "shopify";
+type Tab = "overview" | "tracks" | "sell" | "press" | "shopify" | "customers";
 // Task #335 — the visible tab set is now driven by `sellMode` +
 // `sellQuoteLockedAt`. Before the operator locks a quote we only show
 // Overview/Tracks/Sell so the page stays focused on "decide what we're
@@ -330,16 +331,22 @@ function visibleTabsFor(
   // Path-to-press strip (the `art` chip routed to a hidden tab and
   // did nothing). The panels themselves render their own pre-lock
   // empty/early states.
+  // Task #1499 — Customers tab (per-album buyer roster) is operator-only,
+  // hidden for artist/label partners (same gating as Physical, via
+  // `hidePress`) and never for SPIN-promo (returned above). Appended after
+  // the sell-mode-specific tabs so it always reads last in the bar.
+  const withCustomers = (tabs: { key: Tab; label: string }[]) =>
+    opts?.hidePress ? tabs : [...tabs, { key: "customers" as Tab, label: "Customers" }];
   if (album.sellMode === "direct") {
     // Artist and label partners don't manage manufacturing, so the Physical
     // tab (pressing plant + master preflight) is hidden for them for now.
     if (opts?.hidePress) return base;
-    return [...base, { key: "press", label: "Physical" }];
+    return withCustomers([...base, { key: "press", label: "Physical" }]);
   }
   if (album.sellMode === "shopify") {
-    return [...base, { key: "shopify", label: "Shopify" }];
+    return withCustomers([...base, { key: "shopify", label: "Shopify" }]);
   }
-  return base;
+  return withCustomers(base);
 }
 
 // Legacy "Migrate to Mux" admin action — removed 2026-05 once auto-ingest
@@ -440,7 +447,7 @@ export function AdminAlbum() {
   const initialTab = useMemo(() => {
     try {
       const t = new URLSearchParams(search).get("tab");
-      const valid: Tab[] = ["overview", "tracks", "sell", "press", "shopify"];
+      const valid: Tab[] = ["overview", "tracks", "sell", "press", "shopify", "customers"];
       return valid.includes(t as Tab) ? (t as Tab) : null;
     } catch {
       return null;
@@ -1461,6 +1468,9 @@ export function AdminAlbum() {
                     else setTab(t as Tab);
                   }}
                 />
+              )}
+              {safeTab === "customers" && allowed.has("customers") && (
+                <AlbumCustomersPanel albumId={album.id} />
               )}
             </>
           );

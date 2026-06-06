@@ -13674,6 +13674,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const offset = Number(req.query.offset) || 0;
     const REVENUE_STATUSES = `'paid','shipped','complete','completed'`;
 
+    // Task #1499 — server-side search + sort so the Customers tab can
+    // filter / order across the WHOLE roster, not just the rows already
+    // loaded into the client. Search matches fan name (display/real/buyer
+    // snapshot), email (account + buyer snapshot), and shipping city.
+    const searchRaw = String(req.query.search ?? "").trim();
+    const searchClause = searchRaw
+      ? sql` AND (
+          cu.display_name ILIKE ${"%" + searchRaw + "%"}
+          OR cu.real_name ILIKE ${"%" + searchRaw + "%"}
+          OR o.buyer_name ILIKE ${"%" + searchRaw + "%"}
+          OR cu.email ILIKE ${"%" + searchRaw + "%"}
+          OR o.buyer_email ILIKE ${"%" + searchRaw + "%"}
+          OR o.shipping_address->>'city' ILIKE ${"%" + searchRaw + "%"}
+        )`
+      : sql``;
+
+    // GoodDeed status accounts for per-copy entitlements: a multi-quantity
+    // order fans out into `order_copies`, each carrying its own
+    // good_deed_number, so checking only orders.good_deed_number would
+    // under-report. (See per-copy-entitlements memo.)
+    const hasGoodDeedExpr = sql`(
+      o.good_deed_number IS NOT NULL
+      OR EXISTS (
+        SELECT 1 FROM order_copies oc
+        WHERE oc.order_id = o.id AND oc.good_deed_number IS NOT NULL
+      )
+    )`;
+    const nameExpr = sql`COALESCE(NULLIF(TRIM(cu.display_name), ''), NULLIF(TRIM(cu.real_name), ''), o.buyer_name, cu.email, o.buyer_email)`;
+    const locationExpr = sql`NULLIF(CONCAT_WS(', ', o.shipping_address->>'city', o.shipping_address->>'state', o.shipping_address->>'country'), '')`;
+
+    const sortKey = String(req.query.sort ?? "date");
+    const dir = String(req.query.dir ?? "").toLowerCase() === "asc";
+    const asc = sortKey === "date" ? dir : (req.query.dir ? dir : true);
+    const sortDir = asc ? sql.raw("ASC NULLS LAST") : sql.raw("DESC NULLS LAST");
+    const orderByCol =
+      sortKey === "name"
+        ? nameExpr
+        : sortKey === "location"
+          ? locationExpr
+          : sortKey === "gooddeed"
+            ? hasGoodDeedExpr
+            : sortKey === "amount"
+              ? sql`o.total_cents`
+              : sql`o.created_at`;
+    // Default order (no sort param) preserves the legacy newest-first feed.
+    const orderByClause =
+      sortKey === "date" && !req.query.dir
+        ? sql`ORDER BY o.created_at DESC`
+        : sql`ORDER BY ${orderByCol} ${sortDir}, o.created_at DESC`;
+
     const [kpisRows, orderRows, totalRow] = await Promise.all([
       db.execute<any>(sql`
         SELECT
@@ -13690,19 +13740,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           o.shipping_address->>'city' AS city,
           o.shipping_address->>'state' AS state,
           o.shipping_address->>'country' AS country,
-          cu.email AS fan_email, cu.display_name, cu.real_name
+          cu.email AS fan_email, cu.display_name, cu.real_name,
+          ${hasGoodDeedExpr} AS has_good_deed
         FROM orders o
         LEFT JOIN customer_users cu ON cu.id = o.customer_id
         WHERE o.album_id = ${albumId}
           AND o.status IN (${sql.raw(REVENUE_STATUSES)})
-        ORDER BY o.created_at DESC
+          ${searchClause}
+        ${orderByClause}
         LIMIT ${limit} OFFSET ${offset}
       `),
       db.execute<any>(sql`
         SELECT COUNT(*)::text AS total
         FROM orders o
+        LEFT JOIN customer_users cu ON cu.id = o.customer_id
         WHERE o.album_id = ${albumId}
           AND o.status IN (${sql.raw(REVENUE_STATUSES)})
+          ${searchClause}
       `),
     ]);
 
@@ -13724,6 +13778,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         city: r.city,
         state: r.state,
         country: r.country,
+        goodDeed: r.has_good_deed === true || r.has_good_deed === "t" || r.has_good_deed === "true",
       })),
       total: Number(((totalRow as any).rows?.[0]?.total) ?? 0),
     });
