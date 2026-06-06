@@ -408,7 +408,7 @@ export function AdminDashboard() {
           or, if AdminFrame itself were involved, to AdminShellErrorBoundary
           which removes the sidebar entirely. */}
       <DashboardContentBoundary>
-        <div className="space-y-5">
+        <div className="flex flex-col gap-5 min-h-full">
           <SectionBoundary section="page-header">
             <AdminPageHeader
               title="Dashboard"
@@ -432,15 +432,15 @@ export function AdminDashboard() {
                 <KpiGrid kpis={kpis} loading={kpisLoading} qs={qs} />
               </SectionBoundary>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                <div className="lg:col-span-2">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:flex-1 lg:min-h-0 lg:auto-rows-fr">
+                <div className="lg:col-span-2 flex flex-col min-h-0">
                   <SectionBoundary section="primary-chart">
                     <PrimaryChart kpis={kpis} prior={priorKpis} loading={kpisLoading} />
                   </SectionBoundary>
                 </div>
-                <div>
+                <div className="flex flex-col min-h-0">
                   <SectionBoundary section="activity-feed">
-                    <ActivityFeed orders={recentOrders ?? []} customers={recentCustomers?.rows ?? []} />
+                    <ActivityFeed orders={recentOrders ?? []} customers={recentCustomers?.rows ?? []} className="h-full" />
                   </SectionBoundary>
                 </div>
               </div>
@@ -795,7 +795,7 @@ function PrimaryChart({
   ];
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5" data-testid="dashboard-primary-chart">
+    <div className="rounded-xl border border-slate-200 bg-white p-5 h-full flex flex-col" data-testid="dashboard-primary-chart">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 className="text-sm font-semibold text-slate-700">Trend</h3>
         <div className="inline-flex items-center bg-slate-100 rounded-md p-0.5">
@@ -819,16 +819,17 @@ function PrimaryChart({
           })}
         </div>
       </div>
+      <div className="flex-1 min-h-[260px] flex flex-col">
       {loading ? (
-        <div className="h-[260px] flex items-center justify-center text-slate-400 text-sm">
+        <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
           Loading…
         </div>
       ) : merged.length === 0 ? (
-        <div className="h-[260px] flex items-center justify-center text-slate-400 text-sm">
+        <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
           No activity in this range yet.
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={260}>
+        <ResponsiveContainer width="100%" height="100%">
           <LineChart data={merged} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
             <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} />
@@ -862,6 +863,7 @@ function PrimaryChart({
           </LineChart>
         </ResponsiveContainer>
       )}
+      </div>
     </div>
   );
 }
@@ -1001,7 +1003,7 @@ interface FeedItem {
   href: string;
 }
 
-function ActivityFeed({ orders, customers }: { orders: OrderRow[]; customers: CustomerRow[] }) {
+function ActivityFeed({ orders, customers, className = "" }: { orders: OrderRow[]; customers: CustomerRow[]; className?: string }) {
   const items = useMemo<FeedItem[]>(() => {
     const out: FeedItem[] = [];
     for (const o of orders) {
@@ -1042,7 +1044,7 @@ function ActivityFeed({ orders, customers }: { orders: OrderRow[]; customers: Cu
   }, [orders, customers]);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 h-full" data-testid="dashboard-activity-feed">
+    <div className={`rounded-xl border border-slate-200 bg-white p-5 ${className}`} data-testid="dashboard-activity-feed">
       <h3 className="text-sm font-semibold text-slate-700 mb-3">Recent activity</h3>
       {items.length === 0 ? (
         <p className="text-sm text-slate-400 py-10 text-center">Nothing yet.</p>
