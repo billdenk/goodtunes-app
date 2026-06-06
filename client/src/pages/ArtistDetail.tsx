@@ -379,7 +379,22 @@ export function ArtistDetail() {
   // GoodTunes albums AND no streaming discography pulled for this name.
   // Streaming-only artists (no curated GT release yet) still get a full
   // page with their Music available on streaming buckets + About.
-  if (artistAlbums.length === 0 && streamingAll.length === 0) {
+  //
+  // Task #1394 — the gate must read the FULL catalog, not the
+  // ownership-filtered `artistAlbums`. Previously a non-owning fan tapping
+  // a real artist's name (e.g. "Nick Carter") dead-ended on "Artist not
+  // found" because the #1292 ownership filter empties `artistAlbums` for
+  // albums they don't own — so the artist page failed to open and the fan
+  // backed out to the previous album. `goodTunesTitles` (full GoodTunes
+  // catalog for this name) and `artistPerson` (resolved /api/people row)
+  // are ownership-independent, so a known artist's page now reliably opens
+  // from any entry path; the release grid below still honors #1292.
+  if (
+    artistAlbums.length === 0 &&
+    streamingAll.length === 0 &&
+    goodTunesTitles.size === 0 &&
+    !artistPerson
+  ) {
     return (
       <main className="min-h-screen flex items-center justify-center">
         <div className="text-fan-primary text-center">
