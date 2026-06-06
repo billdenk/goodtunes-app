@@ -1,8 +1,26 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type UIEvent } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { SheetShell, SheetHeader } from "@/pages/AlbumDetail";
-import { SheetClose } from "@/components/ui/SheetChrome";
+import { useQuery } from "@tanstack/react-query";
+import {
+  SheetShell,
+  SheetHeader,
+  PerformerProfileContent,
+  usePersonGearDrilldown,
+  resolveStaticInstrument,
+  personProfileIsRich,
+} from "@/pages/AlbumDetail";
+import { SheetClose, SheetBack } from "@/components/ui/SheetChrome";
 import { EASE_OUT, scrimFade } from "@/lib/motion";
+import { track } from "@/lib/analytics";
+import type { Album, Person } from "@/data/musicData";
+
+/* Minimal slice of GET /api/people/:id/profile — just the fields the credits
+   list needs to decide whether a person is worth linking to (a real profile)
+   vs. a name + photo dead-end. */
+type PersonProfileLite = {
+  person?: { bio?: string | null } | null;
+  tracks?: Array<{ instrumentId?: string | null; albumId?: string | null }>;
+};
 
 export type AlbumCreditsPerson = {
   id: string;
@@ -112,21 +130,113 @@ export function buildAlbumCreditGroups(
   return groups;
 }
 
-/* Shared role-grouped credits list. Rendered identically inside the mobile
-   bottom sheet (AlbumCreditsSheet) and the desktop centered modal
-   (AlbumCreditsModal) so fans see the same content on both surfaces. Apple
-   style: broad-category headings, a responsive multi-column grid, and each
-   person's specific role(s) as a subtitle beneath the name. */
+/* Avatar + name + role-subtitle for a single credit, shared by the tappable
+   (button) and plain (non-tappable) row variants. */
+function CreditFace({ e }: { e: CreditEntry }) {
+  return (
+    <>
+      {e.photoUrl ? (
+        <img
+          src={e.photoUrl}
+          alt=""
+          style={{ width: 36, height: 36 }}
+          className="rounded-full object-cover flex-shrink-0"
+        />
+      ) : (
+        <span
+          aria-hidden
+          style={{ width: 36, height: 36 }}
+          className="rounded-full bg-white/[0.06] flex-shrink-0 inline-flex items-center justify-center text-xs font-medium text-fan-primary"
+        >
+          {initialsOf(e.name)}
+        </span>
+      )}
+      <span className="flex-1 min-w-0">
+        <span className="block truncate text-fan-primary text-sm font-medium leading-tight tracking-[-0.01em]">
+          {e.name}
+        </span>
+        {e.subtitle && (
+          <span className="block truncate text-xs leading-tight text-fan-faint mt-0.5">
+            {e.subtitle}
+          </span>
+        )}
+      </span>
+    </>
+  );
+}
+
+function CreditPersonButton({
+  e,
+  onOpenPerson,
+}: {
+  e: CreditEntry;
+  onOpenPerson: (personId: string, role: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenPerson(e.personId!, e.subtitle)}
+      className="group -mx-2 flex items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/[0.06] active:bg-white/10"
+      data-testid={`link-album-credit-person-${e.personId}`}
+    >
+      <CreditFace e={e} />
+    </button>
+  );
+}
+
+function CreditPlainRow({ e }: { e: CreditEntry }) {
+  return (
+    <div
+      className="flex items-center gap-3 py-2"
+      data-testid={`text-album-credit-${e.key}`}
+    >
+      <CreditFace e={e} />
+    </div>
+  );
+}
+
+/* Tappable only when the person has a real profile to open. Loads the
+   lightweight profile and renders a plain (dead) row until it's proven rich —
+   a bio, any gear, or a track on another album. People who are just a name +
+   photo (session players, assistant engineers) stay non-tappable instead of
+   dead-ending on an empty page (matches Apple Music). The profile query is
+   shared with the in-box person view, so opening a rich person is instant. */
+function GatedCreditEntry({
+  e,
+  currentAlbumId,
+  onOpenPerson,
+}: {
+  e: CreditEntry;
+  currentAlbumId?: string;
+  onOpenPerson: (personId: string, role: string) => void;
+}) {
+  const { data } = useQuery<PersonProfileLite>({
+    queryKey: ["/api/people", e.personId, "profile"],
+    enabled: !!e.personId,
+  });
+  if (personProfileIsRich(data, currentAlbumId)) {
+    return <CreditPersonButton e={e} onOpenPerson={onOpenPerson} />;
+  }
+  return <CreditPlainRow e={e} />;
+}
+
 function AlbumCreditsBody({
   groups,
   onOpenPerson,
+  /* When set, people are tappable only if their profile proves rich (Apple's
+     dead-link behavior). The desktop modal opts in; the mobile sheet keeps its
+     existing always-tappable behavior. */
+  gateEmptyPeople = false,
+  currentAlbumId,
 }: {
   groups: CreditGroup[];
   onOpenPerson?: (personId: string, role: string) => void;
+  gateEmptyPeople?: boolean;
+  currentAlbumId?: string;
 }) {
   if (groups.length === 0) {
     return (
-      <div className="px-5 pb-4 text-white/55 text-sm">
+      <div className="px-5 pb-4 text-fan-secondary text-sm">
         Production credits for this album haven't been published yet.
       </div>
     );
@@ -138,69 +248,31 @@ function AlbumCreditsBody({
         <section
           key={group.title}
           className={
-            groupIdx === 0 ? "" : "mt-8 pt-7 border-t border-white/10"
+            groupIdx === 0 ? "" : "mt-7 pt-6 border-t border-white/[0.06]"
           }
           data-testid={`row-album-credit-role-${group.title
             .replace(/\s+/g, "-")
             .toLowerCase()}`}
         >
-          <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-white/55 mb-3">
+          <h3 className="text-fan-primary text-base font-semibold tracking-[-0.01em] mb-3.5">
             {group.title}
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
             {group.entries.map((e) => {
-              const avatar = e.photoUrl ? (
-                <img
-                  src={e.photoUrl}
-                  alt=""
-                  style={{ width: 36, height: 36 }}
-                  className="rounded-full object-cover flex-shrink-0"
-                />
-              ) : (
-                <span
-                  aria-hidden
-                  style={{ width: 36, height: 36 }}
-                  className="rounded-full bg-white/[0.06] flex-shrink-0 inline-flex items-center justify-center text-xs font-medium text-fan-primary"
-                >
-                  {initialsOf(e.name)}
-                </span>
-              );
-              const text = (
-                <span className="flex-1 min-w-0">
-                  <span className="block truncate text-white text-sm font-medium leading-tight tracking-[-0.01em]">
-                    {e.name}
-                  </span>
-                  {e.subtitle && (
-                    <span className="block truncate text-xs leading-tight text-fan-faint mt-0.5">
-                      {e.subtitle}
-                    </span>
-                  )}
-                </span>
-              );
               if (e.personId && onOpenPerson) {
-                return (
-                  <button
-                    key={e.key}
-                    type="button"
-                    onClick={() => onOpenPerson(e.personId!, e.subtitle)}
-                    className="group -mx-2 flex items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/[0.06] active:bg-white/10"
-                    data-testid={`link-album-credit-person-${e.personId}`}
-                  >
-                    {avatar}
-                    {text}
-                  </button>
-                );
+                if (gateEmptyPeople) {
+                  return (
+                    <GatedCreditEntry
+                      key={e.key}
+                      e={e}
+                      currentAlbumId={currentAlbumId}
+                      onOpenPerson={onOpenPerson}
+                    />
+                  );
+                }
+                return <CreditPersonButton key={e.key} e={e} onOpenPerson={onOpenPerson} />;
               }
-              return (
-                <div
-                  key={e.key}
-                  className="flex items-center gap-3 py-2"
-                  data-testid={`text-album-credit-${e.key}`}
-                >
-                  {avatar}
-                  {text}
-                </div>
-              );
+              return <CreditPlainRow key={e.key} e={e} />;
             })}
           </div>
         </section>
@@ -247,20 +319,22 @@ export function AlbumCreditsSheet({
    `{cond && <AlbumCreditsModal/>}` mount; the exit fade plays via
    AnimatePresence + onExitComplete before the real unmount fires. */
 export function AlbumCreditsModal({
+  album,
   albumTitle,
   artist,
   credits,
   eyebrow = "Album Credits",
-  onOpenPerson,
   onClose,
 }: {
+  /** Full album — needed to host the in-box person view's gear/album
+   *  drill-downs. */
+  album: Album;
   albumTitle: string;
   artist: string;
   credits: AlbumCreditsPayload;
   /** Small uppercase label above the title. Defaults to "Album Credits";
    *  the per-track surface passes "Song Credits". */
   eyebrow?: string;
-  onOpenPerson?: (personId: string, role: string) => void;
   onClose: () => void;
 }) {
   const reduce = !!useReducedMotion();
@@ -268,66 +342,171 @@ export function AlbumCreditsModal({
   const requestClose = () => setOpen(false);
   const groups = useMemo(() => buildAlbumCreditGroups(credits), [credits]);
 
+  // In-box person drill-down. Tapping a (rich) person swaps the card's content
+  // to their profile with a back chevron, instead of closing the box and
+  // popping a separate sheet. The X still dismisses the whole box.
+  const [selectedPerson, setSelectedPerson] = useState<{
+    person: Person;
+    role: string;
+  } | null>(null);
+
+  // Gear/vendor/in-app-browser sub-stack for the person view. Its X closes the
+  // whole modal (returns past the entire stack); each sub-sheet's own back
+  // chevron still pops one level. Rendered as a top-level sibling, OUTSIDE the
+  // framer-transformed card (a transformed ancestor breaks position:fixed).
+  const gear = usePersonGearDrilldown(requestClose);
+
+  // Close-X fades while scrolling the card down, returns on scroll-up, at the
+  // top, or shortly after scrolling stops. Disabled under reduced-motion.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const lastTop = useRef(0);
+  const stopTimer = useRef<ReturnType<typeof setTimeout>>();
+  const [xHidden, setXHidden] = useState(false);
+
+  const resetChrome = () => {
+    setXHidden(false);
+    lastTop.current = 0;
+    if (stopTimer.current) clearTimeout(stopTimer.current);
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  };
+
+  const openPerson = (personId: string, role: string) => {
+    const entry = groups.flatMap((g) => g.entries).find((e) => e.personId === personId);
+    if (!entry) return;
+    track("credits_person_clicked", { personId, albumId: album.id });
+    setSelectedPerson({
+      person: { id: personId, name: entry.name, photoUrl: entry.photoUrl ?? undefined } as Person,
+      role,
+    });
+    resetChrome();
+  };
+
+  const backToList = () => {
+    setSelectedPerson(null);
+    resetChrome();
+  };
+
+  const onScroll = (e: UIEvent<HTMLDivElement>) => {
+    if (reduce) return;
+    const top = e.currentTarget.scrollTop;
+    const prev = lastTop.current;
+    lastTop.current = top;
+    if (top <= 4) setXHidden(false);
+    else if (top > prev + 2) setXHidden(true);
+    else if (top < prev - 2) setXHidden(false);
+    if (stopTimer.current) clearTimeout(stopTimer.current);
+    stopTimer.current = setTimeout(() => setXHidden(false), 600);
+  };
+
   return (
-    <AnimatePresence onExitComplete={onClose}>
-      {open && (
-        <motion.div
-          key="album-credits-modal"
-          className="fixed inset-0 z-[78] flex items-center justify-center p-6"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`Credits for ${albumTitle}`}
-          data-testid="modal-album-credits"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={scrimFade(reduce)}
-        >
-          {/* Solid dim — no live blur (keeps one paint surface, per the
-              iOS-WebKit stacked-blur memo). Click anywhere off the card
-              dismisses it. */}
-          <div
-            className="absolute inset-0 bg-black/70"
-            onClick={requestClose}
-            aria-hidden
-            data-testid="backdrop-album-credits"
-          />
+    <>
+      <AnimatePresence onExitComplete={onClose}>
+        {open && (
           <motion.div
-            className="relative z-10 w-full max-w-[600px] max-h-[80vh] overflow-y-auto scrollbar-hide rounded-3xl pt-1 pb-6"
-            style={{
-              background: "rgb(20, 24, 48)",
-              boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
-            }}
-            initial={{ opacity: 0, scale: 0.97, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: 6 }}
-            transition={{ duration: reduce ? 0.15 : 0.24, ease: EASE_OUT }}
+            key="album-credits-modal"
+            className="fixed inset-0 z-[78] flex items-center justify-center p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Credits for ${albumTitle}`}
+            data-testid="modal-album-credits"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={scrimFade(reduce)}
           >
-            <div className="flex items-start gap-3 px-5 pt-5 pb-4">
-              <div className="flex-1 min-w-0">
-                <p className="text-[color:var(--brand-blue)] text-xs font-semibold uppercase tracking-wider mb-1">
-                  {eyebrow}
-                </p>
-                <h2 className="text-white text-[22px] font-bold leading-tight tracking-tight">
-                  {albumTitle}
-                </h2>
-                <p
-                  className="text-[15px] mt-1 leading-snug"
-                  style={{ color: "rgba(235,235,245,0.55)" }}
-                >
-                  {artist}
-                </p>
+            {/* Solid dim — no live blur (keeps one paint surface, per the
+                iOS-WebKit stacked-blur memo). Click anywhere off the card
+                dismisses it. */}
+            <div
+              className="absolute inset-0 bg-black/70"
+              onClick={requestClose}
+              aria-hidden
+              data-testid="backdrop-album-credits"
+            />
+            <motion.div
+              className="relative z-10 w-full max-w-[600px] max-h-[80vh] overflow-hidden rounded-3xl"
+              style={{
+                background: "rgb(20, 24, 48)",
+                boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+              }}
+              initial={{ opacity: 0, scale: 0.97, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: 6 }}
+              transition={{ duration: reduce ? 0.15 : 0.24, ease: EASE_OUT }}
+            >
+              {/* Pinned chrome — back chevron (person view only) top-left, the
+                  close-X top-right (fades on scroll). Both sit above the
+                  scroller so they stay fixed while content moves. */}
+              {selectedPerson && (
+                <div className="absolute top-3.5 left-4 z-20">
+                  <SheetBack
+                    onClick={backToList}
+                    data-testid="button-credits-modal-back"
+                  />
+                </div>
+              )}
+              <div
+                className="absolute top-3.5 right-4 z-20"
+                style={{
+                  opacity: xHidden ? 0 : 1,
+                  transition: reduce ? undefined : "opacity 220ms ease",
+                }}
+              >
+                <SheetClose
+                  onClick={requestClose}
+                  data-testid="button-credits-modal-close"
+                />
               </div>
-              <SheetClose
-                onClick={requestClose}
-                className="-m-1.5"
-                data-testid="button-credits-modal-close"
-              />
-            </div>
-            <AlbumCreditsBody groups={groups} onOpenPerson={onOpenPerson} />
+
+              <div
+                ref={scrollRef}
+                onScroll={onScroll}
+                className="max-h-[80vh] overflow-y-auto scrollbar-hide"
+              >
+                {selectedPerson ? (
+                  <div className="pt-16 pb-6">
+                    <PerformerProfileContent
+                      person={selectedPerson.person}
+                      album={album}
+                      contextLabel={selectedPerson.role}
+                      currentSongCredits={undefined}
+                      otherTracks={[]}
+                      resolveInstrument={resolveStaticInstrument}
+                      onOpenInstrument={gear.openInstrument}
+                    />
+                  </div>
+                ) : (
+                  <div className="pt-5 pb-6">
+                    <div className="px-5 pr-14">
+                      <p className="text-[color:var(--brand-blue)] text-xs font-semibold uppercase tracking-wider mb-1">
+                        {eyebrow}
+                      </p>
+                      <h2 className="text-white text-[22px] font-bold leading-tight tracking-tight">
+                        {albumTitle}
+                      </h2>
+                      <p
+                        className="text-[15px] mt-1 leading-snug"
+                        style={{ color: "rgba(235,235,245,0.55)" }}
+                      >
+                        {artist}
+                      </p>
+                    </div>
+                    <div className="mt-4">
+                      <AlbumCreditsBody
+                        groups={groups}
+                        onOpenPerson={openPerson}
+                        gateEmptyPeople
+                        currentAlbumId={album.id}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
           </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        )}
+      </AnimatePresence>
+      {gear.overlay}
+    </>
   );
 }

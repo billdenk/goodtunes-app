@@ -1883,7 +1883,7 @@ function CreditsSheet({
   );
 }
 
-function PerformerSheet({
+export function PerformerProfileContent({
   person,
   song,
   album,
@@ -1893,7 +1893,6 @@ function PerformerSheet({
   otherTracks,
   resolveInstrument,
   onOpenInstrument,
-  onClose,
 }: {
   person: Person;
   // The song we're focused on — drives "instruments on this song". Optional:
@@ -1914,7 +1913,6 @@ function PerformerSheet({
   otherTracks: Array<{ song: Song; performer: TrackPerformer }>;
   resolveInstrument: (instrumentId?: string) => Instrument | undefined;
   onOpenInstrument: (instrument: Instrument, tuningNotes?: string, attribution?: { personId: string; songId: string }) => void;
-  onClose: () => void;
 }) {
   // Apple-Music single-scroll profile: no tab strip. The bio sits inline,
   // collapsed to a few lines, and tapping the avatar or name expands it.
@@ -2057,19 +2055,8 @@ function PerformerSheet({
   const hasDiscography = otherTracks.length > 0 || otherAlbums.length > 0;
 
   return (
-    <SheetShell ariaLabel={song ? `${person.name} on ${song.title}` : person.name} testId="sheet-performer" variant="fixed" onClose={onClose}>
-      {/* Single Apple-Music-style scrollable profile. The X stays pinned
-          top-right over the scroll; everything else lives in one column. */}
-      <div className="relative flex-1 min-h-0 flex flex-col">
-        <SheetClose
-          className="absolute top-1 right-4 z-10"
-          data-testid="button-performer-close"
-        />
-        <div
-          className="flex-1 min-h-0 overflow-y-auto scrollbar-hide pb-10"
-          data-testid="region-performer-content"
-        >
-          {/* HERO — centered avatar + name + contextual subtitle. Tapping
+    <>
+      {/* HERO — centered avatar + name + contextual subtitle. Tapping
               the avatar or the name reveals/expands the bio inline. */}
           <div className="flex flex-col items-center text-center px-5 pt-3 pb-4">
             <button
@@ -2251,29 +2238,105 @@ function PerformerSheet({
           {!bio && gear.length === 0 && !hasDiscography && (
             <p className="px-5 py-6 text-fan-secondary text-sm">No detailed credits yet for {person.name}.</p>
           )}
+    </>
+  );
+}
+
+// Returns true when this person has a real profile worth opening — a bio,
+// any gear, or a track on another album. People who are only a name + photo
+// (session players, assistant engineers) resolve to `false` so the credits
+// list can render them as plain, non-tappable rows instead of dead-ending on
+// an empty page (matching Apple Music, where such credits aren't links).
+export function personProfileIsRich(
+  profile: { person?: { bio?: string | null } | null; tracks?: Array<{ instrumentId?: string | null; albumId?: string | null }> } | undefined,
+  currentAlbumId: string | undefined,
+): boolean {
+  if (!profile) return false;
+  if (profile.person?.bio) return true;
+  const tracks = profile.tracks ?? [];
+  return tracks.some((t) => !!t.instrumentId || (!!t.albumId && t.albumId !== currentAlbumId));
+}
+
+// Resolves a static instrument from the in-code seed map. Used by surfaces
+// (the desktop credits modal) that host PerformerProfileContent without their
+// own album-scoped instrument index.
+export function resolveStaticInstrument(instrumentId?: string): Instrument | undefined {
+  return instrumentId ? INSTRUMENTS[instrumentId] : undefined;
+}
+
+// The mobile SuperCredits performer sheet — wraps PerformerProfileContent in a
+// bottom-sheet shell with its own pinned X. The desktop credits modal renders
+// PerformerProfileContent inline instead (no shell), so the content had to be
+// extracted out of this shell.
+function PerformerSheet({
+  person,
+  song,
+  album,
+  contextLabel,
+  selectedCreditId,
+  currentSongCredits,
+  otherTracks,
+  resolveInstrument,
+  onOpenInstrument,
+  onClose,
+}: {
+  person: Person;
+  song?: Song;
+  album: Album;
+  contextLabel?: string;
+  selectedCreditId?: string;
+  currentSongCredits: TrackCredits | undefined;
+  otherTracks: Array<{ song: Song; performer: TrackPerformer }>;
+  resolveInstrument: (instrumentId?: string) => Instrument | undefined;
+  onOpenInstrument: (instrument: Instrument, tuningNotes?: string, attribution?: { personId: string; songId: string }) => void;
+  onClose: () => void;
+}) {
+  return (
+    <SheetShell ariaLabel={song ? `${person.name} on ${song.title}` : person.name} testId="sheet-performer" variant="fixed" onClose={onClose}>
+      {/* Single Apple-Music-style scrollable profile. The X stays pinned
+          top-right over the scroll; everything else lives in one column. */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
+        <SheetClose
+          className="absolute top-1 right-4 z-10"
+          data-testid="button-performer-close"
+        />
+        <div
+          className="flex-1 min-h-0 overflow-y-auto scrollbar-hide pb-10"
+          data-testid="region-performer-content"
+        >
+          <PerformerProfileContent
+            person={person}
+            song={song}
+            album={album}
+            contextLabel={contextLabel}
+            selectedCreditId={selectedCreditId}
+            currentSongCredits={currentSongCredits}
+            otherTracks={otherTracks}
+            resolveInstrument={resolveInstrument}
+            onOpenInstrument={onOpenInstrument}
+          />
         </div>
       </div>
     </SheetShell>
   );
 }
 
-// Self-contained person sheet for surfaces that have no SuperCredits sheet
-// stack of their own (today: the desktop album view's credits sheet). Opens
-// straight to a person — no song context — leading with About and the
-// credited role as the subtitle. Manages its own instrument/vendor/in-app
-// browser sub-stack + bookmark persistence so the Gear/Music tabs stay fully
-// interactive without the caller wiring any of it.
-export function PersonDetailSheet({
-  person,
-  album,
-  contextLabel,
-  onClose,
-}: {
-  person: Person;
-  album: Album;
-  contextLabel?: string;
-  onClose: () => void;
-}) {
+// Self-contained instrument → vendor → in-app-browser drill-down stack with
+// bookmark persistence. Extracted from PersonDetailSheet so both the mobile
+// person sheet and the desktop credits modal can host PerformerProfileContent
+// and share one gear sub-stack. `onCloseAll` is what the X inside any sub-sheet
+// fires (it returns past the whole stack to wherever the host opened from);
+// the back chevron in each sub-sheet still pops a single level.
+//
+// Returns `openInstrument` (wire to PerformerProfileContent's onOpenInstrument)
+// and `overlay` — the currently-open sub-sheet, or null. The overlay must be
+// rendered OUTSIDE any framer-transformed ancestor (a transform turns the
+// sub-sheets' `position: fixed` into absolute), so the desktop modal renders it
+// as a top-level sibling of its animated box.
+export function usePersonGearDrilldown(onCloseAll: () => void): {
+  openInstrument: (instrument: Instrument, tuningNotes?: string, attribution?: { personId: string; songId: string }) => void;
+  overlay: React.ReactNode;
+} {
   const [instrumentSheet, setInstrumentSheet] = useState<{ instrument: Instrument; tuningNotes?: string; attribution?: { personId: string; songId: string } } | null>(null);
   const [vendorSheet, setVendorSheet] = useState<{ vendor: InstrumentVendor; instrument: Instrument } | null>(null);
   const [inAppBrowser, setInAppBrowser] = useState<{ url: string; title: string; logoUrl?: string } | null>(null);
@@ -2315,18 +2378,22 @@ export function PersonDetailSheet({
     });
   };
 
-  // Close-all here dismisses the drill-down stack AND the person sheet that
-  // hosts it, so the X always returns to wherever the person sheet opened
-  // from (back chevron still pops one level).
+  // Close-all dismisses the whole drill-down stack AND calls the host's
+  // onCloseAll, so the X always returns past everything (back chevron still
+  // pops one level).
   const closeAllSheets = () => {
     setInAppBrowser(null);
     setVendorSheet(null);
     setInstrumentSheet(null);
-    onClose();
+    onCloseAll();
   };
 
+  const openInstrument = (instrument: Instrument, tuningNotes?: string, attribution?: { personId: string; songId: string }) =>
+    setInstrumentSheet({ instrument, tuningNotes, attribution });
+
+  let overlay: React.ReactNode = null;
   if (inAppBrowser) {
-    return (
+    overlay = (
       <InAppBrowserSheet
         url={inAppBrowser.url}
         title={inAppBrowser.title}
@@ -2335,9 +2402,8 @@ export function PersonDetailSheet({
         onCloseAll={closeAllSheets}
       />
     );
-  }
-  if (vendorSheet) {
-    return (
+  } else if (vendorSheet) {
+    overlay = (
       <VendorSheet
         vendor={vendorSheet.vendor}
         instrument={vendorSheet.instrument}
@@ -2352,9 +2418,8 @@ export function PersonDetailSheet({
         onCloseAll={closeAllSheets}
       />
     );
-  }
-  if (instrumentSheet) {
-    return (
+  } else if (instrumentSheet) {
+    overlay = (
       <InstrumentSheet
         instrument={instrumentSheet.instrument}
         tuningNotes={instrumentSheet.tuningNotes}
@@ -2368,6 +2433,29 @@ export function PersonDetailSheet({
       />
     );
   }
+
+  return { openInstrument, overlay };
+}
+
+// Self-contained person sheet for surfaces that have no SuperCredits sheet
+// stack of their own (today: the mobile album view's credits flow). Opens
+// straight to a person — no song context — leading with About and the
+// credited role as the subtitle. Manages its own instrument/vendor/in-app
+// browser sub-stack + bookmark persistence so the Gear/Music tabs stay fully
+// interactive without the caller wiring any of it.
+export function PersonDetailSheet({
+  person,
+  album,
+  contextLabel,
+  onClose,
+}: {
+  person: Person;
+  album: Album;
+  contextLabel?: string;
+  onClose: () => void;
+}) {
+  const { openInstrument, overlay } = usePersonGearDrilldown(onClose);
+  if (overlay) return <>{overlay}</>;
   return (
     <PerformerSheet
       person={person}
@@ -2375,8 +2463,8 @@ export function PersonDetailSheet({
       contextLabel={contextLabel}
       currentSongCredits={undefined}
       otherTracks={[]}
-      resolveInstrument={(iid) => (iid ? INSTRUMENTS[iid] : undefined)}
-      onOpenInstrument={(instrument, tuningNotes, attribution) => setInstrumentSheet({ instrument, tuningNotes, attribution })}
+      resolveInstrument={resolveStaticInstrument}
+      onOpenInstrument={openInstrument}
       onClose={onClose}
     />
   );

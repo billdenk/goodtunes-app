@@ -44,8 +44,8 @@ import {
   type DesktopAlbumSong,
 } from "@/components/ui/DesktopAlbumView";
 import type { PlayerSong } from "@/context/PlayerContext";
-import type { Album as PlayerAlbum, Person } from "@/data/musicData";
-import { PersonDetailSheet, ProvenanceSheet, OwnershipSheet, BonusVideoPlayer } from "@/pages/AlbumDetail";
+import type { Album as PlayerAlbum } from "@/data/musicData";
+import { ProvenanceSheet, OwnershipSheet, BonusVideoPlayer } from "@/pages/AlbumDetail";
 import { X } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
@@ -253,11 +253,6 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [playingVideoId]);
-
-  // Person opened from the album-credits sheet. The desktop view has no
-  // SuperCredits sheet stack of its own, so PersonDetailSheet brings its own
-  // self-contained About/Music/Gear sheet (+ instrument/vendor sub-stack).
-  const [creditPerson, setCreditPerson] = useState<{ person: Person; role: string } | null>(null);
 
   // Per-track credits opened from a track row's ⋯ menu (mirrors the mobile
   // track popover's "View Credits"). Scoped to one song — that song's
@@ -937,56 +932,21 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
         />
       )}
 
-      {creditPerson && album ? (
-        <PersonDetailSheet
-          person={creditPerson.person}
-          album={album as unknown as PlayerAlbum}
-          contextLabel={creditPerson.role}
-          onClose={() => setCreditPerson(null)}
-        />
-      ) : showAlbumCredits && effectiveOwned && hasAnyCredits && album ? (
+      {showAlbumCredits && effectiveOwned && hasAnyCredits && album ? (
         <AlbumCreditsModal
+          album={album as unknown as PlayerAlbum}
           albumTitle={album.title}
           artist={album.artist}
           credits={albumCredits ?? {}}
-          onOpenPerson={(personId, role) => {
-            const entry = creditGroups
-              .flatMap((g) => g.entries)
-              .find((e) => e.personId === personId);
-            if (!entry) return;
-            setShowAlbumCredits(false);
-            setCreditPerson({
-              person: {
-                id: personId,
-                name: entry.name,
-                photoUrl: entry.photoUrl ?? undefined,
-              },
-              role,
-            });
-          }}
           onClose={() => setShowAlbumCredits(false)}
         />
       ) : creditsForSong && effectiveOwned && album ? (
         <AlbumCreditsModal
+          album={album as unknown as PlayerAlbum}
           albumTitle={creditsForSong.title}
           artist={`${album.artist} · ${album.title}`}
           eyebrow="Song Credits"
           credits={scopedCreditsFor(creditsForSong.id)}
-          onOpenPerson={(personId, role) => {
-            const entry = buildAlbumCreditGroups(scopedCreditsFor(creditsForSong.id))
-              .flatMap((g) => g.entries)
-              .find((e) => e.personId === personId);
-            if (!entry) return;
-            setCreditsForSong(null);
-            setCreditPerson({
-              person: {
-                id: personId,
-                name: entry.name,
-                photoUrl: entry.photoUrl ?? undefined,
-              },
-              role,
-            });
-          }}
           onClose={() => setCreditsForSong(null)}
         />
       ) : null}
