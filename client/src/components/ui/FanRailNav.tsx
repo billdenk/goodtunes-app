@@ -24,11 +24,13 @@ import {
 // same Apple-Music rounded highlight. Each rail keeps its own brand
 // header + account footer; only this middle nav is shared.
 //
-// Task #1376 — mirrors the mobile dock restructure: a top group
-// (Search, Home, Collection, Recents — no header), a "Library" header
-// over the Collection detail destinations (Songs, Artists), and a
-// "Playlists" header over the Playlists destination (plus, on the
-// storefront rail, the fan's own playlists folded in via `playlistsSlot`).
+// Task #1404 — desktop/tablet rail cleanup: the Collection detail
+// destinations (Songs, Artists, Playlists) now nest directly UNDER the
+// Collection item as indented children with a tree spine, instead of
+// living in separate "Library"/"Playlists" sections whose indentation
+// read as arbitrary. The fan's own playlists still fold in via
+// `playlistsSlot` (storefront rail only), beneath the Playlists child.
+// Top group is the primary destinations (Search, Home, Recents).
 
 // Task #1081 — the URL→active-state logic + types now live in
 // `@/lib/fanRail` (pure, testable). Re-export the type so existing
@@ -67,17 +69,6 @@ function Row({
   );
 }
 
-/** Quiet uppercase muted section label — non-interactive, matches the
- *  existing "Your Playlists" header treatment so the rail's group
- *  headers read consistently. */
-function GroupHeader({ children }: { children: ReactNode }) {
-  return (
-    <div className="px-3 pt-5 pb-1.5 text-xs font-medium uppercase tracking-wider text-fan-faint">
-      {children}
-    </div>
-  );
-}
-
 export function FanRailNav({
   active,
   onSearch,
@@ -88,53 +79,50 @@ export function FanRailNav({
    *  shell swaps its content into search mode) instead of routing to
    *  /search. Omit on storefront pages so Search navigates normally. */
   onSearch?: () => void;
-  /** Rendered under the "Playlists" group header, beneath the Playlists
-   *  destination row — the storefront rail passes the fan's own playlist
-   *  rows here so they read as one cohesive Playlists section. The
-   *  album-page rail omits it. */
+  /** Rendered beneath the Playlists child row, inside the Collection
+   *  sub-tree — the storefront rail passes the fan's own playlist rows
+   *  here so they read as one cohesive Playlists group. The album-page
+   *  rail omits it. */
   playlistsSlot?: ReactNode;
 }) {
   const [, navigate] = useLocation();
 
   return (
-    <div>
-      {/* Top group — the primary destinations, no header. Mirrors the
-          mobile dock (Home · Collection · Recents) plus Search. */}
-      <div className="space-y-0.5">
-        <Row
-          testId="rail-search"
-          icon={Search}
-          label="Search"
-          active={active?.kind === "search"}
-          onClick={() => (onSearch ? onSearch() : navigate("/search"))}
-        />
-        <Row
-          testId="rail-home"
-          icon={HomeIcon}
-          label="Home"
-          active={active?.kind === "home"}
-          onClick={() => navigate(HOME_HREF)}
-        />
-        <Row
-          testId="rail-collection"
-          icon={Library}
-          label="Collection"
-          active={active?.kind === "collection"}
-          onClick={() => navigate(COLLECTION_HREF)}
-        />
-        <Row
-          testId="rail-recents"
-          icon={Clock}
-          label="Recents"
-          active={active?.kind === "recents"}
-          onClick={() => navigate("/recents")}
-        />
-      </div>
+    <div className="space-y-0.5">
+      {/* Top group — the primary destinations. */}
+      <Row
+        testId="rail-search"
+        icon={Search}
+        label="Search"
+        active={active?.kind === "search"}
+        onClick={() => (onSearch ? onSearch() : navigate("/search"))}
+      />
+      <Row
+        testId="rail-home"
+        icon={HomeIcon}
+        label="Home"
+        active={active?.kind === "home"}
+        onClick={() => navigate(HOME_HREF)}
+      />
+      <Row
+        testId="rail-recents"
+        icon={Clock}
+        label="Recents"
+        active={active?.kind === "recents"}
+        onClick={() => navigate("/recents")}
+      />
 
-      {/* Library group — the Collection detail destinations (Songs,
-          Artists), de-indented under their header. */}
-      <GroupHeader>Library</GroupHeader>
-      <div className="space-y-0.5">
+      {/* Collection + its detail destinations as indented children. The
+          left border is a tree spine so Songs / Artists / Playlists (and
+          the fan's own playlists) clearly belong to Collection. */}
+      <Row
+        testId="rail-collection"
+        icon={Library}
+        label="Collection"
+        active={active?.kind === "collection"}
+        onClick={() => navigate(COLLECTION_HREF)}
+      />
+      <div className="ml-5 border-l border-white/[0.08] pl-1.5 space-y-0.5">
         <Row
           testId="rail-collection-songs"
           icon={Music2}
@@ -149,13 +137,6 @@ export function FanRailNav({
           active={active?.kind === "artists"}
           onClick={() => navigate(COLLECTION_ARTISTS_HREF)}
         />
-      </div>
-
-      {/* Playlists group — the Playlists destination, then the fan's own
-          playlists (folded in via `playlistsSlot` on the storefront rail;
-          the album-page rail leaves the slot empty). */}
-      <GroupHeader>Playlists</GroupHeader>
-      <div className="space-y-0.5">
         <Row
           testId="rail-playlists"
           icon={ListMusic}

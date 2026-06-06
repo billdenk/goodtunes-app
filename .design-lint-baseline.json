@@ -12017,11 +12017,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/search/views.tsx",
-    "snippet": "className=\"px-5 py-2.5 rounded-full text-[14px] font-semibold active:opacity-70\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/search/views.tsx",
     "snippet": "className=\"flex-shrink-0 px-3.5 py-1.5 rounded-full text-[13px] font-semibold transition-all\""
   },
   {
@@ -19147,7 +19142,7 @@
   {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/Collection.tsx",
-    "snippet": "className=\"relative w-9 h-9 rounded-full overflow-hidden flex items-center justify-center active:opacity-70\""
+    "snippet": "className=\"relative w-9 h-9 rounded-full overflow-hidden flex items-center justify-center active:opacity-70 lg:hidden\""
   },
   {
     "rule": "player-touch-target-too-small",
@@ -21143,11 +21138,6 @@
     "rule": "fan-text-tone",
     "file": "client/src/pages/PressPortal.tsx",
     "snippet": "<span className=\"text-white/55 text-sm font-semibold\">{fallback.slice(0, 1).toUpperCase()}</span>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Recents.tsx",
-    "snippet": "<main className=\"h-screen w-full flex justify-center overflow-hidden bg-[#00062B]\">"
   },
   {
     "rule": "brand-hex-literal",

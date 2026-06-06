@@ -28,7 +28,7 @@ import {
 } from "@/lib/fanRail";
 import { subscribeChats, totalUnread } from "@/lib/chatStore";
 import { ARTIST_PHOTOS, type Album, type Song } from "@/data/musicData";
-import { Disc3, Music2, Mic2, Users, ListMusic } from "lucide-react";
+import { Disc3, Music2, Mic2, Users, ListMusic, LayoutGrid, List } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { popBounce } from "@/lib/motion";
 
@@ -190,7 +190,7 @@ function AccountAvatar() {
       type="button"
       onClick={() => navigate("/account")}
       aria-label="Account"
-      className="relative w-9 h-9 rounded-full overflow-hidden flex items-center justify-center active:opacity-70"
+      className="relative w-9 h-9 rounded-full overflow-hidden flex items-center justify-center active:opacity-70 lg:hidden"
       style={{
         background: "rgba(255,255,255,0.10)",
         border: "1px solid rgba(255,255,255,0.12)",
@@ -220,16 +220,20 @@ function AccountAvatar() {
 // ---------------------------------------------------------------------------
 function BackButton() {
   const [, navigate] = useLocation();
+  // Hidden at lg+ (TD): the left rail owns Collection navigation there, so a
+  // per-page back arrow is redundant. Phone keeps it (no rail).
   return (
-    <IconButton
-      onClick={() => navigate(COLLECTION_HREF)}
-      label="Back to Collection"
-      data-testid="button-back"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M15 18l-6-6 6-6" />
-      </svg>
-    </IconButton>
+    <span className="lg:hidden">
+      <IconButton
+        onClick={() => navigate(COLLECTION_HREF)}
+        label="Back to Collection"
+        data-testid="button-back"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </IconButton>
+    </span>
   );
 }
 
@@ -308,6 +312,48 @@ function SortMenu({
           </>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// Grid/List view toggle — TD-only (lg+). Phone never sees this (the trailing
+// slot stays sort-only below lg), so the phone build is untouched. (Task #1404.)
+function ViewToggle({
+  view,
+  onChange,
+}: {
+  view: "grid" | "list";
+  onChange: (v: "grid" | "list") => void;
+}) {
+  return (
+    <div
+      className="hidden lg:flex items-center rounded-xl p-0.5 flex-shrink-0"
+      style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.08)" }}
+      role="group"
+      aria-label="View"
+    >
+      <button
+        type="button"
+        onClick={() => onChange("grid")}
+        aria-pressed={view === "grid"}
+        aria-label="Grid view"
+        className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+        style={view === "grid" ? { background: "rgba(255,255,255,0.14)" } : undefined}
+        data-testid="button-view-grid"
+      >
+        <LayoutGrid size={15} className={view === "grid" ? "text-white" : "text-fan-faint"} />
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("list")}
+        aria-pressed={view === "list"}
+        aria-label="List view"
+        className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+        style={view === "list" ? { background: "rgba(255,255,255,0.14)" } : undefined}
+        data-testid="button-view-list"
+      >
+        <List size={15} className={view === "list" ? "text-white" : "text-fan-faint"} />
+      </button>
     </div>
   );
 }
@@ -537,8 +583,10 @@ export function Collection() {
 
   return (
     <FanScreen title="Collection" trailing={<AccountAvatar />} fadeTrailing>
-      {/* Apple-Library category rows */}
-      <div className="px-5">
+      {/* Apple-Library category rows — phone only. At lg+ (TD) the left rail
+          already exposes Songs / Artists / Playlists nested under Collection,
+          so these rows would be a redundant duplicate of the rail. */}
+      <div className="px-5 lg:hidden">
         <div className="flex flex-col" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
           {rows.map((r) => {
             const Icon = r.icon;
@@ -856,6 +904,11 @@ export function CollectionArtists() {
   const favArtists = useFavoriteArtists();
   const [sortBy, setSortBy] = useState("name-asc");
   const [visibleCount, setVisibleCount] = useState(60);
+  // TD (lg+) defaults to the artwork grid; the toggle only renders at lg+, so
+  // phone always stays on the list. (Task #1404.)
+  const [view, setView] = useState<"grid" | "list">(() =>
+    typeof window !== "undefined" && window.matchMedia("(min-width:1024px)").matches ? "grid" : "list",
+  );
   useEffect(() => {
     setVisibleCount(60);
   }, [sortBy]);
@@ -873,14 +926,17 @@ export function CollectionArtists() {
       title="Artists"
       leading={<BackButton />}
       trailing={
-        <SortMenu
-          options={[
-            { value: "name-asc", label: "A–Z" },
-            { value: "name-desc", label: "Z–A" },
-          ]}
-          value={sortBy}
-          onChange={setSortBy}
-        />
+        <div className="flex items-center gap-2">
+          <ViewToggle view={view} onChange={setView} />
+          <SortMenu
+            options={[
+              { value: "name-asc", label: "A–Z" },
+              { value: "name-desc", label: "Z–A" },
+            ]}
+            value={sortBy}
+            onChange={setSortBy}
+          />
+        </div>
       }
     >
       <div className="px-5 pb-4 flex flex-col">
@@ -900,54 +956,106 @@ export function CollectionArtists() {
             <p className="text-fan-faint text-xs">Artists from albums you own will appear here</p>
           </div>
         ) : null}
-        {sorted.slice(0, visibleCount).map((artist, idx, visibleArtists) => {
-          const isFav = favArtists.has(artist.name);
-          const photo = ARTIST_PHOTOS[artist.name];
-          return (
-            <button
-              key={artist.name}
-              type="button"
-              onClick={() => openArtist(artist.name, photo ?? artist.albums[0]?.artwork ?? null)}
-              className="flex items-center gap-3 py-3 active:opacity-60 transition-opacity text-left"
-              style={{ borderBottom: idx < visibleArtists.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}
-              data-testid={`row-artist-${artist.name}`}
-            >
-              <div className="relative flex-shrink-0">
-                <img
-                  src={photo ?? artist.albums[0].artwork}
-                  alt={artist.name}
-                  loading="lazy"
-                  decoding="async"
-                  className="w-12 h-12 rounded-full object-cover"
-                  style={{
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    ...(photo ? { objectPosition: "50% 20%" } : {}),
-                  }}
-                />
-                {isFav && (
-                  <span
-                    className="absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full"
-                    style={{ background: "var(--brand-bg)" }}
-                    aria-label="Favorited"
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,255,255,0.55)">
+        {/* List — phone always; at lg+ only when the toggle picks "list". */}
+        <div className={`flex flex-col ${view === "grid" ? "lg:hidden" : ""}`}>
+          {sorted.slice(0, visibleCount).map((artist, idx, visibleArtists) => {
+            const isFav = favArtists.has(artist.name);
+            const photo = ARTIST_PHOTOS[artist.name];
+            return (
+              <button
+                key={artist.name}
+                type="button"
+                onClick={() => openArtist(artist.name, photo ?? artist.albums[0]?.artwork ?? null)}
+                className="flex items-center gap-3 py-3 active:opacity-60 transition-opacity text-left"
+                style={{ borderBottom: idx < visibleArtists.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}
+                data-testid={`row-artist-${artist.name}`}
+              >
+                <div className="relative flex-shrink-0">
+                  <img
+                    src={photo ?? artist.albums[0].artwork}
+                    alt={artist.name}
+                    loading="lazy"
+                    decoding="async"
+                    className="w-12 h-12 rounded-full object-cover"
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      ...(photo ? { objectPosition: "50% 20%" } : {}),
+                    }}
+                  />
+                  {isFav && (
+                    <span
+                      className="absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full"
+                      style={{ background: "var(--brand-bg)" }}
+                      aria-label="Favorited"
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,255,255,0.55)">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                      </svg>
+                    </span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-fan-primary text-sm font-semibold truncate leading-tight">{artist.name}</p>
+                  <p className="text-fan-secondary text-xs truncate leading-tight mt-0.5">
+                    {artist.albums.length} {artist.albums.length === 1 ? "album" : "albums"}
+                  </p>
+                </div>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.3">
+                  <path d="M9 18l6-6-6-6" strokeLinecap="round" />
+                </svg>
+              </button>
+            );
+          })}
+        </div>
+        {/* TD (lg+) — circular artwork grid. Phone never renders this. */}
+        <div className={`hidden ${view === "grid" ? "lg:grid" : ""} lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-4 gap-y-6`}>
+          {sorted.slice(0, visibleCount).map((artist) => {
+            const isFav = favArtists.has(artist.name);
+            const photo = ARTIST_PHOTOS[artist.name];
+            return (
+              <button
+                key={artist.name}
+                type="button"
+                onClick={() => openArtist(artist.name, photo ?? artist.albums[0]?.artwork ?? null)}
+                className="flex flex-col items-center gap-2 text-center active:opacity-70 transition-opacity"
+                data-testid={`card-artist-${artist.name}`}
+              >
+                <div className="relative w-full">
+                  <img
+                    src={photo ?? artist.albums[0].artwork}
+                    alt={artist.name}
+                    loading="lazy"
+                    decoding="async"
+                    className="w-full aspect-square rounded-full object-cover"
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      ...(photo ? { objectPosition: "50% 20%" } : {}),
+                    }}
+                  />
+                  {isFav && (
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="rgba(255,255,255,0.9)"
+                      aria-label="Favorited"
+                      className="absolute bottom-1.5 right-1.5"
+                      style={{ filter: "drop-shadow(0 1px 3px rgba(0,0,0,0.6))" }}
+                    >
                       <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                     </svg>
-                  </span>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-fan-primary text-sm font-semibold truncate leading-tight">{artist.name}</p>
-                <p className="text-fan-secondary text-xs truncate leading-tight mt-0.5">
-                  {artist.albums.length} {artist.albums.length === 1 ? "album" : "albums"}
-                </p>
-              </div>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.3">
-                <path d="M9 18l6-6-6-6" strokeLinecap="round" />
-              </svg>
-            </button>
-          );
-        })}
+                  )}
+                </div>
+                <div className="min-w-0 w-full">
+                  <p className="text-fan-primary text-sm font-semibold truncate leading-tight">{artist.name}</p>
+                  <p className="text-fan-secondary text-xs truncate leading-tight mt-0.5">
+                    {artist.albums.length} {artist.albums.length === 1 ? "album" : "albums"}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
         {sorted.length > visibleCount && (
           <ShowMore
             remaining={sorted.length - visibleCount}

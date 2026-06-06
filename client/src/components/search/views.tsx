@@ -205,8 +205,8 @@ export function CompactPreview({
           <button
             type="button"
             onClick={onShowAll}
-            className="px-5 py-2.5 rounded-full text-[14px] font-semibold active:opacity-70"
-            style={{ background: "var(--brand-mint)", color: "var(--brand-bg)" }}
+            className="px-5 py-2.5 rounded-full text-sm font-semibold text-[color:var(--brand-blue)] active:opacity-70"
+            style={{ background: "rgba(49,158,216,0.12)" }}
             data-testid="button-show-all-results"
           >
             Show All Results

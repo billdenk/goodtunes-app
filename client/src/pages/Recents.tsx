@@ -105,9 +105,9 @@ export function RecentsPage() {
   );
 
   return (
-    <main className="h-screen w-full flex justify-center overflow-hidden bg-[#00062B]">
+    <main className="h-screen w-full flex justify-center overflow-hidden bg-[var(--brand-bg)] lg:justify-start lg:pl-[260px]">
       <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1100px] lg:mx-auto h-screen text-white flex flex-col">
-        <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
+        <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3 lg:pb-9">
           <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Recents</h1>
           {totalShown > 0 && (
             <button
@@ -136,13 +136,28 @@ export function RecentsPage() {
             const rows = grouped[k];
             if (rows.length === 0) return null;
             return (
-              <div key={k} className="mb-5">
-                <div className="px-5 mb-2">
+              <div key={k} className="mb-5 lg:mb-8">
+                <div className="px-5 mb-2 lg:mb-4">
                   <h2 className="text-white text-[15px] font-bold">{SECTION_LABELS[k]}</h2>
                 </div>
-                <div className="px-5">
+                {/* Phone — swipe-to-remove list. Hidden at lg+ (TD), where the
+                    grid below leads instead. */}
+                <div className="px-5 lg:hidden">
                   {rows.map((row) => (
                     <RecentRow
+                      key={row.id}
+                      row={row}
+                      timestamp={relativeTime(new Date(row.lastAt as any), new Date())}
+                      onOpen={() => navigate(row.href)}
+                      onRemove={() => remove.mutate(row.id)}
+                    />
+                  ))}
+                </div>
+                {/* TD (lg+) — Apple-Music artwork-forward grid, matching the
+                    Collection / Home grids. Phone never renders this. */}
+                <div className="px-5 hidden lg:grid grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-4 gap-y-6">
+                  {rows.map((row) => (
+                    <RecentCard
                       key={row.id}
                       row={row}
                       timestamp={relativeTime(new Date(row.lastAt as any), new Date())}
@@ -285,6 +300,63 @@ function RecentRow({
           </svg>
         </button>
       </div>
+    </div>
+  );
+}
+
+// TD-only (lg+) artwork-forward card — the grid counterpart to RecentRow.
+// Removal lives on a hover affordance instead of swipe (pointer surface).
+function RecentCard({
+  row,
+  timestamp,
+  onOpen,
+  onRemove,
+}: {
+  row: FanRecent;
+  timestamp: string;
+  onOpen: () => void;
+  onRemove: () => void;
+}) {
+  const isRound = row.entityKind === "artist" || row.entityKind === "person" || row.entityKind === "vendor" || row.entityKind === "label";
+
+  return (
+    <div className="group relative">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="w-full flex flex-col gap-2 text-left active:opacity-70 transition-opacity"
+        data-testid={`card-recent-${row.id}`}
+      >
+        <div
+          className={`relative w-full aspect-square overflow-hidden flex items-center justify-center ${isRound ? "rounded-full" : "rounded-2xl"}`}
+          style={{ background: "rgba(255,255,255,0.08)", border: isRound ? "1px solid rgba(255,255,255,0.10)" : undefined }}
+        >
+          {row.thumbUrl ? (
+            <img src={row.thumbUrl} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+          ) : isRound ? (
+            <Star size={28} className="text-fan-faint" fill="currentColor" data-testid={`icon-recent-fallback-${row.id}`} />
+          ) : null}
+        </div>
+        <div className="min-w-0 px-0.5">
+          <p className="text-white text-sm font-semibold truncate leading-tight">{row.title}</p>
+          <p className="text-white/45 text-xs truncate leading-tight mt-0.5">
+            {KIND_LABEL[row.entityKind] ?? row.entityKind}
+            {timestamp ? ` · ${timestamp}` : ""}
+          </p>
+        </div>
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${row.title}`}
+        className="absolute top-1.5 right-1.5 w-7 h-7 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+        style={{ background: "rgba(0,6,43,0.72)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}
+        data-testid={`button-remove-recent-card-${row.id}`}
+      >
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round">
+          <path d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      </button>
     </div>
   );
 }

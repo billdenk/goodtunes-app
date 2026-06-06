@@ -31,18 +31,20 @@ function PlaylistArtwork({
   size,
   rounded = "rounded-xl",
   variant,
+  fill = false,
 }: {
   artworks: string[];
   songCount: number;
   size: number;
   rounded?: string;
   variant?: "favorites";
+  fill?: boolean;
 }) {
-  const wrapperStyle: React.CSSProperties = {
-    width: size,
-    height: size,
-    boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-  };
+  // `fill` lets the artwork fill a responsive grid cell (TD card grid) instead
+  // of a fixed px box; `size` still drives the icon scale in that case.
+  const wrapperStyle: React.CSSProperties = fill
+    ? { width: "100%", aspectRatio: "1 / 1", boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }
+    : { width: size, height: size, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" };
 
   if (variant === "favorites" && (songCount === 0 || artworks.length === 0)) {
     return (
@@ -420,7 +422,7 @@ export function Playlists() {
 
   if (selectedPlaylist) {
     return (
-      <main className="h-screen w-full flex justify-center overflow-hidden">
+      <main className="h-screen w-full flex justify-center overflow-hidden lg:justify-start lg:pl-[260px]">
         <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1100px] lg:mx-auto h-screen text-white flex flex-col">
           <div ref={detailScrollRef} className="flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
           <header className="sticky top-0 z-20 flex items-center justify-between px-5 pt-14 pb-3 flex-shrink-0">
@@ -706,9 +708,9 @@ export function Playlists() {
   }
 
   return (
-    <main className="h-screen w-full flex justify-center overflow-hidden">
+    <main className="h-screen w-full flex justify-center overflow-hidden lg:justify-start lg:pl-[260px]">
       <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1100px] lg:mx-auto h-screen text-white flex flex-col">
-        <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3">
+        <header className="relative z-10 flex items-end justify-between px-5 pt-14 pb-3 lg:pb-9">
           <h1 className="text-white text-[34px] font-bold leading-none tracking-tight" data-testid="text-page-title">Playlists</h1>
           <button
             type="button"
@@ -748,39 +750,76 @@ export function Playlists() {
               </button>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
-              {playlists.map((pl) => {
-                const count = pl.songCount ?? 0;
-                const isFav = pl.id === FAVORITES_PLAYLIST_ID;
-                return (
-                  <button
-                    key={pl.id}
-                    type="button"
-                    onClick={() => setSelectedPlaylist(pl)}
-                    className="flex items-center gap-4 p-3 rounded-2xl bg-white/5 active:bg-white/10 transition-colors text-left"
-                    data-testid={`row-playlist-${pl.id}`}
-                  >
-                    <PlaylistArtwork
-                      artworks={pl.artworks ?? []}
-                      songCount={count}
-                      size={56}
-                      variant={isFav ? "favorites" : undefined}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-semibold truncate">{pl.name}</p>
-                      <p className="text-white/40 text-xs mt-0.5">
-                        {isFav
-                          ? `${count} favorited`
-                          : count === 0 ? "Playlist" : `${count} ${count === 1 ? "song" : "songs"}`}
-                      </p>
-                    </div>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.3">
-                      <path d="M9 18l6-6-6-6" strokeLinecap="round" />
-                    </svg>
-                  </button>
-                );
-              })}
-            </div>
+            <>
+              {/* Phone — row list. Hidden at lg+ (TD), where the grid leads. */}
+              <div className="flex flex-col gap-2 lg:hidden">
+                {playlists.map((pl) => {
+                  const count = pl.songCount ?? 0;
+                  const isFav = pl.id === FAVORITES_PLAYLIST_ID;
+                  return (
+                    <button
+                      key={pl.id}
+                      type="button"
+                      onClick={() => setSelectedPlaylist(pl)}
+                      className="flex items-center gap-4 p-3 rounded-2xl bg-white/5 active:bg-white/10 transition-colors text-left"
+                      data-testid={`row-playlist-${pl.id}`}
+                    >
+                      <PlaylistArtwork
+                        artworks={pl.artworks ?? []}
+                        songCount={count}
+                        size={56}
+                        variant={isFav ? "favorites" : undefined}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-semibold truncate">{pl.name}</p>
+                        <p className="text-white/40 text-xs mt-0.5">
+                          {isFav
+                            ? `${count} favorited`
+                            : count === 0 ? "Playlist" : `${count} ${count === 1 ? "song" : "songs"}`}
+                        </p>
+                      </div>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" opacity="0.3">
+                        <path d="M9 18l6-6-6-6" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* TD (lg+) — Apple-Music artwork-forward grid. Phone never
+                  renders this. */}
+              <div className="hidden lg:grid grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-4 gap-y-6">
+                {playlists.map((pl) => {
+                  const count = pl.songCount ?? 0;
+                  const isFav = pl.id === FAVORITES_PLAYLIST_ID;
+                  return (
+                    <button
+                      key={pl.id}
+                      type="button"
+                      onClick={() => setSelectedPlaylist(pl)}
+                      className="flex flex-col gap-2 text-left active:opacity-70 transition-opacity"
+                      data-testid={`card-playlist-${pl.id}`}
+                    >
+                      <PlaylistArtwork
+                        artworks={pl.artworks ?? []}
+                        songCount={count}
+                        size={220}
+                        rounded="rounded-2xl"
+                        variant={isFav ? "favorites" : undefined}
+                        fill
+                      />
+                      <div className="min-w-0 px-0.5">
+                        <p className="text-white text-sm font-semibold truncate">{pl.name}</p>
+                        <p className="text-fan-secondary text-xs mt-0.5 truncate">
+                          {isFav
+                            ? `${count} favorited`
+                            : count === 0 ? "Playlist" : `${count} ${count === 1 ? "song" : "songs"}`}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
 
