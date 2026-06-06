@@ -109,10 +109,19 @@ async function resolveArtistScope(req: Request): Promise<ArtistScope | { error: 
   const labelClause = isLabelCaller
     ? sql`AND label_id = ${info.roleScopeId}`
     : sql``;
+  // Canonical artist album scope (shared with the buyer-roster page
+  // GET /api/admin/people/:id/buyers — see server/routes.ts). An artist
+  // owns an album when they are its primaryArtistId OR its payout owner,
+  // and the album has NOT been soft-deleted. The `deleted_at IS NULL`
+  // clause is the one that previously diverged: the dashboard counted
+  // deleted-but-sold albums while the roster filtered them out, so a
+  // soft-deleted release with sales made the dashboard headline drift
+  // above the roster. Keep these two queries in lock-step.
   const albumRows = await db.execute<{ id: string }>(sql`
     SELECT id FROM albums
     WHERE (primary_artist_id = ${personId}
            OR (payout_owner_kind = 'person' AND payout_owner_id = ${personId}))
+      AND deleted_at IS NULL
     ${labelClause}
   `);
   const albumIds = ((albumRows as any).rows || []).map((r: any) => r.id);

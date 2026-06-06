@@ -13527,9 +13527,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const albumId = req.query.albumId ? String(req.query.albumId) : null;
     const REVENUE_STATUSES = `'paid','shipped','complete','completed'`;
 
+    // Canonical artist album scope — must stay in lock-step with
+    // resolveArtistScope() in server/artistReports.ts so the dashboard
+    // lifetime headline and this page's KPIs never drift. An artist owns
+    // an album when they are its primaryArtistId OR its payout owner, and
+    // the album has not been soft-deleted. (Previously this page scoped by
+    // primaryArtistId only, so an album whose payout owner is this person
+    // — but whose primary-artist credit is someone else — counted on the
+    // dashboard but not here.)
     const artistAlbums = await db.execute<{ id: string; title: string; artwork: string | null }>(sql`
       SELECT id, title, artwork FROM albums
-      WHERE primary_artist_id = ${personId}
+      WHERE (primary_artist_id = ${personId}
+             OR (payout_owner_kind = 'person' AND payout_owner_id = ${personId}))
         AND deleted_at IS NULL
       ORDER BY title ASC
     `);
