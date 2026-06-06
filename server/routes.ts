@@ -8716,6 +8716,137 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   }
 
+  // ---- Shared Dropbox download primitives -------------------------------
+  // Both the single-file/zip path and the folder path resolve a share URL
+  // through Dropbox's redirect chain (re-validating the host on EVERY hop
+  // to stay SSRF-safe) and then stream a potentially multi-gigabyte body.
+  // Two things have to be true for a large hi-res master to import
+  // reliably:
+  //   1. The underlying fetch must NOT impose its own short read timeout.
+  //      undici's default headers/body timeouts (5 min of inactivity)
+  //      could kill a steady-but-slow multi-GB transfer; we hand fetch a
+  //      dispatcher with those disabled and rely on our own stall guard.
+  //   2. A genuine stall (no bytes for N seconds) must fail PROMPTLY with
+  //      an accurate message, while continuous progress (however slow)
+  //      must be allowed to finish. That's a resettable idle timeout, not
+  //      a single fixed overall deadline that kills a long-but-healthy
+  //      download.
+  const DROPBOX_STALL_MS = 90_000; // fail if no bytes flow for 90s
+  const DROPBOX_CONNECT_MS = 60_000; // cap the initial TCP connect
+
+  // Per-call idle/stall guard. `arm()` (re)starts the countdown — call it
+  // once before the first byte and again on every chunk; `disarm()` stops
+  // it on success. When it fires it aborts the controller AND records
+  // `fired = true`. That dedicated flag is the whole point: the catch
+  // site must NOT assume `signal.aborted` means "timeout" (the caller may
+  // abort the controller itself while cleaning up after an unrelated
+  // failure), so "took too long" is surfaced ONLY when this timer fired.
+  function makeDropboxStallGuard(ac: AbortController, stallMs: number) {
+    let fired = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const arm = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        fired = true;
+        try { ac.abort(); } catch {}
+      }, stallMs);
+    };
+    const disarm = () => {
+      if (timer) { clearTimeout(timer); timer = null; }
+    };
+    return { arm, disarm, get fired() { return fired; } };
+  }
+
+  // Build a fetch dispatcher with read/idle timeouts disabled so OUR
+  // stall guard is the only inactivity bound on the body. `connectTimeout`
+  // still caps the TCP handshake so a black-hole host fails fast.
+  // Cached: one Agent serves every Dropbox download.
+  let dropboxDispatcher: any = null;
+  async function getDropboxDispatcher() {
+    if (dropboxDispatcher) return dropboxDispatcher;
+    const { Agent } = await import("undici");
+    dropboxDispatcher = new Agent({
+      headersTimeout: 0,
+      bodyTimeout: 0,
+      connectTimeout: DROPBOX_CONNECT_MS,
+    });
+    return dropboxDispatcher;
+  }
+
+  // Resolve a Dropbox share URL through its redirect chain (SSRF-safe on
+  // every hop) and return the final non-redirect response. The stall
+  // guard is armed for the connect/redirect phase; the caller keeps it
+  // armed for the body stream (resetting on each chunk) and disarms it on
+  // completion. Throws concrete errors for the common failures.
+  async function resolveDropboxResponse(
+    startUrl: URL,
+    ac: AbortController,
+    stall: ReturnType<typeof makeDropboxStallGuard>,
+  ): Promise<Awaited<ReturnType<typeof fetch>>> {
+    const dispatcher = await getDropboxDispatcher();
+    const maxHops = 5;
+    let current = startUrl;
+    let response: Awaited<ReturnType<typeof fetch>> | null = null;
+    stall.arm();
+    for (let hop = 0; hop <= maxHops; hop++) {
+      const r = await fetch(current.toString(), {
+        redirect: "manual",
+        signal: ac.signal,
+        dispatcher,
+      } as any);
+      if (r.status >= 300 && r.status < 400) {
+        const loc = r.headers.get("location");
+        if (!loc) throw new Error("Dropbox redirect with no target.");
+        let next: URL;
+        try { next = new URL(loc, current); } catch { throw new Error("Dropbox sent an invalid redirect URL."); }
+        assertDropboxHost(next);
+        current = next;
+        try { await r.body?.cancel(); } catch {}
+        stall.arm();
+        continue;
+      }
+      response = r;
+      break;
+    }
+    if (!response) throw new Error("Too many Dropbox redirects.");
+    if (!response.ok) {
+      throw new Error(`Couldn't reach Dropbox (HTTP ${response.status}). Make sure the link is shareable.`);
+    }
+    return response;
+  }
+
+  // Turn a caught download failure into an accurate, operator-facing
+  // message. `stalled` is the stall-guard's `fired` flag — true ONLY when
+  // our idle timer actually fired. Anything else maps to its real cause
+  // (connection reset, HTTP error, too-large, …) instead of a blanket
+  // "took too long."
+  function describeDropboxFailure(err: any, stalled: boolean): string {
+    if (stalled) {
+      return `Dropbox stopped sending data — the transfer stalled (no progress for ${Math.round(DROPBOX_STALL_MS / 1000)}s). Check your connection and try the import again.`;
+    }
+    const msg = String(err?.message || "");
+    // Messages we threw ourselves are already operator-facing — pass
+    // them through verbatim (HTTP nnn, too large, redirect/URL problems,
+    // empty response, not-a-folder hint, invalid .zip, …).
+    if (/Dropbox|too large|HTTP \d|redirect|URL|folder|\.zip|shareable|web page/i.test(msg)) {
+      return msg;
+    }
+    const code = String(err?.code || err?.cause?.code || "");
+    if (code === "ECONNRESET" || /ECONNRESET|socket hang up|terminated|other side closed|ERR_STREAM/i.test(msg)) {
+      return "The connection to Dropbox dropped mid-download. Try the import again.";
+    }
+    if (code === "UND_ERR_CONNECT_TIMEOUT" || code === "ETIMEDOUT" || /connect timeout/i.test(msg)) {
+      return "Couldn't connect to Dropbox — the connection timed out. Check the link and try again.";
+    }
+    if (code === "ENOTFOUND" || code === "EAI_AGAIN") {
+      return "Couldn't resolve Dropbox's servers. Check your connection and try again.";
+    }
+    if (err?.name === "AbortError") {
+      return "The Dropbox download was interrupted before it finished. Try the import again.";
+    }
+    return msg || "Dropbox download failed.";
+  }
+
   // Download a single Dropbox file share to a tempfile and return it
   // wrapped in the same shape as `streamDropboxFolderEntries`. Same
   // SSRF protections (manual redirects + host re-validation) and the
@@ -8767,34 +8898,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // is bounded by the same per-entry cap, so a non-zip non-kept single
     // file is the only (rare) case that downloads before being skipped.
 
-    const maxHops = 5;
-    const timeoutMs = 30 * 60_000;
+    // Resettable idle/stall timeout — NOT a fixed overall deadline. A
+    // steady-but-slow multi-GB hi-res master is allowed to finish; only a
+    // genuine stall (no bytes for DROPBOX_STALL_MS) aborts. The dedicated
+    // `fired` flag is what lets the catch site tell a real stall apart
+    // from any other failure — see makeDropboxStallGuard / the long
+    // comment there. (The old code aborted the controller in its OWN
+    // catch BEFORE checking `signal.aborted`, so every failure — dropped
+    // connection, HTTP error, too-large — was mislabeled "took too long".)
     const ac = new AbortController();
-    const deadlineTimer = setTimeout(() => ac.abort(), timeoutMs);
-    let response: Awaited<ReturnType<typeof fetch>> | null = null;
+    const stall = makeDropboxStallGuard(ac, DROPBOX_STALL_MS);
     let tmpPath = "";
     let size = 0;
     try {
-      let current = url;
-      for (let hop = 0; hop <= maxHops; hop++) {
-        const r = await fetch(current.toString(), { redirect: "manual", signal: ac.signal });
-        if (r.status >= 300 && r.status < 400) {
-          const loc = r.headers.get("location");
-          if (!loc) throw new Error("Dropbox redirect with no target.");
-          let next: URL;
-          try { next = new URL(loc, current); } catch { throw new Error("Dropbox sent an invalid redirect URL."); }
-          assertDropboxHost(next);
-          current = next;
-          try { await r.body?.cancel(); } catch {}
-          continue;
-        }
-        response = r;
-        break;
-      }
-      if (!response) throw new Error("Too many Dropbox redirects.");
-      if (!response.ok) {
-        throw new Error(`Couldn't reach Dropbox (HTTP ${response.status}). Make sure the link is shareable.`);
-      }
+      const response = await resolveDropboxResponse(url, ac, stall);
       if (!response.body) throw new Error("Dropbox sent an empty response.");
 
       const safeName = filename.replace(/[^a-zA-Z0-9.\-_]/g, "_");
@@ -8804,6 +8921,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       let lastReported = 0;
       const cap = new Transform({
         transform(chunk, _enc, cb) {
+          // Bytes are flowing — reset the stall countdown. A continuous
+          // (even slow) transfer therefore never trips it; only a true
+          // no-data stall does.
+          stall.arm();
           size += chunk.length;
           if (size > MAX_DROPBOX_ENTRY_BYTES) {
             cb(new Error(`"${filename}" is too large (over ${Math.round(MAX_DROPBOX_ENTRY_BYTES / (1024 * 1024))} MB).`));
@@ -8820,14 +8941,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         },
       });
       await pipeline(Readable.fromWeb(response.body as any), cap, fs.createWriteStream(tmpPath));
+      stall.disarm();
       try { opts.onDownloadProgress?.(size, totalBytes ?? size); } catch {}
-      clearTimeout(deadlineTimer);
     } catch (err: any) {
-      clearTimeout(deadlineTimer);
+      stall.disarm();
       try { ac.abort(); } catch {}
       await cleanup();
-      if (ac.signal.aborted) throw new Error("Dropbox took too long to respond.");
-      throw err;
+      // Surface the REAL reason. "took too long" only when our stall
+      // timer actually fired; everything else maps to its true cause.
+      throw new Error(describeDropboxFailure(err, stall.fired));
     }
 
     // The shared file is a zip when its name ends in `.zip` OR — only
@@ -8902,42 +9024,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     nodeStream: NodeJS.ReadableStream;
     cancel: () => void;
     totalBytes: number | null;
+    stall: ReturnType<typeof makeDropboxStallGuard>;
   }> {
     const { Readable } = await import("node:stream");
-    let url = normalizeDropboxFolderUrl(folderUrl);
-    const maxHops = 5;
-    // Single shared deadline across the entire transfer — redirect
-    // chain AND body stream. 30 minutes is generous enough for a
-    // multi-gigabyte master folder on a slow connection.
-    const timeoutMs = 30 * 60_000;
+    const url = normalizeDropboxFolderUrl(folderUrl);
+    // Resettable idle/stall timeout (NOT a fixed overall deadline) plus a
+    // fetch dispatcher with read timeouts disabled — exactly the same
+    // corrected handling as the single-file path. A steady-but-slow
+    // multi-gigabyte folder zip is allowed to finish; only a genuine
+    // stall aborts. The caller resets the guard as bytes arrive and
+    // disarms it via `cancel()`.
     const ac = new AbortController();
-    const deadlineTimer = setTimeout(() => ac.abort(), timeoutMs);
-    let response: Awaited<ReturnType<typeof fetch>> | null = null;
+    const stall = makeDropboxStallGuard(ac, DROPBOX_STALL_MS);
     try {
-      for (let hop = 0; hop <= maxHops; hop++) {
-        const r = await fetch(url.toString(), {
-          redirect: "manual",
-          signal: ac.signal,
-        });
-        if (r.status >= 300 && r.status < 400) {
-          const loc = r.headers.get("location");
-          if (!loc) throw new Error("Dropbox redirect with no target.");
-          let next: URL;
-          try { next = new URL(loc, url); } catch { throw new Error("Dropbox sent an invalid redirect URL."); }
-          assertDropboxHost(next);
-          url = next;
-          // Tear the redirect body down at the source instead of
-          // letting it buffer.
-          try { await r.body?.cancel(); } catch { /* ignore */ }
-          continue;
-        }
-        response = r;
-        break;
-      }
-      if (!response) throw new Error("Too many Dropbox redirects.");
-      if (!response.ok) {
-        throw new Error(`Couldn't reach Dropbox (HTTP ${response.status}). Make sure the link is shareable.`);
-      }
+      const response = await resolveDropboxResponse(url, ac, stall);
       const ct = (response.headers.get("content-type") || "").toLowerCase();
       if (ct.includes("text/html")) {
         throw new Error("Dropbox returned a web page instead of files. Check that the link is set to 'Anyone with the link'.");
@@ -8953,19 +9053,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return {
         nodeStream,
         cancel: () => {
+          stall.disarm();
           try { ac.abort(); } catch {}
-          clearTimeout(deadlineTimer);
         },
         totalBytes,
+        stall,
       };
     } catch (err: any) {
-      clearTimeout(deadlineTimer);
-      if (ac.signal.aborted) throw new Error("Dropbox took too long to respond.");
-      throw err;
+      stall.disarm();
+      try { ac.abort(); } catch {}
+      // Surface the REAL reason — "took too long" only when the stall
+      // timer actually fired.
+      throw new Error(describeDropboxFailure(err, stall.fired));
     }
-    // Note: we deliberately DO NOT clear deadlineTimer on success.
-    // The deadline still has to fire if the body stream stalls — the
-    // caller invokes `cancel()` when the import is done (or fails).
+    // Note: on SUCCESS we leave the stall guard armed. It must still fire
+    // if the body stream stalls; the caller resets it on each chunk and
+    // invokes `cancel()` (which disarms it) when the import finishes.
   }
 
   // Download the Dropbox folder zip to a tempfile, then open it via the
@@ -9020,8 +9123,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     let nodeStream: NodeJS.ReadableStream;
     let cancel: () => void;
     let dropboxTotalBytes: number | null;
+    let stall: ReturnType<typeof makeDropboxStallGuard>;
     try {
-      ({ nodeStream, cancel, totalBytes: dropboxTotalBytes } = await openDropboxFolderStream(folderUrl));
+      ({ nodeStream, cancel, totalBytes: dropboxTotalBytes, stall } = await openDropboxFolderStream(folderUrl));
     } catch (err) {
       await cleanup();
       throw err;
@@ -9048,6 +9152,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       let lastReported = 0;
       const cap = new Transform({
         transform(chunk, _enc, cb) {
+          // Bytes are flowing — reset the stall countdown so a continuous
+          // (even slow) folder download is never killed; only a genuine
+          // no-data stall trips it.
+          stall.arm();
           downloaded += chunk.length;
           if (downloaded > MAX_DROPBOX_UNCOMPRESSED_BYTES) {
             cb(new Error(`That folder's total size is over ${Math.round(MAX_DROPBOX_UNCOMPRESSED_BYTES / (1024 * 1024 * 1024))} GB. Split it into two imports.`));
@@ -9065,9 +9173,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // chunk fell under the 64 KB throttle.
       try { opts.onDownloadProgress?.(downloaded, dropboxTotalBytes ?? downloaded); } catch {}
     } catch (err) {
+      const stalled = stall.fired;
       cancel();
       await cleanup();
-      throw err;
+      // Surface the REAL reason for a mid-download failure (stall vs
+      // dropped connection vs too-large) instead of a blanket message.
+      throw new Error(describeDropboxFailure(err, stalled));
     }
     cancel();
 

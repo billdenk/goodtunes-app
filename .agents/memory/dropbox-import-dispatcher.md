@@ -35,6 +35,23 @@ legacy `/s/`). A change to the dispatcher changes every importer at once.
 - **Invariants every edit must preserve:** SSRF host re-validation on every redirect hop,
   per-entry + total size caps, and temp-dir cleanup on EVERY failure path.
 
+- **`signal.aborted` ≠ "took too long" — never infer a timeout from abort state.**
+  **Why:** the download catch sites abort the controller themselves while cleaning up after
+  an UNRELATED failure (HTTP error, too-large, dropped connection), so reading
+  `ac.signal.aborted` in the catch mislabels every failure as "Dropbox took too long." The
+  fix: a dedicated stall guard (`makeDropboxStallGuard`) sets its own `fired` flag ONLY when
+  the idle timer actually trips; the catch reads `stall.fired` (capture it BEFORE calling
+  `cancel()` on the folder path) and routes through `describeDropboxFailure(err, stalled)`,
+  which passes our own operator-facing throws verbatim and maps ECONNRESET / connect-timeout
+  / DNS / abort to real reasons. That message rides `state.errorMessage` into the toast AND
+  the `job_runs` audit row.
+  **How to apply:** large hi-res masters need a RESETTABLE idle/stall timeout (arm() per
+  chunk), not a fixed overall deadline that kills a long-but-healthy transfer; pair it with a
+  cached undici `Agent` dispatcher (`headersTimeout:0, bodyTimeout:0`, finite `connectTimeout`)
+  so undici's default ~5min read timeout can't kill a steady-but-slow multi-GB download. Both
+  download paths (single-file + folder) share these helpers — they live in `routes.ts` with
+  the SSRF/dispatcher code, NOT `dropboxZip.ts` (download concerns, not pure zip helpers).
+
 - **Pure zip helpers live in `server/dropboxZip.ts`, not `routes.ts`.** `extOf`,
   `basenameOf`, `fileLooksLikeZip`, `extractKeptZipEntries` + the `MAX_DROPBOX_*` caps were
   hoisted out so they're unit-testable without booting the 21k-line `routes.ts` (which would

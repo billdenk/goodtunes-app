@@ -5442,9 +5442,12 @@ function AddMultipleTracksDialog({
       // can't hang forever (one stuck request, server crash, etc.).
       const data = await pollImportJob(jobId, {
         onProgress: (p) => setProgress(p),
-        // 15 min — generous for a long album over slow Dropbox; longer
-        // than this and something's wrong, not slow.
-        overallTimeoutMs: 15 * 60 * 1000,
+        // 60 min — a multi-gigabyte hi-res master `.zip` over a slow
+        // connection can legitimately take a long time. The server no
+        // longer enforces a fixed overall deadline (only a 90s no-data
+        // stall guard), so the client cap must be generous enough not to
+        // declare a still-healthy long import "failed" while it's running.
+        overallTimeoutMs: 60 * 60 * 1000,
         // Per-poll: a single GET shouldn't sit longer than 10s.
         perRequestTimeoutMs: 10_000,
       });
