@@ -1,10 +1,10 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { formatUsdCents } from "@shared/money";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Link } from "wouter";
 import { popBounce } from "@/lib/motion";
-import { ChevronRight, Play, Pause, Shuffle, Lock, Share, Info, MoreHorizontal } from "lucide-react";
+import { ChevronRight, Play, Pause, Shuffle, Lock, Share, Info, MoreHorizontal, X } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { BonusPlayBadge } from "@/components/ui/BonusPlayBadge";
 import { IconButton } from "@/components/ui/IconButton";
@@ -302,6 +302,20 @@ export function DesktopAlbumView({
     setMenuOpen((s) => !s);
   };
 
+  // Task #1561 — desktop/tablet "MORE" description popover. The clamped
+  // description (DesktopClampedDescription) renders an inline MORE link when
+  // it overflows; tapping it flips this flag and we portal a centered
+  // rounded-rect card with the full copy (Escape / backdrop / X to close).
+  const [descOpen, setDescOpen] = useState(false);
+  useEffect(() => {
+    if (!descOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDescOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [descOpen]);
+
   const meta = [album.genre, album.type === "LP" ? "LP" : album.type, album.year]
     .filter(Boolean)
     .map((s) => String(s).toUpperCase())
@@ -489,6 +503,71 @@ export function DesktopAlbumView({
           document.body,
         )}
 
+        {/* Task #1561 — full-description popover. Mirrors the centered
+            rounded-card convention (dim + backdrop-blur scrim, glass card)
+            used by the other desktop overlays. Closes on backdrop click,
+            the X control, and Escape (handled above). */}
+        {createPortal(
+          <AnimatePresence>
+            {descOpen && album.description && (
+              <>
+                <motion.div
+                  className="fixed inset-0 z-[70]"
+                  style={{
+                    background: "rgba(0,0,0,0.55)",
+                    backdropFilter: "blur(18px) saturate(140%)",
+                    WebkitBackdropFilter: "blur(18px) saturate(140%)",
+                  }}
+                  onClick={() => setDescOpen(false)}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.16 }}
+                />
+                <div className="fixed inset-0 z-[71] flex items-center justify-center p-6 pointer-events-none">
+                  <motion.div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="About this album"
+                    className="pointer-events-auto relative w-full max-w-[520px] max-h-[80vh] overflow-y-auto rounded-3xl p-7 pt-6"
+                    style={{
+                      background: "rgba(28, 30, 38, 0.96)",
+                      backdropFilter: "blur(28px) saturate(180%)",
+                      WebkitBackdropFilter: "blur(28px) saturate(180%)",
+                      boxShadow: "0 24px 60px rgba(0,0,0,0.6)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                    initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 8 }}
+                    animate={{ opacity: 1, scale: 1, y: 0, transition: popBounce(!!reduceMotion) }}
+                    exit={reduceMotion ? { opacity: 0, transition: { duration: 0.14 } } : { opacity: 0, scale: 0.96, y: 6, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } }}
+                    data-testid="album-description-popover"
+                  >
+                    <div className="flex items-start justify-between gap-4 mb-3">
+                      <h2 className="text-fan-primary text-lg font-bold tracking-[-0.01em] leading-tight">
+                        {album.title}
+                      </h2>
+                      <IconButton
+                        variant="ghost"
+                        size="md"
+                        label="Close"
+                        onClick={() => setDescOpen(false)}
+                        className="-mr-1.5 -mt-1 flex-shrink-0 text-fan-secondary hover:text-white"
+                        data-testid="button-close-album-description"
+                      >
+                        <X strokeWidth={2.2} />
+                      </IconButton>
+                    </div>
+                    <p className="text-fan-secondary text-sm leading-[1.6] whitespace-pre-line">
+                      {album.description}
+                    </p>
+                  </motion.div>
+                </div>
+              </>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
+
         {/* Hero. Cover shrinks to 220px at md (portrait tablets) so the
             artist/title block keeps a comfortable reading measure next
             to it; at lg we restore the full 280px Apple-Music density. */}
@@ -543,12 +622,10 @@ export function DesktopAlbumView({
             )}
 
             {album.description && (
-              <p
-                className="mt-3 text-fan-secondary text-[14px] leading-[1.55] max-w-[640px] line-clamp-3"
-                data-testid="album-description"
-              >
-                {album.description}
-              </p>
+              <DesktopClampedDescription
+                text={album.description}
+                onExpand={() => setDescOpen(true)}
+              />
             )}
 
             {/* Apple anchors the transport row at the BOTTOM of the album
@@ -908,6 +985,93 @@ const BUY_BLUE_GRADIENT =
  * • When no previews exist (`canPlay=false`) → dimmed-white, disabled,
  *   with a tooltip.
  */
+/* Task #1561 — desktop/tablet clamped album description. Mirrors the mobile
+   ClampedDescription: clamps to 3 lines and only renders the inline Apple-style
+   MORE affordance when the copy actually overflows (measured via scrollHeight vs
+   clientHeight, re-checked on resize). When the text fits, it renders the plain
+   clamped paragraph so the layout is unchanged. */
+function DesktopClampedDescription({
+  text,
+  onExpand,
+}: {
+  text: string;
+  onExpand: () => void;
+}) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let raf = 0;
+    const check = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (!ref.current) return;
+        setOverflowing(
+          ref.current.scrollHeight - ref.current.clientHeight > 1,
+        );
+      });
+    };
+    check();
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(check);
+      ro.observe(el);
+      return () => {
+        cancelAnimationFrame(raf);
+        ro.disconnect();
+      };
+    }
+    window.addEventListener("resize", check);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", check);
+    };
+  }, [text]);
+
+  if (!overflowing) {
+    return (
+      <p
+        ref={ref}
+        className="mt-3 text-fan-secondary text-[14px] leading-[1.55] max-w-[640px] line-clamp-3"
+        data-testid="album-description"
+      >
+        {text}
+      </p>
+    );
+  }
+
+  return (
+    <div className="relative mt-3 max-w-[640px]" data-testid="album-description">
+      <button
+        type="button"
+        onClick={onExpand}
+        aria-label="Read more about this album"
+        className="block w-full text-left transition-opacity hover:opacity-90 active:opacity-80"
+      >
+        <p
+          ref={ref}
+          className="text-fan-secondary text-sm leading-[1.55] line-clamp-3"
+        >
+          {text}
+        </p>
+        <span
+          aria-hidden="true"
+          className="absolute bottom-0 right-0 text-sm font-semibold pl-14 leading-[1.55]"
+          style={{
+            color: BRAND_BLUE,
+            background:
+              "linear-gradient(to right, rgba(var(--brand-bg-rgb), 0) 0%, rgb(var(--brand-bg-rgb)) 40%, rgb(var(--brand-bg-rgb)) 100%)",
+          }}
+          data-testid="button-album-description-more"
+        >
+          MORE
+        </span>
+      </button>
+    </div>
+  );
+}
+
 function PreviewPlayPill({
   canPlay,
   active,
