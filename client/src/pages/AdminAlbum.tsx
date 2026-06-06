@@ -114,6 +114,7 @@ import { SellPanel } from "@/components/admin/SellPanel";
 import { PressPanel } from "@/components/admin/PressPanel";
 import { ShopifyPanel } from "@/components/admin/ShopifyPanel";
 import { AlbumCustomersPanel } from "@/components/admin/AlbumCustomersPanel";
+import { AlbumDashboardPanel } from "@/components/admin/AlbumDashboardPanel";
 import { NewAlbumModeDialog } from "@/components/admin/NewAlbumModeDialog";
 import { PressingOrderStepper } from "@/components/admin/PressingOrderFlow";
 import {
@@ -287,7 +288,7 @@ interface SongLite {
   vinylOrder?: number | null;
 }
 
-type Tab = "overview" | "tracks" | "sell" | "press" | "shopify" | "customers";
+type Tab = "dashboard" | "overview" | "tracks" | "sell" | "press" | "shopify" | "customers";
 // Task #335 — the visible tab set is now driven by `sellMode` +
 // `sellQuoteLockedAt`. Before the operator locks a quote we only show
 // Overview/Tracks/Sell so the page stays focused on "decide what we're
@@ -310,11 +311,16 @@ function visibleTabsFor(
   // dropped entirely — Overview + Digital only.
   if (album.isSpinPromo) {
     return [
+      { key: "dashboard", label: "Dashboard" },
       { key: "overview", label: "Overview" },
       { key: "tracks", label: "Digital" },
     ];
   }
+  // Task #1525 — per-album performance Dashboard is the FIRST tab and the
+  // default landing. Unlike Physical / Customers it is NOT gated by
+  // `hidePress`: artist AND label partners see their own album's numbers.
   const base: { key: Tab; label: string }[] = [
+    { key: "dashboard", label: "Dashboard" },
     { key: "overview", label: "Overview" },
     { key: "sell", label: "Package" },
     { key: "tracks", label: "Digital" },
@@ -447,7 +453,7 @@ export function AdminAlbum() {
   const initialTab = useMemo(() => {
     try {
       const t = new URLSearchParams(search).get("tab");
-      const valid: Tab[] = ["overview", "tracks", "sell", "press", "shopify", "customers"];
+      const valid: Tab[] = ["dashboard", "overview", "tracks", "sell", "press", "shopify", "customers"];
       return valid.includes(t as Tab) ? (t as Tab) : null;
     } catch {
       return null;
@@ -459,7 +465,7 @@ export function AdminAlbum() {
       ? "tracks"
       : initialOnboarding
         ? "sell"
-        : initialTab ?? "overview",
+        : initialTab ?? "dashboard",
   );
   // Mode-picker modal state. Opens automatically when `sellMode` is
   // null (a fresh row), or when the operator clicks "Change mode" in
@@ -911,7 +917,7 @@ export function AdminAlbum() {
   useEffect(() => {
     if (!album) return;
     const allowed = visibleTabsFor(album, { hidePress: hidePressSection }).map((t) => t.key);
-    if (!allowed.includes(tab)) setTab("overview");
+    if (!allowed.includes(tab)) setTab("dashboard");
   }, [album?.sellMode, album?.sellQuoteLockedAt, album?.isGoodTunesRelease, album?.isPrepping, album?.isSpinPromo, tab, album, hidePressSection]);
 
   // Task #674 — Mirror the active tab into the URL (`?tab=`) so a refresh
@@ -1402,9 +1408,12 @@ export function AdminAlbum() {
             allowed set. */}
         {(() => {
           const allowed = new Set(visibleTabsFor(album, { hidePress: hidePressSection }).map((t) => t.key));
-          const safeTab: Tab = allowed.has(tab) ? tab : "overview";
+          const safeTab: Tab = allowed.has(tab) ? tab : "dashboard";
           return (
             <>
+              {safeTab === "dashboard" && allowed.has("dashboard") && (
+                <AlbumDashboardPanel albumId={album.id} />
+              )}
               {safeTab === "overview" && allowed.has("overview") && (
                 <OverviewPanel album={album} />
               )}

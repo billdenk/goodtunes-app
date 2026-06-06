@@ -801,6 +801,217 @@ async function audienceHandler(req: Request, res: Response) {
   });
 }
 
+// ─── Single-album dashboard (Task #1525) ───────────────────────────────
+// Powers the per-album "Dashboard" tab on /admin/albums/:id. Reuses the
+// exact same compute path as the catalog /artist dashboard by building an
+// ArtistScope whose albumIds is a single element — there is NO forked SQL
+// here, so the per-album numbers can never drift from the artist rollup.
+//
+// Access: visible to the album's artist AND label (and manager) partners
+// for their OWN album, plus operators for any album. This is deliberately
+// wider than the operator-only Customers/Physical tabs. The album-scoped
+// ownership check below mirrors `computeArtistDatasetScope`'s ownership
+// rule (primaryArtistId OR payout owner; label_id for labels; people.
+// manager_id for managers) so a partner can never read another act's
+// numbers by guessing an album id.
+const ALBUM_REVENUE_STATUSES = sql.raw(`'paid','shipped','complete','completed'`);
+
+type AlbumScopeResult =
+  | { scope: ArtistScope; albumTitle: string }
+  | { error: string; status: number };
+
+async function resolveAlbumScope(req: Request, albumId: string): Promise<AlbumScopeResult> {
+  const userId = req.session?.userId;
+  if (!userId) return { error: "Unauthorized", status: 401 };
+  const info = await getUserRole(userId);
+  if (!info) return { error: "Unauthorized", status: 401 };
+
+  const albRow = await db.execute<{
+    id: string;
+    primary_artist_id: string | null;
+    payout_owner_kind: string | null;
+    payout_owner_id: string | null;
+    label_id: string | null;
+    title: string;
+  }>(sql`
+    SELECT id, primary_artist_id, payout_owner_kind, payout_owner_id, label_id, title
+    FROM albums WHERE id = ${albumId} AND deleted_at IS NULL LIMIT 1
+  `);
+  const album = (albRow as any).rows?.[0];
+  if (!album) return { error: "Album not found", status: 404 };
+
+  let allowed = false;
+  if (info.role === "super_admin" || info.role === "admin") {
+    allowed = true; // operators see any album
+  } else if (info.role === "artist") {
+    allowed =
+      !!info.roleScopeId &&
+      (album.primary_artist_id === info.roleScopeId ||
+        (album.payout_owner_kind === "person" && album.payout_owner_id === info.roleScopeId));
+  } else if (info.role === "label") {
+    allowed = !!info.roleScopeId && album.label_id === info.roleScopeId;
+  } else if (info.role === "manager") {
+    if (info.roleScopeId && album.primary_artist_id) {
+      const r = await db.execute<{ ok: boolean }>(sql`
+        SELECT EXISTS(
+          SELECT 1 FROM people WHERE id = ${album.primary_artist_id} AND manager_id = ${info.roleScopeId}
+        ) AS ok
+      `);
+      allowed = ((r as any).rows?.[0]?.ok) === true;
+    }
+  }
+  if (!allowed) return { error: "You don't have access to this album", status: 403 };
+
+  const songRows = await db.execute<{ id: string }>(sql`
+    SELECT id FROM songs WHERE album_id = ${albumId}
+  `);
+  const songIds = ((songRows as any).rows || []).map((r: any) => r.id);
+  return {
+    scope: { personId: album.primary_artist_id ?? "", albumIds: [albumId], songIds, ownedSongIds: songIds },
+    albumTitle: album.title,
+  };
+}
+
+async function albumDashboardHandler(req: Request, res: Response) {
+  const resolved = await resolveAlbumScope(req, String(req.params.id));
+  if ("error" in resolved) return res.status(resolved.status).json({ message: resolved.error });
+  const { scope } = resolved;
+  const albumId = scope.albumIds[0];
+
+  // (1) Headline totals — reuse the artist rollup's lifetime compute so the
+  // album's units (multi-quantity correct via order_copies), revenue,
+  // orders, buyers, plays and listeners match the catalog dashboard exactly.
+  const lifetime = await computeLifetime(scope);
+
+  // (2) Add-ons sold — receipt-aligned (order_items kind addon|custom_addon),
+  // grouped by sku with the snapshot label, multi-quantity correct via
+  // SUM(quantity). `revenueCents` sums the per-line totals already stored.
+  const addonRows = await db.execute<{ sku: string; label: string; count: string; revenue: string }>(sql`
+    SELECT oi.sku, MIN(oi.label) AS label,
+           COALESCE(SUM(oi.quantity), 0)::text AS count,
+           COALESCE(SUM(oi.unit_price_cents), 0)::text AS revenue
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    WHERE o.album_id = ${albumId}
+      AND o.status IN (${ALBUM_REVENUE_STATUSES})
+      AND oi.kind IN ('addon', 'custom_addon')
+    GROUP BY oi.sku
+    ORDER BY SUM(oi.quantity) DESC, MIN(oi.label) ASC
+  `);
+  const addons = ((addonRows as any).rows || []).map((r: any) => ({
+    sku: r.sku,
+    label: r.label,
+    count: Number(r.count),
+    revenueCents: Number(r.revenue),
+  }));
+
+  // (3) New vs. returning BUYERS (purchase-based, distinct from the play-
+  // based audience cohort). For each customer who bought THIS album, was
+  // this their first-ever GoodTunes purchase (new) or did they already buy
+  // something earlier (returning)?
+  const nvrRow = await db.execute<{ new_buyers: string; returning_buyers: string }>(sql`
+    WITH album_buyers AS (
+      SELECT o.customer_id, MIN(o.created_at) AS first_album_purchase
+      FROM orders o
+      WHERE o.album_id = ${albumId}
+        AND o.status IN (${ALBUM_REVENUE_STATUSES})
+        AND o.customer_id IS NOT NULL
+      GROUP BY o.customer_id
+    ),
+    first_ever AS (
+      SELECT o.customer_id, MIN(o.created_at) AS first_ever_purchase
+      FROM orders o
+      WHERE o.customer_id IN (SELECT customer_id FROM album_buyers)
+        AND o.status IN (${ALBUM_REVENUE_STATUSES})
+      GROUP BY o.customer_id
+    )
+    SELECT
+      COUNT(*) FILTER (WHERE fe.first_ever_purchase >= ab.first_album_purchase)::text AS new_buyers,
+      COUNT(*) FILTER (WHERE fe.first_ever_purchase <  ab.first_album_purchase)::text AS returning_buyers
+    FROM album_buyers ab
+    JOIN first_ever fe ON fe.customer_id = ab.customer_id
+  `);
+  const nvr = (nvrRow as any).rows?.[0] ?? { new_buyers: "0", returning_buyers: "0" };
+
+  // (4) Most popular songs — every track on the album ranked by plays, with
+  // completions + favorites alongside. LEFT JOIN keeps 0-play tracks in the
+  // ranking so the list reads as a complete tracklist leaderboard.
+  const songRows = scope.songIds.length
+    ? await db.execute<{ song_id: string; title: string; plays: string; completes: string; favorites: string }>(sql`
+        SELECT s.id AS song_id, s.title,
+          COUNT(*) FILTER (WHERE e.name = 'play_start')::text AS plays,
+          COUNT(*) FILTER (WHERE e.name = 'play_complete')::text AS completes,
+          COUNT(*) FILTER (WHERE e.name = 'favorite_song')::text AS favorites
+        FROM songs s
+        LEFT JOIN analytics_events e
+          ON e.payload->>'songId' = s.id
+          AND e.name IN ('play_start', 'play_complete', 'favorite_song')
+        WHERE s.album_id = ${albumId}
+        GROUP BY s.id, s.title
+        ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC, s.title ASC
+      `)
+    : ({ rows: [] } as any);
+  const topSongs = ((songRows as any).rows || []).map((r: any) => ({
+    songId: r.song_id,
+    title: r.title,
+    plays: Number(r.plays),
+    completes: Number(r.completes),
+    favorites: Number(r.favorites),
+  }));
+
+  // (5) Fan locations — reuse the partner buyer-map (city-level geocode) with
+  // a single-album scope filter so the viz matches the artist dashboard.
+  const { buyerMap } = await import("./reports/buyers");
+  const geo = await buyerMap(sql`o.album_id = ${albumId}`, new Date(0), new Date(Date.now() + 86400_000));
+
+  return res.json({
+    lifetime,
+    addons,
+    newVsReturning: { newBuyers: Number(nvr.new_buyers), returningBuyers: Number(nvr.returning_buyers) },
+    topSongs,
+    geo,
+  });
+}
+
+// Drill-down for a single add-on: who bought it. PII guardrail mirrors the
+// buyer roster — only public display name (or trimmed legal-name fallback)
+// and city/region/country leave here; email/phone/street never do.
+async function albumAddonBuyersHandler(req: Request, res: Response) {
+  const resolved = await resolveAlbumScope(req, String(req.params.id));
+  if ("error" in resolved) return res.status(resolved.status).json({ message: resolved.error });
+  const albumId = resolved.scope.albumIds[0];
+  const skuRaw = String(req.query.sku ?? "").trim();
+  if (!skuRaw) return res.status(400).json({ message: "sku is required" });
+
+  const rows = await db.execute<any>(sql`
+    SELECT o.id AS order_id, o.created_at, oi.quantity,
+      o.shipping_address->>'city' AS city,
+      o.shipping_address->>'state' AS region,
+      o.shipping_address->>'country' AS country,
+      cu.display_name, o.buyer_name
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    LEFT JOIN customer_users cu ON cu.id = o.customer_id
+    WHERE o.album_id = ${albumId}
+      AND o.status IN (${ALBUM_REVENUE_STATUSES})
+      AND oi.kind IN ('addon', 'custom_addon')
+      AND oi.sku = ${skuRaw}
+    ORDER BY o.created_at DESC
+    LIMIT 500
+  `);
+  const { trimBuyerName } = await import("./reports/buyers");
+  const buyers = ((rows as any).rows || []).map((r: any) => ({
+    orderId: r.order_id,
+    name: r.display_name?.trim() ? r.display_name.trim() : trimBuyerName(r.buyer_name),
+    quantity: Number(r.quantity) || 1,
+    date: r.created_at,
+    city: r.city ?? null,
+    region: r.region ?? null,
+    country: r.country ?? null,
+  }));
+  return res.json({ buyers });
+}
+
 // ─── CSV ───────────────────────────────────────────────────────────────
 function sendCsv(res: Response, filename: string, rows: any[]): Response {
   res.setHeader("Content-Type", "text/csv");
@@ -864,4 +1075,11 @@ export async function registerArtistReportRoutes(app: Express): Promise<void> {
   app.get("/api/artist/buyers", gate, buyersHandler);
   app.get("/api/artist/buyer-map", gate, buyerMapHandler);
   app.get("/api/artist/audience", gate, audienceHandler);
+
+  // Task #1525 — per-album dashboard tab. Wider role gate than the artist
+  // rollup (operators with role "admin" land here too); the per-album
+  // ownership check in resolveAlbumScope does the real authorization.
+  const albumGate = requireRole("artist", "label", "manager", "super_admin", "admin");
+  app.get("/api/admin/albums/:id/dashboard", albumGate, albumDashboardHandler);
+  app.get("/api/admin/albums/:id/dashboard/addon-buyers", albumGate, albumAddonBuyersHandler);
 }
