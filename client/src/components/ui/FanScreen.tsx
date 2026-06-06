@@ -17,12 +17,17 @@ export function FanScreen({
   leading,
   trailing,
   fadeTrailing = false,
+  footer,
   children,
 }: {
   title: string;
   leading?: ReactNode;
   trailing?: ReactNode;
   fadeTrailing?: boolean;
+  // Optional bottom-pinned overlay rendered as a sibling of the scroll
+  // container (the section is `relative`), e.g. the Search page's
+  // bottom-anchored search bar that floats above the MiniPlayer + BottomNav.
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -138,6 +143,7 @@ export function FanScreen({
           </div>
         </div>
 
+        {footer}
         <MiniPlayer />
         <BottomNav />
       </section>
