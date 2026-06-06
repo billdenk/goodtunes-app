@@ -1902,6 +1902,13 @@ export function registerCommerceRoutes(app: Express) {
     // in time to price shipping — the fan tells us up front and we lock
     // the session's allowed_countries to it. Defaults to US.
     shippingCountry: z.string().min(2).max(2).optional(),
+    // Task #1484 — optional name the buyer wants printed on the digital
+    // GoodDeed certificate, captured in the Buy sheet before paying. Only
+    // honored for a digital-only GoodDeed purchase (no physical signed-
+    // cert copy); physical copies keep the operator confirm flow. Stamped
+    // onto orders.certConfirmedName at materialization so the cert PDF
+    // (Path 2) prints it with no second step.
+    certName: z.string().max(80).optional(),
   });
   app.post("/api/checkout/session", async (req, res) => {
     const auth = req.headers.authorization;
@@ -2233,6 +2240,12 @@ export function registerCommerceRoutes(app: Express) {
       gt_quantity: String(quantity),
       gt_signed_cert_count: String(signedCertCount),
       gt_copies: copiesMask,
+      // Task #1484 — buyer-chosen digital GoodDeed cert name. Only carried
+      // when this is a digital-only GoodDeed purchase (no signed copy);
+      // physical signed-cert orders keep the operator confirm flow, so we
+      // never stamp certConfirmedName for them.
+      gt_cert_name:
+        signedCertCount === 0 ? (parsed.data.certName?.trim().slice(0, 80) ?? "") : "",
       // Shipping breakdown so materialize can persist base vs. our markup
       // separately (Stripe only reports the combined shipping_cost total).
       gt_ship_country: shippingQuote ? shippingQuote.country : "",
@@ -2885,6 +2898,14 @@ export async function materializeOrderFromSession(
   const copyCertPattern: boolean[] = Array.from({ length: quantity }, (_, i) =>
     copiesMask[i] === "1",
   );
+  // Task #1484 — the buyer's chosen digital GoodDeed cert name, captured
+  // in the Buy sheet. The session metadata only carries it for a digital-
+  // only GoodDeed purchase (no signed copy); double-gate on !signedCert
+  // here so a physical signed-cert order never gets certConfirmedName
+  // stamped (those keep the operator confirm flow). Blank → keep the
+  // synthesized-name fallback at PDF time.
+  const checkoutCertName =
+    !signedCert ? (session.metadata?.gt_cert_name?.trim() || null) : null;
   const signedCertPriceCents = parseInt(session.metadata?.gt_signed_cert_price ?? "0", 10) || 0;
   // Task #793 — the 7" "+ booklet" variant stamps every copy as a
   // with-booklet bundle so fulfillment + booklet-run consumption is
@@ -3062,6 +3083,11 @@ export async function materializeOrderFromSession(
             paymentWalletType,
             receiptUrl,
             goodDeedNumber: firstCertNumber,
+            // Task #1484 — stamp the buyer's chosen digital cert name (and
+            // when it was set) so the cert PDF (Path 2) prints it with no
+            // post-checkout step. Null for physical signed-cert orders.
+            certConfirmedName: checkoutCertName,
+            certConfirmedAt: checkoutCertName ? new Date() : null,
             skuKind,
             artistSnapshotId,
             labelSnapshotId,
@@ -3128,6 +3154,15 @@ export async function materializeOrderFromSession(
             paymentWalletType,
             receiptUrl,
             goodDeedNumber: firstCertNumber,
+            // Task #1484 — preserve any name the fan already confirmed
+            // (e.g. via the /welcome card on an earlier visit); only fill
+            // from the checkout value when the order has none yet.
+            certConfirmedName: order!.certConfirmedName ?? checkoutCertName,
+            certConfirmedAt: order!.certConfirmedName
+              ? order!.certConfirmedAt
+              : checkoutCertName
+                ? new Date()
+                : order!.certConfirmedAt,
             skuKind: order!.skuKind ?? skuKind,
             artistSnapshotId: order!.artistSnapshotId ?? artistSnapshotId,
             labelSnapshotId: order!.labelSnapshotId ?? labelSnapshotId,

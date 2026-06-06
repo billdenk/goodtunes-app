@@ -278,6 +278,13 @@ export function BuySheet({
     chargedCents?: number;
   } | null>(null);
   const [shippingLoading, setShippingLoading] = useState(false);
+  // Task #1484 — optional "name on your GoodDeed® certificate" the buyer
+  // can set up front, before paying. Only collected on digital-only
+  // GoodDeed purchases (no physical signed-cert copy) — those keep the
+  // operator-driven confirm flow. Persisted to orders.certConfirmedName
+  // at materialization so the digital cert PDF prints it without a
+  // second post-checkout step.
+  const [certName, setCertName] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -357,6 +364,16 @@ export function BuySheet({
   }, [booklet, bookletAvailable]);
 
   const certCount = copyCerts.filter(Boolean).length;
+  // Task #1484 — the optional certificate-name field only applies to a
+  // digital-only GoodDeed purchase: the album offers a GoodDeed cert
+  // AND no copy carries the physical signed-cert add-on (those keep the
+  // operator confirm flow). The synthesized default mirrors the server's
+  // realName → displayName → username fallback so the buyer sees what
+  // will print if they leave it blank.
+  const defaultCertName = isCustomerSignedIn
+    ? user!.realName || user!.displayName || user!.username
+    : "";
+  const showCertNameField = !!addon && certCount === 0;
   // Task #793 — when the with-booklet 7" variant is chosen the per-copy
   // price IS the flat set bundle price; otherwise it's the SKU price.
   const perCopyFormatCents =
@@ -468,6 +485,11 @@ export function BuySheet({
         // Destination drives the server-side shipping quote that becomes
         // the Stripe shipping_option; allowed_countries is locked to it.
         shippingCountry: country,
+        // Task #1484 — optional name for the digital GoodDeed cert. Only
+        // honored server-side when no physical signed-cert copy is in the
+        // order; trimmed empty → server falls back to the synthesized name.
+        certName:
+          showCertNameField && certName.trim() ? certName.trim() : undefined,
       });
       const j = await r.json();
       if (!j.clientSecret) throw new Error(j?.message ?? "Checkout failed to start");
@@ -904,6 +926,39 @@ export function BuySheet({
                         );
                       })}
                     </Group>
+                  </div>
+                )}
+
+                {/* Task #1484 — name on the digital GoodDeed® certificate.
+                    Only shown for a digital-only GoodDeed purchase (no
+                    physical signed-cert copy); persisted to the order at
+                    materialization so the cert PDF prints it with no
+                    second post-checkout step. Left blank → the server
+                    falls back to the buyer's account name. */}
+                {showCertNameField && (
+                  <div className="mb-4" data-testid="block-cert-name">
+                    <label
+                      htmlFor="buy-cert-name"
+                      className="block text-fan-secondary text-sm mb-1.5"
+                    >
+                      Name on your GoodDeed® certificate{" "}
+                      <span className="text-fan-faint">(optional)</span>
+                    </label>
+                    <input
+                      id="buy-cert-name"
+                      type="text"
+                      value={certName}
+                      maxLength={80}
+                      onChange={(e) => setCertName(e.target.value)}
+                      placeholder={defaultCertName || "e.g. Jane Doe"}
+                      className="w-full rounded-2xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-base text-white placeholder:text-white/35 focus:outline-none focus:border-white/25"
+                      data-testid="input-cert-name"
+                    />
+                    <p className="text-fan-faint text-xs mt-1.5 ml-1 leading-snug">
+                      {defaultCertName
+                        ? `Leave blank to use “${defaultCertName}.” You can change it later, too.`
+                        : "This prints on your digital certificate. You can change it later, too."}
+                    </p>
                   </div>
                 )}
 
