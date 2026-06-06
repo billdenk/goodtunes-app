@@ -571,8 +571,15 @@ export function Account() {
           {/* Task #400 — Fan-initiated account merge. If a fan signed up
               on the new player and *then* discovered their imported
               gogoods.com account exists separately, they can pull all
-              that history into the account they're using now. */}
-          <AccountMergePanel />
+              that history into the account they're using now.
+
+              Task #1461 — "These two accounts are me" entry point is
+              intentionally hidden for now (per Bill — adds noise, not
+              needed yet). The merge flow, its routes, and server logic
+              all stay intact; only this entry is hidden. To re-enable,
+              render <AccountMergePanel /> again — ideally gated so it only
+              shows when there's actually a second account to merge. */}
+          {/* <AccountMergePanel /> */}
 
           {/* Task #873 — Passwordless is the default (email magic links).
               A fan who'd rather have a password can opt in here; we reuse
