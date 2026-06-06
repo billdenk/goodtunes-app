@@ -79,9 +79,10 @@ function WelcomeBackPill() {
   const [submitting, setSubmitting] = useState(false);
   const isMobile = useIsMobile();
 
-  // Single close path so every dismiss (Not me, backdrop, ESC, and a
-  // successful submit) both hides the surface and clears the field —
-  // reopening should never show a stale email.
+  // Single close path so every dismiss (backdrop, ESC, the close
+  // affordance, the Google/Apple hint, and a successful submit) both
+  // hides the surface and clears the field — reopening should never
+  // show a stale email.
   const closeWelcomeBack = () => {
     setOpen(false);
     setEmail("");
@@ -166,7 +167,7 @@ function WelcomeBackPill() {
           downstream breaks. */}
       {(() => {
         const formBody = (
-          <form onSubmit={sendLink} className="mt-2 flex flex-col gap-3">
+          <form onSubmit={sendLink} className="mt-3 flex flex-col gap-3">
             <input
               type="email"
               value={email}
@@ -176,7 +177,7 @@ function WelcomeBackPill() {
               inputMode="email"
               autoCapitalize="none"
               spellCheck={false}
-              className="w-full border border-white/10 bg-white/[0.06] rounded-2xl px-4 py-3.5 text-white placeholder-white/30 text-base focus:outline-none focus:border-[var(--brand-blue)]"
+              className="w-full rounded-2xl border border-white/[0.1] bg-white/[0.05] px-4 py-3.5 text-base text-white placeholder-white/30 transition-all focus:outline-none focus:border-[var(--brand-blue)] focus:bg-white/[0.07] focus:shadow-[0_0_0_4px_var(--brand-blue-soft)]"
               required
               autoFocus
               data-testid="input-welcomeback-sheet-email"
@@ -184,19 +185,28 @@ function WelcomeBackPill() {
             <button
               type="submit"
               disabled={submitting || !email.trim()}
-              className="w-full py-3.5 rounded-2xl font-semibold text-white disabled:opacity-40"
-              style={{ background: "linear-gradient(135deg, #1D5E8F, var(--brand-blue))" }}
+              className="w-full py-3.5 rounded-full font-semibold text-base text-white transition-all active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+              style={{
+                background: "linear-gradient(180deg, var(--brand-blue), var(--primarypetrol-blue-02))",
+                boxShadow: "0 14px 30px -14px var(--brand-blue)",
+              }}
               data-testid="button-welcomeback-sheet-send"
             >
-              {submitting ? "Sending…" : "Email me a sign-in link"}
+              {submitting ? "Sending…" : "Send my Magic Link"}
             </button>
+            {/* Quiet OAuth nudge — fans who originally used Google/Apple
+                won't have a password, so the magic link isn't their path.
+                Closing returns them to the main login, where the existing
+                email lookup swaps in the right "Continue with …" button.
+                Secondary styling: a faint line, never a second CTA. */}
             <button
               type="button"
               onClick={closeWelcomeBack}
-              className="w-full py-3 text-white/55 hover:text-white/80 text-sm"
-              data-testid="button-welcomeback-sheet-cancel"
+              className="mt-0.5 w-full text-center text-xs leading-relaxed text-fan-faint transition-colors hover:text-fan-secondary"
+              data-testid="button-welcomeback-oauth-hint"
             >
-              Not me
+              Originally used Google or Apple?{" "}
+              <span className="text-fan-secondary">Just sign in with that instead.</span>
             </button>
           </form>
         );
@@ -204,12 +214,18 @@ function WelcomeBackPill() {
         if (isMobile) {
           return (
             <Drawer open={open} onOpenChange={handleOpenChange}>
-              <DrawerContent className="bg-[var(--brand-bg)] border-white/10 text-white">
+              <DrawerContent
+                className="rounded-t-3xl border border-white/[0.08] text-white backdrop-blur-xl"
+                style={{
+                  background:
+                    "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)), rgba(var(--brand-bg-rgb), 0.88)",
+                }}
+              >
                 <div className="mx-auto w-full max-w-[440px] px-5 pb-8">
                   <DrawerHeader className="px-0 text-left">
-                    <DrawerTitle className="text-white text-2xl font-bold tracking-tight">Welcome back.</DrawerTitle>
-                    <DrawerDescription className="text-white/55 text-sm leading-relaxed">
-                      If you bought music from gogoods.com before June 2026, your library moved over to GoodTunes. Enter the email you used and we'll send a one-tap sign-in link — no password needed.
+                    <DrawerTitle className="text-fan-primary text-2xl font-bold tracking-tight">This refresh goes to twelve.</DrawerTitle>
+                    <DrawerDescription className="text-fan-secondary text-sm leading-relaxed">
+                      Create an account prior to June 2026? Enter the email you used and we'll send a one-tap sign-in link — no password required.
                     </DrawerDescription>
                   </DrawerHeader>
                   {formBody}
@@ -221,11 +237,17 @@ function WelcomeBackPill() {
 
         return (
           <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent className="bg-[var(--brand-bg)] border-0 text-white max-w-[440px] rounded-2xl px-6 py-7">
+            <DialogContent
+              className="border border-white/[0.08] text-white max-w-[440px] rounded-3xl px-6 py-7 backdrop-blur-xl"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)), rgba(var(--brand-bg-rgb), 0.88)",
+              }}
+            >
               <DialogHeader className="text-left space-y-1.5">
-                <DialogTitle className="text-white text-2xl font-bold tracking-tight">Welcome back.</DialogTitle>
+                <DialogTitle className="text-fan-primary text-2xl font-bold tracking-tight">This refresh goes to twelve.</DialogTitle>
                 <DialogDescription className="text-fan-secondary text-sm leading-relaxed">
-                  If you bought music from gogoods.com before June 2026, your library moved over to GoodTunes. Enter the email you used and we'll send a one-tap sign-in link — no password needed.
+                  Create an account prior to June 2026? Enter the email you used and we'll send a one-tap sign-in link — no password required.
                 </DialogDescription>
               </DialogHeader>
               {formBody}
