@@ -2283,6 +2283,23 @@ function ShareLinkPanel({
     queryKey: ["/api/people", artistId],
     enabled: !!artistId,
   });
+  // Task #1379 — read the album's post-sale "locked" signal so we can show a
+  // soft caution (NOT a block) when an operator changes an already-saved
+  // Artist URL on a release that has started selling. Same query key the
+  // OverviewPanel/AlbumEditAccessChip use, so this is a cache hit.
+  const { data: shareEditAccess } = useQuery<{ locked: boolean; requiresApproval?: boolean }>({
+    queryKey: ["/api/admin/albums", album.id, "edit-access"],
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/albums/${album.id}/edit-access`, { credentials: "include" });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+  });
+  const albumPostSale = !!shareEditAccess?.locked;
+  // Don't silently auto-default when this session's edits would divert to the
+  // GoodTunes review queue (approval-mode partner) — that would file a pending
+  // change just for opening the page. Auto-defaulting is for the happy path.
+  const autoDefaultBlocked = !!shareEditAccess?.requiresApproval;
   const savedArtistSlug = personData?.artistShareSlug ?? "";
   const [artistDraft, setArtistDraft] = useState(savedArtistSlug);
   const [artistSuggesting, setArtistSuggesting] = useState(false);
@@ -2452,6 +2469,28 @@ function ShareLinkPanel({
     } catch { return false; }
   };
 
+  // Find an available album slug derived from the album's title (then
+  // artist + title as a secondary base). Returns the first free candidate,
+  // or null when there's no title to suggest from. Mirrors the manual
+  // suggestAlbum() walk but returns the slug instead of setting the draft.
+  const findAvailableAlbumSlug = async (): Promise<string | null> => {
+    const bases: string[] = [];
+    for (const raw of [album.title, `${album.artist} ${album.title}`]) {
+      const v = validateShareSlug(raw ?? "");
+      if (v.ok && !bases.includes(v.slug)) bases.push(v.slug);
+    }
+    if (bases.length === 0) return null;
+    for (const base of bases) {
+      for (let n = 1; n <= 9; n++) {
+        const candidate = n === 1 ? base : `${base}-${n}`;
+        const v = validateShareSlug(candidate);
+        if (!v.ok) continue;
+        if (await checkAlbumAvailable(v.slug)) return v.slug;
+      }
+    }
+    return bases[0]; // all taken — surface the base so the operator can tweak it
+  };
+
   const suggestAlbum = async () => {
     if (disabled || saveAlbum.isPending || albumSuggesting) return;
     const bases: string[] = [];
@@ -2479,6 +2518,50 @@ function ShareLinkPanel({
       toast({ title: "Suggestion may be taken", description: "Tweak it before saving." });
     } finally { setAlbumSuggesting(false); }
   };
+
+  // ── Task #1379 — auto-default both URLs from the real names ────────────
+  // When the panel opens for a release that has a primary artist but no
+  // saved Artist URL, derive a URL-safe default from the real artist name
+  // and save it — no manual "Suggest" click needed. Same for the Album URL
+  // from the album title. Idempotent: each side is attempted at most once
+  // per id (keyed by artistId / album.id), only fires when the value is
+  // genuinely missing, never overwrites an operator's value, and won't run
+  // while editing is frozen (post-sale lock / read-only). Reuses the same
+  // availability + per-person/per-artist uniqueness checks "Suggest" uses,
+  // falling back to a numbered variant when the base name is taken.
+  const autoArtistAttemptedFor = useRef<string | null>(null);
+  const autoAlbumAttemptedFor = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!artistId || disabled || autoDefaultBlocked) return;
+    if (personData === undefined) return; // person not loaded yet — don't assume "missing"
+    if (savedArtistSlug) return;          // already has one — never overwrite
+    if (saveArtist.isPending) return;
+    if (autoArtistAttemptedFor.current === artistId) return;
+    autoArtistAttemptedFor.current = artistId;
+    (async () => {
+      const slug = await findAvailableArtistSlug();
+      if (slug && !savedArtistSlug) {
+        setArtistDraft(slug);
+        saveArtist.mutate(slug);
+      }
+    })();
+  }, [artistId, disabled, autoDefaultBlocked, personData, savedArtistSlug, saveArtist.isPending]);
+
+  useEffect(() => {
+    if (!artistId || disabled || autoDefaultBlocked) return; // link needs an artist half
+    if (savedAlbumSlug) return;           // already has one — never overwrite
+    if (saveAlbum.isPending) return;
+    if (autoAlbumAttemptedFor.current === album.id) return;
+    autoAlbumAttemptedFor.current = album.id;
+    (async () => {
+      const slug = await findAvailableAlbumSlug();
+      if (slug && !savedAlbumSlug) {
+        setAlbumDraft(slug);
+        saveAlbum.mutate(slug);
+      }
+    })();
+  }, [album.id, artistId, disabled, autoDefaultBlocked, savedAlbumSlug, saveAlbum.isPending]);
 
   // ── Computed full URL + copy/open ─────────────────────────────────────
   const fullUrl = (savedArtistSlug && savedAlbumSlug)
@@ -2508,6 +2591,20 @@ function ShareLinkPanel({
   };
 
   const anyPending = saveArtist.isPending || saveAlbum.isPending;
+
+  // Task #1379 — empty-field placeholders preview the actual release (the
+  // normalized real artist name / album title), not the old hardcoded
+  // "nightbirde" / "its-ok" strings.
+  const artistPlaceholder = normalizeShareSlug(personData?.name ?? album.artist ?? "") || "artist";
+  const albumPlaceholder = normalizeShareSlug(album.title ?? "") || "album";
+
+  // Task #1379 — soft caution (NOT a block) when an operator changes an
+  // already-saved Artist URL on a release that has started selling. The
+  // artist URL is shared across every one of that artist's releases, so
+  // changing it post-sale could break existing share links / affect
+  // in-progress sales. We still let the save go through.
+  const showArtistChangeWarning =
+    !!savedArtistSlug && albumPostSale && artistIsDirty && !!artistNormalized;
 
   return (
     <div
@@ -2581,7 +2678,7 @@ function ShareLinkPanel({
                 onChange={(e) => setArtistDraft(e.target.value)}
                 onBlur={commitArtist}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
-                placeholder="nightbirde"
+                placeholder={artistPlaceholder}
                 className="h-8 border-0 bg-transparent px-1 focus-visible:ring-0 shadow-none"
                 data-testid="input-artist-share-slug"
               />
@@ -2593,6 +2690,19 @@ function ShareLinkPanel({
             ) : savedArtistSlug ? (
               <p className="text-xs text-slate-500 mt-1">Affects all of {personData?.name ?? album.artist}'s releases.</p>
             ) : null}
+            {/* Task #1379 — soft caution on changing an already-saved artist
+                URL after this release has started selling. Not a block. */}
+            {showArtistChangeWarning && (
+              <p
+                className="text-xs text-amber-700 mt-1.5 p-2 bg-amber-50 rounded-md border border-amber-200 leading-snug"
+                data-testid="text-artist-slug-change-warning"
+              >
+                This release has started selling. The Artist URL is shared across
+                every one of {personData?.name ?? album.artist}'s releases, so
+                changing it can break existing share links and affect in-progress
+                sales. You can still save.
+              </p>
+            )}
           </div>
 
           {/* Album URL field */}
@@ -2620,7 +2730,7 @@ function ShareLinkPanel({
                 onChange={(e) => setAlbumDraft(e.target.value)}
                 onBlur={commitAlbum}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
-                placeholder="its-ok"
+                placeholder={albumPlaceholder}
                 className="h-8 border-0 bg-transparent px-1 focus-visible:ring-0 shadow-none"
                 data-testid="input-share-slug"
               />
