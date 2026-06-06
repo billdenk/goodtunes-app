@@ -95,13 +95,15 @@ export function AdminLabels() {
   // Paste-URL "Add Label" dialog state. Mirrors AdminVendors so the
   // operator's muscle memory carries over between Vendors and Labels.
   const [addOpen, setAddOpen] = useState(false);
+  const [pasteName, setPasteName] = useState("");
   const [pasteUrl, setPasteUrl] = useState("");
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [duplicateLabel, setDuplicateLabel] = useState<LabelLite | null>(null);
 
   const createLabel = useMutation({
-    mutationFn: async (opts: { url?: string }) => {
-      let payload: Record<string, unknown> = { name: "New label" };
+    mutationFn: async (opts: { url?: string; name?: string }) => {
+      const typedName = (opts.name ?? "").trim();
+      let payload: Record<string, unknown> = { name: typedName || "New label" };
       let scrapedName: string | null = null;
       const trimmedUrl = (opts.url ?? "").trim();
       if (trimmedUrl) {
@@ -117,7 +119,9 @@ export function AdminLabels() {
         };
         scrapedName = scraped.name;
         payload = {
-          name: scraped.name || "New label",
+          // Typed name wins over the scraped name; fall back to the
+          // scraped name, then "New label" for a bare URL pull.
+          name: typedName || scraped.name || "New label",
           ...(scraped.domain ? { domain: scraped.domain } : {}),
           ...(scraped.logoUrl ? { logoUrl: scraped.logoUrl } : {}),
           ...(scraped.bio ? { bio: scraped.bio } : {}),
@@ -134,6 +138,7 @@ export function AdminLabels() {
       );
       queryClient.invalidateQueries({ queryKey: ["/api/labels"] });
       setAddOpen(false);
+      setPasteName("");
       setPasteUrl("");
       setPasteError(null);
       setDuplicateLabel(null);
@@ -199,31 +204,70 @@ export function AdminLabels() {
     if (createLabel.isPending) return;
     setPasteError(null);
     setDuplicateLabel(null);
+    setPasteName("");
     setPasteUrl("");
     setAddOpen(true);
+  };
+
+  // Client-side dup guard on the typed name: the server only 409s on a
+  // domain collision, so a name-only create would otherwise sail past the
+  // "already in your Labels list" notice. Match case-insensitively.
+  const findLabelByName = (name: string): LabelLite | null => {
+    const n = name.trim().toLowerCase();
+    if (!n) return null;
+    return labels.find((l) => l.name.trim().toLowerCase() === n) ?? null;
   };
 
   const submitPaste = () => {
     if (createLabel.isPending) return;
     const u = pasteUrl.trim();
+    const n = pasteName.trim();
+    // No URL: a typed name is a valid "create from scratch" — only error
+    // when both fields are empty.
     if (!u) {
-      setPasteError("Paste a label URL, or click Skip to create a blank entry.");
+      if (!n) {
+        setPasteError("Type a label name, or paste a label URL.");
+        return;
+      }
+      const dup = findLabelByName(n);
+      if (dup) {
+        setDuplicateLabel(dup);
+        setPasteError(null);
+        return;
+      }
+      setPasteError(null);
+      setDuplicateLabel(null);
+      createLabel.mutate({ name: n });
       return;
     }
+    // URL present: validate http(s) shape before scraping.
     if (!/^https?:\/\//i.test(u)) {
       setPasteError("URL must start with http:// or https://");
       return;
     }
+    const dup = n ? findLabelByName(n) : null;
+    if (dup) {
+      setDuplicateLabel(dup);
+      setPasteError(null);
+      return;
+    }
     setPasteError(null);
     setDuplicateLabel(null);
-    createLabel.mutate({ url: u });
+    createLabel.mutate({ url: u, name: n });
   };
 
   const skipPaste = () => {
     if (createLabel.isPending) return;
+    const n = pasteName.trim();
+    const dup = n ? findLabelByName(n) : null;
+    if (dup) {
+      setDuplicateLabel(dup);
+      setPasteError(null);
+      return;
+    }
     setPasteError(null);
     setDuplicateLabel(null);
-    createLabel.mutate({});
+    createLabel.mutate({ name: n });
   };
 
   if (authLoading) {
@@ -346,6 +390,7 @@ export function AdminLabels() {
           if (createLabel.isPending) return;
           setAddOpen(o);
           if (!o) {
+            setPasteName("");
             setPasteUrl("");
             setPasteError(null);
             setDuplicateLabel(null);
@@ -361,12 +406,47 @@ export function AdminLabels() {
               Add label
             </DialogTitle>
             <DialogDescription className="text-[13px] text-slate-500 leading-relaxed">
-              Paste a label's website — we'll prefill name, domain, logo,
-              and bio from the page's Open Graph metadata.
+              Name the label, and optionally paste its website — we'll
+              prefill domain, logo, and bio from the page's Open Graph
+              metadata. Your typed name always wins.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 pt-1">
+            <label
+              htmlFor="add-label-name"
+              className="block text-xs font-semibold text-slate-600"
+            >
+              Label name
+            </label>
             <input
+              id="add-label-name"
+              type="text"
+              value={pasteName}
+              onChange={(e) => {
+                setPasteName(e.target.value);
+                if (pasteError) setPasteError(null);
+                if (duplicateLabel) setDuplicateLabel(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  submitPaste();
+                }
+              }}
+              placeholder="Blue Note"
+              autoFocus
+              disabled={createLabel.isPending}
+              className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
+              data-testid="input-add-label-name"
+            />
+            <label
+              htmlFor="add-label-url"
+              className="block text-xs font-semibold text-slate-600 pt-1"
+            >
+              Website URL <span className="font-normal text-slate-400">(optional)</span>
+            </label>
+            <input
+              id="add-label-url"
               type="url"
               value={pasteUrl}
               onChange={(e) => {
@@ -381,7 +461,6 @@ export function AdminLabels() {
                 }
               }}
               placeholder="https://www.bluenote.com/"
-              autoFocus
               disabled={createLabel.isPending}
               className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-[13.5px] outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 disabled:opacity-50"
               data-testid="input-add-label-url"
@@ -428,12 +507,15 @@ export function AdminLabels() {
               className="px-3 py-1.5 rounded-md text-[12.5px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               data-testid="button-add-label-skip"
             >
-              Skip — create blank
+              {pasteName.trim() ? "Create from scratch" : "Skip — create blank"}
             </button>
             <Button
               type="button"
               onClick={submitPaste}
-              disabled={createLabel.isPending || !pasteUrl.trim()}
+              disabled={
+                createLabel.isPending ||
+                (!pasteUrl.trim() && !pasteName.trim())
+              }
               size="sm"
               className="text-[12.5px] font-semibold"
               data-testid="button-add-label-pull"
@@ -441,7 +523,11 @@ export function AdminLabels() {
               {createLabel.isPending && (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               )}
-              {createLabel.isPending ? "Reading…" : "Pull from URL"}
+              {createLabel.isPending
+                ? "Reading…"
+                : pasteUrl.trim()
+                  ? "Pull from URL"
+                  : "Create label"}
             </Button>
           </DialogFooter>
         </DialogContent>
