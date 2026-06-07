@@ -522,7 +522,7 @@ export function Orders() {
 // printed certificate (display / @username / real) using the same
 // identity-picker logic as the digital share sheet, then flips the row
 // to `confirmed` so the admin print queue can batch it.
-function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo }) {
+export function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [showPicker, setShowPicker] = useState(false);
