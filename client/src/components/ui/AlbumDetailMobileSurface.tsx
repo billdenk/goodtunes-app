@@ -127,6 +127,11 @@ export interface AlbumDetailMobileSurfaceProps {
   onShuffle?: () => void;
   onPlaySong?: (song: AlbumDetailMobileSurfaceSong) => void;
   onOpenBuy?: () => void;
+  /** Task #1628 — staged release whose sales-begin (sunrise) date hasn't
+   *  arrived. When set (and the fan doesn't own the album), the Buy CTA is
+   *  replaced by a disabled "Sales Begin {label}" pill (e.g. "Sales Begin
+   *  6/8"); previews stay playable. Null/undefined = live buy behavior. */
+  salesBeginLabel?: string | null;
   onToggleAlbumDownload?: () => void;
   onToggleSongDownload?: (songId: string) => void;
   onOpenSongMenu?: (song: AlbumDetailMobileSurfaceSong, rect: DOMRect) => void;
@@ -183,6 +188,7 @@ export function AlbumDetailMobileSurface({
   onShuffle,
   onPlaySong,
   onOpenBuy,
+  salesBeginLabel,
   onToggleAlbumDownload,
   onToggleSongDownload,
   onOpenSongMenu,
@@ -671,7 +677,35 @@ export function AlbumDetailMobileSurface({
               surface. (Stream-only releases lead with "Stream this" above.) */}
           {ownedNums.length === 0 &&
             album.priceCents != null &&
-            onOpenBuy && (
+            onOpenBuy &&
+            // Task #1628 — staged release: sales haven't begun yet, so the
+            // Buy CTA is replaced by a disabled "Sales Begin {date}" pill.
+            // Previews still play (the Play control above is untouched).
+            (salesBeginLabel ? (
+              <button
+                type="button"
+                disabled
+                aria-disabled="true"
+                className="flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-sm text-fan-secondary flex-shrink-0 cursor-default"
+                style={{ background: "rgba(255,255,255,0.10)" }}
+                data-testid="button-sales-begin"
+              >
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="4" width="18" height="18" rx="2" />
+                  <path d="M16 2v4M8 2v4M3 10h18" />
+                </svg>
+                Sales Begin {salesBeginLabel}
+              </button>
+            ) : (
               <button
                 type="button"
                 onClick={onOpenBuy}
@@ -695,7 +729,7 @@ export function AlbumDetailMobileSurface({
                 </svg>
                 Buy {formatUsdCents(album.priceCents)}
               </button>
-            )}
+            ))}
           {/* Task #1580 — the album-level credits "i" button is hidden; credits
               are now per-track only (opened from each track's row). The
               `hasAlbumCredits`/`onOpenAlbumCredits` wiring stays in place so it

@@ -52,6 +52,8 @@ import { IconButton } from "@/components/ui/IconButton";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { CertPdfViewerSheet } from "@/components/ui/CertPdfViewerSheet";
 import { track } from "@/lib/analytics";
+import { isSunrisePending, formatSalesBeginDate } from "@shared/albumStage";
+import { SalesBeginArrivalModal } from "@/components/ui/SalesBeginArrivalModal";
 
 /** Left inset of the desktop album content channel, used to center the
  *  PlayerDock between the rails: AlbumDesktopSidebar sits 12px from the
@@ -295,6 +297,16 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const hasPreviews = songs.some((s) => s.isPreviewable !== false);
   const canPlay = effectiveOwned || hasPreviews;
 
+  // Task #1628 — staged release whose sales-begin (sunrise) date hasn't
+  // arrived yet. Drives the disabled "Sales Begin {date}" buy pill + the
+  // arrival modal. Owners never see the locked state. Date-driven, so the
+  // page flips to live buy behavior automatically the day sales begin.
+  const salesPending =
+    !effectiveOwned && isSunrisePending(album?.goodTunesReleaseDate);
+  const salesBeginLabel = salesPending
+    ? formatSalesBeginDate(album?.goodTunesReleaseDate)
+    : null;
+
   // Task #1185 — resolve the fan's owning order(s) for this album so the ⋯
   // menu can offer GoodDeed actions (view cert/provenance/ownership +
   // "Download GoodDeed PDF"). The desktop ApiAlbum carries no ownership
@@ -456,6 +468,8 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
     if (album) track("credits_opened", { songId: song.id, albumId: album.id });
   };
   const handleBuyBundle = (opts?: { signedCert?: boolean }) => {
+    // Task #1628 — read-only during a "Sales Begin" locked preview.
+    if (salesPending) return;
     setBuyAddons({ signedCert: !!opts?.signedCert });
     setShowBuySheet(true);
   };
@@ -495,6 +509,8 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
     const was = wasPlayingRef.current;
     wasPlayingRef.current = player.isPlaying;
     if (!buyEnabled || effectiveOwned) return;
+    // Task #1628 — never auto-open Buy during a "Sales Begin" locked preview.
+    if (salesPending) return;
     if (!player.previewMode) return;
     if (!was || player.isPlaying) return;
     if (player.queue.length === 0) return;
@@ -509,7 +525,16 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
     player.currentIndex,
     player.currentTime,
     effectiveOwned,
+    salesPending,
   ]);
+
+  // Task #1628 — single source-of-truth lock: the Buy sheet must never stay
+  // open during a "Sales Begin" locked preview, no matter how it was opened
+  // (the `?buy=1` deep link initializes showBuySheet before the album data has
+  // loaded, etc.). Force it closed.
+  useEffect(() => {
+    if (salesPending && showBuySheet) setShowBuySheet(false);
+  }, [salesPending, showBuySheet]);
 
   // Turn preview mode off when the route unmounts so a navigation away
   // from Preview & Purchase doesn't leave the 30-sec cap armed for
@@ -639,6 +664,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             isMultiOwned={isMulti}
             onPlayVideo={effectiveOwned ? setPlayingVideoId : undefined}
             onBuyBundle={buyEnabled ? handleBuyBundle : undefined}
+            salesBeginLabel={salesBeginLabel}
             signedCertPriceCents={buyEnabled ? signedCertPriceCents : null}
             signedCertSoldOut={signedCertSoldOut}
             lyricsOpen={railOpen && isLgViewport}
@@ -856,6 +882,15 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
 
       {import.meta.env.DEV && id && (
         <DevOwnershipToggle albumId={id} isOwned={isOwned} />
+      )}
+
+      {buyEnabled && salesBeginLabel && album && (
+        <SalesBeginArrivalModal
+          albumId={album.id}
+          albumTitle={album.title}
+          artist={album.artist}
+          salesBeginLabel={salesBeginLabel}
+        />
       )}
 
       <AnimatePresence>

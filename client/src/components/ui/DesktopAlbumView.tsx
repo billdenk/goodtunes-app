@@ -88,6 +88,11 @@ export type DesktopAlbumViewProps = {
   /** Buy CTA. Receives the current add-on selection so the host can
    *  open BuySheet with the matching toggles pre-checked. */
   onBuyBundle?: (opts?: { signedCert?: boolean }) => void;
+  /** Task #1628 — staged release whose sales-begin (sunrise) date hasn't
+   *  arrived. When set (and the album isn't owned), the Buy pill is replaced
+   *  by a disabled "Sales Begin {label}" pill (e.g. "Sales Begin 6/8");
+   *  previews stay playable. Null/undefined = live buy behavior. */
+  salesBeginLabel?: string | null;
   /** Printed-and-signed GoodDeed add-on price (cents). When provided
    *  AND the album isn't owned, a hover-revealed chip pops below the
    *  Buy pill so the fan can toggle the add-on in before checkout.
@@ -287,6 +292,7 @@ export function DesktopAlbumView({
   onPlayAll,
   onShuffle,
   onBuyBundle,
+  salesBeginLabel,
   signedCertPriceCents = null,
   signedCertSoldOut = false,
   onPlayPreview,
@@ -765,14 +771,43 @@ export function DesktopAlbumView({
                       `onBuyBundle` (undefined on native, where buying is
                       disabled) so the iOS app never surfaces a purchase CTA —
                       App Review 3.1.1, matching the mobile shell. */}
-                  {onBuyBundle && album.priceCents != null && (
-                    <BuyPricePill
-                      priceLabel={formatPrice(album.priceCents)}
-                      signedCertPriceCents={signedCertPriceCents}
-                      signedCertSoldOut={signedCertSoldOut}
-                      onBuy={(opts) => onBuyBundle?.(opts)}
-                    />
-                  )}
+                  {onBuyBundle &&
+                    album.priceCents != null &&
+                    // Task #1628 — staged release: sales haven't begun, so the
+                    // Buy pill is replaced by a disabled "Sales Begin {date}"
+                    // pill. Previews stay playable (Play/Preview untouched).
+                    (salesBeginLabel ? (
+                      <button
+                        type="button"
+                        disabled
+                        aria-disabled="true"
+                        className="inline-flex items-center gap-2 h-11 px-5 rounded-full font-semibold text-sm text-fan-secondary cursor-default"
+                        style={{ background: "rgba(255,255,255,0.10)" }}
+                        data-testid="button-sales-begin"
+                      >
+                        <svg
+                          width="15"
+                          height="15"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <rect x="3" y="4" width="18" height="18" rx="2" />
+                          <path d="M16 2v4M8 2v4M3 10h18" />
+                        </svg>
+                        Sales Begin {salesBeginLabel}
+                      </button>
+                    ) : (
+                      <BuyPricePill
+                        priceLabel={formatPrice(album.priceCents)}
+                        signedCertPriceCents={signedCertPriceCents}
+                        signedCertSoldOut={signedCertSoldOut}
+                        onBuy={(opts) => onBuyBundle?.(opts)}
+                      />
+                    ))}
                   {/* Task #1580 — album-level credits "i" button hidden; credits
                       are per-track only. `hasAlbumCredits`/`onOpenAlbumCredits`
                       wiring stays in place so it can be re-enabled later. */}

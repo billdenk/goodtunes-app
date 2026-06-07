@@ -145,13 +145,17 @@ export interface IStorage {
   // trashed / sunrise gating as getAlbumById unless opts override (the
   // PUT uniqueness check passes includeHidden+includeTrashed so a slug
   // can't silently collide with a hidden/trashed row).
-  getAlbumBySlug(slug: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean }): Promise<AlbumWithLabel | undefined>;
+  // `includeSunrisePending` relaxes ONLY the future-sunrise gate (not
+  // hidden/trashed), so the public slug route can serve a *staged*
+  // (date-pending) release to everyone in a read-only "locked" preview
+  // while still 404ing hidden/prepping/soft-deleted rows.
+  getAlbumBySlug(slug: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean; includeSunrisePending?: boolean }): Promise<AlbumWithLabel | undefined>;
   // Task #1310 — two-part artist/album share link resolver. Looks up the
   // artist by their artistShareSlug on the people table, then finds an album
   // by (primary_artist_id, share_slug). Same buy-eligibility gating as
   // getAlbumBySlug unless opts override.
   getPersonByArtistShareSlug(artistSlug: string): Promise<import("../shared/schema").Person | undefined>;
-  getAlbumByArtistAndSlug(artistId: string, albumSlug: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean }): Promise<AlbumWithLabel | undefined>;
+  getAlbumByArtistAndSlug(artistId: string, albumSlug: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean; includeSunrisePending?: boolean }): Promise<AlbumWithLabel | undefined>;
   // Returns the set of album IDs that have at least one explicit song.
   // Used by the /api/albums + /api/albums/:id routes to derive the
   // album-level "E" badge from per-song flags without a per-album
@@ -1064,7 +1068,7 @@ export class DbStorage implements IStorage {
     }
     return { ...row.albums, label: row.labels ?? null };
   }
-  async getAlbumBySlug(slug: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean }): Promise<AlbumWithLabel | undefined> {
+  async getAlbumBySlug(slug: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean; includeSunrisePending?: boolean }): Promise<AlbumWithLabel | undefined> {
     const [row] = await db
       .select()
       .from(albums)
@@ -1074,9 +1078,13 @@ export class DbStorage implements IStorage {
     if (row.albums.deletedAt && !opts?.includeTrashed) return undefined;
     if (row.albums.isHidden && !opts?.includeHidden) return undefined;
     // Sunrise gate, mirrored from getAlbumById — a future-dated album
-    // reads as not-found for fans until its date arrives.
+    // reads as not-found for fans until its date arrives. The public slug
+    // route opts into `includeSunrisePending` so a *staged* (date-pending)
+    // release still resolves for everyone in read-only "locked" preview
+    // mode; hidden/trashed/prepping stay gated by the checks above.
     if (
       !opts?.includeHidden &&
+      !opts?.includeSunrisePending &&
       row.albums.goodTunesReleaseDate &&
       row.albums.goodTunesReleaseDate > todayISODate()
     ) {
@@ -1095,7 +1103,7 @@ export class DbStorage implements IStorage {
   }
   // Task #1310 — resolve an album by (artist id, album share slug). Same
   // gating as getAlbumBySlug (hidden / trashed / sunrise) unless opts override.
-  async getAlbumByArtistAndSlug(artistId: string, albumSlug: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean }): Promise<AlbumWithLabel | undefined> {
+  async getAlbumByArtistAndSlug(artistId: string, albumSlug: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean; includeSunrisePending?: boolean }): Promise<AlbumWithLabel | undefined> {
     const [row] = await db
       .select()
       .from(albums)
@@ -1104,8 +1112,10 @@ export class DbStorage implements IStorage {
     if (!row) return undefined;
     if (row.albums.deletedAt && !opts?.includeTrashed) return undefined;
     if (row.albums.isHidden && !opts?.includeHidden) return undefined;
+    // Same staged-release relaxation as getAlbumBySlug — see the note there.
     if (
       !opts?.includeHidden &&
+      !opts?.includeSunrisePending &&
       row.albums.goodTunesReleaseDate &&
       row.albums.goodTunesReleaseDate > todayISODate()
     ) {

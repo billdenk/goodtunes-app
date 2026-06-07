@@ -83,6 +83,24 @@ export function formatSunriseDate(
   return ry === curYear ? base : `${base}, ${ry}`;
 }
 
+// Terse numeric "M/D" label for an ISO `YYYY-MM-DD`, e.g. "6/8" (no
+// leading zeros). Used by the staged-release "Sales Begin {date}" locked
+// buy control (Task #1628). The year is appended ("6/8/27") only when it
+// differs from `today`'s year. Built from the string parts (no Date
+// parsing) to avoid timezone day-shifts; returns null for empty/malformed
+// input so callers can hide the label.
+export function formatSalesBeginDate(
+  iso: string | null | undefined,
+  today: string = todayISODate(),
+): string | null {
+  if (!iso) return null;
+  const [ry, rm, rd] = iso.split("-").map(Number);
+  if (!ry || !rm || !rd || rm < 1 || rm > 12 || rd < 1 || rd > 31) return null;
+  const base = `${rm}/${rd}`;
+  const curYear = Number(today.split("-")[0]);
+  return ry === curYear ? base : `${base}/${String(ry).slice(-2)}`;
+}
+
 // Full, Apple-Music-style date label for an ISO `YYYY-MM-DD`, e.g.
 // "February 16, 2010". Built from the string parts (no Date parsing) to
 // avoid timezone day-shifts. Returns null for empty/malformed input so

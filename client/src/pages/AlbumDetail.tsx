@@ -146,6 +146,8 @@ function songCreditsPayload(
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { AlbumDetailDesktop } from "@/pages/AlbumDetailDesktop";
 import { shareUrlForSlug } from "@shared/shareSlug";
+import { isSunrisePending, formatSalesBeginDate } from "@shared/albumStage";
+import { SalesBeginArrivalModal } from "@/components/ui/SalesBeginArrivalModal";
 import { goBack } from "@/lib/navHistory";
 
 /**
@@ -648,13 +650,16 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
     const was = wasPlayingRef.current;
     wasPlayingRef.current = isPlaying;
     if (!buyEnabled || isOwned) return;
+    // Task #1628 — during a "Sales Begin" locked preview the page is read-only;
+    // never auto-open the Buy sheet when a preview ends.
+    if (isSunrisePending(apiAlbum?.goodTunesReleaseDate)) return;
     if (!previewMode) return;
     if (!was || isPlaying) return;
     if (queue.length === 0) return;
     if (currentIndex !== queue.length - 1) return;
     if (currentTime < PREVIEW_CAP_SECONDS - 0.5) return;
     setShowBuySheet(true);
-  }, [isPlaying, previewMode, queue.length, currentIndex, currentTime, isOwned]);
+  }, [isPlaying, previewMode, queue.length, currentIndex, currentTime, isOwned, apiAlbum?.goodTunesReleaseDate]);
 
   // Leaving the album shouldn't leave preview-mode armed on whatever
   // the fan plays next (a downloaded album from their library, a
@@ -839,6 +844,24 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
     </div>
   ) : null;
 
+  // Task #1628 — staged release whose sales-begin (sunrise) date hasn't
+  // arrived yet. Drives the disabled "Sales Begin {date}" buy pill + the
+  // arrival modal. Owners never see the locked state. Date-driven, so the
+  // page flips to live buy behavior automatically the day sales begin.
+  const salesPending =
+    !isOwned && isSunrisePending(apiAlbum?.goodTunesReleaseDate);
+  const salesBeginLabel = salesPending
+    ? formatSalesBeginDate(apiAlbum?.goodTunesReleaseDate)
+    : null;
+
+  // Task #1628 — single source-of-truth lock: the Buy sheet must never stay
+  // open during a "Sales Begin" locked preview, no matter how it was opened
+  // (the `?buy=1` deep link initializes showBuySheet before the album data has
+  // loaded, an in-flight sheet when a date is set, etc.). Force it closed.
+  useEffect(() => {
+    if (salesPending && showBuySheet) setShowBuySheet(false);
+  }, [salesPending, showBuySheet]);
+
   return (
     <main className="h-screen w-full flex justify-center overflow-hidden relative">
       <section className="relative w-full h-screen text-fan-primary flex flex-col">
@@ -899,6 +922,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
             if (full) handlePlaySong({ ...full, album });
           }}
           onOpenBuy={buyEnabled ? () => setShowBuySheet(true) : undefined}
+          salesBeginLabel={salesBeginLabel}
           onToggleAlbumDownload={handleToggleAlbumDownload}
           onToggleSongDownload={(id) => toggleSongDownload(id)}
           onOpenSongMenu={(s, rect) => {
@@ -915,6 +939,15 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
           {editorialPanel}
         </AlbumDetailMobileSurface>
         {/* legacy chrome removed — see AlbumDetailMobileSurface above */}
+
+        {buyEnabled && salesBeginLabel && (
+          <SalesBeginArrivalModal
+            albumId={album.id}
+            albumTitle={album.title}
+            artist={album.artist}
+            salesBeginLabel={salesBeginLabel}
+          />
+        )}
 
         <MiniPlayer />
         <BottomNav />

@@ -17954,9 +17954,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (isFullAccessEmail(c?.email)) staging = true;
       }
     }
+    // Non-staging viewers opt into `includeSunrisePending` so a *staged*
+    // (sales-begin-date-pending) release resolves for EVERYONE in read-only
+    // "locked" preview mode (Task #1628). This relaxes ONLY the sunrise gate
+    // — hidden / trashed / prepping rows still 404 below. OG/unfurl stays
+    // gated (server/og.ts calls the resolver with no opts).
     const album = await storage.getAlbumBySlug(
       slug,
-      staging ? { includeHidden: true } : undefined,
+      staging ? { includeHidden: true } : { includeSunrisePending: true },
     );
     // getAlbumBySlug already filters hidden / trashed / sunrise (relaxed for
     // staging above). Prepping (not-yet-released shells) must also 404 for
@@ -17998,10 +18003,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const artist = await storage.getPersonByArtistShareSlug(artistSlug);
     if (!artist) return res.status(404).json({ message: "Not found" });
 
+    // Same staged-release relaxation as the single-segment route (Task #1628):
+    // non-staging viewers see a sunrise-pending release in locked preview mode,
+    // while hidden / trashed / prepping stay 404 and OG/unfurl stays gated.
     const album = await storage.getAlbumByArtistAndSlug(
       artist.id,
       albumSlug,
-      staging ? { includeHidden: true } : undefined,
+      staging ? { includeHidden: true } : { includeSunrisePending: true },
     );
     if (!album || (album.isPrepping && !staging)) {
       return res.status(404).json({ message: "Not found" });
