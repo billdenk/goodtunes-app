@@ -27,66 +27,17 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
+import { installTestDom } from "./jsdomHarness";
 
 // Player → musicData imports binary image assets; tsconfig.test.json maps
 // "@assets/*" to a string stub so tsx can load the component graph.
 
-// ── jsdom environment ────────────────────────────────────────────────
-const dom = new JSDOM("<!doctype html><html><body></body></html>", {
-  url: "http://localhost/",
-  pretendToBeVisual: true, // gives us requestAnimationFrame for framer-motion
-});
-const { window } = dom;
-const g = globalThis as any;
-g.window = window;
-g.document = window.document;
-g.navigator = window.navigator;
-g.location = window.location; // wouter reads the global location/history
-g.history = window.history;
-g.localStorage = window.localStorage; // analytics.track() writes here on mount
-// analytics.track() (fired on Player mount) lazily arms a 15s setInterval
-// flush loop. Left running, that open handle would keep the test process
-// alive and hang the whole `tsx --test` run. Unref the timer so it never
-// blocks process exit (React's scheduler uses setTimeout/raf, not this).
-const realSetInterval = globalThis.setInterval;
-g.setInterval = ((...args: any[]) => {
-  const t = (realSetInterval as any)(...args);
-  if (t && typeof t.unref === "function") t.unref();
-  return t;
-}) as any;
-g.addEventListener = window.addEventListener.bind(window);
-g.removeEventListener = window.removeEventListener.bind(window);
-g.HTMLElement = window.HTMLElement;
-g.SVGElement = window.SVGElement;
-g.Element = window.Element;
-g.Node = window.Node;
-g.DocumentFragment = window.DocumentFragment;
-g.Event = window.Event;
-g.CustomEvent = window.CustomEvent;
-g.MouseEvent = window.MouseEvent;
-g.KeyboardEvent = window.KeyboardEvent;
-g.getComputedStyle = window.getComputedStyle.bind(window);
-g.requestAnimationFrame = window.requestAnimationFrame.bind(window);
-g.cancelAnimationFrame = window.cancelAnimationFrame.bind(window);
-// framer-motion useReducedMotion → force reduced so animations are 0ms.
-window.matchMedia = ((query: string) => ({
-  matches: /reduce/.test(query),
-  media: query,
-  onchange: null,
-  addListener() {},
-  removeListener() {},
-  addEventListener() {},
-  removeEventListener() {},
-  dispatchEvent() {
-    return false;
-  },
-})) as any;
-g.matchMedia = window.matchMedia;
-// SyncedLyrics auto-scrolls via element.scrollTo, which jsdom doesn't ship.
-(window.HTMLElement.prototype as any).scrollTo = () => {};
-// Required for React 18's act().
-g.IS_REACT_ACT_ENVIRONMENT = true;
+// Stand up jsdom + the globals React/framer-motion/SyncedLyrics read, force
+// reduced-motion so the player's menu animations resolve at 0ms, capture
+// analytics' lazy flush-loop timer, and restore every touched global on
+// teardown so this file can't pollute a sibling when the suite shares a
+// process.
+const { window } = installTestDom();
 
 // Import React + the real component AFTER the DOM globals exist.
 const ReactNs: any = await import("react");

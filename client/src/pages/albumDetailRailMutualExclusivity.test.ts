@@ -20,109 +20,24 @@
 //   TSX_TSCONFIG_PATH=tsconfig.test.json npx tsx --test \
 //     client/src/pages/albumDetailRailMutualExclusivity.test.ts
 
-import test, { after } from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
 import { register } from "node:module";
-import { JSDOM } from "jsdom";
+import { installTestDom } from "./jsdomHarness";
 
 // Stub static asset imports (.svg/.png/…) so the real page can be imported
 // under tsx without Vite. Must run before any import that pulls them in.
 register("./assetStubLoader.mjs", import.meta.url);
 
-// `@/lib/analytics` lazily starts a module-level setInterval flush loop the
-// first time track()/identify fires (which it does once we render the real
-// page). It's never cleared, so capture any interval created during the run
-// and clear them in an `after` hook so the process drains cleanly.
-const realSetInterval = globalThis.setInterval;
-const createdIntervals = new Set<ReturnType<typeof setInterval>>();
-(globalThis as any).setInterval = (...args: any[]) => {
-  const id = (realSetInterval as any)(...args);
-  createdIntervals.add(id);
-  return id;
-};
-after(() => {
-  for (const id of createdIntervals) clearInterval(id);
-  createdIntervals.clear();
-  (globalThis as any).setInterval = realSetInterval;
-});
-// The loader rewrites `import.meta.env` (Vite-only) to this global.
-(globalThis as any).__VITE_ENV__ = {
-  DEV: false,
-  PROD: true,
-  MODE: "test",
-  SSR: false,
-};
-
-// ── jsdom environment ────────────────────────────────────────────────
-const dom = new JSDOM("<!doctype html><html><body></body></html>", {
+// Stand up jsdom + the globals React/wouter/framer-motion/SyncedLyrics read,
+// force reduced-motion, capture analytics' lazy flush-loop timer, and restore
+// every touched global on teardown so this file can't pollute a sibling when
+// the suite shares a process. Viewport is fixed at lg so the in-flow side
+// panel (panel-lyrics) is the active surface; setViewport() can change it.
+const { window, setViewport } = installTestDom({
   url: "http://localhost/album/a1",
-  pretendToBeVisual: true, // gives us requestAnimationFrame for framer-motion
+  viewportWidth: 1280,
 });
-const { window } = dom;
-const g = globalThis as any;
-g.window = window;
-g.document = window.document;
-g.navigator = window.navigator;
-g.location = window.location;
-g.history = window.history;
-g.localStorage = window.localStorage;
-g.addEventListener = window.addEventListener.bind(window);
-g.removeEventListener = window.removeEventListener.bind(window);
-// wouter v3 patches history.pushState/replaceState to emit a navigation
-// event via the GLOBAL dispatchEvent; jsdom only exposes it on window.
-g.dispatchEvent = window.dispatchEvent.bind(window);
-g.HTMLElement = window.HTMLElement;
-g.SVGElement = window.SVGElement;
-g.Element = window.Element;
-g.Node = window.Node;
-g.DocumentFragment = window.DocumentFragment;
-g.Event = window.Event;
-g.CustomEvent = window.CustomEvent;
-g.MouseEvent = window.MouseEvent;
-g.KeyboardEvent = window.KeyboardEvent;
-g.getComputedStyle = window.getComputedStyle.bind(window);
-g.requestAnimationFrame = window.requestAnimationFrame.bind(window);
-g.cancelAnimationFrame = window.cancelAnimationFrame.bind(window);
-g.Audio = window.Audio; // PlayerContext news up a hidden <audio> element
-
-// Mutable viewport the matchMedia stub answers `(min-width: Npx)` against;
-// fixed at lg so the in-flow side panel (panel-lyrics) is the active surface.
-let viewportWidth = 1280;
-function setViewport(px: number) {
-  viewportWidth = px;
-  Object.defineProperty(window, "innerWidth", {
-    configurable: true,
-    value: px,
-  });
-}
-window.matchMedia = ((query: string) => {
-  let matches = false;
-  if (/reduce/.test(query)) {
-    matches = true;
-  } else {
-    const m = /min-width:\s*(\d+)px/.exec(query);
-    if (m) matches = viewportWidth >= Number(m[1]);
-    const mx = /max-width:\s*(\d+)px/.exec(query);
-    if (mx) matches = viewportWidth <= Number(mx[1]);
-  }
-  return {
-    matches,
-    media: query,
-    onchange: null,
-    addListener() {},
-    removeListener() {},
-    addEventListener() {},
-    removeEventListener() {},
-    dispatchEvent() {
-      return false;
-    },
-  };
-}) as any;
-g.matchMedia = window.matchMedia;
-// SyncedLyrics auto-scrolls via element.scrollTo, which jsdom doesn't ship.
-(window.HTMLElement.prototype as any).scrollTo = () => {};
-// Required for React 18's act().
-g.IS_REACT_ACT_ENVIRONMENT = true;
 
 // Import React + the real page AFTER the DOM globals exist.
 const ReactNs: any = await import("react");

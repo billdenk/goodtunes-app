@@ -88,18 +88,50 @@ inside a real `PlayerProvider`, the dock auto-expands once the track key changes
 (after Play), so `button-lyrics` appears after clicking `button-play-album`
 without first clicking `button-show-player`.
 
-**Shared-process content pollution (full-suite-only failures):** the whole
-suite runs in ONE process via the find-glob, so a leaked global `fetch` (or
-other global a sibling test left behind) can change what `PlayerContext.playSong`
-→ `hydrate` does to a seeded queue — e.g. it can stream-filter the second song
-out, leaving `DesktopQueueBody` mounted but with NO `queue-item-*` rows. A test
-that passes standalone + alongside one neighbor can still fail in the full suite.
-Fix: assert on CONTENT-INDEPENDENT markers, not on specific seeded rows. For the
-queue body, key off its always-present "Up Next" header text; for lyrics, the
-`lyrics-scroll` testid. Pair with `aria-pressed` on the dock buttons (the real
-`toggleRail` mutual-exclusivity contract) so the test proves the swap regardless
-of how many songs survived into the queue. (`DesktopQueueBody` has no wrapper
-testid — only `queue-item-${id}`/`button-jump-queue-${id}`/`button-remove-queue-${id}`.)
+**Cross-file global isolation — the runner already isolates per FILE (verified):**
+`tsx --test fileA fileB` spawns a SEPARATE CHILD PROCESS per file by default
+(confirmed: distinct `process.pid` per file, a `globalThis.__leak` set in A reads
+`undefined` in B). Each file's top-level `after()` runs before the next file's
+process starts. So a global one file leaves behind (`fetch`, `window`,
+`matchMedia`, `localStorage`, …) does NOT bleed into a later file today. The
+single-process mode that WOULD allow that leak is Node's `--test-isolation=none`,
+and that flag does **not exist on Node 20.20** (`bad option`) — it landed in Node
+22 — so process-per-file is the ONLY mode here and cross-file leakage is
+structurally impossible on this runtime. Treat any "passes alone, fails in the
+suite" report as a *content/ordering* issue (shared GLOBAL location persisting via
+the same jsdom within ONE file, TanStack cache, etc.), NOT a leaked global.
+
+**Shared jsdom harness — `client/src/pages/jsdomHarness.ts` (`installTestDom`):**
+prefer it over hand-rolling the ~80-line jsdom + globals boilerplate. One call
+stands up the JSDOM window + every global React/wouter/framer-motion/SyncedLyrics
+need, a reduced-motion + viewport-aware `matchMedia` (returns `setViewport(px)`
+for min/max-width breakpoint tests), the `scrollTo` stub, `IS_REACT_ACT_ENVIRONMENT`,
+`__VITE_ENV__`, wraps `setInterval` to capture analytics' flush timer, and
+registers ONE `after()` that clears those timers + restores/deletes EVERY managed
+global (snapshotted at install — incl. `fetch`, even though the helper doesn't set
+it) + closes the window. It does NOT call `register(...)` — each test still calls
+its own loader `register("./assetStubLoader.mjs"|"./mobilePlayerLoader.mjs", import.meta.url)`
+BEFORE `installTestDom()` and before dynamic component imports. Specialised
+prototype stubs (getBoundingClientRect, pointer-capture, the Radix
+copy-all-window-props trick) stay in the test, applied to the returned `window`
+AFTER install. Migrated users: `albumDetailLyricsBreakpoints`,
+`albumDetailRailMutualExclusivity`, `playerLyricsPanel`, `mobilePlayerScrubber`.
+Note this restoration is hygiene/future-proofing (process-per-file already
+isolates today) — but it's also genuine dedup and makes new tests isolation-safe
+by default.
+
+**Shared-process content pollution (full-suite-only failures):** a leaked global
+`fetch` (or other global a sibling left behind) could change what
+`PlayerContext.playSong` → `hydrate` does to a seeded queue — but per the runner
+note above this can't happen across FILES today. Within ONE file it still can if a
+test stubs `fetch` and doesn't restore it (`installTestDom`'s `after()` now does).
+Defensive fix remains best practice: assert on CONTENT-INDEPENDENT markers, not on
+specific seeded rows. For the queue body, key off its always-present "Up Next"
+header text; for lyrics, the `lyrics-scroll` testid. Pair with `aria-pressed` on
+the dock buttons (the real `toggleRail` mutual-exclusivity contract) so the test
+proves the swap regardless of how many songs survived into the queue.
+(`DesktopQueueBody` has no wrapper testid — only
+`queue-item-${id}`/`button-jump-queue-${id}`/`button-remove-queue-${id}`.)
 
 **Baseline:** `server/auth/identityLink.db.test.ts` ("same-email fan IS
 linked…") fails with 500 in throwaway task DBs — pre-existing, DB-state

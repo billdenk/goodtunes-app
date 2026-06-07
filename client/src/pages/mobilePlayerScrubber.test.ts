@@ -25,84 +25,21 @@
 //   TSX_TSCONFIG_PATH=tsconfig.test.json npx tsx --test \
 //     client/src/pages/mobilePlayerScrubber.test.ts
 
-import test, { after } from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
 import { register } from "node:module";
-import { JSDOM } from "jsdom";
+import { installTestDom } from "./jsdomHarness";
 
 // Stub static asset imports + import.meta.env AND redirect @/lib/platform
 // to the live-binding isIOS stub. Must run before any React import.
 register("./mobilePlayerLoader.mjs", import.meta.url);
 
-// analytics.track() (fired on Player mount) lazily arms a setInterval flush
-// loop that's never cleared; left running it keeps the process alive and the
-// buffered TAP output never flushes. Capture + clear in an after() hook.
-const realSetInterval = globalThis.setInterval;
-const createdIntervals = new Set<ReturnType<typeof setInterval>>();
-(globalThis as any).setInterval = (...args: any[]) => {
-  const id = (realSetInterval as any)(...args);
-  createdIntervals.add(id);
-  return id;
-};
-after(() => {
-  for (const id of createdIntervals) clearInterval(id);
-  createdIntervals.clear();
-  (globalThis as any).setInterval = realSetInterval;
-});
-// The loader rewrites Vite-only `import.meta.env` to this global.
-(globalThis as any).__VITE_ENV__ = {
-  DEV: false,
-  PROD: true,
-  MODE: "test",
-  SSR: false,
-};
-
-// ── jsdom environment ────────────────────────────────────────────────
-const dom = new JSDOM("<!doctype html><html><body></body></html>", {
-  url: "http://localhost/",
-  pretendToBeVisual: true, // gives us requestAnimationFrame for framer-motion
-});
-const { window } = dom;
-const g = globalThis as any;
-g.window = window;
-g.document = window.document;
-g.navigator = window.navigator;
-g.location = window.location; // wouter reads the global location/history
-g.history = window.history;
-g.localStorage = window.localStorage; // analytics.track() writes here on mount
-g.addEventListener = window.addEventListener.bind(window);
-g.removeEventListener = window.removeEventListener.bind(window);
-// wouter v3 patches history.pushState to emit its nav event via the GLOBAL
-// dispatchEvent; mirror it so any navigate() path doesn't throw.
-g.dispatchEvent = window.dispatchEvent.bind(window);
-g.HTMLElement = window.HTMLElement;
-g.SVGElement = window.SVGElement;
-g.Element = window.Element;
-g.Node = window.Node;
-g.DocumentFragment = window.DocumentFragment;
-g.Event = window.Event;
-g.CustomEvent = window.CustomEvent;
-g.MouseEvent = window.MouseEvent;
-g.KeyboardEvent = window.KeyboardEvent;
-g.getComputedStyle = window.getComputedStyle.bind(window);
-g.requestAnimationFrame = window.requestAnimationFrame.bind(window);
-g.cancelAnimationFrame = window.cancelAnimationFrame.bind(window);
-// framer-motion useReducedMotion → force reduced so animations are 0ms.
-window.matchMedia = ((query: string) => ({
-  matches: /reduce/.test(query),
-  media: query,
-  onchange: null,
-  addListener() {},
-  removeListener() {},
-  addEventListener() {},
-  removeEventListener() {},
-  dispatchEvent() {
-    return false;
-  },
-})) as any;
-g.matchMedia = window.matchMedia;
-// SyncedLyrics auto-scrolls via element.scrollTo, which jsdom doesn't ship.
-(window.HTMLElement.prototype as any).scrollTo = () => {};
+// Stand up jsdom + the globals React/wouter/framer-motion read, force
+// reduced-motion, capture analytics' lazy flush-loop timer, and restore every
+// touched global on teardown so this file can't pollute a sibling when the
+// suite shares a process. The scrubber-specific prototype stubs below are
+// applied AFTER install, against the returned window.
+const { window } = installTestDom();
 
 // The scrubber/volume math reads getBoundingClientRect; jsdom returns all
 // zeros (width 0 → divide-by-zero). Pin a known 200px-wide rail so
@@ -138,9 +75,6 @@ const RAIL_WIDTH = 200;
 ) {
   return !!this.__caps?.has(id);
 };
-
-// Required for React 18's act().
-g.IS_REACT_ACT_ENVIRONMENT = true;
 
 // Import React + the real component AFTER the DOM globals exist.
 const ReactNs: any = await import("react");
