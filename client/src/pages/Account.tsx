@@ -934,7 +934,7 @@ function PrivacySheet({
 }) {
   return (
     <div
-      className="absolute inset-0 z-[60] flex flex-col md:items-center md:justify-center md:p-6 md:bg-black/60"
+      className="fixed inset-0 z-[60] flex flex-col md:items-center md:justify-center md:p-6 md:bg-black/60"
       role="dialog"
       aria-modal="true"
       aria-label="Privacy"
@@ -1116,13 +1116,25 @@ function StreamingServiceSheet({
 }) {
   return (
     <div
-      className="absolute inset-0 z-[60] flex flex-col"
-      style={{ background: "#00062B" }}
+      className="fixed inset-0 z-[60] flex flex-col md:items-center md:justify-center md:p-6 md:bg-black/60"
       role="dialog"
       aria-modal="true"
       aria-label="Streaming Service"
       data-testid="sheet-streaming-service"
     >
+      {/* Task #1406 backdrop pattern — on phones this is the existing
+          full-screen push; on tablet/desktop it presents as a centered,
+          rounded Apple-style modal over a dim backdrop (tap the backdrop to
+          dismiss), in lock-step with PrivacySheet. */}
+      <div
+        aria-hidden="true"
+        onClick={onClose}
+        className="hidden md:block md:absolute md:inset-0"
+      />
+      <div
+        className="relative flex flex-col flex-1 w-full md:flex-none md:max-w-[440px] md:max-h-[78vh] md:rounded-3xl md:overflow-hidden md:shadow-2xl"
+        style={{ background: "#00062B" }}
+      >
       <div className="relative flex items-center justify-center pt-12 pb-3 px-4">
         <button
           type="button"
@@ -1179,6 +1191,7 @@ function StreamingServiceSheet({
             ? `Tap ${serviceLabel(current)} again to clear it — we'll ask each time instead.`
             : "Until you pick one, we'll ask which service to use the first time you stream."}
         </p>
+      </div>
       </div>
     </div>
   );
