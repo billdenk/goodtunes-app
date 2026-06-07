@@ -7487,6 +7487,7 @@ function TrackRow({
   // owned by TracksPanel so only one row is open at a time. Any open
   // editor force-expands the row so the tile context stays visible.
   const [mode, setMode] = useState<TrackMode>("view");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const setUserExpanded = onSetUserExpanded;
   // Expansion is owned SOLELY by the exclusive-disclosure controller so
   // opening a sibling row always collapses this one — even when this row
@@ -8079,13 +8080,7 @@ function TrackRow({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                if (
-                  window.confirm(
-                    `Delete "${song.title}"? This removes the track, its credits, splits, lyrics and any uploaded master. This can't be undone.`,
-                  )
-                ) {
-                  deleteMut.mutate();
-                }
+                setConfirmDelete(true);
               }}
               disabled={deleteMut.isPending}
               className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/40 disabled:opacity-60"
@@ -8318,6 +8313,33 @@ function TrackRow({
           </div>
         </div>
       )}
+
+      {/* Styled confirm for deleting this track (replaces the old
+          window.confirm). Plain-English consequence naming the track +
+          rose primary, matching the "Clear lineup" dialog. */}
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent data-testid={`dialog-confirm-delete-track-${song.id}`}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{song.title}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the track, its credits, splits, lyrics and any
+              uploaded master. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid={`button-cancel-delete-track-${song.id}`}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteMut.mutate()}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              data-testid={`button-confirm-delete-track-${song.id}`}
+            >
+              Delete track
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </li>
   );
 }
@@ -13799,6 +13821,9 @@ function BonusVideos({
   const [sheet, setSheet] = useState<VideoSheetMode>({ kind: "closed" });
   // Bulk Dropbox-folder import — mirrors the Tracks-tab Advanced flow.
   const [bulkOpen, setBulkOpen] = useState(false);
+  // Styled delete confirm — holds the video pending removal (replaces the
+  // old window.confirm); both the tile and the edit sheet route through it.
+  const [videoToDelete, setVideoToDelete] = useState<AlbumVideo | null>(null);
 
   const { data: videos = [], isLoading } = useQuery<AlbumVideo[]>({
     queryKey: ["/api/albums", albumId, "videos"],
@@ -13886,11 +13911,7 @@ function BonusVideos({
                 <VideoTile
                   key={v.id}
                   video={v}
-                  onDelete={() => {
-                    if (confirm(`Remove "${v.title}"?`)) {
-                      deleteMut.mutate(v.id);
-                    }
-                  }}
+                  onDelete={() => setVideoToDelete(v)}
                   onEdit={() => setSheet({ kind: "edit", video: v })}
                   busy={deleteMut.isPending}
                 />
@@ -13920,14 +13941,47 @@ function BonusVideos({
               title: sheet.kind === "edit" ? "Video updated" : "Video added",
             });
           }}
-          onRequestDelete={(v) => {
-            if (confirm(`Remove "${v.title}"?`)) {
-              deleteMut.mutate(v.id);
-              setSheet({ kind: "closed" });
-            }
-          }}
+          onRequestDelete={(v) => setVideoToDelete(v)}
         />
       )}
+
+      {/* Styled confirm for removing a bonus video (replaces the old
+          window.confirm). Names the video + rose primary. */}
+      <AlertDialog
+        open={videoToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setVideoToDelete(null);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-confirm-delete-video">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Remove "{videoToDelete?.title}"?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the bonus video from this album. This can't be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-video">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (videoToDelete) deleteMut.mutate(videoToDelete.id);
+                setVideoToDelete(null);
+                setSheet({ kind: "closed" });
+              }}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              data-testid="button-confirm-delete-video"
+            >
+              Remove video
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <BulkBonusFromDropboxDialog
         open={bulkOpen}
         onOpenChange={setBulkOpen}
@@ -13952,6 +14006,9 @@ function BonusPhotos({
   const qc = useQueryClient();
   const [sheet, setSheet] = useState<PhotoSheetMode>({ kind: "closed" });
   const [bulkOpen, setBulkOpen] = useState(false);
+  // Styled delete confirm — holds the photo pending removal (replaces the
+  // old window.confirm); both the tile and the edit sheet route through it.
+  const [photoToDelete, setPhotoToDelete] = useState<AlbumPhoto | null>(null);
 
   const { data: photos = [], isLoading } = useQuery<AlbumPhoto[]>({
     queryKey: ["/api/albums", albumId, "photos"],
@@ -14022,11 +14079,7 @@ function BonusPhotos({
                 <PhotoTile
                   key={p.id}
                   photo={p}
-                  onDelete={() => {
-                    if (confirm("Remove this photo?")) {
-                      deleteMut.mutate(p.id);
-                    }
-                  }}
+                  onDelete={() => setPhotoToDelete(p)}
                   onEdit={() => setSheet({ kind: "edit", photo: p })}
                 />
               ))}
@@ -14053,14 +14106,45 @@ function BonusPhotos({
               title: sheet.kind === "edit" ? "Photo updated" : "Photo added",
             });
           }}
-          onRequestDelete={(p) => {
-            if (confirm("Remove this photo?")) {
-              deleteMut.mutate(p.id);
-              setSheet({ kind: "closed" });
-            }
-          }}
+          onRequestDelete={(p) => setPhotoToDelete(p)}
         />
       )}
+
+      {/* Styled confirm for removing a bonus photo (replaces the old
+          window.confirm). Rose primary, matching the rest of admin. */}
+      <AlertDialog
+        open={photoToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPhotoToDelete(null);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-confirm-delete-photo">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this photo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the bonus photo from this album. This can't be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-photo">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (photoToDelete) deleteMut.mutate(photoToDelete.id);
+                setPhotoToDelete(null);
+                setSheet({ kind: "closed" });
+              }}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              data-testid="button-confirm-delete-photo"
+            >
+              Remove photo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <BulkBonusFromDropboxDialog
         open={bulkOpen}
         onOpenChange={setBulkOpen}
