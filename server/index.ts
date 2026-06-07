@@ -12,6 +12,7 @@ import { authKindMiddleware, canonicalHostRedirect } from "./auth/host";
 import { forwardToPostHog, geoFromRequest } from "./analytics";
 import { alertOps } from "./opsAlert";
 import { describeDbError, type DbErrorInfo } from "./db";
+import { isStripeConfigured } from "./stripe";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -455,6 +456,27 @@ async function bootstrapAccessGuard() {
     );
   } catch (e: any) {
     log(`oauth status check failed: ${e?.message ?? e}`, "auth");
+  }
+
+  // Apple Pay / Google Pay enablement. Embedded Checkout only renders the
+  // wallet buttons once each fan host is registered with Stripe as a
+  // payment method domain (and Stripe has fetched the well-known
+  // association file off that host). Register best-effort at boot so Apple
+  // Pay turns on automatically wherever this runs — the test account in
+  // dev, the live account in prod — without any manual step. Fully guarded:
+  // a host that doesn't serve the file yet is just logged, never fatal. Run
+  // a touch after boot so the route serving the file is already live.
+  if (isStripeConfigured()) {
+    setTimeout(() => {
+      import("./applePay")
+        .then(({ ensureApplePayDomainsOnce }) => ensureApplePayDomainsOnce())
+        .then((summary) => {
+          if (summary) log(`apple-pay domains: ${summary}`, "apple-pay");
+        })
+        .catch((e: any) => log(`apple-pay domain sync skipped: ${e?.message ?? e}`, "apple-pay"));
+    }, 10 * 1000);
+  } else {
+    log("apple-pay: Stripe not configured, skipping domain registration", "apple-pay");
   }
 
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {

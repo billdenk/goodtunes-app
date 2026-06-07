@@ -1203,6 +1203,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ─── Apple Pay domain association (Stripe) ─────────────────────────
+  // Stripe Embedded Checkout surfaces the Apple Pay button only once the
+  // fan host is registered as a Stripe payment method domain, and Stripe
+  // verifies that registration by fetching THIS file off the host. The
+  // bytes are Stripe's universal Apple Pay merchant association blob
+  // (committed at public/.well-known/apple-developer-merchantid-domain-
+  // association); they're identical for every Stripe merchant, so there's
+  // no sentinel to substitute. Served on every host (the canonical-host
+  // redirect already exempts /.well-known/*) so Apple can verify whichever
+  // fan domain the checkout runs on. See server/applePay.ts for the
+  // registration side of the handshake.
+  app.get("/.well-known/apple-developer-merchantid-domain-association", async (_req, res) => {
+    try {
+      const { promises: fs } = await import("fs");
+      const path = await import("path");
+      const filePath = path.resolve(
+        process.cwd(),
+        "public/.well-known/apple-developer-merchantid-domain-association",
+      );
+      const body = await fs.readFile(filePath, "utf8");
+      return res.type("text/plain").send(body);
+    } catch {
+      return res
+        .status(404)
+        .type("text/plain")
+        .send("apple-developer-merchantid-domain-association is not configured yet");
+    }
+  });
+
   // ─── OAuth: Google + Apple ─────────────────────────────────────────
   // Start endpoints redirect to the provider; callback endpoints come
   // back here. The `kind` (admin | customer) is taken from the host on
