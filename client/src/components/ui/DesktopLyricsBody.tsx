@@ -56,6 +56,7 @@ export function DesktopLyricsBody() {
       paddingTop="16vh"
       paddingBottom="24vh"
       className="flex-1 min-h-0 px-4"
+      enableManualScroll
     />
   );
 }

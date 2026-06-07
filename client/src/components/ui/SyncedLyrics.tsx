@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { LyricsGapDots } from "@/components/LyricsGapDots";
@@ -76,6 +76,11 @@ export interface SyncedLyricsProps {
    *  text alignment, etc.). */
   className?: string;
   style?: React.CSSProperties;
+  /** DESKTOP ONLY. Lets the user drag the lyric column up/down to browse
+   *  ahead/behind without seeking, then auto-resumes follow after a short
+   *  idle. Mobile leaves this off (its overlay owns swipe-to-dismiss on the
+   *  grabber/artwork, which would conflict with a column drag). */
+  enableManualScroll?: boolean;
 }
 
 export function SyncedLyrics({
@@ -94,6 +99,7 @@ export function SyncedLyrics({
   maskImage = DEFAULT_MASK,
   className,
   style,
+  enableManualScroll = false,
 }: SyncedLyricsProps) {
   const syncedLines = useMemo(
     () => buildSyncedLines(lyrics, duration, syncedLyrics),
@@ -116,6 +122,76 @@ export function SyncedLyrics({
   // rests in its top slot. Each advance changes this value and the stack's
   // CSS transform tweens the whole column up together (see MOVE_EASE).
   const [translateY, setTranslateY] = useState(0);
+
+  // DESKTOP manual browse. While the user is dragging the column (or within
+  // the idle cooldown after), `manualY` holds an absolute translate that
+  // overrides the auto-follow target so they can read ahead/behind without
+  // seeking. After ~4s idle it clears and the stack snaps back to the active
+  // line. Gesture is window-bound (no setPointerCapture — broken on iOS
+  // WebKit) and a tap that doesn't move still falls through to onSeek.
+  const [manualY, setManualY] = useState<number | null>(null);
+  const manualYRef = useRef<number | null>(null);
+  const movedRef = useRef(false);
+  const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (cooldownRef.current) clearTimeout(cooldownRef.current);
+    };
+  }, []);
+
+  const onLyricsPointerDown = (e: React.PointerEvent) => {
+    if (!enableManualScroll) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const startY = e.clientY;
+    const base = manualYRef.current ?? translateY;
+    movedRef.current = false;
+    const viewport = scrollRef.current;
+    const stack = stackRef.current;
+    const max =
+      viewport && stack
+        ? Math.max(0, stack.scrollHeight - viewport.clientHeight)
+        : 0;
+    if (cooldownRef.current) {
+      clearTimeout(cooldownRef.current);
+      cooldownRef.current = null;
+    }
+    const onMove = (ev: PointerEvent) => {
+      const delta = ev.clientY - startY;
+      if (Math.abs(delta) > 6) movedRef.current = true;
+      // Drag down (delta > 0) reveals earlier lines → stack moves down →
+      // smaller translate; drag up advances. Clamp to the scrollable range.
+      const next = Math.max(0, Math.min(max, base - delta));
+      manualYRef.current = next;
+      setManualY(next);
+    };
+    const onFinish = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onFinish);
+      window.removeEventListener("pointercancel", onFinish);
+      cooldownRef.current = setTimeout(() => {
+        manualYRef.current = null;
+        setManualY(null);
+        cooldownRef.current = null;
+      }, 4000);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onFinish);
+    window.addEventListener("pointercancel", onFinish);
+  };
+
+  // Swallow the tap-to-seek click that fires at the end of a drag (the
+  // pointerup lands on a lyric line). A genuine tap leaves movedRef false
+  // and seeks normally.
+  const onLyricsClickCapture = (e: React.MouseEvent) => {
+    if (movedRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      movedRef.current = false;
+    }
+  };
+
+  const effectiveTranslateY = manualY != null ? manualY : translateY;
 
   // Measure in a layout effect (before paint) so the very first active line
   // is positioned without an entry slide, and so the transform target is
@@ -143,8 +219,13 @@ export function SyncedLyrics({
       style={{
         WebkitMaskImage: maskImage,
         maskImage,
+        ...(enableManualScroll
+          ? { touchAction: "none", cursor: "grab" }
+          : null),
         ...style,
       }}
+      onPointerDown={enableManualScroll ? onLyricsPointerDown : undefined}
+      onClickCapture={enableManualScroll ? onLyricsClickCapture : undefined}
       data-testid="lyrics-scroll"
     >
       <div
@@ -157,10 +238,14 @@ export function SyncedLyrics({
           // below the active one keeps its relative spacing and pulls up
           // in lock-step. The overshoot easing gives the slight bounce;
           // reduced-motion snaps with no transition.
-          transform: `translate3d(0, ${-translateY}px, 0)`,
-          transition: reduceMotion
-            ? "none"
-            : `transform ${MOVE_MS}ms ${MOVE_EASE}`,
+          transform: `translate3d(0, ${-effectiveTranslateY}px, 0)`,
+          // No tween while the finger owns the column (1:1 tracking); the
+          // bounce easing returns for auto-follow and the snap-back when the
+          // manual hold clears.
+          transition:
+            reduceMotion || manualY != null
+              ? "none"
+              : `transform ${MOVE_MS}ms ${MOVE_EASE}`,
           willChange: "transform",
         }}
       >

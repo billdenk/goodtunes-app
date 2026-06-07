@@ -23,6 +23,7 @@ import { EASE_OUT } from "@/lib/motion";
 import { isIOS } from "@/lib/platform";
 import { track } from "@/lib/analytics";
 import { useSystemVolume } from "@/lib/nativeVolume";
+import { useRailDrag } from "@/lib/useRailDrag";
 
 /**
  * Apple-Music-style expandable full-screen "Now Playing" surface for the
@@ -490,6 +491,7 @@ function LyricsPanelBody() {
       paddingTop="14vh"
       paddingBottom="24vh"
       className="flex-1 min-h-0 px-6"
+      enableManualScroll
     />
   );
 }
@@ -509,41 +511,15 @@ function DragBar({
   ariaLabel: string;
   live?: boolean;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [dragging, setDragging] = useState(false);
-  const [localPct, setLocalPct] = useState(pct);
-  const shown = dragging ? localPct : pct;
-
-  const calc = (clientX: number) => {
-    const el = ref.current;
-    if (!el) return 0;
-    const r = el.getBoundingClientRect();
-    return Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * 100;
-  };
-
-  const onDown = (e: React.PointerEvent) => {
-    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-    const p = calc(e.clientX);
-    setDragging(true);
-    setLocalPct(p);
-    if (live) onChange(p);
-  };
-  const onMove = (e: React.PointerEvent) => {
-    if (!dragging) return;
-    const p = calc(e.clientX);
-    setLocalPct(p);
-    if (live) onChange(p);
-  };
-  const onUp = (e: React.PointerEvent) => {
-    if (!dragging) return;
-    const p = calc(e.clientX);
-    setDragging(false);
-    onChange(p);
-  };
+  const { railRef, dragging, previewRatio, onPointerDown } = useRailDrag(
+    (ratio) => onChange(ratio * 100),
+    { live },
+  );
+  const shown = dragging ? previewRatio * 100 : pct;
 
   return (
     <div
-      ref={ref}
+      ref={railRef}
       role="slider"
       aria-label={ariaLabel}
       aria-valuenow={Math.round(shown)}
@@ -552,10 +528,7 @@ function DragBar({
       tabIndex={0}
       className="relative cursor-pointer select-none touch-none"
       style={{ height: 16 }}
-      onPointerDown={onDown}
-      onPointerMove={onMove}
-      onPointerUp={onUp}
-      onPointerCancel={onUp}
+      onPointerDown={onPointerDown}
     >
       <div
         className="absolute left-0 right-0 top-1/2 -translate-y-1/2 overflow-hidden"

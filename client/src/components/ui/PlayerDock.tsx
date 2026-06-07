@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { LyricsIcon } from "@/components/ui/LyricsIcon";
 import { isIOS } from "@/lib/platform";
+import { useRailDrag } from "@/lib/useRailDrag";
 
 /**
  * Canonical Apple-Music-style floating dock primitive.
@@ -362,62 +363,31 @@ export function PlayerDock({
       ? Volume1
       : Volume2;
 
-  // Both rails support DRAG, not just click. Pointer events with
-  // setPointerCapture keep the rail receiving move events even after the
-  // cursor leaves the bar bounds — matches Apple/Spotify drag-to-scrub
-  // and drag-to-volume. Without this, click-only feels laggy when a user
-  // tries to drag and nothing happens until mouseup.
-  const applyVolumeFromPointer = (
-    el: HTMLDivElement,
-    clientX: number,
-  ) => {
-    const rect = el.getBoundingClientRect();
-    const pct = Math.max(
-      0,
-      Math.min(100, ((clientX - rect.left) / rect.width) * 100),
-    );
-    const level = Math.round(pct);
-    setVolumeLevel(level);
-    if (volumeMuted) setVolumeMuted(false);
-    onVolumeChange?.(level, false);
-  };
-  const handleVolumePointerDown = (
-    e: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    applyVolumeFromPointer(e.currentTarget, e.clientX);
-  };
-  const handleVolumePointerMove = (
-    e: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      applyVolumeFromPointer(e.currentTarget, e.clientX);
-    }
-  };
-
-  const applyScrubFromPointer = (
-    el: HTMLDivElement,
-    clientX: number,
-  ) => {
-    if (!onSeek) return;
-    const rect = el.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    onSeek(Math.round(pct * totalSeconds));
-  };
-  const handleScrubPointerDown = (
-    e: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    if (!onSeek) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    applyScrubFromPointer(e.currentTarget, e.clientX);
-  };
-  const handleScrubPointerMove = (
-    e: React.PointerEvent<HTMLDivElement>,
-  ) => {
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      applyScrubFromPointer(e.currentTarget, e.clientX);
-    }
-  };
+  // Both rails support DRAG, not just click, on touch + mouse. The gesture
+  // is bound to `window` (see useRailDrag) rather than setPointerCapture,
+  // which is broken on iOS/iPadOS WebKit (calling it inside pointerdown fires
+  // an immediate pointercancel and kills both the tap and the drag). Volume
+  // commits live; the scrubber defers the seek to release so a drag previews
+  // the fill without re-buffering on every tick, and a plain tap still seeks.
+  const volumeRail = useRailDrag(
+    (ratio) => {
+      const level = Math.round(ratio * 100);
+      setVolumeLevel(level);
+      if (volumeMuted) setVolumeMuted(false);
+      onVolumeChange?.(level, false);
+    },
+    { live: true },
+  );
+  const scrubRail = useRailDrag(
+    (ratio) => onSeek?.(Math.round(ratio * totalSeconds)),
+    { live: false },
+  );
+  const volumeShown = volumeRail.dragging
+    ? Math.round(volumeRail.previewRatio * 100)
+    : volumeLevel;
+  const scrubShownPct = scrubRail.dragging
+    ? scrubRail.previewRatio * 100
+    : Math.max(0, Math.min(100, progress));
 
   // Time labels — derive elapsed from progress so the host doesn't have
   // to keep two clocks in sync. Clamp inputs defensively: a host that
@@ -986,19 +956,19 @@ export function PlayerDock({
               <div className="group/vol flex items-center pr-0.5">
                 <div className="overflow-hidden transition-[width,margin] duration-200 ease-out w-0 group-hover/vol:w-[68px] group-hover/vol:mr-1.5">
                   <div
+                    ref={volumeRail.railRef}
                     className="relative w-16 h-[3px] bg-slate-500 rounded-full cursor-pointer touch-none select-none"
-                    onPointerDown={handleVolumePointerDown}
-                    onPointerMove={handleVolumePointerMove}
+                    onPointerDown={volumeRail.onPointerDown}
                     data-testid="rail-volume"
                   >
                     <div
                       className="absolute inset-y-0 left-0 bg-white rounded-full"
-                      style={{ width: volumeMuted ? "0%" : `${volumeLevel}%` }}
+                      style={{ width: volumeMuted ? "0%" : `${volumeShown}%` }}
                     />
                     {!volumeMuted && (
                       <div
                         className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow ring-1 ring-black/10"
-                        style={{ left: knobLeft(volumeLevel) }}
+                        style={{ left: knobLeft(volumeShown) }}
                         aria-hidden
                       />
                     )}
@@ -1095,14 +1065,14 @@ export function PlayerDock({
               </span>
             </div>
             <div
+              ref={scrubRail.railRef}
               className={[
                 `group/scrub absolute ${D.scrubLeft} ${scrubRightClass} bottom-1.5 h-3 flex items-center touch-none select-none`,
                 hasSelection ? "cursor-pointer" : "cursor-default pointer-events-none",
               ].join(" ")}
               onMouseEnter={() => setScrubHover(true)}
               onMouseLeave={() => setScrubHover(false)}
-              onPointerDown={hasSelection ? handleScrubPointerDown : undefined}
-              onPointerMove={hasSelection ? handleScrubPointerMove : undefined}
+              onPointerDown={hasSelection ? scrubRail.onPointerDown : undefined}
               data-testid="rail-scrubber"
             >
               {/* Rail bg lifted to white/40 (was /25) so the remainder
@@ -1113,7 +1083,7 @@ export function PlayerDock({
               <div className="relative flex-1 h-[2px] rounded-full bg-slate-500 transition-[height,background-color] duration-100 group-hover/scrub:h-[4px] group-hover/scrub:bg-slate-400 group-active/scrub:h-[5px] group-active/scrub:bg-slate-300">
                 <div
                   className="absolute inset-y-0 left-0 bg-white rounded-full"
-                  style={{ width: `${clampedProgress}%` }}
+                  style={{ width: `${scrubShownPct}%` }}
                 />
               </div>
             </div>
