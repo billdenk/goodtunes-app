@@ -2482,6 +2482,11 @@ export const orders = pgTable("orders", {
   // records when. Only read on the no-real-row (digital) cert path.
   certConfirmedName: text("cert_confirmed_name"),
   certConfirmedAt: timestamp("cert_confirmed_at"),
+  // Per-order paper size for the DIGITAL (synthetic) GoodDeed cert. NULL =
+  // fall back to the country-derived default (paperSizeFromCountry). A
+  // digital owner can flip US Letter ↔ A4 from the cert viewer; the
+  // physical signed-cert path stores its own size on the cert row instead.
+  certPaperSize: text("cert_paper_size"),
   createdAt: timestamp("created_at").defaultNow(),
   legacyGogoodsId: text("legacy_gogoods_id"),
 }, (t) => ({

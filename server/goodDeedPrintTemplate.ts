@@ -56,7 +56,16 @@ export type GoodDeedPrintInputs = {
   recipientName: string;
   qrPayload: string; // full URL — what the QR encodes
   paperSize: "letter" | "a4";
+  // Which variant of the top-right mark to draw:
+  //   • false / undefined → the free DIGITAL copy: GoodTunes logo.
+  //   • true → the PRINTED/signed copy GoodTunes fulfils: a faint holographic
+  //     sticker PLACEMENT GUIDE (fulfillment applies the real foil sticker
+  //     over it). Bill-approved, May 2026 canvas.
+  signed?: boolean;
 };
+
+// GoodTunes logo orange (#FF7C06) — the Bill-approved cert frame color.
+const FRAME_ORANGE = "#FF7C06";
 
 // Resolved album fields the template needs. Snapshotted so a downstream
 // album rename can't quietly mutate an already-printed cert.
@@ -160,34 +169,56 @@ async function drawGoodDeedOnto(
   artBytes: Buffer | null,
   avatarBytes: Buffer | null,
   sigPlacement: "dynamic" | "fixed" = "fixed",
-  matBorderPt = 9, // ⅛" navy bleed border (Bill-approved default)
+  matBorderPt?: number, // bleed override (pt); default per paper size below
   forceNewLayout = false, // preview: run the new (Letter) layout even on A4
 ): Promise<void> {
-  const L = layoutFor(inputs.paperSize);
+  // `page` is the mat OPENING (the window the framer cuts). The Bill-approved
+  // orange frame (May 2026 canvas) reads as a thin GoodTunes-orange band
+  // 0.25" wide on US Letter — 0.125" showing inside the mat opening +
+  // 0.125" of bleed under the mat edge — and the proportionate 3mm on each
+  // side for A4. We get there by (a) painting an orange rectangle that
+  // extends `bleed` beyond the opening on all sides, then (b) insetting the
+  // entire inner design (art + band) by `inset` so `inset` of orange shows
+  // inside the opening before the artwork begins. Insetting the mat box
+  // uniformly keeps the dark band's HEIGHT invariant (matH − matW is
+  // unchanged when both shrink by 2·inset), so the locked text layout is
+  // untouched — it just shifts inward.
+  const page = layoutFor(inputs.paperSize);
+  const PT_PER_IN = 72;
+  const PT_PER_MM = 72 / 25.4;
+  const insetPt = inputs.paperSize === "a4" ? 3 * PT_PER_MM : 0.125 * PT_PER_IN;
+  const bleedPt = matBorderPt ?? (inputs.paperSize === "a4" ? 3 * PT_PER_MM : 0.125 * PT_PER_IN);
 
-  // ── Page background = white (paper). Mat margins are just that
-  //    background showing through — nothing else to draw on the
-  //    outer rim. The Figma spec keeps the print well inside an
-  //    8×10 frame mat.
+  const L: LayoutDims = {
+    W: page.W,
+    H: page.H,
+    matX: page.matX + insetPt,
+    matY: page.matY + insetPt,
+    matW: page.matW - insetPt * 2,
+    matH: page.matH - insetPt * 2,
+    artH: page.matW - insetPt * 2, // square art = inset mat width
+    bandTop: page.matY + insetPt + (page.matW - insetPt * 2),
+    bandH: (page.matH - insetPt * 2) - (page.matW - insetPt * 2),
+    bandPad: page.bandPad,
+  };
+
+  // ── Page background = white (paper). ──
   doc.save();
   doc.rect(0, 0, L.W, L.H).fill("#FFFFFF");
   doc.restore();
 
-  // ── Optional navy bleed border just OUTSIDE the mat opening. The mat
-  //    window is sized exactly to the inner design (7.5"×9.5" on Letter),
-  //    so a frame that's even slightly off-centre could reveal a sliver of
-  //    white paper at an edge. Painting a band of the band-navy (#00062B)
-  //    beyond the mat edge builds in `matBorderPt` of misalignment
-  //    tolerance for quick framing. The inner design is UNCHANGED — this
-  //    only fills what was previously white margin, behind the art + band.
-  if (matBorderPt > 0) {
+  // ── Orange frame: a solid GoodTunes-orange rectangle from `bleed` outside
+  //    the mat opening inward. The inset art + band drawn on top cover its
+  //    centre, leaving a visible orange band of (inset + bleed) — `inset`
+  //    inside the opening, `bleed` tucked under the mat for framing slack.
+  if (bleedPt > 0 || insetPt > 0) {
     doc.save();
     doc.rect(
-      L.matX - matBorderPt,
-      L.matY - matBorderPt,
-      L.matW + matBorderPt * 2,
-      L.matH + matBorderPt * 2,
-    ).fill("#00062B");
+      page.matX - bleedPt,
+      page.matY - bleedPt,
+      page.matW + bleedPt * 2,
+      page.matH + bleedPt * 2,
+    ).fill(FRAME_ORANGE);
     doc.restore();
   }
 
@@ -286,7 +317,26 @@ async function drawGoodDeedOnto(
   //    column (logo + QR + label) stays anchored to the band edges
   //    regardless of paper size — only the LEFT content block centres
   //    on A4 (Bill, May 2026: don't move the logo/QR on A4). ──
-  if (fs.existsSync(LOGO_ASSET)) {
+  if (inputs.signed) {
+    // PRINTED/signed copy: a faint holographic-sticker PLACEMENT GUIDE
+    // (thin rounded rect) where the logo would sit — fulfillment lays the
+    // real foil sticker over it. Sized a hair under the 0.8×0.75" sticker so
+    // the sticker fully covers the guide, and centred over the QR column so
+    // it tucks into the same top-right corner. Matches the May 2026 canvas.
+    const HOLO_SHRINK = 8;
+    const holoW = 0.78 * 72 - HOLO_SHRINK;
+    const holoH = 0.73 * 72 - HOLO_SHRINK;
+    const holoX = qrColLeft + qrColW / 2 - holoW / 2;
+    const holoY = safeTop + HOLO_SHRINK / 2;
+    doc.save();
+    doc
+      .roundedRect(holoX, holoY, holoW, holoH, 5)
+      .lineWidth(1)
+      .strokeOpacity(0.28)
+      .stroke("#FFFFFF");
+    doc.restore();
+  } else if (fs.existsSync(LOGO_ASSET)) {
+    // Free DIGITAL copy: the GoodTunes logo.
     try {
       doc.image(LOGO_ASSET, qrColRight - logoW, safeTop, { width: logoW });
     } catch {}
@@ -542,7 +592,7 @@ export async function renderGoodDeedPdf(
   const chunks: Buffer[] = [];
   doc.on("data", (c: Buffer) => chunks.push(c));
   const done = new Promise<Buffer>((resolve) => doc.on("end", () => resolve(Buffer.concat(chunks))));
-  await drawGoodDeedOnto(doc, inputs, album, artBytes, avatarBytes, opts?.sigPlacement ?? "fixed", opts?.matBorderPt ?? 9, opts?.forceNewLayout ?? false);
+  await drawGoodDeedOnto(doc, inputs, album, artBytes, avatarBytes, opts?.sigPlacement ?? "fixed", opts?.matBorderPt, opts?.forceNewLayout ?? false);
   doc.end();
   return done;
 }

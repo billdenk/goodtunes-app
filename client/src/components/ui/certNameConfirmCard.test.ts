@@ -136,9 +136,12 @@ test("renders nothing when the order is not editable", async () => {
   fetchHandler = () => ({
     body: {
       editable: false,
+      nameEditable: false,
       confirmed: true,
       currentName: "Jane Doe",
       defaultName: "Jane Doe",
+      paperSize: "letter",
+      defaultPaperSize: "letter",
     },
   });
   const { container, q, cleanup } = await mount({ orderId: "o-physical" });
@@ -160,9 +163,12 @@ test("renders the editor and the current name when editable", async () => {
   fetchHandler = () => ({
     body: {
       editable: true,
+      nameEditable: true,
       confirmed: false,
       currentName: "Janr Doe",
       defaultName: "Janr Doe",
+      paperSize: "letter",
+      defaultPaperSize: "letter",
     },
   });
   const { q, cleanup } = await mount({ orderId: "o-digital" });
@@ -174,6 +180,11 @@ test("renders the editor and the current name when editable", async () => {
     "shows the current (synthesized) name from the GET",
   );
   assert.ok(q("button-edit-cert-name"), "exposes an Edit affordance");
+  assert.equal(
+    q("text-cert-paper-size")?.textContent,
+    "US Letter",
+    "shows the paper size in muted text under the name",
+  );
   await cleanup();
 });
 
@@ -186,9 +197,12 @@ test("a successful save updates the displayed name and fires onSaved", async () 
     return {
       body: {
         editable: true,
+        nameEditable: true,
         confirmed: false,
         currentName: "Janr Doe",
         defaultName: "Janr Doe",
+        paperSize: "letter",
+        defaultPaperSize: "letter",
       },
     };
   };
@@ -228,5 +242,89 @@ test("a successful save updates the displayed name and fires onSaved", async () 
     "displayed name updates to the saved value",
   );
   assert.deepEqual(savedNames, ["Jane Doe"], "onSaved fired with the saved name");
+  await cleanup();
+});
+
+test("a paper-size-only change POSTs just the paperSize, leaving the name alone", async () => {
+  fetchHandler = (_url, init) => {
+    const method = init.method ?? "GET";
+    if (method === "POST") {
+      return { body: { ok: true, paperSize: "a4" } };
+    }
+    return {
+      body: {
+        editable: true,
+        nameEditable: true,
+        confirmed: false,
+        currentName: "Jane Doe",
+        defaultName: "Jane Doe",
+        paperSize: "letter",
+        defaultPaperSize: "letter",
+      },
+    };
+  };
+  fetchCalls.length = 0;
+  const { q, click, cleanup } = await mount({ orderId: "o-paper" });
+
+  await click(q("button-edit-cert-name")!);
+  await settle();
+  // Switch the paper size without touching the name input.
+  await click(q("button-paper-a4")!);
+  await click(q("button-save-cert-name")!);
+  await settle();
+
+  const post = fetchCalls.find((c) => c.method === "POST");
+  assert.ok(post, "save issues a POST");
+  assert.deepEqual(
+    post!.body,
+    { paperSize: "a4" },
+    "POST sends ONLY the paper size — the unchanged name is not re-sent",
+  );
+  assert.equal(
+    q("text-cert-paper-size")?.textContent,
+    "A4",
+    "the displayed paper size updates to the saved value",
+  );
+  await cleanup();
+});
+
+test("a locked name (nameEditable:false) disables the input but still allows paper size", async () => {
+  fetchHandler = (_url, init) => {
+    const method = init.method ?? "GET";
+    if (method === "POST") {
+      return { body: { ok: true, paperSize: "a4" } };
+    }
+    return {
+      body: {
+        editable: true,
+        nameEditable: false, // one-time courtesy already spent
+        confirmed: true,
+        currentName: "Jane Doe",
+        defaultName: "Jane Doe",
+        paperSize: "letter",
+        defaultPaperSize: "letter",
+      },
+    };
+  };
+  fetchCalls.length = 0;
+  const { q, click, cleanup } = await mount({ orderId: "o-locked" });
+
+  await click(q("button-edit-cert-name")!);
+  await settle();
+  const input = q("input-cert-name") as HTMLInputElement | null;
+  assert.ok(input, "the name input still renders");
+  assert.equal(input!.disabled, true, "the name input is locked after first save");
+  assert.ok(q("text-cert-name-locked"), "shows the locked note");
+
+  // Paper size remains changeable even with the name locked.
+  await click(q("button-paper-a4")!);
+  await click(q("button-save-cert-name")!);
+  await settle();
+  const post = fetchCalls.find((c) => c.method === "POST");
+  assert.deepEqual(
+    post!.body,
+    { paperSize: "a4" },
+    "a locked-name order can still update its paper size",
+  );
   await cleanup();
 });

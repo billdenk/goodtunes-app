@@ -272,14 +272,14 @@ function layoutFor(paperSize: "letter" | "a4"): LayoutDims {
 // The page itself is sized to the chosen paper; the layout below treats
 // the framed-mat window (8×10 / 20×25 cm) as the design surface and lets
 // the dark band bleed past it to the page edge.
-export async function renderCertPdf(ctx: CertContext): Promise<Buffer> {
+export async function renderCertPdf(ctx: CertContext, signed = false): Promise<Buffer> {
   const size = ctx.cert.paperSize === "a4" ? "A4" : "LETTER";
   // No margin — we're managing the mat / bleed math ourselves.
   const doc = new PDFDocument({ size, margin: 0 });
   const chunks: Buffer[] = [];
   doc.on("data", (c: Buffer) => chunks.push(c));
   const done = new Promise<Buffer>((resolve) => doc.on("end", () => resolve(Buffer.concat(chunks))));
-  await drawCertOnto(doc, ctx);
+  await drawCertOnto(doc, ctx, signed);
   doc.end();
   return done;
 }
@@ -445,11 +445,26 @@ export function registerCertificateRoutes(app: Express) {
       .where(eq(signedCertCertificates.orderId, o.order.id));
     const defaultName =
       o.customer.realName || o.customer.displayName || o.customer.username;
+    const defaultPaperSize = paperSizeFromCountry(
+      (o.order.shippingAddress as any)?.country ?? null,
+    );
+    const paperSize =
+      o.order.certPaperSize === "letter" || o.order.certPaperSize === "a4"
+        ? o.order.certPaperSize
+        : defaultPaperSize;
     res.json({
+      // `editable` gates whether the card renders at all (the physical
+      // signed-cert path manages its own name elsewhere). `nameEditable`
+      // is the one-time-courtesy lock: a digital owner may rename ONCE,
+      // then the name freezes (certConfirmedAt stamped). Paper size stays
+      // editable regardless — it's a print preference, not the legal name.
       editable: !realRow,
+      nameEditable: !realRow && !o.order.certConfirmedAt,
       confirmed: !!o.order.certConfirmedName,
       currentName: o.order.certConfirmedName || defaultName,
       defaultName,
+      paperSize,
+      defaultPaperSize,
     });
   });
 
@@ -474,14 +489,46 @@ export function registerCertificateRoutes(app: Express) {
         message: "This certificate's name is managed through the signed-certificate confirmation step.",
       });
     }
-    const raw = typeof req.body?.name === "string" ? req.body.name.trim() : "";
-    if (!raw) return res.status(400).json({ message: "A name is required." });
-    if (raw.length > 80) return res.status(400).json({ message: "Name is too long (80 characters max)." });
-    await db
-      .update(orders)
-      .set({ certConfirmedName: raw, certConfirmedAt: new Date() })
-      .where(eq(orders.id, o.id));
-    res.json({ ok: true, confirmedName: raw });
+    // Two independently-optional edits ride this endpoint:
+    //   • name      — the printed recipient name; a ONE-TIME courtesy. Once
+    //                 saved (certConfirmedAt stamped) it locks → 409.
+    //   • paperSize — A4 / US Letter print preference; ALWAYS editable.
+    const hasName = typeof req.body?.name === "string";
+    const hasPaperSize = req.body?.paperSize !== undefined;
+    if (!hasName && !hasPaperSize) {
+      return res.status(400).json({ message: "Nothing to update." });
+    }
+
+    const patch: { certConfirmedName?: string; certConfirmedAt?: Date; certPaperSize?: string } = {};
+
+    if (hasName) {
+      // One-time-courtesy lock: refuse once a name has been confirmed.
+      if (o.certConfirmedAt) {
+        return res.status(409).json({
+          message: "The name on this certificate has already been set and can't be changed.",
+        });
+      }
+      const raw = req.body.name.trim();
+      if (!raw) return res.status(400).json({ message: "A name is required." });
+      if (raw.length > 80) return res.status(400).json({ message: "Name is too long (80 characters max)." });
+      patch.certConfirmedName = raw;
+      patch.certConfirmedAt = new Date();
+    }
+
+    if (hasPaperSize) {
+      const ps = req.body.paperSize;
+      if (ps !== "letter" && ps !== "a4") {
+        return res.status(400).json({ message: "paperSize must be 'letter' or 'a4'." });
+      }
+      patch.certPaperSize = ps;
+    }
+
+    await db.update(orders).set(patch).where(eq(orders.id, o.id));
+    res.json({
+      ok: true,
+      confirmedName: patch.certConfirmedName ?? o.certConfirmedName ?? undefined,
+      paperSize: patch.certPaperSize ?? o.certPaperSize ?? undefined,
+    });
   });
 
   // ─── Admin print queue ──────────────────────────────────────────
@@ -576,7 +623,8 @@ export function registerCertificateRoutes(app: Express) {
     if (!me) return res.status(403).json({ message: "Admin only" });
     const ctx = await loadCertContext(req.params.certId, absoluteOrigin(req));
     if (!ctx) return res.status(404).json({ message: "Not found" });
-    const pdf = await renderCertPdf(ctx);
+    // Operator print preview → signed (holographic placement guide) variant.
+    const pdf = await renderCertPdf(ctx, true);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${certFilename(ctx)}"`);
     res.send(pdf);
@@ -637,7 +685,12 @@ export function registerCertificateRoutes(app: Express) {
     if (!FINALIZED_CERT_ORDER_STATUSES.has(o.order.status) || o.order.goodDeedNumber == null) {
       return res.status(404).json({ message: "Not found" });
     }
-    const paperSize = paperSizeFromCountry((o.order.shippingAddress as any)?.country ?? null);
+    // Honor the fan's per-order paper-size override (set from the cert
+    // viewer pencil); fall back to the country-derived default.
+    const paperSize =
+      o.order.certPaperSize === "letter" || o.order.certPaperSize === "a4"
+        ? o.order.certPaperSize
+        : paperSizeFromCountry((o.order.shippingAddress as any)?.country ?? null);
     // Task #1467 — honor the fan-confirmed digital name if they reviewed
     // it; otherwise fall back to the synthesized realName → displayName →
     // username default.
@@ -841,7 +894,8 @@ export function registerCertificateRoutes(app: Express) {
     if (format === "zip") {
       const zip = new AdmZip();
       for (const ctx of contexts) {
-        const pdf = await renderCertPdf(ctx);
+        // Fulfillment batch → signed (holographic placement guide) variant.
+        const pdf = await renderCertPdf(ctx, true);
         zip.addFile(certFilename(ctx), pdf);
       }
       const buf = zip.toBuffer();
@@ -865,7 +919,8 @@ export function registerCertificateRoutes(app: Express) {
       for (const ctx of contexts) {
         // Add a new page to `merged` matching this cert's size.
         merged.addPage({ size: ctx.cert.paperSize === "a4" ? "A4" : "LETTER", margin: 0 });
-        await drawCertOnto(merged, ctx);
+        // Fulfillment batch → signed (holographic placement guide) variant.
+        await drawCertOnto(merged, ctx, true);
       }
       merged.end();
       const buf = await done;
@@ -888,7 +943,12 @@ export function registerCertificateRoutes(app: Express) {
 // own merged PDF (mixing per-cert paper sizes) and wants to draw onto
 // a doc it already controls. New callers should use
 // renderGoodDeedPdf() / renderGoodDeedBatchPdf() directly.
-function ctxToTemplateInputs(ctx: CertContext): GoodDeedPrintInputs {
+// `signed` picks the top-right mark: false → free digital copy (GoodTunes
+// logo); true → the printed/signed copy GoodTunes fulfils (holographic
+// sticker placement guide). The fan download always renders the free
+// (logo) version; only the operator/fulfillment surfaces (single-cert
+// print preview + the print-queue batch) ask for the signed (holo) one.
+function ctxToTemplateInputs(ctx: CertContext, signed = false): GoodDeedPrintInputs {
   return {
     albumId: ctx.album.id,
     sequenceNumber: ctx.order.goodDeedNumber,
@@ -898,8 +958,9 @@ function ctxToTemplateInputs(ctx: CertContext): GoodDeedPrintInputs {
       "GoodTunes Fan",
     qrPayload: `${ctx.origin}/g/${ctx.cert.shortId}`,
     paperSize: ctx.cert.paperSize === "a4" ? "a4" : "letter",
+    signed,
   };
 }
-async function drawCertOnto(doc: PDFKit.PDFDocument, ctx: CertContext): Promise<void> {
-  await drawGoodDeedPageOnto(doc, ctxToTemplateInputs(ctx));
+async function drawCertOnto(doc: PDFKit.PDFDocument, ctx: CertContext, signed = false): Promise<void> {
+  await drawGoodDeedPageOnto(doc, ctxToTemplateInputs(ctx, signed));
 }

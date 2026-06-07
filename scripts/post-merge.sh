@@ -252,6 +252,30 @@ SQL
 migrate_shipping_rates dev  "${DATABASE_URL:-}"
 migrate_shipping_rates prod "${PROD_DATABASE_URL:-}"
 
+# Digital GoodDeed cert paper size — orders.cert_paper_size lets a digital
+# (synthetic-cert) owner flip US Letter ↔ A4 from the cert viewer. NULL =
+# country-derived default. Declared in shared/schema.ts; hand-apply the
+# additive DDL on BOTH dev and prod so the schema-drift guard stays green
+# and the publish dev→prod diff stays empty. Idempotent (IF NOT EXISTS).
+migrate_cert_paper_size() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping cert_paper_size migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE IF EXISTS orders
+  ADD COLUMN IF NOT EXISTS cert_paper_size text;
+SQL
+  then
+    echo "post-merge: cert_paper_size migration ok on $label"
+  else
+    echo "post-merge: WARNING — cert_paper_size migration failed on $label (continuing)"
+  fi
+}
+migrate_cert_paper_size dev  "${DATABASE_URL:-}"
+migrate_cert_paper_size prod "${PROD_DATABASE_URL:-}"
+
 # Publishing-payout settlement columns — `organizations.pay_to_org_id`
 # (administered-by routing, e.g. Songs of Kaotic → Hipgnosis),
 # `payout_settings.mechanical_rate_micros` (statutory $0.127/unit default),
