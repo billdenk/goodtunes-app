@@ -84,6 +84,7 @@ import { FinishSetup } from "@/pages/FinishSetup";
 import { AccountMerge } from "@/pages/AccountMerge";
 // Task #1496 — Public account-deletion page for the Play Store Data safety form.
 import DeleteAccount from "@/pages/DeleteAccount";
+import { Hope, CampaignPreview } from "@/pages/Hope";
 import { AdminWelcomeBack } from "@/pages/AdminWelcomeBack";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
@@ -426,6 +427,13 @@ function Router() {
             Google Play Data safety form. No auth gate; host-agnostic so it
             resolves at goodtunes.music/delete-account. */}
         <Route path="/delete-account" component={DeleteAccount} />
+        {/* Campaign "Get Hope. Give Hope." — public coming-soon teaser
+            (/hope) and the reusable family-review preview
+            (/staging/:artist/:release). Both are public; the preview's
+            ordering buttons are disabled until launch. Copy + pricing live
+            in the RELEASES registry in client/src/pages/Hope.tsx. */}
+        <Route path="/hope" component={Hope} />
+        <Route path="/staging/:artist/:release" component={CampaignPreview} />
         {/* Admin tool for the wave-1 welcome-back campaign. */}
         <Route path="/admin/welcome-back">
           <ProtectedRoute component={AdminWelcomeBack} />

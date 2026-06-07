@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { useParams } from "wouter";
+import type { LucideIcon } from "lucide-react";
 import {
-  X,
   ChevronRight,
   ChevronLeft,
   Minus,
@@ -12,43 +14,171 @@ import {
   Expand,
   Apple,
   Lock,
+  X,
 } from "lucide-react";
 
 /**
- * "Get Hope. Give Hope." — Nightbirde · Hope · clickable fan offer flow.
+ * "Get Hope. Give Hope." — the redesigned Preview & Purchase campaign flow,
+ * promoted from the canvas mockup to real routes. It runs in two modes:
  *
- * A sandbox mockup of the redesigned Preview & Purchase flow Bill sketched,
- * iterated to remove decision-clutter and lean into the campaign's own
- * two-beat narrative:
- *   overview → GET HOPE (bundle + optional signed upgrade)
- *            → GIVE HOPE (Gift of Hope donation) → sign in & pay.
+ *   - `comingSoon`  (/hope) — a public teaser. The whole flow is visible but the
+ *                   primary CTA is grayed and reads the launch label; nothing
+ *                   advances. Share this link before launch.
+ *   - `preview`     (/staging/<artist>/<release>) — the full clickable flow for
+ *                   the artist's family to review. Every step works, but the pay
+ *                   step's order buttons are disabled (no real ordering yet).
  *
- * Built in the real GoodTunes design system (brand-navy bg, royal-navy
- * modal, brand-blue CTA, orange section labels, mint confirm). Imagery is
- * lifted from Bill's own concept sketches. Read-only: every control logs
- * to the console; nothing touches real checkout. Served at
- * /__mockup/preview/hope-offer/Flow.
+ * All artist-specific copy / pricing / imagery lives in the RELEASES registry
+ * below, so a future campaign is a new entry — not a new page. Pricing here is
+ * PLACEHOLDER until the real checkout is wired.
  */
 
+/* ── brand tokens ─────────────────────────────────────────────────── */
 const BG = "#00062B";
 const CARD = "#0E1A4E";
 const PANEL = "#19295D";
 const BLUE = "#319ED8";
 const ORANGE = "#F09837";
-const MINT = "#4AFFCA";
 
-const PRICE = { bundle: 25, signed: 25 };
-const GIFT_MIN = 75;
-const GIFT_PRESETS = [75, 100, 250];
-
-// One shared product-image size so every card (bundle / signed / gift) matches.
 const CARD_IMG = 150;
 
 const usd = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 0 })}`;
 
-const img = (name: string) =>
-  `${import.meta.env.BASE_URL.replace(/\/$/, "")}/images/${name}`;
+/* ── per-release content registry ─────────────────────────────────── */
+
+type Edition = { label: string; items: { head: string; body: string }[] };
+
+type ReleaseContent = {
+  artistName: string;
+  releaseName: string;
+  launchLabel: string;
+  previewNote: string;
+  imageBase: string;
+  images: { hero: string; cert: string; box: string; logo: string };
+  org: string;
+  prices: { bundle: number; signed: number };
+  gift: { min: number; presets: number[] };
+  tracklist: { title: string; len: string }[];
+  overview: {
+    heading: string;
+    paragraphs: ReactNode[];
+    panelTitle: string;
+    panelBody: string;
+    editions: Edition[];
+  };
+  buy: {
+    heading: string;
+    intro: string;
+    bundleName: string;
+    bundleBody: string;
+    signedName: string;
+    signedBody: string;
+    whyMore: string;
+  };
+  give: {
+    heading: string;
+    intro: string;
+    boxName: string;
+    boxBody: ReactNode;
+    notes: ReactNode[];
+  };
+};
+
+const RELEASES: Record<string, ReleaseContent> = {
+  "nightbirde/hope": {
+    artistName: "Nightbirde",
+    releaseName: "Hope",
+    launchLabel: "Coming 6/8/26",
+    previewNote: "Preview — ordering opens June 8, 2026.",
+    imageBase: "/campaigns/nightbirde",
+    images: {
+      hero: "hope-get-hope.png",
+      cert: "hope-cert-framed.jpg",
+      box: "hope-gift-box.png",
+      logo: "goodtunes-logo-white.png",
+    },
+    org: "Nightbirde Foundation",
+    prices: { bundle: 25, signed: 25 },
+    gift: { min: 75, presets: [75, 100, 250] },
+    tracklist: [
+      { title: "Gold", len: "3:20" },
+      { title: "Better Days", len: "3:21" },
+      { title: "It's OK", len: "3:22" },
+      { title: "Girl in a Bubble", len: "3:23" },
+      { title: "Brave", len: "3:24" },
+    ],
+    overview: {
+      heading: "Get Hope. Give Hope.",
+      paragraphs: [
+        <>
+          It's been five years since <strong className="text-white">Nightbirde</strong> (Jane
+          Marczewski) appeared on <strong className="text-white">America's Got Talent</strong> (AGT)
+          and received the <strong className="text-white">Golden Buzzer</strong> from{" "}
+          <strong className="text-white">Simon Cowell.</strong>
+        </>,
+        <>
+          Before she passed, Jane provided her family with all of her journals, photos, artwork, and
+          music and gave them a mission — use whatever you can to help women with breast cancer.
+        </>,
+        <>
+          The "Get Hope. Give Hope." campaign was built to do just that — proceeds from every
+          purchase go to Nightbirde Foundation. You can also donate a "Gift of Hope" box to someone
+          you know with cancer, or let us choose someone in need on your behalf.
+        </>,
+      ],
+      panelTitle: "Here's what you'll get",
+      panelBody:
+        "This package has been hand curated by Jane's family for you. Digital arrives instantly. Physical ships 8–10 weeks after ordering.",
+      editions: [
+        {
+          label: "Digital Collector Edition",
+          items: [
+            { head: "Music", body: "Instant access to the music with the free GoodTunes® Player." },
+            { head: "GoodDeed®", body: "A numbered, personalized printable PDF GoodDeed® Certificate suitable for framing." },
+            { head: "Bonus", body: "Photos and videos curated by Jane's family." },
+          ],
+        },
+        {
+          label: "Physical Collector Edition",
+          items: [
+            { head: "Music", body: "7\" vinyl tracks \"Gold\" & \"Better Days\"." },
+            { head: "Booklet", body: "Special-edition companion booklet featuring lyrics, Jane's poems, exclusive photos and more." },
+          ],
+        },
+      ],
+    },
+    buy: {
+      heading: "Get Hope",
+      intro:
+        "The first in a limited-edition series — a 7\" Physical Collector Edition plus the full Digital Collector Edition. Proceeds benefit the Nightbirde Foundation.",
+      bundleName: "Hope Bundle",
+      bundleBody:
+        "Physical 7\" vinyl + companion booklet, plus the Digital Collector Edition with GoodDeed® certificate and bonus content from Jane's family.",
+      signedName: "Signed GoodDeed® Certificate",
+      signedBody:
+        "Hand-signed by Jane's family, personalized with your name and unique number, finished with a holographic seal + QR provenance. Ships with your vinyl.",
+      whyMore:
+        "Some people buy more than one as a gift for friends — sharing the music, and the chance to help women facing cancer.",
+    },
+    give: {
+      heading: "Give Hope",
+      intro:
+        "Send a Gift of Hope box to someone facing cancer — or let us choose someone in need on your behalf. Every box is a donation to the Nightbirde Foundation.",
+      boxName: "Gift of Hope Box",
+      boxBody: (
+        <>
+          A stainless-steel Nightbirde cup, a copy of her debut album "It's OK," and Jane's book of
+          poetry, <em>Poems for the Dark</em>.
+        </>
+      ),
+      notes: [
+        "Giving more than one? Tell us who each gift is for after checkout — we'll make it easy.",
+        "Personalize after purchase: keep a gift anonymous or add a message, and choose who receives each box.",
+      ],
+    },
+  },
+};
 
 type Step = "overview" | "buy" | "give" | "pay";
 const ORDER: Step[] = ["overview", "buy", "give", "pay"];
@@ -100,7 +230,6 @@ function QtyStepper({
   );
 }
 
-/** Inline "$25 × 2 = $50" math, sitting where a button used to be. */
 function LineMath({ unit, qty, testid }: { unit: number; qty: number; testid: string }) {
   return (
     <span className="text-white/55 text-[14px] tabular-nums" data-testid={testid}>
@@ -111,8 +240,7 @@ function LineMath({ unit, qty, testid }: { unit: number; qty: number; testid: st
   );
 }
 
-/** Tap-to-reveal explainer (tap, not hover — this lands on touch). */
-function WhyMore() {
+function WhyMore({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative inline-block">
@@ -135,36 +263,27 @@ function WhyMore() {
             boxShadow: "0 16px 40px rgba(0,0,0,0.5)",
           }}
         >
-          Some people buy more than one as a gift for friends — sharing the music, and the
-          chance to help women facing cancer.
+          {text}
         </div>
       )}
     </div>
   );
 }
 
-function EditionCol({
-  label,
-  items,
-}: {
-  label: string;
-  items: { head: string; body: string }[];
-}) {
+function EditionCol({ edition }: { edition: Edition }) {
   return (
     <div className="flex-1 min-w-0">
       <div
         className="text-[13px] font-bold uppercase tracking-[0.04em] mb-3"
         style={{ color: ORANGE }}
       >
-        {label}
+        {edition.label}
       </div>
       <div className="flex flex-col gap-3.5">
-        {items.map((it) => (
+        {edition.items.map((it) => (
           <div key={it.head}>
             <div className="text-white text-[13.5px] font-semibold">{it.head}</div>
-            <div className="text-white/60 text-[12.5px] leading-[1.45] mt-0.5">
-              {it.body}
-            </div>
+            <div className="text-white/60 text-[12.5px] leading-[1.45] mt-0.5">{it.body}</div>
           </div>
         ))}
       </div>
@@ -172,7 +291,7 @@ function EditionCol({
   );
 }
 
-function Note({ icon: Icon, children }: { icon: typeof Gift; children: React.ReactNode }) {
+function Note({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
   return (
     <div className="flex gap-2.5 items-start text-white/55 text-[12.5px] leading-[1.55]">
       <Icon className="w-4 h-4 mt-px flex-shrink-0" strokeWidth={2} style={{ color: ORANGE }} />
@@ -181,8 +300,6 @@ function Note({ icon: Icon, children }: { icon: typeof Gift; children: React.Rea
   );
 }
 
-/** A product image you can tap to enlarge. Every card uses this so size +
- *  styling stay identical across the bundle, signed cert and gift box. */
 function Zoomable({
   src,
   alt,
@@ -215,7 +332,6 @@ function Zoomable({
   );
 }
 
-/** Full-bleed enlarged view of a tapped product image. */
 function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
   return (
     <div
@@ -248,11 +364,12 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
 
 /* ── faint album page behind the modal ────────────────────────────── */
 
-function AlbumBackdrop() {
+function AlbumBackdrop({ c }: { c: ReleaseContent }) {
+  const img = (name: string) => `${c.imageBase}/${name}`;
   return (
     <div className="absolute inset-0 overflow-hidden" aria-hidden style={{ background: BG }}>
       <img
-        src={img("goodtunes-logo-white.png")}
+        src={img(c.images.logo)}
         alt=""
         className="absolute top-7 left-8 w-[120px] h-auto opacity-90"
         draggable={false}
@@ -262,15 +379,15 @@ function AlbumBackdrop() {
           className="rounded-2xl overflow-hidden"
           style={{ width: 230, height: 230, boxShadow: "0 18px 50px rgba(0,0,0,0.5)" }}
         >
-          <img src={img("hope-get-hope.png")} alt="" className="w-full h-full object-cover" />
+          <img src={img(c.images.hero)} alt="" className="w-full h-full object-cover" />
         </div>
       </div>
       <div className="absolute right-[6%] top-[40%] w-[34%] flex flex-col gap-5 opacity-20">
-        {["Gold", "Better Days", "It's OK", "Girl in a Bubble", "Brave"].map((t, i) => (
-          <div key={t} className="flex items-center gap-4">
+        {c.tracklist.map((t, i) => (
+          <div key={t.title} className="flex items-center gap-4">
             <span className="text-white/50 text-[13px] tabular-nums">{i + 1}.</span>
-            <span className="text-white text-[14px] flex-1">{t}</span>
-            <span className="text-white/40 text-[13px] tabular-nums">3:{20 + i}</span>
+            <span className="text-white text-[14px] flex-1">{t.title}</span>
+            <span className="text-white/40 text-[13px] tabular-nums">{t.len}</span>
           </div>
         ))}
       </div>
@@ -284,61 +401,42 @@ function AlbumBackdrop() {
 
 /* ── steps ────────────────────────────────────────────────────────── */
 
-function OverviewStep() {
+function OverviewStep({ c }: { c: ReleaseContent }) {
+  const img = (name: string) => `${c.imageBase}/${name}`;
   return (
     <div data-testid="step-overview">
       <h1 className="text-white text-[30px] font-bold tracking-[-0.02em] mb-5">
-        Get Hope. Give Hope.
+        {c.overview.heading}
       </h1>
       <div className="flex gap-6">
         <div
           className="flex-shrink-0 rounded-2xl overflow-hidden bg-white"
           style={{ width: 210, height: 210, boxShadow: "0 12px 36px rgba(0,0,0,0.4)" }}
         >
-          <img src={img("hope-get-hope.png")} alt="Nightbirde — Hope" className="w-full h-full object-cover" />
+          <img
+            src={img(c.images.hero)}
+            alt={`${c.artistName} — ${c.releaseName}`}
+            className="w-full h-full object-cover"
+          />
         </div>
         <div className="flex-1 min-w-0 text-white/70 text-[13px] leading-[1.55] flex flex-col gap-3">
-          <p>
-            It's been five years since <strong className="text-white">Nightbirde</strong> (Jane
-            Marczewski) appeared on <strong className="text-white">America's Got Talent</strong> (AGT)
-            and received the <strong className="text-white">Golden Buzzer</strong> from{" "}
-            <strong className="text-white">Simon Cowell.</strong>
-          </p>
-          <p>
-            Before she passed, Jane provided her family with all of her journals, photos, artwork,
-            and music and gave them a mission — use whatever you can to help women with breast cancer.
-          </p>
-          <p>
-            The "Get Hope. Give Hope." campaign was built to do just that — proceeds from every
-            purchase go to Nightbirde Foundation. You can also donate a "Gift of Hope" box to someone
-            you know with cancer, or let us choose someone in need on your behalf.
-          </p>
+          {c.overview.paragraphs.map((p, i) => (
+            <p key={i}>{p}</p>
+          ))}
         </div>
       </div>
 
       <div className="mt-6 rounded-2xl p-6" style={{ background: PANEL }}>
-        <h2 className="text-white text-[20px] font-bold tracking-[-0.01em]">Here's what you'll get</h2>
+        <h2 className="text-white text-[20px] font-bold tracking-[-0.01em]">
+          {c.overview.panelTitle}
+        </h2>
         <p className="text-white/65 text-[13px] leading-[1.5] mt-1.5 max-w-[560px]">
-          This package has been hand curated by Jane's family for you. Digital arrives instantly.
-          Physical ships 8–10 weeks after ordering.
+          {c.overview.panelBody}
         </p>
         <div className="flex gap-8 mt-5">
-          <EditionCol
-            label="Digital Collector Edition"
-            items={[
-              { head: "Music", body: "Instant access to the music with the free GoodTunes® Player." },
-              { head: "GoodDeed®", body: "A numbered, personalized printable PDF GoodDeed® Certificate suitable for framing." },
-              { head: "Bonus", body: "Photos and videos curated by Jane's family." },
-            ]}
-          />
+          <EditionCol edition={c.overview.editions[0]} />
           <div className="w-px self-stretch bg-white/10" />
-          <EditionCol
-            label="Physical Collector Edition"
-            items={[
-              { head: "Music", body: "7\" vinyl tracks \"Gold\" & \"Better Days\"." },
-              { head: "Booklet", body: "Special-edition companion booklet featuring lyrics, Jane's poems, exclusive photos and more." },
-            ]}
-          />
+          <EditionCol edition={c.overview.editions[1]} />
         </div>
       </div>
     </div>
@@ -346,80 +444,76 @@ function OverviewStep() {
 }
 
 function BuyStep({
+  c,
   bundleQty,
   onBundle,
   signedQty,
   onSigned,
   onZoom,
 }: {
+  c: ReleaseContent;
   bundleQty: number;
   onBundle: (n: number) => void;
   signedQty: number;
   onSigned: (n: number) => void;
   onZoom: (src: string) => void;
 }) {
+  const img = (name: string) => `${c.imageBase}/${name}`;
   return (
     <div data-testid="step-buy">
-      <h1 className="text-white text-[28px] font-bold tracking-[-0.02em] mb-1.5">Get Hope</h1>
-      <p className="text-white/60 text-[13.5px] leading-[1.5] mb-6 max-w-[520px]">
-        The first in a limited-edition series — a 7" Physical Collector Edition plus the full Digital
-        Collector Edition. Proceeds benefit the Nightbirde Foundation.
-      </p>
+      <h1 className="text-white text-[28px] font-bold tracking-[-0.02em] mb-1.5">{c.buy.heading}</h1>
+      <p className="text-white/60 text-[13.5px] leading-[1.5] mb-6 max-w-[520px]">{c.buy.intro}</p>
 
-      {/* bundle */}
       <div className="flex gap-5">
         <Zoomable
-          src={img("hope-get-hope.png")}
-          alt="Hope Bundle"
+          src={img(c.images.hero)}
+          alt={c.buy.bundleName}
           size={CARD_IMG}
           onZoom={onZoom}
           testid="zoom-bundle"
         />
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex items-start justify-between gap-3">
-            <h3 className="text-white text-[19px] font-bold tracking-[-0.01em]">Hope Bundle</h3>
-            <div className="flex-shrink-0 text-white text-[18px] font-bold tabular-nums" data-testid="price-bundle">
-              {usd(PRICE.bundle)}
+            <h3 className="text-white text-[19px] font-bold tracking-[-0.01em]">{c.buy.bundleName}</h3>
+            <div
+              className="flex-shrink-0 text-white text-[18px] font-bold tabular-nums"
+              data-testid="price-bundle"
+            >
+              {usd(c.prices.bundle)}
             </div>
           </div>
-          <p className="text-white/65 text-[13px] leading-[1.5] mt-1.5 max-w-[340px]">
-            Physical 7" vinyl + companion booklet, plus the Digital Collector Edition with GoodDeed®
-            certificate and bonus content from Jane's family.
-          </p>
+          <p className="text-white/65 text-[13px] leading-[1.5] mt-1.5 max-w-[340px]">{c.buy.bundleBody}</p>
           <div className="mt-auto pt-4 flex items-center gap-4">
             <QtyStepper value={bundleQty} onChange={onBundle} min={1} testid="stepper-bundle" />
-            <LineMath unit={PRICE.bundle} qty={bundleQty} testid="linetotal-bundle" />
+            <LineMath unit={c.prices.bundle} qty={bundleQty} testid="linetotal-bundle" />
           </div>
           <div className="mt-2.5">
-            <WhyMore />
+            <WhyMore text={c.buy.whyMore} />
           </div>
         </div>
       </div>
 
-      {/* signed upgrade — coupled to the bundle count just chosen */}
       <div className="h-px bg-white/10 my-6" />
       <div>
         <div className="flex gap-5">
           <Zoomable
-            src={img("hope-cert-framed.jpg")}
-            alt="Signed GoodDeed Certificate"
+            src={img(c.images.cert)}
+            alt={c.buy.signedName}
             size={CARD_IMG}
             onZoom={onZoom}
             testid="zoom-signed"
           />
           <div className="flex-1 min-w-0 flex flex-col">
             <div className="flex items-start justify-between gap-3">
-              <h3 className="text-white text-[16px] font-bold tracking-[-0.01em]">
-                Signed GoodDeed® Certificate
-              </h3>
-              <div className="flex-shrink-0 text-white text-[15px] font-bold tabular-nums" data-testid="price-signed">
-                +{usd(PRICE.signed)} each
+              <h3 className="text-white text-[16px] font-bold tracking-[-0.01em]">{c.buy.signedName}</h3>
+              <div
+                className="flex-shrink-0 text-white text-[15px] font-bold tabular-nums"
+                data-testid="price-signed"
+              >
+                +{usd(c.prices.signed)} each
               </div>
             </div>
-            <p className="text-white/65 text-[12.5px] leading-[1.5] mt-1.5 max-w-[360px]">
-              Hand-signed by Jane's family, personalized with your name and unique number, finished
-              with a holographic seal + QR provenance. Ships with your vinyl.
-            </p>
+            <p className="text-white/65 text-[12.5px] leading-[1.5] mt-1.5 max-w-[360px]">{c.buy.signedBody}</p>
             <div className="mt-auto pt-3.5 flex items-center gap-4">
               <QtyStepper
                 value={signedQty}
@@ -437,7 +531,7 @@ function BuyStep({
                   <span className="text-white/55">
                     {signedQty} of {bundleQty} signed{" "}
                     <span className="text-white/35">=</span>{" "}
-                    <span className="text-white font-bold">{usd(PRICE.signed * signedQty)}</span>
+                    <span className="text-white font-bold">{usd(c.prices.signed * signedQty)}</span>
                   </span>
                 )}
               </span>
@@ -450,15 +544,17 @@ function BuyStep({
 }
 
 function GiftAmount({
+  c,
   amount,
   onAmount,
 }: {
+  c: ReleaseContent;
   amount: number;
   onAmount: (n: number) => void;
 }) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {GIFT_PRESETS.map((p) => {
+      {c.gift.presets.map((p) => {
         const active = amount === p;
         return (
           <button
@@ -470,7 +566,11 @@ function GiftAmount({
             style={
               active
                 ? { background: "#fff", color: BG }
-                : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.8)", border: "1px solid rgba(255,255,255,0.16)" }
+                : {
+                    background: "rgba(255,255,255,0.06)",
+                    color: "rgba(255,255,255,0.8)",
+                    border: "1px solid rgba(255,255,255,0.16)",
+                  }
             }
           >
             {usd(p)}
@@ -481,13 +581,16 @@ function GiftAmount({
         <button
           type="button"
           aria-label="Give less"
-          onClick={() => onAmount(Math.max(GIFT_MIN, amount - 25))}
-          disabled={amount <= GIFT_MIN}
+          onClick={() => onAmount(Math.max(c.gift.min, amount - 25))}
+          disabled={amount <= c.gift.min}
           className="w-8 h-8 rounded-full inline-flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
         >
           <Minus className="w-4 h-4" strokeWidth={2.4} />
         </button>
-        <span className="px-2 text-center text-white text-[14px] font-semibold tabular-nums" data-testid="text-gift-amount">
+        <span
+          className="px-2 text-center text-white text-[14px] font-semibold tabular-nums"
+          data-testid="text-gift-amount"
+        >
           {usd(amount)}
         </span>
         <button
@@ -504,41 +607,38 @@ function GiftAmount({
 }
 
 function GiveStep({
+  c,
   boxQty,
   onBox,
   giftAmount,
   onAmount,
   onZoom,
 }: {
+  c: ReleaseContent;
   boxQty: number;
   onBox: (n: number) => void;
   giftAmount: number;
   onAmount: (n: number) => void;
   onZoom: (src: string) => void;
 }) {
+  const img = (name: string) => `${c.imageBase}/${name}`;
   const active = boxQty > 0;
   return (
     <div data-testid="step-give">
-      <h1 className="text-white text-[28px] font-bold tracking-[-0.02em] mb-1.5">Give Hope</h1>
-      <p className="text-white/60 text-[13.5px] leading-[1.5] mb-6 max-w-[540px]">
-        Send a Gift of Hope box to someone facing cancer — or let us choose someone in need on your
-        behalf. Every box is a donation to the Nightbirde Foundation.
-      </p>
+      <h1 className="text-white text-[28px] font-bold tracking-[-0.02em] mb-1.5">{c.give.heading}</h1>
+      <p className="text-white/60 text-[13.5px] leading-[1.5] mb-6 max-w-[540px]">{c.give.intro}</p>
 
       <div className="flex gap-5">
         <Zoomable
-          src={img("hope-gift-box.png")}
-          alt="Gift of Hope Box"
+          src={img(c.images.box)}
+          alt={c.give.boxName}
           size={CARD_IMG}
           onZoom={onZoom}
           testid="zoom-box"
         />
         <div className="flex-1 min-w-0 flex flex-col">
-          <h3 className="text-white text-[19px] font-bold tracking-[-0.01em]">Gift of Hope Box</h3>
-          <p className="text-white/65 text-[13px] leading-[1.5] mt-1.5 max-w-[360px]">
-            A stainless-steel Nightbirde cup, a copy of her debut album "It's OK," and Jane's book of
-            poetry, <em>Poems for the Dark</em>.
-          </p>
+          <h3 className="text-white text-[19px] font-bold tracking-[-0.01em]">{c.give.boxName}</h3>
+          <p className="text-white/65 text-[13px] leading-[1.5] mt-1.5 max-w-[360px]">{c.give.boxBody}</p>
           <div className="mt-auto pt-4 flex items-center gap-4">
             <QtyStepper value={boxQty} onChange={onBox} min={0} testid="stepper-box" />
             <span className="text-[13px]" data-testid="hint-box">
@@ -560,9 +660,9 @@ function GiveStep({
             <span className="text-white text-[14px] font-semibold">
               Your gift{boxQty > 1 ? " (each box)" : ""}
             </span>
-            <span className="text-white/45 text-[12.5px]">Minimum {usd(GIFT_MIN)}</span>
+            <span className="text-white/45 text-[12.5px]">Minimum {usd(c.gift.min)}</span>
           </div>
-          <GiftAmount amount={giftAmount} onAmount={onAmount} />
+          <GiftAmount c={c} amount={giftAmount} onAmount={onAmount} />
           {boxQty > 1 && (
             <div className="mt-3 text-white/55 text-[13px] tabular-nums" data-testid="text-gift-total">
               {usd(giftAmount)} <span className="text-white/35">×</span> {boxQty}{" "}
@@ -574,33 +674,30 @@ function GiveStep({
       )}
 
       <div className="mt-6 flex flex-col gap-3">
-        <Note icon={Gift}>
-          Giving more than one? Tell us who each gift is for after checkout — we'll make it easy.
-        </Note>
-        <Note icon={Sparkles}>
-          Personalize after purchase: keep a gift anonymous or add a message, and choose who
-          receives each box.
-        </Note>
+        <Note icon={Gift}>{c.give.notes[0]}</Note>
+        <Note icon={Sparkles}>{c.give.notes[1]}</Note>
       </div>
     </div>
   );
 }
 
 function PayStep({
+  c,
   bundleQty,
   signedQty,
   boxQty,
   giftAmount,
 }: {
+  c: ReleaseContent;
   bundleQty: number;
   signedQty: number;
   boxQty: number;
   giftAmount: number;
 }) {
   const lines = [
-    { label: "Hope Bundle", sub: '7" + Digital Collector Edition', qty: bundleQty, unit: PRICE.bundle },
-    { label: "Signed GoodDeed® Certificate", sub: undefined, qty: signedQty, unit: PRICE.signed },
-    { label: "Gift of Hope (donation)", sub: undefined, qty: boxQty, unit: giftAmount },
+    { label: c.buy.bundleName, sub: "7\" + Digital Collector Edition", qty: bundleQty, unit: c.prices.bundle },
+    { label: c.buy.signedName, sub: undefined as string | undefined, qty: signedQty, unit: c.prices.signed },
+    { label: "Gift of Hope (donation)", sub: undefined as string | undefined, qty: boxQty, unit: giftAmount },
   ].filter((l) => l.qty > 0);
   const subtotal = lines.reduce((s, l) => s + l.qty * l.unit, 0);
 
@@ -649,8 +746,8 @@ function PayStep({
       <div className="mt-5 flex flex-col gap-3">
         <button
           type="button"
-          onClick={() => console.log("[mockup] apple pay")}
-          className="h-12 rounded-full inline-flex items-center justify-center gap-2 text-[15px] font-semibold bg-white text-black active:scale-[0.98] transition-transform"
+          disabled
+          className="h-12 rounded-full inline-flex items-center justify-center gap-2 text-[15px] font-semibold bg-white text-black opacity-40 cursor-not-allowed"
           data-testid="button-applepay"
         >
           <Apple className="w-5 h-5 fill-current" strokeWidth={0} />
@@ -658,63 +755,46 @@ function PayStep({
         </button>
         <button
           type="button"
-          onClick={() => console.log("[mockup] sign in to pay")}
-          className="h-12 rounded-full inline-flex items-center justify-center gap-2 text-[15px] font-semibold text-white active:scale-[0.98] transition-transform"
+          disabled
+          className="h-12 rounded-full inline-flex items-center justify-center gap-2 text-[15px] font-semibold text-white opacity-40 cursor-not-allowed"
           style={{ background: BLUE }}
           data-testid="button-signin-pay"
         >
           Sign in &amp; pay with card
         </button>
-        <p className="text-white/40 text-[11.5px] text-center mt-1">
-          New here? We'll create your account automatically after purchase.
+        <p className="text-white/55 text-[12px] text-center mt-1" data-testid="text-preview-note">
+          {c.previewNote}
         </p>
       </div>
     </div>
   );
 }
 
-/* ── shell ────────────────────────────────────────────────────────── */
+/* ── flow shell ───────────────────────────────────────────────────── */
 
-function initialStep(): Step {
-  if (typeof window !== "undefined") {
-    const q = new URLSearchParams(window.location.search).get("step") as Step;
-    if (q && ORDER.includes(q)) return q;
-    const h = window.location.hash.replace("#", "") as Step;
-    if (ORDER.includes(h)) return h;
-  }
-  return "overview";
-}
-
-export default function Flow() {
-  const seeded = initialStep() !== "overview";
-  const [step, setStep] = useState<Step>(initialStep);
+function CampaignFlow({ c, mode }: { c: ReleaseContent; mode: "comingSoon" | "preview" }) {
+  const comingSoon = mode === "comingSoon";
+  const [step, setStep] = useState<Step>("overview");
   const [bundleQty, setBundleQty] = useState(1);
-  const [signedQty, setSignedQty] = useState(seeded ? 1 : 0);
-  const [boxQty, setBoxQty] = useState(seeded ? 1 : 0);
-  const [giftAmount, setGiftAmount] = useState(GIFT_MIN);
+  const [signedQty, setSignedQty] = useState(0);
+  const [boxQty, setBoxQty] = useState(0);
+  const [giftAmount, setGiftAmount] = useState(c.gift.min);
   const [zoomSrc, setZoomSrc] = useState<string | null>(null);
 
-  // signed certs can never exceed the number of copies in the bag.
   useEffect(() => {
     if (signedQty > bundleQty) setSignedQty(bundleQty);
   }, [bundleQty, signedQty]);
 
   const idx = ORDER.indexOf(step);
-  const go = (s: Step) => {
-    setStep(s);
-    console.log(`[mockup] step → ${s}`);
-  };
+  const go = (s: Step) => setStep(s);
 
   const primary = (() => {
+    if (comingSoon) return null;
     switch (step) {
       case "overview":
         return { label: "Get Hope", onClick: () => go("buy"), Icon: ChevronRight };
       case "buy":
-        return {
-          label: `Add ${bundleQty} to Bag`,
-          onClick: () => go("give"),
-          Icon: ShoppingBag,
-        };
+        return { label: `Add ${bundleQty} to Bag`, onClick: () => go("give"), Icon: ShoppingBag };
       case "give":
         return { label: "Review order", onClick: () => go("pay"), Icon: ChevronRight };
       case "pay":
@@ -728,9 +808,8 @@ export default function Flow() {
       style={{ fontFamily: "system-ui, -apple-system, 'SF Pro Text', sans-serif" }}
       data-testid="hope-offer-flow"
     >
-      <AlbumBackdrop />
+      <AlbumBackdrop c={c} />
 
-      {/* Modal */}
       <div
         className="relative z-10 w-[min(720px,calc(100vw-48px))] max-h-[calc(100vh-56px)] rounded-[28px] flex flex-col overflow-hidden"
         style={{
@@ -740,46 +819,40 @@ export default function Flow() {
         }}
         data-testid="offer-modal"
       >
-        {/* header: progress + close */}
+        {/* header: progress + identity */}
         <div className="flex items-center gap-3 px-7 pt-5">
-          <div className="flex items-center gap-1.5">
-            {ORDER.map((s, i) => (
-              <span
-                key={s}
-                className="h-1.5 rounded-full transition-all"
-                style={{
-                  width: i === idx ? 22 : 7,
-                  background: i <= idx ? BLUE : "rgba(255,255,255,0.18)",
-                }}
-              />
-            ))}
-          </div>
+          {!comingSoon && (
+            <div className="flex items-center gap-1.5">
+              {ORDER.map((s, i) => (
+                <span
+                  key={s}
+                  className="h-1.5 rounded-full transition-all"
+                  style={{
+                    width: i === idx ? 22 : 7,
+                    background: i <= idx ? BLUE : "rgba(255,255,255,0.18)",
+                  }}
+                />
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-2 text-white/55 text-[12px] font-medium">
             <img
-              src={img("hope-get-hope.png")}
+              src={`${c.imageBase}/${c.images.hero}`}
               alt=""
               className="w-5 h-5 rounded-[5px] object-cover"
               draggable={false}
             />
-            Nightbirde · Hope
+            {c.artistName} · {c.releaseName}
           </div>
           <div className="flex-1" />
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={() => go("overview")}
-            data-testid="button-close"
-            className="w-9 h-9 -mr-1 rounded-full inline-flex items-center justify-center text-white/55 hover:text-white hover:bg-white/8 transition-colors"
-          >
-            <X className="w-5 h-5" strokeWidth={2.2} />
-          </button>
         </div>
 
         {/* body */}
         <div className="px-7 py-6 overflow-y-auto">
-          {step === "overview" && <OverviewStep />}
+          {step === "overview" && <OverviewStep c={c} />}
           {step === "buy" && (
             <BuyStep
+              c={c}
               bundleQty={bundleQty}
               onBundle={setBundleQty}
               signedQty={signedQty}
@@ -789,6 +862,7 @@ export default function Flow() {
           )}
           {step === "give" && (
             <GiveStep
+              c={c}
               boxQty={boxQty}
               onBox={setBoxQty}
               giftAmount={giftAmount}
@@ -798,6 +872,7 @@ export default function Flow() {
           )}
           {step === "pay" && (
             <PayStep
+              c={c}
               bundleQty={bundleQty}
               signedQty={signedQty}
               boxQty={boxQty}
@@ -811,7 +886,7 @@ export default function Flow() {
           className="flex items-center gap-3 px-7 py-4 border-t border-white/8"
           style={{ background: "rgba(0,0,0,0.18)" }}
         >
-          {idx > 0 ? (
+          {!comingSoon && idx > 0 ? (
             <button
               type="button"
               onClick={() => go(ORDER[idx - 1])}
@@ -821,30 +896,41 @@ export default function Flow() {
               <ChevronLeft className="w-4 h-4" strokeWidth={2.4} />
               Back
             </button>
-          ) : (
+          ) : !comingSoon ? (
             <button
               type="button"
-              onClick={() => console.log("[mockup] preview the music")}
               data-testid="button-later"
               className="h-11 px-2 text-white/45 hover:text-white/75 text-[14px] font-medium transition-colors"
             >
               Preview the Music
             </button>
-          )}
+          ) : null}
 
           <div className="flex-1" />
 
-          {primary && (
+          {comingSoon ? (
             <button
               type="button"
-              onClick={primary.onClick}
-              data-testid="button-primary"
-              className="h-11 pl-6 pr-5 rounded-full inline-flex items-center gap-2 text-white font-semibold text-[14.5px] transition-all active:scale-[0.97]"
-              style={{ background: BLUE }}
+              disabled
+              data-testid="button-coming-soon"
+              className="h-11 pl-6 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[14.5px] cursor-not-allowed"
+              style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.55)" }}
             >
-              {primary.label}
-              <primary.Icon className="w-4 h-4" strokeWidth={2.4} />
+              {c.launchLabel}
             </button>
+          ) : (
+            primary && (
+              <button
+                type="button"
+                onClick={primary.onClick}
+                data-testid="button-primary"
+                className="h-11 pl-6 pr-5 rounded-full inline-flex items-center gap-2 text-white font-semibold text-[14.5px] transition-all active:scale-[0.97]"
+                style={{ background: BLUE }}
+              >
+                {primary.label}
+                <primary.Icon className="w-4 h-4" strokeWidth={2.4} />
+              </button>
+            )
           )}
         </div>
       </div>
@@ -852,4 +938,35 @@ export default function Flow() {
       {zoomSrc && <Lightbox src={zoomSrc} onClose={() => setZoomSrc(null)} />}
     </div>
   );
+}
+
+function NotFound() {
+  return (
+    <div
+      className="w-full h-screen flex items-center justify-center text-center px-6"
+      style={{ background: BG }}
+      data-testid="hope-not-found"
+    >
+      <div className="text-white/70 text-[15px]">This preview isn't available.</div>
+    </div>
+  );
+}
+
+/* ── route entry points ───────────────────────────────────────────── */
+
+// Public coming-soon teaser at /hope (Nightbirde's "Hope" campaign).
+export function Hope() {
+  const c = RELEASES["nightbirde/hope"];
+  if (!c) return <NotFound />;
+  return <CampaignFlow c={c} mode="comingSoon" />;
+}
+
+// Reusable full clickable preview at /staging/:artist/:release for any campaign
+// in the RELEASES registry. Family-review surface — ordering stays disabled.
+export function CampaignPreview() {
+  const params = useParams<{ artist: string; release: string }>();
+  const key = `${params.artist ?? ""}/${params.release ?? ""}`;
+  const c = RELEASES[key];
+  if (!c) return <NotFound />;
+  return <CampaignFlow c={c} mode="preview" />;
 }
