@@ -107,6 +107,21 @@ definitions:
         #    even across machines. This is automatic — you never touch it.
         LATEST_BUILD_NUMBER=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" || echo "0")
         agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
+    - name: Guard — fail fast if the AppIcon set is invalid
+      script: |
+        # WHY THIS EXISTS: TestFlight Build 59 shipped Apple's GENERIC placeholder
+        # icon (white tile, light-blue arrows) even though the committed asset
+        # catalog was correct. Xcode NEVER fails an archive over a missing/invalid
+        # app icon — it silently substitutes the placeholder. This guard converts
+        # that silent fallback into a HARD, clearly-explained build failure so a
+        # generic-icon build can never reach Apple again.
+        #
+        # It verifies, against the committed AppIcon.appiconset, that every
+        # required slot is declared, every referenced PNG exists at the exact
+        # pixel size its slot requires, and NO icon carries an alpha channel
+        # (alpha is the classic cause of a dropped-to-placeholder icon). Image
+        # inspection uses macOS `sips`, which is always present on the runner.
+        python3 scripts/verify-ios-appicon.py
     - name: Build the signed .ipa
       script: |
         xcode-project build-ipa \
