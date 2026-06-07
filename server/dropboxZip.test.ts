@@ -282,6 +282,86 @@ describe("extractKeptZipEntries", () => {
       (err: Error) => /total size is over/.test(err.message),
     );
   });
+
+  test("fires the liveness onActivity callback as bytes are written", async () => {
+    // The fix this guards: unpacking a big hi-res folder to disk can take
+    // longer than the per-job stall watchdog, so extraction must emit
+    // liveness per chunk written (not just once per file) to keep a
+    // healthy import alive past 100% download.
+    const zipPath = await makeZip("liveness.zip", {
+      "01 First.wav": "aaa",
+      "02 Second.flac": "bbbb",
+      "credits.pdf": "ignored",
+    });
+    const sessionDir = await freshSessionDir();
+    const seen: Array<{ filename: string; entryBytes: number; totalBytes: number }> = [];
+    const { entries, skipped } = await extractKeptZipEntries(
+      zipPath,
+      sessionDir,
+      keepAudio,
+      INVALID_MSG,
+      {},
+      {
+        onActivity: (info) => seen.push(info),
+        // Generous idle window — a healthy unpack must never trip it.
+        idleMs: 60_000,
+        idleMessage: "stalled",
+      },
+    );
+
+    // Extraction itself is unchanged: kept entries land, the rejected
+    // non-audio file is reported skipped.
+    assert.equal(entries.length, 2);
+    assert.deepEqual(skipped, ["credits.pdf"]);
+
+    // Activity fired, and ONLY for kept entries (the skipped pdf never
+    // reaches the write pipeline).
+    assert.ok(seen.length >= 2, "expected at least one activity ping per kept entry");
+    const pinged = new Set(seen.map((s) => s.filename));
+    assert.deepEqual([...pinged].sort(), ["01 First.wav", "02 Second.flac"]);
+    assert.ok(!pinged.has("credits.pdf"));
+    // entryBytes is monotonic per file and totalBytes accumulates across
+    // files, so the last ping reflects the full unpacked size.
+    assert.equal(seen[seen.length - 1].totalBytes, 3 + 4);
+  });
+
+  test("liveness is optional — extraction behaves identically when omitted", async () => {
+    // The lyrics/bonus in-request callers pass no liveness object; that
+    // path must stay byte-for-byte unchanged.
+    const zipPath = await makeZip("no-liveness.zip", {
+      "song.wav": "abcde",
+    });
+    const sessionDir = await freshSessionDir();
+    const { entries, skipped } = await extractKeptZipEntries(
+      zipPath,
+      sessionDir,
+      keepAudio,
+      INVALID_MSG,
+    );
+    assert.deepEqual(entries.map((e) => e.filename), ["song.wav"]);
+    assert.equal(entries[0].size, 5);
+    assert.equal(skipped.length, 0);
+  });
+
+  test("the idle guard does not fire for a healthy (non-stalled) unpack", async () => {
+    // A very small idle window combined with a tiny, instantly-written
+    // file must still succeed: the file is written before the timer can
+    // fire, and the guard is disarmed on completion. (We can't easily
+    // simulate a true multi-second write stall in a unit test without a
+    // fake clock; this asserts the happy path stays green even when the
+    // window is aggressive.)
+    const zipPath = await makeZip("healthy.zip", { "track.wav": "xyz" });
+    const sessionDir = await freshSessionDir();
+    const { entries } = await extractKeptZipEntries(
+      zipPath,
+      sessionDir,
+      keepAudio,
+      INVALID_MSG,
+      {},
+      { idleMs: 50, idleMessage: "should not fire" },
+    );
+    assert.deepEqual(entries.map((e) => e.filename), ["track.wav"]);
+  });
 });
 
 describe("extOf / basenameOf helpers", () => {

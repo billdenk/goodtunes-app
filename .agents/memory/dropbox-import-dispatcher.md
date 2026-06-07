@@ -71,6 +71,19 @@ legacy `/s/`). A change to the dispatcher changes every importer at once.
     from a first-poll 404 (likely finished). Progress carries optional `file`+`step` so the dialog
     proves a long step is alive; keep the server and client progress shapes in sync.
 
+- **The UNPACK phase between download and per-track processing needs its OWN liveness.**
+  **Why:** download and per-track steps already keep the job watchdog fresh, but
+  `extractKeptZipEntries` wrote each kept file to disk silently. A big hi-res folder /
+  `.zip` of 24-bit WAVs unpacks for longer than the ~180s job-stall window, so the
+  watchdog killed a healthy import right after the bar hit 100% ("stopped making progress
+  for 180s"). **How to apply:** `extractKeptZipEntries` takes an optional 6th `liveness`
+  arg (`onActivity` fires PER CHUNK — a single WAV can exceed the idle window on its own —
+  plus a resettable `idleMs`/`idleMessage` guard, NOT a fixed deadline). The tracks
+  importer wires `onActivity`→`heartbeat()` + throttled `setProgress({phase:"extracting"})`;
+  in-request lyrics/bonus callers omit `liveness` and are byte-for-byte unchanged. Progress
+  `phase` union is `download | extracting | process` and MUST stay in sync between server
+  `ImportProgress` (routes.ts) and client (`AdminAlbum.tsx`).
+
 - **Pure zip helpers live in `server/dropboxZip.ts`, not `routes.ts`.** `extOf`,
   `basenameOf`, `fileLooksLikeZip`, `extractKeptZipEntries` + the `MAX_DROPBOX_*` caps were
   hoisted out so they're unit-testable without booting the 21k-line `routes.ts` (which would

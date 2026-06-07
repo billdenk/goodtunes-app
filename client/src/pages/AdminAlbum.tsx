@@ -5341,7 +5341,7 @@ type ImportStep = "transcoding" | "uploading" | "probing" | "saving";
 type ImportProgress = {
   processed: number;
   total: number;
-  phase?: "download" | "process";
+  phase?: "download" | "extracting" | "process";
   file?: string;
   step?: ImportStep;
 };
@@ -5752,7 +5752,9 @@ function AddMultipleTracksDialog({
                     ? progress.step
                       ? `Track ${Math.min(progress.processed + 1, progress.total)} of ${progress.total} — ${IMPORT_STEP_LABEL[progress.step]}…`
                       : `Importing ${progress.processed} of ${progress.total}…`
-                    : "Downloading from Dropbox…"}
+                    : progress.phase === "extracting"
+                      ? "Unpacking files from Dropbox…"
+                      : "Downloading from Dropbox…"}
               </span>
               {progress && progress.total > 0 && (
                 <span className="tabular-nums">
@@ -5763,7 +5765,7 @@ function AddMultipleTracksDialog({
             {/* Filename of the track currently being worked. Reassures the
                 operator a long-but-healthy hi-res transcode/upload is still
                 moving on a specific file rather than wedged. */}
-            {progress?.file && progress.phase === "process" && (
+            {progress?.file && (progress.phase === "process" || progress.phase === "extracting") && (
               <p className="truncate text-xs text-slate-400" data-testid="text-bulk-dropbox-current-file">
                 {progress.file}
               </p>

@@ -8901,6 +8901,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   //      download.
   const DROPBOX_STALL_MS = 90_000; // fail if no bytes flow for 90s
   const DROPBOX_CONNECT_MS = 60_000; // cap the initial TCP connect
+  // Operator-facing message when the UNPACK phase (after download hits
+  // 100%) wedges — no bytes written to disk for DROPBOX_STALL_MS. A
+  // healthy-but-slow unpack survives because the guard is resettable; this
+  // only surfaces on a genuine freeze (e.g. an incomplete download).
+  const DROPBOX_EXTRACT_STALL_MSG =
+    "Unpacking the Dropbox archive stalled — it stopped writing files to disk. The download may be incomplete; re-share the folder from Dropbox and try the import again.";
 
   // Per-call idle/stall guard. `arm()` (re)starts the countdown — call it
   // once before the first byte and again on every chunk; `disarm()` stops
@@ -9031,6 +9037,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     shouldKeep: (filename: string) => boolean,
     opts: {
       onDownloadProgress?: (downloaded: number, total: number | null) => void;
+      onExtractProgress?: (info: { filename: string; entryBytes: number; totalBytes: number }) => void;
     } = {},
   ): Promise<{
     entries: Array<{ filename: string; tmpPath: string; size: number }>;
@@ -9163,6 +9170,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           sessionDir,
           shouldKeep,
           "Couldn't open that .zip — it may be corrupted or only partly uploaded. Try re-downloading the folder from Dropbox and re-sharing it.",
+          {},
+          {
+            onActivity: opts.onExtractProgress,
+            idleMs: DROPBOX_STALL_MS,
+            idleMessage: DROPBOX_EXTRACT_STALL_MSG,
+          },
         );
       } catch (err) {
         await cleanup();
@@ -9207,6 +9220,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Lets the importer surface a left-to-right "Downloading from
       // Dropbox… X%" fill instead of the indeterminate shimmer.
       onDownloadProgress?: (downloaded: number, total: number | null) => void;
+      // Fires per chunk written while UNPACKING the zip to disk (after the
+      // download hits 100%). Unpacking a big hi-res folder can outlast the
+      // per-job stall watchdog, so the tracks importer wires this to the
+      // heartbeat to keep a healthy unpack alive and paint an "extracting"
+      // state. In-request callers (lyrics/bonus) omit it.
+      onExtractProgress?: (info: { filename: string; entryBytes: number; totalBytes: number }) => void;
     } = {},
   ): Promise<{
     entries: Array<{ filename: string; tmpPath: string; size: number }>;
@@ -9301,6 +9320,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     shouldKeep: (filename: string) => boolean,
     opts: {
       onDownloadProgress?: (downloaded: number, total: number | null) => void;
+      onExtractProgress?: (info: { filename: string; entryBytes: number; totalBytes: number }) => void;
     } = {},
   ): Promise<{
     entries: Array<{ filename: string; tmpPath: string; size: number }>;
@@ -9399,6 +9419,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         sessionDir,
         shouldKeep,
         "That link points to a single file, not a folder. Use the folder's share link instead (or click Upload file to import a single document).",
+        {},
+        {
+          onActivity: opts.onExtractProgress,
+          idleMs: DROPBOX_STALL_MS,
+          idleMessage: DROPBOX_EXTRACT_STALL_MSG,
+        },
       );
     } catch (err) {
       await cleanup();
@@ -9864,6 +9890,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             ? 1
             : Math.max(...existingSongs.map(s => s.trackNumber ?? 0)) + 1;
 
+          // Throttle "extracting"-phase setProgress to ~1 MB of unpacked
+          // bytes so a multi-GB unpack doesn't fan out thousands of state
+          // writes; the heartbeat still fires on every chunk underneath.
+          let lastExtractReport = 0;
+
           // Stream the zip → tempfiles (or a single file, for a `/scl/fi/`
           // share link). We only keep audio entries; every other file in
           // the folder (readme.txt, .DS_Store, cover art, etc.) is
@@ -9890,6 +9921,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   total: total && total > 0 ? total : 0,
                   phase: "download",
                 });
+              },
+              // After download hits 100% the zip is unpacked to disk — for
+              // a big hi-res folder that itself can outlast the per-job
+              // stall watchdog. Ping the heartbeat on every chunk so a
+              // healthy unpack is never declared wedged, and (throttled)
+              // surface an "extracting" state so the dialog shows it's
+              // alive instead of frozen at 100%.
+              onExtractProgress: (info) => {
+                heartbeat();
+                if (info.totalBytes - lastExtractReport >= 1024 * 1024) {
+                  lastExtractReport = info.totalBytes;
+                  setProgress({
+                    processed: info.totalBytes,
+                    total: 0,
+                    phase: "extracting",
+                    file: info.filename,
+                  });
+                }
               },
             },
           );
@@ -10279,7 +10328,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   type ImportProgress = {
     processed: number;
     total: number;
-    phase?: "download" | "process";
+    phase?: "download" | "extracting" | "process";
     file?: string;
     step?: "transcoding" | "uploading" | "probing" | "saving";
   };

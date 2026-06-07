@@ -66,6 +66,20 @@ export async function extractKeptZipEntries(
   // without writing 500 MB / 10 GB of fixture data. Production callers
   // omit this and get the real `MAX_DROPBOX_*` constants.
   caps: { maxEntryBytes?: number; maxTotalBytes?: number } = {},
+  // Liveness for the unpack phase. Unpacking a big hi-res folder to disk
+  // can itself outlast the per-job stall watchdog, so we emit a heartbeat
+  // (`onActivity`) on EVERY chunk written — not just once per file, since
+  // a single 24-bit WAV can take longer than the watchdog window on its
+  // own. `idleMs` arms a resettable idle guard (NOT a fixed deadline): a
+  // slow-but-healthy unpack survives, but a truly wedged write — no bytes
+  // for `idleMs` — aborts promptly with `idleMessage`. Omit entirely
+  // (callers that don't care, e.g. the in-request lyrics/bonus paths) and
+  // extraction behaves exactly as before.
+  liveness: {
+    onActivity?: (info: { filename: string; entryBytes: number; totalBytes: number }) => void;
+    idleMs?: number;
+    idleMessage?: string;
+  } = {},
 ): Promise<{
   entries: Array<{ filename: string; tmpPath: string; size: number }>;
   skipped: string[];
@@ -77,6 +91,26 @@ export async function extractKeptZipEntries(
   const { Transform } = await import("node:stream");
   const { pipeline } = await import("node:stream/promises");
   const unzipper = (await import("unzipper")).default;
+
+  // Resettable idle/stall guard for the unpack. Armed per chunk written;
+  // if it fires we abort the in-flight pipeline and surface `idleMessage`.
+  // Disabled (no timer, no AbortController) when no `idleMs` is supplied
+  // so the lyrics/bonus callers stay byte-for-byte unchanged.
+  const idleMs = liveness.idleMs ?? 0;
+  const idleAc = idleMs > 0 ? new AbortController() : null;
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  let idleFired = false;
+  const armIdle = () => {
+    if (!idleAc) return;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      idleFired = true;
+      try { idleAc.abort(); } catch {}
+    }, idleMs);
+  };
+  const disarmIdle = () => {
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+  };
 
   let directory: Awaited<ReturnType<typeof unzipper.Open.file>>;
   try {
@@ -120,10 +154,43 @@ export async function extractKeptZipEntries(
           cb(new Error(`"${filename}" is too large (over ${Math.round(maxEntryBytes / (1024 * 1024))} MB).`));
           return;
         }
+        // Bytes are flowing — reset the idle countdown so a steady (even
+        // slow) unpack of a huge WAV is never declared wedged, then ping
+        // the caller so the per-job watchdog stays fresh and the dialog
+        // can show an "unpacking" state.
+        armIdle();
+        try {
+          liveness.onActivity?.({ filename, entryBytes: size, totalBytes: totalUncompressed + size });
+        } catch {}
         cb(null, chunk);
       },
     });
-    await pipeline(file.stream(), cap, fs.createWriteStream(tmpPath));
+    // Arm before the first chunk so a write that never starts (wedged
+    // before any bytes) still trips the guard. Re-armed per chunk above.
+    armIdle();
+    try {
+      await pipeline(
+        file.stream(),
+        cap,
+        fs.createWriteStream(tmpPath),
+        idleAc ? { signal: idleAc.signal } : {},
+      );
+    } catch (err: any) {
+      disarmIdle();
+      // A genuinely wedged unpack (no bytes for idleMs) surfaces a clear,
+      // operator-actionable message instead of waiting on the coarse
+      // 180s job watchdog. Everything else (size cap, corrupt stream)
+      // propagates verbatim.
+      if (idleFired) {
+        throw new Error(
+          liveness.idleMessage ??
+            `Unpacking "${filename}" stalled — no data was written for ${Math.round(idleMs / 1000)}s. The Dropbox download may be incomplete; re-share the folder and try the import again.`,
+        );
+      }
+      throw err;
+    } finally {
+      disarmIdle();
+    }
     totalUncompressed += size;
     if (totalUncompressed > maxTotalBytes) {
       throw new Error(`That folder's total size is over ${Math.round(maxTotalBytes / (1024 * 1024 * 1024))} GB. Split it into two imports.`);
@@ -131,5 +198,6 @@ export async function extractKeptZipEntries(
     entries.push({ filename, tmpPath, size });
   }
 
+  disarmIdle();
   return { entries, skipped };
 }
