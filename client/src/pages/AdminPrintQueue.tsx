@@ -182,13 +182,22 @@ function AdminPrintQueueInner() {
       <div className="max-w-5xl mx-auto py-8" data-testid="page-admin-print-queue">
         <div className="flex items-center justify-between mb-1">
           <h1 className="text-[22px] font-semibold text-slate-900">Print queue</h1>
-          <Link
-            href="/admin/orders"
-            className="text-[12px] text-slate-500 hover:text-[color:var(--brand-blue)] hover:underline"
-            data-testid="link-admin-orders"
-          >
-            ← All orders
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/admin/cert-names"
+              className="text-[12px] text-slate-500 hover:text-[color:var(--brand-blue)] hover:underline"
+              data-testid="link-cert-names"
+            >
+              Cert names →
+            </Link>
+            <Link
+              href="/admin/orders"
+              className="text-[12px] text-slate-500 hover:text-[color:var(--brand-blue)] hover:underline"
+              data-testid="link-admin-orders"
+            >
+              ← All orders
+            </Link>
+          </div>
         </div>
         <p className="text-slate-500 text-[13px] mb-6">
           Printable GoodDeed certificates. Confirmed rows are ready to print — batch them into a ZIP of single-page PDFs or one merged PDF, then download. Downloading the batch flips rows to <span className="text-slate-900">printed</span>.

@@ -36,6 +36,7 @@ import {
 // template's normalised `{albumId, sequenceNumber, recipientName,
 // qrPayload, paperSize}` inputs.
 import { drawGoodDeedPageOnto, type GoodDeedPrintInputs } from "./goodDeedPrintTemplate";
+import { flagCertName } from "./certNameModeration";
 
 // ─── Constants ───────────────────────────────────────────────────────
 const LETTER_COUNTRIES = new Set(["US", "USA", "CA", "CAN", "MX", "MEX"]);
@@ -513,6 +514,16 @@ export function registerCertificateRoutes(app: Express) {
       if (raw.length > 80) return res.status(400).json({ message: "Name is too long (80 characters max)." });
       patch.certConfirmedName = raw;
       patch.certConfirmedAt = new Date();
+      // Task #1609 — FLAG, never block. A suspect name still saves (a
+      // false positive must never stop a real buyer from confirming their
+      // own name); we just log it so the admin cert-name review surface
+      // can sort it to the top for a human to act on.
+      const flag = flagCertName(raw);
+      if (flag.flagged) {
+        console.warn(
+          `[cert-name] flagged digital cert name on order ${o.id}: ${JSON.stringify(raw)} (matched: ${flag.matches.join(", ")})`,
+        );
+      }
     }
 
     if (hasPaperSize) {
@@ -529,6 +540,84 @@ export function registerCertificateRoutes(app: Express) {
       confirmedName: patch.certConfirmedName ?? o.certConfirmedName ?? undefined,
       paperSize: patch.certPaperSize ?? o.certPaperSize ?? undefined,
     });
+  });
+
+  // ─── Task #1609 — Admin: review + act on flagged digital cert names ──
+  // Digital-only GoodDeed owners set the printed name on a per-order
+  // field (orders.cert_confirmed_name) — they never mint a real
+  // signed_cert_certificates row, so these names NEVER appear in the
+  // print queue. This pair gives operators the missing review surface:
+  // list every digital order whose fan picked a name, flag the suspect
+  // ones (lightweight blocklist, flag-not-block), and let the operator
+  // clear a bad name to re-open the one-time fan edit. Cancel + refund is
+  // handled by the shared /api/admin/orders/:id/refund endpoint.
+  app.get("/api/admin/cert-names", async (req, res) => {
+    const me = await getAdminAuth(req);
+    if (!me) return res.status(403).json({ message: "Admin only" });
+    // Only digital orders (no real cert row) where the fan actually chose
+    // a name. The physical signed-cert path owns its own names in the
+    // print queue, so we LEFT JOIN and keep only the rows with no cert.
+    const rows = await db
+      .select({ order: orders, album: albums, customer: customerUsers })
+      .from(orders)
+      .innerJoin(albums, eq(albums.id, orders.albumId))
+      .innerJoin(customerUsers, eq(customerUsers.id, orders.customerId))
+      .leftJoin(signedCertCertificates, eq(signedCertCertificates.orderId, orders.id))
+      .where(and(isNotNull(orders.certConfirmedName), isNull(signedCertCertificates.id)))
+      .orderBy(desc(orders.certConfirmedAt))
+      .limit(500);
+    const out = rows.map((r) => {
+      const flag = flagCertName(r.order.certConfirmedName);
+      return {
+        orderId: r.order.id,
+        confirmedName: r.order.certConfirmedName,
+        confirmedAt: r.order.certConfirmedAt,
+        status: r.order.status,
+        goodDeedNumber: r.order.goodDeedNumber,
+        totalCents: r.order.totalCents,
+        origin: r.order.origin,
+        refundedAt: r.order.refundedAt,
+        albumTitle: r.album.title,
+        albumArtist: r.album.artist,
+        albumArtwork: r.album.artwork ?? null,
+        customerEmail: r.customer.email,
+        customerDisplayName: r.customer.displayName,
+        flagged: flag.flagged,
+        flagMatches: flag.matches,
+      };
+    });
+    // Surface suspect names first, then most-recently-confirmed. The DB
+    // already ordered by confirmedAt desc; a stable partition keeps that
+    // ordering inside each group.
+    out.sort((a, b) => Number(b.flagged) - Number(a.flagged));
+    res.json(out);
+  });
+
+  // Clear a bad digital cert name — re-opens the one-time fan edit by
+  // nulling both the name and the lock timestamp. The fan's next visit to
+  // the cert viewer can pick a new name; the PDF falls back to the
+  // synthesized realName → displayName → username until they do. Refuses
+  // on the physical signed-cert path (managed by the print queue).
+  app.post("/api/admin/cert-names/:orderId/reset", async (req, res) => {
+    const me = await getAdminAuth(req);
+    if (!me) return res.status(403).json({ message: "Admin only" });
+    const [o] = await db.select().from(orders).where(eq(orders.id, req.params.orderId));
+    if (!o) return res.status(404).json({ message: "Order not found" });
+    const [realRow] = await db
+      .select({ id: signedCertCertificates.id })
+      .from(signedCertCertificates)
+      .where(eq(signedCertCertificates.orderId, o.id));
+    if (realRow) {
+      return res.status(409).json({
+        message: "This certificate's name is managed through the print queue, not here.",
+      });
+    }
+    await db
+      .update(orders)
+      .set({ certConfirmedName: null, certConfirmedAt: null })
+      .where(eq(orders.id, o.id));
+    console.log(`[cert-name] admin ${me.userId} cleared digital cert name on order ${o.id}`);
+    res.json({ ok: true });
   });
 
   // ─── Admin print queue ──────────────────────────────────────────

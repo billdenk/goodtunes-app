@@ -81,6 +81,7 @@ const SECTION_FOR_ENTITY: Partial<Record<EntityKey, SidebarSectionId>> = {
   fulfillment: "partners",
   "pressing-orders": "queues",
   "fan-orders": "queues",
+  "cert-names": "queues",
   jobs: "queues",
   customers: "audience",
   "platform-pricing": "system",
@@ -131,6 +132,7 @@ export type EntityKey =
   | "press-match"
   | "pressing-orders"
   | "fan-orders"
+  | "cert-names"
   | "early-cut"
   | "fulfillment"
   | "customers"
@@ -827,6 +829,16 @@ export function AdminFrame({
                 active={active === "fan-orders"}
                 onClick={() => navigate("/admin/fan-orders")}
                 testId="nav-fan-orders"
+              />
+              {/* Task #1609 — Digital GoodDeed cert name review. Tool, not
+                  a CRUD list, so -1 suppresses the count. */}
+              <SidebarLink
+                icon={ScrollText}
+                label="Cert names"
+                count={-1}
+                active={active === "cert-names"}
+                onClick={() => navigate("/admin/cert-names")}
+                testId="nav-cert-names"
               />
               {/* Task #533 — pool-funded early masters cut review inbox.
                   Tool, not a CRUD list, so -1 suppresses the count. */}

@@ -86,6 +86,7 @@ import { AdminWelcomeBack } from "@/pages/AdminWelcomeBack";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
 import { AdminPrintQueue } from "@/pages/AdminPrintQueue";
+import { AdminCertNames } from "@/pages/AdminCertNames";
 import { AdminLegacyImageAudit } from "@/pages/AdminLegacyImageAudit";
 import { CertProvenance } from "@/pages/CertProvenance";
 import AdminSecurity from "@/pages/AdminSecurity";
@@ -464,6 +465,10 @@ function Router() {
         {/* Task #128 — Printable GoodDeed certificate print queue. */}
         <Route path="/admin/print-queue">
           <ProtectedRoute component={AdminPrintQueue} />
+        </Route>
+        {/* Task #1609 — Review + act on flagged digital cert names. */}
+        <Route path="/admin/cert-names">
+          <ProtectedRoute component={AdminCertNames} />
         </Route>
         {/* Task #434 — Audit imported rows still on tinifycdn.com */}
         <Route path="/admin/legacy-image-audit">

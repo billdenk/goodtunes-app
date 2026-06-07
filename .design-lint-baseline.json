@@ -14951,6 +14951,76 @@
   },
   {
     "rule": "admin-link-missing-shared-treatment",
+    "file": "client/src/pages/AdminCertNames.tsx",
+    "snippet": "<Link"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCertNames.tsx",
+    "snippet": "<h1 className=\"text-[22px] font-semibold text-slate-900\">Certificate names</h1>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCertNames.tsx",
+    "snippet": "className=\"text-[12px] text-slate-500 hover:text-[color:var(--brand-blue)] hover:underline\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCertNames.tsx",
+    "snippet": "<p className=\"text-slate-500 text-[13px] mb-6\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCertNames.tsx",
+    "snippet": "className={`px-3 py-1.5 rounded-full text-[12px] font-semibold ${"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCertNames.tsx",
+    "snippet": "className=\"px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-rose-600 text-white\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCertNames.tsx",
+    "snippet": "<span className=\"px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-slate-200 text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCertNames.tsx",
+    "snippet": "<span className=\"text-[11px] text-slate-500\" data-testid={`gooddeed-${r.orderId}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCertNames.tsx",
+    "snippet": "<span className=\"px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase bg-amber-100 text-amber-700\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCertNames.tsx",
+    "snippet": "className=\"text-[14px] font-medium text-slate-900 truncate mt-0.5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCertNames.tsx",
+    "snippet": "<div className=\"text-[12px] text-slate-500 truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCertNames.tsx",
+    "snippet": "className=\"text-[11px] text-[color:var(--brand-blue)] hover:underline active:opacity-70\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCertNames.tsx",
+    "snippet": "className=\"text-[11px] text-slate-600 hover:text-slate-900 active:opacity-70 disabled:opacity-40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminCertNames.tsx",
+    "snippet": "className=\"text-[11px] text-rose-600 hover:text-rose-700 active:opacity-70 disabled:opacity-40\""
+  },
+  {
+    "rule": "admin-link-missing-shared-treatment",
     "file": "client/src/pages/AdminCustomerDetail.tsx",
     "snippet": "<Link"
   },
