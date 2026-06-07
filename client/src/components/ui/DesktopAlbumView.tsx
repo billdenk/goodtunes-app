@@ -11,7 +11,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { FAN_TOP_CHROME_INSET } from "@/components/ui/SheetChrome";
 import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
 import { useToast } from "@/hooks/use-toast";
-import { shareUrlForSlug } from "@shared/shareSlug";
+import { shareAlbum } from "@/lib/shareAlbum";
 import { formatReleaseDateLong } from "@shared/albumStage";
 import { trackPlaybackState } from "@shared/trackPlayback";
 
@@ -347,20 +347,16 @@ export function DesktopAlbumView({
         title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[24px] lg:text-[28px] text-balance",
       };
   const { toast } = useToast();
-  const handleCopyShareLink = async () => {
-    // Task #970 — copy the clean per-release share link when the album has
-    // a slug so what fans share matches what operators promote.
-    const url = album.shareSlug
-      ? shareUrlForSlug(album.shareSlug)
-      : typeof window !== "undefined"
-      ? `${window.location.origin}/album/${album.id}`
-      : `/album/${album.id}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      toast({ title: "Link copied", description: "Share this album anywhere." });
-    } catch {
-      toast({ title: "Copy failed", description: url, variant: "destructive" });
-    }
+  const handleShareAlbum = async () => {
+    // Task #1702 — open the native share sheet (same as the phone), falling
+    // back to copy-link + toast when the device/browser can't share. Shared
+    // handler keeps every album surface in lock-step (see lib/shareAlbum.ts).
+    await shareAlbum(album, {
+      onCopied: () =>
+        toast({ title: "Link copied", description: "Share this album anywhere." }),
+      onCopyFailed: (url) =>
+        toast({ title: "Copy failed", description: url, variant: "destructive" }),
+    });
   };
 
   // Task #1185 — top-right ⋯ album menu. Anchored under the ⋯ button and
@@ -456,7 +452,7 @@ export function DesktopAlbumView({
               variant="ghost"
               size="md"
               label="Share album"
-              onClick={handleCopyShareLink}
+              onClick={handleShareAlbum}
               className="text-fan-primary hover:text-white"
               data-testid="button-share-album"
             >

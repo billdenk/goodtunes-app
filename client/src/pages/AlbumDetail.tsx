@@ -147,7 +147,7 @@ function songCreditsPayload(
 
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { AlbumDetailDesktop } from "@/pages/AlbumDetailDesktop";
-import { shareUrlForSlug } from "@shared/shareSlug";
+import { shareAlbum } from "@/lib/shareAlbum";
 import { isSunrisePending, formatSalesBeginDate } from "@shared/albumStage";
 import { SalesBeginArrivalModal } from "@/components/ui/SalesBeginArrivalModal";
 import { goBack } from "@/lib/navHistory";
@@ -924,26 +924,15 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
   const hasMoreBy = moreByArtist.length > 0;
 
   const handleShare = async () => {
-    // Task #970 — prefer the clean per-release share link when the album
-    // has a slug, so what fans share matches what operators promote.
-    const url = album.shareSlug
-      ? shareUrlForSlug(album.shareSlug)
-      : `${window.location.origin}/album/${album.id}`;
-    const shareData = { title: album.title, text: `Preview ${album.artist}'s ${album.title} on GoodTunes®`, url };
-    const hasNativeShare = typeof navigator.share === "function";
-    const destination: "native" | "copy" = hasNativeShare ? "native" : "copy";
-    track("share_initiated", { albumId: album.id, destination });
-    try {
-      if (hasNativeShare) {
-        await navigator.share(shareData);
-        track("share_completed", { albumId: album.id, destination: "native" });
-      } else {
-        await navigator.clipboard.writeText(url);
-        track("share_completed", { albumId: album.id, destination: "copy" });
+    // Task #1702 — shared native-first / copy-fallback share handler so the
+    // phone, iPad, and desktop surfaces stay in lock-step (same link, share
+    // text, and analytics). See client/src/lib/shareAlbum.ts.
+    await shareAlbum(album, {
+      onCopied: () => {
         setShareToast("Link copied");
         setTimeout(() => setShareToast(""), 2000);
-      }
-    } catch {}
+      },
+    });
   };
   const handleToggleAlbumDownload = async () => {
     const allDownloaded = songs.length > 0 && songs.every((s) => downloadedSongs.has(s.id));
