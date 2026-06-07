@@ -96,8 +96,11 @@ definitions:
         #    The iOS project shipped pinned at 1.0, which is below the live 3.0,
         #    so we stamp it here. *** BUMP THIS ONE LINE for each new release ***
         #    (e.g. 3.0.2, 3.1, 4.0). It must always exceed the current store
-        #    version.
-        agvtool new-marketing-version 3.0.1
+        #    version. The next step ("Guard — ...marketing version...") fails the
+        #    build in seconds if you forget, instead of letting Apple reject the
+        #    finished upload ten minutes later.
+        MARKETING_VERSION=3.0.1
+        agvtool new-marketing-version "$MARKETING_VERSION"
         #
         # 2) BUILD NUMBER (CFBundleVersion) — an internal counter that must be
         #    unique per upload. APP_STORE_APPLE_ID is the numeric App Apple ID
@@ -107,6 +110,35 @@ definitions:
         #    even across machines. This is automatic — you never touch it.
         LATEST_BUILD_NUMBER=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" || echo "0")
         agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
+    - name: Guard — fail fast if the marketing version is not above the live App Store version
+      script: |
+        # WHY THIS EXISTS: the marketing version (CFBundleShortVersionString) is
+        # hand-stamped one step up. Apple REQUIRES every new upload to carry a
+        # version STRICTLY HIGHER than the version currently live on the App Store
+        # or it rejects the upload with error 90062/90478 — but only AFTER the
+        # full ~10-minute Mac build + upload. If someone forgets to bump
+        # MARKETING_VERSION, that whole build is wasted. This guard reads the
+        # version actually stamped into the project and compares it to the live
+        # store version up front, failing in seconds with a clear "bump
+        # MARKETING_VERSION" message instead.
+        #
+        # It is FAIL-OPEN on uncertainty: on the very first submission (no live
+        # version yet) or a transient API hiccup it warns and continues rather
+        # than blocking a legitimate build. It only HARD-FAILS when it can prove
+        # the stamped version is <= the live store version. See
+        # scripts/verify-ios-marketing-version.py.
+        STAMPED=$(cd ios/App && agvtool what-marketing-version -terse1 | head -n1)
+        echo "Stamped marketing version: $STAMPED"
+        # `apps app-store-versions list --app-store-state READY_FOR_SALE` returns
+        # the version(s) currently live on the store as a JSON array; --json is
+        # parsed by the python guard below. Fall back to an empty array (→
+        # fail-open) if the API call errors so we never block on infra flakiness.
+        app-store-connect apps app-store-versions list "$APP_STORE_APPLE_ID" \
+          --platform IOS \
+          --app-store-state READY_FOR_SALE \
+          --json > /tmp/live_app_store_versions.json 2>/dev/null \
+          || echo "[]" > /tmp/live_app_store_versions.json
+        python3 scripts/verify-ios-marketing-version.py "$STAMPED" /tmp/live_app_store_versions.json
     - name: Guard — fail fast if the AppIcon set is invalid
       script: |
         # WHY THIS EXISTS: TestFlight Build 59 shipped Apple's GENERIC placeholder
