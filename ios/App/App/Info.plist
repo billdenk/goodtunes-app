@@ -56,11 +56,50 @@
         <!-- App Transport Security: all GoodTunes traffic is HTTPS to
              goodtunes.music + Mux/Stripe/Object Storage CDNs. No
              arbitrary loads allowed; this keeps App Review happy and
-             prevents accidental cleartext fetches from sneaking in. -->
+             prevents accidental cleartext fetches from sneaking in.
+
+             NSPinnedDomains (iOS 14+) pins GoodTunes' OWN hosts so the
+             native, TLS-pinned offline-download fetch (URLSession in
+             SecureKeyStorePlugin.pinnedDownload) can't be MITM'd on a
+             GoodTunes host. We pin the long-lived ISRG (Let's Encrypt)
+             ROOTS — NOT the leaf/intermediate, which rotate every ~60 days
+             and would brick installs — one primary + two backups:
+               * ISRG Root X2  (ECDSA root both subdomains chain to today)
+               * ISRG Root X1  (RSA root, R-series chain backup)
+               * ISRG Root YE  (new ECDSA root get.goodtunes.music already uses)
+             See docs/cert-pinning.md for the rotation runbook. Only
+             goodtunes.music is pinned; other hosts (legacy Dropbox masters,
+             Mux, Stripe) stay on normal validation so this can't brick them.
+             NSPinnedDomains applies to URLSession, NOT WKWebView, so the
+             WebView shell load is unaffected and the download is fetched via
+             URLSession on purpose. Ignored on iOS 13 (defense-in-depth). -->
         <key>NSAppTransportSecurity</key>
         <dict>
                 <key>NSAllowsArbitraryLoads</key>
                 <false/>
+                <key>NSPinnedDomains</key>
+                <dict>
+                        <key>goodtunes.music</key>
+                        <dict>
+                                <key>NSIncludesSubdomains</key>
+                                <true/>
+                                <key>NSPinnedCAIdentities</key>
+                                <array>
+                                        <dict>
+                                                <key>SPKI-SHA256-BASE64</key>
+                                                <string>diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=</string>
+                                        </dict>
+                                        <dict>
+                                                <key>SPKI-SHA256-BASE64</key>
+                                                <string>C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</string>
+                                        </dict>
+                                        <dict>
+                                                <key>SPKI-SHA256-BASE64</key>
+                                                <string>sCkq5UWXjg+7mKu9lMhhYF5bGLsy7VI/UNW3tccdR7w=</string>
+                                        </dict>
+                                </array>
+                        </dict>
+                </dict>
         </dict>
         <!-- Export-compliance: GoodTunes uses only standard, exempt encryption
              (HTTPS/TLS to goodtunes.music + Mux/Stripe/Object Storage; no

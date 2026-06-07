@@ -13,7 +13,11 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.security.KeyStore;
 import java.security.SecureRandom;
 
@@ -69,6 +73,65 @@ public class SecureKeyStorePlugin extends Plugin {
         } catch (Exception e) {
             call.reject("failed to access secure key store", e);
         }
+    }
+
+    /**
+     * Fetch a URL over the platform HTTP stack and return the raw bytes as base64.
+     *
+     * Routing the offline-download fetch through here instead of a WebView
+     * {@code fetch()} is what makes TLS pinning actually apply: the Network
+     * Security Config (res/xml/network_security_config.xml) pins GoodTunes' own
+     * hosts to the long-lived ISRG (Let's Encrypt) roots, and HttpsURLConnection —
+     * unlike WebView — ENFORCES that pin-set. A man-in-the-middle on a GoodTunes
+     * host therefore can't swap the download bytes. Hosts not covered by the
+     * pin-set (legacy Dropbox masters, Mux, Stripe) just get normal validation,
+     * so this never bricks them.
+     *
+     * On a pin mismatch the handshake throws and we reject — the JS layer must NOT
+     * silently fall back to the unpinned WebView fetch on failure, only when this
+     * method is entirely absent (older build).
+     */
+    @PluginMethod
+    public void pinnedDownload(PluginCall call) {
+        final String urlStr = call.getString("url");
+        if (urlStr == null || urlStr.isEmpty()) {
+            call.reject("invalid url");
+            return;
+        }
+        new Thread(() -> {
+            HttpURLConnection conn = null;
+            try {
+                URL url = new URL(urlStr);
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setConnectTimeout(30000);
+                conn.setReadTimeout(120000);
+                conn.setInstanceFollowRedirects(true);
+                conn.setRequestProperty("User-Agent", "GoodTunes-Native");
+                int code = conn.getResponseCode();
+                if (code < 200 || code >= 300) {
+                    call.reject("pinned download failed: HTTP " + code);
+                    return;
+                }
+                InputStream in = conn.getInputStream();
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                byte[] buf = new byte[16384];
+                int n;
+                while ((n = in.read(buf)) != -1) {
+                    bos.write(buf, 0, n);
+                }
+                in.close();
+                JSObject ret = new JSObject();
+                ret.put("value", Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP));
+                call.resolve(ret);
+            } catch (Exception e) {
+                // Includes SSLPeerUnverifiedException on a pin mismatch.
+                call.reject("pinned download failed", e);
+            } finally {
+                if (conn != null) {
+                    conn.disconnect();
+                }
+            }
+        }).start();
     }
 
     @PluginMethod

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Certificate pinning for GoodTunes' own hosts (Tier-3 download hardening — see
+  docs/cert-pinning.md and docs/roadmap.md).
+
+  WHAT THIS PINS
+  Only `goodtunes.music` and its subdomains (my.* / get.*). Every protected
+  offline-download fetch that hits a GoodTunes host (object-storage masters at
+  my.goodtunes.music/objects/...) is therefore tied to the GoodTunes TLS chain,
+  so a rogue Wi-Fi / corporate proxy / mis-issued CA cert can't swap the bytes.
+  Hosts NOT listed here (legacy Dropbox masters, Mux, Stripe) are deliberately
+  left on normal system validation so this config can never brick them.
+
+  WHY THE ISRG *ROOTS* AND NOT THE LEAF/INTERMEDIATE
+  GoodTunes' certs are issued by Let's Encrypt, whose leaf + intermediate certs
+  rotate every ~60 days. Pinning either would brick installs within weeks.
+  Pinning the long-lived ISRG *roots* (valid into 2035/2040) survives every
+  leaf/intermediate renewal. Three pins (one primary + two backups) are present
+  so a single root or CA migration is never a single point of failure:
+    - ISRG Root X2  (ECDSA root both subdomains currently chain to) — PRIMARY
+    - ISRG Root X1  (RSA root, covers the RSA/R-series chain)        — BACKUP
+    - ISRG Root YE  (new ECDSA root get.goodtunes.music already uses) — BACKUP
+
+  EXPIRATION = ANTI-BRICK SAFETY NET
+  After the `expiration` date the OS stops ENFORCING these pins and falls back
+  to normal validation. That guarantees a stale, un-updated install can never be
+  permanently locked out by a future CA change. Every native release should
+  review and push this date forward. See docs/cert-pinning.md for the rotation
+  runbook (add the new backup pin and ship an app update BEFORE switching CAs).
+
+  NOTE: Android Network Security Config pinning applies to the platform HTTP
+  stack (HttpsURLConnection / OkHttp), NOT to WebView content loads — which is
+  exactly why the offline download is fetched natively via SecureKeyStorePlugin
+  .pinnedDownload() instead of a WebView fetch(). It also does NOT affect the
+  remote-origin WebView load of my.goodtunes.music, so the app shell can't be
+  bricked by this file.
+-->
+<network-security-config>
+    <domain-config>
+        <domain includeSubdomains="true">goodtunes.music</domain>
+        <pin-set expiration="2028-06-01">
+            <pin digest="SHA-256">diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=</pin>
+            <pin digest="SHA-256">C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</pin>
+            <pin digest="SHA-256">sCkq5UWXjg+7mKu9lMhhYF5bGLsy7VI/UNW3tccdR7w=</pin>
+        </pin-set>
+    </domain-config>
+</network-security-config>

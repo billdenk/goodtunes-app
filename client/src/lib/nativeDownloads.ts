@@ -30,6 +30,13 @@
  *       3. Revocable: `purgeRevokedDownloads` deletes the files for any album
  *          the fan no longer owns the next time the app is online, and a
  *          missing/undecryptable file self-heals (purge + re-download).
+ *       4. TLS-pinned in transit: the download bytes are fetched over the
+ *          native, certificate-pinned HTTP path (`fetchProtectedBytes` →
+ *          `pinnedDownloadBytes`) so a man-in-the-middle on a GoodTunes host
+ *          can't swap the master. A WebView `fetch()` would NOT honor the pin
+ *          config, so we route through URLSession / HttpsURLConnection
+ *          instead. See docs/cert-pinning.md (older builds fall back to the
+ *          WebView fetch; pin failures never silently downgrade).
  *
  * Playback resolution lives in `offlineSrcFor` — it decrypts a stored file
  * into a short-lived in-memory blob URL. The fan player is otherwise
@@ -39,7 +46,7 @@
  */
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { isNative } from "./platform";
-import { getHardwareKeyBytes, isDeviceCompromised } from "./nativeSecureKey";
+import { getHardwareKeyBytes, isDeviceCompromised, pinnedDownloadBytes } from "./nativeSecureKey";
 
 const STORAGE_PREFIX = "gt:downloaded-songs:";
 /** Private, backup-excluded home for encrypted offline audio. */
@@ -272,6 +279,31 @@ function deviceIsCompromised(): Promise<boolean> {
   return compromisedPromise;
 }
 
+/**
+ * Fetch the bytes for an offline download, preferring the native TLS-PINNED
+ * path so a man-in-the-middle on a GoodTunes host can't swap the master.
+ *
+ * `pinnedDownloadBytes` returns the body over URLSession / HttpsURLConnection
+ * (which honor the app's pin config; a WebView `fetch()` does NOT) for hosts
+ * covered by the pin set, and `null` ONLY when that path is unavailable — web,
+ * or an older native build predating the plugin method — in which case we fall
+ * back to the WebView fetch. A genuine pin mismatch / network error from the
+ * pinned path REJECTS and propagates here; we deliberately do NOT fall back on
+ * failure, or a tampered connection could force the unpinned path.
+ *
+ * Note: only `goodtunes.music` hosts are pinned. Legacy Dropbox-hosted masters
+ * fetch over the native path with normal validation (still off the WebView),
+ * and become pinned automatically once migrated to object storage on
+ * my.goodtunes.music. See docs/cert-pinning.md.
+ */
+async function fetchProtectedBytes(audioUrl: string): Promise<ArrayBuffer> {
+  const pinned = await pinnedDownloadBytes(audioUrl);
+  if (pinned) return pinned;
+  const res = await fetch(audioUrl);
+  if (!res.ok) throw new Error(`download failed: ${res.status}`);
+  return res.arrayBuffer();
+}
+
 /* ──────────────────────────── public API ──────────────────────────── */
 
 /**
@@ -295,9 +327,7 @@ export async function downloadSong(
       throw new Error("offline downloads are unavailable on this device");
     }
     await ensureDir();
-    const res = await fetch(audioUrl);
-    if (!res.ok) throw new Error(`download failed: ${res.status}`);
-    const bytes = await res.arrayBuffer();
+    const bytes = await fetchProtectedBytes(audioUrl);
     const data = await encryptToBase64(bytes);
     await Filesystem.writeFile({ path: encPath(songId), directory: Directory.Cache, data });
   }

@@ -32,7 +32,8 @@ public class SecureKeyStorePlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "SecureKeyStore"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "getKey", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "isDeviceCompromised", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "isDeviceCompromised", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "pinnedDownload", returnType: CAPPluginReturnPromise)
     ]
 
     /// Keychain account/service identifying the offline-download master key.
@@ -58,6 +59,55 @@ public class SecureKeyStorePlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func isDeviceCompromised(_ call: CAPPluginCall) {
         call.resolve(["value": Self.isJailbroken()])
+    }
+
+    // MARK: - TLS-pinned download
+
+    /**
+     * Fetch a URL over the app's URLSession and return the raw bytes as base64.
+     *
+     * The whole point of routing the offline-download fetch through here instead
+     * of a WebView `fetch()` is TLS pinning: NSPinnedDomains in Info.plist pins
+     * GoodTunes' own hosts to the long-lived ISRG (Let's Encrypt) roots, and
+     * URLSession — unlike WKWebView — ENFORCES those pins. A man-in-the-middle on
+     * a GoodTunes host therefore can't swap the download bytes. Hosts that aren't
+     * in NSPinnedDomains (legacy Dropbox masters, Mux, Stripe) just get normal
+     * validation, so this never bricks them.
+     *
+     * On a pin mismatch the request fails and we `reject` — the JS layer must NOT
+     * silently fall back to the unpinned WebView fetch on failure, only when this
+     * method is entirely absent (older build).
+     */
+    @objc func pinnedDownload(_ call: CAPPluginCall) {
+        guard let urlString = call.getString("url"), let url = URL(string: urlString) else {
+            call.reject("invalid url")
+            return
+        }
+        var request = URLRequest(url: url)
+        request.setValue("GoodTunes-Native", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 120
+        // URLSession.shared honors the app's ATS NSPinnedDomains automatically.
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                // Includes the pinning failure (NSURLErrorServerCertificateUntrusted).
+                call.reject("pinned download failed: \(error.localizedDescription)")
+                return
+            }
+            guard let http = response as? HTTPURLResponse else {
+                call.reject("pinned download failed: no response")
+                return
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                call.reject("pinned download failed: HTTP \(http.statusCode)")
+                return
+            }
+            guard let data = data else {
+                call.reject("pinned download failed: empty body")
+                return
+            }
+            call.resolve(["value": data.base64EncodedString()])
+        }
+        task.resume()
     }
 
     // MARK: - Keychain

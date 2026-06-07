@@ -44,6 +44,11 @@ interface CompromisedPayload {
   value: boolean;
 }
 
+interface DownloadPayload {
+  /** Base64 of the fetched response body. */
+  value: string;
+}
+
 interface SecureKeyStorePlugin {
   /**
    * Return the per-device master key, generating + persisting one in the
@@ -53,6 +58,13 @@ interface SecureKeyStorePlugin {
   getKey(): Promise<KeyPayload>;
   /** Best-effort jailbreak (iOS) / root (Android) detection. */
   isDeviceCompromised(): Promise<CompromisedPayload>;
+  /**
+   * Fetch a URL over the platform HTTP stack (URLSession / HttpsURLConnection)
+   * so the app's TLS pin config (Info.plist NSPinnedDomains / Android Network
+   * Security Config) is ENFORCED — which a WebView `fetch()` does not honor.
+   * Returns the body base64-encoded.
+   */
+  pinnedDownload(options: { url: string }): Promise<DownloadPayload>;
 }
 
 const SecureKeyStore = registerPlugin<SecureKeyStorePlugin>("SecureKeyStore");
@@ -100,5 +112,33 @@ export async function isDeviceCompromised(): Promise<boolean> {
     return value === true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Fetch `url` over the native, TLS-PINNED HTTP path and return the raw bytes,
+ * or `null` only when the pinned path is UNAVAILABLE — web, or an older native
+ * build that predates this plugin method. Callers treat `null` as "fall back to
+ * the (unpinned) WebView fetch" — the same version-skew tolerance the rest of
+ * this module uses.
+ *
+ * CRITICAL: a `null` is ONLY returned for unavailability. A real failure — pin
+ * mismatch (MITM), bad status, network error — REJECTS and must propagate, so a
+ * tampered connection can never silently downgrade to the unpinned fetch. The
+ * pin enforcement itself lives in the platform config (Info.plist
+ * NSPinnedDomains / Android Network Security Config); this just routes the
+ * fetch through the platform HTTP stack so that config actually applies.
+ */
+export async function pinnedDownloadBytes(url: string): Promise<ArrayBuffer | null> {
+  if (!isNative) return null;
+  try {
+    const { value } = await SecureKeyStore.pinnedDownload({ url });
+    return base64ToBytes(value).buffer;
+  } catch (err) {
+    // Capacitor throws code 'UNIMPLEMENTED' when the running native binary
+    // predates this method. Only THAT means "not pinned-capable" → fall back.
+    const code = (err as { code?: string } | null)?.code;
+    if (code === "UNIMPLEMENTED") return null;
+    throw err;
   }
 }
