@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence, useReducedMotion, type Transition } from "framer-motion";
 import { useLocation } from "wouter";
 import { usePlayer } from "@/context/PlayerContext";
 import { formatDuration } from "@/data/musicData";
+import { useRailDrag } from "@/lib/useRailDrag";
 import { LyricsIcon } from "@/components/ui/LyricsIcon";
 import { IconButton } from "@/components/ui/IconButton";
 import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
@@ -47,48 +48,33 @@ function MobileScrubber({
   rightLabel?: "remaining" | "total";
   testId?: string;
 }) {
-  const hitRef = useRef<HTMLDivElement>(null);
-  const [dragging, setDragging] = useState(false);
-  const [dragTime, setDragTime] = useState(0);
+  // Window-bound drag (useRailDrag) instead of setPointerCapture: on
+  // iOS/iPadOS WKWebView calling setPointerCapture() inside pointerdown fires
+  // an immediate pointercancel and stops delivering move/up to the captured
+  // element, so the bar could only be tapped, never rubbed. useRailDrag binds
+  // move/up/cancel to window for the gesture and reads geometry off the rail
+  // ref — every move plus the release land on both touch and mouse. live:false
+  // defers the seek to release; a plain tap still commits at the tap position.
+  const onChange = useCallback(
+    (ratio: number) => {
+      if (duration > 0) onSeek(ratio * duration);
+    },
+    [duration, onSeek],
+  );
+  const { railRef, dragging, previewRatio, onPointerDown } = useRailDrag(
+    onChange,
+    { live: false },
+  );
 
-  const timeFromX = (clientX: number) => {
-    const el = hitRef.current;
-    if (!el || duration <= 0) return 0;
-    const rect = el.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    return ratio * duration;
-  };
-
-  const display = dragging ? dragTime : currentTime;
+  const display = dragging ? previewRatio * duration : currentTime;
   const pct = duration > 0 ? Math.max(0, Math.min(100, (display / duration) * 100)) : 0;
-
-  const handleDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (duration <= 0) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setDragging(true);
-    setDragTime(timeFromX(e.clientX));
-  };
-  const handleMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-    setDragTime(timeFromX(e.clientX));
-  };
-  const handleUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-    e.currentTarget.releasePointerCapture(e.pointerId);
-    const t = timeFromX(e.clientX);
-    setDragging(false);
-    onSeek(t);
-  };
 
   return (
     <>
       <div
-        ref={hitRef}
+        ref={railRef}
         className="relative w-full h-7 flex items-center cursor-pointer touch-none select-none"
-        onPointerDown={handleDown}
-        onPointerMove={handleMove}
-        onPointerUp={handleUp}
-        onPointerCancel={handleUp}
+        onPointerDown={duration > 0 ? onPointerDown : undefined}
         data-testid={testId}
       >
         <div className={`relative w-full ${railHeightClass} rounded-full overflow-hidden`}>
@@ -329,6 +315,35 @@ export function Player() {
       }
       if (dy > 80) {
         setShowPlayer(false);
+        cleanup();
+      }
+    };
+    const cleanup = () => {
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", cleanup);
+    };
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", cleanup);
+  };
+
+  // The full-screen lyrics overlay floats ABOVE the player (z-70), so the
+  // player's own swipe-to-dismiss (grabber/artwork) is unreachable while
+  // lyrics show. Mirror that gesture here, but scope it to the lyrics HEADER
+  // bar ONLY: a downward drag on the header closes the lyrics overlay. Keeping
+  // it off the lyric column is what lets SyncedLyrics' manual scroll
+  // (`enableManualScroll`) own vertical drags inside the text without the two
+  // gestures fighting — Apple Music separates them the same way (column
+  // scrolls, top chrome dismisses). Same 80px intent threshold + non-passive
+  // preventDefault to block iOS pull-to-refresh as the player handler.
+  const dismissLyricsOnSwipeDown = (e: React.TouchEvent) => {
+    const startY = e.touches[0].clientY;
+    const onMove = (ev: TouchEvent) => {
+      const dy = ev.touches[0].clientY - startY;
+      if (dy > 0) {
+        ev.preventDefault();
+      }
+      if (dy > 80) {
+        setShowLyrics(false);
         cleanup();
       }
     };
@@ -676,7 +691,13 @@ export function Player() {
       {showLyrics && currentSong.lyrics && (
         <div
           className="fixed inset-0 flex justify-center bg-[#00062B]"
-          style={{ zIndex: 70, top: 0, bottom: "auto", height: "100dvh" }}
+          // Plain `inset-0` (top:0 + bottom:0) so the navy fills BOTH safe-area
+          // insets on the native iOS WKWebView. The old `bottom:auto;
+          // height:100dvh` anchored only the top and left a WHITE strip over the
+          // home-indicator inset (100dvh stops short of the real bottom edge in
+          // standalone). The z-49 player backstop sits behind this overlay and
+          // covers any web-Safari toolbar sliver, same as the queue overlay.
+          style={{ zIndex: 70 }}
           onPointerDown={() => showControlsAndArmHide.current()}
         >
           {/* Full-bleed blurred artwork background — Apple Music style */}
@@ -689,7 +710,7 @@ export function Player() {
             />
             <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.28)" }} />
           </div>
-          <div className="relative w-full max-w-[390px] h-[100dvh] flex flex-col">
+          <div className="relative w-full max-w-[390px] h-full flex flex-col">
 
             {/* Header: small art + song info + star + ... — sits at a higher
                 stacking level than the lyrics below so the ⋯ dropdown (which
@@ -698,7 +719,11 @@ export function Player() {
                 SyncedLyrics applies a mask-image (creating its own stacking
                 context) and comes after the header in the DOM, so at an equal
                 z-index it would otherwise overpaint the menu on WebKit/iOS. */}
-            <div className="relative z-20 flex items-center gap-3 px-5 pt-14 pb-4">
+            <div
+              className="relative z-20 flex items-center gap-3 px-5 pt-14 pb-4"
+              onTouchStart={dismissLyricsOnSwipeDown}
+              data-testid="lyrics-header"
+            >
               <button
                 type="button"
                 onClick={() => setShowLyrics(false)}
@@ -851,6 +876,7 @@ export function Player() {
               onSeek={seekTo}
               writers={(currentSong as any).writers}
               active={showLyrics}
+              enableManualScroll
               className="relative z-10 flex-1 px-6"
             />
 

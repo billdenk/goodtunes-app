@@ -188,3 +188,82 @@ test("mobile player lyrics overlay opens from the Lyrics button and closes via i
   });
   container.remove();
 });
+
+test("lyrics overlay: a swipe-down on the HEADER dismisses, a drag on the lyric column does NOT (manual scroll coexists)", async () => {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  let root: any;
+  await act(async () => {
+    root = createRoot(container);
+    root.render(h(Harness));
+  });
+
+  const q = (id: string) =>
+    container.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
+  const click = async (el: HTMLElement) => {
+    await act(async () => {
+      el.dispatchEvent(
+        new window.MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+  };
+  const settle = async (frames = 4) => {
+    for (let i = 0; i < frames; i++) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+    }
+  };
+  const waitForGone = async (id: string) => {
+    for (let i = 0; i < 60 && q(id); i++) await settle(1);
+    return q(id);
+  };
+
+  // The swipe handler reads e.touches[0].clientY (React synthetic on the
+  // header) and ev.touches[0].clientY (native window touchmove/touchend).
+  // jsdom has no TouchEvent, so dispatch a bubbling Event carrying a
+  // hand-built `touches` array. touchstart goes on the element React listens
+  // through; move/end go on window where the handler binds them.
+  const touch = (target: any, type: string, clientY: number) => {
+    const ev: any = new window.Event(type, { bubbles: true, cancelable: true });
+    ev.touches = [{ clientY }];
+    target.dispatchEvent(ev);
+  };
+
+  // ---- First: a downward drag that STARTS on the lyric column must NOT
+  // dismiss (that region is owned by SyncedLyrics' manual scroll). ----
+  await click(q("button-lyrics")!);
+  await settle();
+  assert.ok(q("lyrics-scroll"), "overlay open before the column-drag check");
+
+  await act(async () => {
+    touch(q("lyrics-scroll"), "touchstart", 120);
+    touch(window, "touchmove", 260); // dy = 140, well past the 80px threshold
+    touch(window, "touchend", 260);
+  });
+  await settle();
+  assert.ok(
+    q("lyrics-scroll"),
+    "a drag on the lyric column does NOT close the overlay — scrolling is safe",
+  );
+
+  // ---- Then: the same downward swipe on the HEADER bar dismisses. ----
+  const header = q("lyrics-header");
+  assert.ok(header, "the lyrics overlay renders its header swipe zone");
+  await act(async () => {
+    touch(header!, "touchstart", 100);
+    touch(window, "touchmove", 220); // dy = 120 > 80 → dismiss
+    touch(window, "touchend", 220);
+  });
+  await settle();
+  assert.equal(
+    await waitForGone("lyrics-scroll"),
+    null,
+    "a swipe-down on the header closes the lyrics overlay",
+  );
+
+  await act(async () => {
+    root.unmount();
+  });
+  container.remove();
+});

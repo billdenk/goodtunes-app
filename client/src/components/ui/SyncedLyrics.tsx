@@ -76,10 +76,13 @@ export interface SyncedLyricsProps {
    *  text alignment, etc.). */
   className?: string;
   style?: React.CSSProperties;
-  /** DESKTOP ONLY. Lets the user drag the lyric column up/down to browse
-   *  ahead/behind without seeking, then auto-resumes follow after a short
-   *  idle. Mobile leaves this off (its overlay owns swipe-to-dismiss on the
-   *  grabber/artwork, which would conflict with a column drag). */
+  /** Lets the user drag the lyric column up/down to browse ahead/behind
+   *  without seeking, then auto-resumes follow after a short idle. Used by
+   *  BOTH the desktop immersive player and the mobile full-screen lyrics
+   *  overlay. The overlay's swipe-to-dismiss is scoped to its HEADER bar
+   *  only (see `dismissLyricsOnSwipeDown` in Player.tsx), so a vertical drag
+   *  inside the lyric column scrolls the lyrics and never fights the dismiss
+   *  gesture — the two own different regions, Apple-Music style. */
   enableManualScroll?: boolean;
 }
 

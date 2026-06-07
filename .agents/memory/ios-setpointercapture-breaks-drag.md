@@ -22,5 +22,7 @@ continuously (volume); `live:false` defers the seek to release but a plain tap
 still commits (scrubber). The shared `SyncedLyrics` lyric column uses the same
 window-bound pattern for its DESKTOP-only `enableManualScroll` drag-to-browse
 (tap-to-seek still fires unless the finger moved >6px; auto-follow resumes
-~4s after release). Keep manual lyric scroll OFF on mobile — its overlay owns
-swipe-to-dismiss on the grabber/artwork and would conflict.
+~4s after release). Mobile lyrics NOW enables manual scroll too: the overlay's
+swipe-to-dismiss is scoped to its HEADER bar only (`dismissLyricsOnSwipeDown` in
+Player.tsx), while the lyric column owns vertical drag — different regions, so
+they can't conflict (Apple-Music style). Don't re-disable mobile manual scroll.
