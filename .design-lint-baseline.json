@@ -9732,21 +9732,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PersonGearManager.tsx",
-    "snippet": "<h4 className=\"text-slate-900 text-[13px] font-semibold\">Add gear</h4>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PersonGearManager.tsx",
-    "snippet": "className=\"text-slate-400 hover:text-slate-600 text-[12px]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PersonGearManager.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[12px] py-2\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PersonGearManager.tsx",
     "snippet": "<span className=\"flex-1 text-slate-700 text-[12px] font-medium truncate\">"
   },
   {
@@ -9763,6 +9748,21 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PersonGearManager.tsx",
     "snippet": "<span className=\"ml-2 text-[10px] text-slate-400\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<h4 className=\"text-slate-900 text-[13px] font-semibold\">Add gear</h4>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "className=\"text-slate-400 hover:text-slate-600 text-[12px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[12px] py-2\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -11477,17 +11477,7 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-white/65\">{ca.name}</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-white/85\" data-testid={`text-line-custom-addon-${ca.id}`}>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-white/55\">Total</span>"
+    "snippet": "<span className=\"text-white/85\" data-testid={`text-line-custom-addon-${ca.addon.id}`}>"
   },
   {
     "rule": "fan-text-tone",

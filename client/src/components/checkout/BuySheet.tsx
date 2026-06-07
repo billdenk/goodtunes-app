@@ -377,6 +377,12 @@ export function BuySheet({
     bookletBundleCents != null;
   const signedCertSoldOut = !!options?.signedCertSoldOut;
   const signedCertRemaining = options?.signedCertRemaining ?? null;
+  // Every configured SKU is sold out — distinct from `options.skus.length === 0`
+  // (no SKUs configured yet). Drives the "Sold out" empty state so the sheet
+  // never renders an empty "You'll get" block + a $0.00 disabled checkout
+  // button when there's nothing left to buy.
+  const allSoldOut =
+    !!options && options.skus.length > 0 && options.skus.every((s) => s.soldOut);
 
   // Cap quantity by the SKU stock (when metered).
   const maxQuantity = useMemo(() => {
@@ -731,6 +737,25 @@ export function BuySheet({
                   </Group>
                 )}
 
+                {/* Every format sold out — a clear, honest empty state rather
+                    than an empty "You'll get" block + a $0.00 disabled
+                    checkout button. The format list above still shows each
+                    sold-out option; this confirms there's nothing left to buy
+                    and suppresses the cart/checkout chrome below. */}
+                {allSoldOut && (
+                  <div
+                    className="rounded-2xl bg-white/[0.05] px-4 py-5 text-center mb-5"
+                    data-testid="block-all-sold-out"
+                  >
+                    <div className="text-base font-semibold text-white">
+                      Sold out
+                    </div>
+                    <p className="text-fan-secondary text-sm mt-1 leading-snug">
+                      Every format for this release has sold out.
+                    </p>
+                  </div>
+                )}
+
                 {/* Task #549 — Quantity stepper. Capped at the lesser of
                     MAX_COPIES_PER_CHECKOUT and remaining stock. */}
                 {selectedSku && (
@@ -781,9 +806,24 @@ export function BuySheet({
                       <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider">
                         {quantity === 1 ? "Add-on" : "Per-copy add-ons"}
                       </div>
+                      {/* Step 5 — scarcity nudge. The remaining signed-cert
+                          count is already known; when it's getting low we
+                          promote it from a quiet tally to an "Only X left"
+                          cue in the cert/heart-pink accent so the fan feels
+                          the cap before it sells out. */}
                       {signedCertRemaining != null && !signedCertSoldOut && (
-                        <div className="text-white/40 text-[11px]" data-testid="text-signed-cert-remaining">
-                          {signedCertRemaining} signed left
+                        <div
+                          className={cn(
+                            "text-xs",
+                            signedCertRemaining <= 5
+                              ? "text-[color:var(--brand-pink)] font-semibold"
+                              : "text-fan-faint",
+                          )}
+                          data-testid="text-signed-cert-remaining"
+                        >
+                          {signedCertRemaining <= 5
+                            ? `Only ${signedCertRemaining} left`
+                            : `${signedCertRemaining} signed left`}
                         </div>
                       )}
                     </div>
@@ -980,7 +1020,7 @@ export function BuySheet({
                     box). Each can be bought in quantity and carries an
                     anonymous/specific recipient choice. Shows the owning
                     non-profit so the fan knows where the money goes. */}
-                {customAddonsList.length > 0 && (
+                {selectedSku && customAddonsList.length > 0 && (
                   <div className="mb-5">
                     <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">
                       Add a little extra
@@ -1115,7 +1155,7 @@ export function BuySheet({
                     materialization so the cert PDF prints it with no
                     second post-checkout step. Left blank → the server
                     falls back to the buyer's account name. */}
-                {showCertNameField && (
+                {selectedSku && showCertNameField && (
                   <div className="mb-4" data-testid="block-cert-name">
                     <label
                       htmlFor="buy-cert-name"
@@ -1142,6 +1182,14 @@ export function BuySheet({
                   </div>
                 )}
 
+                {/* Cart + checkout chrome only renders once a buyable SKU is
+                    selected. With no SKU (all formats sold out, or none
+                    configured) there's nothing to price, so the country/ZIP
+                    fields, the live breakdown, and the checkout button all
+                    stay hidden behind the "Sold out" / "Not available" state
+                    above instead of showing a $0.00 dead checkout. */}
+                {selectedSku && (
+                  <>
                 {/* Ship-to country — drives the live shipping quote below.
                     Embedded checkout can't pick a country-based rate on its
                     own, so we collect it here and lock it server-side. */}
@@ -1227,12 +1275,18 @@ export function BuySheet({
                       <span className="text-white/85" data-testid="text-line-booklet">{dollars(bookletLineCents)}</span>
                     </div>
                   )}
-                  {/* Task #844 — one line per ticked custom add-on. */}
+                  {/* Task #844 — one line per ticked custom add-on. Each item
+                      is { addon, qty }, so read through `.addon` and multiply
+                      by the chosen quantity so this line matches the qty the
+                      Total already folds in (customAddonsLineCents). */}
                   {selectedCustomAddons.map((ca) => (
-                    <div key={ca.id} className="flex items-center justify-between mt-1.5">
-                      <span className="text-white/65">{ca.name}</span>
-                      <span className="text-white/85" data-testid={`text-line-custom-addon-${ca.id}`}>
-                        {dollars(ca.priceCents)}
+                    <div key={ca.addon.id} className="flex items-center justify-between mt-1.5">
+                      <span className="text-white/65">
+                        {ca.addon.name}
+                        {ca.qty > 1 ? ` × ${ca.qty}` : ""}
+                      </span>
+                      <span className="text-white/85" data-testid={`text-line-custom-addon-${ca.addon.id}`}>
+                        {dollars(ca.addon.priceCents * ca.qty)}
                       </span>
                     </div>
                   ))}
@@ -1265,11 +1319,21 @@ export function BuySheet({
                       a postal code, and simply folded into the total. Kept
                       low-key — a plain "Sales tax" line, no "estimate"
                       framing, so it just appears and the fan pays. */}
-                  {taxReady && (taxLoading || taxAvailable) && (
+                  {/* Once the fan has typed a postal code the Sales tax line
+                      stays present so the Total never silently omits tax: it
+                      shows "…" while quoting, the figure when Stripe Tax
+                      resolves a rate, or a quiet "At checkout" when the
+                      destination can't be quoted yet (e.g. unsupported
+                      country). No "estimate" framing — Bill's call. */}
+                  {taxReady && (
                     <div className="flex items-center justify-between mt-1.5">
                       <span className="text-fan-secondary">Sales tax</span>
                       <span className="text-fan-primary" data-testid="text-line-tax">
-                        {taxLoading ? "…" : dollars(taxCents)}
+                        {taxLoading
+                          ? "…"
+                          : taxAvailable
+                            ? dollars(taxCents)
+                            : "At checkout"}
                       </span>
                     </div>
                   )}
@@ -1302,6 +1366,8 @@ export function BuySheet({
                     ? "Includes shipping and sales tax. Instant digital access in the player."
                     : "Shipping shown above; sales tax is added at checkout. Instant digital access in the player."}
                 </p>
+                  </>
+                )}
               </>
             )}
           </div>

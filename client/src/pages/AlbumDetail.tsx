@@ -1010,8 +1010,14 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
   // page flips to live buy behavior automatically the day sales begin.
   const salesPending =
     !isOwned && isSunrisePending(apiAlbum?.goodTunesReleaseDate);
+  // When sales are pending the locked pill MUST render even if the date can't
+  // be formatted: a malformed-but-lexically-future ISO string makes
+  // isSunrisePending() true while formatSalesBeginDate() returns null, which
+  // would otherwise drop us back to the live Buy pill while onOpenBuy is a
+  // no-op (salesPending early-return). Fall back to a generic "soon" so the
+  // staged surface stays internally consistent.
   const salesBeginLabel = salesPending
-    ? formatSalesBeginDate(apiAlbum?.goodTunesReleaseDate)
+    ? formatSalesBeginDate(apiAlbum?.goodTunesReleaseDate) ?? "soon"
     : null;
 
   return (
