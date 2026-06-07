@@ -291,6 +291,13 @@ interface SongLite {
   vinylOrder?: number | null;
 }
 
+// iOS-Safari-only WebKit AirPlay picker, narrowed so the admin dock can
+// feature-detect + invoke it without an `any` cast. Other platforms never
+// expose the method, so the optional typing keeps callers honest.
+type AirPlayAudioElement = HTMLAudioElement & {
+  webkitShowPlaybackTargetPicker?: () => void;
+};
+
 type Tab = "dashboard" | "overview" | "tracks" | "sell" | "press" | "shopify" | "customers";
 // Task #335 — the visible tab set is now driven by `sellMode` +
 // `sellQuoteLockedAt`. Before the operator locks a quote we only show
@@ -3548,6 +3555,14 @@ function TracksPanel({
   const [currentSongId, setCurrentSongId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  // AirPlay support flag for the dock. iOS Safari (the only platform that
+  // exposes `webkitShowPlaybackTargetPicker`) flips this true so the dock
+  // surfaces the output button — exactly like the fan PlayerContext does
+  // against its hidden <audio>. Every other platform leaves it false and
+  // the dock hides the control with no platform sniffing. The admin player
+  // owns its OWN audio element, so it detects + drives AirPlay itself
+  // rather than reaching into PlayerContext.
+  const [airPlaySupported, setAirPlaySupported] = useState(false);
   const currentSong =
     currentSongId != null
       ? sorted.find((s) => s.id === currentSongId) ?? null
@@ -3647,6 +3662,29 @@ function TracksPanel({
       audio.removeEventListener("pause", onPause);
     };
   }, []);
+
+  // AirPlay detection — feature-detect `webkitShowPlaybackTargetPicker` on
+  // our own audio element. Only iOS Safari exposes it, so on desktop (where
+  // operators actually live) this stays false and the dock hides the button
+  // exactly like the fan surfaces do. We don't track availability/active
+  // state separately — the dock only gates on `airPlaySupported` and the
+  // native picker reflects the current target itself.
+  useEffect(() => {
+    const a = audioRef.current as AirPlayAudioElement | null;
+    if (!a) return;
+    if (typeof a.webkitShowPlaybackTargetPicker !== "function") return;
+    setAirPlaySupported(true);
+  }, []);
+
+  const showAirPlayPicker = () => {
+    const a = audioRef.current as AirPlayAudioElement | null;
+    if (!a || typeof a.webkitShowPlaybackTargetPicker !== "function") return;
+    try {
+      a.webkitShowPlaybackTargetPicker();
+    } catch {
+      /* picker can throw if invoked without a user gesture — ignore */
+    }
+  };
 
   const togglePlay = () => {
     const audio = audioRef.current;
@@ -4217,6 +4255,18 @@ function TracksPanel({
           audioRef.current.volume = muted ? 0 : level / 100;
           audioRef.current.muted = muted;
         }}
+        // AirPlay parity with the fan docks (MiniPlayer / AlbumDetailDesktop):
+        // gated on iOS-Safari support, driven off the admin's OWN audio
+        // element. Hidden on desktop, where operators actually work.
+        airPlaySupported={airPlaySupported}
+        onAirPlay={showAirPlayPicker}
+        // Up Next is intentionally NOT wired here. The fan `onQueue` opens the
+        // shared desktop right rail bound to PlayerContext's queue; the admin
+        // Tracks tab has no such rail and runs its own self-contained player
+        // off the album's `sorted` tracklist — which is already fully visible
+        // and reorderable right below the dock. An Up Next rail would just
+        // duplicate that list, so the admin dock deliberately keeps AirPlay
+        // parity without an Up Next button. (Task #1600.)
         coverNode={
           // Only show real artwork while a track is selected; idle state
           // falls through to the dock's slate placeholder so the empty
