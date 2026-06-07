@@ -3,6 +3,11 @@
     <color name="colorPrimary">#00062B</color>
     <color name="colorPrimaryDark">#00041A</color>
     <color name="colorAccent">#319ED8</color>
+    <!-- Launch/splash background — GoodTunes brand navy. Matches
+         capacitor.config SplashScreen.backgroundColor so the cold-start window
+         background, the OS splash, and the Capacitor splash are all the same
+         color (no white flash on launch). -->
+    <color name="splash_background">#00062B</color>
     <!-- Tint applied to the white-silhouette status-bar notification icon
          (FCM default_notification_color). GoodTunes brand blue. -->
     <color name="notification_icon_color">#319ED8</color>
