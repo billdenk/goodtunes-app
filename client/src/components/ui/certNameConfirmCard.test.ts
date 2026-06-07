@@ -328,3 +328,100 @@ test("a locked name (nameEditable:false) disables the input but still allows pap
   );
   await cleanup();
 });
+
+// Task #1612 — the live page-frame preview contract. CertNameConfirmCard
+// fires the optional onPaperPreview(paper) on every paper-segment tap so
+// the host PDF viewer can overlay a dashed frame at the new proportions
+// before the save re-renders the real PDF, and onPaperPreview(null) once
+// the edit ends (save or cancel) to clear that preview. None of the tests
+// above assert this callback, so a refactor could silently drop the
+// preview wiring.
+test("onPaperPreview fires the picked size on each segment tap, then null on Save", async () => {
+  fetchHandler = (_url, init) => {
+    const method = init.method ?? "GET";
+    if (method === "POST") {
+      return { body: { ok: true, paperSize: "a4" } };
+    }
+    return {
+      body: {
+        editable: true,
+        nameEditable: true,
+        confirmed: false,
+        currentName: "Jane Doe",
+        defaultName: "Jane Doe",
+        paperSize: "letter",
+        defaultPaperSize: "letter",
+      },
+    };
+  };
+  fetchCalls.length = 0;
+  const previewCalls: (string | null)[] = [];
+  const { q, click, cleanup } = await mount({
+    orderId: "o-preview",
+    onPaperPreview: (p: string | null) => previewCalls.push(p),
+  });
+
+  await click(q("button-edit-cert-name")!);
+  await settle();
+
+  // Each tap immediately previews the just-picked size.
+  await click(q("button-paper-a4")!);
+  await click(q("button-paper-letter")!);
+  await click(q("button-paper-a4")!);
+  assert.deepEqual(
+    previewCalls,
+    ["a4", "letter", "a4"],
+    "each paper-segment tap previews the size the fan just picked",
+  );
+
+  // Saving (paper changed letter → a4) clears the preview with null.
+  await click(q("button-save-cert-name")!);
+  await settle();
+  assert.deepEqual(
+    previewCalls,
+    ["a4", "letter", "a4", null],
+    "a successful save clears the live preview with null",
+  );
+  await cleanup();
+});
+
+test("onPaperPreview fires null when the fan cancels the edit", async () => {
+  fetchHandler = () => ({
+    body: {
+      editable: true,
+      nameEditable: true,
+      confirmed: false,
+      currentName: "Jane Doe",
+      defaultName: "Jane Doe",
+      paperSize: "letter",
+      defaultPaperSize: "letter",
+    },
+  });
+  fetchCalls.length = 0;
+  const previewCalls: (string | null)[] = [];
+  const { q, click, cleanup } = await mount({
+    orderId: "o-preview-cancel",
+    onPaperPreview: (p: string | null) => previewCalls.push(p),
+  });
+
+  await click(q("button-edit-cert-name")!);
+  await settle();
+
+  await click(q("button-paper-a4")!);
+  assert.deepEqual(previewCalls, ["a4"], "the tap previews A4");
+
+  // Cancelling abandons the change and clears the preview with null.
+  await click(q("button-cancel-cert-name")!);
+  await settle();
+  assert.deepEqual(
+    previewCalls,
+    ["a4", null],
+    "cancel clears the live preview with null (no POST issued)",
+  );
+  assert.equal(
+    fetchCalls.find((c) => c.method === "POST"),
+    undefined,
+    "cancel never persists — no POST",
+  );
+  await cleanup();
+});
