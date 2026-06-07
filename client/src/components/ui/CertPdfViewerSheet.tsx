@@ -66,13 +66,13 @@ function clamp(v: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, v));
 }
 
-type PaperSize = "letter" | "a4";
+export type PaperSize = "letter" | "a4";
 
 // Page aspect (height ÷ width) per paper size — mirrors the geometry in
 // server/goodDeedPrintTemplate.ts. A4 is proportionally taller/narrower
 // than US Letter, so the in-page page-frame preview reflects that the
 // moment the fan toggles, before the real PDF re-renders on save.
-const PAPER_ASPECT: Record<PaperSize, number> = {
+export const PAPER_ASPECT: Record<PaperSize, number> = {
   letter: 792 / 612, // ≈ 1.294
   a4: 841.89 / 595.28, // ≈ 1.414
 };
@@ -81,6 +81,51 @@ const PAPER_PREVIEW_LABEL: Record<PaperSize, string> = {
   letter: "US Letter",
   a4: "A4",
 };
+
+/** Computed CSS box for the dashed page-frame preview overlay. */
+export interface PaperPreviewGeometry {
+  /** Whether the overlay should be drawn at all. */
+  show: boolean;
+  /** CSS width of the dashed frame (matches the rendered page width). */
+  width: number;
+  /** CSS height of the dashed frame at the previewed paper's aspect. */
+  height: number;
+  /** True when the previewed paper is taller than the page on screen. */
+  taller: boolean;
+}
+
+// Pure geometry for the live paper-size preview frame. Extracted so the
+// shape math can be verified in isolation (Task #1615): a refactor here
+// could silently break the visible dashed frame even while the
+// onPaperPreview callback keeps firing correctly.
+//
+// The overlay is only drawn once a page has rendered (`pageCss` set), the
+// fan is toggling a paper size (`previewPaper` non-null), and that size's
+// aspect actually differs from what's on screen — so toggling back to the
+// saved size clears the frame. The frame keeps the rendered page width and
+// takes the previewed paper's height (width × target aspect).
+export function computePaperPreviewGeometry(args: {
+  previewPaper: PaperSize | null;
+  pageCss: { width: number; height: number } | null;
+  loading: boolean;
+  error: string | null;
+}): PaperPreviewGeometry {
+  const { previewPaper, pageCss, loading, error } = args;
+  const renderedAspect = pageCss ? pageCss.height / pageCss.width : null;
+  const targetAspect = previewPaper ? PAPER_ASPECT[previewPaper] : null;
+  const show =
+    !loading &&
+    !error &&
+    previewPaper != null &&
+    pageCss != null &&
+    targetAspect != null &&
+    renderedAspect != null &&
+    Math.abs(targetAspect - renderedAspect) > 0.01;
+  const width = show ? pageCss!.width : 0;
+  const height = show ? pageCss!.width * targetAspect! : 0;
+  const taller = show && height > pageCss!.height;
+  return { show, width, height, taller };
+}
 
 export function CertPdfViewerSheet({
   orderId,
@@ -364,21 +409,15 @@ export function CertPdfViewerSheet({
 
   const showNameEditor = !loading && !error;
 
-  // Page-frame preview: only show it once a page has rendered, the fan is
-  // toggling a paper size, and that size's aspect actually differs from
-  // what's on screen (so toggling back to the saved size clears it).
-  const renderedAspect = pageCss ? pageCss.height / pageCss.width : null;
-  const targetAspect = previewPaper ? PAPER_ASPECT[previewPaper] : null;
-  const showPaperPreview =
-    !loading &&
-    !error &&
-    previewPaper != null &&
-    pageCss != null &&
-    targetAspect != null &&
-    renderedAspect != null &&
-    Math.abs(targetAspect - renderedAspect) > 0.01;
-  const previewHeight = showPaperPreview ? pageCss!.width * targetAspect! : 0;
-  const previewTaller = showPaperPreview && previewHeight > pageCss!.height;
+  // Page-frame preview: geometry (whether to show, the dashed frame's CSS
+  // box, and whether it's taller) is computed by the pure helper above so
+  // the shape math stays verifiable in isolation.
+  const {
+    show: showPaperPreview,
+    width: previewWidth,
+    height: previewHeight,
+    taller: previewTaller,
+  } = computePaperPreviewGeometry({ previewPaper, pageCss, loading, error });
 
   return createPortal(
     <div
@@ -496,7 +535,7 @@ export function CertPdfViewerSheet({
                   position: "absolute",
                   left: 0,
                   top: 0,
-                  width: pageCss!.width,
+                  width: previewWidth,
                   height: previewHeight,
                   border: "2px dashed var(--brand-orange)",
                   borderRadius: 8,
