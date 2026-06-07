@@ -4,9 +4,11 @@
  * Web (goodtunes.app) and the Capacitor-wrapped native apps share one
  * codebase. Product rules from Nick:
  *   - Web has Chat. Native (v1) does not.
- *   - Web does NOT download song files. Native does (real on-device files
- *     via the Capacitor Filesystem plugin, so an album plays in airplane
- *     mode).
+ *   - Web does NOT download song files (a true no-op — no audio bytes are
+ *     ever fetched or stored in the browser). Native does, but the bytes are
+ *     protected: encrypted at rest with a per-device key and held in private,
+ *     backup-excluded storage that's revoked when the fan no longer owns the
+ *     album. See `client/src/lib/nativeDownloads.ts`.
  *
  * Every gated UI surface reads these booleans rather than calling
  * `Capacitor.isNativePlatform()` itself, so the rules stay in ONE file.

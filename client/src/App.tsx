@@ -9,6 +9,7 @@ import { PlayerProvider, usePlayer } from "@/context/PlayerContext";
 import { NavVisibilityProvider } from "@/hooks/useNavVisibility";
 import { TopChromeFrostProvider } from "@/hooks/useTopChromeFrost";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
+import { DownloadEntitlementGuard } from "@/components/DownloadEntitlementGuard";
 import { markBootSucceeded } from "@/lib/bootHeal";
 import { initPushNotifications } from "@/lib/pushNotifications";
 import { useTrackInAppNavigation } from "@/lib/navHistory";
@@ -819,6 +820,7 @@ function App() {
               <TopChromeFrostProvider>
                 <Toaster />
                 <PushRegistrar />
+                <DownloadEntitlementGuard />
                 <Router />
               </TopChromeFrostProvider>
             </NavVisibilityProvider>

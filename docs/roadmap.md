@@ -115,6 +115,7 @@ Browsers can never be fully unrippable (analog hole), but the realistic goal is 
 - **Tier 1 (cheap, ~weekend):** Stop serving raw Dropbox/S3 URLs. Proxy through GT backend with short-lived signed URLs, chunked range streaming, disabled right-click/drag, **per-user inaudible audio watermark** so leaks are traceable. GT is mostly here already.
 - **Tier 2 (real DRM, weeks + $):** Encrypted HLS/DASH (Shaka Packager / Bento4), license server, integrate Widevine + FairPlay + PlayReady. Self-host or use **EZDRM / BuyDRM / Axinom / Mux / Bitmovin** (~$300–$2k/mo + per-stream). Player swaps `<audio>` for **Shaka Player** or **hls.js + EME**.
 - **Tier 3:** Native iOS/Android wrapper for cert pinning, encrypted local cache, jailbreak detection. Defer until paying users + native app on roadmap.
+  - **Encrypted local cache — shipped.** Native offline downloads now encrypt audio at rest with AES-256-GCM, keyed by a non-exportable per-install `CryptoKey` (so a copied file is undecryptable elsewhere), stored in private, backup-excluded app storage and revoked when entitlement lapses (`client/src/lib/nativeDownloads.ts`). **Remaining:** back the per-device key with the hardware Keychain (iOS) / Keystore (Android) instead of WebKit-sandboxed IndexedDB; cert pinning; jailbreak/root detection.
 
 ## Artist upload / review portal (Phase 2)
 

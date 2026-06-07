@@ -136,6 +136,7 @@ See `docs/admin-conventions.md` → **Press Catalog** for the editor + cost-spli
 ## Downloads & song row
 
 - Per-song download is **in-app only** (Apple/Spotify model) — no Transfer Rights warning, no popups. Tap the cloud-arrow icon → silent toggle, persisted in localStorage (`gt:downloaded-songs:<albumId>`).
+- **Web = no-op; native = protected.** On the web app the toggle only flips the localStorage flag — no audio bytes are ever fetched or stored. On the native apps (Android today; iOS gated off via `nativeDownloadsEnabled`) the audio is encrypted at rest with a per-device key, written to private, backup-excluded storage, and revoked automatically when the fan no longer owns the album. The full rationale lives in `client/src/lib/nativeDownloads.ts`; the DRM ladder it sits on is in [`roadmap.md`](./roadmap.md).
 - The "download to your device" choice (which would burn Transfer Rights) is deferred to the desktop version. Album-level "Download Music Files" + Transfer Rights warning sheet have been removed for now.
 - Song row layout: track # · title · **download cloud-arrow** · ⋯ menu. Heart moved into the ⋯ sheet.
 - Song ⋯ sheet (Apple-trimmed): Favorite + Share (top two-up), then Add to Playlist · Play Next · Play Last · View Credits. Intentionally omitted: Pin Song, Create Station, Suggest Less, Rate Song.
