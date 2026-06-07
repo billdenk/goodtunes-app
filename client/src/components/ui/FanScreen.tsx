@@ -115,9 +115,21 @@ export function FanScreen({
   return (
     <main
       className="h-screen w-full flex justify-center overflow-hidden lg:justify-start lg:pl-[284px]"
-      style={railOpen ? { paddingRight: LYRICS_RAIL_CONTENT_OFFSET } : undefined}
+      // `100dvh` (inline) tracks the visible viewport on iPad Safari so the
+      // shell exactly fills the screen — `h-screen` (100vh) resolves against
+      // the chrome-HIDDEN viewport, making the shell taller than what's
+      // visible, which lets the whole page rubber-band/overscroll and reveal a
+      // navy/black gap at the top. Falls back to the `h-screen` class where
+      // `dvh` is unsupported (the invalid inline value is simply dropped).
+      style={{
+        height: "100dvh",
+        ...(railOpen ? { paddingRight: LYRICS_RAIL_CONTENT_OFFSET } : {}),
+      }}
     >
-      <section className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1200px] lg:mx-auto h-screen text-fan-primary flex flex-col">
+      <section
+        className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1200px] lg:mx-auto h-screen text-fan-primary flex flex-col"
+        style={{ height: "100dvh" }}
+      >
         <header className="absolute top-0 inset-x-0 z-20 px-5 pt-14 pb-3 pointer-events-none">
           {leading && (
             <div className="pointer-events-auto absolute left-4 top-3">{leading}</div>
@@ -146,7 +158,7 @@ export function FanScreen({
           </div>
         </header>
 
-        <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-hide pb-[170px]">
+        <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto overscroll-contain scrollbar-hide pb-[170px]">
           <div ref={contentRef}>
             <div aria-hidden style={{ height: 128, flexShrink: 0 }} />
             {children}

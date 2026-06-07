@@ -117,7 +117,13 @@ export function AlbumDesktopSidebar({
         borderRadius: RAIL_CARD_BORDER_RADIUS,
         border: RAIL_CARD_BORDER,
         boxShadow: RAIL_CARD_SHADOW,
-        margin: `${RAIL_INSET}px 0 ${RAIL_INSET}px ${RAIL_INSET}px`,
+        // Top margin honors the device top safe-area (status bar / clock /
+        // date) inside the Capacitor webview — like Apple Music's sidebar —
+        // so the rail card clears the iPad clock; falls back to RAIL_INSET on
+        // the web where the inset is 0. The rail is `alignSelf: stretch` in
+        // the 100dvh flex shell, so a larger top margin shrinks the card from
+        // the top rather than pushing its bottom under the home indicator.
+        margin: `max(${RAIL_INSET}px, env(safe-area-inset-top, 0px)) 0 ${RAIL_INSET}px ${RAIL_INSET}px`,
         alignSelf: "stretch",
       }}
       data-testid="desktop-sidebar"

@@ -151,15 +151,19 @@ export function StorefrontSidebar() {
     <aside
       className="hidden lg:flex fixed z-30 flex-col text-white overflow-hidden"
       style={{
-        top: RAIL_INSET,
+        // Top gap honors the device top safe-area (status bar / clock / date)
+        // inside the Capacitor webview — like Apple Music's sidebar — so the
+        // rail card never crowds the iPad clock; falls back to RAIL_INSET on
+        // the web where the inset is 0.
+        top: `max(${RAIL_INSET}px, env(safe-area-inset-top, 0px))`,
         left: RAIL_INSET,
         // Height tracks the DYNAMIC (currently-visible) viewport, not raw
         // 100vh — on iPad Safari `100vh` is the chrome-hidden height, so a
         // bottom-pinned card slides under the address/tab bar. `100dvh`
-        // shrinks with the chrome. The bottom gap honors the device
-        // safe-area (home indicator) inside the Capacitor webview while
-        // falling back to RAIL_INSET on the web.
-        height: `calc(100dvh - ${RAIL_INSET}px - max(${RAIL_INSET}px, env(safe-area-inset-bottom, 0px)))`,
+        // shrinks with the chrome. We subtract BOTH the top and bottom insets
+        // so the added top breathing room shrinks the card from the top
+        // instead of pushing its bottom under the home indicator.
+        height: `calc(100dvh - max(${RAIL_INSET}px, env(safe-area-inset-top, 0px)) - max(${RAIL_INSET}px, env(safe-area-inset-bottom, 0px)))`,
         width: STOREFRONT_SIDEBAR_WIDTH,
         background: "rgba(8, 12, 40, 0.92)",
         backdropFilter: "blur(24px) saturate(180%)",
