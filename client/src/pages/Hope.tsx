@@ -333,8 +333,18 @@ function Zoomable({
 }
 
 function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Enlarged image"
       className="absolute inset-0 z-50 flex items-center justify-center p-12"
       style={{ background: "rgba(0,2,12,0.82)", backdropFilter: "blur(6px)" }}
       onClick={onClose}
@@ -954,19 +964,41 @@ function NotFound() {
 
 /* ── route entry points ───────────────────────────────────────────── */
 
-// Public coming-soon teaser at /hope (Nightbirde's "Hope" campaign).
-export function Hope() {
-  const c = RELEASES["nightbirde/hope"];
-  if (!c) return <NotFound />;
-  return <CampaignFlow c={c} mode="comingSoon" />;
+// Registry key from an artist/release pair (case-insensitive). null when the
+// pair points at no campaign, so the 2-segment share route can fall through to
+// the album-by-slug resolver instead.
+function releaseKey(artist?: string, release?: string): string | null {
+  const key = `${artist ?? ""}/${release ?? ""}`.toLowerCase();
+  return key in RELEASES ? key : null;
+}
+
+// True when an artist/release pair is a known campaign. Lets App.tsx decide
+// between the campaign teaser and the normal share-link album page on the
+// shared /:artistSlug/:albumSlug route.
+export function isCampaignRelease(artist?: string, release?: string): boolean {
+  return releaseKey(artist, release) !== null;
+}
+
+// Public coming-soon teaser, artist-first at /:artist/:release
+// (e.g. /nightbirde/hope). The whole flow is visible but ordering is locked
+// behind the launch label until the campaign goes live.
+export function CampaignPublic({
+  artist,
+  release,
+}: {
+  artist: string;
+  release: string;
+}) {
+  const key = releaseKey(artist, release);
+  if (!key) return <NotFound />;
+  return <CampaignFlow c={RELEASES[key]} mode="comingSoon" />;
 }
 
 // Reusable full clickable preview at /staging/:artist/:release for any campaign
 // in the RELEASES registry. Family-review surface — ordering stays disabled.
 export function CampaignPreview() {
   const params = useParams<{ artist: string; release: string }>();
-  const key = `${params.artist ?? ""}/${params.release ?? ""}`;
-  const c = RELEASES[key];
-  if (!c) return <NotFound />;
-  return <CampaignFlow c={c} mode="preview" />;
+  const key = releaseKey(params.artist, params.release);
+  if (!key) return <NotFound />;
+  return <CampaignFlow c={RELEASES[key]} mode="preview" />;
 }
