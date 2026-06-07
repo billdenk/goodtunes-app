@@ -151,6 +151,38 @@ function Group({
   );
 }
 
+// Task #1630 — small round +/- control for the custom-addon quantity
+// stepper. 44px touch target per the brand's touch-target rule.
+function IconStep({
+  icon,
+  onClick,
+  disabled,
+  testId,
+  label,
+}: {
+  icon: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  testId: string;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      data-testid={testId}
+      className={cn(
+        "flex h-11 w-11 items-center justify-center rounded-full bg-white/[0.08] transition-colors",
+        disabled ? "text-fan-faint" : "text-fan-primary hover:bg-white/[0.14]",
+      )}
+    >
+      {icon}
+    </button>
+  );
+}
+
 // Destination countries offered in the shipping selector. The eight in
 // PRICED_COUNTRIES have their own Spinney rate; every other destination prices
 // off the INTL average (the server resolves the band + rate for whatever is
@@ -259,10 +291,18 @@ export function BuySheet({
   // toggling on), so the displayed total can't drift from what we
   // POST to /api/checkout/session.
   const [booklet, setBooklet] = useState(false);
-  // Task #844 — ticked custom ("Gift of Hope") add-ons. Each is a single
-  // optional checkbox (one per order, no quantity). Independent of every
-  // other line; the server re-validates eligibility + price on checkout.
-  const [customAddonIds, setCustomAddonIds] = useState<string[]>([]);
+  // Task #844 / #1630 — custom non-profit add-ons (e.g. Nightbirde's
+  // "Gift of Hope" donation box) the fan ticked. Each can now be bought
+  // in quantity, and carries an anonymous/specific recipient choice the
+  // fan makes here. `customAddonQty` maps addon id → count (absent/0 =
+  // not selected); `customAddonMode` maps addon id → recipient choice
+  // (defaults to "anonymous"). Independent of every other line; the
+  // server re-validates eligibility + price on checkout.
+  const [customAddonQty, setCustomAddonQty] = useState<Record<string, number>>({});
+  const [customAddonMode, setCustomAddonMode] = useState<
+    Record<string, "anonymous" | "specific">
+  >({});
+  const MAX_CUSTOM_ADDON_QTY = 25;
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -386,10 +426,16 @@ export function BuySheet({
   // add-on; the 7" variant is folded into the format price above.
   const bookletLineCents =
     booklet && bookletAvailable && !bundleAvailable ? bookletAddon!.priceCents : 0;
-  // Task #844 — each ticked custom add-on adds its flat price once.
+  // Task #844 / #1630 — each ticked custom add-on adds its price times the
+  // chosen quantity.
   const customAddonsList = options?.customAddons ?? [];
-  const selectedCustomAddons = customAddonsList.filter((c) => customAddonIds.includes(c.id));
-  const customAddonsLineCents = selectedCustomAddons.reduce((sum, c) => sum + c.priceCents, 0);
+  const selectedCustomAddons = customAddonsList
+    .map((c) => ({ addon: c, qty: customAddonQty[c.id] ?? 0 }))
+    .filter((x) => x.qty > 0);
+  const customAddonsLineCents = selectedCustomAddons.reduce(
+    (sum, x) => sum + x.addon.priceCents * x.qty,
+    0,
+  );
   const itemsTotalCents = formatLineCents + certLineCents + bookletLineCents + customAddonsLineCents;
 
   // Booklet weight: the 7" set variant ships one booklet per copy; the
@@ -478,10 +524,15 @@ export function BuySheet({
         booklet: booklet && bookletAvailable,
         bookletPriceCents:
           booklet && bookletAvailable ? bookletAddon!.priceCents : undefined,
-        // Task #844 — ids of ticked custom ("Gift of Hope") add-ons.
-        // Server re-validates each is active + targets this album's
-        // artist and always uses the stored price.
-        customAddonIds: selectedCustomAddons.map((c) => c.id),
+        // Task #844 / #1630 — ticked custom non-profit add-ons with the
+        // chosen quantity + anonymous/specific recipient intent. Server
+        // re-validates each is active + targets this album's artist and
+        // always uses the stored price.
+        customAddons: selectedCustomAddons.map((x) => ({
+          id: x.addon.id,
+          quantity: x.qty,
+          recipientMode: customAddonMode[x.addon.id] ?? "anonymous",
+        })),
         // Destination drives the server-side shipping quote that becomes
         // the Stripe shipping_option; allowed_countries is locked to it.
         shippingCountry: country,
@@ -862,10 +913,11 @@ export function BuySheet({
                   </button>
                 )}
 
-                {/* Task #844 — Operator-built custom ("Gift of Hope")
-                    add-ons. Each is a single optional checkbox (one per
-                    order, no quantity). Shows the owning non-profit so
-                    the fan knows where the money goes. */}
+                {/* Task #844 / #1630 — Operator-built custom non-profit
+                    add-ons (e.g. Nightbirde's "Gift of Hope" donation
+                    box). Each can be bought in quantity and carries an
+                    anonymous/specific recipient choice. Shows the owning
+                    non-profit so the fan knows where the money goes. */}
                 {customAddonsList.length > 0 && (
                   <div className="mb-5">
                     <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">
@@ -873,56 +925,122 @@ export function BuySheet({
                     </div>
                     <Group>
                       {customAddonsList.map((ca) => {
-                        const selected = customAddonIds.includes(ca.id);
+                        const qty = customAddonQty[ca.id] ?? 0;
+                        const selected = qty > 0;
+                        const mode = customAddonMode[ca.id] ?? "anonymous";
+                        const setQty = (next: number) =>
+                          setCustomAddonQty((prev) => {
+                            const clamped = Math.max(0, Math.min(MAX_CUSTOM_ADDON_QTY, next));
+                            return { ...prev, [ca.id]: clamped };
+                          });
                         return (
-                          <button
-                            key={ca.id}
-                            type="button"
-                            onClick={() =>
-                              setCustomAddonIds((prev) =>
-                                prev.includes(ca.id)
-                                  ? prev.filter((x) => x !== ca.id)
-                                  : [...prev, ca.id],
-                              )
-                            }
-                            className={cn(
-                              "w-full flex items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors",
-                              selected
-                                ? "bg-[color:var(--brand-mint)]/15"
-                                : "hover:bg-white/[0.03]",
-                            )}
-                            data-testid={`button-toggle-custom-addon-${ca.id}`}
-                          >
-                            <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
-                              <div
-                                className="w-12 h-12 rounded-md bg-white/[0.06] flex-shrink-0 overflow-hidden flex items-center justify-center"
-                                data-testid={`img-custom-addon-${ca.id}`}
-                              >
-                                {ca.imageUrl ? (
-                                  <img src={ca.imageUrl} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                  <Gift className="w-5 h-5 text-white/40" />
+                          <div key={ca.id}>
+                            <button
+                              type="button"
+                              onClick={() => setQty(selected ? 0 : 1)}
+                              className={cn(
+                                "w-full flex items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors",
+                                selected
+                                  ? "bg-[color:var(--brand-mint)]/15"
+                                  : "hover:bg-white/[0.03]",
+                              )}
+                              data-testid={`button-toggle-custom-addon-${ca.id}`}
+                            >
+                              <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
+                                <div
+                                  className="w-12 h-12 rounded-md bg-white/[0.06] flex-shrink-0 overflow-hidden flex items-center justify-center"
+                                  data-testid={`img-custom-addon-${ca.id}`}
+                                >
+                                  {ca.imageUrl ? (
+                                    <img src={ca.imageUrl} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <Gift className="w-5 h-5 text-white/40" />
+                                  )}
+                                </div>
+                                <div className="flex flex-col flex-1 min-w-0">
+                                  <span className="text-sm font-medium">{ca.name}</span>
+                                  <span className="text-[12px] text-white/55 leading-snug mt-0.5">
+                                    {ca.description || `Supports ${ca.orgName}.`}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 whitespace-nowrap">
+                                <span className="text-[14px] font-semibold whitespace-nowrap">
+                                  + {dollars(ca.priceCents)}
+                                </span>
+                                {selected && (
+                                  <Check
+                                    className="w-[18px] h-[18px] text-[color:var(--brand-mint)]"
+                                    strokeWidth={2.75}
+                                  />
                                 )}
                               </div>
-                              <div className="flex flex-col flex-1 min-w-0">
-                                <span className="text-sm font-medium">{ca.name}</span>
-                                <span className="text-[12px] text-white/55 leading-snug mt-0.5">
-                                  {ca.description || `Supports ${ca.orgName}.`}
-                                </span>
+                            </button>
+                            {selected && (
+                              <div className="px-4 pb-4 pt-1 flex flex-col gap-3 border-t border-white/[0.06]">
+                                {/* Quantity stepper — total scales by count */}
+                                <div className="flex items-center justify-between gap-3 pt-3">
+                                  <span className="text-sm text-fan-secondary">How many?</span>
+                                  <div className="flex items-center gap-3">
+                                    <IconStep
+                                      icon={<Minus className="w-4 h-4" strokeWidth={2.5} />}
+                                      onClick={() => setQty(qty - 1)}
+                                      disabled={qty <= 1}
+                                      testId={`button-custom-addon-qty-dec-${ca.id}`}
+                                      label="Decrease quantity"
+                                    />
+                                    <span
+                                      className="text-base font-semibold tabular-nums w-6 text-center"
+                                      data-testid={`text-custom-addon-qty-${ca.id}`}
+                                    >
+                                      {qty}
+                                    </span>
+                                    <IconStep
+                                      icon={<Plus className="w-4 h-4" strokeWidth={2.5} />}
+                                      onClick={() => setQty(qty + 1)}
+                                      disabled={qty >= MAX_CUSTOM_ADDON_QTY}
+                                      testId={`button-custom-addon-qty-inc-${ca.id}`}
+                                      label="Increase quantity"
+                                    />
+                                  </div>
+                                </div>
+                                {/* Anonymous vs. specific recipient choice */}
+                                <div className="flex flex-col gap-2">
+                                  <span className="text-sm text-fan-secondary">Who is this for?</span>
+                                  <div className="grid grid-cols-2 gap-1 rounded-lg bg-white/[0.04] p-1">
+                                    {(
+                                      [
+                                        ["anonymous", "Anyone in need"],
+                                        ["specific", "Someone specific"],
+                                      ] as const
+                                    ).map(([value, copy]) => (
+                                      <button
+                                        key={value}
+                                        type="button"
+                                        onClick={() =>
+                                          setCustomAddonMode((prev) => ({ ...prev, [ca.id]: value }))
+                                        }
+                                        className={cn(
+                                          "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                                          mode === value
+                                            ? "bg-[color:var(--brand-mint)]/20 text-fan-primary"
+                                            : "text-fan-secondary hover:text-fan-primary",
+                                        )}
+                                        data-testid={`button-custom-addon-recipient-${value}-${ca.id}`}
+                                      >
+                                        {copy}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  <p className="text-xs text-fan-faint leading-snug">
+                                    {mode === "specific"
+                                      ? "You'll be able to assign the copies and certificates you purchase to specific recipients after checkout."
+                                      : "These go to fans the foundation chooses. You can still assign your own purchased copies and certificates to recipients after checkout."}
+                                  </p>
+                                </div>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2 whitespace-nowrap">
-                              <span className="text-[14px] font-semibold whitespace-nowrap">
-                                + {dollars(ca.priceCents)}
-                              </span>
-                              {selected && (
-                                <Check
-                                  className="w-[18px] h-[18px] text-[color:var(--brand-mint)]"
-                                  strokeWidth={2.75}
-                                />
-                              )}
-                            </div>
-                          </button>
+                            )}
+                          </div>
                         );
                       })}
                     </Group>

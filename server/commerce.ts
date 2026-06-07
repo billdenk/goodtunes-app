@@ -1873,6 +1873,11 @@ export function registerCommerceRoutes(app: Express) {
   // Cap on copies-per-checkout is a soft UX guard; physical fulfillment
   // doesn't choke until much higher numbers.
   const MAX_COPIES_PER_CHECKOUT = 10;
+  // Task #1630 — custom non-profit add-ons (e.g. Nightbirde's "Gift of
+  // Hope") can now be bought in quantity. Defensive ceiling so a spoofed
+  // client can't mint an absurd Stripe line; the donation box is a real
+  // physical item so this stays modest.
+  const MAX_CUSTOM_ADDON_QTY = 25;
   const checkoutSchema = z.object({
     albumId: z.string().min(1),
     skuFormat: z.enum(ALBUM_FORMATS),
@@ -1894,8 +1899,25 @@ export function registerCommerceRoutes(app: Express) {
     // the fan ticked. Each is added once (one per order); the server
     // re-validates that every id is active AND targets this album's
     // primary artist before charging, and always uses the server-side
-    // price (client can't influence the amount).
+    // price (client can't influence the amount). Legacy shape — kept for
+    // older clients that can't send a quantity / recipient choice.
     customAddonIds: z.array(z.string().min(1)).optional(),
+    // Task #1630 — richer custom-addon selection: per-addon quantity plus
+    // an anonymous/specific recipient choice. Takes precedence over the
+    // legacy `customAddonIds` when present. The server still re-validates
+    // eligibility and always uses the stored price; quantity is clamped
+    // to MAX_CUSTOM_ADDON_QTY. `recipientMode` is a lightweight intent
+    // flag (the actual recipient is assigned post-purchase via the gift
+    // flow) and is snapshotted onto the order line.
+    customAddons: z
+      .array(
+        z.object({
+          id: z.string().min(1),
+          quantity: z.number().int().min(1).max(MAX_CUSTOM_ADDON_QTY),
+          recipientMode: z.enum(["anonymous", "specific"]).optional(),
+        }),
+      )
+      .optional(),
     // Destination country (ISO-3166-1 alpha-2) the fan picked in the Buy
     // sheet. Embedded Checkout collects the full shipping address inside
     // the iframe AFTER we mint the session, so we can't see the country
@@ -2045,19 +2067,45 @@ export function registerCommerceRoutes(app: Express) {
     // primary artist) and always use the stored price, so a stale or
     // spoofed client can't add an add-on that doesn't apply or change the
     // amount charged. De-duped (one per order) and capped defensively.
-    const selectedCustomAddons: CustomAddonForAlbum[] = [];
-    if (parsed.data.customAddonIds && parsed.data.customAddonIds.length > 0) {
+    // Task #1630 — each selection carries a quantity (line scales by it)
+    // and a lightweight anonymous/specific recipient intent. The newer
+    // `customAddons` payload wins; we fall back to the legacy
+    // `customAddonIds` (quantity 1, no recipient choice) for old clients.
+    type SelectedCustomAddon = {
+      addon: CustomAddonForAlbum;
+      quantity: number;
+      recipientMode: "anonymous" | "specific" | null;
+    };
+    const requestedAddons: Array<{
+      id: string;
+      quantity: number;
+      recipientMode: "anonymous" | "specific" | null;
+    }> =
+      parsed.data.customAddons && parsed.data.customAddons.length > 0
+        ? parsed.data.customAddons.map((c) => ({
+            id: c.id,
+            quantity: c.quantity,
+            recipientMode: c.recipientMode ?? null,
+          }))
+        : (parsed.data.customAddonIds ?? []).map((id) => ({
+            id,
+            quantity: 1,
+            recipientMode: null,
+          }));
+    const selectedCustomAddons: SelectedCustomAddon[] = [];
+    if (requestedAddons.length > 0) {
       const eligible = await listCustomAddonsForAlbum(album.primaryArtistId);
       const eligibleById = new Map(eligible.map((c) => [c.id, c]));
       const seen = new Set<string>();
-      for (const id of parsed.data.customAddonIds) {
-        if (seen.has(id)) continue;
-        seen.add(id);
-        const match = eligibleById.get(id);
+      for (const req of requestedAddons) {
+        if (seen.has(req.id)) continue;
+        seen.add(req.id);
+        const match = eligibleById.get(req.id);
         if (!match) {
           return res.status(400).json({ message: "That add-on isn't available for this album." });
         }
-        selectedCustomAddons.push(match);
+        const quantity = Math.max(1, Math.min(MAX_CUSTOM_ADDON_QTY, req.quantity));
+        selectedCustomAddons.push({ addon: match, quantity, recipientMode: req.recipientMode });
       }
     }
 
@@ -2134,10 +2182,11 @@ export function registerCommerceRoutes(app: Express) {
       });
     }
 
-    // Task #844 — One line item per ticked custom add-on (qty 1). The
-    // add-on id + fulfiller ride in the product metadata so materialize
-    // can persist them on the order_items row for the fulfiller.
-    for (const ca of selectedCustomAddons) {
+    // Task #844 / #1630 — One line item per ticked custom add-on, with the
+    // chosen quantity. The add-on id + fulfiller + recipient mode ride in
+    // the product metadata so materialize can persist them on the
+    // order_items row for the fulfiller.
+    for (const { addon: ca, quantity: caQty, recipientMode } of selectedCustomAddons) {
       lineItems.push({
         price_data: {
           currency: "usd",
@@ -2151,10 +2200,11 @@ export function registerCommerceRoutes(app: Express) {
               gt_sku: ca.id,
               gt_album_id: album.id,
               gt_fulfiller: ca.fulfiller ?? "",
+              gt_recipient_mode: recipientMode ?? "",
             },
           },
         },
-        quantity: 1,
+        quantity: caQty,
       });
     }
 
@@ -3011,6 +3061,13 @@ export async function materializeOrderFromSession(
     const pressingSnap = kind === "format" ? skuByFormatAtPurchase.get(sku as any) : undefined;
     const fulfiller =
       kind === "custom_addon" ? (product?.metadata?.gt_fulfiller || null) : null;
+    // Task #1630 — anonymous/specific recipient intent the fan picked for a
+    // custom non-profit add-on, snapshotted from the line metadata. Null on
+    // every other kind.
+    const recipientMode =
+      kind === "custom_addon"
+        ? ((product?.metadata?.gt_recipient_mode as "anonymous" | "specific" | "") || null)
+        : null;
     items.push({
       kind,
       sku,
@@ -3020,6 +3077,7 @@ export async function materializeOrderFromSession(
       vinylColor: pressingSnap?.vinylColor ?? null,
       jacketUpgrade: (pressingSnap?.jacketUpgrade as JacketUpgrade | null) ?? null,
       fulfiller,
+      recipientMode,
     });
   }
   const totalCents = full.amount_total ?? items.reduce((a, b) => a + b.unitPriceCents * b.quantity, 0);

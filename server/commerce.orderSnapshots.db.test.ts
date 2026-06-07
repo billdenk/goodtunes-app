@@ -156,14 +156,21 @@ test("materializeOrderFromSession stamps every order_items snapshot field", asyn
       },
     },
     {
+      // Task #1630 — bought in quantity (2) with a "specific" recipient
+      // intent. The line carries gt_recipient_mode + a quantity > 1.
       description: "Gift of Hope",
-      amount_total: 2500,
-      quantity: 1,
+      amount_total: 5000,
+      quantity: 2,
       price: {
         unit_amount: 2500,
         product: {
           name: "Gift of Hope",
-          metadata: { gt_kind: "custom_addon", gt_sku: ADDON_ID, gt_fulfiller: FULFILLER },
+          metadata: {
+            gt_kind: "custom_addon",
+            gt_sku: ADDON_ID,
+            gt_fulfiller: FULFILLER,
+            gt_recipient_mode: "specific",
+          },
         },
       },
     },
@@ -174,7 +181,7 @@ test("materializeOrderFromSession stamps every order_items snapshot field", asyn
   created.orders.add(order.id);
 
   const items = rows(await exec(sql`
-    SELECT kind, sku, label, unit_price_cents, quantity, vinyl_color, jacket_upgrade, fulfiller
+    SELECT kind, sku, label, unit_price_cents, quantity, vinyl_color, jacket_upgrade, fulfiller, recipient_mode
       FROM order_items WHERE order_id = ${order.id}
   `));
 
@@ -218,5 +225,20 @@ test("materializeOrderFromSession stamps every order_items snapshot field", asyn
     addonRow.fulfiller,
     FULFILLER,
     "custom_addon row `fulfiller` must be snapshotted from the add-on",
+  );
+
+  // Task #1630 — quantity > 1 flows straight off the line item, and the
+  // anonymous/specific recipient intent is snapshotted from the metadata.
+  assert.equal(addonRow.quantity, 2, "custom_addon row `quantity` must snapshot the line quantity");
+  assert.equal(
+    addonRow.recipient_mode,
+    "specific",
+    "custom_addon row `recipientMode` must be snapshotted from the add-on line",
+  );
+  // Non-custom_addon rows must never carry a recipient mode.
+  assert.equal(
+    formatRow.recipient_mode,
+    null,
+    "format row `recipientMode` must stay null",
   );
 });

@@ -4423,8 +4423,10 @@ migrate_task_1113_schema_drift() {
   if out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
 BEGIN;
 -- order_items.fulfiller (Task #844 custom-addon fulfiller snapshot)
+-- order_items.recipient_mode (Task #1630 custom-addon anonymous/specific)
 ALTER TABLE IF EXISTS order_items
-  ADD COLUMN IF NOT EXISTS fulfiller text;
+  ADD COLUMN IF NOT EXISTS fulfiller text,
+  ADD COLUMN IF NOT EXISTS recipient_mode text;
 
 -- Soft-delete trio on the split tables (Task #616). deleted_at already
 -- shipped; the audit columns drifted.

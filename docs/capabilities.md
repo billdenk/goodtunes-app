@@ -90,6 +90,8 @@ Buy direct from the artist, get a numbered GoodDeed collectible, share or gift i
 
 - **Gifting.** Fans can buy an album as a gift for someone else. The recipient gets a unique link to claim their GoodDeed and add the album to their library.
 
+- **Custom non-profit add-ons, now by the bundle.** Artists can attach operator-built charitable add-ons to a release (e.g. the Nightbirde Foundation's "Gift of Hope" donation box). In the Buy sheet a fan can now add **more than one** — a quantity stepper scales the running total — and choose, per add-on, whether it goes to **anyone in need** (the foundation decides) or to **someone specific** the fan will name. Either way the fan is reassured up front that the copies and certificates they purchase can be assigned to recipients after checkout, using the existing gift flow. The price is whatever the operator set — change it in the admin and the Buy sheet, totals, and Stripe charge all follow, with no code change.
+
 - **Delete your account from inside the app.** Every fan can permanently delete their GoodTunes account from **Account → Privacy → Delete My Account** (behind a plain-language confirm). Deleting removes their profile and personal data — favorites, playlists, library, and sign-in (password and any Google/Apple links) — and signs them out everywhere; past orders are retained for legal and accounting records. This satisfies Apple's and Google's requirement that an app offering account creation also lets users delete their account in-app.
 
 ---

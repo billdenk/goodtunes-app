@@ -2812,6 +2812,13 @@ export const orderItems = pgTable("order_items", {
   // line tells fulfillment who ships it. Null on format / signed-cert /
   // booklet rows and on historical orders.
   fulfiller: text("fulfiller"),
+  // Task #1630 — for a custom non-profit add-on (e.g. Nightbirde's "Gift
+  // of Hope" donation box) the buyer picks whether it ships anonymously
+  // or is destined for a specific recipient they assign after the sale.
+  // "anonymous" | "specific". Null on every other kind and on historical
+  // rows. Whom each donation actually goes to is assigned post-purchase
+  // via the existing gift-assignment flow, not captured here.
+  recipientMode: text("recipient_mode"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
