@@ -55,10 +55,16 @@ export const NAV_CLEARANCE = 170;
 // tap gesture (the input stays mounted, just scaled to 0 at rest) which
 // is the only reliable way to bring up the iOS keyboard.
 //
-// Locked dimensions — these come from the live spec and must not move:
-//   * pillow height drives off py-2 + label/icon vertical stack (~64px)
-//   * tab icon = 25×25, label = 10px font-medium
-// If you change those, the visual rhythm in the dock breaks.
+// Locked dimensions — Apple-Music tab-bar parity (Task #1695). A real iOS
+// tab bar is a slim ~49pt: icon ≈ 25pt + ~2pt gap + ~10pt label, centered
+// with ~6pt of vertical breathing room. We mirror that here so the floating
+// pillow reads as Apple's slim bar rather than a chunky chip:
+//   * pillow vertical padding = py-1.5 (6px) — NOT py-2; the icon box is
+//     already snug to the glyph so the bar lands at ~52px tall
+//   * tab icon box = 26px tall around a 25×25 glyph (snug, room for the
+//     active-tab scale pop), label = 10px font-medium, gap-[2px]
+// If you change those, the visual rhythm in the dock breaks. Safe-area is
+// handled separately by DOCK_BOTTOM (env(safe-area-inset-bottom)).
 
 const NavItem = ({
   label,
@@ -103,7 +109,7 @@ const NavItem = ({
           bottom: "-4px",
         }}
       />
-      <div className={`relative w-14 h-7 flex items-center justify-center ${contentShift}`}>
+      <div className={`relative w-14 h-[26px] flex items-center justify-center ${contentShift}`}>
         {/* Tab-to-tab bounce — the glyph gives a quick Apple-Music pop when
             its tab becomes active (the keyframe only re-fires when `active`
             flips false→true). Transform-only (GPU-cheap) and gated behind
@@ -422,7 +428,7 @@ export function BottomNav() {
             <motion.nav
               key="nav-pillow"
               ref={pillowRef}
-              className="pointer-events-auto absolute left-3 flex items-center justify-around px-2 py-2 rounded-full"
+              className="pointer-events-auto absolute left-3 flex items-center justify-around px-2 py-1.5 rounded-full"
               style={{
                 bottom: DOCK_BOTTOM,
                 right: dockHVal + 20, // reserve the right circle + 8px gap
