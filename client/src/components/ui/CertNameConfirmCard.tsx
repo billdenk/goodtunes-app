@@ -186,11 +186,11 @@ export function CertNameConfirmCard({
   const paper = info.paperSize;
 
   const editForm = (
-    <div className="flex flex-col gap-3 rounded-xl bg-white/5 border border-white/10 px-3 py-3">
+    <div className="flex flex-col gap-4 rounded-2xl bg-white/[0.05] px-4 py-4">
       <div className="flex flex-col gap-2">
         <label
           htmlFor={`cert-name-input-${orderId}`}
-          className="text-xs uppercase tracking-wider text-fan-secondary"
+          className="text-xs uppercase tracking-wider text-fan-secondary px-0.5"
         >
           Name on certificate
         </label>
@@ -206,15 +206,15 @@ export function CertNameConfirmCard({
             if (e.key === "Enter" && !saving) handleSave();
           }}
           placeholder="e.g. Jane Doe"
-          className="bg-white/10 text-white text-base rounded-lg px-3 py-2 outline-none focus:bg-white/15 disabled:opacity-60"
+          className="bg-white/[0.09] text-fan-primary placeholder:text-fan-faint text-base rounded-xl px-3.5 py-2.5 outline-none transition-colors focus:bg-white/[0.14] disabled:opacity-60"
           data-testid="input-cert-name"
         />
         {nameEditable ? (
-          <p className="text-xs text-fan-faint leading-snug" data-testid="text-cert-name-onetime">
+          <p className="text-xs text-fan-faint leading-snug px-0.5" data-testid="text-cert-name-onetime">
             You can set this name once. After you save, it's locked in.
           </p>
         ) : (
-          <p className="text-xs text-fan-faint leading-snug" data-testid="text-cert-name-locked">
+          <p className="text-xs text-fan-faint leading-snug px-0.5" data-testid="text-cert-name-locked">
             This name is locked after your first save.
           </p>
         )}
@@ -222,11 +222,11 @@ export function CertNameConfirmCard({
 
       {/* Paper size — always editable; a print preference, not the name. */}
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs uppercase tracking-wider text-fan-secondary">
+        <span className="text-xs uppercase tracking-wider text-fan-secondary px-0.5">
           Paper size
         </span>
         <div
-          className="inline-flex rounded-lg bg-white/10 p-0.5 self-start"
+          className="inline-flex rounded-xl bg-white/[0.09] p-1 self-start"
           role="group"
           aria-label="Certificate paper size"
         >
@@ -243,9 +243,9 @@ export function CertNameConfirmCard({
                 disabled={saving}
                 aria-pressed={active}
                 className={
-                  "px-3 py-1.5 rounded-md text-sm font-medium transition-colors " +
+                  "px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors " +
                   (active
-                    ? "bg-white text-[var(--brand-bg)]"
+                    ? "bg-white text-[var(--brand-bg)] shadow-sm"
                     : "text-fan-secondary active:opacity-70")
                 }
                 data-testid={`button-paper-${size}`}
@@ -257,22 +257,22 @@ export function CertNameConfirmCard({
         </div>
       </div>
 
-      <p className="text-xs text-fan-faint leading-snug" data-testid="text-cert-derogatory-disclaimer">
+      <p className="text-xs text-fan-faint leading-snug px-0.5" data-testid="text-cert-derogatory-disclaimer">
         Certificates bearing derogatory, offensive, or infringing names may be
         declined or cancelled.
       </p>
 
       {saveError && (
-        <div className="text-xs" style={{ color: "var(--brand-pink)" }} data-testid="text-cert-name-error">
+        <div className="text-xs px-0.5" style={{ color: "var(--brand-pink)" }} data-testid="text-cert-name-error">
           {saveError}
         </div>
       )}
-      <div className="flex items-center gap-2 mt-0.5">
+      <div className="flex items-center gap-3 mt-0.5">
         <button
           type="button"
           onClick={handleSave}
           disabled={saving || (nameEditable && !draft.trim())}
-          className="px-3 py-1.5 rounded-full bg-[var(--brand-mint)] text-[var(--brand-bg)] text-sm font-semibold disabled:opacity-50 active:opacity-80"
+          className="px-4 py-2 rounded-full bg-[var(--brand-mint)] text-[var(--brand-bg)] text-sm font-semibold disabled:opacity-50 active:opacity-80 transition-opacity"
           data-testid="button-save-cert-name"
         >
           {saving ? "Saving…" : "Save"}
@@ -297,7 +297,7 @@ export function CertNameConfirmCard({
   );
 
   const viewRow = (
-    <div className="flex items-center gap-3 rounded-xl bg-white/5 border border-white/10 px-3 py-2.5">
+    <div className="flex items-center gap-3 rounded-2xl bg-white/[0.05] px-4 py-3">
       <div className="flex-1 min-w-0">
         <div className="text-xs uppercase tracking-wider text-fan-secondary">
           Name on certificate
@@ -415,14 +415,11 @@ export function CertNameConfirmCard({
   const body = editing ? editForm : viewRow;
 
   return (
-    <div
-      className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5"
-      data-testid="cert-name-editor"
-    >
-      <div className="text-fan-faint text-xs uppercase tracking-wider font-semibold mb-1.5">
+    <div className="mb-5" data-testid="cert-name-editor">
+      <div className="text-fan-secondary text-xs uppercase tracking-wider font-semibold mb-1.5 px-0.5">
         Name on your GoodDeed®
       </div>
-      <p className="text-fan-faint text-xs mb-3 leading-snug">
+      <p className="text-fan-faint text-xs mb-3 leading-snug px-0.5">
         This is the name we'll print on your certificate — correct it now if it
         isn't right.
       </p>
