@@ -135,7 +135,7 @@ The admin tooling and operational process that lets a tiny team run the whole bu
 
 # Coming next / In-flight
 
-- **Push notifications.** The native iOS and Android apps register for push on first launch (after the fan grants permission) and the platform can deliver real alerts to a fan's devices — the first live trigger sends an "Your order has shipped" notification the moment an operator marks an order shipped. Delivery is credential-gated (Apple APNs / Google FCM keys), so it stays dormant until those provider keys are loaded.
+- **Push notifications.** The native iOS and Android apps register for push on first launch (after the fan grants permission) and the platform can deliver real alerts to a fan's devices — the first live trigger sends an "Your order has shipped" notification the moment an operator marks an order shipped, now carrying the album's cover art as a rich image (Android big-picture / iOS attachment) so the alert is on-brand and recognizable, falling back to the plain text alert when no artwork is available. Delivery is credential-gated (Apple APNs / Google FCM keys), so it stays dormant until those provider keys are loaded.
 - **Native Mobile Apps.** Full native experience for iOS and Android.
 - **Advanced Analytics.** Deep insights for artists and labels.
 - **Enhanced Social Features.** More ways for fans to connect with artists and each other.

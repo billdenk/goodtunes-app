@@ -3010,6 +3010,7 @@ export function registerCommerceRoutes(app: Express) {
         orderId: updated.id,
         albumId: updated.albumId,
         albumTitle: album?.title ?? "Your GoodTunes album",
+        albumArtwork: album?.artwork ?? null,
       });
     } catch (e: any) {
       console.error(`[ship] push notify threw for order ${updated.id}`, e?.message);

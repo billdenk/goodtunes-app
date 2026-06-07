@@ -73,6 +73,14 @@ definitions:
           --type IOS_APP_STORE \
           --certificate-key @file:/tmp/cert_key.pem \
           --create
+        # The Notification Service Extension (rich push album art) is a SECOND
+        # signed target with its own bundle id, so it needs its own App Store
+        # provisioning profile. The NSE needs no special capabilities, so a
+        # plain App ID + profile is enough; --create makes both if missing.
+        app-store-connect fetch-signing-files "Io.GoGoods.music.NotificationService" \
+          --type IOS_APP_STORE \
+          --certificate-key @file:/tmp/cert_key.pem \
+          --create
         rm -f /tmp/cert_key.pem
         keychain add-certificates
         xcode-project use-profiles

@@ -33,3 +33,25 @@ Apple/Google account. APNs = HTTP/2 + ES256 JWT (jose) from a .p8
 AppDelegate forwarding, native plugin sync) is missing, and there's no error —
 the token just never arrives. Knowing all three are required saves a long
 "why is there no token" hunt.
+
+## Rich notification artwork (album art)
+PushPayload.image (raw `/objects/uploads/<id>` OR absolute URL) is resolved to
+an absolute https URL via `absolutePushImage()` using config-driven
+`fanOrigin()` (APP_URL → GOODTUNES_HOST → my.goodtunes.music) because the
+triggers have no inbound req. FCM uses `android.notification.image` (big
+picture) — FCM fetches it itself. APNs sets `aps.mutable-content:1` + rides the
+absolute URL at the payload TOP LEVEL under key `image` (NOT inside aps); the
+iOS Notification Service Extension reads `request.content.userInfo["image"]`,
+downloads it, attaches it. Both degrade to plain text when no/unresolvable
+image.
+
+**The NSE is a SECOND in-tree iOS target** (`ios/App/NotificationService/`,
+bundle id `Io.GoGoods.music.NotificationService`) hand-wired into
+`project.pbxproj` (target + Sources/Frameworks/Resources phases + product
+.appex + Embed App Extensions copy phase on the App target + target dependency
++ container proxy + Debug/Release configs + config list; FE-prefixed object
+ids). cap sync won't add it — keep it in lockstep like SystemVolumePlugin.
+codemagic.yaml runs a SECOND `fetch-signing-files` for the extension bundle id
+(its own App Store provisioning profile; no special capabilities needed).
+**Why the payload contract matters:** the server `image` key + `mutable-content`
+must match exactly what the NSE parses, or iOS silently shows text only.

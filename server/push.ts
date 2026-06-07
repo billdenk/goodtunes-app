@@ -36,10 +36,39 @@ export type PushPlatform = "ios" | "android";
 export type PushPayload = {
   title: string;
   body: string;
+  // Optional artwork to render as a rich notification (Android big-picture /
+  // iOS attachment). May be a raw object-storage path (`/objects/uploads/<id>`)
+  // or an already-absolute https URL — it's resolved to an absolute, publicly
+  // fetchable URL by the transports. Falls back to a plain text-only alert
+  // when absent or unresolvable.
+  image?: string | null;
   // Arbitrary string→string data delivered alongside the alert so a tap
   // can deep-link (e.g. { kind: "order_shipped", orderId, albumId }).
   data?: Record<string, string>;
 };
+
+// Resolve a stored image reference into an absolute, publicly fetchable https
+// URL the OS notification renderer can GET without auth. APNs attachments and
+// FCM big-picture images BOTH require an absolute URL (and https in practice),
+// so a bare `/objects/uploads/<id>` path must be prefixed with the fan origin.
+// There's no inbound `req` here (the push triggers run off webhooks / admin
+// actions), so the origin is resolved from config the same way the order
+// receipt's deep links are: APP_URL wins, else https://${GOODTUNES_HOST},
+// else my.goodtunes.music.
+function fanOrigin(): string {
+  const explicit = (process.env.APP_URL || "").trim();
+  if (explicit) return explicit.replace(/\/+$/, "");
+  const host = (process.env.GOODTUNES_HOST || "my.goodtunes.music").trim();
+  return `https://${host}`;
+}
+
+function absolutePushImage(raw: string | null | undefined): string | undefined {
+  if (!raw) return undefined;
+  const s = String(raw).trim();
+  if (!s) return undefined;
+  if (/^https?:\/\//i.test(s)) return s;
+  return `${fanOrigin()}${s.startsWith("/") ? "" : "/"}${s}`;
+}
 
 // ---- Token storage -------------------------------------------------------
 
@@ -168,8 +197,21 @@ async function sendApns(
   } catch (e) {
     return { ok: false, invalid: false, reason: `apns jwt: ${(e as Error).message}` };
   }
+  // Rich notification: when artwork is present, flag the alert
+  // `mutable-content` so the app's Notification Service Extension can wake,
+  // download the image, and attach it. The absolute image URL rides at the
+  // payload top level (alongside `aps`) under a stable `image` key the NSE
+  // reads. With no NSE in the build it degrades to a plain text alert — the
+  // extra `image`/`mutable-content` fields are simply ignored.
+  const image = absolutePushImage(payload.image);
+  const aps: Record<string, unknown> = {
+    alert: { title: payload.title, body: payload.body },
+    sound: "default",
+  };
+  if (image) aps["mutable-content"] = 1;
   const body = JSON.stringify({
-    aps: { alert: { title: payload.title, body: payload.body }, sound: "default" },
+    aps,
+    ...(image ? { image } : {}),
     ...(payload.data ?? {}),
   });
 
@@ -246,6 +288,7 @@ async function fcmAccessToken(): Promise<{ accessToken: string; projectId: strin
 async function sendFcm(deviceToken: string, payload: PushPayload): Promise<SendOutcome> {
   const auth = await fcmAccessToken();
   if (!auth) return { ok: false, invalid: false, reason: "fcm not configured" };
+  const image = absolutePushImage(payload.image);
   try {
     const r = await fetch(`https://fcm.googleapis.com/v1/projects/${auth.projectId}/messages:send`, {
       method: "POST",
@@ -259,8 +302,15 @@ async function sendFcm(deviceToken: string, payload: PushPayload): Promise<SendO
           // monochrome GoodTunes "G" shipped in the Android res drawables.
           // This mirrors the AndroidManifest FCM default meta-data so the
           // icon is correct whether or not the OS falls back to the default.
+          // `image` is the big-picture artwork (expanded notification); FCM
+          // fetches the absolute URL itself, so it just degrades to the plain
+          // small-icon alert when no artwork is supplied.
           android: {
-            notification: { icon: "ic_stat_notify", color: "#319ED8" },
+            notification: {
+              icon: "ic_stat_notify",
+              color: "#319ED8",
+              ...(image ? { image } : {}),
+            },
           },
           ...(payload.data ? { data: payload.data } : {}),
         },
@@ -329,10 +379,14 @@ export function notifyOrderShipped(opts: {
   orderId: string;
   albumId: string;
   albumTitle: string;
+  // Raw album artwork reference (`/objects/uploads/<id>` or absolute URL).
+  // Rendered as the big-picture / attachment; omitted → plain text alert.
+  albumArtwork?: string | null;
 }): void {
   void sendPushToCustomer(opts.customerId, {
     title: "Your order has shipped",
     body: `${opts.albumTitle} is on its way.`,
+    image: opts.albumArtwork ?? undefined,
     data: { kind: "order_shipped", orderId: opts.orderId, albumId: opts.albumId },
   }).catch(() => {
     /* best-effort; never surface into the ship request */
