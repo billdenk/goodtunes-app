@@ -523,6 +523,12 @@ export type OrderReceiptData = {
   albumArtist: string;
   artworkUrl: string | null;
   lines: OrderReceiptLine[];
+  // Task #1629 — broken-out shipping + Stripe-computed sales tax so the
+  // receipt total reconciles (line items + shipping + tax = total). Both
+  // null when not applicable (digital order has no shipping; legacy orders
+  // predating Stripe Tax have no tax). A real computed 0 still renders.
+  shippingCents?: number | null;
+  taxCents?: number | null;
   totalCents: number;
   currency: string;
   goodDeedNumbers: number[];
@@ -546,6 +552,8 @@ export async function sendOrderReceiptEmail(
     albumArtist,
     artworkUrl,
     lines,
+    shippingCents,
+    taxCents,
     totalCents,
     currency,
     goodDeedNumbers,
@@ -558,6 +566,10 @@ export async function sendOrderReceiptEmail(
   const gdLabel = goodDeedNumbers.length === 1 ? "GoodDeed number" : "GoodDeed numbers";
   const gdText = goodDeedNumbers.map((n) => `#${n}`).join(", ");
 
+  // Task #1629 — only show a Shipping/Tax line when we have a value for it.
+  const showShipping = shippingCents != null && shippingCents > 0;
+  const showTax = taxCents != null;
+
   const text = [
     `You're in. Your album is unlocked and your record is on its way.`,
     ``,
@@ -568,6 +580,8 @@ export async function sendOrderReceiptEmail(
     ...lines.map(
       (l) => `  ${l.label}${l.quantity > 1 ? ` ×${l.quantity}` : ""}  ${formatMoney(l.amountCents, currency)}`,
     ),
+    ...(showShipping ? [`  Shipping  ${formatMoney(shippingCents!, currency)}`] : []),
+    ...(showTax ? [`  Tax  ${formatMoney(taxCents!, currency)}`] : []),
     `  Total  ${formatMoney(totalCents, currency)}`,
     ``,
     `Play on the web: ${webPlayUrl}`,
@@ -633,6 +647,22 @@ export async function sendOrderReceiptEmail(
       <div style="font-size: 12px; color: rgba(255,255,255,0.5); letter-spacing: 0.5px; text-transform: uppercase; font-weight: 700; margin: 24px 0 6px;">Order summary</div>
       <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
         ${linesHtml}
+        ${
+          showShipping
+            ? `<tr>
+          <td style="padding: 6px 0; font-size: 14px; color: rgba(255,255,255,0.7);">Shipping</td>
+          <td style="padding: 6px 0; font-size: 14px; color: rgba(255,255,255,0.7); text-align: right; white-space: nowrap;">${escapeHtml(formatMoney(shippingCents!, currency))}</td>
+        </tr>`
+            : ""
+        }
+        ${
+          showTax
+            ? `<tr>
+          <td style="padding: 6px 0; font-size: 14px; color: rgba(255,255,255,0.7);">Tax</td>
+          <td style="padding: 6px 0; font-size: 14px; color: rgba(255,255,255,0.7); text-align: right; white-space: nowrap;">${escapeHtml(formatMoney(taxCents!, currency))}</td>
+        </tr>`
+            : ""
+        }
         <tr><td colspan="2" style="border-top: 1px solid rgba(255,255,255,0.15); padding: 0;"></td></tr>
         <tr>
           <td style="padding: 8px 0 0; font-size: 15px; font-weight: 700; color: #ffffff;">Total</td>

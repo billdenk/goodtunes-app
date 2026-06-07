@@ -226,7 +226,10 @@ ALTER TABLE IF EXISTS orders
   ADD COLUMN IF NOT EXISTS shipping_base_cents    integer,
   ADD COLUMN IF NOT EXISTS shipping_markup_cents  integer,
   ADD COLUMN IF NOT EXISTS shipping_charged_cents integer,
-  ADD COLUMN IF NOT EXISTS shipping_band          text;
+  ADD COLUMN IF NOT EXISTS shipping_band          text,
+  -- Task #1629 — Stripe Tax: per-order computed sales tax (already part of
+  -- total_cents; broken out for the /welcome receipt + email tax line).
+  ADD COLUMN IF NOT EXISTS tax_cents              integer;
 CREATE TABLE IF NOT EXISTS shipping_rates (
   id                     varchar PRIMARY KEY DEFAULT gen_random_uuid(),
   fulfillment_partner_id varchar NOT NULL REFERENCES fulfillment_partners(id) ON DELETE CASCADE,

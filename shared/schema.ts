@@ -2464,6 +2464,13 @@ export const orders = pgTable("orders", {
   shippingMarkupCents: integer("shipping_markup_cents"),
   shippingChargedCents: integer("shipping_charged_cents"),
   shippingBand: text("shipping_band"),
+  // Task #1629 — Stripe Tax: municipal/state sales tax Stripe computed for
+  // this order from the fan's address. `total_cents` (= Stripe
+  // amount_total) ALREADY includes this; `tax_cents` is broken out so the
+  // /welcome receipt + email can show a "Tax" line. NULL for legacy/
+  // imported orders predating Stripe Tax, and for $0-tax jurisdictions
+  // Stripe still reports 0 (a real, computed zero — not "undetermined").
+  taxCents: integer("tax_cents"),
   // Task #937 — stamped the moment the branded order-receipt email is
   // claimed for sending. The send is best-effort, but the claim is an
   // atomic conditional UPDATE (… WHERE receipt_email_sent_at IS NULL)

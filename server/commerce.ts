@@ -2122,6 +2122,21 @@ export function registerCommerceRoutes(app: Express) {
       await storage.updateCustomer(customer.id, { stripeCustomerId });
     }
 
+    // Task #1629 — Stripe Tax classification. With `automatic_tax` enabled
+    // (below), each line must declare WHAT it is so Stripe applies the
+    // right municipal/state rate. Physical goods (records, signed certs,
+    // booklets) are tangible; the digital-only format is a tethered digital
+    // audio work; the Gift of Hope / custom add-on is a charitable
+    // donation (non-taxable). `tax_behavior: "exclusive"` adds US sales tax
+    // on top of our listed price (we don't bake tax into the sticker).
+    const TAX_CODE_TANGIBLE = "txcd_99999999"; // General - Tangible Goods
+    const TAX_CODE_DIGITAL = "txcd_10401000"; // Digital Audio Works - streamed, non-subscription, limited rights
+    const TAX_CODE_DONATION = "txcd_90000001"; // Cash Donation
+    const TAX_BEHAVIOR = "exclusive" as const;
+    const { classifySkuKind } = await import("./orderDesk");
+    const skuKind = classifySkuKind(sku.format);
+    const formatTaxCode = skuKind === "digital" ? TAX_CODE_DIGITAL : TAX_CODE_TANGIBLE;
+
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
       {
         price_data: {
@@ -2130,11 +2145,13 @@ export function registerCommerceRoutes(app: Express) {
           // line at the flat set price (no separate booklet line); the
           // "alone" variant and every other format use the SKU price.
           unit_amount: isBookletBundle ? bookletBundleCents : sku.priceCents,
+          tax_behavior: TAX_BEHAVIOR,
           product_data: {
             name: isBookletBundle
               ? `${album.title} — ${ALBUM_FORMAT_LABEL[sku.format as AlbumFormat] ?? sku.format} + Booklet`
               : `${album.title} — ${ALBUM_FORMAT_LABEL[sku.format as AlbumFormat] ?? sku.format}`,
             description: album.artist,
+            tax_code: formatTaxCode,
             images: album.artwork ? [absoluteUrl(req, album.artwork)] : [],
             metadata: {
               gt_kind: "format",
@@ -2152,9 +2169,11 @@ export function registerCommerceRoutes(app: Express) {
         price_data: {
           currency: "usd",
           unit_amount: addonPriceCents,
+          tax_behavior: TAX_BEHAVIOR,
           product_data: {
             name: ALBUM_ADDON_LABEL[addon.kind as AlbumAddonKind] ?? addon.kind,
             description: `Printed & signed for ${album.title}`,
+            tax_code: TAX_CODE_TANGIBLE,
             metadata: { gt_kind: "addon", gt_sku: addon.kind, gt_album_id: album.id },
           },
         },
@@ -2171,9 +2190,11 @@ export function registerCommerceRoutes(app: Express) {
         price_data: {
           currency: "usd",
           unit_amount: bookletPriceCents,
+          tax_behavior: TAX_BEHAVIOR,
           product_data: {
             name: ALBUM_ADDON_LABEL[bookletAddon.kind as AlbumAddonKind] ?? bookletAddon.kind,
             description: `16-page booklet for ${album.title}`,
+            tax_code: TAX_CODE_TANGIBLE,
             images: bookletAddon.artworkUrl ? [absoluteUrl(req, bookletAddon.artworkUrl)] : [],
             metadata: { gt_kind: "addon", gt_sku: bookletAddon.kind, gt_album_id: album.id },
           },
@@ -2191,9 +2212,14 @@ export function registerCommerceRoutes(app: Express) {
         price_data: {
           currency: "usd",
           unit_amount: ca.priceCents,
+          tax_behavior: TAX_BEHAVIOR,
           product_data: {
             name: ca.name,
             description: `${ca.orgName} — for ${album.title}`,
+            // Task #1629 — Gift of Hope and every custom add-on is a
+            // charitable contribution, not a retail good — Stripe treats
+            // the donation tax code as non-taxable.
+            tax_code: TAX_CODE_DONATION,
             images: ca.imageUrl ? [absoluteUrl(req, ca.imageUrl)] : [],
             metadata: {
               gt_kind: "custom_addon",
@@ -2214,8 +2240,6 @@ export function registerCommerceRoutes(app: Express) {
     // export. `gt_order_id` is patched onto the PaymentIntent by
     // materializeOrderFromSession once the row exists — sessions are
     // created before we know our internal order id.
-    const { classifySkuKind } = await import("./orderDesk");
-    const skuKind = classifySkuKind(sku.format);
     const bundleParts = [sku.format];
     if (signedCertCount > 0) bundleParts.push("signed_cert");
     if (bookletAddon) bundleParts.push("booklet");
@@ -2322,7 +2346,17 @@ export function registerCommerceRoutes(app: Express) {
         ...(shippingOptions ? { shipping_options: shippingOptions } : {}),
         billing_address_collection: "required",
         phone_number_collection: { enabled: true },
-        automatic_tax: { enabled: false },
+        // Task #1629 — Stripe Tax computes municipal/state sales tax from
+        // the address the fan enters in the embedded form. Per-line
+        // tax_code + tax_behavior (set on the line items above) tell Stripe
+        // what each line is. If Stripe can't determine tax for the entered
+        // address it BLOCKS completion in the embedded UI — the fan can
+        // never pay $0 tax on a taxable jurisdiction by accident.
+        automatic_tax: { enabled: true },
+        // Required by Stripe whenever a `customer` is attached AND
+        // automatic_tax is on: lets the session write the address the fan
+        // enters back onto the Customer so the tax location is captured.
+        customer_update: { address: "auto", name: "auto", shipping: "auto" },
         return_url: returnUrl,
         payment_intent_data: {
           metadata: {
@@ -2904,6 +2938,8 @@ async function dispatchOrderReceipt(order: Order): Promise<void> {
     albumArtist: album?.artist ?? "",
     artworkUrl: album?.artwork ?? null,
     lines,
+    shippingCents: order.shippingChargedCents ?? null,
+    taxCents: order.taxCents ?? null,
     totalCents: order.totalCents,
     currency: order.currency,
     goodDeedNumbers,
@@ -2998,10 +3034,17 @@ export async function materializeOrderFromSession(
 
   // Fan-charged shipping is authoritative from Stripe's collected total;
   // fall back to the metadata estimate if Stripe didn't attach a cost.
+  // Task #1629 — the fan-facing shipping line must be PRE-TAX. With Stripe Tax
+  // on, the shipping rate is taxed too, so `shipping_cost.amount_total` is
+  // tax-inclusive and `total_details.amount_tax` already covers that shipping
+  // tax. Use the pre-tax shipping (`total_details.amount_shipping`, which equals
+  // the rate we quoted) so items-subtotal + shipping + tax reconciles to the
+  // order total without double-counting shipping tax.
   const shipChargedCents =
     shipBaseCents === null
       ? null
-      : (full as any).shipping_cost?.amount_total ??
+      : (full as any).total_details?.amount_shipping ??
+        (full as any).shipping_cost?.amount_subtotal ??
         (session.metadata?.gt_ship_charged ? parseInt(session.metadata.gt_ship_charged, 10) || 0 : null);
 
   const piId = typeof full.payment_intent === "string" ? full.payment_intent : full.payment_intent?.id ?? null;
@@ -3072,7 +3115,14 @@ export async function materializeOrderFromSession(
       kind,
       sku,
       label: li.description ?? product?.name ?? sku,
-      unitPriceCents: li.amount_total ?? li.price?.unit_amount ?? 0,
+      // Task #1629 — store the PRE-TAX line amount. With Stripe Tax on and
+      // tax_behavior "exclusive", `amount_total` is tax-INCLUSIVE, so using it
+      // here would double-count tax once we also break out a Tax line on the
+      // receipt/summary. `amount_subtotal` is the pre-tax, post-discount line
+      // amount Stripe always returns; fall back to amount_total/unit_amount only
+      // for legacy/test stubs that don't carry it (no-tax orders where
+      // amount_subtotal === amount_total).
+      unitPriceCents: li.amount_subtotal ?? li.amount_total ?? li.price?.unit_amount ?? 0,
       quantity: li.quantity ?? 1,
       vinylColor: pressingSnap?.vinylColor ?? null,
       jacketUpgrade: (pressingSnap?.jacketUpgrade as JacketUpgrade | null) ?? null,
@@ -3081,6 +3131,11 @@ export async function materializeOrderFromSession(
     });
   }
   const totalCents = full.amount_total ?? items.reduce((a, b) => a + b.unitPriceCents * b.quantity, 0);
+  // Task #1629 — Stripe Tax: the sales tax Stripe computed for this order.
+  // `total_details.amount_tax` is part of `amount_total` (it's tax-on-top,
+  // tax_behavior: "exclusive"), so we only break it out for display — we
+  // never add it again. Null when Stripe didn't report it (legacy session).
+  const taxCents = (full as any).total_details?.amount_tax ?? null;
 
   // Task #549 — Pressing snapshot for the chosen format, used on every
   // order_copies row we write below.
@@ -3154,6 +3209,7 @@ export async function materializeOrderFromSession(
             shippingMarkupCents: shipMarkupCents,
             shippingChargedCents: shipChargedCents,
             shippingBand: shipBand,
+            taxCents,
           })
           .onConflictDoNothing({ target: orders.stripeCheckoutSessionId })
           .returning();
@@ -3229,6 +3285,7 @@ export async function materializeOrderFromSession(
             shippingMarkupCents: order!.shippingMarkupCents ?? shipMarkupCents,
             shippingChargedCents: order!.shippingChargedCents ?? shipChargedCents,
             shippingBand: order!.shippingBand ?? shipBand,
+            taxCents: order!.taxCents ?? taxCents,
           })
           .where(eq(orders.id, order!.id))
           .returning();

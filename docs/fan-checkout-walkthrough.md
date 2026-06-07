@@ -183,9 +183,23 @@ which returns a client secret; the sheet mounts Stripe's `EmbeddedCheckout` with
   surfaces these express-pay buttons automatically when the device supports them
   (e.g. Apple Pay in Safari on an Apple device); fans on unsupported setups just see
   the card form. We don't add or remove these — they're device-driven.
-- Tax is **not** auto-calculated (automatic tax is off); the small print's "taxes
-  calculated at checkout" reflects whatever Stripe applies, not a GoodTunes tax
-  engine.
+- **Sales tax is auto-calculated by Stripe Tax** (Task #1629). `automatic_tax` is
+  enabled on the session and every line declares a `tax_code` + `tax_behavior:
+  "exclusive"`: records / signed cert / booklet are tangible goods
+  (`txcd_99999999`), the digital-only format is a streamed digital audio work
+  (`txcd_10401000`), and the Gift of Hope / custom add-on is a cash donation
+  (`txcd_90000001`, non-taxable). Stripe computes municipal + state tax from the
+  address the fan enters in the embedded form and adds it on top of our prices. If
+  Stripe can't determine tax for that address it **blocks completion in the embedded
+  UI** — the fan can never accidentally pay $0 tax in a taxable jurisdiction. The
+  computed tax is stored on `orders.tax_cents` and shown as a "Tax" line on the
+  `/welcome` summary, the "Your orders" detail, and the receipt email.
+  > **Operator dependency (Bill):** Stripe Tax only collects where GoodTunes is
+  > **registered**. Bill must add the tax registrations (and the head-office /
+  > origin address) in the Stripe Dashboard → Tax settings for each state/locale
+  > GoodTunes is obligated to collect in. Until a jurisdiction is registered, Stripe
+  > reports $0 tax there (a real computed zero, not an error). This is out of scope
+  > for the codebase.
 
 **Stock / signed-copy safety at this moment:** the session call re-checks
 availability. If stock ran out, or the last signed slots were claimed by another

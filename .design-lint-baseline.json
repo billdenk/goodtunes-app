@@ -20952,6 +20952,16 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Orders.tsx",
+    "snippet": "<div className=\"flex items-center justify-between px-4 py-2 text-[13px]\" data-testid=\"detail-shipping-line\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Orders.tsx",
+    "snippet": "<div className=\"flex items-center justify-between px-4 py-2 text-[13px]\" data-testid=\"detail-tax-line\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Orders.tsx",
     "snippet": "<div className=\"text-[12px] uppercase tracking-widest text-fan-secondary font-semibold\">Total</div>"
   },
   {
@@ -21978,6 +21988,16 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Welcome.tsx",
     "snippet": "<div key={it.id} className=\"flex items-center justify-between text-[14px] mb-1\" data-testid={`order-item-${it.kind}-${it.sku}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Welcome.tsx",
+    "snippet": "<div className=\"mt-3 flex items-center justify-between text-[13px]\" data-testid=\"welcome-shipping\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Welcome.tsx",
+    "snippet": "<div className=\"mt-1 flex items-center justify-between text-[13px]\" data-testid=\"welcome-tax\">"
   },
   {
     "rule": "hardcoded-font-size",

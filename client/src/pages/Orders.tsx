@@ -71,6 +71,10 @@ type OrderRow = {
   albumArtwork: string | null;
   status: string;
   totalCents: number;
+  // Task #1629 — shipping + Stripe-computed sales tax broken out so the
+  // total reconciles. Null when not applicable / legacy order.
+  shippingChargedCents?: number | null;
+  taxCents?: number | null;
   goodDeedNumber: number | null;
   cert?: CertInfo | null;
   shippedAt: string | null;
@@ -839,6 +843,19 @@ function OrderDetailSheet({ order, onClose }: { order: OrderRow | null; onClose:
                     </div>
                   );
                 })}
+                {/* Task #1629 — shipping + Stripe-computed sales tax. */}
+                {order.shippingChargedCents != null && order.shippingChargedCents > 0 && (
+                  <div className="flex items-center justify-between px-4 py-2 text-[13px]" data-testid="detail-shipping-line">
+                    <div className="text-fan-secondary">Shipping</div>
+                    <div className="tabular-nums text-fan-secondary">{dollars(order.shippingChargedCents)}</div>
+                  </div>
+                )}
+                {order.taxCents != null && (
+                  <div className="flex items-center justify-between px-4 py-2 text-[13px]" data-testid="detail-tax-line">
+                    <div className="text-fan-secondary">Tax</div>
+                    <div className="tabular-nums text-fan-secondary">{dollars(order.taxCents)}</div>
+                  </div>
+                )}
                 <div className="flex items-center justify-between px-4 py-3 bg-white/[0.03]">
                   <div className="text-[12px] uppercase tracking-widest text-fan-secondary font-semibold">Total</div>
                   <div className="text-[15px] font-semibold tabular-nums">{dollars(order.totalCents)}</div>

@@ -40,6 +40,10 @@ type Order = {
   goodDeedNumber: number | null;
   status: string;
   totalCents: number;
+  // Task #1629 — shipping + Stripe-computed sales tax broken out so the
+  // receipt total reconciles. Null when not applicable / legacy order.
+  shippingChargedCents: number | null;
+  taxCents: number | null;
   shippingName: string | null;
   createdAt: string;
 };
@@ -354,6 +358,21 @@ export function Welcome() {
                 <span className="text-fan-secondary">${((it.unitPriceCents * it.quantity) / 100).toFixed(2)}</span>
               </div>
             ))
+          )}
+          {/* Task #1629 — shipping + Stripe-computed sales tax. Shipping
+              only renders when the fan was charged it (physical order); tax
+              renders whenever Stripe reported a value (incl. a real $0). */}
+          {data.order.shippingChargedCents != null && data.order.shippingChargedCents > 0 && (
+            <div className="mt-3 flex items-center justify-between text-[13px]" data-testid="welcome-shipping">
+              <span className="text-fan-secondary">Shipping</span>
+              <span className="text-fan-secondary">${(data.order.shippingChargedCents / 100).toFixed(2)}</span>
+            </div>
+          )}
+          {data.order.taxCents != null && (
+            <div className="mt-1 flex items-center justify-between text-[13px]" data-testid="welcome-tax">
+              <span className="text-fan-secondary">Tax</span>
+              <span className="text-fan-secondary">${(data.order.taxCents / 100).toFixed(2)}</span>
+            </div>
           )}
           <div className="border-t border-white/10 mt-3 pt-3 flex items-center justify-between">
             <span className="text-fan-secondary text-[13px]">Total</span>

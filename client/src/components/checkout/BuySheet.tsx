@@ -1195,8 +1195,8 @@ export function BuySheet({
                         : `Checkout — ${dollars(totalCents)}`}
                 </button>
                 <p className="mt-3 text-white/40 text-[11px] text-center leading-snug">
-                  Shipping shown above; taxes calculated at checkout. Includes instant
-                  digital access in the player.
+                  Shipping shown above; sales tax is calculated from your address
+                  on the next step. Includes instant digital access in the player.
                 </p>
               </>
             )}
