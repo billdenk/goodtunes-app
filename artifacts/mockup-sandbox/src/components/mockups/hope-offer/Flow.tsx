@@ -266,26 +266,15 @@ function OverviewStep() {
             and music and gave them a mission — use whatever you can to help women with breast cancer.
           </p>
           <p>
-            The "Get Hope. Give Hope." campaign has been built to do just that. Proceeds from every
-            purchase go to Nightbirde Foundation. Plus, you can donate a "Gift of Hope" box to be
-            shipped to someone you know who has cancer, or allow us to choose someone in need on your
-            behalf.
+            The "Get Hope. Give Hope." campaign was built to do just that — proceeds from every
+            purchase go to Nightbirde Foundation. You can also donate a "Gift of Hope" box to someone
+            you know with cancer, or let us choose someone in need on your behalf.
           </p>
         </div>
       </div>
 
       <div className="mt-6 rounded-2xl p-6" style={{ background: PANEL }}>
-        <div className="flex items-start justify-between gap-4">
-          <h2 className="text-white text-[20px] font-bold tracking-[-0.01em]">Here's what you'll get</h2>
-          <div className="flex-shrink-0 text-right">
-            <div className="text-white text-[24px] font-bold tabular-nums leading-none">
-              {usd(PRICE.bundle)}
-            </div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.06em] mt-1" style={{ color: ORANGE }}>
-              Hope Bundle
-            </div>
-          </div>
-        </div>
+        <h2 className="text-white text-[20px] font-bold tracking-[-0.01em]">Here's what you'll get</h2>
         <p className="text-white/65 text-[13px] leading-[1.5] mt-1.5 max-w-[560px]">
           This package has been hand curated by Jane's family for you. Digital arrives instantly.
           Physical ships 8–10 weeks after ordering.
