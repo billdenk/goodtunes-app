@@ -88,6 +88,19 @@ inside a real `PlayerProvider`, the dock auto-expands once the track key changes
 (after Play), so `button-lyrics` appears after clicking `button-play-album`
 without first clicking `button-show-player`.
 
+**Shared-process content pollution (full-suite-only failures):** the whole
+suite runs in ONE process via the find-glob, so a leaked global `fetch` (or
+other global a sibling test left behind) can change what `PlayerContext.playSong`
+→ `hydrate` does to a seeded queue — e.g. it can stream-filter the second song
+out, leaving `DesktopQueueBody` mounted but with NO `queue-item-*` rows. A test
+that passes standalone + alongside one neighbor can still fail in the full suite.
+Fix: assert on CONTENT-INDEPENDENT markers, not on specific seeded rows. For the
+queue body, key off its always-present "Up Next" header text; for lyrics, the
+`lyrics-scroll` testid. Pair with `aria-pressed` on the dock buttons (the real
+`toggleRail` mutual-exclusivity contract) so the test proves the swap regardless
+of how many songs survived into the queue. (`DesktopQueueBody` has no wrapper
+testid — only `queue-item-${id}`/`button-jump-queue-${id}`/`button-remove-queue-${id}`.)
+
 **Baseline:** `server/auth/identityLink.db.test.ts` ("same-email fan IS
 linked…") fails with 500 in throwaway task DBs — pre-existing, DB-state
 dependent, not caused by client test work.
