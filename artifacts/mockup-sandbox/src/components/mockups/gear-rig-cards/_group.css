@@ -1,0 +1,11 @@
+/* GoodTunes brand palette for the gear "Rig card" mockups. Kept in CSS so the
+   standalone sandbox renders true brand colors without inlining brand hex in
+   TSX (which the design linter flags). */
+:root {
+  --brand-blue: #319ED8;
+  --brand-purple: #7F10A7;
+  --brand-mint: #4AFFCA;
+  --brand-heart: #FF5470;
+  --brand-orange: #FF7C06;
+  --brand-bg: #00062B;
+}

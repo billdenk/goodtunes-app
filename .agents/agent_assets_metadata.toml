@@ -18,6 +18,12 @@ uri = "file://artifacts/mockup-sandbox/public/images/album-nick-superhero.png"
 type = "image"
 title = "nick superhero album cover"
 
+[[generated]]
+id = "B2g1FPJ0Ka65dr_bp1CUw"
+uri = "file://artifacts/mockup-sandbox/public/images/instrument-telecaster.png"
+type = "image"
+title = "vintage telecaster studio shot"
+
 [[outputs]]
 id = "tQG0d2lnGEkyn2Eoeh5Rz"
 uri = "file://docs/launch-plan.md"
@@ -179,3 +185,57 @@ id = "RD-4mYsX_gM7o090d3w66"
 uri = "file://codemagic.yaml"
 type = "unspecified"
 title = "codemagic.yaml (beta group → GoGoods Test Group)"
+
+[[outputs]]
+id = "EodysdVICd5SEFcBLuL_L"
+uri = "file://attached_assets/screenshots/5293185b-8e25-4d4f-b8b2-dc5494b9adc6-00-2smdxrpg586m8-if7eip2y_kirk_replit_dev_3000_mockup_preview_gear-rig-cards_GearSheet.png"
+type = "image"
+title = "Gear sheet — instrument hero + Apple-style Rig cards"
+
+[[outputs]]
+id = "VCxJ8ykcaA9anvVC2LJfk"
+uri = "file://attached_assets/screenshots/5293185b-8e25-4d4f-b8b2-dc5494b9adc6-00-2smdxrpg586m8-if7eip2y_kirk_replit_dev_3000_mockup_preview_gear-rig-cards_RigDetail.png"
+type = "image"
+title = "Rig detail — instrument, accessories + \"Request this rig\" CTA"
+
+[[outputs]]
+id = "PJ_moeGK8pXOWHf-31am6"
+uri = "file://attached_assets/screenshots/rig-final/2-rig-detail-full-page.png"
+type = "image"
+title = "Rig detail — Apple-HIG chevrons (Instrument no chevron, Accessories See All, Tracks no chevron)"
+
+[[outputs]]
+id = "Tjg56CdkQfMYYJD8vmxBe"
+uri = "file://attached_assets/screenshots/rig-final/1-gear-sheet.png"
+type = "image"
+title = "Gear Sheet — instrument hero + 'Played on this guitar' rail"
+
+[[outputs]]
+id = "SEVTLQ_cz5hgVe6dd54c0"
+uri = "file://attached_assets/screenshots/rig-final/3-cta-full.png"
+type = "image"
+title = "CTA — in stock (one shop, with Norman's logo)"
+
+[[outputs]]
+id = "kFwjZQ7ozBdQxRuYv42nx"
+uri = "file://attached_assets/screenshots/rig-final/4-cta-partial.png"
+type = "image"
+title = "CTA — partial (pieces split across 3 shops)"
+
+[[outputs]]
+id = "kJM9jYYC2Ww4tWh1Bc0Mf"
+uri = "file://attached_assets/screenshots/rig-final/5-cta-none.png"
+type = "image"
+title = "CTA — not in stock (request a hunt)"
+
+[[outputs]]
+id = "6QGfL4gzc4_fw4WUt9CAW"
+uri = "file://attached_assets/screenshots/rig-final/6-accessories-see-all.png"
+type = "image"
+title = "Accessories — two-up See All page"
+
+[[outputs]]
+id = "oGjciagXmdu2YW8BAxMxF"
+uri = "file://attached_assets/screenshots/rig-final/5-hunt-cta-agnostic.png"
+type = "image"
+title = "Hunt CTA — agnostic copy (\"Track down this guitar\")"
