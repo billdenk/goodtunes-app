@@ -83,7 +83,7 @@ export async function resolveLabelScope(req: Request): Promise<LabelScope | { er
   const primaryArtistIds = albums.map((r) => r.primary_artist_id).filter((x): x is string => !!x);
 
   const songRows = albumIds.length
-    ? await db.execute<{ id: string }>(sql`SELECT id FROM songs WHERE album_id = ANY(${pgArray(albumIds)})`)
+    ? await db.execute<{ id: string }>(sql`SELECT id FROM songs WHERE album_id = ANY(${pgArray(albumIds)}) AND deleted_at IS NULL`)
     : ({ rows: [] } as any);
   const songIds = ((songRows as any).rows || []).map((r: any) => r.id);
 

@@ -166,7 +166,7 @@ export async function computeArtistDatasetScope(
 
   const ownedSongRows = albumIds.length
     ? await db.execute<{ id: string }>(sql`
-        SELECT id FROM songs WHERE album_id = ANY(${pgArray(albumIds)})
+        SELECT id FROM songs WHERE album_id = ANY(${pgArray(albumIds)}) AND deleted_at IS NULL
       `)
     : ({ rows: [] } as any);
   const ownedSongIds = ((ownedSongRows as any).rows || []).map((r: any) => r.id);
@@ -863,7 +863,7 @@ async function resolveAlbumScope(req: Request, albumId: string): Promise<AlbumSc
   if (!allowed) return { error: "You don't have access to this album", status: 403 };
 
   const songRows = await db.execute<{ id: string }>(sql`
-    SELECT id FROM songs WHERE album_id = ${albumId}
+    SELECT id FROM songs WHERE album_id = ${albumId} AND deleted_at IS NULL
   `);
   const songIds = ((songRows as any).rows || []).map((r: any) => r.id);
   return {
@@ -946,7 +946,7 @@ async function albumDashboardHandler(req: Request, res: Response) {
         LEFT JOIN analytics_events e
           ON e.payload->>'songId' = s.id
           AND e.name IN ('play_start', 'play_complete', 'favorite_song')
-        WHERE s.album_id = ${albumId}
+        WHERE s.id = ANY(${pgArray(scope.songIds)})
         GROUP BY s.id, s.title
         ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC, s.title ASC
       `)
@@ -1073,7 +1073,7 @@ async function albumExportHandler(req: Request, res: Response) {
           LEFT JOIN analytics_events e
             ON e.payload->>'songId' = s.id
             AND e.name IN ('play_start', 'play_complete', 'favorite_song')
-          WHERE s.album_id = ${albumId}
+          WHERE s.id = ANY(${pgArray(scope.songIds)})
           GROUP BY s.id, s.title
           ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC, s.title ASC
         `)

@@ -200,7 +200,7 @@ async function buildLabelPayload(
   const albumIds = albums.map((a) => a.id);
 
   const songRows = albumIds.length
-    ? await db.execute<any>(sql`SELECT id FROM songs WHERE album_id = ANY(${pgArray(albumIds)})`)
+    ? await db.execute<any>(sql`SELECT id FROM songs WHERE album_id = ANY(${pgArray(albumIds)}) AND deleted_at IS NULL`)
     : ({ rows: [] } as any);
   const songIds = ((songRows as any).rows ?? []).map((s: any) => s.id);
 
@@ -597,7 +597,7 @@ async function buildArtistPayload(
   const albums = ((albumRows as any).rows ?? []) as any[];
   const albumIds = albums.map((a) => a.id);
   const songRows = albumIds.length
-    ? await db.execute<any>(sql`SELECT id FROM songs WHERE album_id = ANY(${pgArray(albumIds)})`)
+    ? await db.execute<any>(sql`SELECT id FROM songs WHERE album_id = ANY(${pgArray(albumIds)}) AND deleted_at IS NULL`)
     : ({ rows: [] } as any);
   const songIds = ((songRows as any).rows ?? []).map((s: any) => s.id);
 

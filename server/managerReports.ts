@@ -86,7 +86,7 @@ export async function resolveManagerScope(req: Request): Promise<ManagerScope | 
   const albumIds = albums.map((r) => r.id);
 
   const songRows = albumIds.length
-    ? await db.execute<{ id: string }>(sql`SELECT id FROM songs WHERE album_id = ANY(${pgArray(albumIds)})`)
+    ? await db.execute<{ id: string }>(sql`SELECT id FROM songs WHERE album_id = ANY(${pgArray(albumIds)}) AND deleted_at IS NULL`)
     : ({ rows: [] } as any);
   const songIds = ((songRows as any).rows || []).map((r: any) => r.id);
 
