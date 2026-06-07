@@ -10920,7 +10920,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const credits = await import("./lib/credits");
         const format = credits.detectCreditsFormat(filename);
         if (!format) {
-          return res.status(400).json({ message: "Unsupported file type. Use PDF, Word (.docx), or .txt." });
+          return res.status(400).json({ message: "Unsupported file type. Use PDF, Word (.docx), .txt, or Apple Pages (.pages)." });
         }
         const text = await credits.extractCreditsText(buf, format);
         if (!text || text.length < 20) {
@@ -11009,7 +11009,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           return res.status(400).json({ message: urlErr?.message || "Invalid Dropbox link." });
         }
 
-        const CREDIT_EXTENSIONS = new Set([".pdf", ".docx", ".doc", ".txt", ".md"]);
+        const CREDIT_EXTENSIONS = new Set([".pdf", ".docx", ".doc", ".txt", ".md", ".pages"]);
 
         let buf: Buffer;
         let filename: string;
@@ -11025,7 +11025,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           );
           try {
             if (tmpEntries.length === 0) {
-              const msg = "No PDF, Word, .txt, or .md files in that folder.";
+              const msg = "No PDF, Word, .txt, .md, or Apple Pages (.pages) files in that folder.";
               await logRun("failed", { fileCount: 0 }, msg);
               return res.status(400).json({ message: msg });
             }

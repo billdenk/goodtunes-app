@@ -18,7 +18,7 @@ import OpenAI from "openai";
 // Plain-text extraction
 // ---------------------------------------------------------------------------
 
-export type CreditsFileFormat = "pdf" | "docx" | "txt";
+export type CreditsFileFormat = "pdf" | "docx" | "txt" | "pages";
 
 export function detectCreditsFormat(filenameOrUrl: string): CreditsFileFormat | null {
   // Strip query string before sniffing the extension — Dropbox URLs always
@@ -28,7 +28,73 @@ export function detectCreditsFormat(filenameOrUrl: string): CreditsFileFormat | 
   if (cleaned.endsWith(".pdf")) return "pdf";
   if (cleaned.endsWith(".docx") || cleaned.endsWith(".doc")) return "docx";
   if (cleaned.endsWith(".txt") || cleaned.endsWith(".md")) return "txt";
+  // Apple Pages bundles are ZIP archives. Keynote (.key) / Numbers
+  // (.numbers) share the same structure but are intentionally out of
+  // scope here — only `.pages` is recognized.
+  if (cleaned.endsWith(".pages")) return "pages";
   return null;
+}
+
+// Read plain text out of an Apple Pages (`.pages`) bundle. Pages files are
+// ZIP archives that embed a `QuickLook/Preview.pdf` rendering of the
+// document — we read that and run it through the same PDF text path. Older
+// Pages exports instead ship a `index.xml` (or a `QuickLook/*.html`
+// preview); we fall back to stripping tags out of those. If none of these
+// are present (or the bundle is corrupt), throw a clear error so the caller
+// can surface it instead of silently returning nothing.
+async function extractPagesText(buf: Buffer): Promise<string> {
+  const AdmZip = (await import("adm-zip")).default;
+  let zip: InstanceType<typeof AdmZip>;
+  try {
+    zip = new AdmZip(buf);
+  } catch {
+    throw new Error(
+      "That Apple Pages file couldn't be opened — it may be corrupted or not a real .pages document.",
+    );
+  }
+  const entries = zip.getEntries();
+  const find = (test: (name: string) => boolean) =>
+    entries.find((e) => !e.isDirectory && test(e.entryName.toLowerCase().replace(/\\/g, "/")));
+
+  // 1) Preferred: the embedded QuickLook preview PDF.
+  const previewPdf = find((n) => n.endsWith("quicklook/preview.pdf"));
+  if (previewPdf) {
+    const pdfBuf = previewPdf.getData();
+    if (pdfBuf && pdfBuf.length > 0) {
+      return await extractPdfText(pdfBuf);
+    }
+  }
+
+  // 2) Legacy fallback: index.xml or a QuickLook HTML preview. Strip tags
+  // to recover the visible text. This is best-effort — newer bundles won't
+  // hit this path at all.
+  const legacy = find((n) => n.endsWith("index.xml")) || find((n) => /quicklook\/.*\.html?$/.test(n));
+  if (legacy) {
+    const raw = legacy.getData().toString("utf8");
+    const stripped = raw
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/[ \t]+/g, " ")
+      .trim();
+    if (stripped.length > 0) return stripped;
+  }
+
+  throw new Error(
+    "Couldn't read this Apple Pages file — it has no embedded preview. Re-save it from Pages, or export it as a PDF and import that instead.",
+  );
+}
+
+async function extractPdfText(buf: Buffer): Promise<string> {
+  // Same dynamic import pattern routes.ts uses for the lyrics importer:
+  // pdf-parse's `index.js` tries to load a bundled test PDF at module
+  // init which crashes in prod builds; the named export skips that.
+  const { PDFParse } = await import("pdf-parse");
+  const parser = new PDFParse({ data: buf });
+  const parsed = await parser.getText();
+  return parsed.text || "";
 }
 
 export async function extractCreditsText(
@@ -37,17 +103,13 @@ export async function extractCreditsText(
 ): Promise<string> {
   let text = "";
   if (format === "pdf") {
-    // Same dynamic import pattern routes.ts uses for the lyrics importer:
-    // pdf-parse's `index.js` tries to load a bundled test PDF at module
-    // init which crashes in prod builds; the named export skips that.
-    const { PDFParse } = await import("pdf-parse");
-    const parser = new PDFParse({ data: buf });
-    const parsed = await parser.getText();
-    text = parsed.text || "";
+    text = await extractPdfText(buf);
   } else if (format === "docx") {
     const mammoth = await import("mammoth");
     const result = await mammoth.extractRawText({ buffer: buf });
     text = result.value || "";
+  } else if (format === "pages") {
+    text = await extractPagesText(buf);
   } else {
     text = buf.toString("utf8");
   }

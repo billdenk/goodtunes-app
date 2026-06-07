@@ -96,6 +96,10 @@ export function CreditsImportSheet({
   const [step, setStep] = useState<"source" | "review" | "spotify">("source");
   const [sourceUrl, setSourceUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  // Persistent parse failure shown inline on the source step. The toast
+  // alone is easy to miss, so a failed Analyze looks like it just "comes
+  // back to Analyze" — keep the reason on screen until the admin retries.
+  const [parseError, setParseError] = useState<string | null>(null);
   const [parsed, setParsed] = useState<ParseResponse | null>(null);
   const [decisions, setDecisions] = useState<Record<string, PersonDecision>>({});
   const [linerNotes, setLinerNotes] = useState("");
@@ -112,6 +116,7 @@ export function CreditsImportSheet({
     setStep("source");
     setSourceUrl("");
     setFile(null);
+    setParseError(null);
     setParsed(null);
     setDecisions({});
     setLinerNotes("");
@@ -138,6 +143,7 @@ export function CreditsImportSheet({
       return (await res.json()) as ParseResponse;
     },
     onSuccess: (data) => {
+      setParseError(null);
       setParsed(data);
       // Seed default decisions from matches.
       const initial: Record<string, PersonDecision> = {};
@@ -159,6 +165,7 @@ export function CreditsImportSheet({
       setStep("review");
     },
     onError: (err: Error) => {
+      setParseError(err.message);
       toast({ title: "Couldn't parse credits", description: err.message, variant: "destructive" });
     },
   });
@@ -267,11 +274,18 @@ export function CreditsImportSheet({
           {step === "source" ? (
             <SourceStep
               sourceUrl={sourceUrl}
-              setSourceUrl={setSourceUrl}
+              setSourceUrl={(v) => {
+                setSourceUrl(v);
+                if (parseError) setParseError(null);
+              }}
               file={file}
-              setFile={setFile}
+              setFile={(f) => {
+                setFile(f);
+                if (parseError) setParseError(null);
+              }}
               fileInputRef={fileInputRef}
               busy={parseMutation.isPending}
+              error={parseError}
             />
           ) : step === "review" && parsed ? (
             <ReviewStep
@@ -397,6 +411,7 @@ function SourceStep({
   setFile,
   fileInputRef,
   busy,
+  error,
 }: {
   sourceUrl: string;
   setSourceUrl: (v: string) => void;
@@ -404,9 +419,20 @@ function SourceStep({
   setFile: (f: File | null) => void;
   fileInputRef: React.RefObject<HTMLInputElement>;
   busy: boolean;
+  error: string | null;
 }) {
   return (
     <div className="space-y-5 py-2">
+      {error && (
+        <div
+          className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700"
+          role="alert"
+          data-testid="text-credits-parse-error"
+        >
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+          <span>{error}</span>
+        </div>
+      )}
       <div className="space-y-1.5">
         <Label htmlFor="credits-url" className="text-[12.5px] font-medium text-slate-700">
           Dropbox link
@@ -426,7 +452,7 @@ function SourceStep({
           className="h-10 text-[14px] bg-white text-slate-900 border-slate-300 placeholder:text-slate-400"
         />
         <p className="text-xs text-slate-500">
-          Paste a Dropbox shareable link to a single PDF, Word doc, or .txt file.
+          Paste a Dropbox shareable link to a single PDF, Word doc, .txt, or Apple Pages (.pages) file.
         </p>
       </div>
 
@@ -482,13 +508,13 @@ function SourceStep({
             <>
               <Upload className="h-7 w-7 text-slate-400" />
               <div className="text-sm font-medium text-slate-700">Drop a credits doc here</div>
-              <div className="text-xs text-slate-500">PDF, Word (.docx), or .txt — max 25 MB</div>
+              <div className="text-xs text-slate-500">PDF, Word (.docx), .txt, or Apple Pages (.pages) — max 25 MB</div>
             </>
           )}
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.docx,.doc,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+            accept=".pdf,.docx,.doc,.txt,.md,.pages,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.apple.pages,text/plain"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
