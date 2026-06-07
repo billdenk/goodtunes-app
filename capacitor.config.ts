@@ -56,7 +56,8 @@ const config: CapacitorConfig = {
     contentInset: "always",
     // Background-audio + universal-links capabilities are declared in
     // Info.plist (UIBackgroundModes=audio) and the Xcode project's
-    // Associated Domains (applinks:goodtunes.music). See
+    // Associated Domains (applinks:my.goodtunes.music — the bare apex is the
+    // Webflow marketing site and is intentionally not claimed). See
     // docs/app-store-submission.md.
   },
   android: {

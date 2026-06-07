@@ -82,15 +82,18 @@ Play has required **API level 35 (Android 15)** for new apps and updates since
 be done on the Mac: run a clean `./gradlew :app:bundleRelease` and fix any
 AGP-version fallout before the first Play upload (see C1).
 
-### B2. Republish + attach the apex domain so deep links verify
-From `app-store-submission.md` (already documented, still open):
-1. **Republish** the production app so the running build picks up the
-   `ANDROID_RELEASE_SHA256` secret — until then `assetlinks.json` on
-   `my.goodtunes.music` serves the 503 sentinel.
-2. **Attach the bare `goodtunes.music` apex** as a verified custom domain on the
-   deployment. The iOS entitlements and Android manifest both list
-   `applinks:goodtunes.music` (the apex), so Apple/Google fetch the association from
-   the apex host, which currently 404s at the edge.
+### B2. Cut a new build so deep links verify on `my.goodtunes.music`
+From `app-store-submission.md` (see the "Deep links" section for the full rationale):
+1. **Republish — done.** The production app now serves real values; `assetlinks.json`
+   and `apple-app-site-association` return 200 with the real SHA-256 / Team ID on both
+   `my.goodtunes.music` and `admin.goodtunes.music` (re-verified live).
+2. **Apex no longer needed.** The original plan to attach the bare `goodtunes.music`
+   apex was dropped: the apex is the **Webflow marketing site** (it can't serve our
+   association files), so the app now claims **only `my.goodtunes.music`** — the
+   bare-apex claim was removed from both the iOS entitlements and Android manifest.
+   No deployment custom-domain change is required and Webflow stays untouched. This
+   change ships in the **next signed build via Codemagic**; after that build is
+   installed, run the verifiers in C2 against `my.goodtunes.music`.
 
 ### B3. Provide a public account-deletion URL for the Play listing — **fixed in repo (A)**
 In-app deletion exists (A1), and the public deletion page Play's Data safety form
@@ -116,8 +119,9 @@ both consoles verbatim at submission time.
   Archive (iOS) and a `./gradlew :app:bundleRelease` (Android, with the API-35
   bump already in-repo) — none runnable here. This is where any AGP-`8.7.2` /
   Gradle-`8.9` fallout from B1 surfaces.
-- **C2. App Links / Universal Links verifiers.** `swcutil verify -d goodtunes.music`
-  (Apple) and Google's Statement List Tester need a real install after B2.
+- **C2. App Links / Universal Links verifiers.** `swcutil verify -d my.goodtunes.music`
+  (Apple) and Google's Statement List Tester (for `my.goodtunes.music`) need a real
+  install of the new apex-free build from B2.
 - **C3. The full on-device smoke test** in `native-builds.md` (background audio,
   offline download playback, BottomNav hides Chat, instrument-sheet chat bubble
   hidden) — needs a physical iPhone + Android phone.

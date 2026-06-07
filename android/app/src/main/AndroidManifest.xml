@@ -23,15 +23,19 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Android App Links: open https://goodtunes.music/* in the app
-                 when installed. autoVerify=true makes Play check the
-                 /.well-known/assetlinks.json on the domain before honoring it. -->
+            <!-- Android App Links: open https://my.goodtunes.music/* in the
+                 app when installed. autoVerify=true makes Play check the
+                 /.well-known/assetlinks.json on the domain before honoring it.
+                 We intentionally do NOT claim the bare goodtunes.music apex:
+                 that host is the Webflow marketing site (it can't serve our
+                 assetlinks.json), so claiming it would only produce a
+                 permanent verification failure. Fan-shareable content links
+                 live on the app subdomains, not the marketing homepage. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" />
-                <data android:host="goodtunes.music" />
                 <data android:host="my.goodtunes.music" />
                 <!-- Match every path on the host. The web SPA's router
                      already knows what to do with unknown paths (404

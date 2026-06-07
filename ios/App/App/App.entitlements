@@ -4,13 +4,17 @@
 <dict>
     <!-- Task #535 — Universal Links. Pairs with the
          apple-app-site-association file served at
-         https://goodtunes.music/.well-known/apple-app-site-association.
+         https://my.goodtunes.music/.well-known/apple-app-site-association.
          The operator-managed Apple Team ID prefix on the appIDs in that
          file must match this app's signing team for verification to
-         succeed. -->
+         succeed.
+         We intentionally do NOT claim the bare goodtunes.music apex: that
+         host is the Webflow marketing site (it can't serve our AASA file),
+         so claiming it would only produce a permanent verification failure.
+         Fan-shareable content links live on the app subdomains, not the
+         marketing homepage. -->
     <key>com.apple.developer.associated-domains</key>
     <array>
-        <string>applinks:goodtunes.music</string>
         <string>applinks:my.goodtunes.music</string>
     </array>
     <!-- Task #535 — Push entitlement declared now so the binary asks
