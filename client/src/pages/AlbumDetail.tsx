@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlbumDetailMobileSurface } from "@/components/ui/AlbumDetailMobileSurface";
 import { AlbumDetailMobileSkeleton, AlbumNotFound } from "@/components/ui/AlbumDetailSkeleton";
-import { AlbumCreditsSheet, SongCreditsSheet, buildAlbumCreditGroups } from "@/components/ui/AlbumCreditsSheet";
+import { AlbumCreditsSheet, SongCreditsSheet, buildAlbumCreditGroups, type SongRig } from "@/components/ui/AlbumCreditsSheet";
 import type { AlbumCreditsPayload, AlbumCreditsRow } from "@/components/ui/AlbumCreditsSheet";
 import { BonusPlayBadge } from "@/components/ui/BonusPlayBadge";
 import { BonusVideoPlayer, type BonusVideo } from "@/components/ui/BonusVideoPlayer";
@@ -45,8 +45,8 @@ import {
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { toast } from "@/hooks/use-toast";
 import { IconButton } from "@/components/ui/IconButton";
-import { ChromeScrim } from "@/components/ui/ChromeScrim";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
+import { GearDetailBody, type GearArtist, type GearArtistNote } from "@/components/gear/GearDetailBody";
 import { ChevronLeft, Share, MoreHorizontal, Lock, ShieldCheck, Music2, ArrowRight } from "lucide-react";
 import { buyEnabled, nativeDownloadsEnabled, streamingHandoffEnabled } from "@/lib/platform";
 import { downloadSong, removeDownload, listDownloadedSongs } from "@/lib/nativeDownloads";
@@ -65,6 +65,7 @@ type ApiInstrument = { id: string; name: string; category: string; shortCategory
 type ApiSongCredits = {
   writers: Array<{ id: string; songId: string; personId: string | null; name: string; role: string; position: number; person: ApiPerson | null }>;
   performers: Array<{ id: string; songId: string; personId: string | null; instrumentId: string | null; name: string; role: string; tuningNotes: string | null; position: number; person: ApiPerson | null; instrument: ApiInstrument | null }>;
+  rigs?: SongRig[];
 };
 
 // API rows use `string | null` for optional columns; the static types use
@@ -1282,6 +1283,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
             albumTitle={album.title}
             artist={album.artist}
             credits={songCreditsPayload(getCredits(creditsForSong.id), creditsForSong.id, peopleById)}
+            rigs={apiAlbumCredits?.bySongId?.[creditsForSong.id]?.rigs}
             album={album}
             resolveInstrument={(iid) => (iid ? instrumentsById.get(iid) : undefined)}
             songHeader={{
@@ -2752,56 +2754,39 @@ function InstrumentSheet({
   // SuperCredits-derived list of artists who've played this instrument on
   // a track. Anchored on instrument.id (not vendor.id), so it works for
   // both demo instruments and real DB rows. Empty list → section hidden.
+  // GET /api/instruments/:id/profile — drives the "Played by" rail plus the
+  // headline maker (eyebrow + 96×96 brand chip) and the scraped source link.
   type InstrumentProfile = {
-    instrument: { id: string };
-    artists: Array<{
-      id: string; name: string; photoUrl: string | null;
-      bio: string | null; trackCount: number;
-    }>;
+    instrument: {
+      id: string;
+      sourceUrl?: string | null;
+      maker?: { id: string; name: string; domain?: string | null; logoUrl: string | null } | null;
+    };
+    artists: Array<{ id: string; name: string; photoUrl: string | null; bio: string | null; trackCount: number }>;
   };
   const { data: instrumentProfile } = useQuery<InstrumentProfile>({
     queryKey: ["/api/instruments", instrument.id, "profile"],
     enabled: !!instrument.id,
   });
-  const instrumentArtists: Person[] = (instrumentProfile?.artists ?? []).map((a) => ({
-    id: a.id,
-    name: a.name,
-    photoUrl: a.photoUrl ?? undefined,
-  } as Person));
+  const playedBy: GearArtist[] = (instrumentProfile?.artists ?? []).map((a) => ({
+    id: a.id, name: a.name, photoUrl: a.photoUrl,
+  }));
+  const maker = instrumentProfile?.instrument?.maker ?? null;
+  const sourceUrl = instrumentProfile?.instrument?.sourceUrl ?? null;
 
-  // Split the admin-pasted "about" blob into prose vs. structured specs once,
-  // up here, so the top-level tab strip below can decide which tabs to show.
-  // Mirrors the same parse used inline by the older InstrumentAboutSection.
-  const { prose: aboutProse, specs: aboutSpecs } = useMemo(
-    () => parseInstrumentAbout(instrument.about ?? ""),
-    [instrument.about],
-  );
-  const hasProse = aboutProse.length > 0;
-  const hasSpecs = aboutSpecs.length > 0;
-  const hasArtists = instrumentArtists.length > 0;
-
-  // Vendor-style top tabs: About | Specs | Artists. Tabs hide themselves
-  // when their content is empty (no specs uploaded yet, no SuperCredits
-  // performers yet) so a sparse instrument doesn't show empty sections.
-  // Default tab prefers About when prose exists, otherwise Specs, otherwise
-  // Artists — same priority as the original linear order.
-  const availableTabs = (
-    ["about", "specs", "artists"] as const
-  ).filter((t) =>
-    t === "about" ? hasProse || instrument.artistNote || (instrument.vendors && instrument.vendors.length > 0)
-    : t === "specs" ? hasSpecs
-    : hasArtists,
-  );
-  const [instrumentTab, setInstrumentTab] = useState<"about" | "specs" | "artists">(
-    availableTabs[0] ?? "about",
-  );
-
-  // Resolve attribution → who wrote the note + which song it's about.
-  // Used so a bookmarked instrument still tells you "this note was from X on Y".
+  // Resolve attribution → who wrote the note + which song it's about, so a
+  // bookmarked instrument still reads "this note was from X on Y".
   const noteFromPerson = attribution ? PEOPLE[attribution.personId] : undefined;
   const noteFromSong = attribution
     ? ALBUMS.flatMap((a) => getSongsByAlbum(a.id)).find((s) => s.id === attribution.songId)
     : undefined;
+  const artistNote: GearArtistNote | null = instrument.artistNote
+    ? {
+        quote: instrument.artistNote,
+        person: noteFromPerson ? { name: noteFromPerson.name, photoUrl: noteFromPerson.photoUrl } : undefined,
+        albumNote: noteFromSong ? `on "${noteFromSong.title}"` : undefined,
+      }
+    : null;
 
   const handleShare = async () => {
     const shareUrl = typeof window !== "undefined" ? window.location.href : "";
@@ -2826,270 +2811,22 @@ function InstrumentSheet({
 
   return (
     <SheetShell ariaLabel={instrument.name} testId="sheet-instrument" variant="full" contained={contained} onClose={onClose}>
-      {/* Apple-style top bar: back chevron on left (this is a sub-sheet from credits),
-          Share + Bookmark on right. shrink-0 so it stays pinned. Top padding respects safe area.
-          Background is the shared ChromeScrim (soft navy gradient fade, no hard
-          frosted band) so it matches the rest of the fan chrome. */}
-      <div className="relative flex-shrink-0">
-        <ChromeScrim edge="top" className="absolute inset-0" />
-        <div
-          className="relative flex items-center justify-between px-3 pb-2"
-          style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
-        >
-        <SheetBack data-testid="button-instrument-close" />
-        <div className="flex items-center gap-2">
-          <IconButton
-            variant="glass"
-            label="Share"
-            onClick={handleShare}
-            data-testid="button-instrument-share"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M12 3v12" />
-              <path d="M7 8l5-5 5 5" />
-              <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
-            </svg>
-          </IconButton>
-          <IconButton
-            variant="glass"
-            label={isBookmarked ? "Remove bookmark" : "Bookmark"}
-            aria-pressed={isBookmarked}
-            onClick={onToggleBookmark}
-            data-testid="button-instrument-bookmark"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill={isBookmarked ? "#4AFFCA" : "none"}
-              stroke={isBookmarked ? "#4AFFCA" : "currentColor"}
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-            </svg>
-          </IconButton>
-        </div>
-        </div>
-      </div>
-
-      {/* Scrollable content area (header above is shrink-0). Pin
-          overflow-x off — see VendorSheet for the same reason. */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide pb-8">
-      {/* Hero photo (no overlay X — that's in the sticky bar above) */}
-      <div className="mx-5 mt-2 rounded-2xl overflow-hidden mb-4" style={{ aspectRatio: "16 / 10", background: "linear-gradient(135deg, #1a1f4a 0%, #2a1156 100%)" }}>
-        {instrument.photoUrl ? (
-          <img src={instrument.photoUrl} alt={instrument.name} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-fan-faint">
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M9 18V5l12-2v13" />
-              <circle cx="6" cy="18" r="3" />
-              <circle cx="18" cy="16" r="3" />
-            </svg>
-          </div>
-        )}
-      </div>
-
-      {/* Task #1233 — gallery strip: every extra listing photo beyond the
-          hero, horizontally scrollable. */}
-      {instrument.photoUrls && instrument.photoUrls.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide px-5 pb-4 -mt-1" data-testid="strip-instrument-gallery">
-          {instrument.photoUrls.map((u, i) => (
-            <div key={u} className="flex-shrink-0 w-28 rounded-xl overflow-hidden ring-1 ring-white/10" style={{ aspectRatio: "1 / 1" }}>
-              <img src={u} alt={`${instrument.name} photo ${i + 2}`} className="w-full h-full object-cover" loading="lazy" data-testid={`img-instrument-gallery-${i}`} />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Title block — Apple Music "About Neil Diamond" pattern: small grey eyebrow, big bold title */}
-      <div className="px-5 pb-4">
-        <p className="text-[12px] font-medium mb-1" style={{ color: "rgba(235,235,245,0.55)" }}>{instrument.category}</p>
-        <h2 className="text-fan-primary text-[26px] font-bold leading-tight tracking-tight">{instrument.name}</h2>
-        {tuningNotes && (
-          <p className="text-[15px] mt-1.5" style={{ color: "rgba(235,235,245,0.55)" }}>Tuning · {tuningNotes}</p>
-        )}
-      </div>
-
-      {/* Top-level tab strip — mirrors VendorSheet's About | Gear | Artists
-          treatment so the two gear-adjacent sheets feel like a pair. Tabs
-          self-hide when their content is empty. Underline is #319ED8 (brand
-          blue) — same component shape used on the vendor sheet at ~L2773. */}
-      {availableTabs.length > 1 && (
-        <div className="px-5 pt-1 pb-0">
-          <div className="flex gap-6 border-b border-white/10">
-            {availableTabs.map((t) => {
-              const active = instrumentTab === t;
-              const label = t === "about" ? "About" : t === "specs" ? "Specs" : "Artists";
-              const count = t === "specs" ? aboutSpecs.length : t === "artists" ? instrumentArtists.length : undefined;
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setInstrumentTab(t)}
-                  aria-pressed={active}
-                  className="relative pb-2.5 text-[15px] font-semibold active:opacity-80"
-                  style={{ color: active ? "#fff" : "rgba(235,235,245,0.55)" }}
-                  data-testid={`tab-instrument-${t}`}
-                >
-                  {label}
-                  {typeof count === "number" && count > 0 && (
-                    <span className="ml-1.5 text-[13px] font-medium" style={{ color: "rgba(235,235,245,0.45)" }}>
-                      {count}
-                    </span>
-                  )}
-                  {active && (
-                    <span
-                      aria-hidden
-                      className="absolute left-0 right-0 -bottom-px h-[2px] rounded-full"
-                      style={{ background: "#319ED8" }}
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Specs tab — structured key:value grid lifted out of the old
-          InstrumentAboutSection. Two-column dl: label dim, value white,
-          hairline rows. Matches the dense spec sheets on Reverb / Carter
-          Vintage listings. */}
-      {instrumentTab === "specs" && hasSpecs && (
-        <section className="px-5 pt-4 pb-5">
-          <h3 className="text-fan-primary text-[22px] font-bold leading-tight tracking-tight mb-2">Specs</h3>
-          <dl className="text-[15px] leading-snug" data-testid="list-instrument-specs">
-            {aboutSpecs.map((s, i) => (
-              <div
-                key={`${s.label}-${i}`}
-                className="grid grid-cols-[40%_60%] gap-3 py-2"
-                style={{ borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,0.06)" }}
-              >
-                <dt style={{ color: "rgba(235,235,245,0.55)" }}>{s.label}</dt>
-                <dd className="text-fan-primary">{s.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      )}
-
-      {/* About tab — prose only (no specs; those moved to their own tab).
-          Notes from artist + Where to buy live here too, because they're
-          the "story" of this instrument; Specs is the dry data view. */}
-      {instrumentTab === "about" && hasProse && (
-        <section className="px-5 pt-4 pb-3">
-          <h3 className="text-fan-primary text-[22px] font-bold leading-tight tracking-tight mb-2">About this {instrument.category.toLowerCase()}</h3>
-          <p className="text-[16px] leading-relaxed whitespace-pre-line" style={{ color: "rgba(235,235,245,0.72)" }} data-testid="text-instrument-about">
-            {aboutProse}
-          </p>
-        </section>
-      )}
-
-      {/* Notes from the artist — attributed (so the note still makes sense after bookmarking) */}
-      {instrumentTab === "about" && instrument.artistNote && (
-        <section className="px-5 pt-3 pb-5">
-          <h3 className="text-fan-primary text-[22px] font-bold leading-tight tracking-tight mb-2">Notes from the artist</h3>
-          <p className="pb-3 text-[16px] leading-relaxed italic" style={{ color: "rgba(235,235,245,0.78)" }}>"{instrument.artistNote}"</p>
-          {noteFromPerson && (
-            <div className="flex items-center gap-2.5">
-              <PersonAvatar person={noteFromPerson} size={28} />
-              <div className="min-w-0 flex-1">
-                <p className="text-fan-primary text-[14px] font-medium truncate">{noteFromPerson.name}</p>
-                {noteFromSong && (
-                  <p className="text-[13px] truncate" style={{ color: "rgba(235,235,245,0.55)" }}>on "{noteFromSong.title}"</p>
-                )}
-              </div>
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Where to buy — vendor list. Tap row → direct buy link. Tap logo → vendor about page. */}
-      {instrumentTab === "about" && instrument.vendors && instrument.vendors.length > 0 && (
-        <section className="pt-3 pb-2">
-          <h3 className="px-5 text-fan-primary text-[22px] font-bold leading-tight tracking-tight mb-3">Where to buy</h3>
-          <div className="pb-1">
-            {instrument.vendors.map((v, i) => (
-              <div
-                key={`${v.name}-${i}`}
-                className="flex items-center px-5 py-2.5 active:bg-white/5"
-                data-testid={`row-vendor-${i}`}
-              >
-                {/* The Vendor link — tap the logo or the name to open the
-                    vendor's profile page inside GoodTunes. */}
-                <button
-                  type="button"
-                  onClick={() => onOpenVendor(v)}
-                  aria-label={`About ${v.name}`}
-                  className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 active:scale-[0.94] overflow-hidden"
-                  style={{ background: "rgba(255,255,255,0.92)" }}
-                  data-testid={`button-vendor-about-${i}`}
-                >
-                  {v.logoUrl ? (
-                    <img src={v.logoUrl} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-[#00062B] text-[13px] font-bold">{v.name.charAt(0)}</span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onOpenVendor(v)}
-                  className="flex-1 flex items-center min-w-0 ml-3 active:opacity-80 text-left"
-                  data-testid={`button-vendor-buy-${i}`}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-fan-primary text-[15px] font-medium truncate">{v.name}</p>
-                  </div>
-                </button>
-                {/* The direct-to-gear link — opens THIS instrument's own
-                    product page (instrument_vendors.affiliate_url), not the
-                    vendor's brand homepage. The brand domain lives behind the
-                    globe on the vendor profile sheet. */}
-                <IconButton
-                  variant="glass"
-                  label={`Open ${instrument.name} at ${v.name}`}
-                  onClick={() => onOpenInAppBrowser({ url: v.affiliateUrl, title: v.name, logoUrl: v.logoUrl })}
-                  className="flex-shrink-0 ml-2"
-                  data-testid={`button-vendor-open-${i}`}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M14 4h6v6" />
-                    <path d="M20 4L10 14" />
-                    <path d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
-                  </svg>
-                </IconButton>
-              </div>
-            ))}
-          </div>
-
-          <p className="px-5 pt-4 pb-3 text-[11px] text-center leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
-            Outbound links support the artist via Credits Micro-Sponsorships. Artist receives the lion's share; GoodTunes receives a small connection fee.
-          </p>
-        </section>
-      )}
-
-      {/* Artists tab — SuperCredits™ derived. Mirrors the Artists grid on
-          VendorSheet (3-col avatar wall) so the two gear-adjacent sheets
-          read as a pair. The tab itself self-hides when empty (see
-          availableTabs filter), so we don't need a heading here. */}
-      {instrumentTab === "artists" && instrumentArtists.length > 0 && (
-        <section className="px-5 pt-5 pb-5">
-          <div className="grid grid-cols-3 gap-x-4 gap-y-5">
-            {instrumentArtists.map((person) => (
-              <div key={person.id} className="flex flex-col items-center" data-testid={`instrument-artist-${person.id}`}>
-                <PersonAvatar person={person} size={88} />
-                <p className="text-fan-primary text-[13px] font-medium mt-2 text-center leading-tight line-clamp-2">{person.name}</p>
-              </div>
-            ))}
-          </div>
-          <p className="pt-4 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
-            From Credits — artists credited with playing this gear on a track.
-          </p>
-        </section>
-      )}
-      </div>
+      <GearDetailBody
+        instrument={instrument}
+        maker={maker}
+        vendors={instrument.vendors ?? []}
+        artistNote={artistNote}
+        playedBy={playedBy}
+        sourceUrl={sourceUrl}
+        tuningNote={tuningNotes ?? null}
+        isBookmarked={isBookmarked}
+        onToggleBookmark={onToggleBookmark}
+        onShare={handleShare}
+        onBack={onClose}
+        onOpenMaker={maker ? () => onOpenVendor({ name: maker.name, vendorId: maker.id, logoUrl: maker.logoUrl ?? undefined, affiliateUrl: maker.domain ? (maker.domain.startsWith("http") ? maker.domain : `https://${maker.domain}`) : "" } as InstrumentVendor) : undefined}
+        onOpenVendor={(v) => onOpenVendor(v as InstrumentVendor)}
+        onOpenBuy={(v) => { const iv = v as InstrumentVendor; if (iv.affiliateUrl) onOpenInAppBrowser({ url: iv.affiliateUrl, title: iv.name, logoUrl: iv.logoUrl ?? undefined }); }}
+      />
     </SheetShell>
   );
 }

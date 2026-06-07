@@ -1531,15 +1531,18 @@ function InstrumentsPanel({
             </p>
           </div>
         ) : (
-          <ul className="space-y-2.5" data-testid="list-instruments">
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="list-instruments">
             {instruments.map((i) => (
-              <li key={i.id}>
+              <li
+                key={i.id}
+                className="rounded-xl border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm transition-all overflow-hidden"
+              >
                 <Link
                   href={`/admin/instruments/${i.id}`}
-                  className="inline-flex items-center gap-2 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors pl-1 pr-3 py-1 max-w-full"
+                  className="flex items-center gap-3 p-3"
                   data-testid={`chip-gear-${i.id}`}
                 >
-                  <span className="w-7 h-7 rounded-full overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
+                  <span className="w-16 h-16 rounded-lg overflow-hidden bg-slate-50 ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
                     {i.photoUrl ? (
                       <img
                         src={i.photoUrl}
@@ -1547,21 +1550,23 @@ function InstrumentsPanel({
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <Guitar className="w-3.5 h-3.5 text-slate-400" />
+                      <Guitar className="w-6 h-6 text-slate-300" />
                     )}
                   </span>
-                  <span className="text-xs font-semibold text-slate-800 truncate">
-                    {i.name}
-                  </span>
-                  {(i.shortCategory || i.category) && (
-                    <span className="text-xs text-slate-500 truncate">
-                      · {i.shortCategory || i.category}
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-slate-900 truncate">
+                      {i.name}
                     </span>
-                  )}
+                    {(i.shortCategory || i.category) && (
+                      <span className="block text-xs text-slate-500 truncate mt-0.5">
+                        {i.shortCategory || i.category}
+                      </span>
+                    )}
+                  </span>
                 </Link>
                 {isMaker && i.resellers && (
                   <div
-                    className="mt-1.5 ml-9 flex flex-wrap items-center gap-1.5"
+                    className="px-3 pb-3 -mt-1 flex flex-wrap items-center gap-1.5"
                     data-testid={`resellers-${i.id}`}
                   >
                     {i.resellers.length === 0 ? (

@@ -16420,6 +16420,86 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     ]);
     return res.json({ instrument, artists, tracks });
   });
+  // ─── Rigs (Task #1643) — named gear bundles ───────────────────────
+  // A rig = base instrument + accessory lines, attachable to a track.
+  // Reads are public (fan track surface renders attached rigs); writes are
+  // operator-only (mint/edit are creates, so requireAdmin's partner-verb
+  // layer isn't enough — but rigs are pure catalog metadata, no post-sale
+  // lock applies, so requireAdmin alone is the right gate here).
+  app.get("/api/rigs", requireAdmin, async (_req, res) => {
+    return res.json(await storage.listRigs());
+  });
+  app.get("/api/rigs/:id", async (req, res) => {
+    const rig = await storage.getRigById(String(req.params.id));
+    if (!rig) return res.status(404).json({ message: "Rig not found" });
+    return res.json(rig);
+  });
+  const rigBodySchema = z.object({
+    name: z.string().min(1),
+    instrumentId: z.string().min(1).nullable().optional(),
+    notes: z.string().nullable().optional(),
+    accessories: z
+      .array(z.object({ type: z.string().min(1), value: z.string().min(1) }))
+      .default([]),
+  });
+  app.post("/api/admin/rigs", requireAdmin, async (req, res) => {
+    const parsed = rigBodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid", issues: parsed.error.issues });
+    const { accessories, ...data } = parsed.data;
+    const rig = await storage.createRig(
+      { name: data.name, instrumentId: data.instrumentId ?? null, notes: data.notes ?? null } as any,
+      accessories,
+    );
+    return res.status(201).json(rig);
+  });
+  app.put("/api/admin/rigs/:id", requireAdmin, async (req, res) => {
+    const parsed = rigBodySchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid", issues: parsed.error.issues });
+    const { accessories, ...data } = parsed.data;
+    const patch: Record<string, unknown> = {};
+    if (data.name !== undefined) patch.name = data.name;
+    if (data.instrumentId !== undefined) patch.instrumentId = data.instrumentId ?? null;
+    if (data.notes !== undefined) patch.notes = data.notes ?? null;
+    const rig = await storage.updateRig(String(req.params.id), patch as any, accessories);
+    if (!rig) return res.status(404).json({ message: "Rig not found" });
+    return res.json(rig);
+  });
+  app.delete("/api/admin/rigs/:id", requireAdmin, async (req, res) => {
+    await storage.deleteRig(String(req.params.id), (req as any).userId ?? null);
+    return res.json({ ok: true });
+  });
+  // Attach a rig to a track (with optional per-track tweak note).
+  app.post("/api/admin/songs/:songId/rigs", requireAdmin, async (req, res) => {
+    const schema = z.object({
+      rigId: z.string().min(1),
+      tweakNote: z.string().nullable().optional(),
+      position: z.number().int().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid", issues: parsed.error.issues });
+    const songId = String(req.params.songId);
+    const song = await storage.getSongById(songId);
+    if (!song) return res.status(404).json({ message: "Song not found" });
+    try {
+      const row = await storage.attachRigToTrack({
+        songId,
+        rigId: parsed.data.rigId,
+        tweakNote: parsed.data.tweakNote ?? null,
+        position: parsed.data.position,
+      });
+      return res.status(201).json(row);
+    } catch (e) {
+      return res.status(400).json({ message: e instanceof Error ? e.message : "Could not attach rig" });
+    }
+  });
+  app.get("/api/songs/:songId/rigs", async (req, res) => {
+    return res.json(await storage.getSongRigs(String(req.params.songId)));
+  });
+  app.delete("/api/admin/track-rigs/:id", requireAdmin, async (req, res) => {
+    await storage.detachTrackRig(String(req.params.id), (req as any).userId ?? null);
+    return res.json({ ok: true });
+  });
+
   app.get("/api/vendors/:id/profile", async (req, res) => {
     const id = String(req.params.id);
     const vendor = await storage.getVendorById(id);

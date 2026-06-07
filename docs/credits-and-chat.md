@@ -29,6 +29,16 @@ Richer per-track credits than Apple's writer-only list. Three layers:
 - Person + instrument FKs are `SET NULL` on delete; the `name` snapshot keeps a credit renderable after a Person row is removed.
 - Public read: `GET /api/songs/:id/credits` returns writers + performers already enriched with their joined `person` and `instrument: {..., vendors: []}` so the credits sheet renders from a single fetch.
 
+### Rigs (named gear bundles, active build)
+
+A **Rig** is a reusable, named gear bundle — a base instrument plus the accessories that complete it — that attaches to a track with a per-track tweak note. It answers "what exactly was this sound made with?" beyond the single instrument on a performer row.
+
+- **Data shape.** `rigs: { id, name, instrumentId?, notes? }` (the base instrument FK is `SET NULL` on delete); `rig_accessories: { id, rigId, type, value, position }` (e.g. `type: "Strings"`, `value: "D'Addario EJ16 (.012–.053)"`); `track_rigs: { id, songId, rigId?, rigName (snapshot), tweakNote?, position }`. All three carry the soft-delete columns. The `rigName` snapshot keeps the attachment renderable if the underlying rig is deleted.
+- **Accessory types** are free text, but the admin builder offers a category-aware suggestion list (`accessoryTypesFor()` in `shared/categories.ts`, keyed off the base instrument's short-category — Guitar → Strings/Pick/Capo/Strap/Slide/Tuning, etc., with a generic fallback). The chosen type is stored verbatim so the data survives any edit to that list.
+- **Admin.** Build + attach lives on the per-track Credits panel (`TrackCreditsPanel`): create a rig (name, base instrument, accessory rows, notes) and it attaches to the current track in one step, or attach an existing rig with a tweak note. Routes: `POST/PUT/DELETE /api/admin/rigs`, `POST /api/admin/songs/:songId/rigs` (attach), `DELETE /api/admin/track-rigs/:id` (detach), `GET /api/rigs` (admin list), `GET /api/rigs/:id` + `GET /api/songs/:songId/rigs` (public).
+- **Fan read.** A track's rigs ride in the album credits payload (`bySongId[songId].rigs`) and render under the performers in the credits sheet: rig name, the base instrument as a tappable gear link, accessories as labeled chips, and the tweak note in quotes.
+- **Demo.** Fernando Perdomo's "Folk-Pop Rig" is seeded (prod-only, marker-guarded in `post-merge.sh`) on *Waves* / "Beautiful Soul".
+
 ### SuperCredits™ badge (discovery)
 
 Apple surfaces small chips on albums/tracks for **Dolby Atmos**, **Lossless**, **Spatial Audio** — fans actively hunt for them. A `SuperCredits™` chip serves the same job: "this album took the trouble to credit every musician + show you their gear."

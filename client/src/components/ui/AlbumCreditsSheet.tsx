@@ -34,6 +34,22 @@ export type AlbumCreditsPerson = {
   photoUrl?: string | null;
 };
 
+/* A Rig attached to a track — the artist's named gear setup (base instrument
+   + accessory entries) plus an optional per-take tweak note. Shape mirrors
+   the TrackRigWithDetail payload from GET /api/songs/:id/credits. */
+export type SongRig = {
+  id: string;
+  rigName: string;
+  tweakNote?: string | null;
+  rig?: {
+    id: string;
+    name: string;
+    notes?: string | null;
+    instrument?: Instrument | null;
+    accessories?: Array<{ id: string; type: string; value: string }>;
+  } | null;
+};
+
 export type AlbumCreditsRow = {
   id: string;
   personId?: string | null;
@@ -454,6 +470,7 @@ const SLIDE_SPRING = { type: "spring", stiffness: 420, damping: 44, mass: 0.9 } 
    The container never resizes between the two views. */
 function CreditsSlider({
   groups,
+  rigs,
   eyebrow,
   title,
   subtitle,
@@ -471,6 +488,7 @@ function CreditsSlider({
   multiColumn,
 }: {
   groups: CreditGroup[];
+  rigs?: SongRig[];
   eyebrow: string;
   title: string;
   subtitle: string;
@@ -581,11 +599,98 @@ function CreditsSlider({
                   currentAlbumId={currentAlbumId}
                   multiColumn={multiColumn}
                 />
+                {rigs && rigs.length > 0 && (
+                  <RigSection rigs={rigs} onOpenInstrument={onOpenInstrument} />
+                )}
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/* ── Rig section ─────────────────────────────────────────────────────────
+   The artist's named gear setup for this track: a base instrument (tappable
+   into the gear sheet) plus accessory entries (Strings / Pick / Capo …) and
+   an optional per-take tweak note. Renders under the credit groups so the
+   "who played" list stays the headline; the "what they played it with" reads
+   as supporting detail. */
+function RigSection({
+  rigs,
+  onOpenInstrument,
+}: {
+  rigs: SongRig[];
+  onOpenInstrument: (instrument: Instrument, tuningNotes?: string) => void;
+}) {
+  return (
+    <div className="px-5 mt-8" data-testid="section-track-rigs">
+      <p className="text-[color:var(--brand-blue)] text-xs font-semibold uppercase tracking-wider mb-3">
+        Rig
+      </p>
+      <div className="space-y-3">
+        {rigs.map((tr) => {
+          const base = tr.rig?.instrument ?? null;
+          const accessories = tr.rig?.accessories ?? [];
+          return (
+            <div
+              key={tr.id}
+              className="rounded-2xl bg-white/[0.04] border border-white/10 p-4"
+              data-testid={`rig-${tr.id}`}
+            >
+              <p className="text-fan-primary text-base font-semibold leading-tight" data-testid={`text-rig-name-${tr.id}`}>
+                {tr.rigName}
+              </p>
+              {base && (
+                <button
+                  type="button"
+                  onClick={() => onOpenInstrument(base, tr.tweakNote ?? undefined)}
+                  className="mt-3 flex items-center gap-3 w-full text-left active:opacity-70"
+                  data-testid={`button-rig-base-${tr.id}`}
+                >
+                  {base.photoUrl ? (
+                    <img
+                      src={base.photoUrl}
+                      alt={base.name}
+                      className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <span className="w-12 h-12 rounded-lg bg-white/10 flex-shrink-0" />
+                  )}
+                  <span className="min-w-0">
+                    <span className="block text-fan-primary text-sm font-medium truncate">
+                      {base.name}
+                    </span>
+                    {base.category && (
+                      <span className="block text-fan-faint text-xs truncate">{base.category}</span>
+                    )}
+                  </span>
+                </button>
+              )}
+              {accessories.length > 0 && (
+                <div className="mt-3 space-y-1.5">
+                  {accessories.map((a) => (
+                    <div
+                      key={a.id}
+                      className="flex items-baseline justify-between gap-4 text-sm"
+                      data-testid={`rig-accessory-${a.id}`}
+                    >
+                      <span className="text-fan-faint flex-shrink-0">{a.type}</span>
+                      <span className="text-fan-secondary text-right">{a.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {tr.tweakNote && (
+                <p className="text-fan-secondary text-sm mt-3 leading-snug italic" data-testid={`text-rig-tweak-${tr.id}`}>
+                  “{tr.tweakNote}”
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -617,6 +722,7 @@ function CreditsSheetHost({
   title,
   subtitle,
   groups,
+  rigs,
   albumId,
   album,
   trackExtra,
@@ -631,6 +737,8 @@ function CreditsSheetHost({
   title: string;
   subtitle: string;
   groups: CreditGroup[];
+  /** Named gear setups attached to this track (per-track surfaces only). */
+  rigs?: SongRig[];
   /** Apple song-page header for per-track surfaces (album credits omit it). */
   songHeader?: CreditsSongHeader;
   /** Current album id — lets the rich-profile gate count a track on THIS
@@ -677,6 +785,7 @@ function CreditsSheetHost({
       >
         <CreditsSlider
           groups={groups}
+          rigs={rigs}
           eyebrow={eyebrow}
           title={title}
           subtitle={subtitle}
@@ -755,6 +864,7 @@ export function SongCreditsSheet({
   albumTitle,
   artist,
   credits,
+  rigs,
   album,
   resolveInstrument,
   resolvePersonContext,
@@ -768,6 +878,8 @@ export function SongCreditsSheet({
   artist: string;
   /** Single-song credits payload (one bySongId entry). */
   credits: AlbumCreditsPayload;
+  /** Named gear setups attached to this track. */
+  rigs?: SongRig[];
   album: Album;
   resolveInstrument: (instrumentId?: string) => Instrument | undefined;
   resolvePersonContext: (personId: string, role: string) => CreditsPersonView | null;
@@ -784,6 +896,7 @@ export function SongCreditsSheet({
       title={songTitle}
       subtitle={`${artist} · ${albumTitle}`}
       groups={groups}
+      rigs={rigs}
       albumId={albumId}
       album={album}
       trackExtra={{ songId }}

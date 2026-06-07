@@ -5590,3 +5590,149 @@ SQL
 }
 backfill_task_1459_sourceless_videos dev  "${DATABASE_URL:-}"
 backfill_task_1459_sourceless_videos prod "${PROD_DATABASE_URL:-}"
+
+# Task #1643 — Rig tables (rigs, rig_accessories, track_rigs). A "Rig" is a
+# named gear bundle (base instrument + accessory lines) attachable to a track
+# with a per-track tweak note. New tables only — purely additive, idempotent,
+# safe to run on every merge / on DBs that already have them. Applied to both
+# dev and prod so the schema-drift guard (which diffs schema.ts → both DBs)
+# stays green the moment the schema lands.
+migrate_task_1643_rigs() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1643 rig tables on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS rigs (
+  id                    varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  name                  text NOT NULL,
+  instrument_id         varchar REFERENCES instruments(id) ON DELETE SET NULL,
+  notes                 text,
+  deleted_at            timestamp,
+  deleted_by_user_id    varchar,
+  deleted_via_parent_id varchar
+);
+CREATE TABLE IF NOT EXISTS rig_accessories (
+  id        varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  rig_id    varchar NOT NULL REFERENCES rigs(id) ON DELETE CASCADE,
+  type      text NOT NULL,
+  value     text NOT NULL,
+  position  integer NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS track_rigs (
+  id                    varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  song_id               varchar NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+  rig_id                varchar REFERENCES rigs(id) ON DELETE SET NULL,
+  rig_name              text NOT NULL,
+  tweak_note            text,
+  position              integer NOT NULL DEFAULT 0,
+  deleted_at            timestamp,
+  deleted_by_user_id    varchar,
+  deleted_via_parent_id varchar
+);
+CREATE INDEX IF NOT EXISTS rig_accessories_rig_id_idx ON rig_accessories(rig_id);
+CREATE INDEX IF NOT EXISTS track_rigs_song_id_idx ON track_rigs(song_id);
+COMMIT;
+SQL
+  then
+    echo "post-merge: task-1643 rig tables ok on $label"
+  else
+    echo "post-merge: WARNING — task-1643 rig tables failed on $label (continuing)"
+  fi
+}
+migrate_task_1643_rigs dev  "${DATABASE_URL:-}"
+migrate_task_1643_rigs prod "${PROD_DATABASE_URL:-}"
+
+# Task #1643 — Seed a demo Rig for Fernando Perdomo. Marker-guarded via
+# post_merge_data_backfills so it runs exactly once per DB and never clobbers
+# an operator edit. Fernando is prod-only data, so this no-ops (without
+# stamping the marker) on the throwaway task/dev DBs and only lands the demo
+# where his catalog actually exists. Idempotent + best-effort: a failure here
+# never blocks a merge.
+seed_task_1643_demo_rig() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1643 demo rig on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+DO $$
+DECLARE
+  v_person varchar;
+  v_song   varchar;
+  v_instr  varchar;
+  v_rig    varchar;
+BEGIN
+  IF EXISTS (SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_1643_demo_rig') THEN
+    RAISE NOTICE 'task-1643 demo rig already applied — skipping';
+    RETURN;
+  END IF;
+
+  SELECT id INTO v_person
+  FROM people
+  WHERE name ILIKE 'Fernando Perdomo' AND deleted_at IS NULL
+  ORDER BY id LIMIT 1;
+  IF v_person IS NULL THEN
+    RAISE NOTICE 'task-1643 demo rig: Fernando Perdomo not in this DB — skipping (prod-only demo)';
+    RETURN;
+  END IF;
+
+  -- Pick a track he performs on, deterministically (nicest title first).
+  SELECT tp.song_id INTO v_song
+  FROM track_performers tp
+  JOIN songs s ON s.id = tp.song_id
+  WHERE tp.person_id = v_person AND tp.deleted_at IS NULL
+  ORDER BY s.title, tp.song_id
+  LIMIT 1;
+  IF v_song IS NULL THEN
+    RAISE NOTICE 'task-1643 demo rig: no Fernando track found — skipping';
+    RETURN;
+  END IF;
+
+  -- Base instrument: prefer the 1973 Martin D-28 (matches the gear redesign
+  -- mockup), else fall back to any guitar.
+  SELECT id INTO v_instr FROM instruments WHERE id = 'i-martin-1973-d28';
+  IF v_instr IS NULL THEN
+    SELECT id INTO v_instr
+    FROM instruments
+    WHERE short_category = 'Guitar' AND deleted_at IS NULL
+    ORDER BY id LIMIT 1;
+  END IF;
+
+  INSERT INTO rigs (name, instrument_id, notes)
+  VALUES (
+    'Fernando''s Folk-Pop Rig',
+    v_instr,
+    'Fernando''s go-to acoustic setup on Waves — warm fingerstyle tone.'
+  )
+  RETURNING id INTO v_rig;
+
+  INSERT INTO rig_accessories (rig_id, type, value, position) VALUES
+    (v_rig, 'Strings', 'D''Addario EJ16 Phosphor Bronze (.012–.053)', 0),
+    (v_rig, 'Pick',    'Dunlop Tortex .60mm', 1),
+    (v_rig, 'Capo',    'Shubb C1', 2),
+    (v_rig, 'Tuning',  'Standard, half-step down', 3);
+
+  INSERT INTO track_rigs (song_id, rig_id, rig_name, tweak_note, position)
+  VALUES (
+    v_song,
+    v_rig,
+    'Fernando''s Folk-Pop Rig',
+    'Capo moved to the 2nd fret for this take.',
+    0
+  );
+
+  INSERT INTO post_merge_data_backfills (name) VALUES ('task_1643_demo_rig');
+  RAISE NOTICE 'task-1643 demo rig seeded on song %', v_song;
+END $$;
+SQL
+  then
+    echo "post-merge: task-1643 demo rig ok on $label"
+  else
+    echo "post-merge: WARNING — task-1643 demo rig failed on $label (continuing)"
+  fi
+}
+seed_task_1643_demo_rig dev  "${DATABASE_URL:-}"
+seed_task_1643_demo_rig prod "${PROD_DATABASE_URL:-}"

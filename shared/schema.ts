@@ -1386,6 +1386,53 @@ export const albumCredits = pgTable("album_credits", {
   ...softDeleteCols,
 });
 
+// ----- Rigs (a named gear package) --------------------------------------
+// Task #1643 — a "Rig" is the artist's setup as a *named bundle*: one base
+// instrument (the headline piece, e.g. "1937 Martin D-28") plus any number
+// of accessory entries (strings, pick, capo, reeds, mute, …). It's reusable
+// across tracks — Fernando's "Out to Sea acoustic rig" can be attached to
+// several songs — and each attachment can carry a per-track tweak note
+// ("capo 2, dropped to DADGAD for this take"). The accessory `type` list is
+// category-aware (see ACCESSORY_TYPES_BY_CATEGORY in shared/categories.ts)
+// but stored as free text so the data outlives any list edit.
+export const rigs = pgTable("rigs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  // Base instrument — the headline piece the rig is built around. SET NULL
+  // so deleting an instrument doesn't orphan the rig; the name snapshot on
+  // any track attachment keeps the credit renderable.
+  instrumentId: varchar("instrument_id").references(() => instruments.id, {
+    onDelete: "set null",
+  }),
+  // Optional general note about the rig as a whole (not track-specific).
+  notes: text("notes"),
+  ...softDeleteCols,
+});
+
+// One accessory line on a rig: type + value. Replaced wholesale when the
+// operator edits a rig's accessory list, so no soft-delete here — they
+// CASCADE with the parent rig.
+export const rigAccessories = pgTable("rig_accessories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  rigId: varchar("rig_id").notNull().references(() => rigs.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // "Strings" / "Pick" / "Capo" / "Reeds" …
+  value: text("value").notNull(), // "D'Addario EJ16 Phosphor Bronze"
+  position: integer("position").notNull().default(0),
+});
+
+// Attaches a Rig to a track, with an optional per-track tweak note. Mirrors
+// the credit-table delete policy: songId CASCADE, rigId SET NULL with a
+// `rigName` snapshot so a deleted rig still renders historically.
+export const trackRigs = pgTable("track_rigs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  songId: varchar("song_id").notNull().references(() => songs.id, { onDelete: "cascade" }),
+  rigId: varchar("rig_id").references(() => rigs.id, { onDelete: "set null" }),
+  rigName: text("rig_name").notNull(), // snapshot of rig.name at attach time
+  tweakNote: text("tweak_note"), // "Capo 2, DADGAD for this take"
+  position: integer("position").notNull().default(0),
+  ...softDeleteCols,
+});
+
 // ----- Organizations (labels-publishers as legal entities) --------------
 // A muso-style "Organizations" credit (Record Label, Publisher, PRO, etc.)
 // is a *legal entity*, not a person. We already have a richer `labels` table
@@ -3178,6 +3225,35 @@ export type TrackPerformer = typeof trackPerformers.$inferSelect;
 export const insertAlbumCreditSchema = createInsertSchema(albumCredits).omit({ id: true });
 export type InsertAlbumCredit = z.infer<typeof insertAlbumCreditSchema>;
 export type AlbumCredit = typeof albumCredits.$inferSelect;
+
+// Task #1643 — Rig model. A named gear bundle (base instrument + accessory
+// lines), attachable to a track with a per-track tweak note.
+export const insertRigSchema = createInsertSchema(rigs).omit({ id: true });
+export type InsertRig = z.infer<typeof insertRigSchema>;
+export type Rig = typeof rigs.$inferSelect;
+
+export const insertRigAccessorySchema = createInsertSchema(rigAccessories).omit({ id: true });
+export type InsertRigAccessory = z.infer<typeof insertRigAccessorySchema>;
+export type RigAccessory = typeof rigAccessories.$inferSelect;
+
+export const insertTrackRigSchema = createInsertSchema(trackRigs).omit({ id: true });
+export type InsertTrackRig = z.infer<typeof insertTrackRigSchema>;
+export type TrackRig = typeof trackRigs.$inferSelect;
+
+// Enriched read shape: a rig with its accessory lines and (when still
+// linked) its base instrument hydrated, so a single fetch renders the whole
+// rig card on the fan + admin surfaces.
+export type RigWithDetail = Rig & {
+  accessories: RigAccessory[];
+  instrument: Instrument | null;
+};
+
+// A rig as attached to a track: the attachment row (tweak note) plus the
+// hydrated rig. `rig` is null only if the underlying rig was hard-deleted
+// (SET NULL); the `rigName` snapshot on the attachment still renders.
+export type TrackRigWithDetail = TrackRig & {
+  rig: RigWithDetail | null;
+};
 
 export const insertPersonAliasSchema = createInsertSchema(personAliases).omit({ id: true });
 export type InsertPersonAlias = z.infer<typeof insertPersonAliasSchema>;

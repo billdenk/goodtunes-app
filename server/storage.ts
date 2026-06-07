@@ -102,6 +102,16 @@ import {
   type InsertAdminInvite,
   trackWriters,
   trackPerformers,
+  rigs,
+  rigAccessories,
+  trackRigs,
+  type Rig,
+  type InsertRig,
+  type RigAccessory,
+  type InsertRigAccessory,
+  type TrackRig,
+  type RigWithDetail,
+  type TrackRigWithDetail,
   trackPublishingSplits,
   trackMechanicalSplits,
   type TrackPublishingSplit,
@@ -282,6 +292,30 @@ export interface IStorage {
   // confirm dialog so the operator sees "Used on 12 track credits"
   // before they cascade.
   getInstrumentUsage(id: string): Promise<{ performerCount: number }>;
+
+  // ----- Rigs (Task #1643) — named gear bundles -----------------------
+  // A rig = base instrument + accessory lines, reusable across tracks.
+  listRigs(): Promise<RigWithDetail[]>;
+  getRigById(id: string): Promise<RigWithDetail | undefined>;
+  createRig(
+    data: InsertRig,
+    accessories: Array<Pick<InsertRigAccessory, "type" | "value">>,
+  ): Promise<RigWithDetail>;
+  updateRig(
+    id: string,
+    data: Partial<Pick<Rig, "name" | "instrumentId" | "notes">>,
+    accessories?: Array<Pick<InsertRigAccessory, "type" | "value">>,
+  ): Promise<RigWithDetail | undefined>;
+  deleteRig(id: string, userId?: string | null): Promise<void>;
+  // Track ↔ rig attachment with an optional per-track tweak note.
+  getSongRigs(songId: string): Promise<TrackRigWithDetail[]>;
+  attachRigToTrack(args: {
+    songId: string;
+    rigId: string;
+    tweakNote?: string | null;
+    position?: number;
+  }): Promise<TrackRig>;
+  detachTrackRig(id: string, userId?: string | null): Promise<void>;
 
   // Label ENTITY CRUD. Each album.labelId points here (nullable, SET NULL).
   // Editing the label propagates to every album released on it.
@@ -1961,6 +1995,136 @@ export class DbStorage implements IStorage {
     return { performerCount: row?.c ?? 0 };
   }
 
+  // ----- Rigs (Task #1643) --------------------------------------------
+  // Hydrate a set of rig ids into RigWithDetail (accessories + base
+  // instrument). Used by every rig read so the fan/admin card renders in a
+  // single fetch. Skips soft-deleted rigs and soft-deleted base instruments.
+  private async loadRigDetail(rigIds: string[]): Promise<Map<string, RigWithDetail>> {
+    const out = new Map<string, RigWithDetail>();
+    if (rigIds.length === 0) return out;
+    const [rigRows, accRows] = await Promise.all([
+      db.select().from(rigs).where(and(inArray(rigs.id, rigIds), isNull(rigs.deletedAt))),
+      db.select().from(rigAccessories).where(inArray(rigAccessories.rigId, rigIds)).orderBy(asc(rigAccessories.position)),
+    ]);
+    const instrumentIds = Array.from(new Set(rigRows.map((r) => r.instrumentId).filter((v): v is string => !!v)));
+    const instrumentRows = instrumentIds.length
+      ? await db.select().from(instruments).where(and(inArray(instruments.id, instrumentIds), isNull(instruments.deletedAt)))
+      : ([] as Instrument[]);
+    const instrumentsById = new Map(instrumentRows.map((i) => [i.id, i]));
+    const accByRig = new Map<string, RigAccessory[]>();
+    for (const a of accRows) {
+      const list = accByRig.get(a.rigId) ?? [];
+      list.push(a);
+      accByRig.set(a.rigId, list);
+    }
+    for (const r of rigRows) {
+      out.set(r.id, {
+        ...r,
+        accessories: accByRig.get(r.id) ?? [],
+        instrument: r.instrumentId ? instrumentsById.get(r.instrumentId) ?? null : null,
+      });
+    }
+    return out;
+  }
+
+  async listRigs(): Promise<RigWithDetail[]> {
+    const rigRows = await db.select().from(rigs)
+      .where(isNull(rigs.deletedAt))
+      .orderBy(asc(rigs.name));
+    if (rigRows.length === 0) return [];
+    const detail = await this.loadRigDetail(rigRows.map((r) => r.id));
+    return rigRows.map((r) => detail.get(r.id)).filter((r): r is RigWithDetail => !!r);
+  }
+
+  async getRigById(id: string): Promise<RigWithDetail | undefined> {
+    const detail = await this.loadRigDetail([id]);
+    return detail.get(id);
+  }
+
+  async createRig(
+    data: InsertRig,
+    accessories: Array<Pick<InsertRigAccessory, "type" | "value">>,
+  ): Promise<RigWithDetail> {
+    const created = await db.transaction(async (tx) => {
+      const [rig] = await tx.insert(rigs).values(data as any).returning();
+      if (accessories.length) {
+        await tx.insert(rigAccessories).values(
+          accessories.map((a, i) => ({ rigId: rig.id, type: a.type, value: a.value, position: i })),
+        );
+      }
+      return rig;
+    });
+    return (await this.getRigById(created.id))!;
+  }
+
+  async updateRig(
+    id: string,
+    data: Partial<Pick<Rig, "name" | "instrumentId" | "notes">>,
+    accessories?: Array<Pick<InsertRigAccessory, "type" | "value">>,
+  ): Promise<RigWithDetail | undefined> {
+    await db.transaction(async (tx) => {
+      if (Object.keys(data).length > 0) {
+        await tx.update(rigs).set(data as any).where(eq(rigs.id, id));
+      }
+      // Accessories are replaced wholesale when provided (cascade-safe rebuild).
+      if (accessories) {
+        await tx.delete(rigAccessories).where(eq(rigAccessories.rigId, id));
+        if (accessories.length) {
+          await tx.insert(rigAccessories).values(
+            accessories.map((a, i) => ({ rigId: id, type: a.type, value: a.value, position: i })),
+          );
+        }
+      }
+    });
+    return this.getRigById(id);
+  }
+
+  async deleteRig(id: string, userId?: string | null): Promise<void> {
+    // Soft-delete so any track attachment keeps its rigName snapshot; the
+    // attachment's rigId stays pointed at the now-hidden rig (no FK action
+    // on a soft delete), but reads filter rigs.deletedAt so the live rig
+    // detail resolves to null and only the snapshot name renders.
+    await db.update(rigs)
+      .set({ deletedAt: new Date(), deletedByUserId: userId ?? null })
+      .where(eq(rigs.id, id));
+  }
+
+  async getSongRigs(songId: string): Promise<TrackRigWithDetail[]> {
+    const rows = await db.select().from(trackRigs)
+      .where(and(eq(trackRigs.songId, songId), isNull(trackRigs.deletedAt)))
+      .orderBy(asc(trackRigs.position));
+    if (rows.length === 0) return [];
+    const detail = await this.loadRigDetail(
+      Array.from(new Set(rows.map((r) => r.rigId).filter((v): v is string => !!v))),
+    );
+    return rows.map((r) => ({ ...r, rig: r.rigId ? detail.get(r.rigId) ?? null : null }));
+  }
+
+  async attachRigToTrack(args: {
+    songId: string;
+    rigId: string;
+    tweakNote?: string | null;
+    position?: number;
+  }): Promise<TrackRig> {
+    const [rig] = await db.select().from(rigs)
+      .where(and(eq(rigs.id, args.rigId), isNull(rigs.deletedAt)));
+    if (!rig) throw new Error("Rig not found");
+    const [row] = await db.insert(trackRigs).values({
+      songId: args.songId,
+      rigId: args.rigId,
+      rigName: rig.name,
+      tweakNote: args.tweakNote ?? null,
+      position: args.position ?? 0,
+    }).returning();
+    return row;
+  }
+
+  async detachTrackRig(id: string, userId?: string | null): Promise<void> {
+    await db.update(trackRigs)
+      .set({ deletedAt: new Date(), deletedByUserId: userId ?? null })
+      .where(eq(trackRigs.id, id));
+  }
+
   // ----- Label ENTITY CRUD --------------------------------------------
   async getLabels(): Promise<Label[]> {
     return await db.select().from(labels)
@@ -2690,10 +2854,26 @@ export class DbStorage implements IStorage {
       // buttons don't render in the InstrumentSheet.
       this.loadEnrichedAttachments(instrumentIds, false),
     ]);
+    // Headline makers (the builder) for the redesigned gear surface — drives
+    // the eyebrow + 96×96 brand chip. One batched query, null when unlinked.
+    const makerIds = Array.from(new Set(
+      instrumentRows.map((i) => i.makerVendorId).filter((v): v is string => !!v),
+    ));
+    const makerRows = makerIds.length
+      ? await db.select().from(vendors).where(and(inArray(vendors.id, makerIds), isNull(vendors.deletedAt)))
+      : ([] as Vendor[]);
+    const makersById = new Map(makerRows.map((v) => [v.id, v]));
     const peopleById = new Map(peopleRows.map((p) => [p.id, p]));
     const instrumentsById = new Map(
-      instrumentRows.map((i) => [i.id, { ...i, vendors: vendorsByInstrument.get(i.id) ?? [] }]),
+      instrumentRows.map((i) => [i.id, {
+        ...i,
+        vendors: vendorsByInstrument.get(i.id) ?? [],
+        maker: i.makerVendorId ? makersById.get(i.makerVendorId) ?? null : null,
+      }]),
     );
+    // Task #1643 — rigs attached to this track (base instrument + accessories
+    // + per-track tweak note). Surfaced under the track's credits.
+    const rigList = await this.getSongRigs(songId);
     return {
       writers: writerRows.map((w) => ({ ...w, person: w.personId ? peopleById.get(w.personId) ?? null : null })),
       performers: performerRows.map((p) => ({
@@ -2701,6 +2881,7 @@ export class DbStorage implements IStorage {
         person: p.personId ? peopleById.get(p.personId) ?? null : null,
         instrument: p.instrumentId ? instrumentsById.get(p.instrumentId) ?? null : null,
       })),
+      rigs: rigList,
     };
   }
   async getAlbumCredits(albumId: string) {
@@ -2714,15 +2895,23 @@ export class DbStorage implements IStorage {
     const production = await this.listAlbumProductionCredits(albumId);
     if (songIds.length === 0) return { bySongId: {}, production };
 
-    // 2) All writers + performers for those songs in two queries.
-    const [writerRows, performerRows] = await Promise.all([
+    // 2) All writers + performers + rigs for those songs in three queries.
+    const [writerRows, performerRows, rigAttachRows] = await Promise.all([
       db.select().from(trackWriters)
         .where(and(inArray(trackWriters.songId, songIds), isNull(trackWriters.deletedAt)))
         .orderBy(asc(trackWriters.position)),
       db.select().from(trackPerformers)
         .where(and(inArray(trackPerformers.songId, songIds), isNull(trackPerformers.deletedAt)))
         .orderBy(asc(trackPerformers.position)),
+      db.select().from(trackRigs)
+        .where(and(inArray(trackRigs.songId, songIds), isNull(trackRigs.deletedAt)))
+        .orderBy(asc(trackRigs.position)),
     ]);
+    // Hydrate the distinct rig ids once (accessories + base instrument), then
+    // attach the detail back onto each track-rig row.
+    const rigDetail = await this.loadRigDetail(
+      Array.from(new Set(rigAttachRows.map((r) => r.rigId).filter((v): v is string => !!v))),
+    );
 
     // 3) Resolve the small set of distinct person + instrument ids in one
     //    query each (same enrichment as getSongCredits, batched across the album).
@@ -2752,18 +2941,25 @@ export class DbStorage implements IStorage {
         person: Person | null;
         instrument: (Instrument & { vendors: EnrichedInstrumentVendor[] }) | null;
       })[];
+      rigs: TrackRigWithDetail[];
     }> = {};
+    const ensureBucket = (songId: string) =>
+      bySongId[songId] ?? (bySongId[songId] = { writers: [], performers: [], rigs: [] });
     for (const w of writerRows) {
-      const bucket = bySongId[w.songId] ?? (bySongId[w.songId] = { writers: [], performers: [] });
+      const bucket = ensureBucket(w.songId);
       bucket.writers.push({ ...w, person: w.personId ? peopleById.get(w.personId) ?? null : null });
     }
     for (const p of performerRows) {
-      const bucket = bySongId[p.songId] ?? (bySongId[p.songId] = { writers: [], performers: [] });
+      const bucket = ensureBucket(p.songId);
       bucket.performers.push({
         ...p,
         person: p.personId ? peopleById.get(p.personId) ?? null : null,
         instrument: p.instrumentId ? instrumentsById.get(p.instrumentId) ?? null : null,
       });
+    }
+    for (const r of rigAttachRows) {
+      const bucket = ensureBucket(r.songId);
+      bucket.rigs.push({ ...r, rig: r.rigId ? rigDetail.get(r.rigId) ?? null : null });
     }
     return { bySongId, production };
   }

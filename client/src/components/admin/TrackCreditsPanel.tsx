@@ -8,6 +8,7 @@ import {
   Check,
   ChevronDown,
   Download,
+  Guitar,
   Pencil,
   Plus,
   Search,
@@ -35,6 +36,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/Spinner";
+import { accessoryTypesFor } from "@shared/categories";
 
 // Per-track Credits panel.
 //
@@ -1604,6 +1606,447 @@ function ImportMenu({
   );
 }
 
+/* ─── Rig builder + attach ────────────────────────────────────────── */
+
+type RigAccessoryDraft = { type: string; value: string };
+type RigDetailLite = {
+  id: string;
+  name: string;
+  instrumentId: string | null;
+  notes: string | null;
+  accessories: { id?: string; type: string; value: string }[];
+  instrument: { id: string; name: string; photoUrl?: string | null } | null;
+};
+type TrackRigRow = {
+  id: string;
+  songId: string;
+  rigId: string | null;
+  rigName: string | null;
+  tweakNote: string | null;
+  rig: RigDetailLite | null;
+};
+
+function RigPanel({
+  songId,
+  albumId,
+  instruments,
+}: {
+  songId: string;
+  albumId: string;
+  instruments: AdminInstrumentLite[];
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data: attached = [], isLoading } = useQuery<TrackRigRow[]>({
+    queryKey: ["/api/songs", songId, "rigs"],
+    queryFn: async () => {
+      const r = await fetch(`/api/songs/${songId}/rigs`);
+      if (!r.ok) return [];
+      return r.json();
+    },
+  });
+  const { data: allRigs = [] } = useQuery<RigDetailLite[]>({
+    queryKey: ["/api/rigs"],
+  });
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["/api/songs", songId, "rigs"] });
+    qc.invalidateQueries({ queryKey: ["/api/rigs"] });
+    qc.invalidateQueries({ queryKey: ["/api/albums", albumId, "credits"] });
+  };
+
+  // Build-a-rig form state.
+  const [building, setBuilding] = useState(false);
+  const [name, setName] = useState("");
+  const [instrumentId, setInstrumentId] = useState("");
+  const [notes, setNotes] = useState("");
+  const [accessories, setAccessories] = useState<RigAccessoryDraft[]>([]);
+
+  const pickedInstrument =
+    instruments.find((i) => i.id === instrumentId) ?? null;
+  const typeSuggestions = accessoryTypesFor(pickedInstrument?.category ?? null);
+
+  const resetBuilder = () => {
+    setName("");
+    setInstrumentId("");
+    setNotes("");
+    setAccessories([]);
+    setBuilding(false);
+  };
+
+  const createMut = useMutation({
+    mutationFn: async () => {
+      const cleanAcc = accessories.filter(
+        (a) => a.type.trim() && a.value.trim(),
+      );
+      const res = await apiRequest("POST", "/api/admin/rigs", {
+        name: name.trim(),
+        instrumentId: instrumentId || null,
+        notes: notes.trim() || null,
+        accessories: cleanAcc,
+      });
+      const rig = await res.json();
+      await apiRequest("POST", `/api/admin/songs/${songId}/rigs`, {
+        rigId: rig.id,
+      });
+      return rig;
+    },
+    onSuccess: () => {
+      invalidate();
+      resetBuilder();
+      toast({ description: "Rig built and attached to this track." });
+    },
+    onError: (e) =>
+      toast({
+        variant: "destructive",
+        description: e instanceof Error ? e.message : "Could not build rig",
+      }),
+  });
+
+  // Attach-an-existing-rig state.
+  const [attachRigId, setAttachRigId] = useState("");
+  const [tweakNote, setTweakNote] = useState("");
+  const attachMut = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", `/api/admin/songs/${songId}/rigs`, {
+        rigId: attachRigId,
+        tweakNote: tweakNote.trim() || null,
+      });
+    },
+    onSuccess: () => {
+      invalidate();
+      setAttachRigId("");
+      setTweakNote("");
+      toast({ description: "Rig attached to this track." });
+    },
+    onError: (e) =>
+      toast({
+        variant: "destructive",
+        description: e instanceof Error ? e.message : "Could not attach rig",
+      }),
+  });
+
+  const detachMut = useMutation({
+    mutationFn: async (trackRigId: string) => {
+      await apiRequest("DELETE", `/api/admin/track-rigs/${trackRigId}`);
+    },
+    onSuccess: () => {
+      invalidate();
+      toast({ description: "Rig removed from this track." });
+    },
+    onError: (e) =>
+      toast({
+        variant: "destructive",
+        description: e instanceof Error ? e.message : "Could not remove rig",
+      }),
+  });
+
+  const attachedRigIds = new Set(
+    attached.map((a) => a.rigId).filter(Boolean) as string[],
+  );
+  const attachable = allRigs.filter((r) => !attachedRigIds.has(r.id));
+
+  const selectCls =
+    "h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40";
+
+  return (
+    <section
+      data-testid={`section-rigs-${songId}`}
+      className="rounded-xl border border-slate-200 bg-white px-4 py-4 mt-4"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Guitar className="w-4 h-4 text-slate-400" />
+        <h3 className="text-sm font-bold text-slate-900">Rigs</h3>
+        <span className="text-xs text-slate-400">
+          Named gear bundles played on this track
+        </span>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
+          <Spinner className="h-3.5 w-3.5" /> Loading rigs…
+        </div>
+      ) : attached.length === 0 ? (
+        <p className="text-xs text-slate-400 py-1">
+          No rigs attached to this track yet.
+        </p>
+      ) : (
+        <ul className="space-y-2.5" data-testid={`list-track-rigs-${songId}`}>
+          {attached.map((tr) => (
+            <li
+              key={tr.id}
+              className="rounded-lg border border-slate-200 bg-slate-50/60 p-3"
+              data-testid={`track-rig-${tr.id}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-900 truncate">
+                      {tr.rig?.name ?? tr.rigName ?? "Rig"}
+                    </span>
+                    {tr.rig?.instrument && (
+                      <Link
+                        href={`/admin/instruments/${tr.rig.instrument.id}`}
+                        className="inline-flex items-center gap-1 rounded-full bg-white ring-1 ring-slate-200 px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-100"
+                        data-testid={`link-rig-instrument-${tr.id}`}
+                      >
+                        {tr.rig.instrument.photoUrl ? (
+                          <img
+                            src={tr.rig.instrument.photoUrl}
+                            alt=""
+                            className="w-3.5 h-3.5 rounded-sm object-cover"
+                          />
+                        ) : (
+                          <Guitar className="w-3 h-3 text-slate-400" />
+                        )}
+                        {tr.rig.instrument.name}
+                      </Link>
+                    )}
+                  </div>
+                  {tr.rig && tr.rig.accessories.length > 0 && (
+                    <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                      {tr.rig.accessories.map((a, idx) => (
+                        <li
+                          key={a.id ?? idx}
+                          className="inline-flex items-center gap-1 rounded-full bg-white ring-1 ring-slate-200 px-2 py-0.5 text-xs text-slate-600"
+                        >
+                          <span className="font-semibold text-slate-500">
+                            {a.type}
+                          </span>
+                          <span>{a.value}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {tr.tweakNote && (
+                    <p className="mt-1.5 text-xs text-slate-500 italic">
+                      “{tr.tweakNote}”
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => detachMut.mutate(tr.id)}
+                  disabled={detachMut.isPending}
+                  className="flex-shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-40"
+                  data-testid={`button-detach-rig-${tr.id}`}
+                  aria-label="Remove rig from track"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Attach an existing rig */}
+      {attachable.length > 0 && (
+        <div className="mt-4 rounded-lg border border-slate-200 p-3">
+          <Label className="text-xs font-semibold text-slate-600">
+            Attach an existing rig
+          </Label>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <select
+              value={attachRigId}
+              onChange={(e) => setAttachRigId(e.target.value)}
+              className={selectCls}
+              data-testid="select-attach-rig"
+            >
+              <option value="">Choose a rig…</option>
+              {attachable.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+            <Input
+              value={tweakNote}
+              onChange={(e) => setTweakNote(e.target.value)}
+              placeholder="Per-track tweak (optional)"
+              className="h-9 text-sm"
+              data-testid="input-attach-rig-tweak"
+            />
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => attachMut.mutate()}
+              disabled={!attachRigId || attachMut.isPending}
+              data-testid="button-attach-rig"
+              className="flex-shrink-0"
+            >
+              {attachMut.isPending ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                "Attach"
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Build a new rig */}
+      <div className="mt-3">
+        {!building ? (
+          <button
+            type="button"
+            onClick={() => setBuilding(true)}
+            className="inline-flex items-center gap-1.5 rounded-md text-sm font-semibold text-[var(--brand-blue)] hover:underline"
+            data-testid="button-build-rig"
+          >
+            <Plus className="w-4 h-4" /> Build a new rig
+          </button>
+        ) : (
+          <div className="rounded-lg border border-slate-200 p-3 space-y-3">
+            <div>
+              <Label className="text-xs font-semibold text-slate-600">
+                Rig name
+              </Label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Fernando's Folk Rig"
+                className="mt-1 h-9 text-sm"
+                data-testid="input-rig-name"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-slate-600">
+                Base instrument
+              </Label>
+              <select
+                value={instrumentId}
+                onChange={(e) => setInstrumentId(e.target.value)}
+                className={`${selectCls} mt-1`}
+                data-testid="select-rig-instrument"
+              >
+                <option value="">None</option>
+                {instruments.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold text-slate-600">
+                  Accessories
+                </Label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAccessories((a) => [...a, { type: "", value: "" }])
+                  }
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand-blue)] hover:underline"
+                  data-testid="button-add-accessory"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add
+                </button>
+              </div>
+              <datalist id={`accessory-types-${songId}`}>
+                {typeSuggestions.map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
+              {accessories.length === 0 ? (
+                <p className="mt-1 text-xs text-slate-400">
+                  No accessories — add strings, picks, settings, etc.
+                </p>
+              ) : (
+                <ul className="mt-2 space-y-2">
+                  {accessories.map((a, idx) => (
+                    <li key={idx} className="flex items-center gap-2">
+                      <Input
+                        value={a.type}
+                        onChange={(e) =>
+                          setAccessories((arr) =>
+                            arr.map((x, i) =>
+                              i === idx ? { ...x, type: e.target.value } : x,
+                            ),
+                          )
+                        }
+                        list={`accessory-types-${songId}`}
+                        placeholder="Type"
+                        className="h-9 text-sm sm:w-40"
+                        data-testid={`input-accessory-type-${idx}`}
+                      />
+                      <Input
+                        value={a.value}
+                        onChange={(e) =>
+                          setAccessories((arr) =>
+                            arr.map((x, i) =>
+                              i === idx ? { ...x, value: e.target.value } : x,
+                            ),
+                          )
+                        }
+                        placeholder="Value (e.g. D'Addario .012s)"
+                        className="h-9 text-sm flex-1"
+                        data-testid={`input-accessory-value-${idx}`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAccessories((arr) =>
+                            arr.filter((_, i) => i !== idx),
+                          )
+                        }
+                        className="flex-shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                        data-testid={`button-remove-accessory-${idx}`}
+                        aria-label="Remove accessory"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-slate-600">
+                Notes
+              </Label>
+              <Input
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Optional — how this rig is set up"
+                className="mt-1 h-9 text-sm"
+                data-testid="input-rig-notes"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => createMut.mutate()}
+                disabled={!name.trim() || createMut.isPending}
+                data-testid="button-save-rig"
+              >
+                {createMut.isPending ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  "Build & attach"
+                )}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={resetBuilder}
+                disabled={createMut.isPending}
+                data-testid="button-cancel-rig"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /* ─── Top-level panel ─────────────────────────────────────────────── */
 
 export default function TrackCreditsPanel({
@@ -1735,6 +2178,7 @@ export default function TrackCreditsPanel({
           )}
         </div>
       </div>
+      <RigPanel songId={songId} albumId={albumId} instruments={instruments} />
     </div>
   );
 }

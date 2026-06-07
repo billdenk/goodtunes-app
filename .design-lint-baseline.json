@@ -11641,6 +11641,121 @@
   },
   {
     "rule": "brand-hex-literal",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<svg viewBox=\"0 0 24 24\" fill={isBookmarked ? \"#4AFFCA\" : \"none\"} stroke={isBookmarked ? \"#4AFFCA\" : \"currentColor\"} strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\" aria-hidden=\"true\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "style={{ height: \"32%\", background: \"linear-gradient(to bottom, rgba(0,6,43,0) 0%, rgba(0,6,43,0.45) 55%, #00062B 100%)\" }}"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<span className=\"w-9 h-9 rounded-lg bg-white flex items-center justify-center text-[#00062B] text-[14px] font-bold flex-shrink-0 overflow-hidden\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "// the bottom fade into #00062B is seamless. `vivid` brightens it for the"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<span className=\"text-[11px] font-semibold uppercase tracking-[0.2em] block text-fan-faint\" data-testid=\"text-gear-eyebrow\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<h1 className=\"text-fan-primary font-bold leading-tight tracking-tight mt-1.5 text-[26px]\" data-testid=\"text-gear-name\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<p className=\"text-[15px] mt-1 leading-snug text-fan-secondary\" data-testid=\"text-gear-subtitle\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<span className=\"inline-flex items-center mt-2 px-2.5 py-1 rounded-full text-[12px] font-semibold text-fan-primary\" style={{ background: \"rgba(255,255,255,0.08)\" }} data-testid=\"pill-gear-tuning\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<span className=\"w-full h-full flex items-center justify-center text-white text-[30px] font-bold\">{maker.name.charAt(0)}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<p className=\"text-[14px] leading-relaxed mt-3 whitespace-pre-line text-fan-secondary\" data-testid=\"text-gear-overview\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<span className=\"text-[12px] font-medium flex-shrink-0 pr-4 text-fan-faint\">{row.label}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<span className=\"text-fan-primary text-[13px] text-right leading-snug\">{row.value}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<p className=\"text-[12px] mt-1 text-fan-faint\">From the artists in your library</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<span className=\"text-fan-primary text-[11px] font-semibold mt-2 text-center leading-tight line-clamp-2\" style={{ width: 78 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<span className=\"w-9 h-9 rounded-lg bg-white flex items-center justify-center text-[#00062B] text-[14px] font-bold flex-shrink-0 overflow-hidden\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<span className=\"text-fan-primary text-[13px] font-semibold leading-tight truncate\">{v.name}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "{v.tagline && <span className=\"text-[11px] leading-tight truncate text-fan-faint\">{v.tagline}</span>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<p className=\"text-[11px] leading-relaxed text-fan-faint\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "return <h2 className=\"text-fan-primary text-[22px] font-bold leading-tight tracking-tight\">{title}</h2>;"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<p className=\"text-fan-primary text-[14px] leading-snug italic\">“{note.quote}”</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<span className=\"text-fan-primary text-[12px] font-semibold\">— {note.person.name}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "{note.albumNote && <span className=\"text-[11px] text-fan-faint\">{note.albumNote}</span>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/gear/GearDetailBody.tsx",
+    "snippet": "<span className=\"text-white text-[14px] font-semibold tabular-nums\">{index + 1} / {photos.length}</span>"
+  },
+  {
+    "rule": "brand-hex-literal",
     "file": "client/src/components/GlobalErrorBoundary.tsx",
     "snippet": "\"background:#FF5470\","
   },
@@ -17882,31 +17997,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "fill={isBookmarked ? \"#4AFFCA\" : \"none\"}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "stroke={isBookmarked ? \"#4AFFCA\" : \"currentColor\"}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "self-hide when their content is empty. Underline is #319ED8 (brand"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "style={{ background: \"#319ED8\" }}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<span className=\"text-[#00062B] text-[13px] font-bold\">{v.name.charAt(0)}</span>"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<svg viewBox=\"0 0 24 24\" fill={isBookmarked ? \"#4AFFCA\" : \"none\"} stroke={isBookmarked ? \"#4AFFCA\" : \"currentColor\"} strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\" aria-hidden=\"true\">"
   },
   {
@@ -17933,6 +18023,11 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<div className=\"px-5 pt-5 pb-0\" style={{ background: \"#00062B\" }}>"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/AlbumDetail.tsx",
+    "snippet": "style={{ background: \"#319ED8\" }}"
   },
   {
     "rule": "brand-hex-literal",
@@ -18137,91 +18232,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-[12px] font-medium mb-1\" style={{ color: \"rgba(235,235,245,0.55)\" }}>{instrument.category}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<h2 className=\"text-fan-primary text-[26px] font-bold leading-tight tracking-tight\">{instrument.name}</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-[15px] mt-1.5\" style={{ color: \"rgba(235,235,245,0.55)\" }}>Tuning · {tuningNotes}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "className=\"relative pb-2.5 text-[15px] font-semibold active:opacity-80\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<span className=\"ml-1.5 text-[13px] font-medium\" style={{ color: \"rgba(235,235,245,0.45)\" }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<h3 className=\"text-fan-primary text-[22px] font-bold leading-tight tracking-tight mb-2\">Specs</h3>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<h3 className=\"text-fan-primary text-[22px] font-bold leading-tight tracking-tight mb-2\">About this {instrument.category.toLowerCase()}</h3>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<h3 className=\"text-fan-primary text-[22px] font-bold leading-tight tracking-tight mb-2\">Notes from the artist</h3>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"pb-3 text-[16px] leading-relaxed italic\" style={{ color: \"rgba(235,235,245,0.78)\" }}>\"{instrument.artistNote}\"</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-fan-primary text-[14px] font-medium truncate\">{noteFromPerson.name}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-[13px] truncate\" style={{ color: \"rgba(235,235,245,0.55)\" }}>on \"{noteFromSong.title}\"</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<h3 className=\"px-5 text-fan-primary text-[22px] font-bold leading-tight tracking-tight mb-3\">Where to buy</h3>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<span className=\"text-[#00062B] text-[13px] font-bold\">{v.name.charAt(0)}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-fan-primary text-[15px] font-medium truncate\">{v.name}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"px-5 pt-4 pb-3 text-[11px] text-center leading-relaxed\" style={{ color: \"rgba(235,235,245,0.45)\" }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"text-fan-primary text-[13px] font-medium mt-2 text-center leading-tight line-clamp-2\">{person.name}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
-    "snippet": "<p className=\"pt-4 text-[11px] leading-relaxed\" style={{ color: \"rgba(235,235,245,0.45)\" }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<span className=\"text-[32px] font-bold\" style={{ color: \"#00062B\" }}>"
   },
   {
@@ -18238,6 +18248,16 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "{tagline && <p className=\"text-[14px] mt-0.5 truncate\" style={{ color: \"rgba(235,235,245,0.7)\" }}>{tagline}</p>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AlbumDetail.tsx",
+    "snippet": "className=\"relative pb-2.5 text-[15px] font-semibold active:opacity-80\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AlbumDetail.tsx",
+    "snippet": "<span className=\"ml-1.5 text-[13px] font-medium\" style={{ color: \"rgba(235,235,245,0.45)\" }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -18322,7 +18342,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AlbumDetail.tsx",
+    "snippet": "<p className=\"pt-4 text-[11px] leading-relaxed\" style={{ color: \"rgba(235,235,245,0.45)\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AlbumDetail.tsx",
     "snippet": "<p className=\"text-[14px]\" style={{ color: \"rgba(235,235,245,0.5)\" }}>No artists credited with this vendor's instruments yet.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AlbumDetail.tsx",
+    "snippet": "<p className=\"text-fan-primary text-[13px] font-medium mt-2 text-center leading-tight line-clamp-2\">{person.name}</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -19755,21 +19785,6 @@
     "snippet": "<main className=\"relative h-screen w-full flex justify-center overflow-hidden\" style={{ background: \"#00062B\" }}>"
   },
   {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "fill={isBookmarked ? \"#4AFFCA\" : \"none\"}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "stroke={isBookmarked ? \"#4AFFCA\" : \"currentColor\"}"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<span className=\"text-[#00062B] text-[13px] font-bold\">{v.name.charAt(0)}</span>"
-  },
-  {
     "rule": "fan-text-tone",
     "file": "client/src/pages/InstrumentDetail.tsx",
     "snippet": "<p className=\"text-white/70 text-[15px]\">This bookmark is no longer available.</p>"
@@ -19780,104 +19795,9 @@
     "snippet": "className=\"mt-6 px-5 py-2 rounded-full border border-white/20 text-white/80 text-sm font-medium active:opacity-70\""
   },
   {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<div className=\"w-full h-full flex items-center justify-center text-white/35\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" strokeWidth=\"2\" strokeLinecap=\"round\" strokeLinejoin=\"round\" className=\"text-white/55 flex-shrink-0 ml-2\" aria-hidden="
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "className=\"mt-1.5 text-xs font-medium inline-flex items-center gap-1 text-white/55 hover:text-[var(--brand-blue)] hover:underline\""
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<span aria-hidden className=\"text-white/40\">·</span>"
-  },
-  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/InstrumentDetail.tsx",
     "snippet": "<p className=\"text-white/70 text-[15px]\">This bookmark is no longer available.</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<p className=\"text-[12px] font-medium mb-1\" style={{ color: \"rgba(235,235,245,0.55)\" }} data-testid=\"text-instrument-category\">{instrument.category}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<h1 className=\"text-white text-[26px] font-bold leading-tight tracking-tight\" data-testid=\"text-instrument-name\">{instrument.name}</h1>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<h2 className=\"text-white text-[22px] font-bold leading-tight tracking-tight mb-2\">About this {instrument.category.toLowerCase()}</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<p className=\"text-[16px] leading-relaxed whitespace-pre-line\" style={{ color: \"rgba(235,235,245,0.72)\" }} data-testid=\"text-instrument-about\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<h2 className=\"text-white text-[22px] font-bold leading-tight tracking-tight mb-2\">Notes from the artist</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<p className=\"text-[16px] leading-relaxed italic\" style={{ color: \"rgba(235,235,245,0.78)\" }} data-testid=\"text-instrument-artist-note\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<h2 className=\"text-white text-[22px] font-bold leading-tight tracking-tight mb-2\">Specs</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<dl className=\"text-[15px] leading-snug\" data-testid=\"list-instrument-specs\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<h2 className=\"px-5 text-white text-[22px] font-bold leading-tight tracking-tight mb-3\">Available at</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<span className=\"text-[#00062B] text-[13px] font-bold\">{v.name.charAt(0)}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<p className=\"text-white text-[15px] font-medium truncate\">{v.name}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<p className=\"text-[12px] truncate\" style={{ color: \"rgba(235,235,245,0.55)\" }}>{v.tagline}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "<p className=\"px-5 pt-4 pb-3 text-[11px] text-center leading-relaxed\" style={{ color: \"rgba(235,235,245,0.45)\" }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "className=\"mt-1.5 text-[13px] font-medium inline-flex items-center gap-1.5\""
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/pages/InstrumentDetail.tsx",
-    "snippet": "className=\"w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden\""
   },
   {
     "rule": "fan-text-tone",
