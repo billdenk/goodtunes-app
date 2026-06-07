@@ -26,12 +26,29 @@ export async function initPushNotifications(): Promise<void> {
   started = true;
 
   try {
+    // The native apps load the LATEST web bundle from my.goodtunes.music
+    // (remote origin), so this JS can be newer than the installed binary.
+    // An older binary (built before push shipped) has NO native push plugin,
+    // and every plugin call — including addListener() — rejects with
+    // "PushNotifications plugin is not implemented on ios". Those rejections
+    // are un-awaited, so they surface as the global "Unhandled promise
+    // rejection" banner. Gate on the plugin actually being present in THIS
+    // binary before touching it.
+    const { Capacitor } = await import("@capacitor/core");
+    if (!Capacitor.isPluginAvailable("PushNotifications")) {
+      console.warn("[push] plugin not in this native build — skipping");
+      return;
+    }
+
     const { PushNotifications } = await import("@capacitor/push-notifications");
 
     // Forward the OS-issued token to our backend. iOS hands back the raw
     // APNs token; Android hands back the FCM registration token. The
-    // backend keys delivery transport on `platform`.
-    PushNotifications.addListener("registration", (token) => {
+    // backend keys delivery transport on `platform`. `addListener` returns
+    // a promise that REJECTS when the plugin is absent, so it must be
+    // awaited inside this try (an un-awaited reject becomes the global
+    // unhandled-rejection banner).
+    await PushNotifications.addListener("registration", (token) => {
       const platform = nativePlatform === "ios" ? "ios" : "android";
       void apiRequest("POST", "/api/push/register", { token: token.value, platform }).catch((e) => {
         // Best-effort: a failed POST just means no alerts until the next
@@ -40,7 +57,7 @@ export async function initPushNotifications(): Promise<void> {
       });
     });
 
-    PushNotifications.addListener("registrationError", (err) => {
+    await PushNotifications.addListener("registrationError", (err) => {
       console.warn("[push] registration error", err);
     });
 
