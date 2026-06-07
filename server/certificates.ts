@@ -415,6 +415,44 @@ export function registerCertificateRoutes(app: Express) {
     res.json({ ok: true });
   });
 
+  // ─── Task #1633 — Fan: change paper size on a PHYSICAL signed cert ──
+  // Digital-only owners change paper size via /cert/digital-name; owners
+  // of a PHYSICAL signed cert (who DO have a signed_cert_certificates row)
+  // get the matching control here. Paper size is a print preference that
+  // is independent of the one-shot recipient-name lock — so it stays
+  // editable for physical certs too, defaulting to the country auto-pick
+  // already stamped at cert creation. Once the cert has been pulled into a
+  // print run (locked_for_print / printed) the stock is committed at the
+  // printer, so we refuse the change there. The locked name behaviour
+  // (/cert/confirm) is left completely untouched.
+  app.post("/api/orders/:orderId/cert/paper-size", async (req, res) => {
+    const me = await getCustomerAuth(req);
+    if (!me) return res.status(401).json({ message: "Sign in required" });
+    const ps = req.body?.paperSize;
+    if (ps !== "letter" && ps !== "a4") {
+      return res.status(400).json({ message: "paperSize must be 'letter' or 'a4'." });
+    }
+    const [row] = await db
+      .select({ cert: signedCertCertificates, order: orders })
+      .from(signedCertCertificates)
+      .innerJoin(orders, eq(orders.id, signedCertCertificates.orderId))
+      .where(eq(signedCertCertificates.orderId, req.params.orderId));
+    if (!row || row.order.customerId !== me.userId) {
+      return res.status(404).json({ message: "Not found" });
+    }
+    if (row.cert.nameStatus === "locked_for_print" || row.cert.nameStatus === "printed") {
+      return res.status(409).json({
+        message:
+          "This certificate is already in a print run — its paper size is locked. Contact support if it needs to change.",
+      });
+    }
+    await db
+      .update(signedCertCertificates)
+      .set({ paperSize: ps, paperSizeOverridden: true, updatedAt: new Date() })
+      .where(eq(signedCertCertificates.id, row.cert.id));
+    res.json({ ok: true, paperSize: ps });
+  });
+
   // ─── Task #1467 — Fan: review + confirm the DIGITAL cert name ────
   // Digital-only GoodDeed owners never mint a `signed_cert_certificates`
   // row, so the cert PDF synthesizes the recipient name (realName →

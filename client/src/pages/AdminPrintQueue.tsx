@@ -113,6 +113,13 @@ function AdminPrintQueueInner() {
   const allSelectable = visible.filter((r) => r.nameStatus === "confirmed").map((r) => r.id);
   const allSelected = allSelectable.length > 0 && allSelectable.every((id) => selected.has(id));
 
+  // Task #1633 — how many of the current selection sit on each stock,
+  // so the split-download buttons can show their counts and disable when
+  // empty.
+  const selectedRows = visible.filter((r) => selected.has(r.id));
+  const letterCount = selectedRows.filter((r) => r.paperSize === "letter").length;
+  const a4Count = selectedRows.filter((r) => r.paperSize === "a4").length;
+
   function toggle(id: string) {
     const next = new Set(selected);
     if (next.has(id)) next.delete(id);
@@ -125,8 +132,18 @@ function AdminPrintQueueInner() {
     else setSelected(new Set(allSelectable));
   }
 
-  async function batchDownload(format: "zip" | "merged_pdf") {
-    if (selected.size === 0) {
+  // Task #1633 — the printer runs one stock at a time, so beside the mixed
+  // ZIP / merged PDF we offer paper-size-split merged PDFs: pass a
+  // `paperFilter` and only the selected certs on that stock are batched,
+  // downloaded, and flipped to printed (the other size stays selected so
+  // the operator can immediately download it too).
+  async function batchDownload(format: "zip" | "merged_pdf", paperFilter?: "letter" | "a4") {
+    const ids = Array.from(selected).filter((id) => {
+      if (!paperFilter) return true;
+      const row = visible.find((v) => v.id === id);
+      return row?.paperSize === paperFilter;
+    });
+    if (ids.length === 0) {
       toast({ title: "Select at least one certificate", variant: "destructive" });
       return;
     }
@@ -138,7 +155,7 @@ function AdminPrintQueueInner() {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ certIds: Array.from(selected), format }),
+      body: JSON.stringify({ certIds: ids, format }),
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({ message: "Failed" }));
@@ -148,7 +165,10 @@ function AdminPrintQueueInner() {
     const blob = await r.blob();
     const cd = r.headers.get("Content-Disposition") ?? "";
     const m = /filename="([^"]+)"/.exec(cd);
-    const filename = m?.[1] ?? (format === "zip" ? "gooddeed-batch.zip" : "gooddeed-batch.pdf");
+    let filename = m?.[1] ?? (format === "zip" ? "gooddeed-batch.zip" : "gooddeed-batch.pdf");
+    // Stamp the stock into the split download's name so the printer can
+    // tell the two single-stock files apart at a glance.
+    if (paperFilter) filename = `gooddeed-print-${paperFilter}.pdf`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -157,9 +177,15 @@ function AdminPrintQueueInner() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    setSelected(new Set());
+    // Clear only the certs we actually downloaded — a split run leaves the
+    // other stock selected and ready to download next.
+    setSelected((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.delete(id));
+      return next;
+    });
     queryClient.invalidateQueries({ queryKey: ["/api/admin/print-queue"] });
-    toast({ title: "Batch downloaded", description: `${filename} — ${selected.size} certificate(s) marked printed.` });
+    toast({ title: "Batch downloaded", description: `${filename} — ${ids.length} certificate(s) marked printed.` });
   }
 
   function promptOverrideName(row: QueueRow) {
@@ -200,7 +226,7 @@ function AdminPrintQueueInner() {
           </div>
         </div>
         <p className="text-slate-500 text-[13px] mb-6">
-          Printable GoodDeed certificates. Confirmed rows are ready to print — batch them into a ZIP of single-page PDFs or one merged PDF, then download. Downloading the batch flips rows to <span className="text-slate-900">printed</span>.
+          Printable GoodDeed certificates. Confirmed rows are ready to print — batch them into a ZIP of single-page PDFs, one merged PDF, or split into single-stock <span className="text-slate-900">US Letter</span> / <span className="text-slate-900">A4</span> PDFs (one clean file per paper size), then download. Downloading the batch flips those rows to <span className="text-slate-900">printed</span>.
         </p>
 
         {/* Tabs */}
@@ -251,6 +277,26 @@ function AdminPrintQueueInner() {
               data-testid="button-batch-pdf"
             >
               Download merged PDF ({selected.size})
+            </button>
+            {/* Task #1633 — single-stock splits: one clean file per paper
+                size so the printer can run each stock in one pass. */}
+            <button
+              type="button"
+              onClick={() => batchDownload("merged_pdf", "letter")}
+              disabled={letterCount === 0}
+              className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40"
+              data-testid="button-batch-pdf-letter"
+            >
+              US Letter PDF ({letterCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => batchDownload("merged_pdf", "a4")}
+              disabled={a4Count === 0}
+              className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40"
+              data-testid="button-batch-pdf-a4"
+            >
+              A4 PDF ({a4Count})
             </button>
           </div>
         )}

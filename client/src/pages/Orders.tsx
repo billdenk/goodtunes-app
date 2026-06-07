@@ -548,6 +548,22 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
     },
     onError: (e: any) => toast({ title: "Couldn't confirm", description: e?.message, variant: "destructive" }),
   });
+  // Task #1633 — paper size is a print preference, independent of the
+  // one-shot name lock, so physical signed-cert owners can change it any
+  // time before the cert is pulled into a print run (locked_for_print /
+  // printed). Defaults to the country auto-pick stamped at cert creation.
+  const setPaperSize = useMutation({
+    mutationFn: async (paperSize: "letter" | "a4") => {
+      const r = await apiRequest("POST", `/api/orders/${order.id}/cert/paper-size`, { paperSize });
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({ title: "Paper size updated" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't update paper size", description: e?.message, variant: "destructive" }),
+  });
 
   const locked = cert.nameStatus === "locked_for_print" || cert.nameStatus === "printed";
   const confirmed = cert.nameStatus === "confirmed" || locked;
@@ -601,7 +617,7 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
                   ? "Your certificate has been printed and shipped."
                   : cert.nameStatus === "locked_for_print"
                   ? "Locked for the next print run — name can no longer be changed."
-                  : `Paper: ${cert.paperSize === "a4" ? "A4" : "US Letter"} · Name is permanent — it will be printed exactly as shown.`}
+                  : "Name is permanent — it will be printed exactly as shown."}
               </div>
               {/* Task #435 — Download the PDF (works for every cert state
                   so legacy-import certs imported as `printed` AND
@@ -654,6 +670,53 @@ function CertConfirmationCard({ order, cert }: { order: OrderRow; cert: CertInfo
               )}
             </>
           )}
+          {/* Task #1633 — Paper size is a print preference, editable any
+              time before the cert is locked into a print run; once
+              locked/printed the stock is committed so we show it
+              read-only. Independent of the one-shot name lock above. */}
+          <div className="mt-2 flex flex-col gap-1.5" data-testid={`cert-paper-${order.id}`}>
+            <span className="text-xs uppercase tracking-wider text-fan-secondary">
+              Paper size
+            </span>
+            {locked ? (
+              <div
+                className="text-sm text-fan-primary font-medium"
+                data-testid={`cert-paper-readonly-${order.id}`}
+              >
+                {cert.paperSize === "a4" ? "A4" : "US Letter"}
+              </div>
+            ) : (
+              <div
+                className="inline-flex rounded-lg bg-white/10 p-0.5 self-start"
+                role="group"
+                aria-label="Certificate paper size"
+              >
+                {(["letter", "a4"] as const).map((size) => {
+                  const active = cert.paperSize === size;
+                  return (
+                    <button
+                      key={size}
+                      type="button"
+                      disabled={setPaperSize.isPending}
+                      onClick={() => {
+                        if (cert.paperSize !== size) setPaperSize.mutate(size);
+                      }}
+                      aria-pressed={active}
+                      className={
+                        "px-3 py-1.5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 " +
+                        (active
+                          ? "bg-white text-[var(--brand-bg)]"
+                          : "text-fan-secondary active:opacity-70")
+                      }
+                      data-testid={`button-cert-paper-${size}-${order.id}`}
+                    >
+                      {size === "a4" ? "A4" : "US Letter"}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

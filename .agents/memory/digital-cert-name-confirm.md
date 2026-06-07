@@ -39,3 +39,29 @@ prefers `certConfirmedName` before the synthesized realName→displayName→user
   clobbers a later /welcome edit). Physical signed-cert orders carry no
   gt_cert_name and are double-gated (`!signedCert`) at materialization, so the
   operator confirm flow is untouched.
+
+## Paper size has TWO parallel edit paths — don't confuse them
+
+Paper size (`letter`/`a4`) is fan-editable for BOTH kinds of owner, but via
+DIFFERENT endpoints writing DIFFERENT columns:
+- **Digital-only** (no cert row): rides the digital-name path; paper size lives
+  alongside `orders.certConfirmedName`. Editable even after the one-time NAME lock.
+- **Physical signed-cert** (HAS a `signed_cert_certificates` row): its own
+  `POST /api/orders/:orderId/cert/paper-size` writes
+  `signed_cert_certificates.paperSize` (+ `paperSizeOverridden=true`). The
+  digital path 409s these (a cert row exists), so they MUST use this endpoint.
+
+**Decision:** "editable any time" = independent of the recipient-NAME lock, NOT
+after the print run commits. The physical endpoint gates on auth + ownership
+(via signedCertCertificates⋈orders), validates paperSize, 404s when no cert row /
+non-owner, and **409s once `nameStatus` is `locked_for_print` or `printed`**
+(stock is committed at the printer). It never touches `nameStatus`/`confirmedName`.
+**Why:** the name lock and the print-run lock are separate axes; a fan correcting
+their paper choice must not be able to reopen the frozen name, and must not move
+stock that's already queued/printed.
+
+The admin print queue (AdminPrintQueue.tsx) splits batch downloads by
+`row.paperSize` CLIENT-SIDE — a US-Letter-only and an A4-only merged PDF
+(`gooddeed-print-<size>.pdf`) alongside the existing mixed ZIP + merged PDF. Each
+split marks only the certs it contained as printed and leaves the other stock
+selected. (The ZIP path still mixes stocks.)
