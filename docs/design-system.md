@@ -158,6 +158,21 @@ Every fan-facing mobile sheet dismisses the same way (Apple HIG / Apple-Card pat
 - **HIG exceptions — keep `Cancel` / `Done`** only where the user is *editing or confirming discardable changes*: new-playlist / rename dialogs, phone-verify OTP entry, the Account real-email capture, and destructive confirms (e.g. "Clear all recents?" → Cancel / Clear All). Everything else prefers the X.
 - **Light / hero surfaces** (the frosted light `HowToPlaySheet`, the GoodDeed certificate over vibrant art) keep a contrast-appropriate chip (dark glyph on light) but follow the same size / position / top-inset standard.
 
+## Fan top-chrome placement — one safe-area inset, never a hard `top-14`
+
+The floating top-chrome on fan surfaces — the **back caret** (top-left) and the **share / ••• capsule** or favorite chip (top-right) over a hero — sits tucked **just below the status bar / Dynamic Island with a small, deliberate margin** (Apple Music's placement: present, not flush, not floating low). That vertical position is **one shared token**, not a per-surface `top-14`:
+
+- **`FAN_TOP_CHROME_INSET`** (in `client/src/components/ui/SheetChrome.tsx`) = `calc(env(safe-area-inset-top, 0px) + 12px)`, **kept equal to `SHEET_SAFE_TOP`** so page chrome and sheet chrome land on the same line. It's safe-area-based on purpose: the old hard-coded `top-14` (56px) ignored the device safe area and read too low. Consume it as an inline `style={{ top: FAN_TOP_CHROME_INSET }}` on the absolutely-positioned chip; keep the horizontal placement (`left-4` / `right-4`) and the `z-50` on the className.
+- Applied across every fan surface that floats this chrome over a hero: album detail (`AlbumDetailMobileSurface` back + share/••• capsule), `ArtistDetail` (back + favorite), `FanLabel` (back). **New fan top-chrome must use this token** — never reintroduce a fixed `top-14`/`top-16`.
+- Out of scope: large-title page headers (`FanScreen`'s leading/trailing slots live inside a padded header, not floating over a hero) and the bottom nav / player dock.
+
+## Balanced title wrapping — long titles break into evenly-weighted lines
+
+Long album titles wrap **Apple-style balanced** (e.g. "The Very Best of Daryl Hall and John Oates" splits into evenly-weighted rows), not with plain greedy browser line-breaking. Add Tailwind's **`text-balance`** (`text-wrap: balance`) utility to the title heading:
+
+- Applied to the album `<h1>` on both the mobile (`AlbumDetailMobileSurface`) and desktop (`DesktopAlbumView`) surfaces. Mobile stays centered (the parent is `text-center`); `text-balance` works on the block heading directly (don't wrap the text in a `flex`/`flex-wrap` row — balancing applies to a text block, not flex items).
+- Reach for `text-balance` on any future multi-line display title (album / playlist / artist headings) so our headings break like Apple's.
+
 ## Admin tokens — reach brand colors through CSS vars, not hex
 
 The admin (`body.gt-admin`) is a Stripe-leaning light surface and lives off a tokenized palette, not one-off hex codes.

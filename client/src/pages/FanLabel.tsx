@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { IconButton } from "@/components/ui/IconButton";
+import { FAN_TOP_CHROME_INSET } from "@/components/ui/SheetChrome";
 import type { Album as DbAlbum, Label } from "@shared/schema";
 import { useOwnedAlbumIds } from "@/hooks/useOwnedAlbumIds";
 
@@ -67,7 +68,8 @@ export function FanLabel() {
           variant="dimmed"
           label="Back"
           onClick={() => window.history.length > 1 ? window.history.back() : navigate("/collection")}
-          className="absolute top-14 left-4 z-50"
+          className="absolute left-4 z-50"
+          style={{ top: FAN_TOP_CHROME_INSET }}
           data-testid="button-back-label"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

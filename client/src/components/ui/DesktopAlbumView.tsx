@@ -325,7 +325,7 @@ export function DesktopAlbumView({
         column: "max-w-[720px] mx-auto px-6 py-5 transition-[max-width,margin] duration-200 flex-1 min-w-0",
         heroSection: "mt-3 flex gap-6",
         cover: "rounded-2xl overflow-hidden flex-shrink-0 w-[200px] h-[200px]",
-        title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[24px]",
+        title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[24px] text-balance",
       }
     : {
         // Apple parity: let the album content (hero + tracklist) breathe
@@ -337,7 +337,7 @@ export function DesktopAlbumView({
         column: "max-w-[720px] mx-auto lg:max-w-none lg:mx-0 2xl:max-w-[1600px] 2xl:mx-auto px-6 lg:px-12 py-5 lg:py-6 transition-[max-width,margin] duration-200 flex-1 min-w-0",
         heroSection: "mt-3 flex gap-6 lg:gap-8",
         cover: "rounded-2xl overflow-hidden flex-shrink-0 w-[200px] h-[200px] lg:w-[240px] lg:h-[240px]",
-        title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[24px] lg:text-[28px]",
+        title: "text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[24px] lg:text-[28px] text-balance",
       };
   const { toast } = useToast();
   const handleCopyShareLink = async () => {

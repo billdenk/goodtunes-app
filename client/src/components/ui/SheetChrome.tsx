@@ -21,6 +21,17 @@ import { IconButton, type IconButtonVariant } from "./IconButton";
 // and still has "room at the top" before content begins.
 export const SHEET_SAFE_TOP = "calc(env(safe-area-inset-top, 0px) + 12px)";
 
+// Shared fan top-chrome vertical inset (Task #1601). The floating back caret,
+// share button, and ••• capsule on fan surfaces (album detail, artist, label)
+// pin their `top` to this single token so every surface's top chrome sits on
+// ONE line — tucked just below the status bar / Dynamic Island with a small,
+// deliberate margin (Apple Music's placement). Expressed off the device safe
+// area (NOT a hard-coded `top-14`, which ignored the safe area and sat too low
+// on notched phones / too low everywhere else) so it clears the notch on every
+// device, and kept equal to SHEET_SAFE_TOP so page chrome and sheet chrome
+// align to the same line.
+export const FAN_TOP_CHROME_INSET = SHEET_SAFE_TOP;
+
 // --- self-managed dismiss context ----------------------------------------
 //
 // `SheetShell` exposes its animated dismiss through this context so the

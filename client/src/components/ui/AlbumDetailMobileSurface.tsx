@@ -14,6 +14,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import { IconButton } from "@/components/ui/IconButton";
 import { ChromeScrim } from "@/components/ui/ChromeScrim";
+import { FAN_TOP_CHROME_INSET } from "@/components/ui/SheetChrome";
 import { useTopChromeFrost } from "@/hooks/useTopChromeFrost";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { popBounce } from "@/lib/motion";
@@ -263,6 +264,7 @@ export function AlbumDetailMobileSurface({
   // the scrim's full open→close lifecycle, including its exit fade — otherwise
   // the two backdrop-filters briefly stack over the hero (iOS-WebKit rule).
   const capsuleStyle: React.CSSProperties = {
+    top: FAN_TOP_CHROME_INSET,
     background: "rgba(255,255,255,0.17)",
     ...(scrimBlurPresent || searchOwnsTop
       ? {}
@@ -285,14 +287,15 @@ export function AlbumDetailMobileSurface({
         variant="glass"
         label="Back to collection"
         onClick={onBack}
-        className="absolute top-14 left-4 z-50"
+        className="absolute left-4 z-50"
+        style={{ top: FAN_TOP_CHROME_INSET }}
         data-testid="button-back-album"
       >
         <ChevronLeft strokeWidth={2.5} className="-translate-x-[1px]" />
       </IconButton>
 
       <div
-        className="absolute top-14 right-4 z-50 flex items-center rounded-full"
+        className="absolute right-4 z-50 flex items-center rounded-full"
         style={capsuleStyle}
       >
         <button
@@ -520,10 +523,10 @@ export function AlbumDetailMobileSurface({
 
           <div className="relative pt-4 pb-3 px-5 text-center">
             <h1
-              className="text-fan-primary text-[22px] font-bold leading-tight tracking-tight flex items-center justify-center gap-2 flex-wrap"
+              className="text-fan-primary text-[22px] font-bold leading-tight tracking-tight text-balance"
               data-testid="text-album-title"
             >
-              <span>{album.title}</span>
+              {album.title}
             </h1>
             <button
               type="button"

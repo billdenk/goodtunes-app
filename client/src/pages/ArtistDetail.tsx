@@ -20,6 +20,7 @@ import {
 import { streamingHandoffEnabled } from "@/lib/platform";
 import { X, ChevronRight, ChevronLeft } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
+import { FAN_TOP_CHROME_INSET } from "@/components/ui/SheetChrome";
 import { AlbumCard } from "@/components/ui/AlbumCard";
 import { track } from "@/lib/analytics";
 import { useRecordRecent } from "@/hooks/useRecents";
@@ -431,7 +432,8 @@ export function ArtistDetail() {
           variant="dimmed"
           label="Back to collection"
           onClick={() => navigate("/collection")}
-          className="absolute top-14 left-4 z-50"
+          className="absolute left-4 z-50"
+          style={{ top: FAN_TOP_CHROME_INSET }}
           data-testid="button-back-artist"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -445,7 +447,8 @@ export function ArtistDetail() {
           label={isFav ? "Unfavorite artist" : "Favorite artist"}
           aria-pressed={isFav}
           onClick={() => favArtists.toggle(artistName)}
-          className="absolute top-14 right-4 z-50"
+          className="absolute right-4 z-50"
+          style={{ top: FAN_TOP_CHROME_INSET }}
           data-testid="button-favorite-artist"
         >
           <svg viewBox="0 0 24 24" fill={isFav ? "rgba(255,255,255,0.55)" : "none"} stroke={isFav ? "rgba(255,255,255,0.55)" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

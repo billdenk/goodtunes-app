@@ -12252,7 +12252,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/AlbumDetailMobileSurface.tsx",
-    "snippet": "className=\"text-fan-primary text-[22px] font-bold leading-tight tracking-tight flex items-center justify-center gap-2 flex-wrap\""
+    "snippet": "className=\"text-fan-primary text-[22px] font-bold leading-tight tracking-tight text-balance\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -12317,12 +12317,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "title: \"text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[24px]\","
+    "snippet": "title: \"text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[24px] text-balance\","
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "title: \"text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[24px] lg:text-[28px]\","
+    "snippet": "title: \"text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[24px] lg:text-[28px] text-balance\","
   },
   {
     "rule": "hardcoded-font-size",
