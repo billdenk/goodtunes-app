@@ -63,6 +63,10 @@ interface PlayerContextValue extends PlayerState {
   setShowPlayer: (show: boolean) => void;
   setShowAddToPlaylist: (show: boolean) => void;
   setShowQueue: (show: boolean) => void;
+  /** Toggles the shared desktop right rail between lyrics, queue, and
+   *  closed. Lyrics and the Up Next queue are mutually exclusive: opening
+   *  one closes the other; tapping the already-open mode closes the rail. */
+  toggleRail: (mode: "lyrics" | "queue") => void;
   toggleAutoplay: () => void;
   reorderQueue: (from: number, to: number) => void;
   removeFromQueue: (index: number) => void;
@@ -821,6 +825,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const toggleAutoplay = useCallback(() => setAutoplay((a) => !a), []);
 
+  // Lyrics + Up Next share the single desktop right rail and are mutually
+  // exclusive — opening one closes the other (same pattern the full-screen
+  // Now Playing overlay uses), and re-tapping the open mode closes the rail.
+  const toggleRail = useCallback((mode: "lyrics" | "queue") => {
+    if (mode === "lyrics") {
+      setShowQueue(false);
+      setShowLyrics((v) => !v);
+    } else {
+      setShowLyrics(false);
+      setShowQueue((v) => !v);
+    }
+  }, []);
+
   const reorderQueue = useCallback((from: number, to: number) => {
     setQueue((q) => {
       if (from === to || from < 0 || to < 0 || from >= q.length || to >= q.length) return q;
@@ -875,6 +892,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         setShowPlayer,
         setShowAddToPlaylist,
         setShowQueue,
+        toggleRail,
         toggleAutoplay,
         reorderQueue,
         removeFromQueue,

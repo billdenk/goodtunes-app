@@ -9,6 +9,7 @@ import {
 } from "@/hooks/useDesktopShell";
 import { shouldRenderStorefrontSidebar } from "@/components/StorefrontSidebar";
 import { DesktopLyricsBody } from "@/components/ui/DesktopLyricsBody";
+import { DesktopQueueBody } from "@/components/ui/DesktopQueueBody";
 
 /**
  * Persistent desktop lyrics rail — the storefront/library/artist counterpart
@@ -33,22 +34,35 @@ import { DesktopLyricsBody } from "@/components/ui/DesktopLyricsBody";
  * exact same action as the dock thumbnail's expand control.
  */
 
-/** True when the persistent storefront lyrics rail should be showing. Shared
- *  with FanScreen / ArtistDetail (content reflow) and the dock (channel). */
-export function useLyricsRailOpen(): boolean {
+/** Which body the shared storefront rail is showing, or null when closed.
+ *  Lyrics and the Up Next queue share the single rail and are mutually
+ *  exclusive (PlayerContext.toggleRail enforces it). */
+export function useRailMode(): "lyrics" | "queue" | null {
   const isDesktop = useDesktopShell();
-  const { showLyrics, currentSong } = usePlayer();
+  const { showLyrics, showQueue, currentSong } = usePlayer();
   const [location] = useLocation();
-  return (
-    isDesktop &&
-    showLyrics &&
-    !!currentSong &&
-    shouldRenderStorefrontSidebar(location)
-  );
+  if (
+    !isDesktop ||
+    !currentSong ||
+    !shouldRenderStorefrontSidebar(location)
+  ) {
+    return null;
+  }
+  if (showLyrics) return "lyrics";
+  if (showQueue) return "queue";
+  return null;
+}
+
+/** True when the persistent storefront rail (lyrics OR Up Next) is showing.
+ *  Shared with FanScreen / ArtistDetail (content reflow) and the dock
+ *  (channel) so every reflow + the dock's right channel track both modes. */
+export function useLyricsRailOpen(): boolean {
+  return useRailMode() !== null;
 }
 
 export function DesktopLyricsRail() {
-  const open = useLyricsRailOpen();
+  const mode = useRailMode();
+  const open = mode !== null;
   const { setShowPlayer } = usePlayer();
   // Expand affordance reveal — mirrors the dock thumbnail's pointer-vs-touch
   // pattern: pointer devices reveal on hover (CSS group-hover), touch devices
@@ -87,8 +101,8 @@ export function DesktopLyricsRail() {
         // Soft inward shadow toward the content (no heavy floating-card drop).
         boxShadow: "-12px 0 40px rgba(0,0,0,0.28)",
       }}
-      aria-label="Lyrics"
-      data-testid="lyrics-rail"
+      aria-label={mode === "queue" ? "Up Next" : "Lyrics"}
+      data-testid={mode === "queue" ? "queue-rail" : "lyrics-rail"}
     >
       <button
         type="button"
@@ -116,7 +130,7 @@ export function DesktopLyricsRail() {
         className="flex-1 min-h-0 flex flex-col py-6 px-2"
         style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom, 0px))" }}
       >
-        <DesktopLyricsBody />
+        {mode === "queue" ? <DesktopQueueBody /> : <DesktopLyricsBody />}
       </div>
     </aside>
   );

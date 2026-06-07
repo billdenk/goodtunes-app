@@ -38,6 +38,7 @@ import {
 import { DesktopSearchView } from "@/components/search/DesktopSearchView";
 import { PlayerDock } from "@/components/ui/PlayerDock";
 import { DesktopLyricsBody } from "@/components/ui/DesktopLyricsBody";
+import { DesktopQueueBody } from "@/components/ui/DesktopQueueBody";
 import {
   DesktopAlbumView,
   LYRICS_PANEL_WIDTH,
@@ -191,11 +192,14 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   // button, swipe-down) pops our entry back off so Back still works
   // normally afterwards. lg side-panel + <768 mobile never mount this
   // overlay, so they're untouched.
-  const mdLyricsOpen = player.showLyrics && !isLgViewport;
+  const mdRailOpen = (player.showLyrics || player.showQueue) && !isLgViewport;
   useEffect(() => {
-    if (!mdLyricsOpen) return;
+    if (!mdRailOpen) return;
     window.history.pushState({ gtLyricsOverlay: true }, "");
-    const onPop = () => player.setShowLyrics(false);
+    const onPop = () => {
+      player.setShowLyrics(false);
+      player.setShowQueue(false);
+    };
     window.addEventListener("popstate", onPop);
     return () => {
       window.removeEventListener("popstate", onPop);
@@ -206,7 +210,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
         window.history.back();
       }
     };
-  }, [mdLyricsOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mdRailOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isOwned = useAlbumOwnership(id);
   // Bill's own accounts (admin sessions + a small email allowlist) are
@@ -542,6 +546,12 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   // context.
   const lyricsBody = <DesktopLyricsBody />;
 
+  // Shared desktop right rail. Lyrics and Up Next (queue) are mutually
+  // exclusive (PlayerContext.toggleRail enforces it), so the SAME rail/overlay
+  // renders whichever is active: queue body when showQueue, otherwise lyrics.
+  const railOpen = player.showLyrics || player.showQueue;
+  const railBody = player.showQueue ? <DesktopQueueBody /> : lyricsBody;
+
   // PlayerDock track adapter. Dock shows the artwork as the cover slot
   // when something is playing; otherwise the dock's idle treatment (a
   // centered gray "G", no title) takes over. We pass an empty title
@@ -631,8 +641,8 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             onBuyBundle={buyEnabled ? handleBuyBundle : undefined}
             signedCertPriceCents={buyEnabled ? signedCertPriceCents : null}
             signedCertSoldOut={signedCertSoldOut}
-            lyricsOpen={player.showLyrics && isLgViewport}
-            lyrics={lyricsBody}
+            lyricsOpen={railOpen && isLgViewport}
+            lyrics={railBody}
             onExpandLyrics={() => player.setShowPlayer(true)}
           />
           )}
@@ -648,7 +658,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             below. No backdrop-filter here — the card is a plain translucent
             surface, so it never stacks a second blur over the chrome. */}
         <AnimatePresence initial={false}>
-          {searchMode && player.showLyrics && isLgViewport && (
+          {searchMode && railOpen && isLgViewport && (
             <motion.aside
               key="search-lyrics-panel"
               className="hidden lg:flex justify-end flex-shrink-0 overflow-hidden self-start"
@@ -686,7 +696,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
                     boxShadow: "-12px 0 40px rgba(0,0,0,0.28)",
                   }}
                 >
-                  <div className="flex-1 min-h-0 flex flex-col">{lyricsBody}</div>
+                  <div className="flex-1 min-h-0 flex flex-col">{railBody}</div>
                 </div>
               </div>
             </motion.aside>
@@ -703,7 +713,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             lyrics toggle — stays reachable while reading. Reuses the SAME
             `lyricsBody` (shared SyncedLyrics, props only). */}
         <AnimatePresence initial={false}>
-          {player.showLyrics && !isLgViewport && (
+          {railOpen && !isLgViewport && (
             <motion.div
               key="lyrics-overlay-md"
               className="lg:hidden absolute inset-0 z-30 flex flex-col"
@@ -732,9 +742,10 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
               onDragEnd={(_, info) => {
                 if (info.offset.y > 120 || info.velocity.y > 600) {
                   player.setShowLyrics(false);
+                  player.setShowQueue(false);
                 }
               }}
-              aria-label="Lyrics"
+              aria-label={player.showQueue ? "Up Next" : "Lyrics"}
               data-testid="overlay-lyrics-md"
             >
               {/* No title/close header — the dock mic owns the open/close
@@ -744,7 +755,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
               <div
                 className="flex items-center justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing touch-none select-none"
                 onPointerDown={(e) => lyricsDragControls.start(e)}
-                aria-label="Drag down to close lyrics"
+                aria-label={player.showQueue ? "Drag down to close Up Next" : "Drag down to close lyrics"}
                 data-testid="handle-lyrics-md-drag"
               >
                 <span
@@ -757,7 +768,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
                   }}
                 />
               </div>
-              <div className="flex-1 min-h-0 flex flex-col">{lyricsBody}</div>
+              <div className="flex-1 min-h-0 flex flex-col">{railBody}</div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -778,7 +789,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             // window. The dock slides + resizes when lyrics open/close.
             channelLeft={ALBUM_DOCK_CHANNEL_LEFT}
             channelRight={
-              player.showLyrics && isLgViewport ? LYRICS_PANEL_WIDTH : 0
+              railOpen && isLgViewport ? LYRICS_PANEL_WIDTH : 0
             }
             track={dockTrack}
             onTitleActivate={
@@ -831,8 +842,12 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
                 player.seekTo(s);
               }
             }}
-            onLyrics={() => player.setShowLyrics(!player.showLyrics)}
+            onLyrics={() => player.toggleRail("lyrics")}
             lyricsActive={player.showLyrics}
+            onQueue={() => player.toggleRail("queue")}
+            queueActive={player.showQueue}
+            airPlaySupported={player.airPlaySupported}
+            onAirPlay={player.showAirPlayPicker}
             coverNode={dockCover}
             onExpand={() => player.setShowPlayer(true)}
           />

@@ -85,8 +85,12 @@ function DesktopMiniPlayer() {
               ? () => navigate(`/artist/${encodeURIComponent(artist)}`)
               : undefined
           }
-          onLyrics={() => player.setShowLyrics(!player.showLyrics)}
+          onLyrics={() => player.toggleRail("lyrics")}
           lyricsActive={player.showLyrics}
+          onQueue={() => player.toggleRail("queue")}
+          queueActive={player.showQueue}
+          airPlaySupported={player.airPlaySupported}
+          onAirPlay={player.showAirPlayPicker}
           hasSelection={true}
           playing={player.isPlaying}
           previewMode={player.previewMode}

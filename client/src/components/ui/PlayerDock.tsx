@@ -15,6 +15,7 @@ import {
   ChevronUp,
   Music2,
   Maximize2,
+  ListMusic,
 } from "lucide-react";
 import { LyricsIcon } from "@/components/ui/LyricsIcon";
 import { isIOS } from "@/lib/platform";
@@ -103,6 +104,23 @@ export interface PlayerDockProps {
    *  the right-side lyrics panel is currently open. */
   lyricsActive?: boolean;
 
+  /** Up Next (queue) button on the right cluster — opens the shared desktop
+   *  right rail to the queue. Omit to hide the button entirely. Mutually
+   *  exclusive with lyrics in the rail (host enforces via toggleRail). */
+  onQueue?: () => void;
+  /** When true, the Up Next glyph renders active (brand-blue, aria-pressed),
+   *  reflecting that the right rail is currently showing the queue. */
+  queueActive?: boolean;
+
+  /** AirPlay button on the right cluster (to the RIGHT of the lyrics mic).
+   *  Only rendered when `airPlaySupported` is also true — mirrors Apple
+   *  Music, which only surfaces AirPlay where an output target exists. */
+  onAirPlay?: () => void;
+  /** Gates the AirPlay button's visibility. The host owns the platform/route
+   *  detection (PlayerContext.airPlaySupported); the dock just shows or hides
+   *  the control. */
+  airPlaySupported?: boolean;
+
   /** Fires when the user toggles shuffle (internal state). */
   onShuffleChange?: (next: boolean) => void;
   /** Fires when the user cycles repeat off → all → one → off. */
@@ -178,6 +196,10 @@ export function PlayerDock({
   onSubtitleActivate,
   onLyrics,
   lyricsActive = false,
+  onQueue,
+  queueActive = false,
+  onAirPlay,
+  airPlaySupported = false,
   onShuffleChange,
   onRepeatChange,
   onVolumeChange,
@@ -882,6 +904,71 @@ export function PlayerDock({
             >
               <LyricsIcon size={D.utilityIcon} />
             </button>
+            )}
+            {/* AirPlay — sits to the RIGHT of the lyrics mic (Apple Music
+                anatomy). Only rendered where the host reports an output
+                target exists (`airPlaySupported`, e.g. iOS Safari + the
+                native iPad/iPhone app) AND wires `onAirPlay`; stays hidden on
+                Android/desktop. Output routing is independent of the bought
+                track, so it stays OUT of the `previewMode` gate. */}
+            {airPlaySupported && onAirPlay && (
+              <button
+                type="button"
+                aria-label="AirPlay"
+                title="AirPlay"
+                onClick={onAirPlay}
+                data-testid="button-airplay"
+                className={`${D.utilityBtn} rounded-full inline-flex items-center justify-center transition-colors text-fan-primary hover:text-white hover:bg-white/10`}
+              >
+                {/* Apple's AirPlay glyph: a rounded display with a small
+                    upward triangle centered at its base. */}
+                <svg
+                  width={D.utilityIcon}
+                  height={D.utilityIcon}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M5 17H4a2 2 0 01-2-2V6a2 2 0 012-2h16a2 2 0 012 2v9a2 2 0 01-2 2h-1" />
+                  <polygon points="12 15 17 21 7 21 12 15" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+            )}
+            {/* Up Next (queue) — opens the shared desktop right rail to the
+                queue, mutually exclusive with lyrics (host's toggleRail
+                closes the other). Rendered ALWAYS when the host wires
+                `onQueue`; disabled (like the lyrics mic) without a selection.
+                Not gated by previewMode — the audition queue is real even in
+                preview. Active state mirrors the lyrics mic's brand-blue. */}
+            {onQueue && (
+              <button
+                type="button"
+                aria-label={queueActive ? "Hide Up Next" : "Show Up Next"}
+                aria-pressed={queueActive}
+                title={queueActive ? "Hide Up Next" : "Show Up Next"}
+                onClick={onQueue}
+                disabled={!hasSelection}
+                data-testid="button-queue"
+                className={[
+                  `${D.utilityBtn} rounded-full inline-flex items-center justify-center transition-colors`,
+                  hasSelection
+                    ? queueActive
+                      ? "bg-white/10 hover:bg-white/15"
+                      : "text-fan-primary hover:text-white hover:bg-white/10"
+                    : "text-fan-faint cursor-default",
+                ].join(" ")}
+                style={
+                  hasSelection && queueActive
+                    ? { color: "var(--brand-blue)" }
+                    : undefined
+                }
+              >
+                <ListMusic className={isCompactDensity ? "w-[18px] h-[18px]" : "w-5 h-5"} />
+              </button>
             )}
             {/* Volume cluster — slider slides out left on hover.
                 Hidden in compact: Apple drops volume from its narrow

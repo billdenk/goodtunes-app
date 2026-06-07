@@ -12160,21 +12160,6 @@
     "snippet": "export const BRAND_BLUE = \"#319ED8\";"
   },
   {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/AlbumDesktopSidebar.tsx",
-    "snippet": "<div className=\"w-full h-full flex items-center justify-center text-fan-primary text-[13px] font-semibold\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/AlbumDesktopSidebar.tsx",
-    "snippet": "<div className=\"text-fan-primary text-[13px] font-semibold truncate\">"
-  },
-  {
-    "rule": "player-touch-target-too-small",
-    "file": "client/src/components/ui/AlbumDesktopSidebar.tsx",
-    "snippet": "className=\"w-10 h-10 rounded-full flex-shrink-0 overflow-hidden bg-white/[0.18] ring-1 ring-white/30\""
-  },
-  {
     "rule": "brand-hex-literal",
     "file": "client/src/components/ui/AlbumDesktopTrackRow.tsx",
     "snippet": "(Apple-Music desktop accent). #FF5470 is the only rose in the GoodTunes"
@@ -12357,12 +12342,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"mt-3 text-fan-secondary text-[14px] leading-[1.55] max-w-[640px] line-clamp-3\""
+    "snippet": "className=\"h-11 pl-5 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97]\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"h-11 pl-5 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-[15px] transition-transform active:scale-[0.97]\""
+    "snippet": "className=\"mt-3 text-fan-secondary text-[14px] leading-[1.55] max-w-[640px] line-clamp-3\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -12498,6 +12483,11 @@
     "rule": "naked-icon-button",
     "file": "client/src/components/ui/PlayerDock.tsx",
     "snippet": "<button type=\"button\" aria-label={lyricsActive ? \"Hide lyrics\" : \"Show lyrics\"} aria-pressed={onLyrics ? lyricsActive : undefined} title={ onLyrics ? lyricsActive ? \"Hide lyrics\" : \"Show lyrics\" : \"Ly"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/components/ui/PlayerDock.tsx",
+    "snippet": "<button type=\"button\" aria-label={queueActive ? \"Hide Up Next\" : \"Show Up Next\"} aria-pressed={queueActive} title={queueActive ? \"Hide Up Next\" : \"Show Up Next\"} onClick={onQueue} disabled={!hasSelect"
   },
   {
     "rule": "naked-icon-button",
