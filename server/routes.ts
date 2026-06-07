@@ -16335,6 +16335,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const id = String(req.params.id);
     const person = await storage.getPersonById(id);
     if (!person) return res.status(404).json({ message: "Person not found" });
+    // Task #1667 — `?search=<q>` widens the picker beyond the person's
+    // own/credited catalog to ANY GoodTunes-release track matching the
+    // query (by song or album title). Mirrors the credited-vs-all pattern
+    // of the Gear → People picker; gated behind a non-empty query so the
+    // default (no search) payload stays the small own/credited bundle.
+    const search = String(req.query.search ?? "").trim();
+    if (search) {
+      return res.json(await storage.searchPersonGearTracks(id, search));
+    }
     return res.json(await storage.getPersonGearContext(id));
   });
   // Admin-only: GoodTunes-release tracks for a person, with per-track

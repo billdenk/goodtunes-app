@@ -486,6 +486,31 @@ export interface IStorage {
     }>;
   }>>;
 
+  // Admin-only: Task #1667 — search ALL GoodTunes-release tracks (by song
+  // or album title) so gear can be attached to a track the person isn't
+  // credited on yet. Same GearContextAlbum shape as getPersonGearContext,
+  // with the person's existing performer rows joined per track. Gated
+  // behind a non-empty query; returns [] for a blank query.
+  searchPersonGearTracks(personId: string, query: string): Promise<Array<{
+    albumId: string;
+    albumTitle: string;
+    albumArtwork: string;
+    albumYear: number | null;
+    tracks: Array<{
+      songId: string;
+      title: string;
+      trackNumber: number;
+      performers: Array<{
+        id: string;
+        instrumentId: string | null;
+        instrumentName: string | null;
+        instrumentPhotoUrl: string | null;
+        role: string;
+        tuningNotes: string | null;
+      }>;
+    }>;
+  }>>;
+
   // Attachment CRUD — only the per-instrument fields (affiliateUrl, position,
   // isHidden) live on the join row. Vendor metadata edits go through the
   // vendor-entity methods above.
@@ -2662,6 +2687,117 @@ export class DbStorage implements IStorage {
           (a.albumYear ?? 0) - (b.albumYear ?? 0) ||
           a.albumTitle.localeCompare(b.albumTitle),
       );
+  }
+
+  async searchPersonGearTracks(personId: string, query: string) {
+    // Task #1667 — widen the "+ Add gear" track picker beyond the
+    // person's own/credited catalog (getPersonGearContext) so an
+    // operator can attach gear to ANY GoodTunes-release track, even one
+    // the artist is only a guest on and isn't credited on yet. Mirrors
+    // the `mode=all` fallback already used by the Gear → People credit
+    // picker (getPersonTracksForInstrument), but person-anchored and
+    // returning the SAME GearContextAlbum shape the panel already
+    // renders. Gated behind a non-empty search query so the default
+    // gear-context payload stays small.
+    const q = query.trim();
+    if (!q) return [];
+    const like = `%${q.toLowerCase()}%`;
+    // GoodTunes-release tracks whose song title OR album title matches.
+    // Hidden albums are intentionally allowed (this is an admin-only
+    // editor; same as getPersonGearContext which never filters isHidden)
+    // but non-GoodTunes streaming rows are excluded per the
+    // streaming-row vs GoodTunes-release rule.
+    const rows = await db
+      .select({ s: songs, a: albums })
+      .from(songs)
+      .innerJoin(albums, eq(songs.albumId, albums.id))
+      .where(and(
+        eq(albums.isGoodTunesRelease, true),
+        isNull(albums.deletedAt),
+        isNull(songs.deletedAt),
+        or(
+          sql`lower(${songs.title}) like ${like}`,
+          sql`lower(${albums.title}) like ${like}`,
+        ),
+      ))
+      .orderBy(asc(albums.year), asc(albums.title), asc(songs.trackNumber))
+      .limit(200);
+    if (rows.length === 0) return [];
+
+    // Join this person's existing performer rows onto the matched tracks
+    // so the panel's "already credited" / "other credits" flags + the
+    // save-time dedupe keep working for search results too.
+    const songIds = rows.map((r) => r.s.id);
+    const performerRows = await db
+      .select({ p: trackPerformers, i: instruments })
+      .from(trackPerformers)
+      .leftJoin(instruments, eq(trackPerformers.instrumentId, instruments.id))
+      .where(and(
+        eq(trackPerformers.personId, personId),
+        inArray(trackPerformers.songId, songIds),
+        isNull(trackPerformers.deletedAt),
+      ));
+    const performersBySong = new Map<
+      string,
+      Array<{
+        id: string;
+        instrumentId: string | null;
+        instrumentName: string | null;
+        instrumentPhotoUrl: string | null;
+        role: string;
+        tuningNotes: string | null;
+      }>
+    >();
+    for (const r of performerRows) {
+      const list = performersBySong.get(r.p.songId) ?? [];
+      list.push({
+        id: r.p.id,
+        instrumentId: r.i?.id ?? null,
+        instrumentName: r.i?.name ?? null,
+        instrumentPhotoUrl: r.i?.photoUrl ?? null,
+        role: r.p.role,
+        tuningNotes: r.p.tuningNotes,
+      });
+      performersBySong.set(r.p.songId, list);
+    }
+
+    type Bucket = {
+      albumId: string;
+      albumTitle: string;
+      albumArtwork: string;
+      albumYear: number | null;
+      tracks: Array<{
+        songId: string;
+        title: string;
+        trackNumber: number;
+        performers: Array<{
+          id: string;
+          instrumentId: string | null;
+          instrumentName: string | null;
+          instrumentPhotoUrl: string | null;
+          role: string;
+          tuningNotes: string | null;
+        }>;
+      }>;
+    };
+    const byAlbum = new Map<string, Bucket>();
+    for (const r of rows) {
+      const bucket = byAlbum.get(r.a.id) ?? {
+        albumId: r.a.id,
+        albumTitle: r.a.title,
+        albumArtwork: r.a.artwork,
+        albumYear: r.a.year,
+        tracks: [],
+      };
+      bucket.tracks.push({
+        songId: r.s.id,
+        title: r.s.title,
+        trackNumber: r.s.trackNumber,
+        performers: performersBySong.get(r.s.id) ?? [],
+      });
+      byAlbum.set(r.a.id, bucket);
+    }
+    return Array.from(byAlbum.values());
   }
 
   async getVendorSuperCreditArtists(vendorId: string): Promise<Array<Person & { trackCount: number }>> {

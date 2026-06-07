@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { X as XIcon } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 
@@ -356,6 +356,39 @@ export function AddGearPanel({
   const [role, setRole] = useState("");
   const [tuningNotes, setTuningNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  // Task #1667 — additive search across ALL GoodTunes-release tracks so
+  // gear can be attached to a track the artist isn't credited on yet.
+  // The artist's own/credited albums (`context`) stay shown by default;
+  // this only fires when the operator types.
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 250);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+  const { data: searchResults = [], isFetching: searchFetching } = useQuery<
+    GearContextAlbum[]
+  >({
+    queryKey: ["/api/admin/people", personId, "gear-context", { search: debouncedSearch }],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/admin/people/${personId}/gear-context?search=${encodeURIComponent(debouncedSearch)}`,
+        {
+          credentials: "include",
+          headers: getAuthToken()
+            ? { Authorization: `Bearer ${getAuthToken()}` }
+            : undefined,
+        },
+      );
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    enabled: debouncedSearch.length > 0,
+  });
+  // De-dupe albums that already appear in the artist's own/credited list
+  // so a searched-for own-album track doesn't render twice.
+  const ownAlbumIds = new Set(context.map((a) => a.albumId));
+  const searchAlbums = searchResults.filter((a) => !ownAlbumIds.has(a.albumId));
   // When the user picks an instrument, default the role to the
   // instrument's short category ("Guitar" / "Bass" / "Drums"). They can
   // overwrite it before saving — e.g. "Acoustic guitar (capo 3)".
@@ -391,7 +424,12 @@ export function AddGearPanel({
     // the gear track counts and require manual cleanup.
     const allSelected = Array.from(selectedSongIds);
     const songIdToTrack = new Map<string, GearContextAlbum["tracks"][number]>();
+    // Look up across BOTH the artist's own/credited context and any
+    // searched-for tracks — a selection can come from either list.
     for (const a of context) for (const t of a.tracks) songIdToTrack.set(t.songId, t);
+    for (const a of searchResults) for (const t of a.tracks) {
+      if (!songIdToTrack.has(t.songId)) songIdToTrack.set(t.songId, t);
+    }
     const skipped: string[] = [];
     const songIds = allSelected.filter((songId) => {
       const t = songIdToTrack.get(songId);
@@ -445,6 +483,92 @@ export function AddGearPanel({
     }
     onSaved();
   }
+
+  // Shared album-group renderer — used by both the artist's own/credited
+  // list and the "search all releases" results so the visual language
+  // (artwork header, Select-all, checkbox rows, already-credited / other-
+  // credits chips) stays identical across both surfaces.
+  const renderAlbumGroup = (a: GearContextAlbum) => {
+    const allSelected =
+      a.tracks.length > 0 && a.tracks.every((t) => selectedSongIds.has(t.songId));
+    const toggleAll = () => {
+      setSelectedSongIds((prev) => {
+        const next = new Set(prev);
+        if (allSelected) {
+          for (const t of a.tracks) next.delete(t.songId);
+        } else {
+          for (const t of a.tracks) next.add(t.songId);
+        }
+        return next;
+      });
+    };
+    return (
+      <div key={a.albumId} className="border-b border-slate-100 last:border-b-0">
+        <div className="flex items-center gap-2 px-2 py-1.5 bg-slate-50">
+          {a.albumArtwork ? (
+            <img src={a.albumArtwork} alt="" className="w-6 h-6 rounded object-cover" />
+          ) : null}
+          <span className="flex-1 text-slate-700 text-[12px] font-medium truncate">
+            {a.albumTitle}
+            {a.albumYear ? <span className="text-slate-400 font-normal"> · {a.albumYear}</span> : null}
+          </span>
+          <button
+            type="button"
+            onClick={toggleAll}
+            className="text-[11px] text-[var(--brand-blue)] hover:underline"
+            data-testid={`button-toggle-album-${a.albumId}`}
+          >
+            {allSelected ? "Clear" : "Select all"}
+          </button>
+        </div>
+        <ul>
+          {a.tracks.map((t) => {
+            const checked = selectedSongIds.has(t.songId);
+            const alreadyOnThisInstrument =
+              !!selectedInstrument &&
+              t.performers.some((p) => p.instrumentId === selectedInstrument.id);
+            const otherCredits = t.performers.filter(
+              (p) => !selectedInstrument || p.instrumentId !== selectedInstrument.id,
+            );
+            return (
+              <li
+                key={t.songId}
+                className="flex items-center gap-2 px-2 py-1.5"
+                data-testid={`row-add-gear-track-${t.songId}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleSong(t.songId)}
+                  className="h-3.5 w-3.5 accent-[var(--brand-blue)]"
+                  data-testid={`checkbox-add-gear-track-${t.songId}`}
+                />
+                <span className="text-slate-400 text-[11px] w-6 text-right tabular-nums">
+                  {t.trackNumber}
+                </span>
+                <span className="flex-1 min-w-0 text-slate-700 text-[12px] truncate">
+                  {t.title}
+                  {alreadyOnThisInstrument && (
+                    <span className="ml-2 text-[10px] text-amber-600">
+                      already credited
+                    </span>
+                  )}
+                  {!alreadyOnThisInstrument && otherCredits.length > 0 && (
+                    <span className="ml-2 text-[10px] text-slate-400">
+                      {otherCredits
+                        .map((p) => p.instrumentName ?? p.role)
+                        .filter(Boolean)
+                        .join(", ")}
+                    </span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  };
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-3" data-testid="panel-add-gear">
@@ -501,90 +625,48 @@ export function AddGearPanel({
         </span>
         {context.length === 0 ? (
           <p className="text-slate-400 text-[12px] py-2">
-            No tracks available yet. Add this person as the primary artist on an album, or open an album editor and add their credits there first.
+            No tracks from {personName}'s own catalog yet — search all releases below to credit gear on any track.
           </p>
         ) : (
           <div className="max-h-72 overflow-y-auto rounded-md border border-slate-200" data-testid="list-add-gear-tracks">
-            {context.map((a) => {
-              const allSelected = a.tracks.length > 0 && a.tracks.every((t) => selectedSongIds.has(t.songId));
-              const toggleAll = () => {
-                setSelectedSongIds((prev) => {
-                  const next = new Set(prev);
-                  if (allSelected) {
-                    for (const t of a.tracks) next.delete(t.songId);
-                  } else {
-                    for (const t of a.tracks) next.add(t.songId);
-                  }
-                  return next;
-                });
-              };
-              return (
-                <div key={a.albumId} className="border-b border-slate-100 last:border-b-0">
-                  <div className="flex items-center gap-2 px-2 py-1.5 bg-slate-50">
-                    {a.albumArtwork ? (
-                      <img src={a.albumArtwork} alt="" className="w-6 h-6 rounded object-cover" />
-                    ) : null}
-                    <span className="flex-1 text-slate-700 text-[12px] font-medium truncate">
-                      {a.albumTitle}
-                      {a.albumYear ? <span className="text-slate-400 font-normal"> · {a.albumYear}</span> : null}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={toggleAll}
-                      className="text-[11px] text-[var(--brand-blue)] hover:underline"
-                      data-testid={`button-toggle-album-${a.albumId}`}
-                    >
-                      {allSelected ? "Clear" : "Select all"}
-                    </button>
-                  </div>
-                  <ul>
-                    {a.tracks.map((t) => {
-                      const checked = selectedSongIds.has(t.songId);
-                      const alreadyOnThisInstrument =
-                        !!selectedInstrument &&
-                        t.performers.some((p) => p.instrumentId === selectedInstrument.id);
-                      const otherCredits = t.performers.filter(
-                        (p) => !selectedInstrument || p.instrumentId !== selectedInstrument.id,
-                      );
-                      return (
-                        <li
-                          key={t.songId}
-                          className="flex items-center gap-2 px-2 py-1.5"
-                          data-testid={`row-add-gear-track-${t.songId}`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleSong(t.songId)}
-                            className="h-3.5 w-3.5 accent-[var(--brand-blue)]"
-                            data-testid={`checkbox-add-gear-track-${t.songId}`}
-                          />
-                          <span className="text-slate-400 text-[11px] w-6 text-right tabular-nums">
-                            {t.trackNumber}
-                          </span>
-                          <span className="flex-1 min-w-0 text-slate-700 text-[12px] truncate">
-                            {t.title}
-                            {alreadyOnThisInstrument && (
-                              <span className="ml-2 text-[10px] text-amber-600">
-                                already credited
-                              </span>
-                            )}
-                            {!alreadyOnThisInstrument && otherCredits.length > 0 && (
-                              <span className="ml-2 text-[10px] text-slate-400">
-                                {otherCredits
-                                  .map((p) => p.instrumentName ?? p.role)
-                                  .filter(Boolean)
-                                  .join(", ")}
-                              </span>
-                            )}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              );
-            })}
+            {context.map((a) => renderAlbumGroup(a))}
+          </div>
+        )}
+      </div>
+
+      {/* Task #1667 — additive "search all releases" picker. The artist's
+          own/credited albums above stay the fast default; this surfaces
+          any GoodTunes-release track so gear can be attached to a song
+          the artist is only a guest on and isn't credited on yet. */}
+      <div>
+        <span className="block text-slate-400 text-[11px] uppercase tracking-wider mb-1">
+          Search all releases
+        </span>
+        <input
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Find any track by song or album title…"
+          className={inputCls}
+          data-testid="input-add-gear-search"
+        />
+        {debouncedSearch.length > 0 && (
+          <div className="mt-2">
+            {searchFetching && searchAlbums.length === 0 ? (
+              <p className="text-slate-400 text-xs py-2" data-testid="text-add-gear-search-loading">
+                Searching…
+              </p>
+            ) : searchAlbums.length === 0 ? (
+              <p className="text-slate-400 text-xs py-2" data-testid="text-add-gear-search-empty">
+                No other releases match “{debouncedSearch}”.
+              </p>
+            ) : (
+              <div
+                className="max-h-72 overflow-y-auto rounded-md border border-slate-200"
+                data-testid="list-add-gear-search-results"
+              >
+                {searchAlbums.map((a) => renderAlbumGroup(a))}
+              </div>
+            )}
           </div>
         )}
       </div>
