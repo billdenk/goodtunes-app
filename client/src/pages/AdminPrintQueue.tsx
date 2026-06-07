@@ -168,7 +168,7 @@ function AdminPrintQueueInner() {
     let filename = m?.[1] ?? (format === "zip" ? "gooddeed-batch.zip" : "gooddeed-batch.pdf");
     // Stamp the stock into the split download's name so the printer can
     // tell the two single-stock files apart at a glance.
-    if (paperFilter) filename = `gooddeed-print-${paperFilter}.pdf`;
+    if (paperFilter) filename = `gooddeed-print-${paperFilter}.${format === "zip" ? "zip" : "pdf"}`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -226,7 +226,7 @@ function AdminPrintQueueInner() {
           </div>
         </div>
         <p className="text-slate-500 text-[13px] mb-6">
-          Printable GoodDeed certificates. Confirmed rows are ready to print — batch them into a ZIP of single-page PDFs, one merged PDF, or split into single-stock <span className="text-slate-900">US Letter</span> / <span className="text-slate-900">A4</span> PDFs (one clean file per paper size), then download. Downloading the batch flips those rows to <span className="text-slate-900">printed</span>.
+          Printable GoodDeed certificates. Confirmed rows are ready to print — batch them into a ZIP of single-page PDFs, one merged PDF, or split into single-stock <span className="text-slate-900">US Letter</span> / <span className="text-slate-900">A4</span> files (one clean merged PDF or ZIP per paper size), then download. Downloading the batch flips those rows to <span className="text-slate-900">printed</span>.
         </p>
 
         {/* Tabs */}
@@ -297,6 +297,27 @@ function AdminPrintQueueInner() {
               data-testid="button-batch-pdf-a4"
             >
               A4 PDF ({a4Count})
+            </button>
+            {/* Task #1649 — single-stock ZIPs (one file per cert) so print
+                shops that want individual files still get a single-stock
+                archive instead of hand-sorting a mixed ZIP. */}
+            <button
+              type="button"
+              onClick={() => batchDownload("zip", "letter")}
+              disabled={letterCount === 0}
+              className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40"
+              data-testid="button-batch-zip-letter"
+            >
+              US Letter ZIP ({letterCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => batchDownload("zip", "a4")}
+              disabled={a4Count === 0}
+              className="px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 text-[12px] font-semibold hover:bg-slate-50 disabled:opacity-40"
+              data-testid="button-batch-zip-a4"
+            >
+              A4 ZIP ({a4Count})
             </button>
           </div>
         )}
