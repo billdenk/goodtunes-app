@@ -47,6 +47,20 @@
 
         </activity>
 
+        <!-- Push-notification small icon. Status-bar notification icons MUST
+             be a single-color white-on-transparent silhouette — Android only
+             uses the alpha channel and tints it, so a full-color launcher
+             icon renders as a gray box. ic_stat_notify is the monochrome
+             GoodTunes "G" matching the Android 13+ themed launcher icon. FCM
+             reads these two meta-data tags as the default small icon + tint
+             for any notification payload that doesn't override them. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_notify" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_icon_color" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

@@ -254,6 +254,14 @@ async function sendFcm(deviceToken: string, payload: PushPayload): Promise<SendO
         message: {
           token: deviceToken,
           notification: { title: payload.title, body: payload.body },
+          // Status-bar small icon + tint. Android requires a single-color
+          // white-on-transparent silhouette here; `ic_stat_notify` is the
+          // monochrome GoodTunes "G" shipped in the Android res drawables.
+          // This mirrors the AndroidManifest FCM default meta-data so the
+          // icon is correct whether or not the OS falls back to the default.
+          android: {
+            notification: { icon: "ic_stat_notify", color: "#319ED8" },
+          },
           ...(payload.data ? { data: payload.data } : {}),
         },
       }),

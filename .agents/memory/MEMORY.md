@@ -1,10 +1,6 @@
 - [Deep links claim my. not apex](deeplink-claims-my-not-apex.md) — Universal/App Links claim only `my.goodtunes.music` (app subdomain), NOT the bare `goodtunes.music` apex; the apex is the Webflow marketing site (A record -> Webflow via Cloudflare) which cannot serve association files; fan-shareable links live on `my.`/`get.`, so dropping the apex claim costs nothing.
 - [App Store + Play Store submission readiness](app-store-submission.md) — one-page runbook for reviewers, demo account provisioning, and privacy labels; in-app account deletion is at Account → Privacy → Delete My Account; Buy/Chat are gated by platform-specific flags.
-<<<<<<< HEAD
 - [Stripe Tax - low-key Buy sheet framing](stripe-tax-buy-sheet-framing.md) — Tax line in Buy sheet is "Sales tax" (not estimated), folds into "Total" (not estimated), ZIP field caption removed, and footnote is quiet ("Includes shipping and sales tax" or "added at checkout"). Stripe Tax engine is used for the quote to ensure zero divergence from the final checkout charge; static rate tables are banned.
-=======
-- [Stripe Tax - low-key Buy sheet framing](stripe-tax-buy-sheet-framing.md) — Tax line in Buy sheet is "Sales tax" (not estimated), folds into "Total" (not estimated), ZIP field caption removed, and footnote is quiet ("Includes shipping and sales tax" or "added at checkout"). Stripe Tax engine is used for the quote to ensure zero divergence from the final checkout charge; static rate tables are banned.
->>>>>>> task-1339
 - [client React component tests](client-react-component-tests.md) — no vitest; tests run via tsx --test + jsdom under tsconfig.test.json (jsx react-jsx) with TSX_TSCONFIG_PATH on the `test` validation cmd; needs wouter/framer/scrollTo global stubs + PlayerDock boots collapsed.
 - [napi-rs native binaries break esbuild bundle](napi-canvas-build-externals.md) — adding any `@napi-rs/*` (or sharp-style) pkg whose native `.node` ships in platform sibling pkgs requires a `pkg-*` glob in script/build.ts externals; optional-dep siblings aren't in package.json so the existing filter misses them, dev passes, publish fails.
 - [Oversized album art downscale](oversized-art-downscale.md) — oversized raster art is never stored/served raw (OOMs mobile WebKit); downscale via sharp shrink-on-load or hard-reject — never silent-raw; backfill only stamps its marker when 0 errored.
@@ -140,3 +136,10 @@
 - [Toast setTimeout hangs client tests](client-test-toast-settimeout-hang.md) — a component that calls toast() in a test arms a 1,000,000ms TOAST_REMOVE_DELAY setTimeout the jsdom harness DOESN'T capture (it only wraps setInterval) → buffered tsx --test process hangs ~1000s after all tests pass (no TAP summary, EXIT 124); wrap+clear setTimeout in the test.
 - [Stripe Tax pre-checkout line](stripe-tax-preview.md) — Buy-sheet shows a plain "Sales tax" line (NO "estimated" framing, Bill's call) folded into Total; GET /api/checkout/tax-quote uses Stripe Tax (needs US postal + Dashboard head-office addr or it hides). Never swap for a static table — would diverge from the actual charge.
 - [Artist Rig surfaces](rig-feature-surfaces.md) — track rigs ride in getAlbumCredits().bySongId[id].rigs (NOT getCredits); mutations must invalidate ["/api/albums",id,"credits"]; Fernando demo is prod-only marker-no-op-on-absence.
+<<<<<<< HEAD
+=======
+>>>>>>> b348abc (Task #1643: Gear-as-album redesign + artist Rig concept)
+>>>>>>> 98ecdde (Task #1643: Gear-as-album redesign + artist Rig concept)
+>>>>>>> 4eb28e5 (Task #1643: Gear-as-album redesign + artist Rig concept)
+- [Android notification icon + splash](android-notification-icon.md) — status-bar small icon MUST be white-on-transparent silhouette (alpha-only, else gray box); ic_stat_notify wired via FCM default meta-data + server payload; splash is white "G" on navy #00062B, not white bg.
+>>>>>>> 6128b99 (Task #1671: Android themed notification small-icon + consistent splash)

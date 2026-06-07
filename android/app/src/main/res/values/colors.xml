@@ -3,4 +3,7 @@
     <color name="colorPrimary">#00062B</color>
     <color name="colorPrimaryDark">#00041A</color>
     <color name="colorAccent">#319ED8</color>
+    <!-- Tint applied to the white-silhouette status-bar notification icon
+         (FCM default_notification_color). GoodTunes brand blue. -->
+    <color name="notification_icon_color">#319ED8</color>
 </resources>
