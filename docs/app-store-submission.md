@@ -112,7 +112,13 @@ After the republish + apex domain are in place, run Apple's `swcutil verify -d g
 
 ### Push entitlement
 
-The iOS entitlements file declares `aps-environment = development` (Xcode auto-swaps to `production` on Archive). The Android manifest declares `android.permission.POST_NOTIFICATIONS` so the user gets prompted once on first launch (Android 13+). Both are wired now so the binary asks for the right provisioning at install time — **no payloads are sent yet**; the FCM / APNs wiring is a follow-up task.
+The iOS entitlements file declares `aps-environment = development` (Xcode auto-swaps to `production` on Archive). The Android manifest declares `android.permission.POST_NOTIFICATIONS` so the user gets prompted once on first launch (Android 13+).
+
+End-to-end push is now wired (Task #1338):
+
+- **Client.** The `@capacitor/push-notifications` plugin is installed. On native launch, once a fan is signed in, `client/src/lib/pushNotifications.ts` requests permission, registers with the OS, and POSTs the resulting APNs (iOS) / FCM (Android) device token to `/api/push/register`. `ios/App/App/AppDelegate.swift` forwards the APNs registration callbacks into the Capacitor plugin so the JS `register()` resolves a token.
+- **Server.** Tokens persist in `push_devices` (one row per fan × device, keyed on the unique token, soft-deleted when invalid). `server/push.ts` delivers via APNs HTTP/2 (ES256 JWT) for iOS and FCM HTTP v1 for Android, and the admin "mark shipped" action fires an `order_shipped` alert end-to-end.
+- **Credential-gated, inert without keys** (same pattern as opsAlert / Sentry / Resend). With no provider secrets set, every send is a no-op that logs one `[push:dry-run]` line — so the wiring is verifiable without an Apple/Google account. To actually deliver, set the operator secrets: **APNs** — `APNS_KEY_P8`, `APNS_KEY_ID`, `APNS_TEAM_ID` (optional `APNS_BUNDLE_ID`, default `Io.GoGoods.music`; `APNS_PRODUCTION=0` for sandbox); **FCM** — `FCM_SERVICE_ACCOUNT_JSON` (optional `FCM_PROJECT_ID`). Android delivery additionally needs `google-services.json` in the Android build (already conditionally applied by `android/app/build.gradle`).
 
 ---
 

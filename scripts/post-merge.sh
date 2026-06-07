@@ -278,6 +278,39 @@ SQL
 }
 migrate_cert_paper_size dev  "${DATABASE_URL:-}"
 migrate_cert_paper_size prod "${PROD_DATABASE_URL:-}"
+# Push notifications — device-token table. shared/schema.ts declares
+# `push_devices` (one row per fan × installed app, keyed on the unique
+# APNs/FCM token). Hand-apply the canonical additive DDL on BOTH dev and
+# prod so the schema-drift guard stays green on a freshly-cloned dev and
+# the publish dev→prod diff stays empty. Idempotent (IF NOT EXISTS).
+migrate_push_devices() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping push_devices migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS push_devices (
+  id           varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id  varchar NOT NULL REFERENCES customer_users(id) ON DELETE CASCADE,
+  platform     text NOT NULL,
+  token        text NOT NULL UNIQUE,
+  created_at   timestamp DEFAULT now(),
+  last_seen_at timestamp DEFAULT now(),
+  deleted_at   timestamp
+);
+CREATE INDEX IF NOT EXISTS push_devices_customer_idx ON push_devices (customer_id);
+COMMIT;
+SQL
+  then
+    echo "post-merge: push_devices migration ok on $label"
+  else
+    echo "post-merge: WARNING — push_devices migration failed on $label (continuing)"
+  fi
+}
+migrate_push_devices dev  "${DATABASE_URL:-}"
+migrate_push_devices prod "${PROD_DATABASE_URL:-}"
 
 # Publishing-payout settlement columns — `organizations.pay_to_org_id`
 # (administered-by routing, e.g. Songs of Kaotic → Hipgnosis),

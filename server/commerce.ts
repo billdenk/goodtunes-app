@@ -2999,6 +2999,21 @@ export function registerCommerceRoutes(app: Express) {
       .set({ status: "shipped", shippedAt: new Date() })
       .where(eq(orders.id, o.id))
       .returning();
+    // Fire-and-forget order-shipped push to the fan's registered devices.
+    // Inert without APNs/FCM credentials (logs a dry-run line). Never
+    // blocks the ship action — the album lookup + send are best-effort.
+    try {
+      const album = await storage.getAlbumById(updated.albumId, { includeHidden: true });
+      const { notifyOrderShipped } = await import("./push");
+      notifyOrderShipped({
+        customerId: updated.customerId,
+        orderId: updated.id,
+        albumId: updated.albumId,
+        albumTitle: album?.title ?? "Your GoodTunes album",
+      });
+    } catch (e: any) {
+      console.error(`[ship] push notify threw for order ${updated.id}`, e?.message);
+    }
     // ─── Task #48 — auto-transfer to the connected account on ship.
     // Best-effort: a Stripe failure leaves the order shipped with
     // payoutStatus = "failed" / "skipped" so the operator can retry

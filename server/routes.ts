@@ -18294,6 +18294,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ ok: true });
   });
 
+  // ----- Push notifications: device-token registration ------------------
+  // The Capacitor native apps POST their APNs (iOS) / FCM (Android) token
+  // here after the fan grants notification permission. Upsert keyed on the
+  // unique token (server/push.ts) so re-launching just refreshes ownership.
+  // Delivery is credential-gated and inert without keys (server/push.ts).
+  app.post("/api/push/register", requireCustomer, async (req, res) => {
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    const platform = req.body?.platform === "ios" ? "ios" : req.body?.platform === "android" ? "android" : "";
+    if (!token || !platform) {
+      return res.status(400).json({ message: "token and platform ('ios'|'android') required" });
+    }
+    const { registerDevice } = await import("./push");
+    await registerDevice({ customerId: req.session.userId!, platform, token });
+    return res.status(201).json({ ok: true });
+  });
+  app.post("/api/push/unregister", requireCustomer, async (req, res) => {
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    if (!token) return res.status(400).json({ message: "token required" });
+    const { unregisterDevice } = await import("./push");
+    const removed = await unregisterDevice(req.session.userId!, token);
+    return res.json({ ok: true, removed });
+  });
+
   // ----- Task #530: Unified search + fan recents + recent searches ------
   //
   // GET /api/search?q=&kinds=&limit=

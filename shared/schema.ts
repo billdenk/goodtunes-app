@@ -1839,6 +1839,43 @@ export const reservedHandles = pgTable("reserved_handles", {
 });
 export type ReservedHandle = typeof reservedHandles.$inferSelect;
 
+// Push-notification device tokens. One row per (fan × installed app).
+// Registered from the Capacitor native apps on first launch after the
+// fan grants notification permission: the client POSTs its APNs (iOS)
+// or FCM (Android) token to /api/push/register, which upserts here keyed
+// on the globally-unique `token`. `platform` selects the delivery
+// transport (APNs vs FCM) at send time. Soft-deleted (`deletedAt`) when
+// the fan unregisters or the provider reports the token as invalid/
+// unregistered on a send, so a stale token is never retried but the
+// audit trail survives. A single fan can own several rows (phone +
+// tablet); a single device can move between fans (re-registration moves
+// the token to the newest customer via the upsert).
+export const pushDevices = pgTable(
+  "push_devices",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    customerId: varchar("customer_id")
+      .notNull()
+      .references(() => customerUsers.id, { onDelete: "cascade" }),
+    platform: text("platform").notNull(),
+    token: text("token").notNull().unique(),
+    createdAt: timestamp("created_at").defaultNow(),
+    lastSeenAt: timestamp("last_seen_at").defaultNow(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => ({
+    customerIdx: index("push_devices_customer_idx").on(t.customerId),
+  }),
+);
+export const insertPushDeviceSchema = createInsertSchema(pushDevices).omit({
+  id: true,
+  createdAt: true,
+  lastSeenAt: true,
+  deletedAt: true,
+});
+export type InsertPushDevice = z.infer<typeof insertPushDeviceSchema>;
+export type PushDevice = typeof pushDevices.$inferSelect;
+
 // Task #400 — Single-use one-tap sign-in tokens emailed in the welcome
 // campaign. Clicking the link in the wave-1 email lands the fan on
 // `/welcome-back?token=…`, which trades the token for a fresh customer

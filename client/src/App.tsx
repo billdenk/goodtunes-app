@@ -10,6 +10,7 @@ import { NavVisibilityProvider } from "@/hooks/useNavVisibility";
 import { TopChromeFrostProvider } from "@/hooks/useTopChromeFrost";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 import { markBootSucceeded } from "@/lib/bootHeal";
+import { initPushNotifications } from "@/lib/pushNotifications";
 import { useTrackInAppNavigation } from "@/lib/navHistory";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthKind, isStoreHost } from "@/hooks/useAuthKind";
@@ -788,6 +789,19 @@ function Router() {
   );
 }
 
+// Registers the native push-notification device token once a fan is
+// signed in. No-op on web and until auth resolves a customer; the actual
+// register/delivery is gated server-side (server/push.ts).
+function PushRegistrar() {
+  const { user } = useAuth();
+  useEffect(() => {
+    if (user?.kind === "customer") {
+      void initPushNotifications();
+    }
+  }, [user?.kind]);
+  return null;
+}
+
 function App() {
   // Task #921 — Tell the boot self-heal the shell actually mounted, which
   // clears the one-reload guard so future redeploys can recover again and
@@ -804,6 +818,7 @@ function App() {
             <NavVisibilityProvider>
               <TopChromeFrostProvider>
                 <Toaster />
+                <PushRegistrar />
                 <Router />
               </TopChromeFrostProvider>
             </NavVisibilityProvider>
