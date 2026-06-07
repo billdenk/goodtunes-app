@@ -831,6 +831,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ ok: true });
   });
 
+  // Task #1631 — Cross-host purchase handoff. The preview + purchase funnel
+  // lives on get./store.goodtunes.music; after a sale we send the fan to the
+  // player on my.goodtunes.music to play what they now own. Both the session
+  // cookie and the localStorage bearer token are host-scoped, so neither
+  // transfers across subdomains. The funnel mints a fresh customer bearer
+  // token here (the caller is already authed on the funnel host) and carries
+  // it to the player host in the URL fragment — the same mechanism the
+  // welcome-back sign-in link uses. Customer-only, so an admin token can't
+  // mint a customer session.
+  app.post("/api/checkout/player-handoff", requireCustomer, async (req, res) => {
+    const userId = req.session.userId!;
+    const token = generateToken();
+    await storage.createAuthToken(token, userId, "customer");
+    return res.json({ token });
+  });
+
   app.get("/api/me", requireAuth, async (req, res) => {
     if (req.session.kind === "customer") {
       const c = await storage.getCustomer(req.session.userId!);

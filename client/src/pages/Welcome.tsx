@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { isPurchaseFunnelHost, PLAYER_HOST } from "@/hooks/useAuthKind";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { track } from "@/lib/analytics";
@@ -208,7 +209,33 @@ export function Welcome() {
       // their handle later from /account/edit.
     } finally {
       setSavingUsername(false);
-      navigate(data?.order ? `/album/${data.order.albumId}` : "/account");
+      const albumId = data?.order?.albumId;
+      if (!albumId) {
+        navigate("/account");
+        return;
+      }
+      // Task #1631 — Cross-host purchase handoff. On the prod purchase funnel
+      // (get./store.goodtunes.music) the fan must be re-authed on the player
+      // host (my.goodtunes.music): both the session cookie and the localStorage
+      // bearer token are host-scoped, so we mint a fresh token and carry it in
+      // the URL fragment (kept out of the query so it never hits a server log)
+      // plus a `gtwelcome` flag that pops the thank-you modal on arrival. In
+      // dev / *.replit.app this branch is skipped (single host) and we navigate
+      // in-app, still flagging the modal.
+      if (isPurchaseFunnelHost()) {
+        try {
+          const r = await apiRequest("POST", "/api/checkout/player-handoff");
+          const { token } = await r.json();
+          window.location.replace(
+            `https://${PLAYER_HOST}/album/${albumId}#token=${encodeURIComponent(token)}&gtwelcome=1`,
+          );
+          return;
+        } catch {
+          // Mint failed — fall back to a same-host navigation. The album is
+          // already unlocked for this session, so the fan still lands on it.
+        }
+      }
+      navigate(`/album/${albumId}?gtwelcome=1`);
     }
   };
 

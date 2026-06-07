@@ -247,8 +247,29 @@ webhook may land a beat after the redirect). The fan sees a spinner with
 5. **"Pick your handle" — *optional*.** A `@username` field pre-filled from the
    fan's email local-part. They can change it or leave it; it's saved when they tap
    the final button.
-6. **"Open my player"** button — saves the handle (if changed) and navigates to
-   **`/album/:id`**, now with the album unlocked for instant digital listening.
+6. **"Open my player"** button — saves the handle (if changed) and hands the fan
+   to the album with the album unlocked for instant digital listening.
+   - **On the same host** (dev, `*.replit.app`, or the main fan host) this is an
+     in-app navigation to **`/album/:id?gtwelcome=1`**.
+   - **On the preview + purchase funnel** (`get.goodtunes.music` /
+     `store.goodtunes.music`) the fan must be re-authed on the player host
+     (`my.goodtunes.music`) — the session cookie and the localStorage bearer
+     token are both host-scoped, so neither crosses subdomains. The funnel mints
+     a fresh customer bearer token (`POST /api/checkout/player-handoff`,
+     `requireCustomer`) and redirects to
+     **`https://my.goodtunes.music/album/:id#token=<bearer>&gtwelcome=1`**. The
+     token rides in the URL **fragment** (never sent to the server, so it never
+     hits an access log); `main.tsx` consumes it before React mounts, stores it,
+     scrubs the fragment, and leaves `?gtwelcome=1` behind. If the mint fails the
+     funnel falls back to a same-host navigation (the album is already unlocked
+     for the current session).
+   - The `gtwelcome=1` flag pops a **dismissible thank-you modal** on the album
+     (`PurchaseThankYouModal` in `AlbumDetail.tsx`) confirming the music, videos,
+     and photos are unlocked now and pointing at the free, personalized, numbered
+     GoodDeed certificate download behind the album's **⋯ menu**. It shows
+     **once** — the flag is stripped from the URL the instant it's read and a
+     per-album `gt:welcome-seen:<albumId>` localStorage key guards against a
+     shared/bookmarked URL re-popping it.
 
 **A receipt also lands in their inbox.** The moment the order materializes from the
 paid Stripe session (the same event that powers this page), GoodTunes sends **one

@@ -47,7 +47,7 @@ import { toast } from "@/hooks/use-toast";
 import { IconButton } from "@/components/ui/IconButton";
 import { ChromeScrim } from "@/components/ui/ChromeScrim";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
-import { ChevronLeft, Share, MoreHorizontal, Lock } from "lucide-react";
+import { ChevronLeft, Share, MoreHorizontal, Lock, ShieldCheck, Music2, ArrowRight } from "lucide-react";
 import { buyEnabled, nativeDownloadsEnabled, streamingHandoffEnabled } from "@/lib/platform";
 import { downloadSong, removeDownload, listDownloadedSongs } from "@/lib/nativeDownloads";
 import { track } from "@/lib/analytics";
@@ -176,6 +176,147 @@ type OrderLite = {
   cert?: { id: string } | null;
 };
 
+// Task #1631 — Post-purchase thank-you modal. Pops once when a fan lands on the
+// album after a sale (the buy funnel appends `?gtwelcome=1`, or the cross-host
+// handoff in main.tsx restores it from the URL fragment). Confirms the music /
+// videos / photos are unlocked now and points at the free, personalized,
+// numbered GoodDeed certificate download behind the ⋯ menu. Self-contained so a
+// single mount in the parent covers both the mobile and desktop surfaces.
+//
+// "Show once" is enforced two ways: we strip `gtwelcome` from the URL the
+// instant we read it (a refresh / back never re-pops it) AND we stamp a
+// per-album localStorage key so a shared / bookmarked URL that still carries
+// the flag won't nag a fan who already dismissed it.
+function PurchaseThankYouModal({ albumId: albumIdProp }: { albumId?: string }) {
+  const { user } = useAuth();
+  // The bare `/album/:id` route mounts <AlbumDetail /> with no prop, so fall
+  // back to the route param (same resolution the surface uses) — otherwise the
+  // localStorage "seen" key collapses to a single global value and the modal
+  // would only ever show for the first album a fan opens.
+  const params = useParams<{ id: string }>();
+  const albumId = albumIdProp ?? params.id;
+  const [open, setOpen] = useState(false);
+  const armed = useRef(false);
+
+  useEffect(() => {
+    if (armed.current) return;
+    let flagged = false;
+    try {
+      flagged = new URLSearchParams(window.location.search).get("gtwelcome") === "1";
+    } catch {}
+    if (!flagged) return;
+    // Strip the flag from the URL + history so a refresh or back-navigation
+    // never re-pops the modal.
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("gtwelcome");
+      window.history.replaceState({}, "", url.toString());
+    } catch {}
+    const key = `gt:welcome-seen:${albumId ?? "x"}`;
+    try {
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, "1");
+    } catch {}
+    armed.current = true;
+    setOpen(true);
+  }, [albumId]);
+
+  // Best-effort personalization — pull the GoodDeed number for this album off
+  // the shared /api/orders cache (already warmed by the album page). If it
+  // isn't resolved yet the copy gracefully omits the number.
+  const { data: orders } = useQuery<OrderLite[]>({
+    queryKey: ["/api/orders"],
+    enabled: open && !!user,
+  });
+  const certNum =
+    (orders ?? []).find(
+      (o) => o.albumId === albumId && !o.refundedAt && o.goodDeedNumber != null,
+    )?.goodDeedNumber ?? null;
+
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center p-5"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Purchase complete"
+      data-testid="modal-purchase-thankyou"
+    >
+      <div
+        className="absolute inset-0 bg-black/70"
+        onClick={() => setOpen(false)}
+        data-testid="overlay-purchase-thankyou"
+      />
+      <div
+        className="relative w-full max-w-[400px] rounded-3xl border border-white/10 shadow-2xl p-7"
+        style={{ background: "var(--brand-bg)" }}
+      >
+        <div className="absolute right-4 top-4">
+          <SheetClose onClick={() => setOpen(false)} data-testid="button-close-thankyou" />
+        </div>
+
+        <div
+          className="flex h-12 w-12 items-center justify-center rounded-full"
+          style={{ backgroundColor: "rgba(74,255,202,0.14)" }}
+        >
+          <Music2 className="h-6 w-6" style={{ color: "var(--brand-mint)" }} />
+        </div>
+
+        <p
+          className="mt-5 text-xs font-semibold uppercase tracking-[0.18em]"
+          style={{ color: "var(--brand-mint)" }}
+          data-testid="text-thankyou-eyebrow"
+        >
+          Purchase complete
+        </p>
+        <h2 className="mt-1.5 text-2xl font-bold text-fan-primary" data-testid="text-thankyou-title">
+          It’s all yours.
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-fan-secondary" data-testid="text-thankyou-body">
+          Your music, videos, and photos are unlocked right now — press play and enjoy.
+        </p>
+
+        <div className="mt-5 flex gap-3 rounded-2xl bg-white/[0.04] p-4">
+          <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" style={{ color: "var(--brand-mint)" }} />
+          <p className="text-sm leading-relaxed text-fan-secondary" data-testid="text-thankyou-cert">
+            Your free, personalized GoodDeed® certificate
+            {certNum != null ? (
+              <>
+                {" "}
+                <span className="font-semibold text-fan-primary">#{certNum}</span>
+              </>
+            ) : null}{" "}
+            is ready to download — open the{" "}
+            <MoreHorizontal className="inline h-4 w-4 align-text-bottom" aria-label="more menu" /> menu
+            on this album anytime.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-full py-3 text-sm font-semibold"
+          style={{ backgroundColor: "var(--brand-mint)", color: "var(--brand-bg)" }}
+          data-testid="button-start-listening"
+        >
+          Start listening
+          <ArrowRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function AlbumDetail({ albumId }: { albumId?: string } = {}) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   // Surface choice is width-only so an iPad running the native app gets the
@@ -198,7 +339,12 @@ export function AlbumDetail({ albumId }: { albumId?: string } = {}) {
   // FanPreviewProvider keeps the fan-preview lens wiring intact (read via
   // useFanPreview, still toggleable through the `?fan=1` URL flag); the visible
   // floating toggle pill has been removed.
-  return <FanPreviewProvider>{surface}</FanPreviewProvider>;
+  return (
+    <FanPreviewProvider>
+      {surface}
+      <PurchaseThankYouModal albumId={albumId} />
+    </FanPreviewProvider>
+  );
 }
 
 // `albumId` lets a host-aware caller (the store launch storefront) render a
