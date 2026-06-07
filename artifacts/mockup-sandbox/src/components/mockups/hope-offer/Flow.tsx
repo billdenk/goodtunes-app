@@ -9,6 +9,7 @@ import {
   Info,
   Gift,
   Sparkles,
+  Expand,
   Apple,
   Lock,
 } from "lucide-react";
