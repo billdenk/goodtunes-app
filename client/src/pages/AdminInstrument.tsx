@@ -1559,8 +1559,6 @@ function AddMakerComposer({
         >
           {busy ? (
             <Spinner className="w-3.5 h-3.5 animate-spin" />
-          ) : step === "url" ? (
-            "Scrape & add"
           ) : (
             "Add maker"
           )}
