@@ -105,11 +105,7 @@
 - [iOS bundle id ≠ Android](ios-bundle-id-vs-android.md) — live App Store app is `Io.GoGoods.music` (Apple ID 6448246869), Android is `fm.goodtunes.player`; iOS id lives in capacitor+pbxproj×2+codemagic×2+AASA, keep in lockstep.
 - [Codemagic App Store signing needs a real private key](codemagic-distribution-cert-private-key.md) — iOS build dies at "Build the signed .ipa" with a MISLEADING "profile requires capabilities" error; real cause (in the code-signing SETUP step log) is no distribution-cert PRIVATE KEY — ASC API key can't supply one, must load a .p12.
 - [get/my split + native = player](get-my-domain-split-and-native-no-buy.md) — buying is web-only on get.goodtunes.music (never unlocks in place → my.goodtunes.music player); both native apps hide Buy via `buyEnabled = !isNative`; Android-off is reversible.
-<<<<<<< HEAD
 - [Fan desktop surface width-only](fan-desktop-surface-width-only.md) — every fan "is desktop?" decision must be width-only (useDesktopShell), NOT `&& buyEnabled`; gating the album surface on buyEnabled dropped native iPad to the phone shell while width-only rails stayed. Hide native-forbidden CTAs in-component (Buy pill on onBuyBundle) so surface choice stays purely width-driven.
-=======
-- [Deep-link claims target my. not the apex](deeplink-claims-my-not-apex.md) — native Universal/App Link claims list ONLY my.goodtunes.music; bare goodtunes.music apex is the Webflow marketing site (can't serve association files, would only ever fail verification), intentionally never claimed.
->>>>>>> d5394fc (Task #1339: Deep links verify on my.goodtunes.music (drop bare apex))
 - [Rebase multi-region leftover markers](rebase-multi-region-leftover-markers.md) — one file can have >1 conflict region; resolving the first + git add commits leftover =====/>>>>> markers that only break the build post-rebase; grep marker-count==0 per file before add + sweep repo + re-check schema-drift on dev AND prod.
 - [Fan shipping charge](fan-shipping-charge.md) — real shipping from shipping_rates card; base vs $1 markup stay separate cols, markup once/order, recompute server-side, physical no-quote REFUSE (422) never $0, lock Stripe allowed_countries=[picked], persist breakdown in BOTH materialize paths.
 - [ArtistDetail not-found gate](artist-page-notfound-gate.md) — fan artist link works; false "Artist not found" comes from gating on the owned-only artistAlbums; gate exists/not-found on ownership-INDEPENDENT goodTunesTitles + artistPerson.
@@ -136,10 +132,5 @@
 - [Toast setTimeout hangs client tests](client-test-toast-settimeout-hang.md) — a component that calls toast() in a test arms a 1,000,000ms TOAST_REMOVE_DELAY setTimeout the jsdom harness DOESN'T capture (it only wraps setInterval) → buffered tsx --test process hangs ~1000s after all tests pass (no TAP summary, EXIT 124); wrap+clear setTimeout in the test.
 - [Stripe Tax pre-checkout line](stripe-tax-preview.md) — Buy-sheet shows a plain "Sales tax" line (NO "estimated" framing, Bill's call) folded into Total; GET /api/checkout/tax-quote uses Stripe Tax (needs US postal + Dashboard head-office addr or it hides). Never swap for a static table — would diverge from the actual charge.
 - [Artist Rig surfaces](rig-feature-surfaces.md) — track rigs ride in getAlbumCredits().bySongId[id].rigs (NOT getCredits); mutations must invalidate ["/api/albums",id,"credits"]; Fernando demo is prod-only marker-no-op-on-absence.
-<<<<<<< HEAD
-=======
->>>>>>> b348abc (Task #1643: Gear-as-album redesign + artist Rig concept)
->>>>>>> 98ecdde (Task #1643: Gear-as-album redesign + artist Rig concept)
->>>>>>> 4eb28e5 (Task #1643: Gear-as-album redesign + artist Rig concept)
+- [Native plugin version skew + iOS icon](native-plugin-version-skew.md) — new Capacitor plugin called from the remote-origin bundle throws on older installed binaries → un-awaited addListener reject paints the global banner; gate on isPluginAvailable + await (republish fixes it, no new build). Single-size 1024 iOS app icon renders blank in TestFlight; ship the full explicit no-alpha icon set.
 - [Android notification icon + splash](android-notification-icon.md) — status-bar small icon MUST be white-on-transparent silhouette (alpha-only, else gray box); ic_stat_notify wired via FCM default meta-data + server payload; splash is white "G" on navy #00062B, not white bg.
->>>>>>> 6128b99 (Task #1671: Android themed notification small-icon + consistent splash)
