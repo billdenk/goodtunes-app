@@ -183,7 +183,12 @@ export function CertPdfViewerSheet({
     t.ty = clamp(t.ty, -maxY, maxY);
   }, []);
 
-  // ── Render the (single-page) certificate to the canvas, fit to width ──
+  // ── Render the (single-page) certificate to the canvas, fit-to-contain ──
+  // The whole page is scaled to fit WITHIN the viewport box (width AND
+  // height), so on a short/landscape viewport the portrait certificate is
+  // fully visible at a glance — no scroll/pinch just to see it. The flex
+  // container above this viewport already reserves the header height, so
+  // `vp.clientHeight` is the area actually available to the page.
   const renderPage = useCallback(async () => {
     const doc = docRef.current;
     const canvas = canvasRef.current;
@@ -191,19 +196,21 @@ export function CertPdfViewerSheet({
     if (!doc || !canvas || !vp) return;
     const page = await doc.getPage(1);
     const unscaled = page.getViewport({ scale: 1 });
-    const cssWidth = vp.clientWidth;
-    const fitScale = cssWidth / unscaled.width;
+    const vw = vp.clientWidth;
+    const vh = vp.clientHeight;
+    if (vw <= 0 || vh <= 0) return;
+    // Fit-to-contain: smaller of the width-fit and height-fit scales.
+    const fitScale = Math.min(vw / unscaled.width, vh / unscaled.height);
+    const cssWidth = unscaled.width * fitScale;
+    const cssHeight = unscaled.height * fitScale;
     // Remember the rendered page's CSS box so the paper-size preview frame
     // can be drawn at the same width and the live aspect compared.
-    setPageCss({
-      width: cssWidth,
-      height: cssWidth * (unscaled.height / unscaled.width),
-    });
+    setPageCss({ width: cssWidth, height: cssHeight });
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
     const viewport = page.getViewport({ scale: fitScale * dpr });
     canvas.width = Math.floor(viewport.width);
     canvas.height = Math.floor(viewport.height);
-    // CSS size = fit-to-width; the canvas backing store is DPR-crisp.
+    // CSS size = fit-to-contain; the canvas backing store is DPR-crisp.
     canvas.style.width = `${Math.floor(viewport.width / dpr)}px`;
     canvas.style.height = `${Math.floor(viewport.height / dpr)}px`;
     const ctx = canvas.getContext("2d");
@@ -428,13 +435,16 @@ export function CertPdfViewerSheet({
       data-testid="overlay-cert-pdf"
     >
       <div
-        className="flex items-center justify-between gap-2 px-4 pb-3"
+        className="flex items-start justify-between gap-3 px-4 pb-2"
         style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
       >
-        <span className="text-white text-base font-semibold" data-testid="text-cert-pdf-title">
-          GoodDeed® Certificate
-        </span>
-        <div className="flex items-center gap-2">
+        <h1
+          className="text-fan-primary text-2xl font-semibold leading-tight pt-1"
+          data-testid="text-cert-pdf-title"
+        >
+          Here's your GoodDeed® Certificate.
+        </h1>
+        <div className="flex items-center gap-2 flex-shrink-0">
           {downloadReady && (
             <IconButton
               variant="glass"
@@ -511,7 +521,7 @@ export function CertPdfViewerSheet({
           </div>
         )}
         <div
-          className="absolute inset-0 flex items-start justify-center"
+          className="absolute inset-0 flex items-center justify-center"
           style={{ visibility: loading || error ? "hidden" : "visible" }}
         >
           <div

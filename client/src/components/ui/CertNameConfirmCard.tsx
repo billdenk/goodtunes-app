@@ -341,15 +341,78 @@ export function CertNameConfirmCard({
     </div>
   );
 
-  const body = editing ? editForm : viewRow;
+  // Bar variant view — plain inline text under the sheet title (no boxed
+  // card), with a small, understated pencil to the left that opens the same
+  // inline editor. The value spans keep their testids holding ONLY the
+  // value so callers/tests read the name + paper size cleanly.
+  const editPencil = (
+    <div className="flex-shrink-0 -ml-1" style={{ color: "var(--brand-mint)" }}>
+      <IconButton
+        variant="ghost"
+        size="md"
+        label="Edit certificate details"
+        onClick={() => {
+          setDraft(info.currentName ?? "");
+          setDraftPaper(info.paperSize);
+          setSaveError(null);
+          setEditing(true);
+        }}
+        data-testid="button-edit-cert-name"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+        </svg>
+      </IconButton>
+    </div>
+  );
+
+  const barViewRow = (
+    <div className="flex items-center gap-1.5">
+      {editPencil}
+      <div className="min-w-0 flex flex-col gap-0.5">
+        <div className="flex flex-wrap items-baseline gap-x-2 leading-snug">
+          <span className="text-xs uppercase tracking-wider text-fan-faint">
+            Name on certificate:
+          </span>
+          <span
+            className="text-base font-medium text-fan-primary truncate"
+            data-testid="text-cert-name"
+          >
+            {info.currentName}
+          </span>
+        </div>
+        {paper && (
+          <div className="flex flex-wrap items-baseline gap-x-2 leading-snug">
+            <span className="text-xs uppercase tracking-wider text-fan-faint">
+              Paper size:
+            </span>
+            <span className="text-base text-fan-secondary" data-testid="text-cert-paper-size">
+              {PAPER_LABEL[paper]}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   if (variant === "bar") {
     return (
       <div className="px-4 pb-3" data-testid="cert-name-editor">
-        {body}
+        {editing ? editForm : barViewRow}
       </div>
     );
   }
+
+  const body = editing ? editForm : viewRow;
 
   return (
     <div
