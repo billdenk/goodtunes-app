@@ -32,6 +32,7 @@ import {
   SheetDismissProvider,
   useSheetDismiss,
   SHEET_SAFE_TOP,
+  SHEET_TOP_FADE,
 } from "@/components/ui/SheetChrome";
 import {
   getFavoriteStreamingService,
@@ -2440,7 +2441,8 @@ function PerformerSheet({
           data-testid="button-performer-close"
         />
         <div
-          className="flex-1 min-h-0 overflow-y-auto scrollbar-hide pb-10"
+          className="flex-1 min-h-0 overflow-y-auto scrollbar-hide pt-16 pb-10"
+          style={{ WebkitMaskImage: SHEET_TOP_FADE, maskImage: SHEET_TOP_FADE }}
           data-testid="region-performer-content"
         >
           <PerformerProfileContent

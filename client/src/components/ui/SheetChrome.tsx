@@ -32,6 +32,20 @@ export const SHEET_SAFE_TOP = "calc(env(safe-area-inset-top, 0px) + 12px)";
 // align to the same line.
 export const FAN_TOP_CHROME_INSET = SHEET_SAFE_TOP;
 
+// Apple-Music-style soft top fade for a scrollable sheet region (Task #1693).
+// Applied as a CSS mask on the scroll container so content dissolves as it
+// scrolls up under the pinned top chrome (back chevron / close X) instead of
+// hard-cutting at a sharp horizontal line. The fade reaches full opacity by
+// 64px, so pair it with ~64px (`pt-16`) of top padding on the scrolled content
+// (the person hero already adds a little more on top of that) — that way the
+// first row rests *below* the fade and the chrome, fully opaque at rest, and
+// only the act of scrolling pulls content up into the soft fade. Because the
+// mask also fades the scroll region's own background, the host's surface color
+// must match the panel/card behind it (it does on every fan sheet) so the
+// faded band reveals an identical color, not a seam.
+export const SHEET_TOP_FADE =
+  "linear-gradient(to bottom, transparent 0px, rgba(0,0,0,0.4) 40px, #000 64px)";
+
 // --- self-managed dismiss context ----------------------------------------
 //
 // `SheetShell` exposes its animated dismiss through this context so the

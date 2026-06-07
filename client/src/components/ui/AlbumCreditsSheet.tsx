@@ -8,7 +8,7 @@ import {
   resolveStaticInstrument,
   personProfileIsRich,
 } from "@/pages/AlbumDetail";
-import { SheetClose, SheetBack } from "@/components/ui/SheetChrome";
+import { SheetClose, SheetBack, SHEET_TOP_FADE } from "@/components/ui/SheetChrome";
 import { scrimFade } from "@/lib/motion";
 import { track } from "@/lib/analytics";
 import type {
@@ -546,7 +546,11 @@ function CreditsSlider({
           <motion.div
             key="person"
             className="absolute inset-0 z-10 overflow-y-auto scrollbar-hide"
-            style={{ background: surfaceBg }}
+            style={{
+              background: surfaceBg,
+              WebkitMaskImage: SHEET_TOP_FADE,
+              maskImage: SHEET_TOP_FADE,
+            }}
             initial={fade ? fade.initial : { x: "100%" }}
             animate={fade ? fade.animate : { x: 0 }}
             exit={fade ? fade.exit : { x: "100%" }}
@@ -570,7 +574,11 @@ function CreditsSlider({
           <motion.div
             key="list"
             className="absolute inset-0 overflow-y-auto scrollbar-hide"
-            style={{ background: surfaceBg }}
+            style={{
+              background: surfaceBg,
+              WebkitMaskImage: SHEET_TOP_FADE,
+              maskImage: SHEET_TOP_FADE,
+            }}
             initial={fade ? fade.initial : { x: "-25%" }}
             animate={fade ? fade.animate : { x: 0 }}
             exit={fade ? fade.exit : { x: "-25%" }}
