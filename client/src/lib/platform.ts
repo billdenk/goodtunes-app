@@ -53,8 +53,16 @@ export const isWebIOS: boolean = isIOS && !isNative;
 /** Chat tab + every "Chat with vendor" CTA. */
 export const chatEnabled = !isNative;
 
-/** Real on-device file downloads (Capacitor Filesystem). */
-export const nativeDownloadsEnabled = isNative;
+/**
+ * Real on-device file downloads (Capacitor Filesystem).
+ *
+ * Android-native only. iOS hides every download affordance (per-track,
+ * album-level, and any other) — the iPhone player is a streaming surface in
+ * this build, matching the streaming-first product direction and avoiding a
+ * half-wired download path on iOS. Web never downloads. Re-enable iOS by
+ * widening this back to `isNative`.
+ */
+export const nativeDownloadsEnabled = isNative && nativePlatform === "android";
 
 /**
  * Fan-facing Buy affordances (album BuySheet, price pill, etc.).

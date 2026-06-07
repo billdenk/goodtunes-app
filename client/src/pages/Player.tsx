@@ -10,7 +10,7 @@ import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { PlayerNameLinks } from "@/components/ui/PlayerNameLinks";
 import { PlayerTitleLink } from "@/components/ui/PlayerTitleLink";
 import { track } from "@/lib/analytics";
-import { isWebIOS } from "@/lib/platform";
+import { isIOS } from "@/lib/platform";
 import { useSystemVolume } from "@/lib/nativeVolume";
 
 /**
@@ -118,12 +118,13 @@ function MobileScrubber({
 /**
  * Pointer-driven volume slider for the mobile full-screen player. Same
  * native-range-input problem as the scrubber. Callers gate this behind
- * `!isWebIOS`: on web iOS the audio value is read-only (hardware buttons
- * own loudness) so the slider is hidden, but on native iOS the SystemVolume
- * plugin makes it work, so it shows there and mirrors the phone's hardware
- * volume. `volume`/`setVolume` are supplied by the caller — PlayerContext on
- * web/Android, the live system volume on native iOS. Volume is cheap to set,
- * so it tracks the finger live (no defer-to-release).
+ * `!isIOS`: across all of iOS (web Safari/in-app webviews AND the native
+ * app) the in-player slider is a dead control in this build — web iOS makes
+ * the audio value read-only (hardware buttons own loudness) and the native
+ * SystemVolume path doesn't drive it here — so the slider is hidden on every
+ * iPhone/iPad. `volume`/`setVolume` are supplied by the caller (PlayerContext
+ * on web/Android). Volume is cheap to set, so it tracks the finger live (no
+ * defer-to-release).
  */
 function MobileVolume({
   volume,
@@ -341,6 +342,21 @@ export function Player() {
 
   return (
     <>
+      {/* Navy backstop — a non-animating, full-viewport fill pinned behind
+          the sliding/fading player surface. A `position: fixed; inset: 0`
+          layer reaches the iOS safe-area insets (top + bottom) the same way
+          the global `body::before` fan backdrop does, where a plain box
+          background does NOT. Because it carries neither the slide (`y`) nor
+          the opacity fade, navy stays edge-to-edge behind the player at EVERY
+          drag offset and speed during the pull-down dismiss — so the WKWebView's
+          default white window can never flash through the insets mid-dismiss.
+          It mounts/unmounts with the player via AnimatePresence, so it's gone
+          the instant the dismiss completes (the page beneath is navy too). */}
+      <div
+        aria-hidden
+        className="fixed inset-0 pointer-events-none"
+        style={{ zIndex: 49, backgroundColor: "var(--brand-bg)" }}
+      />
       <motion.div
         className="fixed inset-0 flex justify-center bg-[#00062B]"
         initial={{ y: "100%", opacity: 0 }}
@@ -549,10 +565,10 @@ export function Player() {
             </div>
             {/* End middle cluster — volume + bottom buttons anchor at bottom. */}
 
-            {/* Volume slider — hidden on web iOS, where Safari makes audio
-                volume read-only (hardware buttons own loudness). On native
-                iOS it shows and mirrors the phone's hardware volume. */}
-            {!isWebIOS && (
+            {/* Volume slider — hidden on all iOS (iPhone + iPad, web AND
+                native). The in-player slider is a dead control there in this
+                build, so it's never shown on iOS; Android/web keep it. */}
+            {!isIOS && (
               <MobileVolume
                 volume={volumeLevel}
                 setVolume={setVolumeLevel}
@@ -901,9 +917,9 @@ export function Player() {
                 </button>
               </div>
 
-              {/* Volume slider — hidden on web iOS (read-only audio volume);
-                  shown on native iOS mirroring hardware volume. */}
-              {!isWebIOS && (
+              {/* Volume slider — hidden on all iOS (dead control there in
+                  this build); Android/web keep it. */}
+              {!isIOS && (
                 <MobileVolume
                   volume={volumeLevel}
                   setVolume={setVolumeLevel}
@@ -1154,9 +1170,9 @@ export function Player() {
                 </button>
               </div>
 
-              {/* Volume slider — hidden on web iOS (read-only audio volume);
-                  shown on native iOS mirroring hardware volume. */}
-              {!isWebIOS && (
+              {/* Volume slider — hidden on all iOS (dead control there in
+                  this build); Android/web keep it. */}
+              {!isIOS && (
                 <MobileVolume
                   volume={volumeLevel}
                   setVolume={setVolumeLevel}
