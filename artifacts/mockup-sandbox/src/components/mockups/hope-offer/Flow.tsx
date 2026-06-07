@@ -22,6 +22,10 @@ const BLUE = "#319ED8";
 const ORANGE = "#F09837";
 const MINT = "#4AFFCA";
 
+const PRICE = { bundle: 45, cert: 25, box: 50 };
+const usd = (n: number) =>
+  `$${n.toLocaleString("en-US", { minimumFractionDigits: 0 })}`;
+
 const img = (name: string) =>
   `${import.meta.env.BASE_URL.replace(/\/$/, "")}/images/${name}`;
 
@@ -136,6 +140,7 @@ function ProductRow({
   image,
   title,
   desc,
+  price,
   qty,
   onQty,
   testid,
@@ -144,6 +149,7 @@ function ProductRow({
   image: string;
   title: string;
   desc: React.ReactNode;
+  price: number;
   qty: number;
   onQty: (n: number) => void;
   testid: string;
@@ -163,7 +169,15 @@ function ProductRow({
         />
       </div>
       <div className="flex-1 min-w-0 flex flex-col">
-        <h3 className="text-white text-[19px] font-bold tracking-[-0.01em]">{title}</h3>
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-white text-[19px] font-bold tracking-[-0.01em]">{title}</h3>
+          <div
+            className="flex-shrink-0 text-white text-[18px] font-bold tabular-nums"
+            data-testid={`price-${testid}`}
+          >
+            {usd(price)}
+          </div>
+        </div>
         <div className="text-white/65 text-[13px] leading-[1.5] mt-1.5 max-w-[340px]">
           {desc}
         </div>
@@ -174,6 +188,15 @@ function ProductRow({
             onClick={() => onQty(qty > 0 ? qty : 1)}
             testid={`add-${testid}`}
           />
+          {qty > 1 && (
+            <span
+              className="ml-auto text-white/55 text-[13px] tabular-nums"
+              data-testid={`linetotal-${testid}`}
+            >
+              {usd(price)} × {qty} ={" "}
+              <span className="text-white font-semibold">{usd(price * qty)}</span>
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -252,7 +275,17 @@ function OverviewStep() {
       </div>
 
       <div className="mt-6 rounded-2xl p-6" style={{ background: PANEL }}>
-        <h2 className="text-white text-[20px] font-bold tracking-[-0.01em]">Here's what you'll get</h2>
+        <div className="flex items-start justify-between gap-4">
+          <h2 className="text-white text-[20px] font-bold tracking-[-0.01em]">Here's what you'll get</h2>
+          <div className="flex-shrink-0 text-right">
+            <div className="text-white text-[24px] font-bold tabular-nums leading-none">
+              {usd(PRICE.bundle)}
+            </div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.06em] mt-1" style={{ color: ORANGE }}>
+              Hope Bundle
+            </div>
+          </div>
+        </div>
         <p className="text-white/65 text-[13px] leading-[1.5] mt-1.5 max-w-[560px]">
           This package has been hand curated by Jane's family for you. Digital arrives instantly.
           Physical ships 8–10 weeks after ordering.
@@ -290,6 +323,7 @@ function BuyStep({ qty, onQty }: { qty: number; onQty: (n: number) => void }) {
         testid="bundle"
         image={img("hope-get-hope.png")}
         title="Get Hope"
+        price={PRICE.bundle}
         desc={
           <>
             The first in a limited-edition series. Includes the Digital Collector Edition and the 7"
@@ -322,6 +356,7 @@ function AddonsStep({
           testid="cert"
           image={img("hope-cert-framed.jpg")}
           title="Signed GoodDeed® Certificate"
+          price={PRICE.cert}
           desc={
             <>
               Printed on museum-quality heavy stock, this deed of your good is personalized with your
@@ -338,6 +373,7 @@ function AddonsStep({
           testid="box"
           image={img("hope-gift-box.png")}
           title="Gift of Hope Box"
+          price={PRICE.box}
           desc={
             <>
               Each box includes a stainless-steel Nightbirde cup, a copy of her debut album "It's OK,"
@@ -364,10 +400,11 @@ function PayStep({
   boxQty: number;
 }) {
   const lines = [
-    { label: "Get Hope — Hope Bundle", qty: bundleQty },
-    { label: "Signed GoodDeed® Certificate", qty: certQty },
-    { label: "Gift of Hope Box", qty: boxQty },
+    { label: "Get Hope — Hope Bundle", qty: bundleQty, unit: PRICE.bundle },
+    { label: "Signed GoodDeed® Certificate", qty: certQty, unit: PRICE.cert },
+    { label: "Gift of Hope Box", qty: boxQty, unit: PRICE.box },
   ].filter((l) => l.qty > 0);
+  const subtotal = lines.reduce((s, l) => s + l.qty * l.unit, 0);
 
   return (
     <div data-testid="step-pay">
@@ -380,16 +417,31 @@ function PayStep({
         <div className="text-white/55 text-[11px] font-bold uppercase tracking-[0.12em] mb-3">
           Your order
         </div>
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-3">
           {lines.map((l) => (
-            <div key={l.label} className="flex items-center justify-between">
-              <span className="text-white text-[14px]">{l.label}</span>
-              <span className="text-white/60 text-[13px] tabular-nums">×{l.qty}</span>
+            <div key={l.label} className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <span className="text-white text-[14px]">{l.label}</span>
+                {l.qty > 1 && (
+                  <div className="text-white/45 text-[12px] tabular-nums mt-0.5">
+                    {usd(l.unit)} × {l.qty}
+                  </div>
+                )}
+              </div>
+              <span className="flex-shrink-0 text-white text-[14px] font-semibold tabular-nums">
+                {usd(l.unit * l.qty)}
+              </span>
             </div>
           ))}
         </div>
         <div className="h-px bg-white/10 my-4" />
-        <div className="flex items-center gap-2 text-white/55 text-[12.5px]">
+        <div className="flex items-center justify-between">
+          <span className="text-white/75 text-[14px] font-semibold">Subtotal</span>
+          <span className="text-white text-[17px] font-bold tabular-nums" data-testid="text-subtotal">
+            {usd(subtotal)}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 text-white/55 text-[12.5px] mt-3">
           <Lock className="w-3.5 h-3.5" strokeWidth={2} />
           Shipping &amp; sales tax calculated at checkout.
         </div>
