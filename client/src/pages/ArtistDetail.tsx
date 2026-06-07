@@ -529,19 +529,6 @@ export function ArtistDetail() {
                 )}
               </div>
             )}
-            {artistPerson?.label && (
-              <button
-                type="button"
-                onClick={() => navigate(`/label/${artistPerson.label!.id}`)}
-                className="mt-5 -mb-4 inline-flex items-center justify-center min-h-[44px] px-2 active:opacity-70 lg:self-start"
-                data-testid={`link-artist-label-${artistPerson.label.id}`}
-              >
-                <span className="text-fan-secondary text-xs uppercase tracking-[0.14em] font-semibold">
-                  Signed to{" "}
-                  <span className="text-fan-primary">{artistPerson.label.name}</span>
-                </span>
-              </button>
-            )}
             {/* Name row. On mobile the name is centered and Play is the FAB
                 that overlaps the avatar above. On the desktop (left-rail)
                 layout we mirror Apple Music's iPad/web hero: the avatar stays
