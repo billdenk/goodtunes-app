@@ -177,7 +177,17 @@ export function FanScreen({
 
         <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto overscroll-contain scrollbar-hide pb-[170px]">
           <div ref={contentRef}>
-            <div aria-hidden style={{ height: 128, flexShrink: 0 }} />
+            {/* Spacer that pushes the first content row below the absolutely
+                positioned header. Derive it from the SAME chrome inset the
+                header uses (FAN_TOP_CHROME_INSET + 44px control + 36px title
+                row + 12px pb = header bottom edge) plus a comfortable ~40px
+                Apple-Music large-title margin, so the title always clears the
+                content with breathing room on flat AND notched/safe-area
+                devices — a fixed height under-clears on notched screens. */}
+            <div
+              aria-hidden
+              style={{ height: `calc(${FAN_TOP_CHROME_INSET} + 132px)`, flexShrink: 0 }}
+            />
             {children}
           </div>
         </div>

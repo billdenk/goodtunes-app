@@ -862,6 +862,19 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
     }
   };
 
+  // Task #1628 — single source-of-truth lock: the Buy sheet must never stay
+  // open during a "Sales Begin" locked preview, no matter how it was opened
+  // (the `?buy=1` deep link initializes showBuySheet before the album data has
+  // loaded, an in-flight sheet when a date is set, etc.). Force it closed.
+  // MUST run before the loading / not-found guards below so the hook count
+  // stays stable across the loading→loaded transition (otherwise React #310:
+  // "rendered more hooks than during the previous render").
+  useEffect(() => {
+    const pending =
+      !isOwned && isSunrisePending(apiAlbum?.goodTunesReleaseDate);
+    if (pending && showBuySheet) setShowBuySheet(false);
+  }, [isOwned, apiAlbum?.goodTunesReleaseDate, showBuySheet]);
+
   if (!album && isAlbumLoading) {
     return <AlbumDetailMobileSkeleton />;
   }
@@ -1000,14 +1013,6 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
   const salesBeginLabel = salesPending
     ? formatSalesBeginDate(apiAlbum?.goodTunesReleaseDate)
     : null;
-
-  // Task #1628 — single source-of-truth lock: the Buy sheet must never stay
-  // open during a "Sales Begin" locked preview, no matter how it was opened
-  // (the `?buy=1` deep link initializes showBuySheet before the album data has
-  // loaded, an in-flight sheet when a date is set, etc.). Force it closed.
-  useEffect(() => {
-    if (salesPending && showBuySheet) setShowBuySheet(false);
-  }, [salesPending, showBuySheet]);
 
   return (
     <main className="h-screen w-full flex justify-center overflow-hidden relative">
