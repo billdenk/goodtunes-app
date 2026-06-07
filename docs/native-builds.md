@@ -107,6 +107,18 @@ Walk this on a real iPhone and a real Android phone:
 
 ---
 
+## Hardware-key download verification (device-only — can't run in the Replit container)
+
+The secure-key store and compromised-device gate are native code (Swift Keychain in `ios/App/App/SecureKeyStorePlugin.swift`, Java AndroidKeyStore in `android/app/src/main/java/fm/goodtunes/player/SecureKeyStorePlugin.java`). Neither compiles or runs in the Linux container — only the web no-op contract is covered by automated tests (`client/src/lib/nativeDownloadsWebNoop.test.ts`). Run this pass on a **real iPhone and a real Android phone** (native build with downloads enabled) whenever the key store, `migrateToHardwareKey`, or the compromise gate changes.
+
+1. **Key persists across launches.** Sign in, download a song, then force-quit and relaunch the app. Put the phone in airplane mode and play the downloaded song end-to-end. If the per-device key didn't survive the relaunch, decryption fails and playback falls back to (now-unavailable) streaming — so airplane-mode playback proves the Keychain/Keystore key persisted.
+2. **Legacy download re-encrypts onto the hardware key once.** Install a *pre-hardware-key* build, download a song (encrypted under the legacy sandboxed-IndexedDB key), then upgrade in place to the current build. On next launch `migrateToHardwareKey` re-encrypts the existing file under the hardware key and retires the legacy key. Confirm the previously-downloaded song still plays offline, and that re-launching again doesn't re-migrate (the `gt:offline-hw-key-migrated:v1` flag is set). A song downloaded *after* the upgrade must also play offline.
+3. **Compromised-device gate.** On a **stock** device, confirm downloads are *not* refused (the jailbreak/root probe must not false-positive) and downloaded songs play offline. On a **jailbroken (iOS) / rooted (Android)** test device, confirm the download is refused (the song row surfaces the "offline downloads are unavailable on this device" failure) and that playback instead streams online — never decrypts a protected file on the compromised device.
+
+If any step fails, capture the device/OS version and the Xcode/Logcat console output — the native plugins `reject()` with a specific message on key-store failure, which the JS layer swallows into a software-key fallback, so the native log is the only place a key-store error is visible.
+
+---
+
 ## What is intentionally **not** in v1
 
 - Push notifications, deep links, in-app purchases, native chat — all deferred (see `docs/roadmap.md`).
