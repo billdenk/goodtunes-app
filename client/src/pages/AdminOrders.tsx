@@ -131,7 +131,11 @@ function UploadValidationBadge({
 }
 
 function OriginBadge({ origin }: { origin: string | undefined }) {
-  if (!origin || origin === "direct") return null;
+  // Only Shopify-sourced orders get the green pill. Everything else —
+  // "direct", empty, and legacy import origins like "legacy:gogoods" —
+  // stays unbadged. (Previously any non-"direct" origin rendered the
+  // Shopify pill, which mislabeled all the gogoods-imported orders.)
+  if (!origin || !origin.startsWith("shopify")) return null;
   return (
     <span
       className="inline-flex items-center rounded-full bg-[#95BF47]/15 text-[#5a7c2c] text-[10.5px] font-semibold uppercase tracking-wider px-2 py-0.5"

@@ -119,7 +119,11 @@ function isPhysical(o: OrderRow): boolean {
 // unbadged (it's the default); Shopify-sourced orders surface a small
 // "Shopify" tag so a fan can tell where they came from at a glance.
 function OriginBadge({ origin }: { origin: string | undefined }) {
-  if (!origin || origin === "direct") return null;
+  // Only Shopify-sourced orders get the tag. "direct", empty, and legacy
+  // import origins like "legacy:gogoods" stay unbadged. (Previously any
+  // non-"direct" origin rendered the Shopify tag, mislabeling every
+  // gogoods-imported order as Shopify.)
+  if (!origin || !origin.startsWith("shopify")) return null;
   return (
     <span
       className="inline-flex items-center gap-1 rounded-full bg-[#95BF47]/15 text-[#95BF47] text-[10.5px] font-semibold uppercase tracking-wider px-2 py-0.5"

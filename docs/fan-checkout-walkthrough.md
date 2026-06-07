@@ -217,11 +217,41 @@ which returns a client secret; the sheet mounts Stripe's `EmbeddedCheckout` with
   computed tax is stored on `orders.tax_cents` and shown as a "Tax" line on the
   `/welcome` summary, the "Your orders" detail, and the receipt email.
   > **Operator dependency (Bill):** Stripe Tax only collects where GoodTunes is
-  > **registered**. Bill must add the tax registrations (and the head-office /
+  > **registered**. Bill maintains the tax registrations (and the head-office /
   > origin address) in the Stripe Dashboard → Tax settings for each state/locale
-  > GoodTunes is obligated to collect in. Until a jurisdiction is registered, Stripe
-  > reports $0 tax there (a real computed zero, not an error). This is out of scope
-  > for the codebase.
+  > GoodTunes is obligated to collect in. Where a jurisdiction isn't registered,
+  > Stripe reports a real computed $0 there (not an error). This config is out of
+  > scope for the codebase.
+  >
+  > **Status (confirmed June 2026):** Live Stripe Tax is configured and computing
+  > correctly. The live Tax → Business information settings have a **head office**
+  > (United States / California), a preset product category (Digital products >
+  > Media > Digital audio content), shipping set to **Determine automatically**, and
+  > include-tax-in-prices on **Automatic**. At least one active live registration is
+  > collecting — confirmed by a real California order computing **$3.88 (Taxable)**,
+  > while an Alberta order correctly computed **$0.00 (Nontaxable)** (the real
+  > computed zero for an unregistered locale). So the Stripe-layer calculation is
+  > verified working in live mode, and the code path that persists/renders it is
+  > correct.
+  >
+  > **Open reconciliation item (tracked separately):** these confirmed live taxed
+  > charges are **not** appearing in the GoodTunes `orders` table — `tax_cents` is
+  > `NULL` on every prod order and there are no app orders at all dated after
+  > 2026-03-24. So tax is collected at Stripe but the app isn't recording these
+  > sales. This is *not* the Shopify storefront (Bill confirms zero Shopify orders).
+  > It needs live-Stripe reconciliation (only reachable from the deployed app, not a
+  > task sandbox) to tell whether app checkouts are failing to materialize or the
+  > charges originate on a separately-wired Stripe channel.
+  >
+  > **How to re-verify the end-to-end app path** once a real app order lands in a
+  > registered state:
+  > 1. The order's `tax_cents` is non-zero in the prod DB (`SELECT tax_cents FROM
+  >    orders WHERE stripe_payment_intent_id = '<pi>'`).
+  > 2. That same tax renders as a "Tax" line on `/welcome`, in "Your orders," and on
+  >    the receipt email.
+  > 3. An order to an *unregistered* address shows a real computed `$0` (not an
+  >    error) and checkout still completes.
+  > 4. An address Stripe can't resolve blocks completion in the embedded UI.
 
 **Stock / signed-copy safety at this moment:** the session call re-checks
 availability. If stock ran out, or the last signed slots were claimed by another

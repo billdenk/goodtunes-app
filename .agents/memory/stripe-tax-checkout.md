@@ -34,4 +34,18 @@ registered-but-non-taxing jurisdiction returns a real computed $0, not an error.
 
 **Operator dependency.** Stripe Tax only collects where the business is *registered*.
 The state/locale registrations + head-office/origin address are a Stripe Dashboard
-task, not a code change; until a jurisdiction is registered Stripe collects $0 there.
+task, not a code change; where a jurisdiction isn't registered Stripe returns a real
+computed $0 there.
+**Verifying registration state needs operator/deployed-app, not the sandbox.** The
+live Stripe account / tax registrations are NOT reachable from a task sandbox (only
+the dev/TEST connection is, and test-mode has no registrations). Confirm via the
+operator's Stripe dashboard or the deployed app's live key. As of June 2026 live
+Stripe Tax IS configured + collecting (CA head office, digital-audio product
+category, auto shipping; a CA order computed $3.88 taxable, Alberta $0 nontaxable).
+**Trap — Stripe collects tax but the `orders` table shows none.** `orders.tax_cents`
+being `NULL` on every prod row does NOT prove tax isn't flowing; it can mean the
+taxed charges never went through this app's checkout→materialize path at all. As of
+June 2026 there were ZERO app orders after 2026-03-24 yet live Stripe was charging
+tax — an unresolved recording gap (NOT Shopify; operator confirms zero Shopify
+orders). Reconcile live Stripe payments ↔ `orders` before concluding anything from
+`tax_cents`.
