@@ -26,7 +26,9 @@ const {
   offlineSrcFor,
   listDownloadedSongs,
   purgeRevokedDownloads,
+  migrateToHardwareKey,
 } = await import("./nativeDownloads");
+const { getHardwareKeyBytes, isDeviceCompromised } = await import("./nativeSecureKey");
 const { isNative } = await import("./platform");
 
 test("the test runs on the web platform (isNative === false)", () => {
@@ -64,4 +66,16 @@ test("purgeRevokedDownloads is a no-op on web (leaves flags untouched)", async (
     listDownloadedSongs("album-2").has("song-2"),
     "web purge must not remove flags (no real files to revoke)",
   );
+});
+
+test("getHardwareKeyBytes returns null on web (no hardware key store)", async () => {
+  assert.equal(await getHardwareKeyBytes(), null);
+});
+
+test("isDeviceCompromised fails safe to false on web", async () => {
+  assert.equal(await isDeviceCompromised(), false);
+});
+
+test("migrateToHardwareKey is a no-op on web (no files, never throws)", async () => {
+  await migrateToHardwareKey();
 });

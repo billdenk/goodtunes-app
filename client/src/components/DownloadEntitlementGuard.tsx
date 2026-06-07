@@ -23,6 +23,7 @@ import { queryClient } from "@/lib/queryClient";
 import { isNative } from "@/lib/platform";
 import {
   migrateLegacyDownloads,
+  migrateToHardwareKey,
   purgeRevokedDownloads,
 } from "@/lib/nativeDownloads";
 
@@ -47,10 +48,16 @@ export function DownloadEntitlementGuard() {
     [data],
   );
 
-  // One-time migration of legacy plaintext downloads into the encrypted store.
+  // One-time migrations: first move any legacy plaintext downloads into the
+  // encrypted store, then re-encrypt existing downloads onto the
+  // hardware-backed key (Keychain/Keystore). Both are best-effort no-ops when
+  // already done or when the hardware store isn't available.
   useEffect(() => {
     if (!isNative) return;
-    void migrateLegacyDownloads();
+    void (async () => {
+      await migrateLegacyDownloads();
+      await migrateToHardwareKey();
+    })();
   }, []);
 
   // Revoke on every trusted ownership snapshot (initial load + refetches).
