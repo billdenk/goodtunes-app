@@ -55,6 +55,12 @@ interface CertNameConfirmCardProps {
   variant?: "bar" | "card";
   /** Fired after a successful save (e.g. the sheet re-renders the PDF). */
   onSaved?: (name: string) => void;
+  /**
+   * Fired while editing as the fan toggles the paper-size segments, so the
+   * host viewer can preview the new page proportions BEFORE the save
+   * re-renders the real PDF. `null` clears the preview (save / cancel).
+   */
+  onPaperPreview?: (paper: PaperSize | null) => void;
 }
 
 const PAPER_LABEL: Record<PaperSize, string> = {
@@ -66,6 +72,7 @@ export function CertNameConfirmCard({
   orderId,
   variant = "card",
   onSaved,
+  onPaperPreview,
 }: CertNameConfirmCardProps) {
   const [info, setInfo] = useState<DigitalNameInfo | null>(null);
   const [editing, setEditing] = useState(false);
@@ -149,6 +156,7 @@ export function CertNameConfirmCard({
       setDraft(saved);
       setDraftPaper(savedPaper);
       setEditing(false);
+      onPaperPreview?.(null);
       onSaved?.(saved);
     } catch (e: unknown) {
       let msg = "Couldn't save that. Please try again.";
@@ -228,7 +236,10 @@ export function CertNameConfirmCard({
               <button
                 key={size}
                 type="button"
-                onClick={() => setDraftPaper(size)}
+                onClick={() => {
+                  setDraftPaper(size);
+                  onPaperPreview?.(size);
+                }}
                 disabled={saving}
                 aria-pressed={active}
                 className={
@@ -273,6 +284,7 @@ export function CertNameConfirmCard({
             setSaveError(null);
             setDraft(info.currentName ?? "");
             setDraftPaper(info.paperSize);
+            onPaperPreview?.(null);
           }}
           disabled={saving}
           className="text-sm text-fan-secondary active:opacity-70 disabled:opacity-50"

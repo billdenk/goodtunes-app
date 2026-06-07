@@ -66,6 +66,22 @@ function clamp(v: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, v));
 }
 
+type PaperSize = "letter" | "a4";
+
+// Page aspect (height ÷ width) per paper size — mirrors the geometry in
+// server/goodDeedPrintTemplate.ts. A4 is proportionally taller/narrower
+// than US Letter, so the in-page page-frame preview reflects that the
+// moment the fan toggles, before the real PDF re-renders on save.
+const PAPER_ASPECT: Record<PaperSize, number> = {
+  letter: 792 / 612, // ≈ 1.294
+  a4: 841.89 / 595.28, // ≈ 1.414
+};
+
+const PAPER_PREVIEW_LABEL: Record<PaperSize, string> = {
+  letter: "US Letter",
+  a4: "A4",
+};
+
 export function CertPdfViewerSheet({
   orderId,
   filename = "GoodDeed-Certificate.pdf",
@@ -75,6 +91,17 @@ export function CertPdfViewerSheet({
   const [loading, setLoading] = useState(true);
   const objectUrlRef = useRef<string | null>(null);
   const [downloadReady, setDownloadReady] = useState(false);
+
+  // ── Live paper-size preview ──────────────────────────────────────────
+  // The CertNameConfirmCard reports which paper size the fan is currently
+  // toggling (before they hit Save). We compare that against the page the
+  // canvas is actually showing — read straight off the rendered PDF — and,
+  // when they differ, overlay a page-frame at the NEW proportions so the
+  // aspect-ratio change feels tangible immediately. On save the real PDF
+  // re-renders and `previewPaper` resets to null.
+  const [previewPaper, setPreviewPaper] = useState<PaperSize | null>(null);
+  // CSS box of the rendered page (fit-to-width); drives the preview frame.
+  const [pageCss, setPageCss] = useState<{ width: number; height: number } | null>(null);
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -121,6 +148,12 @@ export function CertPdfViewerSheet({
     const unscaled = page.getViewport({ scale: 1 });
     const cssWidth = vp.clientWidth;
     const fitScale = cssWidth / unscaled.width;
+    // Remember the rendered page's CSS box so the paper-size preview frame
+    // can be drawn at the same width and the live aspect compared.
+    setPageCss({
+      width: cssWidth,
+      height: cssWidth * (unscaled.height / unscaled.width),
+    });
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
     const viewport = page.getViewport({ scale: fitScale * dpr });
     canvas.width = Math.floor(viewport.width);
@@ -331,6 +364,22 @@ export function CertPdfViewerSheet({
 
   const showNameEditor = !loading && !error;
 
+  // Page-frame preview: only show it once a page has rendered, the fan is
+  // toggling a paper size, and that size's aspect actually differs from
+  // what's on screen (so toggling back to the saved size clears it).
+  const renderedAspect = pageCss ? pageCss.height / pageCss.width : null;
+  const targetAspect = previewPaper ? PAPER_ASPECT[previewPaper] : null;
+  const showPaperPreview =
+    !loading &&
+    !error &&
+    previewPaper != null &&
+    pageCss != null &&
+    targetAspect != null &&
+    renderedAspect != null &&
+    Math.abs(targetAspect - renderedAspect) > 0.01;
+  const previewHeight = showPaperPreview ? pageCss!.width * targetAspect! : 0;
+  const previewTaller = showPaperPreview && previewHeight > pageCss!.height;
+
   return createPortal(
     <div
       className="fixed inset-0 z-[120] bg-[var(--brand-bg)] flex flex-col"
@@ -379,7 +428,22 @@ export function CertPdfViewerSheet({
           orderId={orderId}
           variant="bar"
           onSaved={() => loadPdf()}
+          onPaperPreview={setPreviewPaper}
         />
+      )}
+
+      {showPaperPreview && (
+        <div
+          className="px-4 pb-2 text-center text-xs text-fan-faint leading-snug"
+          data-testid="text-cert-paper-preview-hint"
+        >
+          Previewing{" "}
+          <span className="font-semibold" style={{ color: "var(--brand-orange)" }}>
+            {PAPER_PREVIEW_LABEL[previewPaper!]}
+          </span>{" "}
+          proportions — the page is {previewTaller ? "taller" : "shorter"}. Save to
+          apply.
+        </div>
       )}
 
       <div
@@ -413,7 +477,11 @@ export function CertPdfViewerSheet({
         >
           <div
             ref={stageRef}
-            style={{ transformOrigin: "center center", willChange: "transform" }}
+            style={{
+              position: "relative",
+              transformOrigin: "center center",
+              willChange: "transform",
+            }}
             data-testid="stage-cert-pdf"
           >
             <canvas
@@ -421,6 +489,23 @@ export function CertPdfViewerSheet({
               className="block bg-white shadow-lg"
               data-testid="canvas-cert-pdf"
             />
+            {showPaperPreview && (
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  width: pageCss!.width,
+                  height: previewHeight,
+                  border: "2px dashed var(--brand-orange)",
+                  borderRadius: 8,
+                  boxSizing: "border-box",
+                  pointerEvents: "none",
+                }}
+                data-testid="overlay-cert-paper-preview"
+              />
+            )}
           </div>
         </div>
       </div>
