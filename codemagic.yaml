@@ -279,6 +279,24 @@ workflows:
           # place for this build so the .aab carries the fresh number.
           sed -i.bak "s/versionCode .*/versionCode $NEW_BUILD_NUMBER/" \
             android/app/build.gradle
+      - name: Guard — fail fast if the Android launcher/notification icons are invalid
+        script: |
+          # WHY THIS EXISTS: the iOS side already shipped a generic placeholder
+          # icon to TestFlight (Build 59) because the build tooling silently
+          # falls back to a default when the icon set is wrong. Android can fail
+          # the SAME way — a missing launcher density ships a default/blank
+          # launcher icon, and a notification small icon that isn't an alpha-only
+          # white silhouette renders as a featureless gray box. This guard turns
+          # those silent failures into a HARD, clearly-explained build failure.
+          #
+          # Android rules DIFFER from iOS: the launcher icon is an adaptive icon
+          # (foreground/background layers + per-density mipmap rasters) and the
+          # notification icon MUST be white-on-transparent (alpha-only) — the
+          # OPPOSITE of the iOS no-alpha rule. The script encodes both. Pillow
+          # gives a precise pixel check; we install it here so the white/alpha
+          # inspection is deterministic on the Linux runner.
+          pip3 install --quiet --disable-pip-version-check Pillow || true
+          python3 scripts/verify-android-appicon.py
       - name: Build the signed .aab
         script: |
           cd android
