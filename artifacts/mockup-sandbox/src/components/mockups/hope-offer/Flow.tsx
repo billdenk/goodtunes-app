@@ -41,6 +41,9 @@ const PRICE = { bundle: 25, signed: 25 };
 const GIFT_MIN = 75;
 const GIFT_PRESETS = [75, 100, 250];
 
+// One shared product-image size so every card (bundle / signed / gift) matches.
+const CARD_IMG = 150;
+
 const usd = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 0 })}`;
 
@@ -178,6 +181,71 @@ function Note({ icon: Icon, children }: { icon: typeof Gift; children: React.Rea
   );
 }
 
+/** A product image you can tap to enlarge. Every card uses this so size +
+ *  styling stay identical across the bundle, signed cert and gift box. */
+function Zoomable({
+  src,
+  alt,
+  size,
+  onZoom,
+  testid,
+}: {
+  src: string;
+  alt: string;
+  size: number;
+  onZoom: (src: string) => void;
+  testid: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onZoom(src)}
+      data-testid={testid}
+      className="group relative flex-shrink-0 rounded-2xl overflow-hidden bg-white cursor-zoom-in"
+      style={{ width: size, height: size, boxShadow: "0 10px 30px rgba(0,0,0,0.35)" }}
+    >
+      <img src={src} alt={alt} className="w-full h-full object-cover" draggable={false} />
+      <span
+        className="absolute bottom-2 right-2 w-7 h-7 rounded-full inline-flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"
+        style={{ background: "rgba(0,0,0,0.5)" }}
+      >
+        <Expand className="w-3.5 h-3.5" strokeWidth={2.4} />
+      </span>
+    </button>
+  );
+}
+
+/** Full-bleed enlarged view of a tapped product image. */
+function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  return (
+    <div
+      className="absolute inset-0 z-50 flex items-center justify-center p-12"
+      style={{ background: "rgba(0,2,12,0.82)", backdropFilter: "blur(6px)" }}
+      onClick={onClose}
+      data-testid="lightbox"
+    >
+      <img
+        src={src}
+        alt=""
+        className="max-w-[86%] max-h-[86%] rounded-2xl object-contain bg-white"
+        style={{ boxShadow: "0 30px 90px rgba(0,0,0,0.7)" }}
+        onClick={(e) => e.stopPropagation()}
+        draggable={false}
+      />
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        data-testid="button-lightbox-close"
+        className="absolute top-5 right-5 w-10 h-10 rounded-full inline-flex items-center justify-center text-white/85 hover:text-white transition-colors"
+        style={{ background: "rgba(0,0,0,0.45)" }}
+      >
+        <X className="w-5 h-5" strokeWidth={2.2} />
+      </button>
+    </div>
+  );
+}
+
 /* ── faint album page behind the modal ────────────────────────────── */
 
 function AlbumBackdrop() {
@@ -282,11 +350,13 @@ function BuyStep({
   onBundle,
   signedQty,
   onSigned,
+  onZoom,
 }: {
   bundleQty: number;
   onBundle: (n: number) => void;
   signedQty: number;
   onSigned: (n: number) => void;
+  onZoom: (src: string) => void;
 }) {
   return (
     <div data-testid="step-buy">
@@ -298,12 +368,13 @@ function BuyStep({
 
       {/* bundle */}
       <div className="flex gap-5">
-        <div
-          className="flex-shrink-0 rounded-2xl overflow-hidden bg-white"
-          style={{ width: 168, height: 168, boxShadow: "0 10px 30px rgba(0,0,0,0.35)" }}
-        >
-          <img src={img("hope-get-hope.png")} alt="Hope Bundle" className="w-full h-full object-cover" draggable={false} />
-        </div>
+        <Zoomable
+          src={img("hope-get-hope.png")}
+          alt="Hope Bundle"
+          size={CARD_IMG}
+          onZoom={onZoom}
+          testid="zoom-bundle"
+        />
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex items-start justify-between gap-3">
             <h3 className="text-white text-[19px] font-bold tracking-[-0.01em]">Hope Bundle</h3>
@@ -328,19 +399,14 @@ function BuyStep({
       {/* signed upgrade — coupled to the bundle count just chosen */}
       <div className="h-px bg-white/10 my-6" />
       <div>
-        <div className="flex items-center gap-1.5 mb-3">
-          <Sparkles className="w-3.5 h-3.5" strokeWidth={2.2} style={{ color: ORANGE }} />
-          <span className="text-[12px] font-bold uppercase tracking-[0.08em]" style={{ color: ORANGE }}>
-            Make it official
-          </span>
-        </div>
         <div className="flex gap-5">
-          <div
-            className="flex-shrink-0 rounded-2xl overflow-hidden bg-white"
-            style={{ width: 132, height: 132, boxShadow: "0 10px 30px rgba(0,0,0,0.35)" }}
-          >
-            <img src={img("hope-cert-framed.jpg")} alt="Signed GoodDeed Certificate" className="w-full h-full object-cover" draggable={false} />
-          </div>
+          <Zoomable
+            src={img("hope-cert-framed.jpg")}
+            alt="Signed GoodDeed Certificate"
+            size={CARD_IMG}
+            onZoom={onZoom}
+            testid="zoom-signed"
+          />
           <div className="flex-1 min-w-0 flex flex-col">
             <div className="flex items-start justify-between gap-3">
               <h3 className="text-white text-[16px] font-bold tracking-[-0.01em]">
@@ -442,11 +508,13 @@ function GiveStep({
   onBox,
   giftAmount,
   onAmount,
+  onZoom,
 }: {
   boxQty: number;
   onBox: (n: number) => void;
   giftAmount: number;
   onAmount: (n: number) => void;
+  onZoom: (src: string) => void;
 }) {
   const active = boxQty > 0;
   return (
@@ -458,12 +526,13 @@ function GiveStep({
       </p>
 
       <div className="flex gap-5">
-        <div
-          className="flex-shrink-0 rounded-2xl overflow-hidden bg-white"
-          style={{ width: 168, height: 168, boxShadow: "0 10px 30px rgba(0,0,0,0.35)" }}
-        >
-          <img src={img("hope-gift-box.png")} alt="Gift of Hope Box" className="w-full h-full object-cover" draggable={false} />
-        </div>
+        <Zoomable
+          src={img("hope-gift-box.png")}
+          alt="Gift of Hope Box"
+          size={CARD_IMG}
+          onZoom={onZoom}
+          testid="zoom-box"
+        />
         <div className="flex-1 min-w-0 flex flex-col">
           <h3 className="text-white text-[19px] font-bold tracking-[-0.01em]">Gift of Hope Box</h3>
           <p className="text-white/65 text-[13px] leading-[1.5] mt-1.5 max-w-[360px]">
@@ -623,6 +692,7 @@ export default function Flow() {
   const [signedQty, setSignedQty] = useState(seeded ? 1 : 0);
   const [boxQty, setBoxQty] = useState(seeded ? 1 : 0);
   const [giftAmount, setGiftAmount] = useState(GIFT_MIN);
+  const [zoomSrc, setZoomSrc] = useState<string | null>(null);
 
   // signed certs can never exceed the number of copies in the bag.
   useEffect(() => {
@@ -714,6 +784,7 @@ export default function Flow() {
               onBundle={setBundleQty}
               signedQty={signedQty}
               onSigned={setSignedQty}
+              onZoom={setZoomSrc}
             />
           )}
           {step === "give" && (
@@ -722,6 +793,7 @@ export default function Flow() {
               onBox={setBoxQty}
               giftAmount={giftAmount}
               onAmount={setGiftAmount}
+              onZoom={setZoomSrc}
             />
           )}
           {step === "pay" && (
@@ -776,6 +848,8 @@ export default function Flow() {
           )}
         </div>
       </div>
+
+      {zoomSrc && <Lightbox src={zoomSrc} onClose={() => setZoomSrc(null)} />}
     </div>
   );
 }

@@ -62,8 +62,10 @@ These existing claims were checked against code and hold:
   substitute `APPLE_TEAM_ID` / `ANDROID_RELEASE_SHA256` at request time and return
   `503` when the var is missing (no sentinel leak). `server/auth/host.ts` exempts
   `/.well-known/*` from the apex→`my.` redirect.
-- **Bundle id `fm.goodtunes.player`** is consistent across `capacitor.config.ts`,
-  Android `build.gradle`, the iOS pbxproj, `assetlinks.json`, and `Info.plist`.
+- **Bundle ids are consistent.** iOS is `Io.GoGoods.music` (across `capacitor.config.ts`,
+  the iOS pbxproj, and the AASA `appIDs`); Android is `fm.goodtunes.player` (Android
+  `build.gradle` + `assetlinks.json`). The two stores use different identities by design —
+  see `app-store-submission.md § App identity`.
 - **Permissions hygiene.** ATT / StoreKit / Camera / Mic / Location are *not*
   declared — correct, since declaring an unused capability is itself a rejection
   trigger.
