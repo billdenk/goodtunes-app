@@ -2425,6 +2425,163 @@ export function registerCommerceRoutes(app: Express) {
     }
   });
 
+  // GET /api/checkout/tax-quote — Task #1636. Estimated sales tax for the
+  // Buy sheet running total, so the fan sees an approximate Tax line as
+  // soon as they pick a destination (mirrors the shipping-quote UX). The
+  // estimate is computed by Stripe Tax (tax.calculations.create) from the
+  // server-resolved line prices + the same per-line tax_code
+  // classification the session-create path uses, so a client can't fake
+  // the number. It's clearly labelled "estimated" in the UI — the
+  // authoritative figure is still computed inside the embedded checkout
+  // from the full address the fan enters there.
+  app.get("/api/checkout/tax-quote", async (req, res) => {
+    const albumId = typeof req.query.albumId === "string" ? req.query.albumId : "";
+    const format = typeof req.query.format === "string" ? req.query.format : "";
+    const country = normalizeCountry(
+      typeof req.query.country === "string" ? req.query.country : "US",
+    );
+    const postalCode =
+      typeof req.query.postalCode === "string" ? req.query.postalCode.trim() : "";
+    const region = typeof req.query.region === "string" ? req.query.region.trim() : "";
+    const quantity = Math.max(1, parseInt(String(req.query.quantity ?? "1"), 10) || 1);
+    let certCount = Math.max(0, parseInt(String(req.query.certCount ?? "0"), 10) || 0);
+    const certPriceCents = Math.max(0, parseInt(String(req.query.certPriceCents ?? "0"), 10) || 0);
+    const booklet = req.query.booklet === "1" || req.query.booklet === "true";
+
+    // Tax needs at minimum a destination country; for the US (and other
+    // postal-driven jurisdictions) Stripe needs a postal code to resolve
+    // the municipal/state rate. Without enough address info, report
+    // "unavailable" and let the UI hold the line until the fan types more.
+    if (!country) return res.json({ available: false });
+
+    const album = await storage.getAlbumById(albumId);
+    if (!album) return res.json({ available: false });
+    const skus = await listActiveSkus(album.id);
+    const sku = skus.find((s) => s.format === format);
+    if (!sku) return res.json({ available: false });
+
+    const { classifySkuKind } = await import("./orderDesk");
+    const skuKind = classifySkuKind(sku.format);
+
+    // Resolve the add-on prices server-side from the same catalog the
+    // session-create path reads, so the estimate is built from prices we
+    // control — not whatever the client claims. The signed-cert add-on is
+    // "name your price" above a floor, so we honour the fan's chosen
+    // amount clamped to the per-album minimum (exactly as session-create
+    // does).
+    let addonPriceCents = 0;
+    let bookletPriceCents = 0;
+    let isBookletBundle = false;
+    let bookletBundleCents = 0;
+    if (certCount > 0 || booklet) {
+      const addons = await listActiveAddons(album.id);
+      if (certCount > 0) {
+        const addon = addons.find((x) => x.kind === "signed_cert") ?? null;
+        if (addon) {
+          addonPriceCents = Math.max(addon.minPriceCents, certPriceCents || addon.priceCents);
+        } else {
+          certCount = 0;
+        }
+      }
+      if (booklet) {
+        const bookletAddon = addons.find((x) => x.kind === "booklet") ?? null;
+        if (bookletAddon) {
+          if (sku.format === "7_inch") {
+            isBookletBundle = true;
+            bookletBundleCents = resolveBookletBundleCents(sku.priceCents, bookletAddon);
+          } else {
+            bookletPriceCents = bookletAddon.priceCents;
+          }
+        }
+      }
+    }
+
+    // Same tax codes + behaviour as the session-create path.
+    const TAX_CODE_TANGIBLE = "txcd_99999999";
+    const TAX_CODE_DIGITAL = "txcd_10401000";
+    const TAX_BEHAVIOR = "exclusive" as const;
+    const formatTaxCode = skuKind === "digital" ? TAX_CODE_DIGITAL : TAX_CODE_TANGIBLE;
+
+    const taxLineItems: Stripe.Tax.CalculationCreateParams.LineItem[] = [
+      {
+        amount: (isBookletBundle ? bookletBundleCents : sku.priceCents) * quantity,
+        reference: "format",
+        tax_code: formatTaxCode,
+        tax_behavior: TAX_BEHAVIOR,
+      },
+    ];
+    if (certCount > 0 && addonPriceCents > 0) {
+      taxLineItems.push({
+        amount: addonPriceCents * certCount,
+        reference: "signed_cert",
+        tax_code: TAX_CODE_TANGIBLE,
+        tax_behavior: TAX_BEHAVIOR,
+      });
+    }
+    if (booklet && !isBookletBundle && bookletPriceCents > 0) {
+      taxLineItems.push({
+        amount: bookletPriceCents,
+        reference: "booklet",
+        tax_code: TAX_CODE_TANGIBLE,
+        tax_behavior: TAX_BEHAVIOR,
+      });
+    }
+    // Custom ("Gift of Hope") add-ons are charitable donations — Stripe's
+    // donation tax code is non-taxable, so they never move the estimate.
+    // We omit them here rather than round-tripping zero-tax lines.
+
+    // Physical orders are taxed on shipping too; mirror the real shipping
+    // charge so the preview lines up with what the embedded checkout will
+    // tax. Digital orders ship nothing.
+    let shippingCents = 0;
+    if (skuKind !== "digital") {
+      const bookletCount = isBookletBundle ? quantity : booklet ? 1 : 0;
+      try {
+        const quote = await quoteShipping({
+          format: sku.format,
+          quantity,
+          signedCertCount: certCount,
+          bookletCount,
+          country,
+        });
+        if (quote) shippingCents = quote.chargedCents;
+      } catch (e) {
+        console.error("[tax-quote] shipping quote failed", e);
+      }
+    }
+
+    try {
+      const stripe = await getStripe();
+      const calculation = await stripe.tax.calculations.create({
+        currency: "usd",
+        line_items: taxLineItems,
+        ...(shippingCents > 0
+          ? { shipping_cost: { amount: shippingCents, tax_behavior: TAX_BEHAVIOR } }
+          : {}),
+        customer_details: {
+          address: {
+            country,
+            ...(postalCode ? { postal_code: postalCode } : {}),
+            ...(region ? { state: region } : {}),
+          },
+          address_source: "shipping",
+        },
+      });
+      res.json({
+        available: true,
+        taxCents: calculation.tax_amount_exclusive,
+        country,
+      });
+    } catch (e) {
+      // Stripe rejects the calc when the address is too thin to resolve a
+      // jurisdiction (e.g. US with no postal) or the country is
+      // unsupported. That's an expected "not enough info yet" state, not a
+      // server error — the fan just hasn't typed enough.
+      console.warn("[tax-quote] calculation unavailable", (e as Error)?.message);
+      res.json({ available: false });
+    }
+  });
+
   // GET /api/checkout/session/:id — read for the /welcome page so it can
   // show the order summary + GoodDeed number without waiting for the
   // webhook (we also fetch the order row in case the webhook beat us).

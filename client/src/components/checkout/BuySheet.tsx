@@ -312,12 +312,19 @@ export function BuySheet({
   // shipping rate on its own — we price it server-side and lock the
   // collected country to this one).
   const [country, setCountry] = useState("US");
+  const [postalCode, setPostalCode] = useState("");
   const [shipping, setShipping] = useState<{
     shippable?: boolean;
     available?: boolean;
     chargedCents?: number;
   } | null>(null);
   const [shippingLoading, setShippingLoading] = useState(false);
+  // Task #1636 — sales tax for the running total, computed server-side by
+  // Stripe Tax (the authoritative rate table) once the fan picks a
+  // destination + postal code, then quietly folded into the total. No
+  // "estimate" framing — the same engine confirms the charge at checkout.
+  const [tax, setTax] = useState<{ available?: boolean; taxCents?: number } | null>(null);
+  const [taxLoading, setTaxLoading] = useState(false);
   // Task #1484 — optional "name on your GoodDeed® certificate" the buyer
   // can set up front, before paying. Only collected on digital-only
   // GoodDeed purchases (no physical signed-cert copy) — those keep the
@@ -479,7 +486,62 @@ export function BuySheet({
   const shippingCents =
     shipping?.shippable && shipping?.available ? shipping.chargedCents ?? 0 : 0;
   const shippingUnavailable = !!shipping?.shippable && shipping?.available === false;
-  const totalCents = itemsTotalCents + shippingCents;
+
+  // Task #1636 — live tax estimate. Re-quotes whenever the cart, the
+  // destination, or the postal code changes. We only ask once the fan has
+  // typed a postal code (Stripe needs it to resolve a US municipal/state
+  // rate); the server computes the figure via Stripe Tax so it can't be
+  // tampered with here.
+  const taxReady = !!selectedSku && !!country && postalCode.trim().length >= 3;
+  useEffect(() => {
+    if (!selectedSku || !taxReady) {
+      setTax(null);
+      return;
+    }
+    let cancelled = false;
+    setTaxLoading(true);
+    const handle = setTimeout(() => {
+      (async () => {
+        try {
+          const params = new URLSearchParams({
+            albumId,
+            format: selectedSku.format,
+            country,
+            postalCode: postalCode.trim(),
+            quantity: String(quantity),
+            certCount: String(certCount),
+            certPriceCents: String(addon?.priceCents ?? 0),
+            booklet: bookletCountForShip > 0 ? "1" : "0",
+          });
+          const r = await apiRequest("GET", `/api/checkout/tax-quote?${params.toString()}`);
+          const j = await r.json();
+          if (!cancelled) setTax(j);
+        } catch {
+          if (!cancelled) setTax(null);
+        } finally {
+          if (!cancelled) setTaxLoading(false);
+        }
+      })();
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [
+    albumId,
+    selectedSku?.format,
+    country,
+    postalCode,
+    quantity,
+    certCount,
+    addon?.priceCents,
+    bookletCountForShip,
+    taxReady,
+  ]);
+
+  const taxCents = tax?.available ? tax.taxCents ?? 0 : 0;
+  const taxAvailable = !!tax?.available;
+  const totalCents = itemsTotalCents + shippingCents + taxCents;
 
   // If the run is capped, don't let the fan toggle more copies than
   // remain in inventory. The server validates this too — this is just
@@ -1114,6 +1176,33 @@ export function BuySheet({
                   </select>
                 </div>
 
+                {/* ZIP / postal code — Task #1636. Drives the live sales-tax
+                    figure from Stripe Tax (the authoritative rate table) so the
+                    tax is already folded into the total before the fan reaches
+                    the card form. Stripe needs the postal code to resolve the
+                    US municipal/state rate; it's re-collected inside the
+                    embedded checkout where the same engine confirms the charge.
+                    Kept low-key on purpose — no "estimate" framing. */}
+                <div className="mb-4">
+                  <label
+                    htmlFor="buy-postal-code"
+                    className="block text-fan-secondary text-sm mb-1.5"
+                  >
+                    ZIP / Postal code
+                  </label>
+                  <input
+                    id="buy-postal-code"
+                    type="text"
+                    inputMode="text"
+                    autoComplete="postal-code"
+                    value={postalCode}
+                    onChange={(e) => setPostalCode(e.target.value)}
+                    placeholder="e.g. 90210"
+                    className="w-full rounded-2xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-base text-white placeholder:text-white/35 appearance-none focus:outline-none focus:border-white/25"
+                    data-testid="input-postal-code"
+                  />
+                </div>
+
                 {/* Live breakdown — separate lines so the fan can verify
                     the math before tapping checkout. */}
                 <div className="rounded-2xl bg-white/[0.05] p-4 mb-4 text-[13px]" data-testid="block-breakdown">
@@ -1170,8 +1259,22 @@ export function BuySheet({
                       We can't quote shipping to this destination yet — try another country.
                     </p>
                   )}
+                  {/* Sales tax — Task #1636. Computed server-side by Stripe
+                      Tax (the authoritative rate table, the same engine that
+                      confirms the charge at checkout) once the fan has entered
+                      a postal code, and simply folded into the total. Kept
+                      low-key — a plain "Sales tax" line, no "estimate"
+                      framing, so it just appears and the fan pays. */}
+                  {taxReady && (taxLoading || taxAvailable) && (
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-fan-secondary">Sales tax</span>
+                      <span className="text-fan-primary" data-testid="text-line-tax">
+                        {taxLoading ? "…" : dollars(taxCents)}
+                      </span>
+                    </div>
+                  )}
                   <div className="border-t border-white/[0.08] mt-3 pt-3 flex items-center justify-between">
-                    <span className="text-white/55">Total</span>
+                    <span className="text-fan-faint">Total</span>
                     <span className="text-[18px] font-bold" data-testid="text-buy-total">
                       {dollars(totalCents)}
                     </span>
@@ -1195,8 +1298,9 @@ export function BuySheet({
                         : `Checkout — ${dollars(totalCents)}`}
                 </button>
                 <p className="mt-3 text-white/40 text-[11px] text-center leading-snug">
-                  Shipping shown above; sales tax is calculated from your address
-                  on the next step. Includes instant digital access in the player.
+                  {taxAvailable
+                    ? "Includes shipping and sales tax. Instant digital access in the player."
+                    : "Shipping shown above; sales tax is added at checkout. Instant digital access in the player."}
                 </p>
               </>
             )}

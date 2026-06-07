@@ -110,10 +110,15 @@ The booklet behaves **differently by format** — this is the trickiest conditio
   Mexico, and Honduras have their own rate; every other listed destination falls
   back to the international ("INTL") average. Digital-only selections hide the
   picker — no shipping applies.
+- Below the "Ship to" picker is a plain **ZIP / Postal code** field (kept low-key —
+  no "for tax estimate" labelling). It's optional for placing the order — Stripe
+  re-collects the full address at the card step — but it's what lets the sales-tax
+  figure resolve and fold into the total below.
 - A running breakdown the fan can read before committing: the format line
   (`format × quantity`, folding in "+ booklet" for the 7″ variant), a signed-cert
   line (`cert × count`) when any copies are signed, a separate booklet line for the
-  cassette stacked add-on, a **Shipping** line, and a bold **Total**.
+  cassette stacked add-on, a **Shipping** line, a **Sales tax** line, and a
+  bold **Total**.
 - The **Shipping** line is a live server quote (`GET /api/checkout/shipping-quote`,
   re-fetched whenever the format, country, quantity, or signed-cert/booklet counts
   change). It's the fulfillment partner's (Spinney) published rate for the chosen
@@ -123,6 +128,21 @@ The booklet behaves **differently by format** — this is the trickiest conditio
   - **Only when:** if shipping to the chosen country can't be priced, the line
     shows an "unavailable" message and the checkout button is disabled until the
     fan picks a serviceable country.
+- The **Sales tax** line (Task #1636) is a live server quote
+  (`GET /api/checkout/tax-quote`), shown once the fan has typed a postal code
+  (≥3 chars). It's computed by **Stripe Tax** (`stripe.tax.calculations.create`)
+  from the server-resolved line prices + the **same per-line `tax_code`
+  classification** the session-create path uses, so it can't be tampered with from
+  the browser. It's deliberately **low-key** — a plain "Sales tax" line that just
+  folds into the **Total** (no "estimate" labelling, no "Estimated total" relabel),
+  because the same Stripe Tax engine confirms the exact charge at the card step, so
+  the number doesn't move.
+  - **Only when:** if Stripe can't resolve a jurisdiction for the entered address
+    (or Stripe Tax isn't configured for the account yet — needs a head-office
+    address + registrations in the Dashboard), the endpoint returns
+    `{ available: false }` and the line simply doesn't render. The order still goes
+    through; tax is just confirmed at the card step. Digital-only carts get their
+    correct (often $0) figure too.
 
 ### 2g. The checkout button — *always, label depends on auth*
 
@@ -134,9 +154,11 @@ The big button at the bottom changes its label based on state:
   (Step 4); while it spins up it briefly reads **"Opening checkout…"**.
 - It's disabled until a format is selected.
 
-Small print under the button: *"Shipping & taxes calculated at checkout. Includes
-instant digital access in the player."* (Shipping for the chosen country is already
-shown in the breakdown above before the fan commits; this line is about taxes.)
+Small print under the button stays low-key: once the tax line is present it reads
+*"Includes shipping and sales tax. Instant digital access in the player."* Otherwise
+it reads *"Shipping shown above; sales tax is added at checkout. Instant digital
+access in the player."* (Shipping for the chosen country is already in the breakdown
+before the fan commits.)
 
 ---
 
