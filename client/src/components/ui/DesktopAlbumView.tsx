@@ -8,6 +8,7 @@ import { ChevronRight, Play, Pause, Shuffle, Lock, Share, MoreHorizontal, X, Max
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { BonusPlayBadge } from "@/components/ui/BonusPlayBadge";
 import { IconButton } from "@/components/ui/IconButton";
+import { FAN_TOP_CHROME_INSET } from "@/components/ui/SheetChrome";
 import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
 import { useToast } from "@/hooks/use-toast";
 import { shareUrlForSlug } from "@shared/shareSlug";
@@ -426,7 +427,14 @@ export function DesktopAlbumView({
             Collection) or the browser back button, and any album is only ~two
             levels deep. Share + More stay grouped at the right edge. The album
             title lives in the hero below. */}
-        <div className="flex items-start gap-2">
+        {/* The capsule row is pushed down by the shared FAN_TOP_CHROME_INSET
+            (Task #1621) so it clears the device status / info bar with a small,
+            deliberate margin instead of sitting flush at the column's top
+            padding — matching the FanScreen library pages and Apple Music. */}
+        <div
+          className="flex items-start gap-2"
+          style={{ marginTop: FAN_TOP_CHROME_INSET }}
+        >
           {/* Apple-Music top-right chrome: Share + More sit together at the
               right edge of the album header, away from the transport controls
               (Task #1055). `ml-auto` keeps them right-aligned. */}

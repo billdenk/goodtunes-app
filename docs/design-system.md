@@ -164,7 +164,8 @@ The floating top-chrome on fan surfaces — the **back caret** (top-left) and th
 
 - **`FAN_TOP_CHROME_INSET`** (in `client/src/components/ui/SheetChrome.tsx`) = `calc(env(safe-area-inset-top, 0px) + 12px)`, **kept equal to `SHEET_SAFE_TOP`** so page chrome and sheet chrome land on the same line. It's safe-area-based on purpose: the old hard-coded `top-14` (56px) ignored the device safe area and read too low. Consume it as an inline `style={{ top: FAN_TOP_CHROME_INSET }}` on the absolutely-positioned chip; keep the horizontal placement (`left-4` / `right-4`) and the `z-50` on the className.
 - Applied across every fan surface that floats this chrome over a hero: album detail (`AlbumDetailMobileSurface` back + share/••• capsule), `ArtistDetail` (back + favorite), `FanLabel` (back). **New fan top-chrome must use this token** — never reintroduce a fixed `top-14`/`top-16`.
-- Out of scope: large-title page headers (`FanScreen`'s leading/trailing slots live inside a padded header, not floating over a hero) and the bottom nav / player dock.
+- **Desktop / iPad album + library top controls follow the same inset (Task #1621).** On the desktop album page (`DesktopAlbumView`) the Share + ••• capsule row is pushed down by the inset (`style={{ marginTop: FAN_TOP_CHROME_INSET }}`) so it clears the status / info bar instead of sitting flush at the column's top padding. On `FanScreen`-based library pages (Home, Collection, Songs, Artists) **both** the leading (left/back) and trailing (right/sort-filter) slots pin `top` to the inset so they sit on **one horizontal line** at a consistent height — resolving the old `top-3` vs `top-14` split. The header's top padding derives from the same inset plus the 44px control height (`calc(${FAN_TOP_CHROME_INSET} + 44px)`) so the large title always clears the control line on every device.
+- Out of scope: the bottom nav / player dock.
 
 ## Balanced title wrapping — long titles break into evenly-weighted lines
 

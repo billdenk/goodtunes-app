@@ -4,6 +4,7 @@ import { MiniPlayer } from "@/components/MiniPlayer";
 import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { useLyricsRailOpen } from "@/components/ui/DesktopLyricsRail";
 import { LYRICS_RAIL_CONTENT_OFFSET } from "@/hooks/useDesktopShell";
+import { FAN_TOP_CHROME_INSET } from "@/components/ui/SheetChrome";
 
 // ---------------------------------------------------------------------------
 // Shared screen chrome — Apple-Music large header + collapsing title, the
@@ -130,14 +131,30 @@ export function FanScreen({
         className="relative w-full max-w-[390px] md:max-w-[760px] lg:max-w-[1200px] lg:mx-auto h-screen text-fan-primary flex flex-col"
         style={{ height: "100dvh" }}
       >
-        <header className="absolute top-0 inset-x-0 z-20 px-5 pt-14 pb-3 pointer-events-none">
+        {/* The leading (left/back) and trailing (right/sort-filter) slots both
+            pin their `top` to the shared FAN_TOP_CHROME_INSET (Task #1621) so
+            they sit on ONE horizontal line at a consistent height, tucked just
+            below the device status / info bar — resolving the old `top-3` vs
+            `top-14` mismatch. The header's top padding derives from the same
+            inset plus the 44px control height so the title row always clears the
+            control line on every device (incl. notched / safe-area surfaces). */}
+        <header
+          className="absolute top-0 inset-x-0 z-20 px-5 pb-3 pointer-events-none"
+          style={{ paddingTop: `calc(${FAN_TOP_CHROME_INSET} + 44px)` }}
+        >
           {leading && (
-            <div className="pointer-events-auto absolute left-4 top-3">{leading}</div>
+            <div
+              className="pointer-events-auto absolute left-4"
+              style={{ top: FAN_TOP_CHROME_INSET }}
+            >
+              {leading}
+            </div>
           )}
           {trailing && (
             <div
               ref={trailingRef}
-              className="pointer-events-auto absolute right-5 top-14 will-change-[opacity,transform]"
+              className="pointer-events-auto absolute right-5 will-change-[opacity,transform]"
+              style={{ top: FAN_TOP_CHROME_INSET }}
             >
               {trailing}
             </div>
