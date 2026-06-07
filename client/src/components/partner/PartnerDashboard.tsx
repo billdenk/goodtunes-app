@@ -30,6 +30,8 @@ const RANGE_PRESETS: ReadonlyArray<RangePreset<PartnerRangePreset>> = [
 
 type KpiFormat = "currency" | "number" | "percent" | "duration";
 
+type KpiBreakdownRow = { label: string; value: number; format: KpiFormat };
+
 type DashboardKpi = {
   id: string;
   label: string;
@@ -38,6 +40,7 @@ type DashboardKpi = {
   format: KpiFormat;
   note?: string;
   comingSoon?: boolean;
+  breakdown?: KpiBreakdownRow[];
 };
 
 type ChartMetric = { id: string; label: string; format: KpiFormat };
@@ -228,6 +231,25 @@ function KpiTile({ k, scope }: { k: DashboardKpi; scope: PartnerScopeKind }) {
           <span className="text-white/45 truncate">{k.note}</span>
         )}
       </div>
+      {k.breakdown && k.breakdown.length > 0 && !k.comingSoon && (
+        <dl
+          className="mt-3 space-y-1 border-t border-white/10 pt-2"
+          data-testid={`${testId}-breakdown`}
+        >
+          {k.breakdown.map((b, i) => (
+            <div key={i} className="flex items-center justify-between text-xs">
+              <dt className="text-fan-secondary">{b.label}</dt>
+              <dd
+                className={`tabular-nums font-medium ${
+                  b.value < 0 ? "text-rose-300" : "text-fan-primary"
+                }`}
+              >
+                {formatValue(b.value, b.format)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </DashboardPanel>
   );
 }
