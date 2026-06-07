@@ -222,8 +222,9 @@ function formatPrice(cents: number): string {
  * reveal pattern. Wraps the karaoke body so hovering (pointer devices) — or a
  * first tap (touch) — reveals a button whose click opens the full-screen Now
  * Playing surface via the host's `onExpand` (player.setShowPlayer(true)).
- * Unlike the rail, the in-flow panel still reflows the album column; this only
- * adds the control, not the rail's flush edge treatment.
+ * The in-flow panel still reflows the album column but now shares the rail's
+ * flush edge treatment (solid navy, flush right/bottom, top-left corner only);
+ * this wrapper only adds the expand control.
  */
 function InFlowLyricsExpand({
   onExpand,
@@ -948,32 +949,31 @@ export function DesktopAlbumView({
         <div className="h-16" aria-hidden />
       </div>
 
-      {/* Right-side lyrics slide-in (Apple-Music style). The width is the
+      {/* Right-side lyrics rail (Apple-Music style). The width is the
           animated property: the aside grows from 0 → 360px so the primary
-          column reflows smoothly to make room and stays fully visible —
-          no full-screen takeover. The inner card is fixed-width and
-          right-justified inside the overflow-hidden aside, so it reads as
-          a panel sliding in from the right edge. Caller owns the toggle
-          (PlayerContext.showLyrics + setShowLyrics). lg-only: the 360px
-          panel needs the room a wide desktop provides. The `lyrics` node
-          (the shared karaoke SyncedLyrics on the fan route) owns its own
-          scroll, so the body is a plain flex container — no extra
-          scrollbar. */}
+          column reflows smoothly to make room and stays fully visible — no
+          full-screen takeover. Bill: the rail must look the SAME on the album
+          page as on every other screen, so it shares the storefront
+          DesktopLyricsRail's flush edge treatment — a solid navy panel butted
+          FLUSH against the right + bottom window edges with only the interior
+          (top-left) corner rounded, not a floating fully-rounded translucent
+          card. Caller owns the toggle (PlayerContext.showLyrics +
+          setShowLyrics). lg-only: the 360px panel needs the room a wide
+          desktop provides. The `lyrics` node (the shared karaoke SyncedLyrics
+          on the fan route) owns its own scroll + bottom padding, so it keeps
+          the karaoke text clear of the dock / iPad home indicator even though
+          the panel now runs to the bottom edge. */}
       <AnimatePresence initial={false}>
         {showLyrics && !compact && (
           <motion.aside
             key="lyrics-panel"
-            // Bounded, self-contained scroll panel (Apple parity): the rail
-            // is `sticky top-0` but its height stops short of the bottom by
-            // `LYRICS_DOCK_CLEARANCE` (+ the iOS safe-area inset) so its
-            // content ends ABOVE the floating PlayerDock instead of running
-            // full-height behind it / below the fold. The inner SyncedLyrics
-            // viewport is this card, so the active line + neighbours stay
-            // visible within the panel.
+            // `sticky top-0` + full viewport height so the rail runs flush to
+            // the bottom window edge (matching the storefront rail). At lg the
+            // floating PlayerDock reserves this panel's width as its right
+            // channel, so the dock sits to the rail's LEFT and never overlaps
+            // it; SyncedLyrics' own bottom padding handles narrower cases.
             className="hidden lg:flex justify-end flex-shrink-0 overflow-hidden sticky top-0 self-start"
-            style={{
-              height: `calc(100dvh - ${LYRICS_DOCK_CLEARANCE}px - env(safe-area-inset-bottom, 0px))`,
-            }}
+            style={{ height: "100dvh" }}
             initial={reduceMotion ? false : { width: 0 }}
             animate={{ width: LYRICS_PANEL_WIDTH }}
             exit={{ width: 0 }}
@@ -986,14 +986,17 @@ export function DesktopAlbumView({
             data-testid="panel-lyrics"
           >
             <div
-              className="flex-shrink-0 h-full py-8 pr-8 pl-2 flex flex-col"
+              className="flex-shrink-0 h-full flex flex-col"
               style={{ width: LYRICS_PANEL_WIDTH }}
             >
               <div
-                className="flex-1 min-h-0 rounded-2xl overflow-hidden flex flex-col"
+                className="flex-1 min-h-0 overflow-hidden flex flex-col"
                 style={{
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.08)",
+                  background: "rgba(10, 14, 42, 0.97)",
+                  borderTopLeftRadius: 16,
+                  borderTop: "1px solid rgba(255,255,255,0.08)",
+                  borderLeft: "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: "-12px 0 40px rgba(0,0,0,0.28)",
                 }}
               >
                 {/* No title/close header — the dock mic toggles the panel
@@ -1026,13 +1029,6 @@ export function DesktopAlbumView({
  *  host (AlbumDetailDesktop) can feed the same width to the PlayerDock as
  *  its right channel inset, keeping the dock in the gutter beside the rail. */
 export const LYRICS_PANEL_WIDTH = 360;
-
-/** Vertical inset (px) the lyrics rail leaves at top+bottom so it reads as a
- *  full-height rail matching the left nav rail (Task #1523): 12px top + 12px
- *  bottom = 24. The floating dock sits in the gutter to the rail's LEFT
- *  (≥1100), so no extra bottom clearance is needed; SyncedLyrics' own bottom
- *  padding keeps the karaoke text above the dock at narrower widths. */
-const LYRICS_DOCK_CLEARANCE = 24;
 
 /* Buy CTA fill — the brand-blue gradient, matching the not-owned Buy
    button on the mobile album surface (AlbumDetailMobileSurface) so the

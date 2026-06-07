@@ -17,6 +17,7 @@ import {
   Maximize2,
 } from "lucide-react";
 import { LyricsIcon } from "@/components/ui/LyricsIcon";
+import { isIOS } from "@/lib/platform";
 
 /**
  * Canonical Apple-Music-style floating dock primitive.
@@ -885,11 +886,16 @@ export function PlayerDock({
             {/* Volume cluster — slider slides out left on hover.
                 Hidden in compact: Apple drops volume from its narrow
                 mini-player too. The title gets the ~46px back.
+                Also hidden on ALL iOS (web iPad Safari + the native iPad
+                app): iOS audio volume is read-only on the web and the
+                native plugin doesn't reach the hardware volume reliably on
+                iPad, so per Bill we hide the dead control there for now
+                (the native iPhone uses the mobile Player.tsx, not this dock).
                 Rail bg lifted to white/25 so the empty (right-of-knob)
                 portion reads as a track rather than blending into
                 the dark pill. Fill transition dropped so clicks on the
                 rail snap immediately to the new level. */}
-            {!compact && (
+            {!compact && !isIOS && (
               <div className="group/vol flex items-center pr-0.5">
                 <div className="overflow-hidden transition-[width,margin] duration-200 ease-out w-0 group-hover/vol:w-[68px] group-hover/vol:mr-1.5">
                   <div

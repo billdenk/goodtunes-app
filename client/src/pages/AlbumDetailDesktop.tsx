@@ -653,11 +653,13 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
               key="search-lyrics-panel"
               className="hidden lg:flex justify-end flex-shrink-0 overflow-hidden self-start"
               style={{
-                // Full-height rail (Task #1523): reaches the bottom like the
-                // left nav rail; the floating dock sits in the gutter to its
-                // left (≥1100) so it never overlaps, and SyncedLyrics' own
-                // bottom padding keeps the text clear at narrower widths.
-                height: `calc(100dvh - 24px - env(safe-area-inset-bottom, 0px))`,
+                // Full-height rail: runs flush to the bottom window edge like
+                // the storefront DesktopLyricsRail (Bill: consistent rail on
+                // every screen). The floating dock reserves this width as its
+                // right channel (≥1100) so it sits to the rail's LEFT and never
+                // overlaps; SyncedLyrics' own bottom padding keeps the text
+                // clear at narrower widths.
+                height: "100dvh",
               }}
               initial={reduceMotion ? false : { width: 0 }}
               animate={{ width: LYRICS_PANEL_WIDTH }}
@@ -671,14 +673,17 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
               data-testid="panel-lyrics-search"
             >
               <div
-                className="flex-shrink-0 h-full py-8 pr-8 pl-2 flex flex-col"
+                className="flex-shrink-0 h-full flex flex-col"
                 style={{ width: LYRICS_PANEL_WIDTH }}
               >
                 <div
-                  className="flex-1 min-h-0 rounded-2xl overflow-hidden flex flex-col"
+                  className="flex-1 min-h-0 overflow-hidden flex flex-col"
                   style={{
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "rgba(10, 14, 42, 0.97)",
+                    borderTopLeftRadius: 16,
+                    borderTop: "1px solid rgba(255,255,255,0.08)",
+                    borderLeft: "1px solid rgba(255,255,255,0.08)",
+                    boxShadow: "-12px 0 40px rgba(0,0,0,0.28)",
                   }}
                 >
                   <div className="flex-1 min-h-0 flex flex-col">{lyricsBody}</div>

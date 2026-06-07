@@ -20,7 +20,8 @@ import { IconButton } from "@/components/ui/IconButton";
 import { LyricsIcon } from "@/components/ui/LyricsIcon";
 import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
 import { EASE_OUT } from "@/lib/motion";
-import { isWebIOS } from "@/lib/platform";
+import { isIOS } from "@/lib/platform";
+import { track } from "@/lib/analytics";
 import { useSystemVolume } from "@/lib/nativeVolume";
 
 /**
@@ -323,13 +324,15 @@ export function DesktopNowPlaying() {
                 <LyricsIcon />
               </IconButton>
 
-              {/* Volume cluster — hidden on web iOS (iPad Safari), where audio
-                  volume is read-only so the slider would be a dead control;
-                  hardware buttons own loudness there. On native iOS the
-                  SystemVolume plugin makes it work, so it shows and mirrors the
-                  device's hardware volume (no separate mute — like the phone
-                  player — since the system owns it). */}
-              {!isWebIOS && (
+              {/* Volume cluster — hidden on ALL iOS (web iPad Safari + the
+                  native iPad app). On web iOS audio volume is read-only so the
+                  slider is a dead control; on the native iPad app the
+                  SystemVolume plugin doesn't reach the hardware volume reliably
+                  either, so per Bill we hide it for now rather than show a
+                  control that does nothing (hardware buttons own loudness).
+                  The native iPhone keeps its working slider via the mobile
+                  Player.tsx, which this desktop surface never renders. */}
+              {!isIOS && (
                 <div className="flex items-center gap-2 flex-1 max-w-[200px]">
                   {systemVolume.active ? (
                     <span
@@ -358,6 +361,44 @@ export function DesktopNowPlaying() {
                     />
                   </div>
                 </div>
+              )}
+
+              {/* AirPlay — the desktop/iPad analog of the mobile player's
+                  output button. `airPlaySupported` is true only where iOS
+                  WebKit exposes the picker (Safari + the native iPad/iPhone
+                  app), so it surfaces AirPlay on the iPad app — where it was
+                  previously missing — and stays hidden on Android/desktop. */}
+              {player.airPlaySupported && (
+                <IconButton
+                  variant="ghost"
+                  size="md"
+                  label="AirPlay"
+                  onClick={() => {
+                    player.showAirPlayPicker();
+                    track("airplay_picker_opened", {
+                      songId: cs.id,
+                      albumId: cs.album?.id,
+                    });
+                  }}
+                  data-testid="button-now-playing-airplay"
+                >
+                  {/* Apple's AirPlay glyph: a rounded display with a small
+                      upward triangle centered at its base. */}
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M5 17H4a2 2 0 01-2-2V6a2 2 0 012-2h16a2 2 0 012 2v9a2 2 0 01-2 2h-1" />
+                    <polygon points="12 15 17 21 7 21 12 15" fill="currentColor" stroke="none" />
+                  </svg>
+                </IconButton>
               )}
 
               <IconButton
