@@ -134,7 +134,7 @@ function MobileMiniPlayer() {
   //   * Expanded: MiniPlayer floats above the labeled pillow + search
   //     circle as a full-width capsule (same 79px lift as before).
   const containerClass = hidden
-    ? "absolute z-30 flex"
+    ? "absolute z-30"
     : "absolute left-0 right-0 z-30 px-3 pb-1";
   // Apple-style spring on the grow/shrink morph: a tuned overshoot bezier
   // (y > 1 = the capsule squishes past its target, then settles) instead
@@ -162,7 +162,20 @@ function MobileMiniPlayer() {
       };
 
   return (
-    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] z-[45] pointer-events-none">
+    <div
+      // Bound the dock to the VISIBLE viewport, never the containing block.
+      // Width is capped with `100vw` (viewport-relative, so a transformed
+      // ancestor or an iOS layout-vs-visual-viewport mismatch can't let the
+      // pill run past the right edge) minus the left/right safe-area insets
+      // (notched landscape). Centered with left-1/2 + translateX(-50%). This
+      // is the fix for the right-edge overflow seen in mobile Safari /
+      // in-app browsers. (Task #1694)
+      className="fixed bottom-0 left-1/2 -translate-x-1/2 z-[45] pointer-events-none"
+      style={{
+        width:
+          "min(390px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)))",
+      }}
+    >
     <div className={`pointer-events-auto ${containerClass}`} style={containerStyle}>
       <div
         className="relative cursor-pointer active:scale-[0.98] transition-transform"
@@ -184,18 +197,18 @@ function MobileMiniPlayer() {
         onClick={() => setShowPlayer(true)}
       >
         {hidden ? (
-          <div className="flex items-center gap-3 pl-3 pr-2.5 py-2">
+          <div className="flex items-center gap-2.5 pl-2 pr-1 py-1.5">
             <img
               src={currentSong.album.artwork}
               alt={currentSong.album.title}
               className="flex-shrink-0 object-cover"
-              style={{ width: 32, height: 32, borderRadius: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}
+              style={{ width: 36, height: 36, borderRadius: 7, boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}
             />
             <div className="flex-1 min-w-0">
               <PlayerTitleLink
                 title={currentSong.title}
                 albumId={currentSong.album.id}
-                className="text-fan-primary text-[13px] font-semibold truncate leading-tight"
+                className="text-fan-primary text-sm font-semibold truncate leading-tight"
                 testId="mini-title"
               />
               <PlayerNameLinks
@@ -203,69 +216,70 @@ function MobileMiniPlayer() {
                 albumId={currentSong.album.id}
                 albumTitle={currentSong.album.title}
                 className="leading-tight"
-                segmentClassName="text-fan-secondary text-[11px]"
-                separatorClassName="text-fan-secondary/60 text-[11px]"
+                segmentClassName="text-fan-secondary text-xs"
+                separatorClassName="text-fan-secondary/60 text-xs"
                 testIdPrefix="mini-subtitle"
               />
             </div>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-              className="w-8 h-8 flex-shrink-0 flex items-center justify-center text-white active:opacity-60 transition-opacity"
+              className="w-11 h-11 flex-shrink-0 flex items-center justify-center text-white active:opacity-60 transition-opacity"
               aria-label={isPlaying ? "Pause" : "Play"}
             >
               {isPlaying ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                   <rect x="5" y="4" width="4" height="16" rx="1.5" />
                   <rect x="15" y="4" width="4" height="16" rx="1.5" />
                 </svg>
               ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18a1 1 0 000-1.69L9.54 5.98A.998.998 0 008 6.82z" />
                 </svg>
               )}
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-3 pl-3 pr-3 py-1.5">
+          <div className="flex items-center gap-3 pl-2 pr-1.5 py-1.5">
             <img
               src={currentSong.album.artwork}
               alt={currentSong.album.title}
               className="flex-shrink-0 object-cover"
-              style={{ width: 32, height: 32, borderRadius: 6, boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}
+              style={{ width: 44, height: 44, borderRadius: 8, boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}
             />
 
             <div className="flex-1 min-w-0">
               <PlayerTitleLink
                 title={currentSong.title}
                 albumId={currentSong.album.id}
-                className="text-fan-primary text-[14px] font-semibold truncate leading-snug"
+                className="text-fan-primary text-sm font-semibold truncate leading-tight"
                 testId="mini-title"
               />
               <PlayerNameLinks
                 artist={currentSong.album.artist}
                 albumId={currentSong.album.id}
                 albumTitle={currentSong.album.title}
-                className="leading-snug"
-                segmentClassName="text-fan-secondary text-[12px]"
-                separatorClassName="text-fan-secondary/60 text-[12px]"
+                className="leading-tight"
+                segmentClassName="text-fan-secondary text-xs"
+                separatorClassName="text-fan-secondary/60 text-xs"
                 testIdPrefix="mini-subtitle"
               />
             </div>
 
-            <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center flex-shrink-0" onClick={(e) => e.stopPropagation()}>
               <button
                 type="button"
                 onClick={togglePlay}
-                className="w-9 h-9 flex items-center justify-center text-white active:opacity-60 transition-opacity"
+                className="w-11 h-11 flex items-center justify-center text-white active:opacity-60 transition-opacity"
+                aria-label={isPlaying ? "Pause" : "Play"}
               >
                 {isPlaying ? (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
                     <rect x="5" y="4" width="4" height="16" rx="1.5" />
                     <rect x="15" y="4" width="4" height="16" rx="1.5" />
                   </svg>
                 ) : (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18a1 1 0 000-1.69L9.54 5.98A.998.998 0 008 6.82z" />
                   </svg>
                 )}
@@ -273,9 +287,10 @@ function MobileMiniPlayer() {
               <button
                 type="button"
                 onClick={next}
-                className="w-9 h-9 flex items-center justify-center text-white active:opacity-60 transition-opacity"
+                className="w-11 h-11 flex items-center justify-center text-white active:opacity-60 transition-opacity"
+                aria-label="Next track"
               >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M6 18l8.5-6L6 6v12z" />
                   <rect x="16" y="6" width="2" height="12" rx="1" />
                 </svg>
