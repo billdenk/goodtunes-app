@@ -1,12 +1,26 @@
-import { useState } from "react";
-import { X, ChevronRight, ChevronLeft, Minus, Plus, Check, Heart, Apple, Lock } from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+  X,
+  ChevronRight,
+  ChevronLeft,
+  Minus,
+  Plus,
+  ShoppingBag,
+  Info,
+  Gift,
+  Sparkles,
+  Apple,
+  Lock,
+} from "lucide-react";
 
 /**
  * "Get Hope. Give Hope." — Nightbirde · Hope · clickable fan offer flow.
  *
- * A sandbox mockup of the redesigned Preview & Purchase flow Bill sketched:
- * a centered modal over the album page that steps through
- *   overview → buy bundle → add-ons → sign in & pay.
+ * A sandbox mockup of the redesigned Preview & Purchase flow Bill sketched,
+ * iterated to remove decision-clutter and lean into the campaign's own
+ * two-beat narrative:
+ *   overview → GET HOPE (bundle + optional signed upgrade)
+ *            → GIVE HOPE (Gift of Hope donation) → sign in & pay.
  *
  * Built in the real GoodTunes design system (brand-navy bg, royal-navy
  * modal, brand-blue CTA, orange section labels, mint confirm). Imagery is
@@ -22,15 +36,18 @@ const BLUE = "#319ED8";
 const ORANGE = "#F09837";
 const MINT = "#4AFFCA";
 
-const PRICE = { bundle: 45, cert: 25, box: 50 };
+const PRICE = { bundle: 25, signed: 25 };
+const GIFT_MIN = 75;
+const GIFT_PRESETS = [75, 100, 250];
+
 const usd = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 0 })}`;
 
 const img = (name: string) =>
   `${import.meta.env.BASE_URL.replace(/\/$/, "")}/images/${name}`;
 
-type Step = "overview" | "buy" | "addons" | "pay";
-const ORDER: Step[] = ["overview", "buy", "addons", "pay"];
+type Step = "overview" | "buy" | "give" | "pay";
+const ORDER: Step[] = ["overview", "buy", "give", "pay"];
 
 /* ── small primitives ─────────────────────────────────────────────── */
 
@@ -38,11 +55,17 @@ function QtyStepper({
   value,
   onChange,
   testid,
+  min = 0,
+  max,
 }: {
   value: number;
   onChange: (n: number) => void;
   testid: string;
+  min?: number;
+  max?: number;
 }) {
+  const atMin = value <= min;
+  const atMax = max != null && value >= max;
   return (
     <div
       className="inline-flex items-center rounded-full border border-white/20 bg-white/[0.04] h-10 px-1"
@@ -51,9 +74,9 @@ function QtyStepper({
       <button
         type="button"
         aria-label="Decrease quantity"
-        onClick={() => onChange(Math.max(0, value - 1))}
-        className="w-8 h-8 rounded-full inline-flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30"
-        disabled={value === 0}
+        onClick={() => onChange(Math.max(min, value - 1))}
+        className="w-8 h-8 rounded-full inline-flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+        disabled={atMin}
       >
         <Minus className="w-4 h-4" strokeWidth={2.4} />
       </button>
@@ -63,8 +86,9 @@ function QtyStepper({
       <button
         type="button"
         aria-label="Increase quantity"
-        onClick={() => onChange(value + 1)}
-        className="w-8 h-8 rounded-full inline-flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+        onClick={() => onChange(max != null ? Math.min(max, value + 1) : value + 1)}
+        className="w-8 h-8 rounded-full inline-flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+        disabled={atMax}
       >
         <Plus className="w-4 h-4" strokeWidth={2.4} />
       </button>
@@ -72,36 +96,46 @@ function QtyStepper({
   );
 }
 
-function AddButton({
-  added,
-  onClick,
-  testid,
-}: {
-  added: boolean;
-  onClick: () => void;
-  testid: string;
-}) {
+/** Inline "$25 × 2 = $50" math, sitting where a button used to be. */
+function LineMath({ unit, qty, testid }: { unit: number; qty: number; testid: string }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-testid={testid}
-      className="h-10 px-5 rounded-full inline-flex items-center gap-2 text-[14px] font-semibold transition-colors active:scale-[0.97]"
-      style={
-        added
-          ? { background: "rgba(74,255,202,0.14)", color: MINT, border: `1px solid ${MINT}55` }
-          : { background: "#fff", color: BG }
-      }
-    >
-      {added ? (
-        <>
-          <Check className="w-4 h-4" strokeWidth={2.6} />
-          Added
-        </>
-      ) : (
-        "Add to order"
+    <span className="text-white/55 text-[14px] tabular-nums" data-testid={testid}>
+      {usd(unit)} <span className="text-white/35">×</span> {qty}{" "}
+      <span className="text-white/35">=</span>{" "}
+      <span className="text-white font-bold">{usd(unit * qty)}</span>
+    </span>
+  );
+}
+
+/** Tap-to-reveal explainer (tap, not hover — this lands on touch). */
+function WhyMore() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        data-testid="link-why-more"
+        className="inline-flex items-center gap-1 text-white/45 hover:text-white/75 text-[12px] transition-colors"
+      >
+        <Info className="w-3.5 h-3.5" strokeWidth={2} />
+        Why more than one?
+      </button>
+      {open && (
+        <div
+          data-testid="popover-why-more"
+          className="absolute z-30 left-0 top-full mt-2 w-[268px] rounded-xl p-3.5 text-[12.5px] leading-[1.55] text-white/85"
+          style={{
+            background: PANEL,
+            border: "1px solid rgba(255,255,255,0.14)",
+            boxShadow: "0 16px 40px rgba(0,0,0,0.5)",
+          }}
+        >
+          Some people buy more than one as a gift for friends — sharing the music, and the
+          chance to help women facing cancer.
+        </div>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -134,71 +168,11 @@ function EditionCol({
   );
 }
 
-/* ── product row (buy + add-ons) ──────────────────────────────────── */
-
-function ProductRow({
-  image,
-  title,
-  desc,
-  price,
-  qty,
-  onQty,
-  testid,
-  imgClass = "",
-}: {
-  image: string;
-  title: string;
-  desc: React.ReactNode;
-  price: number;
-  qty: number;
-  onQty: (n: number) => void;
-  testid: string;
-  imgClass?: string;
-}) {
+function Note({ icon: Icon, children }: { icon: typeof Gift; children: React.ReactNode }) {
   return (
-    <div className="flex gap-5" data-testid={`row-${testid}`}>
-      <div
-        className="flex-shrink-0 rounded-2xl overflow-hidden bg-white"
-        style={{ width: 168, height: 168, boxShadow: "0 10px 30px rgba(0,0,0,0.35)" }}
-      >
-        <img
-          src={image}
-          alt={title}
-          className={"w-full h-full object-cover " + imgClass}
-          draggable={false}
-        />
-      </div>
-      <div className="flex-1 min-w-0 flex flex-col">
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="text-white text-[19px] font-bold tracking-[-0.01em]">{title}</h3>
-          <div
-            className="flex-shrink-0 text-white text-[18px] font-bold tabular-nums"
-            data-testid={`price-${testid}`}
-          >
-            {usd(price)}
-          </div>
-        </div>
-        <div className="text-white/65 text-[13px] leading-[1.5] mt-1.5 max-w-[340px]">
-          {desc}
-        </div>
-        <div className="mt-auto pt-4 flex items-center gap-3">
-          <QtyStepper value={qty} onChange={onQty} testid={`stepper-${testid}`} />
-          <AddButton
-            added={qty > 0}
-            onClick={() => onQty(qty > 0 ? qty : 1)}
-            testid={`add-${testid}`}
-          />
-          {qty > 1 && (
-            <span
-              className="ml-auto text-white/55 text-[13px] tabular-nums"
-              data-testid={`linetotal-${testid}`}
-            >
-              {usd(price)} × {qty} ={" "}
-              <span className="text-white font-semibold">{usd(price * qty)}</span>
-            </span>
-          )}
-        </div>
-      </div>
+    <div className="flex gap-2.5 items-start text-white/55 text-[12.5px] leading-[1.55]">
+      <Icon className="w-4 h-4 mt-px flex-shrink-0" strokeWidth={2} style={{ color: ORANGE }} />
+      <span>{children}</span>
     </div>
   );
 }
@@ -302,78 +276,241 @@ function OverviewStep() {
   );
 }
 
-function BuyStep({ qty, onQty }: { qty: number; onQty: (n: number) => void }) {
+function BuyStep({
+  bundleQty,
+  onBundle,
+  signedQty,
+  onSigned,
+}: {
+  bundleQty: number;
+  onBundle: (n: number) => void;
+  signedQty: number;
+  onSigned: (n: number) => void;
+}) {
   return (
     <div data-testid="step-buy">
-      <h1 className="text-white text-[28px] font-bold tracking-[-0.02em] mb-6">
-        Get Nightbirde's Hope Bundle
-      </h1>
-      <ProductRow
-        testid="bundle"
-        image={img("hope-get-hope.png")}
-        title="Get Hope"
-        price={PRICE.bundle}
-        desc={
-          <>
-            The first in a limited-edition series. Includes the Digital Collector Edition and the 7"
-            Physical Collector Edition. Proceeds benefit Nightbirde Foundation.
-          </>
-        }
-        qty={qty}
-        onQty={onQty}
-      />
+      <h1 className="text-white text-[28px] font-bold tracking-[-0.02em] mb-1.5">Get Hope</h1>
+      <p className="text-white/60 text-[13.5px] leading-[1.5] mb-6 max-w-[520px]">
+        The first in a limited-edition series — a 7" Physical Collector Edition plus the full Digital
+        Collector Edition. Proceeds benefit the Nightbirde Foundation.
+      </p>
+
+      {/* bundle */}
+      <div className="flex gap-5">
+        <div
+          className="flex-shrink-0 rounded-2xl overflow-hidden bg-white"
+          style={{ width: 168, height: 168, boxShadow: "0 10px 30px rgba(0,0,0,0.35)" }}
+        >
+          <img src={img("hope-get-hope.png")} alt="Hope Bundle" className="w-full h-full object-cover" draggable={false} />
+        </div>
+        <div className="flex-1 min-w-0 flex flex-col">
+          <div className="flex items-start justify-between gap-3">
+            <h3 className="text-white text-[19px] font-bold tracking-[-0.01em]">Hope Bundle</h3>
+            <div className="flex-shrink-0 text-white text-[18px] font-bold tabular-nums" data-testid="price-bundle">
+              {usd(PRICE.bundle)}
+            </div>
+          </div>
+          <p className="text-white/65 text-[13px] leading-[1.5] mt-1.5 max-w-[340px]">
+            Physical 7" vinyl + companion booklet, plus the Digital Collector Edition with GoodDeed®
+            certificate and bonus content from Jane's family.
+          </p>
+          <div className="mt-auto pt-4 flex items-center gap-4">
+            <QtyStepper value={bundleQty} onChange={onBundle} min={1} testid="stepper-bundle" />
+            <LineMath unit={PRICE.bundle} qty={bundleQty} testid="linetotal-bundle" />
+          </div>
+          <div className="mt-2.5">
+            <WhyMore />
+          </div>
+        </div>
+      </div>
+
+      {/* signed upgrade — coupled to the bundle count just chosen */}
+      <div className="h-px bg-white/10 my-6" />
+      <div>
+        <div className="flex items-center gap-1.5 mb-3">
+          <Sparkles className="w-3.5 h-3.5" strokeWidth={2.2} style={{ color: ORANGE }} />
+          <span className="text-[12px] font-bold uppercase tracking-[0.08em]" style={{ color: ORANGE }}>
+            Make it official
+          </span>
+        </div>
+        <div className="flex gap-5">
+          <div
+            className="flex-shrink-0 rounded-2xl overflow-hidden bg-white"
+            style={{ width: 132, height: 132, boxShadow: "0 10px 30px rgba(0,0,0,0.35)" }}
+          >
+            <img src={img("hope-cert-framed.jpg")} alt="Signed GoodDeed Certificate" className="w-full h-full object-cover" draggable={false} />
+          </div>
+          <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="text-white text-[16px] font-bold tracking-[-0.01em]">
+                Signed GoodDeed® Certificate
+              </h3>
+              <div className="flex-shrink-0 text-white text-[15px] font-bold tabular-nums" data-testid="price-signed">
+                +{usd(PRICE.signed)} each
+              </div>
+            </div>
+            <p className="text-white/65 text-[12.5px] leading-[1.5] mt-1.5 max-w-[360px]">
+              Hand-signed by Jane's family, personalized with your name and unique number, finished
+              with a holographic seal + QR provenance. Ships with your vinyl.
+            </p>
+            <div className="mt-auto pt-3.5 flex items-center gap-4">
+              <QtyStepper
+                value={signedQty}
+                onChange={onSigned}
+                min={0}
+                max={bundleQty}
+                testid="stepper-signed"
+              />
+              <span className="text-[13px] tabular-nums" data-testid="hint-signed">
+                {signedQty === 0 ? (
+                  <span className="text-white/45">
+                    Optional — up to your {bundleQty} cop{bundleQty > 1 ? "ies" : "y"}
+                  </span>
+                ) : (
+                  <span className="text-white/55">
+                    {signedQty} of {bundleQty} signed{" "}
+                    <span className="text-white/35">=</span>{" "}
+                    <span className="text-white font-bold">{usd(PRICE.signed * signedQty)}</span>
+                  </span>
+                )}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function AddonsStep({
-  certQty,
-  onCert,
-  boxQty,
-  onBox,
+function GiftAmount({
+  amount,
+  onAmount,
 }: {
-  certQty: number;
-  onCert: (n: number) => void;
-  boxQty: number;
-  onBox: (n: number) => void;
+  amount: number;
+  onAmount: (n: number) => void;
 }) {
   return (
-    <div data-testid="step-addons">
-      <h1 className="text-white text-[28px] font-bold tracking-[-0.02em] mb-6">Add-ons</h1>
-      <div className="flex flex-col gap-8">
-        <ProductRow
-          testid="cert"
-          image={img("hope-cert-framed.jpg")}
-          title="Signed GoodDeed® Certificate"
-          price={PRICE.cert}
-          desc={
-            <>
-              Printed on museum-quality heavy stock, this deed of your good is personalized with your
-              name and your unique number. Signed by Jane's family and authenticated with a GoodTunes
-              holographic seal and a QR code for digital provenance. Ships with your vinyl order. Frame
-              not included.
-            </>
-          }
-          qty={certQty}
-          onQty={onCert}
-        />
-        <div className="h-px bg-white/10" />
-        <ProductRow
-          testid="box"
-          image={img("hope-gift-box.png")}
-          title="Gift of Hope Box"
-          price={PRICE.box}
-          desc={
-            <>
-              Each box includes a stainless-steel Nightbirde cup, a copy of her debut album "It's OK,"
-              and Jane's book of poetry, <em>Poems for the Dark</em>. Add a note of your own, or let
-              the Nightbirde team write one — and we'll send it to someone you love who's facing
-              cancer, or someone in need we choose on your behalf.
-            </>
-          }
-          qty={boxQty}
-          onQty={onBox}
-        />
+    <div className="flex items-center gap-2 flex-wrap">
+      {GIFT_PRESETS.map((p) => {
+        const active = amount === p;
+        return (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onAmount(p)}
+            data-testid={`pill-gift-${p}`}
+            className="h-10 px-4 rounded-full text-[14px] font-semibold tabular-nums transition-colors"
+            style={
+              active
+                ? { background: "#fff", color: BG }
+                : { background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.8)", border: "1px solid rgba(255,255,255,0.16)" }
+            }
+          >
+            {usd(p)}
+          </button>
+        );
+      })}
+      <div className="inline-flex items-center rounded-full border border-white/20 bg-white/[0.04] h-10 px-1">
+        <button
+          type="button"
+          aria-label="Give less"
+          onClick={() => onAmount(Math.max(GIFT_MIN, amount - 25))}
+          disabled={amount <= GIFT_MIN}
+          className="w-8 h-8 rounded-full inline-flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+        >
+          <Minus className="w-4 h-4" strokeWidth={2.4} />
+        </button>
+        <span className="px-2 text-center text-white text-[14px] font-semibold tabular-nums" data-testid="text-gift-amount">
+          {usd(amount)}
+        </span>
+        <button
+          type="button"
+          aria-label="Give more"
+          onClick={() => onAmount(amount + 25)}
+          className="w-8 h-8 rounded-full inline-flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+        >
+          <Plus className="w-4 h-4" strokeWidth={2.4} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GiveStep({
+  boxQty,
+  onBox,
+  giftAmount,
+  onAmount,
+}: {
+  boxQty: number;
+  onBox: (n: number) => void;
+  giftAmount: number;
+  onAmount: (n: number) => void;
+}) {
+  const active = boxQty > 0;
+  return (
+    <div data-testid="step-give">
+      <h1 className="text-white text-[28px] font-bold tracking-[-0.02em] mb-1.5">Give Hope</h1>
+      <p className="text-white/60 text-[13.5px] leading-[1.5] mb-6 max-w-[540px]">
+        Send a Gift of Hope box to someone facing cancer — or let us choose someone in need on your
+        behalf. Every box is a donation to the Nightbirde Foundation.
+      </p>
+
+      <div className="flex gap-5">
+        <div
+          className="flex-shrink-0 rounded-2xl overflow-hidden bg-white"
+          style={{ width: 168, height: 168, boxShadow: "0 10px 30px rgba(0,0,0,0.35)" }}
+        >
+          <img src={img("hope-gift-box.png")} alt="Gift of Hope Box" className="w-full h-full object-cover" draggable={false} />
+        </div>
+        <div className="flex-1 min-w-0 flex flex-col">
+          <h3 className="text-white text-[19px] font-bold tracking-[-0.01em]">Gift of Hope Box</h3>
+          <p className="text-white/65 text-[13px] leading-[1.5] mt-1.5 max-w-[360px]">
+            A stainless-steel Nightbirde cup, a copy of her debut album "It's OK," and Jane's book of
+            poetry, <em>Poems for the Dark</em>.
+          </p>
+          <div className="mt-auto pt-4 flex items-center gap-4">
+            <QtyStepper value={boxQty} onChange={onBox} min={0} testid="stepper-box" />
+            <span className="text-[13px]" data-testid="hint-box">
+              {active ? (
+                <span className="text-white/55">
+                  {boxQty} box{boxQty > 1 ? "es" : ""}
+                </span>
+              ) : (
+                <span className="text-white/45">Optional</span>
+              )}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {active && (
+        <div className="mt-6 rounded-2xl p-5" style={{ background: PANEL }}>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <span className="text-white text-[14px] font-semibold">
+              Your gift{boxQty > 1 ? " (each box)" : ""}
+            </span>
+            <span className="text-white/45 text-[12.5px]">Minimum {usd(GIFT_MIN)}</span>
+          </div>
+          <GiftAmount amount={giftAmount} onAmount={onAmount} />
+          {boxQty > 1 && (
+            <div className="mt-3 text-white/55 text-[13px] tabular-nums" data-testid="text-gift-total">
+              {usd(giftAmount)} <span className="text-white/35">×</span> {boxQty}{" "}
+              <span className="text-white/35">=</span>{" "}
+              <span className="text-white font-bold">{usd(giftAmount * boxQty)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="mt-6 flex flex-col gap-3">
+        <Note icon={Gift}>
+          Giving more than one? Tell us who each gift is for after checkout — we'll make it easy.
+        </Note>
+        <Note icon={Sparkles}>
+          Personalize after purchase: keep a gift anonymous or add a message, and choose who
+          receives each box.
+        </Note>
       </div>
     </div>
   );
@@ -381,17 +518,19 @@ function AddonsStep({
 
 function PayStep({
   bundleQty,
-  certQty,
+  signedQty,
   boxQty,
+  giftAmount,
 }: {
   bundleQty: number;
-  certQty: number;
+  signedQty: number;
   boxQty: number;
+  giftAmount: number;
 }) {
   const lines = [
-    { label: "Get Hope — Hope Bundle", qty: bundleQty, unit: PRICE.bundle },
-    { label: "Signed GoodDeed® Certificate", qty: certQty, unit: PRICE.cert },
-    { label: "Gift of Hope Box", qty: boxQty, unit: PRICE.box },
+    { label: "Hope Bundle", sub: '7" + Digital Collector Edition', qty: bundleQty, unit: PRICE.bundle },
+    { label: "Signed GoodDeed® Certificate", sub: undefined, qty: signedQty, unit: PRICE.signed },
+    { label: "Gift of Hope (donation)", sub: undefined, qty: boxQty, unit: giftAmount },
   ].filter((l) => l.qty > 0);
   const subtotal = lines.reduce((s, l) => s + l.qty * l.unit, 0);
 
@@ -411,6 +550,7 @@ function PayStep({
             <div key={l.label} className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <span className="text-white text-[14px]">{l.label}</span>
+                {l.sub && <div className="text-white/45 text-[12px] mt-0.5">{l.sub}</div>}
                 {l.qty > 1 && (
                   <div className="text-white/45 text-[12px] tabular-nums mt-0.5">
                     {usd(l.unit)} × {l.qty}
@@ -478,9 +618,15 @@ function initialStep(): Step {
 export default function Flow() {
   const seeded = initialStep() !== "overview";
   const [step, setStep] = useState<Step>(initialStep);
-  const [bundleQty, setBundleQty] = useState(seeded ? 1 : 0);
-  const [certQty, setCertQty] = useState(seeded ? 1 : 0);
+  const [bundleQty, setBundleQty] = useState(1);
+  const [signedQty, setSignedQty] = useState(seeded ? 1 : 0);
   const [boxQty, setBoxQty] = useState(seeded ? 1 : 0);
+  const [giftAmount, setGiftAmount] = useState(GIFT_MIN);
+
+  // signed certs can never exceed the number of copies in the bag.
+  useEffect(() => {
+    if (signedQty > bundleQty) setSignedQty(bundleQty);
+  }, [bundleQty, signedQty]);
 
   const idx = ORDER.indexOf(step);
   const go = (s: Step) => {
@@ -491,15 +637,15 @@ export default function Flow() {
   const primary = (() => {
     switch (step) {
       case "overview":
-        return { label: "Get Hope", onClick: () => go("buy"), enabled: true };
+        return { label: "Get Hope", onClick: () => go("buy"), Icon: ChevronRight };
       case "buy":
         return {
-          label: "Continue to add-ons",
-          onClick: () => go("addons"),
-          enabled: bundleQty > 0,
+          label: `Add ${bundleQty} to Bag`,
+          onClick: () => go("give"),
+          Icon: ShoppingBag,
         };
-      case "addons":
-        return { label: "Review order", onClick: () => go("pay"), enabled: true };
+      case "give":
+        return { label: "Review order", onClick: () => go("pay"), Icon: ChevronRight };
       case "pay":
         return null;
     }
@@ -537,8 +683,13 @@ export default function Flow() {
               />
             ))}
           </div>
-          <div className="flex items-center gap-1.5 text-white/45 text-[12px] font-medium">
-            <Heart className="w-3.5 h-3.5" style={{ color: "#FF5470" }} fill="#FF5470" strokeWidth={0} />
+          <div className="flex items-center gap-2 text-white/55 text-[12px] font-medium">
+            <img
+              src={img("hope-get-hope.png")}
+              alt=""
+              className="w-5 h-5 rounded-[5px] object-cover"
+              draggable={false}
+            />
             Nightbirde · Hope
           </div>
           <div className="flex-1" />
@@ -556,17 +707,29 @@ export default function Flow() {
         {/* body */}
         <div className="px-7 py-6 overflow-y-auto">
           {step === "overview" && <OverviewStep />}
-          {step === "buy" && <BuyStep qty={bundleQty} onQty={setBundleQty} />}
-          {step === "addons" && (
-            <AddonsStep
-              certQty={certQty}
-              onCert={setCertQty}
+          {step === "buy" && (
+            <BuyStep
+              bundleQty={bundleQty}
+              onBundle={setBundleQty}
+              signedQty={signedQty}
+              onSigned={setSignedQty}
+            />
+          )}
+          {step === "give" && (
+            <GiveStep
               boxQty={boxQty}
               onBox={setBoxQty}
+              giftAmount={giftAmount}
+              onAmount={setGiftAmount}
             />
           )}
           {step === "pay" && (
-            <PayStep bundleQty={bundleQty} certQty={certQty} boxQty={boxQty} />
+            <PayStep
+              bundleQty={bundleQty}
+              signedQty={signedQty}
+              boxQty={boxQty}
+              giftAmount={giftAmount}
+            />
           )}
         </div>
 
@@ -598,21 +761,16 @@ export default function Flow() {
 
           <div className="flex-1" />
 
-          {step === "buy" && bundleQty === 0 && (
-            <span className="text-white/40 text-[12.5px]">Add the bundle to continue</span>
-          )}
-
           {primary && (
             <button
               type="button"
-              onClick={primary.enabled ? primary.onClick : undefined}
-              disabled={!primary.enabled}
+              onClick={primary.onClick}
               data-testid="button-primary"
-              className="h-11 pl-6 pr-5 rounded-full inline-flex items-center gap-2 text-white font-semibold text-[14.5px] transition-all active:scale-[0.97] disabled:opacity-35 disabled:cursor-not-allowed"
+              className="h-11 pl-6 pr-5 rounded-full inline-flex items-center gap-2 text-white font-semibold text-[14.5px] transition-all active:scale-[0.97]"
               style={{ background: BLUE }}
             >
               {primary.label}
-              <ChevronRight className="w-4 h-4" strokeWidth={2.4} />
+              <primary.Icon className="w-4 h-4" strokeWidth={2.4} />
             </button>
           )}
         </div>
