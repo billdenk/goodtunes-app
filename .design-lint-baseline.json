@@ -9696,6 +9696,131 @@
   },
   {
     "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<span className=\"block text-slate-400 text-[11px] uppercase tracking-wider mb-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<p className=\"text-slate-500 text-[12px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<p className=\"text-slate-900 text-[13px] font-medium truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[11px] truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<span className=\"text-slate-300 text-[11px]\">{isOpen ? \"▾\" : \"▸\"}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<span className=\"text-slate-400 text-[11px] w-6 text-right tabular-nums\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<span className=\"flex-1 min-w-0 text-slate-700 text-[12px] truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<h4 className=\"text-slate-900 text-[13px] font-semibold\">Add gear</h4>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "className=\"text-slate-400 hover:text-slate-600 text-[12px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[12px] py-2\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<span className=\"flex-1 text-slate-700 text-[12px] font-medium truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "className=\"text-[11px] text-[var(--brand-blue)] hover:underline\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<span className=\"ml-2 text-[10px] text-amber-600\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<span className=\"ml-2 text-[10px] text-slate-400\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "className=\"px-3 py-1.5 text-[12px] text-slate-600 hover:bg-slate-100 rounded\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "className=\"px-3 py-1.5 text-[12px] rounded-md bg-[var(--brand-blue)] text-white font-medium disabled:opacity-40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<p className=\"text-slate-900 text-[13px] font-medium truncate\">{value.name}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "className=\"text-[11px] text-slate-500 hover:text-slate-800\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<p className=\"px-3 py-2 text-slate-400 text-[12px]\">No matches.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<span className=\"block text-slate-900 text-[12px] truncate\">{i.name}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<span className=\"block text-slate-400 text-[10px] truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "className=\"w-full text-left px-3 py-2 border-t border-slate-100 text-[12px] text-[var(--brand-blue)] hover:bg-slate-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "{createErr && <p className=\"text-red-600 text-[11px]\">{createErr}</p>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "className=\"text-[11px] text-slate-500 hover:text-slate-800 px-2 py-1\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "className=\"px-2.5 py-1 text-[11px] rounded bg-[var(--brand-blue)] text-white font-medium disabled:opacity-40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressingOrderFlow.tsx",
     "snippet": "<div className=\"text-[14px] font-semibold text-slate-900\">Path to Shopify</div>"
   },
@@ -13047,11 +13172,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Admin.tsx",
-    "snippet": "<span className=\"block text-slate-400 text-[11px] uppercase tracking-wider mb-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
     "snippet": "<div className=\"text-slate-400 text-[11px]\">"
   },
   {
@@ -13063,96 +13183,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Admin.tsx",
     "snippet": "className=\"text-[12px] text-[var(--brand-blue)] font-medium hover:underline disabled:opacity-40\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "<p className=\"text-slate-500 text-[12px]\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "<p className=\"text-slate-900 text-[13px] font-medium truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[11px] truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "<span className=\"text-slate-300 text-[11px]\">{isOpen ? \"▾\" : \"▸\"}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "<span className=\"text-slate-400 text-[11px] w-6 text-right tabular-nums\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "<span className=\"flex-1 min-w-0 text-slate-700 text-[12px] truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "<h4 className=\"text-slate-900 text-[13px] font-semibold\">Add gear</h4>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "className=\"text-slate-400 hover:text-slate-600 text-[12px]\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "<p className=\"text-slate-400 text-[12px] py-2\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "<span className=\"flex-1 text-slate-700 text-[12px] font-medium truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "className=\"text-[11px] text-[var(--brand-blue)] hover:underline\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "<span className=\"ml-2 text-[10px] text-amber-600\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "<span className=\"ml-2 text-[10px] text-slate-400\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "className=\"px-3 py-1.5 text-[12px] text-slate-600 hover:bg-slate-100 rounded\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "className=\"px-3 py-1.5 text-[12px] rounded-md bg-[var(--brand-blue)] text-white font-medium disabled:opacity-40\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "<p className=\"text-slate-900 text-[13px] font-medium truncate\">{value.name}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "<span className=\"block text-slate-900 text-[12px] truncate\">{i.name}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Admin.tsx",
-    "snippet": "<span className=\"block text-slate-400 text-[10px] truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -13233,6 +13263,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Admin.tsx",
     "snippet": "<p className=\"text-slate-900 text-[13px] font-medium truncate\">{a.name}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Admin.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[11px] truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16733,31 +16768,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
     "snippet": "<div className=\"text-slate-400 text-[11px]\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "className=\"rounded-lg border border-rose-200 bg-rose-50 p-4 text-[13px] text-rose-700\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "<p className=\"text-[13.5px] text-slate-500\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "<p className=\"text-[11.5px] text-slate-400 mt-1\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "<div className=\"text-[13.5px] font-semibold text-slate-900 truncate group-hover:text-[var(--brand-blue)] group-hover:underline underline-offset-2 transition-colors\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPerson.tsx",
-    "snippet": "<div className=\"text-[11.5px] text-slate-400 truncate\">"
   },
   {
     "rule": "hardcoded-font-size",
