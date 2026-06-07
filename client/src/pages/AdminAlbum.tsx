@@ -7642,7 +7642,7 @@ function TrackRow({
   const anyPartial = sectionStatuses.includes("partial");
   const allOk = okCount === sectionStatuses.length;
   const allEmpty = emptyCount === sectionStatuses.length;
-  const summaryText = allOk ? "Ready" : allEmpty ? "Empty" : `${toFill} to fill`;
+  const summaryText = allOk ? "Ready" : allEmpty ? "" : `${toFill} to fill`;
   const summaryCls = allOk
     ? "text-emerald-700"
     : anyPartial
