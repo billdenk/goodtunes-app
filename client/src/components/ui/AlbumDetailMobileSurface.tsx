@@ -570,7 +570,20 @@ export function AlbumDetailMobileSurface({
               className="text-fan-primary text-[22px] font-bold leading-tight tracking-tight text-balance"
               data-testid="text-album-title"
             >
-              {album.title}
+              {(() => {
+                const sep = " - ";
+                const idx = album.title.indexOf(sep);
+                if (idx === -1) return album.title;
+                const before = album.title.slice(0, idx);
+                const after = album.title.slice(idx + sep.length);
+                if (!before.trim() || !after.trim()) return album.title;
+                return (
+                  <>
+                    {before} -<br />
+                    {after}
+                  </>
+                );
+              })()}
             </h1>
             <button
               type="button"
