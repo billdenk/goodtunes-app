@@ -503,19 +503,34 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
             setIsPlaying(false);
           }
         });
+        // Defer play() until MANIFEST_PARSED — calling play() immediately
+        // after attachMedia() fires before MSE has any buffered data.
+        // The call resolves silently (no rejection) while hls.js loads the
+        // manifest in the background, leaving the dock in a phantom
+        // "playing" state with no audio. Waiting for MANIFEST_PARSED
+        // guarantees the source is ready before play() is invoked.
+        // The srcTokenRef guard handles the race where the user skips to
+        // another song before the manifest fetch completes.
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (isPlayingRef.current && srcTokenRef.current === token) {
+            a.play().catch(() => setIsPlaying(false));
+          }
+        });
         hls.loadSource(url);
         hls.attachMedia(a);
       } else {
         // Native HLS (Safari/iOS), progressive (wav/mp3), or a decrypted
-        // offline `blob:` URL — direct src.
+        // offline `blob:` URL — direct src assignment + load() queues the
+        // resource fetch and play() is safe to call immediately (the browser
+        // will begin actual output once enough data is buffered).
         a.src = url;
         a.load();
+        if (isPlayingRef.current) {
+          a.play().catch(() => setIsPlaying(false));
+        }
       }
       setAudioDuration(null);
       setCurrentTime(0);
-      if (isPlayingRef.current) {
-        a.play().catch(() => setIsPlaying(false));
-      }
     };
 
     // Mux-only streaming path (the default for everything not downloaded).
