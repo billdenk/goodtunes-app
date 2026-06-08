@@ -83,12 +83,13 @@ const NavItem = ({
 }) => {
   const reduceMotion = useReducedMotion();
   const dir = align === "right" ? 1 : align === "left" ? -1 : 0;
-  // End tabs nudge the highlight 2px toward the dock's outer curve so the
-  // gap to the end curve matches the inner gap (Collection left, Recents
-  // right). Both edges shift by the same 2px, so the pill's width/radius
-  // stay identical to before — this is a pure horizontal offset.
-  const pillLeft = dir === -1 ? "-6px" : dir === 1 ? "6px" : "-2px";
-  const pillRight = dir === -1 ? "6px" : dir === 1 ? "-6px" : "-2px";
+  // End tabs push their OUTER edge further toward the dock's `rounded-full`
+  // cap (Home left, Recents right) and pull the inner edge in, so the
+  // stadium's outer semicircle hugs the dock curve while its inner end keeps
+  // a small even gap to the neighbour. The net center still shifts 6px
+  // outward, matched by contentShift so the icon+label stay centered.
+  const pillLeft = dir === -1 ? "-8px" : dir === 1 ? "4px" : "-2px";
+  const pillRight = dir === -1 ? "4px" : dir === 1 ? "-8px" : "-2px";
   const contentShift =
     dir === -1 ? "-translate-x-[6px]" : dir === 1 ? "translate-x-[6px]" : "";
   return (
@@ -100,18 +101,21 @@ const NavItem = ({
     >
       <span
         aria-hidden
-        // Apple Music's active-tab highlight is a SQUIRCLE (rounded-rect),
-        // not a full stadium — the old `rounded-full` gave semicircular ends
-        // that read as a wide capsule. A fixed ~18px radius + symmetric
-        // top/bottom insets makes the highlight border the icon+label lockup
-        // evenly all the way around, matching IMG_4370/4371/4372.
-        className="absolute rounded-[18px] transition-colors duration-200"
+        // Apple Music's active-tab highlight is a tall STADIUM that nearly
+        // fills the dock's interior height and whose ends are true
+        // semicircles, so the selection belongs to the dock's `rounded-full`
+        // outline rather than floating as a separate rounded-rect chip
+        // (Task #1760). `rounded-full` + near-zero top/bottom gap gives the
+        // stadium; the end tabs (Home/Recents) shift their outer edge toward
+        // the dock curve via pillLeft/pillRight so the leftmost pill mirrors
+        // the dock's left curve and the rightmost mirrors the right.
+        className="absolute rounded-full transition-colors duration-200"
         style={{
           background: active ? "rgba(49,158,216,0.18)" : "transparent",
           left: pillLeft,
           right: pillRight,
-          top: "-4px",
-          bottom: "-4px",
+          top: "-5px",
+          bottom: "-5px",
         }}
       />
       <div className={`relative w-14 h-[26px] flex items-center justify-center ${contentShift}`}>
