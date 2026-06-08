@@ -48,6 +48,7 @@ import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
 import { RolePicker } from "@/components/admin/RolePicker";
 import { PersonSplitsRail } from "@/components/admin/SplitsPanels";
 import { PersonGearManager } from "@/components/admin/PersonGearManager";
+import { NotificationsCard } from "@/components/admin/NotificationsCard";
 import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import type { PartnerAddressSnapshot } from "@shared/schema";
@@ -589,6 +590,14 @@ export function AdminPerson() {
           person.shape === "contact"
             ? <ContactOverviewPanel person={person} />
             : <OverviewPanel person={person} labels={labels} managers={managers} />
+        )}
+        {/* Task #1783 — who gets this artist's end-of-day sales report.
+            Reuses the partner-notification recipient settings; the daily
+            digest only goes to people set up here. */}
+        {tab === "overview" && person.shape !== "contact" && (
+          <div className="mt-4">
+            <NotificationsCard partnerKind="person" partnerId={person.id} partnerName={person.name} />
+          </div>
         )}
         {tab === "cover" && <ImageUploadPanel person={person} field="cover" />}
         {tab === "members" && person.isGroup && <MembersPanel person={person} />}

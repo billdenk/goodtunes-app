@@ -52,6 +52,12 @@ schema.ts, dev, or real prod (verified against prod with 264 real albums):
 - `albums.is_good_tunes_release` → the boolean is **`is_goodtunes_release`** (no
   underscore between good+tunes). Confusingly the DATE column next to it
   **`good_tunes_release_date`** DOES keep the underscores. Don't pattern-match.
+- `referral_credits.kind` → **no such column.** NPO-donation rows are matched by
+  **`referrer_kind = 'non_profit'`** (the column is `referrer_kind`, values
+  `artist` / `non_profit`; there is NO `'npo'` value anywhere). `server/artistReports.ts`'s
+  NPO-payout query uses the phantom `rc.kind = 'npo'` and would 500 if its
+  `scope.albumIds.length` guard ever let it run with data — copy the
+  `referrer_kind = 'non_profit'` form, not the artistReports version.
 
 **Masking gotcha:** when several phantom-column `db.execute` queries run in
 sequence in one block (e.g. the `POST /api/admin/invites` claimed-Person review

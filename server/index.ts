@@ -412,6 +412,41 @@ async function bootstrapAccessGuard() {
     log(`payout digest scheduler init failed: ${e?.message ?? e}`, "earmark-digest");
   }
 
+  // Task #1783 — Daily sales report digest for artists + their team.
+  // Once a day, every `person` / `label` partner with active notification
+  // recipients gets an email summary of the last 24h of sales for the
+  // releases they can see. Same shape as the payout digest above (long
+  // first delay so boot logs settle, then a 24h tick, in-process guard).
+  // The digest helper itself short-circuits per-partner via the
+  // notification log so a restart never double-mails, and stays quiet on
+  // empty-activity days unless DAILY_SALES_DIGEST_SEND_EMPTY=true.
+  try {
+    const { runDailySalesDigests } = await import("./dailySalesReport");
+    let digestingSales = false;
+    const runSalesDigest = async () => {
+      if (digestingSales) return;
+      digestingSales = true;
+      try {
+        const out = await runDailySalesDigests();
+        if (out.sent > 0) {
+          log(
+            `daily sales digest sent to ${out.sent} partner(s) — ${out.skippedEmpty} quiet, ${out.skippedRecent} already-sent`,
+            "sales-digest",
+          );
+        }
+      } catch (e: any) {
+        log(`sales digest tick failed: ${e?.message ?? e}`, "sales-digest");
+      } finally {
+        digestingSales = false;
+      }
+    };
+    setTimeout(runSalesDigest, 6 * 60 * 1000);
+    setInterval(runSalesDigest, 24 * 60 * 60 * 1000);
+    log("daily sales digest scheduler armed (daily tick)", "sales-digest");
+  } catch (e: any) {
+    log(`sales digest scheduler init failed: ${e?.message ?? e}`, "sales-digest");
+  }
+
   // Task #550 — Daily scheduler for scheduled-delivery gifts. Stamps
   // deliveredAt on any pending gift whose deliver_on date has arrived
   // so the recipient's claim page unlocks. Same shape as the trash

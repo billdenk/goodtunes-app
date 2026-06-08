@@ -42,6 +42,7 @@ import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPa
 import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { InvitedByPressPanel } from "@/components/admin/InvitedByPressPanel";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
+import { NotificationsCard } from "@/components/admin/NotificationsCard";
 import {
   LabelPreviewCard,
   type LabelPreviewAlbum,
@@ -487,6 +488,14 @@ export function AdminLabel() {
             entityName={label.name}
             blurb="People at this label — A&R, label manager, accounts, anyone you need to reach."
           />
+        )}
+        {/* Task #1783 — who gets this label's end-of-day sales report.
+            Reuses the partner-notification recipient settings; the daily
+            digest only goes to people set up here. */}
+        {tab === "overview" && (
+          <div className="mt-4">
+            <NotificationsCard partnerKind="label" partnerId={label.id} partnerName={label.name} />
+          </div>
         )}
         {tab === "cover" && <CoverPanel label={label} />}
         {tab === "artists" && (

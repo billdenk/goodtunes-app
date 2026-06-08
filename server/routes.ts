@@ -16333,6 +16333,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.json({ ok: true });
     },
   );
+
+  // Task #1783 — super-admin trigger for the daily sales digest. The
+  // scheduler runs it once a day; this lets an operator fire a pass on
+  // demand (e.g. to preview the email). `?force=1` bypasses the
+  // recent-send dedup so a same-day re-run still delivers. requireAdmin
+  // admits partner accounts, so gate on super_admin explicitly.
+  app.post(
+    "/api/admin/partner-notifications/run-daily-sales-digest",
+    requireAdmin,
+    async (req, res) => {
+      const userId = (req as any).session?.userId;
+      const { getUserRole } = await import("./auth/roles");
+      const info = userId ? await getUserRole(userId) : null;
+      if (info?.role !== "super_admin") {
+        return res.status(403).json({ message: "Super-admin only" });
+      }
+      const force = req.query.force === "1" || req.query.force === "true";
+      const { runDailySalesDigests } = await import("./dailySalesReport");
+      const out = await runDailySalesDigests({ force });
+      return res.json(out);
+    },
+  );
   app.post("/api/admin/fulfillment-partners", requireAdmin, async (req, res) => {
     const b = req.body ?? {};
     if (!b.name) return res.status(400).json({ message: "name is required" });

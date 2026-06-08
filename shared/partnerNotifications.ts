@@ -10,6 +10,11 @@ export const PARTNER_NOTIFICATION_KINDS = [
   "vendor",
   "manufacturer",
   "fulfillment",
+  // Task #1783 — artists (people) and their team (labels) reuse the same
+  // recipient table to receive the end-of-day sales digest. `person` is
+  // an artist; `label` is the team/roster. No new contact system.
+  "person",
+  "label",
 ] as const;
 export type PartnerNotificationKind = (typeof PARTNER_NOTIFICATION_KINDS)[number];
 
@@ -52,6 +57,7 @@ export const PARTNER_NOTIFICATION_EVENTS = [
   "fulfillment_heads_up",
   "invoice_paid",
   "pipeline_state_change",
+  "daily_sales_digest",
 ] as const;
 export type PartnerNotificationEvent =
   (typeof PARTNER_NOTIFICATION_EVENTS)[number];
@@ -75,6 +81,11 @@ export const PARTNER_NOTIFICATION_EVENT_META: Record<
     description:
       "An album this partner is working on moved to a new production stage.",
   },
+  daily_sales_digest: {
+    label: "Daily sales report",
+    description:
+      "Once a day, a summary of the last 24 hours of sales, copies, revenue, gifts, and donations for these releases. Quiet on days with no activity.",
+  },
 };
 
 // Which events actually fire for each partner kind in v1. Vendors get
@@ -88,6 +99,9 @@ export const EVENTS_BY_PARTNER_KIND: Record<
   manufacturer: ["invoice_paid", "pipeline_state_change"],
   fulfillment: ["fulfillment_heads_up", "pipeline_state_change"],
   vendor: [],
+  // Artists + their team only get the end-of-day sales digest for now.
+  person: ["daily_sales_digest"],
+  label: ["daily_sales_digest"],
 };
 
 export const PARTNER_NOTIFICATION_LOG_STATUSES = [
