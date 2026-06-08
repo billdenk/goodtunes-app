@@ -2,12 +2,7 @@ import { useLocation } from "wouter";
 import { Settings, LogOut } from "lucide-react";
 import { FanRailNav } from "@/components/ui/FanRailNav";
 import { useAuth } from "@/hooks/useAuth";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
-import {
-  FAN_DOCK_CLEARANCE,
-  COMPACT_DOCK_BREAKPOINT,
-  STOREFRONT_SIDEBAR_WIDTH,
-} from "@/hooks/useDesktopShell";
+import { STOREFRONT_SIDEBAR_WIDTH } from "@/hooks/useDesktopShell";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,22 +62,13 @@ export function AlbumDesktopSidebar({
 }) {
   const [, navigate] = useLocation();
   const { logout } = useAuth();
-  // The album-detail page always mounts its compact dock (it never
-  // collapses), and below COMPACT_DOCK_BREAKPOINT (iPad width) that dock
-  // goes edge-to-edge over this rail. Reserve room above the bottom-pinned
-  // account chip so it clears the dock; on a wide desktop the dock is
-  // centered and never overlaps, so we keep the original spacing. Always
-  // add the device safe-area inset so the chip clears the home indicator
-  // in the Capacitor webview.
-  const dockNarrow = useMediaQuery(
-    `(max-width: ${COMPACT_DOCK_BREAKPOINT - 1}px)`,
-  );
-  // Match the storefront chip's `mb-4` (16px) resting gap, swapping in the
-  // dock clearance when the always-on compact dock is in its edge-to-edge
-  // (iPad) regime, and always honoring the device safe-area inset.
-  const chipMarginBottom = `calc(${
-    dockNarrow ? FAN_DOCK_CLEARANCE : 16
-  }px + env(safe-area-inset-bottom, 0px))`;
+  // The album-detail page always mounts its compact dock, which now stays
+  // tucked in the content channel between the rails at EVERY desktop width
+  // and never overlaps this rail (Apple-Music parity, Task #1764). So the
+  // bottom-pinned account chip just keeps the storefront chip's `mb-4`
+  // (16px) resting gap; we still always add the device safe-area inset so
+  // the chip clears the home indicator in the Capacitor webview.
+  const chipMarginBottom = `calc(16px + env(safe-area-inset-bottom, 0px))`;
   // A logged-out visitor (no fan/admin session) landing on a shared
   // Preview & Purchase link sees a stripped rail: just the GoodTunes
   // lockup up top and a branded "Log in" CTA pinned to the bottom. The

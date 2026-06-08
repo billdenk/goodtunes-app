@@ -42,19 +42,12 @@ export const RAIL_INSET = 12;
 /** Gap between the rail card's right edge and the main content (px). */
 export const RAIL_GAP = 12;
 
-/**
- * Vertical room the bottom-pinned account/avatar must reserve so it
- * clears the floating compact Player dock when the dock overlaps the
- * rail. The fan dock is `fixed bottom-8` (32px) and ~60px tall, so its
- * top edge sits ~92px above the viewport bottom — round up for breathing
- * room. Only applied when the dock is in its edge-to-edge regime
- * (viewport < `COMPACT_DOCK_BREAKPOINT`), i.e. iPad-width; on a wide
- * desktop the dock is centered and never covers the left rail. */
-export const FAN_DOCK_CLEARANCE = 96;
-
-/** Width below which the fan compact dock goes edge-to-edge and overlaps
- * the left rail (mirrors PlayerDock's COMPACT_BREAKPOINT). */
-export const COMPACT_DOCK_BREAKPOINT = 1100;
+// NOTE: The fan compact Player dock no longer overlaps the left rail at any
+// desktop-shell width — it stays docked in the content channel between the
+// rails (Apple-Music parity, Task #1764). The bottom-pinned account chip
+// therefore never needs to reserve dock clearance, so the old
+// `FAN_DOCK_CLEARANCE` / `COMPACT_DOCK_BREAKPOINT` constants were removed.
+// See `PlayerDock.tsx` (`edgeToEdge`) for the channel-docking behavior.
 
 /**
  * Total left padding that content pages apply so their content starts

@@ -3,16 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Settings, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { usePlayer } from "@/context/PlayerContext";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { FanRailNav } from "@/components/ui/FanRailNav";
 import { computeRailActive } from "@/lib/fanRail";
 import {
   useDesktopShell,
   STOREFRONT_SIDEBAR_WIDTH,
   RAIL_INSET,
-  FAN_DOCK_CLEARANCE,
-  COMPACT_DOCK_BREAKPOINT,
 } from "@/hooks/useDesktopShell";
 import { chatEnabled } from "@/lib/platform";
 import { subscribeChats, totalUnread } from "@/lib/chatStore";
@@ -66,13 +62,6 @@ export function StorefrontSidebar() {
   const [location, navigate] = useLocation();
   const { user, logout } = useAuth();
   const isDesktop = useDesktopShell();
-  const { currentSong } = usePlayer();
-  // The fan compact dock goes edge-to-edge (overlapping this rail) only
-  // below COMPACT_DOCK_BREAKPOINT — iPad width. On a wide desktop it's a
-  // centered pill that never covers the left rail, so we don't reserve.
-  const dockNarrow = useMediaQuery(
-    `(max-width: ${COMPACT_DOCK_BREAKPOINT - 1}px)`,
-  );
   const [, setTick] = useState(0);
   useEffect(() => subscribeChats(() => setTick((n) => n + 1)), []);
 
@@ -87,12 +76,6 @@ export function StorefrontSidebar() {
 
   const unread = chatEnabled ? totalUnread() : 0;
   const playlists = (playlistsRaw ?? []).slice(0, 12);
-
-  // Reserve room above the floating dock so the account chip clears it
-  // when a song is playing AND the dock is in its edge-to-edge (iPad)
-  // regime. No song → DesktopMiniPlayer renders nothing, so we keep the
-  // chip flush to the bottom (no empty gap).
-  const reserveDock = !!currentSong && dockNarrow;
 
   const isAccount = location.startsWith("/account");
 
@@ -234,7 +217,6 @@ export function StorefrontSidebar() {
             className={`flex items-center gap-3 mx-3 mb-4 px-3 py-2.5 rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--brand-blue)] ${
               isAccount ? "bg-[rgba(49,158,216,0.14)]" : "hover:bg-white/[0.06]"
             }`}
-            style={reserveDock ? { marginBottom: FAN_DOCK_CLEARANCE } : undefined}
             data-testid="sidebar-account"
           >
             <Avatar />

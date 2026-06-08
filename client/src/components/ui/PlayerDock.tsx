@@ -31,8 +31,11 @@ import { useRailDrag } from "@/lib/useRailDrag";
  *
  * Behaviors baked in:
  *   • Wide layout — centered 760px pill with inset progress bar.
- *   • Compact (window < 1100px or `forceCompact`) — edge-to-edge capsule,
- *     scrubber removed, volume cluster hidden so the title gets ~46px back.
+ *   • Compact (window < 1100px or `forceCompact`) — narrow capsule, scrubber
+ *     removed, volume cluster hidden so the title gets ~46px back. The fan
+ *     (compact-density) dock with channel insets stays docked in the content
+ *     channel between the rails at every desktop width (never edge-to-edge);
+ *     only the admin/default dock + demo `forceCompact` go edge-to-edge.
  *   • Minimized — corner pill (cover · play/pause · restore chevron). The
  *     minimize/restore is internal UI chrome and does not need a host prop.
  *   • Shuffle / Repeat / Volume / Mute are managed internally. Hosts that
@@ -514,7 +517,18 @@ export function PlayerDock({
   //   • Compact + forced demo  → constrained 640px centered (so demo
   //     callers passing `forceCompact` reproduce the cramped layout even
   //     inside a 1280px iframe).
-  const edgeToEdge = compact && forceCompact !== true;
+  // The fan (compact-density) dock is given the content-channel insets by
+  // its hosts (MiniPlayer / AlbumDetailDesktop), and it only ever mounts at
+  // the desktop-shell width (≥1024px) where the left rail is visible. There
+  // it must stay tucked in the content channel between the rails at EVERY
+  // width and never slide edge-to-edge under the rail — Apple-Music parity
+  // (Bill's call, Task #1764). This deliberately reverses the prior
+  // "intentional iPad rail/dock overlap" decision. The admin/default-density
+  // dock (no rail) and the demo `forceCompact` callers keep the original
+  // edge-to-edge-at-narrow behavior.
+  const hasChannelInsets = channelLeft != null && channelRight != null;
+  const edgeToEdge =
+    compact && forceCompact !== true && !(isCompactDensity && hasChannelInsets);
   const wrapperStyle = !compact
     ? { width: D.wideWidth }
     : forceCompact === true
@@ -527,9 +541,11 @@ export function PlayerDock({
   // `[channelLeft, windowWidth − channelRight]` instead of the whole window
   // — so it floats in the gutter between the left nav rail and the right
   // lyrics rail, and slides/resizes when the right rail opens or closes.
-  // Edge-to-edge (narrow) keeps the existing full-bleed behavior so the
-  // iPad rail/dock overlap is unchanged. The CSS transition on left/width
-  // (motion-reduce safe) makes the re-center read as one smooth shift.
+  // The fan dock now stays in channel mode at every desktop width (it is
+  // never edge-to-edge — see `edgeToEdge` above); edge-to-edge is reserved
+  // for the admin/default dock + demo `forceCompact`. The CSS transition on
+  // left/width (motion-reduce safe) makes the re-center read as one smooth
+  // shift.
   const channelMode =
     !edgeToEdge && channelLeft != null && channelRight != null;
   const channelWidth = channelMode

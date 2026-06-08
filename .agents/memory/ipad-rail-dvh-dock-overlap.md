@@ -1,9 +1,9 @@
 ---
-name: iPad rail dvh + dock overlap
-description: Why the desktop fan rails size off dynamic viewport units and only reserve Player-dock clearance at iPad width.
+name: iPad rail dvh + dock never overlaps
+description: Why the desktop fan rails size off dynamic viewport units, and that the fan Player dock now channel-docks (never overlaps the left rail) at every desktop width.
 ---
 
-# iPad fan-rail sizing + Player-dock overlap
+# iPad fan-rail sizing + Player-dock (no overlap)
 
 **Rule:** The desktop fan sidebars (StorefrontSidebar fixed `aside`, and the
 AlbumDetailDesktop flex column that holds AlbumDesktopSidebar) must size their
@@ -15,18 +15,23 @@ against the *chrome-hidden* (large) viewport, so a bottom-pinned account/avatar
 slides under the address/tab bar. `100dvh` tracks the actually-visible viewport;
 the safe-area inset clears the home indicator inside the Capacitor webview.
 
-**Dock overlap is width-gated.** The fan compact `PlayerDock` only switches to
-its edge-to-edge (`left-2 right-2`) layout — the one that covers the left rail —
-*below* `COMPACT_BREAKPOINT` (1100px, in PlayerDock.tsx). At ≥1100px it's a
-centered pill that never touches the left rail. So reserve dock clearance under
-the account chip ONLY when viewport < 1100 (iPad width); doing it on a wide
-desktop just creates an empty gap = a regression.
+**The fan dock NO LONGER overlaps the left rail — at any width.** This reverses
+the prior "intentional iPad rail/dock overlap" decision: Bill asked for the
+Apple-Music behavior where the player stays tucked in the content channel
+between the rails and never covers the left nav / account chip. The fan
+(`density="compact"`) `PlayerDock` is given `channelLeft`/`channelRight` insets
+by its hosts and only mounts at the desktop-shell width (≥1024px, where the
+rail is visible), so it now channel-docks at **every** width and is never
+edge-to-edge. `edgeToEdge` in PlayerDock.tsx is gated off for the compact-density
+dock with channel insets; edge-to-edge is reserved for the admin/default dock
+and the demo `forceCompact` callers.
 
-**How to apply:** shared constants `FAN_DOCK_CLEARANCE` + `COMPACT_DOCK_BREAKPOINT`
-live in `client/src/hooks/useDesktopShell.ts`. StorefrontSidebar reserves only
-when a song is playing (`usePlayer().currentSong`) AND narrow — no song means
-DesktopMiniPlayer renders nothing, so keep the chip flush. The album-detail dock
-never collapses, so AlbumDesktopSidebar reserves whenever narrow.
+**How to apply:** because the dock never overlaps, the account chip never
+reserves dock clearance — it just keeps its `mb-4` (16px) resting gap + the
+device safe-area inset. The old `FAN_DOCK_CLEARANCE` / `COMPACT_DOCK_BREAKPOINT`
+constants (and the `dockNarrow`/`reserveDock` media-query logic in both
+sidebars) were removed. Don't reintroduce a width-gated overlap or a clearance
+reservation — that's the regression this task fixed.
 
 **Sandbox caveat:** the mockup-sandbox keeps hand-maintained parallel copies of
 these components (`artifacts/mockup-sandbox/.../preview-purchase-desktop/_shared.tsx`),
