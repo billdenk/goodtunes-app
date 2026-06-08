@@ -49,6 +49,30 @@ process gone). Run the push as a platform **workflow** (`configureWorkflow` cons
 no port), poll `getWorkflowStatus` / `git ls-remote`, then `removeWorkflow` when done.
 A full push takes ~2 min of upload at ~20 MB/s after enumerate/compress.
 
+## Why the history is fat, and how to shrink it
+
+The ~2.4 GB is almost entirely `attached_assets/` — the chat-upload dir (~3.1 GB / ~3,800
+files in the tree). The build imports only ~23 small IMAGES from it via the `@assets/...`
+alias (all static `.png`/`.jpg`, e.g. in `client/src/data/musicData.ts`); the rest is
+screen recordings / screenshots / zips nothing references. Two layers:
+
+1. **Forward-looking (in repo):** `.gitattributes` LFS-tracks large *non-build* media
+   under `attached_assets/` (video/recording/audio/archive extensions, case-insensitive,
+   root + nested). It deliberately tracks NO image globs — build-imported images and the
+   iOS AppIcon PNGs must stay normal blobs, because the mirror is pushed with
+   `GIT_LFS_SKIP_PUSH=1` (no LFS objects on GitHub) so any build-imported file in LFS is
+   a broken pointer at Codemagic checkout. Verify patterns with `git check-attr filter -- <path>`.
+
+2. **One-time history rewrite (operator/Bill action — NOT the agent; needs git, which is
+   platform-managed/forbidden in the isolated task env):** `scripts/shrink-git-history.sh`
+   auto-derives the ~23 keep paths from live `@assets` refs, enumerates every
+   `attached_assets/` path across all history, strips the rest with `git filter-repo`
+   (`--invert-paths --paths-from-file`). Dry-run by default, `--apply` to rewrite. Run on a
+   throwaway clone, `npm run build` to verify the kept assets resolve, then **force-push the
+   mirror** (recipe above) — it changes every SHA, so all clones (incl. the Replit project)
+   must re-clone. `git-filter-repo` is NOT installed in the Replit env; only `git lfs` is.
+   Operator runbook: `docs/codemagic-builds.md` → "Keeping the GitHub mirror small".
+
 ## Verify after
 
 `git ls-remote subrepl-8shaawlm refs/heads/main` must equal local HEAD. Spot-check the

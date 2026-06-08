@@ -136,6 +136,43 @@ Until you do all three, just leave it alone — it costs nothing sitting idle.
 
 ---
 
+## Keeping the GitHub mirror small (history shrink)
+
+Codemagic clones the build from the GitHub mirror, so a bloated git history makes
+every checkout, clone, and mirror push slow and bandwidth-heavy. The culprit is
+`attached_assets/` — it collects **every** file uploaded in chat (~3.1 GB across
+~3,800 files), but the app only imports ~23 small images from it (the ones
+referenced via `@assets/...`). The rest is screen recordings, screenshots and
+zips that never reach the build.
+
+Two layers keep this under control:
+
+1. **Going forward (already in the repo):** `.gitattributes` routes large *non-build*
+   media in `attached_assets/` (video, screen recordings, audio, archives) to **Git
+   LFS** automatically, so future uploads of that kind don't fatten history. It does
+   **not** touch images — the build imports specific images, and the mirror carries no
+   LFS objects, so a build-imported file in LFS would break the Codemagic checkout.
+   The iOS AppIcon PNGs stay as normal files for the same reason.
+
+2. **One-time cleanup of the existing 2.4 GB of history (operator action, coordinated
+   with Bill):** run [`scripts/shrink-git-history.sh`](../scripts/shrink-git-history.sh).
+   It auto-derives the ~23 build-imported assets to **keep** and strips every other
+   `attached_assets/` blob from **all** history with `git filter-repo`.
+
+   ⚠️ **This rewrites history — it changes every commit SHA.** Do it deliberately:
+   - Run on a **throwaway clone**, not your working repo.
+   - `bash scripts/shrink-git-history.sh` first (dry run — prints the keep/strip plan
+     and current `.git` size), then `--apply`.
+   - Verify: `npm ci && npm run build` (the kept assets must still resolve) and
+     `du -sh .git` (should drop dramatically).
+   - **Force-push the mirror** afterwards (see
+     [`.agents/memory/github-mirror-push.md`](../.agents/memory/github-mirror-push.md)
+     for the token-auth + `--no-verify` + `GIT_LFS_SKIP_PUSH` push recipe).
+   - Anyone with an existing clone (including the Replit project) must **re-clone**,
+     since SHAs no longer match.
+
+---
+
 ## If Codemagic is ever down (manual-Mac fallback)
 
 Codemagic is the day-to-day path, but your Mac still works as a backup. The full Xcode/Android-Studio steps are in [`native-builds.md`](./native-builds.md): `npm run build && npx cap sync`, then **Product → Archive** in Xcode → **Distribute App → App Store Connect → Upload**. Same Apple account, same bundle id (`Io.GoGoods.music`), so a hand-cut build slots in next to the cloud builds without any conflict.
