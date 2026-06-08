@@ -19,7 +19,6 @@ import { useTopChromeFrost } from "@/hooks/useTopChromeFrost";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { popBounce } from "@/lib/motion";
 import { formatReleaseDateLong } from "@shared/albumStage";
-import { trackPlaybackState } from "@shared/trackPlayback";
 import { streamingHandoffEnabled } from "@/lib/platform";
 
 // Height (px) of the top ChromeScrim band. The scrim is rendered at this
@@ -783,14 +782,12 @@ export function AlbumDetailMobileSurface({
             const isActive = currentSongId === song.id;
             const isDownloaded = !!downloadedSongIds?.has(song.id);
             const isFavorite = !!favoriteSongIds?.has(song.id);
-            // Quiet "locked" row: an operator hid this track's preview on a
-            // not-owned album. Mirrors the desktop `locked` state — greyed
-            // title + lock, nothing actionable on the right, not tappable.
-            const locked =
-              trackPlaybackState({
-                isOwned,
-                isPreviewable: song.isPreviewable,
-              }) === "locked";
+            // Quiet "locked" row: an operator hid this track (preview hidden /
+            // unreleased). Mirrors the desktop `locked` state — greyed title +
+            // lock, nothing actionable on the right, not tappable. A hidden
+            // track is locked for EVERYONE — even owners — matching Apple's
+            // pre-release pattern, and Play / Shuffle skip it.
+            const locked = song.isPreviewable === false;
             if (locked) {
               return (
                 <Fragment key={song.id}>

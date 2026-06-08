@@ -79,6 +79,10 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "manager",
   "press",
   "presses",
+  // /staging/:artist/:release — operator-only locked preview of a release
+  // being prepped. First segment must be reserved so an artist slug can never
+  // shadow the staging preview route.
+  "staging",
   // Task #1310 — /g/:shortId (cert provenance short-link; first segment
   // must be reserved even though "g" can't pass the min-length slug check,
   // so the drift-guard test never flags it as missing).

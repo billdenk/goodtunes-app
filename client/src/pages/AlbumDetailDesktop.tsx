@@ -373,7 +373,11 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
       description: album.description ?? "",
     };
     return songs
-      .filter((s) => effectiveOwned || s.isPreviewable !== false)
+      // A track the operator hid (isPreviewable === false) is treated as
+      // unreleased for EVERYONE — even owners. It never enters the
+      // play-all / shuffle queue, so Play skips straight to the next
+      // released track (Apple's pre-release pattern).
+      .filter((s) => s.isPreviewable !== false)
       .map((s) => ({
         id: s.id,
         albumId: s.albumId,

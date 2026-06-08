@@ -887,9 +887,14 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
   const albumSongs = songs.map((s) => ({ ...s, album }));
   // Preview-first surfaces only the songs the artist marked as
   // previewable; full-ownership playback walks the entire tracklist.
-  const playableAlbumSongs = previewFirst
-    ? albumSongs.filter((s) => (s as any).isPreviewable !== false)
-    : albumSongs;
+  // A track the operator hid (isPreviewable === false) is treated as
+  // unreleased for EVERYONE — even owners. It never enters the playback
+  // queue, so Play / Shuffle skip straight to the next released track
+  // (Apple's pre-release pattern). previewFirst still governs preview MODE
+  // (30-sec auditions) via beginPlay, but no longer changes the track set.
+  const playableAlbumSongs = albumSongs.filter(
+    (s) => (s as any).isPreviewable !== false,
+  );
 
   const beginPlay = (
     song: typeof albumSongs[0],

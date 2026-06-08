@@ -828,11 +828,21 @@ export function DesktopAlbumView({
                   weight so the list reads as one uniform set of rules. */}
               <span aria-hidden className="mx-3 h-px shrink-0 bg-white/20" />
               {songs.map((s) => {
-                const state = trackPlaybackState({
-                  isOwned,
-                  isPreviewable: s.isPreviewable,
-                });
-                const isCurrent = currentSongId === s.id;
+                // A hidden track (isPreviewable === false) reads as a quiet
+                // "locked" row for EVERYONE — even owners — matching Apple's
+                // pre-release pattern: greyed title, no runtime, not tappable.
+                const state =
+                  s.isPreviewable === false
+                    ? "locked"
+                    : trackPlaybackState({
+                        isOwned,
+                        isPreviewable: s.isPreviewable,
+                      });
+                // A locked (unreleased) row is never the "now playing" row —
+                // it can't be played, so it must not show the rose title or
+                // equalizer even if a stale session still points at it.
+                const isCurrent =
+                  state !== "locked" && currentSongId === s.id;
                 return (
                   <Fragment key={s.id}>
                     <AlbumDesktopTrackRow
