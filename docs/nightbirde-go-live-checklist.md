@@ -60,13 +60,17 @@ The Buy sheet's "Sales tax" line and the final checkout charge both come from St
 Tax. If Tax isn't fully configured, the line legitimately hides and the fan only sees
 tax at the Stripe checkout step — avoid that for launch.
 
-In the Stripe Dashboard (production):
+Follow the full operator runbook in **[stripe-tax-enablement.md](./stripe-tax-enablement.md)**.
+In short, in the Stripe Dashboard (production):
 
 - **Enable Stripe Tax** (Settings → Tax).
 - **Set the head-office / origin address.** Without it Stripe Tax can't compute a
   rate and the pre-checkout tax line stays hidden.
 - **Register every jurisdiction** you're obligated to collect in (Settings → Tax →
-  Registrations). Stripe only adds tax for jurisdictions you've registered.
+  Registrations), and let Stripe's threshold monitoring flag new ones. Stripe only
+  adds tax for jurisdictions you've registered.
+- **Confirm the default tax behavior is Exclusive** and a tangible-goods default tax
+  code is set (the app sends the right per-line code regardless).
 
 Verify: on the staged page (or a generic release), enter a US shipping ZIP in a
 registered jurisdiction and confirm the "Sales tax" line resolves to a real figure
