@@ -24,7 +24,7 @@ import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { IconButton } from "@/components/ui/IconButton";
-import { SheetClose } from "@/components/ui/SheetChrome";
+import { SheetBack, SheetClose } from "@/components/ui/SheetChrome";
 import { cn } from "@/lib/utils";
 import { Check, Gift, Minus, Plus } from "lucide-react";
 import { VinylPreview } from "@/components/VinylPreview";
@@ -285,6 +285,9 @@ export function BuySheet({
   // `quantity`. First copy seeds from `signedCertDefault` so the
   // hero-pill pre-toggle still flows through.
   const [copyCerts, setCopyCerts] = useState<boolean[]>([signedCertDefault]);
+  // Task #1822 — dedicated cert step. "main" = format/qty/addons/shipping,
+  // "cert" = focused signed-certificate screen (only when addon active).
+  const [step, setStep] = useState<"main" | "cert">("main");
   // Task #579 — Booklet add-on toggle. Independent of signedCert; both
   // can be on the same checkout. Forced off when the selected format
   // isn't booklet-eligible (e.g. fan switches from 7" to 12"LP after
@@ -564,7 +567,9 @@ export function BuySheet({
     setCopyCerts((prev) => prev.map((v, i) => (i === idx ? !v : v)));
   };
 
-  const beginCheckout = async () => {
+  // Task #1822 — overrideCerts lets the cert-step "Skip" button pass
+  // zeroed-out cert picks without waiting for setCopyCerts to re-render.
+  const beginCheckout = async (overrideCerts?: boolean[]) => {
     if (!selectedSku) return;
     if (!isCustomerSignedIn) {
       const next = `/album/${albumId}?buy=1`;
@@ -574,9 +579,11 @@ export function BuySheet({
     setBusy(true);
     setError(null);
     try {
+      const effectiveCerts = overrideCerts ?? copyCerts;
+      const effectiveCertCount = effectiveCerts.filter(Boolean).length;
       track("checkout_started", { albumId, priceCents: totalCents });
       const willSendCert = !!(addon && !signedCertSoldOut);
-      const copiesPayload = copyCerts.map((sc) => ({
+      const copiesPayload = effectiveCerts.map((sc) => ({
         skuFormat: selectedSku.format,
         signedCert: willSendCert && sc,
       }));
@@ -584,7 +591,7 @@ export function BuySheet({
         albumId,
         skuFormat: selectedSku.format,
         copies: copiesPayload,
-        signedCertPriceCents: willSendCert && certCount > 0 ? addon!.priceCents : undefined,
+        signedCertPriceCents: willSendCert && effectiveCertCount > 0 ? addon!.priceCents : undefined,
         // Task #579 — booklet add-on. Sent only when the toggle is on
         // AND the selected SKU is eligible (defensive: a stale state
         // post-format-swap shouldn't slip through). Server re-validates
@@ -639,13 +646,24 @@ export function BuySheet({
             the prior title-left / close-right header bar. Content below is
             unchanged. */}
         <div className="relative flex items-center px-5 pt-5 pb-3">
-          <SheetClose onClick={onClose} data-testid="button-close-buy" />
+          {step === "cert" && !inCheckout ? (
+            <SheetBack
+              onClick={() => setStep("main")}
+              data-testid="button-cert-back"
+            />
+          ) : (
+            <SheetClose onClick={onClose} data-testid="button-close-buy" />
+          )}
           <div className="absolute left-1/2 -translate-x-1/2 text-base font-semibold">
-            {inCheckout ? "Checkout" : "Buy this album"}
+            {inCheckout
+              ? "Checkout"
+              : step === "cert"
+                ? "Add a certificate?"
+                : "Buy this album"}
           </div>
         </div>
 
-        {!inCheckout && (
+        {!inCheckout && step === "main" && (
           <div className="px-5 pb-6 overflow-y-auto max-h-[78vh]">
             {!options && !error && (
               <div className="py-10 text-center text-white/55 text-sm">Loading…</div>
@@ -792,89 +810,6 @@ export function BuySheet({
                         That's all we have in stock for this format.
                       </p>
                     )}
-                  </div>
-                )}
-
-                {/* Task #549 — Per-copy signed-cert toggles. One row per
-                    copy so the fan can mix signed + unsigned (e.g. one
-                    for yourself + one to gift, only the gift one is
-                    signed). When qty = 1 this collapses to the original
-                    single-toggle behaviour visually. */}
-                {addon && selectedSku && (
-                  <div className="mb-5">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider">
-                        {quantity === 1 ? "Add-on" : "Per-copy add-ons"}
-                      </div>
-                      {/* Step 5 — scarcity nudge. The remaining signed-cert
-                          count is already known; when it's getting low we
-                          promote it from a quiet tally to an "Only X left"
-                          cue in the cert/heart-pink accent so the fan feels
-                          the cap before it sells out. */}
-                      {signedCertRemaining != null && !signedCertSoldOut && (
-                        <div
-                          className={cn(
-                            "text-xs",
-                            signedCertRemaining <= 5
-                              ? "text-[color:var(--brand-pink)] font-semibold"
-                              : "text-fan-faint",
-                          )}
-                          data-testid="text-signed-cert-remaining"
-                        >
-                          {signedCertRemaining <= 5
-                            ? `Only ${signedCertRemaining} left`
-                            : `${signedCertRemaining} signed left`}
-                        </div>
-                      )}
-                    </div>
-                    <Group>
-                      {copyCerts.map((on, i) => {
-                        const disabled = signedCertSoldOut || (!on && !canToggleMoreCerts(i));
-                        return (
-                          <button
-                            key={`copy-${i}`}
-                            type="button"
-                            onClick={() => toggleCopyCert(i)}
-                            disabled={disabled}
-                            className={cn(
-                              "w-full flex items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors",
-                              disabled
-                                ? "opacity-50 cursor-not-allowed"
-                                : on
-                                  ? "bg-[color:var(--brand-pink)]/15"
-                                  : "hover:bg-white/[0.03]",
-                            )}
-                            data-testid={`button-toggle-signed-cert-${i}`}
-                          >
-                            <div className="flex flex-col flex-1 min-w-0 pr-2">
-                              <span className="text-[14px] font-medium">
-                                {quantity === 1 ? addon.label : `Copy ${i + 1} · ${addon.label}`}
-                              </span>
-                              <span className="text-[12px] text-white/55 leading-snug mt-0.5">
-                                {signedCertSoldOut
-                                  ? "All signed copies claimed"
-                                  : on
-                                    ? "Numbered, printed, and signed by the artist. Mailed with your record."
-                                    : "Tap to add a signed certificate for this copy."}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 whitespace-nowrap">
-                              {on && (
-                                <span className="text-[14px] font-semibold whitespace-nowrap">
-                                  + {dollars(addon.priceCents)}
-                                </span>
-                              )}
-                              {on && (
-                                <Check
-                                  className="w-[18px] h-[18px] text-[color:var(--brand-pink)]"
-                                  strokeWidth={2.75}
-                                />
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </Group>
                   </div>
                 )}
 
@@ -1149,39 +1084,6 @@ export function BuySheet({
                   </div>
                 )}
 
-                {/* Task #1484 — name on the digital GoodDeed® certificate.
-                    Only shown for a digital-only GoodDeed purchase (no
-                    physical signed-cert copy); persisted to the order at
-                    materialization so the cert PDF prints it with no
-                    second post-checkout step. Left blank → the server
-                    falls back to the buyer's account name. */}
-                {selectedSku && showCertNameField && (
-                  <div className="mb-4" data-testid="block-cert-name">
-                    <label
-                      htmlFor="buy-cert-name"
-                      className="block text-fan-secondary text-sm mb-1.5"
-                    >
-                      Name on your GoodDeed® certificate{" "}
-                      <span className="text-fan-faint">(optional)</span>
-                    </label>
-                    <input
-                      id="buy-cert-name"
-                      type="text"
-                      value={certName}
-                      maxLength={80}
-                      onChange={(e) => setCertName(e.target.value)}
-                      placeholder={defaultCertName || "e.g. Jane Doe"}
-                      className="w-full rounded-2xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-base text-white placeholder:text-white/35 focus:outline-none focus:border-white/25"
-                      data-testid="input-cert-name"
-                    />
-                    <p className="text-fan-faint text-xs mt-1.5 ml-1 leading-snug">
-                      {defaultCertName
-                        ? `Leave blank to use “${defaultCertName}.” You can change it later, too.`
-                        : "This prints on your digital certificate. You can change it later, too."}
-                    </p>
-                  </div>
-                )}
-
                 {/* Cart + checkout chrome only renders once a buyable SKU is
                     selected. With no SKU (all formats sold out, or none
                     configured) there's nothing to price, so the country/ZIP
@@ -1345,9 +1247,25 @@ export function BuySheet({
                   </div>
                 </div>
 
+                {/* Task #1822 — when the album offers a signed cert, the
+                    main-sheet "Continue" routes to the dedicated cert step
+                    rather than directly to Stripe. Auth gate still fires
+                    here (before the cert step) so the bounce-back ?buy=1
+                    re-opens on the main step and the fan picks certs again. */}
                 <button
                   type="button"
-                  onClick={beginCheckout}
+                  onClick={() => {
+                    if (!isCustomerSignedIn) {
+                      const next = `/album/${albumId}?buy=1`;
+                      navigate(`/login?next=${encodeURIComponent(next)}`);
+                      return;
+                    }
+                    if (addon) {
+                      setStep("cert");
+                    } else {
+                      beginCheckout();
+                    }
+                  }}
                   disabled={!selectedSku || busy || shippingUnavailable}
                   className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 transition-all active:scale-[0.98]"
                   style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
@@ -1359,7 +1277,9 @@ export function BuySheet({
                       ? "Sign in to continue"
                       : shippingUnavailable
                         ? "Choose a shippable destination"
-                        : `Checkout — ${dollars(totalCents)}`}
+                        : addon
+                          ? "Continue"
+                          : `Checkout — ${dollars(totalCents)}`}
                 </button>
                 <p className="mt-3 text-white/40 text-[11px] text-center leading-snug">
                   {taxAvailable
@@ -1369,6 +1289,183 @@ export function BuySheet({
                   </>
                 )}
               </>
+            )}
+          </div>
+        )}
+
+        {/* Task #1822 — dedicated signed-certificate step. Only mounts when
+            the album has an active signed-cert add-on and the fan advanced
+            past the main selection screen. Carries back navigation (top-left
+            chevron) and two primary actions:
+              • "Checkout — $Total" — keeps their cert choices and begins Stripe
+              • "Skip" — clears all per-copy cert toggles and begins Stripe */}
+        {!inCheckout && step === "cert" && addon && (
+          <div className="px-5 pb-6 overflow-y-auto max-h-[78vh]" data-testid="cert-step">
+            {/* Album art + cert identity header */}
+            <div className="flex items-center gap-3 mb-5">
+              {options?.artwork && (
+                <img
+                  src={options.artwork}
+                  alt=""
+                  className="w-14 h-14 rounded-lg object-cover"
+                />
+              )}
+              <div className="min-w-0">
+                <div className="text-[15px] font-semibold truncate">{addon.label}</div>
+                <div className="text-[13px] text-fan-secondary truncate">
+                  {dollars(addon.priceCents)} per copy · {options?.title}
+                </div>
+              </div>
+            </div>
+
+            <p className="text-fan-secondary text-sm leading-snug mb-5">
+              Numbered, printed, and personally signed by the artist. Mailed with your record.
+            </p>
+
+            {/* Scarcity nudge — mirrors main-step placement */}
+            {signedCertRemaining != null && !signedCertSoldOut && (
+              <div
+                className={cn(
+                  "mb-3 text-sm font-semibold",
+                  signedCertRemaining <= 5
+                    ? "text-[color:var(--brand-pink)]"
+                    : "text-fan-faint",
+                )}
+                data-testid="text-signed-cert-remaining"
+              >
+                {signedCertRemaining <= 5
+                  ? `Only ${signedCertRemaining} signed left`
+                  : `${signedCertRemaining} signed copies remaining`}
+              </div>
+            )}
+
+            {/* Per-copy toggles — same behaviour as the former inline section */}
+            {signedCertSoldOut ? (
+              <div
+                className="rounded-2xl bg-white/[0.05] px-4 py-5 text-center mb-5"
+                data-testid="block-signed-cert-sold-out"
+              >
+                <div className="text-base font-semibold text-fan-primary">All signed copies claimed</div>
+                <p className="text-fan-secondary text-sm mt-1 leading-snug">
+                  The signed run for this release has been fully reserved.
+                </p>
+              </div>
+            ) : (
+              <Group className="mb-5">
+                {copyCerts.map((on, i) => {
+                  const disabled = !on && !canToggleMoreCerts(i);
+                  return (
+                    <button
+                      key={`cert-step-copy-${i}`}
+                      type="button"
+                      onClick={() => toggleCopyCert(i)}
+                      disabled={disabled}
+                      className={cn(
+                        "w-full flex items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors",
+                        disabled
+                          ? "opacity-50 cursor-not-allowed"
+                          : on
+                            ? "bg-[color:var(--brand-pink)]/15"
+                            : "hover:bg-white/[0.03]",
+                      )}
+                      data-testid={`button-toggle-signed-cert-${i}`}
+                    >
+                      <div className="flex flex-col flex-1 min-w-0 pr-2">
+                        <span className="text-[14px] font-medium">
+                          {quantity === 1 ? addon.label : `Copy ${i + 1} · ${addon.label}`}
+                        </span>
+                        <span className="text-[12px] text-fan-secondary leading-snug mt-0.5">
+                          {on
+                            ? "Numbered, printed, and signed by the artist. Mailed with your record."
+                            : "Tap to add a signed certificate for this copy."}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 whitespace-nowrap">
+                        {on && (
+                          <span className="text-[14px] font-semibold whitespace-nowrap">
+                            + {dollars(addon.priceCents)}
+                          </span>
+                        )}
+                        {on && (
+                          <Check
+                            className="w-[18px] h-[18px] text-[color:var(--brand-pink)]"
+                            strokeWidth={2.75}
+                          />
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </Group>
+            )}
+
+            {/* Digital cert name — only for digital-only GoodDeed
+                (no physical signed-cert copies chosen). Persisted into the
+                same field as the main-step version. */}
+            {showCertNameField && (
+              <div className="mb-5" data-testid="block-cert-name">
+                <label
+                  htmlFor="cert-step-cert-name"
+                  className="block text-fan-secondary text-sm mb-1.5"
+                >
+                  Name on your GoodDeed® certificate{" "}
+                  <span className="text-fan-faint">(optional)</span>
+                </label>
+                <input
+                  id="cert-step-cert-name"
+                  type="text"
+                  value={certName}
+                  maxLength={80}
+                  onChange={(e) => setCertName(e.target.value)}
+                  placeholder={defaultCertName || "e.g. Jane Doe"}
+                  className="w-full rounded-2xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-base text-white placeholder:text-white/35 focus:outline-none focus:border-white/25"
+                  data-testid="input-cert-name"
+                />
+                <p className="text-fan-faint text-xs mt-1.5 ml-1 leading-snug">
+                  {defaultCertName
+                    ? `Leave blank to use "${defaultCertName}." You can change it later, too.`
+                    : "This prints on your digital certificate. You can change it later, too."}
+                </p>
+              </div>
+            )}
+
+            {/* Primary action — proceeds to Stripe with current cert choices */}
+            <button
+              type="button"
+              onClick={beginCheckout}
+              disabled={busy}
+              className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 transition-all active:scale-[0.98] mb-3"
+              style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
+              data-testid="button-cert-checkout"
+            >
+              {busy
+                ? "Opening checkout…"
+                : certCount > 0
+                  ? `Checkout — ${dollars(totalCents)}`
+                  : `Checkout — ${dollars(totalCents)}`}
+            </button>
+
+            {/* Skip — clears all cert picks and proceeds without a certificate.
+                Pass the zeroed array directly to avoid the setCopyCerts
+                re-render race (beginCheckout reads copyCerts from closure). */}
+            <button
+              type="button"
+              onClick={() => {
+                const zeroed = copyCerts.map(() => false);
+                setCopyCerts(zeroed);
+                beginCheckout(zeroed);
+              }}
+              disabled={busy}
+              className="w-full py-3 rounded-2xl font-medium text-sm text-fan-secondary hover:text-fan-primary transition-colors disabled:opacity-40"
+              data-testid="button-cert-skip"
+            >
+              Skip — no certificate
+            </button>
+
+            {error && (
+              <div className="mt-3 rounded-xl bg-red-500/10 px-4 py-3 text-red-300 text-sm" data-testid="text-buy-error">
+                {error}
+              </div>
             )}
           </div>
         )}

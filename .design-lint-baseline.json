@@ -11897,22 +11897,17 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-[12px] text-white/55 leading-snug mt-0.5\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
     "snippet": "<div className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2\">"
   },
   {
     "rule": "fan-text-tone",
     "file": "client/src/components/checkout/BuySheet.tsx",
     "snippet": "<span className=\"text-xs text-white/40 font-semibold uppercase tracking-wider\">"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/components/checkout/BuySheet.tsx",
+    "snippet": "<span className=\"text-[12px] text-white/55 leading-snug mt-0.5\">"
   },
   {
     "rule": "fan-text-tone",
@@ -12027,12 +12022,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-[14px] font-medium\">"
+    "snippet": "<div className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -12043,11 +12033,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/checkout/BuySheet.tsx",
     "snippet": "<span className=\"text-[14px] font-semibold whitespace-nowrap\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -12063,6 +12048,26 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/checkout/BuySheet.tsx",
     "snippet": "<p className=\"mt-3 text-white/40 text-[11px] text-center leading-snug\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/checkout/BuySheet.tsx",
+    "snippet": "<div className=\"text-[15px] font-semibold truncate\">{addon.label}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/checkout/BuySheet.tsx",
+    "snippet": "<div className=\"text-[13px] text-fan-secondary truncate\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/checkout/BuySheet.tsx",
+    "snippet": "<span className=\"text-[14px] font-medium\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/checkout/BuySheet.tsx",
+    "snippet": "<span className=\"text-[12px] text-fan-secondary leading-snug mt-0.5\">"
   },
   {
     "rule": "fan-text-tone",

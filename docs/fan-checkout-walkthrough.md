@@ -5,9 +5,7 @@ a record on GoodTunes **today**. Written for Bill so the live flow can be review
 without reading code. This documents the *current* behaviour, conditionals and all
 — not the roadmap.
 
-The whole flow is: **album page → Buy sheet → (sign in if needed) → Stripe checkout
-inside the sheet → `/welcome` confirmation → back into the player.** The fan never
-leaves the app to a hosted Stripe page; checkout is embedded in the same sheet.
+The whole flow is: **album page → Buy sheet → (cert step, when offered) → (sign in if needed) → Stripe checkout inside the sheet → `/welcome` confirmation → back into the player.** The fan never leaves the app to a hosted Stripe page; checkout is embedded in the same sheet.
 
 > Honesty note: several things below only appear *sometimes*. Those conditionals
 > are called out inline with **"Only when…"** so this doc doesn't oversell what
@@ -73,18 +71,12 @@ The sheet is built top-to-bottom from these sections. Several are conditional.
 - The quantity ceiling is also limited by **remaining stock** when the format
   tracks stock — the fan can't select more copies than are left.
 
-### 2d. Signed-certificate add-on — *only when offered, per copy*
+### 2d. Signed-certificate add-on — *moved to its own step*
 
-- **Only when** the album has an active signed-certificate add-on.
-- It's a **per-copy** choice: each copy gets its own "add a signed certificate"
-  toggle, so the fan can mix signed and unsigned copies in the same order
-  (e.g. 4 copies, copies 1/3/4 signed). With a single copy it reads as one toggle.
-- Each toggled copy adds the signed-cert price (shown as **"+ $X"**).
-- **Limited / sold-out states:**
-  - Signed copies are a finite, numbered run. The number the fan can toggle on is
-    capped by how many signed slots remain.
-  - When the signed run is fully claimed, the toggles show **"All signed copies
-    claimed"** and are disabled.
+- **Only when** the album has an active signed-certificate add-on, the signed-cert
+  choices appear on a **dedicated cert step** (Step 2.5 below), not inline in the
+  Buy sheet scroll. When no cert add-on is active, the cert step is skipped entirely
+  and the "Continue to checkout" button goes straight to Stripe.
 
 ### 2e. Booklet — *only on 7″ vinyl or cassette, and only when offered*
 
@@ -149,9 +141,12 @@ The booklet behaves **differently by format** — this is the trickiest conditio
 The big button at the bottom changes its label based on state:
 
 - **Not signed in:** reads **"Sign in to continue."** Tapping it sends the fan to
-  the auth gate (Step 3).
-- **Signed in:** reads **"Checkout — $Total."** Tapping it starts the Stripe session
-  (Step 4); while it spins up it briefly reads **"Opening checkout…"**.
+  the auth gate (Step 4).
+- **Signed in, cert add-on active:** reads **"Continue"** (whether or not sold
+  out). Tapping it advances to the **cert step** (Step 2.5).
+- **Signed in, no cert add-on:** reads **"Checkout — $Total."** Tapping it starts
+  the Stripe session (Step 5); while it spins up it briefly reads
+  **"Opening checkout…"**.
 - It's disabled until a format is selected.
 
 Small print under the button stays low-key: once the tax line is present it reads
@@ -162,10 +157,52 @@ before the fan commits.)
 
 ---
 
+## Step 2.5 — Cert step (only when a signed-cert add-on is active)
+
+**Skipped entirely** when the album has no active signed-cert add-on — tapping
+the main "Continue" button goes straight to Step 3 (auth) or Step 4 (Stripe).
+When a cert add-on *is* active — **including when the entire signed run is sold
+out** — the cert step always shows, so the fan can see the sold-out state and
+still skip through to checkout without a certificate.
+
+**Where the fan is:** still in the Buy sheet, same `/album/:id` URL. The product
+selector slides away and is replaced by the cert step inside the same sheet, with
+a **← back** arrow in the header that returns to the main step.
+
+**What the fan sees:**
+
+- **Album art + release title + artist** — a compact header so there's no doubt
+  which record this is for.
+- **Description of the offer** — "Add your signed copy of *{Album}*" followed by
+  the add-on description text the operator entered.
+- **Scarcity nudge** — a live "Only N left" caption when fewer than 20 signed slots
+  remain. Hidden once the run is fully claimed.
+- **Sold-out state** — "All signed copies claimed" replaces the nudge when the
+  entire signed run is gone; all toggles are disabled.
+- **Per-copy toggles** — one row per copy being purchased (Copy 1, Copy 2, …).
+  Each shows the copy label, the signed-cert price **"+ $X"**, and an on/off toggle.
+  The number of copies the fan can toggle on is capped by remaining slots — if the
+  fan chose 4 copies but only 2 signed slots remain, only the first 2 can be
+  toggled on; the rest are disabled with a "Sold out" caption.
+- **"Name on your certificate" field** — appears for *digital-only* GoodDeed
+  copies (any copy without the signed-cert toggle on, when there is no physical
+  cert order in the order). Pre-filled from the fan's account name; optional —
+  leaving it blank uses the account name. The fan can always update it later from
+  their Orders page too.
+- **"Checkout — $Total" button** — proceeds to the Stripe embedded checkout with
+  the chosen cert selections baked in.
+- **"Skip — no certificate" link** — advances straight to checkout with all cert
+  toggles turned off (none of the cert price is added).
+
+**After this step:** the fan proceeds to the auth gate if not signed in (Step 3),
+or straight to Stripe if they are (Step 4).
+
+---
+
 ## Step 3 — Auth gate (only for fans who aren't signed in)
 
 **Skipped entirely** if the fan is already signed in as a customer — they go
-straight from Step 2 to Step 4.
+straight from Step 2 / 2.5 to Step 4.
 
 **Where the fan is:** the login page at `/login?next=/album/:id?buy=1`.
 
@@ -178,7 +215,8 @@ straight from Step 2 to Step 4.
 - **After auth:** the `next` parameter returns them to `/album/:id?buy=1`, which
   **auto-re-opens the Buy sheet** (Step 1's `?buy=1` shortcut). Their format /
   quantity / add-on choices are re-made in the freshly opened sheet, and the button
-  now reads "Checkout — $Total."
+  now reads "Continue to checkout" (if a cert add-on is active) or
+  "Checkout — $Total."
 
 ---
 
@@ -355,8 +393,11 @@ card receipt, if enabled, is a separate email.
 | Desktop signed-cert pre-arm chip | Desktop (≥768px) hero, album offers signed cert |
 | "You'll get" vinyl preview | Selected format is vinyl |
 | Quantity above 1 | Stock (if tracked) allows it; hard cap is 10 |
-| Per-copy signed-cert toggles | Album has an active signed-cert add-on |
-| "All signed copies claimed" (disabled) | The numbered signed run is fully claimed |
+| Cert step (Step 2.5) | Album has an active signed-cert add-on |
+| Per-copy signed-cert toggles (on cert step) | Album has an active signed-cert add-on |
+| "Only N left" scarcity nudge on cert step | Fewer than 20 signed slots remain |
+| "All signed copies claimed" (cert step, disabled) | The numbered signed run is fully claimed |
+| "Name on your certificate" field (cert step) | Digital-only GoodDeed copies in the order |
 | 7″ "alone" vs "+ booklet" variant | Album has a 7″ SKU **and** an active booklet add-on |
 | Cassette stacked booklet toggle | Album has a cassette SKU **and** an active booklet add-on |
 | Booklet section hidden entirely | No 7″/cassette SKU, or no booklet add-on |

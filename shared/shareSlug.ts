@@ -104,6 +104,8 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "chat",
   "recents",
   "error",
+  // /find-gooddeed — QR-resolver fallback for legacy certs with no cert row
+  "find-gooddeed",
 ]);
 
 export const SHARE_SLUG_MIN = 2;
