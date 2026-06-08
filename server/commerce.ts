@@ -1468,6 +1468,27 @@ export function registerCommerceRoutes(app: Express) {
       } catch {
         mrpDefaults = null;
       }
+      // Task #1837 — derive the effective plant from saved SKUs so partner
+      // roles see the chosen manufacturer instead of "No plant set". Keep
+      // `press: null` so the MRP cost-math fallback, the picker lock, and
+      // the format picker all stay on their no-press code paths.
+      let effectivePress: { id: string; name: string; logoUrl: string | null } | null = null;
+      try {
+        const skuPressRows = await db
+          .select({ pressId: albumSkus.pressId })
+          .from(albumSkus)
+          .where(eq(albumSkus.albumId, String(req.params.id)));
+        const firstPressId =
+          skuPressRows
+            .map((s) => (s.pressId ? String(s.pressId) : null))
+            .find((id): id is string => !!id) ?? null;
+        if (firstPressId) {
+          const p = await storage.getManufacturerById(firstPressId);
+          if (p) {
+            effectivePress = { id: p.id, name: p.name, logoUrl: (p as any).logoUrl ?? null };
+          }
+        }
+      } catch {}
       return res.json({
         press: null,
         hasShippedFirst: false,
@@ -1477,6 +1498,7 @@ export function registerCommerceRoutes(app: Express) {
         pressMode,
         demo: demoKind,
         skuPressCatalogs,
+        effectivePress,
       });
     }
 

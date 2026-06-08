@@ -189,6 +189,10 @@ type InvitedPressResponse = {
   // differ from the invited press. The /catalog endpoint has requirePressScope
   // so artists can't fetch them directly; the server embeds them here.
   skuPressCatalogs?: Record<string, Catalog>;
+  // Task #1837 — plant chosen per-SKU when no invited-by-press stamp
+  // exists. `press` stays null (keeps MRP cost-math fallback intact);
+  // partner/artist-admin roles read this field for a read-only display.
+  effectivePress?: { id: string; name: string; logoUrl?: string | null } | null;
 };
 
 // Mirrors `snapToCatalogQuantityTier` server-side. Walks an ordered
@@ -450,6 +454,14 @@ export function SellPanel({
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",
   });
+  // Task #1837 — role check so PrinterAndPressPanel can gate the full
+  // directory picker to super-admin / admin and show a read-only
+  // effective-press label to partner/artist-admin roles.
+  const { data: sellRoleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
+    queryKey: ["/api/me/role"],
+  });
+  const sellIsSuperAdmin =
+    sellRoleInfo?.role === "super_admin" || sellRoleInfo?.role === "admin";
   // Task #635 — full press list powers the collapsed-header press-
   // switcher popover. Display-only: shows which presses are qualified
   // to quote this format (and marks the currently-invited one). Swap
@@ -1229,6 +1241,7 @@ export function SellPanel({
           allPresses={allPresses ?? null}
           pressFormatsByPress={pressFormatsByPress}
           selectedId={selectedPressChipId}
+          isSuperAdmin={sellIsSuperAdmin}
           onSelectId={(id) => {
             // Task #1025 — an explicit operator press switch (god-view
             // comparison) wins over the pinned default until reload.
@@ -1564,12 +1577,18 @@ function computePressChips(
   invited: InvitedPressResponse | null,
   allPresses?: Manufacturer[] | null,
   pressFormatsByPress?: Map<string, Set<string>>,
+  // Task #1837 — partners see their chosen plant read-only; only super-admin
+  // / admin gets the full directory picker in "all" mode.
+  isSuperAdmin = true,
 ): PressChip[] {
   const invitedPress = invited?.press ?? null;
   const allMode = (invited?.pressMode ?? "dedicated") === "all";
   const locked = !!invitedPress && !invited?.hasShippedFirst && !allMode;
   const liveDirectoryChips: PressChip[] = (() => {
     if (!allMode) return [];
+    // Partners don't get the full directory picker — they'll see the
+    // effective press as a read-only label below instead.
+    if (!isSuperAdmin) return [];
     const seen = new Set<string>();
     const out: PressChip[] = [];
     if (invitedPress) {
@@ -1599,6 +1618,7 @@ function PrinterAndPressPanel({
   pressFormatsByPress,
   selectedId,
   onSelectId,
+  isSuperAdmin = true,
 }: {
   invited: InvitedPressResponse | null;
   allPresses?: Manufacturer[] | null;
@@ -1608,6 +1628,8 @@ function PrinterAndPressPanel({
   // invited chip, so this is effectively inert there.
   selectedId: string;
   onSelectId: (id: string) => void;
+  // Task #1837 — gates the full directory picker to operator roles only.
+  isSuperAdmin?: boolean;
 }) {
   const invitedPress = invited?.press ?? null;
   // Task #736 — in "all" mode the super-admin wants to shop every press,
@@ -1616,7 +1638,7 @@ function PrinterAndPressPanel({
   const allMode = (invited?.pressMode ?? "dedicated") === "all";
   const locked = !!invitedPress && !invited?.hasShippedFirst && !allMode;
 
-  const chips = computePressChips(invited, allPresses, pressFormatsByPress);
+  const chips = computePressChips(invited, allPresses, pressFormatsByPress, isSuperAdmin);
   const selectedChip = chips.find((c) => c.id === selectedId) ?? chips[0];
   const selectedPress = selectedChip?.press ?? null;
 
@@ -1626,7 +1648,25 @@ function PrinterAndPressPanel({
   // force chips to render in the free flow even though the operator can
   // only pick Hellbender today).
   // No press resolved → render nothing rather than a fabricated default.
-  if (!selectedChip) return null;
+  // Task #1837 — for partner roles with no invited stamp, check for an
+  // effective press derived from saved SKUs and show it read-only.
+  if (!selectedChip) {
+    const effectivePress = invited?.effectivePress ?? null;
+    if (effectivePress && !isSuperAdmin) {
+      return (
+        <div className="mb-4" data-testid="panel-printer-and-press">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-slate-500">Printer</span>
+            <span className="font-semibold text-slate-900" data-testid="text-selected-printer">
+              {effectivePress.name}
+            </span>
+            <span className="text-xs text-slate-400">chosen plant</span>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  }
 
   const otherLiveChips = chips.filter((c) => c.id !== selectedChip.id && c.status === "live");
   const otherComingSoonChips = chips.filter((c) => c.id !== selectedChip.id && c.status !== "live");

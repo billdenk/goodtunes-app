@@ -347,7 +347,11 @@ export function PressPanel({
   // Sell tabs always agree.  When NO plant is set, both fall back to
   // `defaultPreflightVendor()` (MRP) — the same platform-wide default —
   // so the two panels cannot diverge in either the set or unset case.
-  const { data: invitedPress } = useQuery<{ press: { name: string | null } | null }>({
+  const { data: invitedPress } = useQuery<{
+    press: { name: string | null } | null;
+    // Task #1837 — effective plant from saved SKUs when no invited-by-press stamp.
+    effectivePress?: { id: string; name: string } | null;
+  }>({
     queryKey: ["/api/admin/albums", albumId, "invited-press"],
   });
   // Task #1311 — Physical tab derives its plant from the SAME resolver as
@@ -356,9 +360,14 @@ export function PressPanel({
   // is the single authoritative control. `HIDDEN_PREFLIGHT_VENDORS` still governs
   // which vendors appear in generic contexts, but a deliberate artist stamp is
   // always honored even when the vendor is in that set.
+  // Task #1837 — also try matching against the effective press (chosen per-SKU)
+  // when no artist/label stamp exists, so the Physical tab stays consistent
+  // with what the Sell panel's Printer row shows to partner roles.
   const defaultVendor: VendorId = useMemo(() => {
     const matched = matchInvitedPressToVendor(invitedPress?.press?.name);
     if (matched) return matched;
+    const effectiveMatched = matchInvitedPressToVendor(invitedPress?.effectivePress?.name);
+    if (effectiveMatched) return effectiveMatched;
     // Same platform-default the Sell panel's mrpDefaults fallback resolves to.
     return defaultPreflightVendor();
   }, [invitedPress]);
@@ -692,7 +701,11 @@ export function PressPanel({
               {VENDOR_SPECS[vendorId]?.label ?? vendorId}
             </span>
             <span className="text-xs text-slate-400">
-              {invitedPress?.press?.name ? "artist's plant" : "platform default"}
+              {invitedPress?.press?.name
+                ? "artist's plant"
+                : invitedPress?.effectivePress?.name
+                  ? "chosen plant"
+                  : "platform default"}
             </span>
           </div>
         </div>
