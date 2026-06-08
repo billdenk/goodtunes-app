@@ -551,7 +551,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // `muxStatus === "ready"` and re-enter this branch.
       (async () => {
         try {
-          const r = await apiRequest("POST", `/api/songs/${song.id}/playback-url`);
+          // Forward the campaign share token (`?k=`) so an anonymous
+          // pre-launch preview visitor can mint a signed 30s URL. The token —
+          // not the song id — is the capability the server checks; a signed-in
+          // fan ignores it entirely (ownership decides access server-side).
+          const campaignToken =
+            typeof window !== "undefined"
+              ? new URLSearchParams(window.location.search).get("k")
+              : null;
+          const r = await apiRequest(
+            "POST",
+            `/api/songs/${song.id}/playback-url`,
+            campaignToken ? { k: campaignToken } : undefined,
+          );
           const json = await r.json();
           if (srcTokenRef.current !== token) return;
           if (json?.url) attachSrc(json.url);

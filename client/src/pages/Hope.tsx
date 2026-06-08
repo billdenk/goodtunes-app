@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { useParams } from "wouter";
+import { useParams, useSearch } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import type { LucideIcon } from "lucide-react";
 import {
   ChevronRight,
@@ -14,8 +15,13 @@ import {
   Expand,
   Apple,
   Lock,
+  Play,
+  Pause,
   X,
 } from "lucide-react";
+import { usePlayer } from "@/context/PlayerContext";
+import type { PlayerSong } from "@/context/PlayerContext";
+import type { Album } from "@/data/musicData";
 
 /**
  * "Get Hope. Give Hope." — the redesigned Preview & Purchase campaign flow,
@@ -44,6 +50,31 @@ const CARD_IMG = 150;
 
 const usd = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 0 })}`;
+
+/* ── campaign preview access (server-token-gated) ─────────────────────
+ * The unguessable share link carries `?k=<token>`. The server resolves the
+ * token to a tier and (when valid) the album's previewable tracks. The
+ * embargoed title track never appears here — the server filters it out. */
+type PreviewTrack = {
+  id: string;
+  title: string;
+  trackNumber: number;
+  duration: number;
+  muxPlaybackId: string;
+  muxStatus: string;
+};
+type CampaignAccess = {
+  tier: "none" | "preview" | "family";
+  albumId: string;
+  tracks: PreviewTrack[];
+};
+
+const fmtDur = (sec: number) => {
+  const total = Math.max(0, Math.round(sec || 0));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+};
 
 /* ── per-release content registry ─────────────────────────────────── */
 
@@ -375,8 +406,53 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
 
 /* ── faint album page behind the modal ────────────────────────────── */
 
-function AlbumBackdrop({ c, dimmed = true }: { c: ReleaseContent; dimmed?: boolean }) {
+function AlbumBackdrop({
+  c,
+  dimmed = true,
+  tracks,
+  albumId,
+}: {
+  c: ReleaseContent;
+  dimmed?: boolean;
+  tracks?: PreviewTrack[];
+  albumId?: string;
+}) {
   const img = (name: string) => `${c.imageBase}/${name}`;
+  const { playSong, setPreviewMode, togglePlay, currentSong, isPlaying } = usePlayer();
+
+  // Real, playable tracks supersede the static placeholder tracklist. Each row
+  // streams a 30s preview (setPreviewMode caps it; the server signs a Mux URL).
+  const hasReal = !!tracks && tracks.length > 0;
+  const album: Album = {
+    id: albumId ?? "",
+    title: c.releaseName,
+    artist: c.artistName,
+    artwork: img(c.images.cover),
+    year: 2026,
+    type: "LP",
+    description: "",
+  };
+  const queue: PlayerSong[] = (tracks ?? []).map((t) => ({
+    id: t.id,
+    albumId: album.id,
+    title: t.title,
+    trackNumber: t.trackNumber,
+    duration: t.duration,
+    muxPlaybackId: t.muxPlaybackId,
+    muxStatus: t.muxStatus,
+    album,
+  })) as PlayerSong[];
+
+  const onRow = (id: string) => {
+    if (currentSong?.id === id) {
+      togglePlay();
+      return;
+    }
+    setPreviewMode(true);
+    const song = queue.find((q) => q.id === id);
+    if (song) playSong(song, queue);
+  };
+
   return (
     <div className="absolute inset-0 overflow-hidden" aria-hidden={dimmed} style={{ background: BG }}>
       <img
@@ -409,15 +485,59 @@ function AlbumBackdrop({ c, dimmed = true }: { c: ReleaseContent; dimmed?: boole
             <div className="text-white text-[34px] font-bold tracking-[-0.02em] mb-6">
               {c.releaseName}
             </div>
-            <div className="flex flex-col gap-3.5">
-              {c.tracklist.map((t, i) => (
-                <div key={t.title} className="flex items-center gap-4">
-                  <span className="text-white/40 text-[14px] tabular-nums w-4">{i + 1}</span>
-                  <span className="text-white text-[15px] flex-1">{t.title}</span>
-                  <span className="text-white/40 text-[13px] tabular-nums">{t.len}</span>
-                </div>
-              ))}
-            </div>
+            {hasReal ? (
+              <div className="flex flex-col gap-1">
+                {tracks!.map((t, i) => {
+                  const isCurrent = currentSong?.id === t.id;
+                  const playing = isCurrent && isPlaying;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => !dimmed && onRow(t.id)}
+                      disabled={dimmed}
+                      data-testid={`track-preview-${t.id}`}
+                      className="group flex items-center gap-4 text-left rounded-lg -mx-2 px-2 py-1.5 transition-colors hover:bg-white/5 disabled:cursor-default"
+                    >
+                      <span className="w-4 flex items-center justify-center text-[14px] tabular-nums">
+                        {playing ? (
+                          <Pause className="w-3.5 h-3.5" style={{ color: BLUE }} strokeWidth={2.4} />
+                        ) : isCurrent ? (
+                          <Play className="w-3.5 h-3.5" style={{ color: BLUE }} strokeWidth={2.4} />
+                        ) : (
+                          <>
+                            <span className="text-white/40 group-hover:hidden">{i + 1}</span>
+                            <Play
+                              className="w-3.5 h-3.5 hidden group-hover:block text-white"
+                              strokeWidth={2.4}
+                            />
+                          </>
+                        )}
+                      </span>
+                      <span
+                        className="text-[15px] flex-1 truncate"
+                        style={{ color: isCurrent ? BLUE : "#fff" }}
+                      >
+                        {t.title}
+                      </span>
+                      <span className="text-white/40 text-[13px] tabular-nums">
+                        {fmtDur(t.duration)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3.5">
+                {c.tracklist.map((t, i) => (
+                  <div key={t.title} className="flex items-center gap-4">
+                    <span className="text-white/40 text-[14px] tabular-nums w-4">{i + 1}</span>
+                    <span className="text-white text-[15px] flex-1">{t.title}</span>
+                    <span className="text-white/40 text-[13px] tabular-nums">{t.len}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -804,8 +924,19 @@ function PayStep({
 
 /* ── flow shell ───────────────────────────────────────────────────── */
 
-function CampaignFlow({ c, mode }: { c: ReleaseContent; mode: "comingSoon" | "preview" }) {
+function CampaignFlow({
+  c,
+  mode,
+  tracks,
+  albumId,
+}: {
+  c: ReleaseContent;
+  mode: "comingSoon" | "preview";
+  tracks?: PreviewTrack[];
+  albumId?: string;
+}) {
   const comingSoon = mode === "comingSoon";
+  const canPreviewMusic = !!tracks && tracks.length > 0;
   const [step, setStep] = useState<Step>("overview");
   const [bundleQty, setBundleQty] = useState(1);
   const [signedQty, setSignedQty] = useState(0);
@@ -841,7 +972,7 @@ function CampaignFlow({ c, mode }: { c: ReleaseContent; mode: "comingSoon" | "pr
       style={{ fontFamily: "system-ui, -apple-system, 'SF Pro Text', sans-serif" }}
       data-testid="hope-offer-flow"
     >
-      <AlbumBackdrop c={c} dimmed={!previewing} />
+      <AlbumBackdrop c={c} dimmed={!previewing} tracks={tracks} albumId={albumId} />
 
       {!previewing && (
       <div
@@ -930,7 +1061,7 @@ function CampaignFlow({ c, mode }: { c: ReleaseContent; mode: "comingSoon" | "pr
               <ChevronLeft className="w-4 h-4" strokeWidth={2.4} />
               Back
             </button>
-          ) : (
+          ) : canPreviewMusic ? (
             <button
               type="button"
               onClick={() => setPreviewing(true)}
@@ -939,7 +1070,7 @@ function CampaignFlow({ c, mode }: { c: ReleaseContent; mode: "comingSoon" | "pr
             >
               Preview the music
             </button>
-          )}
+          ) : null}
 
           <div className="flex-1" />
 
@@ -1018,9 +1149,56 @@ export function isCampaignRelease(artist?: string, release?: string): boolean {
   return releaseKey(artist, release) !== null;
 }
 
-// Public coming-soon teaser, artist-first at /:artist/:release
-// (e.g. /nightbirde/hope). The whole flow is visible but ordering is locked
-// behind the launch label until the campaign goes live.
+// Shared campaign surface. The `?k=` token on the (unguessable) share link
+// decides the tier server-side:
+//   • none    → locked teaser, no music ("Coming …" label, no preview button)
+//   • preview → fans: 30s music previews + the campaign overview
+//   • family  → family: the previews PLUS the full buy/give/pay flow
+// The token never lives in the client bundle — we just forward whatever is in
+// the URL and let the server resolve it.
+function CampaignExperience({
+  artist,
+  release,
+}: {
+  artist: string;
+  release: string;
+}) {
+  const search = useSearch();
+  const token = new URLSearchParams(search).get("k") ?? "";
+  const key = releaseKey(artist, release);
+  const { data } = useQuery<CampaignAccess>({
+    queryKey: ["/api/campaign", artist, release, "access", token],
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/campaign/${encodeURIComponent(artist)}/${encodeURIComponent(
+          release,
+        )}/access?k=${encodeURIComponent(token)}`,
+        { credentials: "include" },
+      );
+      if (!r.ok) throw new Error(`access ${r.status}`);
+      return (await r.json()) as CampaignAccess;
+    },
+    enabled: !!key,
+    staleTime: Infinity,
+    retry: false,
+  });
+
+  if (!key) return <NotFound />;
+  const tier = data?.tier ?? "none";
+  const mode = tier === "family" ? "preview" : "comingSoon";
+  return (
+    <CampaignFlow
+      c={RELEASES[key]}
+      mode={mode}
+      tracks={data?.tracks}
+      albumId={data?.albumId}
+    />
+  );
+}
+
+// Artist-first share link at /:artist/:release (e.g. /nightbirde/hope). Tier
+// (and therefore whether music + the offer flow appear) is decided by the
+// `?k=` token; a bare/guessable URL only ever shows the locked teaser.
 export function CampaignPublic({
   artist,
   release,
@@ -1028,16 +1206,12 @@ export function CampaignPublic({
   artist: string;
   release: string;
 }) {
-  const key = releaseKey(artist, release);
-  if (!key) return <NotFound />;
-  return <CampaignFlow c={RELEASES[key]} mode="comingSoon" />;
+  return <CampaignExperience artist={artist} release={release} />;
 }
 
-// Reusable full clickable preview at /staging/:artist/:release for any campaign
-// in the RELEASES registry. Family-review surface — ordering stays disabled.
+// /staging/:artist/:release — same token-gated experience for any campaign in
+// the RELEASES registry.
 export function CampaignPreview() {
   const params = useParams<{ artist: string; release: string }>();
-  const key = releaseKey(params.artist, params.release);
-  if (!key) return <NotFound />;
-  return <CampaignFlow c={RELEASES[key]} mode="preview" />;
+  return <CampaignExperience artist={params.artist} release={params.release} />;
 }

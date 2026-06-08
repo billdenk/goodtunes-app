@@ -229,6 +229,85 @@ async function isAdminUser(req: Request): Promise<boolean> {
   return !!user?.isAdmin;
 }
 
+// ── Pre-launch campaign preview gating ────────────────────────────────
+// A curated, unreleased release (e.g. Nightbirde "Hope") is shared before
+// launch via an UNGUESSABLE link so the masters stay among the people the
+// operator chooses. Two per-release tokens carve out the two tiers the
+// operator asked for:
+//   • previewKey — fans: 30s music previews + the campaign overview.
+//   • familyKey  — family: the same previews PLUS the full buy/give/pay flow.
+// The bare (guessable) /<artist>/<release> path carries no token, so it can
+// only ever show the locked "coming soon" teaser — never the music.
+//
+// Master protection is unchanged: previews are short-lived signed Mux HLS
+// URLs with the 30s cap enforced client-side (exactly like every other
+// not-yet-owned album), the raw master never leaves Object Storage, and the
+// embargoed title track (carrying `previewHidden`) stays locked for everyone.
+type CampaignPreview = {
+  slug: string;
+  albumId: string;
+  previewKey: string;
+  familyKey: string;
+};
+const CAMPAIGN_PREVIEWS: CampaignPreview[] = [
+  {
+    slug: "nightbirde/hope",
+    albumId: "b250a5a5-98cc-4673-9903-ab39e5278d8c",
+    previewKey: "hope-listen-7f3a2c9b41e8",
+    familyKey: "hope-family-4e8d1a5fce27",
+  },
+];
+const findCampaignBySlug = (slug: string): CampaignPreview | undefined =>
+  CAMPAIGN_PREVIEWS.find((c) => c.slug === slug.toLowerCase());
+// "none" = no/bad token; the music stays locked.
+const campaignTier = (
+  c: CampaignPreview,
+  token: string | null | undefined,
+): "none" | "preview" | "family" => {
+  if (!token) return "none";
+  if (token === c.familyKey) return "family";
+  if (token === c.previewKey) return "preview";
+  return "none";
+};
+
+// Playback-url is normally requireAuth (a signed-in fan's ownership decides
+// full vs 30s-preview access). The single exception: a curated pre-launch
+// campaign album may be 30s-previewed by an ANONYMOUS visitor — but only when
+// they present a valid campaign token (the `?k=` / `k` from the unguessable
+// share link), and only for its non-embargoed, Mux-ready tracks. The token —
+// NOT mere knowledge of the song id — is the capability: a bare or wrong token
+// resolves to tier "none" and is rejected, so a leaked song id alone can never
+// mint a signed preview. The embargoed title track and every non-campaign
+// album keep the hard requireAuth gate. An anonymous caller never gets a
+// session, so the handler computes fullAccess=false and the client caps
+// playback at 30s.
+async function requireAuthOrCampaignPreview(
+  req: Request,
+  res: Response,
+  next: Function,
+) {
+  const a = await getAuthFromRequest(req);
+  if (a) return requireAuth(req, res, next);
+  const song = await storage.getSongById(req.params.id as string);
+  const albumId = (song as any)?.albumId as string | undefined;
+  const campaign = CAMPAIGN_PREVIEWS.find((c) => c.albumId === albumId);
+  const token =
+    (typeof req.body?.k === "string" && req.body.k) ||
+    (typeof req.query.k === "string" && (req.query.k as string)) ||
+    null;
+  if (
+    song &&
+    campaign &&
+    campaignTier(campaign, token) !== "none" &&
+    song.muxStatus === "ready" &&
+    !!song.muxPlaybackId &&
+    !(song as any).previewHidden
+  ) {
+    return next();
+  }
+  return res.status(401).json({ message: "Unauthorized" });
+}
+
 // Maps any incoming album-type string to the three values the player + admin
 // know about. Accepts legacy "album" payloads from older clients and rewrites
 // them to "LP" so we don't have to do a coordinated client rollout.
@@ -19615,7 +19694,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/songs/:id/playback-url", requireAuth, async (req, res) => {
+  // Token-gated, no-login campaign access. The campaign page (Hope.tsx) calls
+  // this with the `?k=` token from the unguessable share link to learn its
+  // tier (none/preview/family) and — when the token is valid — the album's
+  // previewable tracks. ONLY non-embargoed, Mux-ready tracks are returned, so
+  // the title track (previewHidden) never appears. The track ids handed back
+  // here are the capability the relaxed playback-url route checks against, so
+  // a bad/missing token yields no ids and therefore no reachable music.
+  app.get("/api/campaign/:artist/:release/access", async (req, res) => {
+    const slug = `${req.params.artist}/${req.params.release}`;
+    const campaign = findCampaignBySlug(slug);
+    if (!campaign) return res.status(404).json({ message: "Unknown campaign" });
+    const token = typeof req.query.k === "string" ? req.query.k : null;
+    const tier = campaignTier(campaign, token);
+    if (tier === "none") {
+      return res.json({ tier, albumId: campaign.albumId, tracks: [] });
+    }
+    const songs = await storage.getSongsByAlbum(campaign.albumId);
+    const tracks = songs
+      .filter(
+        (s) =>
+          !!s.muxPlaybackId &&
+          s.muxStatus === "ready" &&
+          !(s as any).previewHidden,
+      )
+      .map((s) => ({
+        id: s.id,
+        title: s.title,
+        trackNumber: s.trackNumber,
+        duration: s.duration,
+        muxPlaybackId: s.muxPlaybackId,
+        muxStatus: s.muxStatus,
+      }));
+    res.json({ tier, albumId: campaign.albumId, tracks });
+  });
+
+  app.post("/api/songs/:id/playback-url", requireAuthOrCampaignPreview, async (req, res) => {
     if (!isMuxConfigured()) return res.status(503).json({ message: "Mux not configured" });
     const song = await storage.getSongById(req.params.id as string);
     if (!song) return res.status(404).json({ message: "Song not found" });
