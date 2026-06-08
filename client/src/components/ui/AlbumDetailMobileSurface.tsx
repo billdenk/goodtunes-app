@@ -484,7 +484,19 @@ export function AlbumDetailMobileSurface({
             between these blocks (the band that used to sit behind Play). */}
         <div style={{ background: "#00062B" }}>
         <div style={{ background: "#00062B" }}>
-          <div className="pt-32 px-6 flex justify-center">
+          <div
+            className="px-6 flex justify-center"
+            style={{
+              // Safe-area-aware so the header→art gap is a consistent ~20px on
+              // BOTH the native webview (real status-bar inset) and Safari
+              // (inset 0). The floating back/share/⋯ chips sit at
+              // FAN_TOP_CHROME_INSET (safe + 12px) and are 44px tall, so
+              // (safe + 76px) leaves the art ~20px below the chip row on
+              // every device instead of the old fixed pt-32 (too tight on
+              // native, too loose on web).
+              paddingTop: "calc(env(safe-area-inset-top, 0px) + 76px)",
+            }}
+          >
             <div
               className="relative w-[72%] max-w-[300px] rounded-xl overflow-hidden"
               style={{
@@ -585,7 +597,7 @@ export function AlbumDetailMobileSurface({
             ) : (
               <div
                 aria-hidden
-                className="mt-3 h-[2.85rem]"
+                className="h-1"
                 data-testid="album-description-spacer"
               />
             )}

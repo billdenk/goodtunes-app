@@ -157,7 +157,12 @@ function MobileMiniPlayer() {
         transition: morphTransition,
       }
     : {
-        bottom: "calc(90px + env(safe-area-inset-bottom, 0px))",
+        // Apple-tight gap to the tab bar: the nav pillow rests at
+        // DOCK_BOTTOM (12px) and is ~53px tall (top ≈ 65px), so a 72px
+        // baseline + the pill's own pb-1 lands the capsule ~11px above the
+        // pillow — matching Apple Music's snug now-playing-over-tab-bar
+        // stack instead of the old detached ~30px float (90px baseline).
+        bottom: "calc(72px + env(safe-area-inset-bottom, 0px))",
         transition: morphTransition,
       };
 
@@ -197,7 +202,7 @@ function MobileMiniPlayer() {
         onClick={() => setShowPlayer(true)}
       >
         {hidden ? (
-          <div className="flex items-center gap-2.5 pl-2 pr-1 py-1.5">
+          <div className="flex items-center gap-2.5 pl-2 pr-1 py-1">
             <img
               src={currentSong.album.artwork}
               alt={currentSong.album.title}
@@ -224,7 +229,7 @@ function MobileMiniPlayer() {
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-              className="w-11 h-11 flex-shrink-0 flex items-center justify-center text-white active:opacity-60 transition-opacity"
+              className="w-10 h-10 flex-shrink-0 flex items-center justify-center text-white active:opacity-60 transition-opacity"
               aria-label={isPlaying ? "Pause" : "Play"}
             >
               {isPlaying ? (
@@ -240,12 +245,12 @@ function MobileMiniPlayer() {
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-3 pl-2 pr-1.5 py-1.5">
+          <div className="flex items-center gap-3 pl-2.5 pr-1.5 py-1.5">
             <img
               src={currentSong.album.artwork}
               alt={currentSong.album.title}
               className="flex-shrink-0 object-cover"
-              style={{ width: 44, height: 44, borderRadius: 8, boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}
+              style={{ width: 40, height: 40, borderRadius: 7, boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}
             />
 
             <div className="flex-1 min-w-0">

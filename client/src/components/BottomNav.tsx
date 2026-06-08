@@ -100,12 +100,17 @@ const NavItem = ({
     >
       <span
         aria-hidden
-        className="absolute rounded-full transition-colors duration-200"
+        // Apple Music's active-tab highlight is a SQUIRCLE (rounded-rect),
+        // not a full stadium — the old `rounded-full` gave semicircular ends
+        // that read as a wide capsule. A fixed ~18px radius + symmetric
+        // top/bottom insets makes the highlight border the icon+label lockup
+        // evenly all the way around, matching IMG_4370/4371/4372.
+        className="absolute rounded-[18px] transition-colors duration-200"
         style={{
           background: active ? "rgba(49,158,216,0.18)" : "transparent",
           left: pillLeft,
           right: pillRight,
-          top: "-3px",
+          top: "-4px",
           bottom: "-4px",
         }}
       />
