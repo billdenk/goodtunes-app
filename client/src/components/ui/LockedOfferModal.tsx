@@ -33,6 +33,10 @@ export type LockedOfferModalProps = {
   priceCents?: number | null;
   /** Pre-launch (sunrise pending): lead with "Get Notified" instead of Buy. */
   salesPending: boolean;
+  /** Task #1755 — campaign fan link: the release is live (family can buy) but
+   *  general fans are notify-only, so force the "Get Notified" lead and never
+   *  surface a checkout CTA, even though `salesPending` is false. */
+  notifyOnly?: boolean;
   /** e.g. "6/8" — shown in the pre-launch copy when known. */
   salesBeginLabel?: string | null;
   /** Opens the real Buy sheet (live releases only). */
@@ -54,11 +58,15 @@ export function LockedOfferModal({
   artworkUrl,
   priceCents,
   salesPending,
+  notifyOnly,
   salesBeginLabel,
   onBuy,
   prefilledEmail,
   source,
 }: LockedOfferModalProps) {
+  // Lead with the notify flow either pre-launch (sunrise pending) OR when the
+  // campaign fan link forces notify-only on an otherwise-live release.
+  const leadNotify = salesPending || !!notifyOnly;
   const [mode, setMode] = useState<"offer" | "notify" | "done">("offer");
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -248,7 +256,7 @@ export function LockedOfferModal({
               >
                 <Lock className="w-3.5 h-3.5" style={{ color: "var(--brand-mint)" }} strokeWidth={2.4} />
                 <span className="text-xs font-semibold tracking-wide" style={{ color: "var(--brand-mint)" }}>
-                  {salesPending ? "COMING SOON" : "UNLOCK THIS RELEASE"}
+                  {leadNotify ? "COMING SOON" : "UNLOCK THIS RELEASE"}
                 </span>
               </div>
               <h2 className="text-white text-2xl font-bold leading-tight" data-testid="text-offer-title">
@@ -260,12 +268,12 @@ export function LockedOfferModal({
                 </p>
               )}
               <p className="text-sm mt-3 leading-snug" style={{ color: "#98A2B3" }}>
-                {salesPending
+                {leadNotify
                   ? `This release isn't on sale yet${salesBeginLabel ? ` — sales begin ${salesBeginLabel}` : ""}. Be first in line and we'll email you the moment it drops.`
                   : "Own it forever — the full album, lossless audio, bonus videos and your GoodDeed certificate of ownership."}
               </p>
 
-              {salesPending ? (
+              {leadNotify ? (
                 <button
                   type="button"
                   onClick={() => setMode("notify")}

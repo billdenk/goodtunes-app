@@ -137,6 +137,10 @@ export interface AlbumDetailMobileSurfaceProps {
    *  Details" text link that re-opens the offer modal. Only set on the
    *  get./store. host; the MY player never passes it. */
   lockedPreview?: boolean;
+  /** Task #1755 — campaign fan link: the release is live but general fans are
+   *  notify-only, so the locked-preview action row leads with "Get Notified"
+   *  (no checkout) even though there's no sunrise `salesBeginLabel`. */
+  notifyOnly?: boolean;
   /** Re-open the offer modal (Get Details link, and the pre-launch primary
    *  CTA when sales haven't begun). */
   onGetDetails?: () => void;
@@ -201,6 +205,7 @@ export function AlbumDetailMobileSurface({
   onOpenBuy,
   salesBeginLabel,
   lockedPreview = false,
+  notifyOnly = false,
   onGetDetails,
   onGetNotified,
   onToggleAlbumDownload,
@@ -712,14 +717,12 @@ export function AlbumDetailMobileSurface({
           {ownedNums.length === 0 &&
             album.priceCents != null &&
             onOpenBuy &&
-            // Task #1628 — staged release: sales haven't begun yet, so the
-            // Buy CTA is replaced by a disabled "Sales Begin {date}" pill.
+            // Task #1628 / #1755 — locked-preview "Get Notified" wins when
+            // either sales haven't begun yet (sunrise) OR a campaign fan link
+            // forces notify-only on a live release. Otherwise the disabled
+            // "Sales Begin {date}" pill (admin previews) or the live Buy CTA.
             // Previews still play (the Play control above is untouched).
-            (salesBeginLabel ? (
-              // Task #1734 — pre-launch on the purchase-funnel host: the
-              // disabled "Sales Begin" pill becomes an active "Get Notified"
-              // CTA that re-opens the offer modal to capture the fan's email.
-              lockedPreview && onGetNotified ? (
+            (lockedPreview && (salesBeginLabel || notifyOnly) && onGetNotified ? (
                 <button
                   type="button"
                   onClick={onGetNotified}
@@ -742,7 +745,7 @@ export function AlbumDetailMobileSurface({
                   </svg>
                   Get Notified
                 </button>
-              ) : (
+              ) : salesBeginLabel ? (
               <button
                 type="button"
                 disabled
@@ -766,7 +769,6 @@ export function AlbumDetailMobileSurface({
                 </svg>
                 Sales Begin {salesBeginLabel}
               </button>
-              )
             ) : (
               <button
                 type="button"

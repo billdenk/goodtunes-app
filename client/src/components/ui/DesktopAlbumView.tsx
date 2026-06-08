@@ -115,6 +115,10 @@ export type DesktopAlbumViewProps = {
    *  modal. Off on the MY player, where the row stays the normal preview/buy
    *  surface. */
   lockedPreview?: boolean;
+  /** Task #1755 — campaign fan link: live release but general fans are
+   *  notify-only, so the locked transport row leads with "Get Notified"
+   *  (no checkout) even without a sunrise `salesBeginLabel`. */
+  notifyOnly?: boolean;
   /** Pre-launch (sunrise pending) CTA: opens the offer modal's notify step. */
   onGetNotified?: () => void;
   /** Reopens the centered offer modal ("Get Details"). */
@@ -304,6 +308,7 @@ export function DesktopAlbumView({
   onShuffle,
   onBuyBundle,
   salesBeginLabel,
+  notifyOnly = false,
   signedCertPriceCents = null,
   signedCertSoldOut = false,
   onPlayPreview,
@@ -779,7 +784,7 @@ export function DesktopAlbumView({
                       Play
                     </button>
                   )}
-                  {salesBeginLabel ? (
+                  {salesBeginLabel || notifyOnly ? (
                     <button
                       type="button"
                       onClick={onGetNotified}

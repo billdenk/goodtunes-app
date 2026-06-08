@@ -153,7 +153,10 @@ type ApiAlbumPhoto = {
  * The DesktopAlbumView primitive is shared with the admin album preview
  * so editors see the same surface fans see, pixel-for-pixel.
  */
-export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
+export function AlbumDetailDesktop({
+  albumId,
+  notifyOnly = false,
+}: { albumId?: string; notifyOnly?: boolean } = {}) {
   const params = useParams<{ id: string }>();
   const id = albumId ?? params.id;
   const { user, updateProfile } = useAuth();
@@ -181,6 +184,9 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const [showBuySheet, setShowBuySheet] = useState(() => {
     if (typeof window === "undefined") return false;
     if (!buyEnabled) return false;
+    // Task #1755 — campaign fan link is notify-only: no checkout, so never
+    // auto-open the Buy sheet from a stray ?buy=1 marker.
+    if (notifyOnly) return false;
     return new URL(window.location.href).searchParams.get("buy") === "1";
   });
   // Task #1734 — auto-opening "offer" modal on the purchase-funnel host. Opens
@@ -679,6 +685,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             onPlayPreview={handlePlayPreview}
             previewActive={previewActive}
             lockedPreview={lockedPreview}
+            notifyOnly={notifyOnly}
             onGetNotified={() => setShowOfferModal(true)}
             onGetDetails={() => setShowOfferModal(true)}
             onPlayTrack={handlePlayTrack}
@@ -992,7 +999,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
         />
       )}
 
-      {showBuySheet && album && (
+      {showBuySheet && album && !notifyOnly && (
         <BuySheet
           albumId={album.id}
           signedCertDefault={buyAddons.signedCert}
@@ -1013,6 +1020,7 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
           artworkUrl={album.artwork}
           priceCents={album.priceCents ?? null}
           salesPending={salesPending}
+          notifyOnly={notifyOnly}
           salesBeginLabel={salesBeginLabel}
           onBuy={() => {
             setShowOfferModal(false);

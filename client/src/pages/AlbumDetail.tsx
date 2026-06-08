@@ -321,7 +321,10 @@ function PurchaseThankYouModal({ albumId: albumIdProp }: { albumId?: string }) {
   );
 }
 
-export function AlbumDetail({ albumId }: { albumId?: string } = {}) {
+export function AlbumDetail({
+  albumId,
+  notifyOnly = false,
+}: { albumId?: string; notifyOnly?: boolean } = {}) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   // Surface choice is width-only so an iPad running the native app gets the
   // SAME desktop chrome (left rail + hero + tracklist) it gets in a desktop
@@ -336,9 +339,9 @@ export function AlbumDetail({ albumId }: { albumId?: string } = {}) {
   // `buyEnabled`. Native iPhone keeps the mobile shell purely on width
   // (<768px), TARGETED_DEVICE_FAMILY="1,2" notwithstanding.
   const surface = isDesktop ? (
-    <AlbumDetailDesktop albumId={albumId} />
+    <AlbumDetailDesktop albumId={albumId} notifyOnly={notifyOnly} />
   ) : (
-    <AlbumDetailMobile albumId={albumId} />
+    <AlbumDetailMobile albumId={albumId} notifyOnly={notifyOnly} />
   );
   // FanPreviewProvider keeps the fan-preview lens wiring intact (read via
   // useFanPreview, still toggleable through the `?fan=1` URL flag); the visible
@@ -354,7 +357,10 @@ export function AlbumDetail({ albumId }: { albumId?: string } = {}) {
 // `albumId` lets a host-aware caller (the store launch storefront) render a
 // specific release without the id living in the URL; deep links via
 // /album/:id keep flowing through useParams.
-function AlbumDetailMobile({ albumId }: { albumId?: string }) {
+function AlbumDetailMobile({
+  albumId,
+  notifyOnly = false,
+}: { albumId?: string; notifyOnly?: boolean }) {
   const params = useParams<{ id: string }>();
   const id = albumId ?? params.id;
   const _recordRecent = useRecordRecent();
@@ -397,6 +403,9 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
   // add-on + embedded Stripe Checkout). `?buy=1` in the URL auto-opens
   // it so the Login bounce-back lands directly on the format picker.
   const [showBuySheet, setShowBuySheet] = useState(() => { if (!buyEnabled) return false;
+    // Task #1755 — the campaign fan link is notify-only: never auto-open the
+    // Buy sheet from a stray ?buy=1 marker, there's no checkout for fans.
+    if (notifyOnly) return false;
     if (typeof window === "undefined") return false;
     return new URL(window.location.href).searchParams.get("buy") === "1";
   });
@@ -1096,6 +1105,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
           onOpenBuy={buyEnabled ? () => setShowBuySheet(true) : undefined}
           salesBeginLabel={salesBeginLabel}
           lockedPreview={lockedPreview}
+          notifyOnly={notifyOnly}
           onGetDetails={() => setShowOfferModal(true)}
           onGetNotified={() => setShowOfferModal(true)}
           onToggleAlbumDownload={handleToggleAlbumDownload}
@@ -1127,7 +1137,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
         <MiniPlayer />
         <BottomNav />
 
-        {showBuySheet && (
+        {showBuySheet && !notifyOnly && (
           <BuySheet
             albumId={album.id}
             onClose={() => {
@@ -1155,6 +1165,7 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
             artworkUrl={album.artwork}
             priceCents={(album as any).priceCents ?? null}
             salesPending={salesPending}
+            notifyOnly={notifyOnly}
             salesBeginLabel={salesBeginLabel}
             onBuy={() => {
               setShowOfferModal(false);

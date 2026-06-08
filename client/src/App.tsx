@@ -84,7 +84,7 @@ import { FinishSetup } from "@/pages/FinishSetup";
 import { AccountMerge } from "@/pages/AccountMerge";
 // Task #1496 — Public account-deletion page for the Play Store Data safety form.
 import DeleteAccount from "@/pages/DeleteAccount";
-import { CampaignPreview, CampaignStaging } from "@/pages/Hope";
+import { isCampaignRelease } from "@/pages/Hope";
 import { AdminWelcomeBack } from "@/pages/AdminWelcomeBack";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
@@ -213,6 +213,47 @@ function ShareSlugTwo() {
       const album = (await r.json()) as { id: string };
       // Prime the same cache key AlbumDetail reads so it renders without an
       // authed /api/albums/:id refetch (which would 401 when logged out).
+      queryClient.setQueryData(["/api/albums", album.id], album);
+      return album;
+    },
+  });
+
+  if (isLoading) return <AlbumDetailMobileSkeleton />;
+  if (isError || !data) return <AlbumNotFound variant="mobile" />;
+  // Task #1755 — campaign releases (e.g. nightbirde/hope) are notify-only on
+  // the bare fan link: same locked Preview & Purchase surface, but the primary
+  // CTA captures an email instead of opening checkout. The family link
+  // (/:artist/:release/staging) keeps the full Buy flow — see ShareSlugStaging.
+  const notifyOnly = isCampaignRelease(artistSlug, albumSlug);
+  return <AlbumDetail albumId={data.id} notifyOnly={notifyOnly} />;
+}
+
+// Task #1755 — family-review link for a campaign release
+// (/staging/:artist/:release and the /:artist/:release/staging suffix Bill
+// shares with family). Renders the SAME locked Preview & Purchase surface as
+// the fan link, but with full Buy → Stripe checkout enabled (no notify-only
+// gate). Resolves through the same public album-by-slug endpoint, which also
+// honors staging access (admin / full-access email) for hidden pre-launch
+// releases; the campaign `?k=` token still rides through to playback for
+// early-access previews.
+function ShareSlugStaging() {
+  const params = useParams<{ artist: string; release: string }>();
+  const artistSlug = params.artist ?? "";
+  const albumSlug = params.release ?? "";
+  const cacheKey = `${artistSlug}/${albumSlug}`;
+  const { data, isLoading, isError } = useQuery<{ id: string } | null>({
+    queryKey: ["/api/public/album-by-slug", cacheKey],
+    enabled: !!(artistSlug && albumSlug),
+    retry: false,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/public/album-by-slug/${encodeURIComponent(artistSlug)}/${encodeURIComponent(albumSlug)}`,
+        { credentials: "include" },
+      );
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error(`Failed to load (${r.status})`);
+      const album = (await r.json()) as { id: string };
       queryClient.setQueryData(["/api/albums", album.id], album);
       return album;
     },
@@ -428,17 +469,19 @@ function Router() {
             resolves at goodtunes.music/delete-account. */}
         <Route path="/delete-account" component={DeleteAccount} />
         {/* Campaign "Get Hope. Give Hope." family-review preview only.
-            Task #1735 retired the public artist-first "Coming today" teaser:
-            the bare /:artist/:release route now always falls through to the
-            standard buyable album surface (ShareSlugTwo → AlbumDetail's
-            locked-player landing). /staging/:artist/:release (and the
-            /:artist/:release/staging suffix Bill shares with family) keep the
-            reusable family-review preview. Copy + pricing live in the RELEASES
-            registry in client/src/pages/Hope.tsx. */}
-        <Route path="/staging/:artist/:release" component={CampaignPreview} />
+            Task #1735 retired the public artist-first "Coming today" teaser;
+            Task #1755 retired the "Get Hope. Give Hope." CampaignFlow chrome.
+            Every campaign link now renders the SAME locked Preview & Purchase
+            AlbumDetail surface — the bare /:artist/:release fan route
+            (ShareSlugTwo → AlbumDetail) is notify-only for campaign releases,
+            while /staging/:artist/:release and the /:artist/:release/staging
+            suffix Bill shares with family (ShareSlugStaging) keep the full Buy
+            flow. The campaign registry (isCampaignRelease + notify-only copy)
+            lives in client/src/pages/Hope.tsx. */}
+        <Route path="/staging/:artist/:release" component={ShareSlugStaging} />
         {/* Suffix form Bill shares with family: /:artist/:release/staging
             (e.g. /nightbirde/hope/staging) — family tier, buy flow on. */}
-        <Route path="/:artist/:release/staging" component={CampaignStaging} />
+        <Route path="/:artist/:release/staging" component={ShareSlugStaging} />
         {/* Admin tool for the wave-1 welcome-back campaign. */}
         <Route path="/admin/welcome-back">
           <ProtectedRoute component={AdminWelcomeBack} />
