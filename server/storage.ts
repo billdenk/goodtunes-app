@@ -135,7 +135,7 @@ import {
   printGenerations,
   printArtifacts,
 } from "@shared/schema";
-import { and, asc, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "./db";
 import { pgArray } from "./lib/pgArray";
 import { softDeleteEntity, restoreEntity, purgeEntity } from "./softDelete";
