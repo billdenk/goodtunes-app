@@ -1310,17 +1310,29 @@ export function SellPanel({
                       const existing = skuByFormat.get(f)!;
                       // Task #1830 — supply the catalog for the press the SKU
                       // was actually saved against. When the saved pressId is
-                      // an "extra" press (differs from the invited press) AND
-                      // the operator hasn't specifically selected that press
-                      // via the chip switcher (in which case selectedCatalogByFormat
-                      // already contains it), use the extra catalog so the
-                      // artist's view resolves the saved tier/color identically
-                      // to God View — without touching economics masking.
+                      // an "extra" press (differs from the invited press),
+                      // always resolve color+tier from the server-embedded
+                      // skuPressCatalogs entry (extraSkuPressCatalogByFormat)
+                      // rather than from selectedCatalogByFormat.
+                      //
+                      // Why unconditional (no "selectedRealPressId !== extra"
+                      // gate): pinnedChipId auto-snaps the chip to the extra
+                      // press when it's visible in the chips list (god-view
+                      // "All Presses" mode). That snap sets selectedRealPressId
+                      // === firstExtraSkuPressId, which was defeating the guard
+                      // and falling through to selectedCatalogByFormat. For an
+                      // artist, the lazy /catalog endpoint is blocked by
+                      // requirePressScope, so selectedPressCatalog never loads
+                      // and activeCatalog falls back to the invited-press
+                      // catalog — wrong press, wrong color, silent revert to
+                      // Black. The embedded catalog always arrives with the
+                      // invited-press response and is never gated, so prefer
+                      // it unconditionally for saved extra-press SKU rows.
+                      // When the embedded catalog has no entry for this format
+                      // we fall back to selectedCatalogByFormat as before.
                       const skuSavedPressId = existing.pressId ?? null;
                       const catalogFormat =
-                        skuSavedPressId &&
-                        skuSavedPressId === firstExtraSkuPressId &&
-                        selectedRealPressId !== firstExtraSkuPressId
+                        skuSavedPressId && skuSavedPressId === firstExtraSkuPressId
                           ? extraSkuPressCatalogByFormat.get(f) ?? selectedCatalogByFormat.get(f) ?? null
                           : selectedCatalogByFormat.get(f) ?? null;
                       return (
