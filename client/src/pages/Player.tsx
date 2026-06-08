@@ -379,15 +379,18 @@ export function Player() {
         exit={{ y: "100%", opacity: 0, transition: closeTransition }}
         style={{
           zIndex: 50,
-          // iOS Safari's toolbar shrinks/grows as you scroll, and a plain
-          // `fixed inset-0` element tracks the *layout* viewport — so its
-          // solid background leaves a sliver above the toolbar where the
-          // page behind peeks through. Anchor to the top and size to the
-          // *dynamic* visual viewport (`100dvh`) so the navy fill always
-          // reaches the real bottom edge, in any toolbar state.
-          top: 0,
-          bottom: "auto",
-          height: "100dvh",
+          // Plain `inset-0` (top:0 + bottom:0, from the className) so the navy
+          // surface fills BOTH safe-area insets on the native iOS WKWebView and
+          // sizes to the REAL viewport. The old `top:0; bottom:auto;
+          // height:100dvh` was a web-Safari toolbar workaround that anchored
+          // only the top — but in the native standalone app `100dvh` stops
+          // short of the true bottom edge, which (1) left a WHITE strip over
+          // the home-indicator inset and (2) pushed the transport + scrubber
+          // down into the home-indicator gesture zone where iOS swallows the
+          // touch, leaving the scrubber dead. The z-49 backstop below still
+          // covers any web-Safari toolbar sliver, so dropping the 100dvh
+          // sizing is safe on the web too — same pattern the lyrics + queue
+          // overlays already use.
           // Block iOS Safari's pull-to-refresh. Without this, swiping down
           // anywhere on the player reloads the page and kills the audio —
           // the opposite of what an Apple-Music user expects (they expect
@@ -407,7 +410,7 @@ export function Player() {
           />
           <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0.3) 0%, rgba(0,6,43,0.5) 100%)" }} />
         </div>
-        <div className="relative w-full max-w-[390px] h-[100dvh] flex flex-col">
+        <div className="relative w-full max-w-[390px] h-full flex flex-col">
 
           {/* Grabber + drag zone — Apple-style pull-down dismiss.
               The drag listener (`dismissOnSwipeDown`) is attached to BOTH
