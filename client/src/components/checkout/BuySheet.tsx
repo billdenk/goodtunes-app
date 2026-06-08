@@ -724,7 +724,7 @@ export function BuySheet({
                 {selectedSku && isVinylFormat(selectedSku.format as AlbumFormat) && (
                   <div className="mb-5" data-testid="youll-get-vinyl">
                     <SectionLabel>You'll get</SectionLabel>
-                    <div className="rounded-2xl bg-white/[0.05] p-4">
+                    <div className="flex flex-col items-center pt-1">
                       <VinylPreview
                         artworkUrl={options.artwork}
                         color={
@@ -794,7 +794,7 @@ export function BuySheet({
                     and suppresses the cart/checkout chrome below. */}
                 {allSoldOut && (
                   <div
-                    className="rounded-2xl bg-white/[0.05] px-4 py-5 text-center mb-5"
+                    className="px-4 py-6 text-center mb-5"
                     data-testid="block-all-sold-out"
                   >
                     <div className="text-base font-semibold text-white">
@@ -811,7 +811,7 @@ export function BuySheet({
                 {selectedSku && (
                   <div className="mb-5">
                     <SectionLabel>Quantity</SectionLabel>
-                    <div className="flex items-center justify-between rounded-2xl bg-white/[0.05] px-4 py-3">
+                    <div className="flex items-center justify-between px-1 py-1">
                       <span className="text-sm text-fan-secondary">How many copies?</span>
                       <div className="flex items-center gap-3">
                         <IconButton
@@ -1248,7 +1248,7 @@ export function BuySheet({
 
                 {/* Live breakdown — separate lines so the fan can verify
                     the math before tapping checkout. */}
-                <div className="rounded-2xl bg-white/[0.05] p-5 mb-4 text-sm" data-testid="block-breakdown">
+                <div className="px-1 mb-5 text-sm" data-testid="block-breakdown">
                   <div className="flex items-center justify-between">
                     <span className="text-fan-secondary">
                       {selectedSku?.label ?? "Format"}
@@ -1440,7 +1440,7 @@ export function BuySheet({
             {/* Per-copy toggles — same behaviour as the former inline section */}
             {signedCertSoldOut ? (
               <div
-                className="rounded-2xl bg-white/[0.05] px-4 py-5 text-center mb-5"
+                className="px-4 py-6 text-center mb-5"
                 data-testid="block-signed-cert-sold-out"
               >
                 <div className="text-base font-semibold text-fan-primary">All signed copies claimed</div>
