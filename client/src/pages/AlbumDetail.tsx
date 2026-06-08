@@ -50,6 +50,8 @@ import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { GearDetailBody, type GearArtist, type GearArtistNote } from "@/components/gear/GearDetailBody";
 import { ChevronLeft, Share, MoreHorizontal, Lock, ShieldCheck, Music2, ArrowRight } from "lucide-react";
 import { buyEnabled, nativeDownloadsEnabled, streamingHandoffEnabled } from "@/lib/platform";
+import { isPurchaseFunnelHost } from "@/hooks/useAuthKind";
+import { LockedOfferModal } from "@/components/ui/LockedOfferModal";
 import { downloadSong, removeDownload, listDownloadedSongs } from "@/lib/nativeDownloads";
 import { track } from "@/lib/analytics";
 import Hls from "hls.js";
@@ -383,6 +385,10 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
   const isOwned = fanView ? false : isOwnedRaw;
   const fullPlaybackAccess = fanView ? false : fullPlaybackAccessRaw;
   const previewFirst = buyEnabled && !isOwned && !fullPlaybackAccess;
+  // Task #1734 — purchase-funnel "locked unlock" presentation (get./store.
+  // host, web only, not owned). The MY player never sets this so it stays
+  // 100% unchanged.
+  const lockedPreview = previewFirst && isPurchaseFunnelHost();
   const queueHasUpcoming = queue.length - currentIndex - 1 > 0;
   const { user, updateProfile } = useAuth();
   const favSongs = useFavoriteSongs();
@@ -394,6 +400,10 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
     if (typeof window === "undefined") return false;
     return new URL(window.location.href).searchParams.get("buy") === "1";
   });
+  // Task #1734 — auto-opening offer modal on the purchase-funnel host. Opens
+  // once when the locked-preview surface is ready; "Get Details" reopens it.
+  const [showOfferModal, setShowOfferModal] = useState(false);
+  const offerAutoOpenedRef = useRef(false);
   const [singleCertNum, setSingleCertNum] = useState<number | null>(null);
   const [provenanceCertNum, setProvenanceCertNum] = useState<number | null>(null);
   const [showOwnership, setShowOwnership] = useState(false);
@@ -876,6 +886,15 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
     if (pending && showBuySheet) setShowBuySheet(false);
   }, [isOwned, apiAlbum?.goodTunesReleaseDate, showBuySheet]);
 
+  // Task #1734 — once the locked-preview surface is ready, front it with the
+  // offer modal so the page reads like the real player behind an unlock.
+  useEffect(() => {
+    if (lockedPreview && album && !offerAutoOpenedRef.current) {
+      offerAutoOpenedRef.current = true;
+      setShowOfferModal(true);
+    }
+  }, [lockedPreview, album]);
+
   if (!album && isAlbumLoading) {
     return <AlbumDetailMobileSkeleton />;
   }
@@ -1076,6 +1095,9 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
           }}
           onOpenBuy={buyEnabled ? () => setShowBuySheet(true) : undefined}
           salesBeginLabel={salesBeginLabel}
+          lockedPreview={lockedPreview}
+          onGetDetails={() => setShowOfferModal(true)}
+          onGetNotified={() => setShowOfferModal(true)}
           onToggleAlbumDownload={handleToggleAlbumDownload}
           onToggleSongDownload={(id) => toggleSongDownload(id)}
           onOpenSongMenu={(s, rect) => {
@@ -1120,6 +1142,26 @@ function AlbumDetailMobile({ albumId }: { albumId?: string }) {
                 }
               } catch {}
             }}
+          />
+        )}
+
+        {lockedPreview && (
+          <LockedOfferModal
+            open={showOfferModal}
+            onClose={() => setShowOfferModal(false)}
+            albumId={album.id}
+            title={album.title}
+            artist={album.artist}
+            artworkUrl={album.artwork}
+            priceCents={(album as any).priceCents ?? null}
+            salesPending={salesPending}
+            salesBeginLabel={salesBeginLabel}
+            onBuy={() => {
+              setShowOfferModal(false);
+              setShowBuySheet(true);
+            }}
+            prefilledEmail={user?.email ?? null}
+            source="get"
           />
         )}
 

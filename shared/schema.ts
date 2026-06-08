@@ -660,6 +660,30 @@ export const albumPhotos = pgTable("album_photos", {
   ...softDeleteCols,
 });
 
+// Task #1734 — "Get Notified" signups on a pre-launch release. When a fan
+// lands on the get.goodtunes.music locked-preview page for a release whose
+// sales haven't begun yet (sunrise pending), the primary CTA is "Get
+// Notified" instead of "Buy". Tapping it captures their email here so the
+// operator can reach the waitlist when sales open. One row per (album,
+// email); re-submitting is an idempotent no-op (upsert on the unique).
+export const releaseNotifySignups = pgTable("release_notify_signups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  // The signed-in fan who asked, when there is one (signups are allowed
+  // logged-out too, so this is nullable). No FK — mirrors the loose
+  // customer-id pattern used elsewhere (auth_tokens / user_albums).
+  customerUserId: varchar("customer_user_id"),
+  // Where the signup came from (e.g. "get", "store") for light attribution.
+  source: text("source"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  // Stamped once the operator has reached out about the launch, so the
+  // admin list can show who's already been messaged.
+  notifiedAt: timestamp("notified_at"),
+}, (t) => ({
+  albumEmailUniq: uniqueIndex("release_notify_album_email_uniq").on(t.albumId, t.email),
+}));
+
 export const songs = pgTable("songs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   albumId: varchar("album_id").notNull().references(() => albums.id),
@@ -3222,6 +3246,12 @@ export type AlbumVideo = typeof albumVideos.$inferSelect;
 export const insertAlbumPhotoSchema = createInsertSchema(albumPhotos).omit({ id: true });
 export type InsertAlbumPhoto = z.infer<typeof insertAlbumPhotoSchema>;
 export type AlbumPhoto = typeof albumPhotos.$inferSelect;
+
+export const insertReleaseNotifySignupSchema = createInsertSchema(releaseNotifySignups, {
+  email: z.string().trim().email().max(254),
+}).pick({ albumId: true, email: true, customerUserId: true, source: true });
+export type InsertReleaseNotifySignup = z.infer<typeof insertReleaseNotifySignupSchema>;
+export type ReleaseNotifySignup = typeof releaseNotifySignups.$inferSelect;
 
 // Album reads denormalize the joined label entity so the fan-facing UI can
 // render label name/logo without a second fetch. `label` is null when an

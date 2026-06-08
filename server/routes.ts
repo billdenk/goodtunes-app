@@ -54,7 +54,7 @@ import {
 } from "./dropboxZip";
 import { promisify } from "util";
 import { z } from "zod";
-import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema, insertTrackPublishingSplitSchema, insertTrackMechanicalSplitSchema, insertOrganizationSchema } from "@shared/schema";
+import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema, insertTrackPublishingSplitSchema, insertTrackMechanicalSplitSchema, insertOrganizationSchema, insertReleaseNotifySignupSchema } from "@shared/schema";
 import { ALBUM_FORMATS, type AlbumFormat } from "@shared/schema";
 import { SHORT_CATEGORIES } from "@shared/categories";
 import { normalizeAudioUrl } from "@shared/audioUrl";
@@ -12972,6 +12972,78 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!album) return;
     const rows = await storage.listAlbumPhotos(album.id);
     return res.json(rows);
+  });
+
+  // Task #1734 — "Get Notified" waitlist capture for a pre-launch release.
+  // Public (logged-out fans can join from the get.goodtunes.music landing
+  // page); when a customer IS signed in we link the row to them. Idempotent
+  // per (album, email) so re-tapping never errors. We don't gate on the
+  // sunrise window here — a stray signup on a live album is harmless and the
+  // client only shows the button pre-launch.
+  app.post("/api/albums/:id/notify", async (req, res) => {
+    const albumId = String(req.params.id);
+    const album = await storage.getAlbumById(albumId);
+    if (!album) return res.status(404).json({ message: "Album not found" });
+
+    // Prefill / link the signed-in fan when present (signup still works
+    // logged-out, so this is best-effort).
+    let customerUserId: string | null = null;
+    let signedInEmail: string | null = null;
+    const auth = await getAuthFromRequest(req);
+    if (auth?.kind === "customer") {
+      const c = await storage.getCustomer(auth.userId);
+      if (c && !c.mergedIntoId) {
+        customerUserId = c.id;
+        signedInEmail = c.email ?? null;
+      }
+    }
+
+    const rawEmail =
+      typeof req.body?.email === "string" && req.body.email.trim()
+        ? req.body.email
+        : signedInEmail ?? "";
+    const parsed = insertReleaseNotifySignupSchema.safeParse({
+      albumId,
+      email: rawEmail,
+      customerUserId,
+      source:
+        typeof req.body?.source === "string" ? req.body.source.slice(0, 32) : null,
+    });
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ message: "A valid email is required." });
+    }
+
+    try {
+      await storage.addReleaseNotifySignup(parsed.data);
+      const count = await storage.countReleaseNotifySignups(albumId);
+      return res.json({ ok: true, count });
+    } catch (err) {
+      console.error("[notify-signup] failed", err);
+      return res.status(500).json({ message: "Could not save your signup." });
+    }
+  });
+
+  // Operator view of the waitlist — this is the "something simple to reach
+  // them" surface. Returns the signups (newest first) plus a count so the
+  // admin can copy emails / export and message the waitlist at launch.
+  app.get("/api/admin/albums/:id/notify-signups", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.id);
+    const album = await storage.getAlbumById(albumId);
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    const rows = await storage.listReleaseNotifySignups(albumId);
+    return res.json({
+      count: rows.length,
+      signups: rows.map((r) => ({
+        id: r.id,
+        email: r.email,
+        customerUserId: r.customerUserId ?? null,
+        source: r.source ?? null,
+        createdAt: r.createdAt,
+        notifiedAt: r.notifiedAt ?? null,
+      })),
+    });
   });
 
   app.post("/api/admin/albums/:id/videos", requireAdminBearer, async (req, res) => {

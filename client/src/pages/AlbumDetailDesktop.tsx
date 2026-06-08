@@ -13,6 +13,8 @@ import { BuySheet } from "@/components/checkout/BuySheet";
 import { buyEnabled } from "@/lib/platform";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { isPurchaseFunnelHost } from "@/hooks/useAuthKind";
+import { LockedOfferModal } from "@/components/ui/LockedOfferModal";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import {
   AlbumCreditsPage,
@@ -181,6 +183,10 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
     if (!buyEnabled) return false;
     return new URL(window.location.href).searchParams.get("buy") === "1";
   });
+  // Task #1734 — auto-opening "offer" modal on the purchase-funnel host. Opens
+  // once when the locked-preview surface is ready; "Get Details" reopens it.
+  const [showOfferModal, setShowOfferModal] = useState(false);
+  const offerAutoOpenedRef = useRef(false);
   // When the fan ticked the signed-cert add-on chip on the hero before
   // clicking Buy, we hand the toggle into BuySheet so the checkout sheet
   // opens with it pre-checked. Cleared whenever the sheet closes.
@@ -312,6 +318,21 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
   const salesBeginLabel = salesPending
     ? formatSalesBeginDate(album?.goodTunesReleaseDate) ?? "soon"
     : null;
+
+  // Task #1734 — purchase-funnel "locked unlock" presentation. Only on the
+  // get./store. host (web), for a release the viewer doesn't own. The MY
+  // player (my.goodtunes.music) never sets this, so it stays 100% unchanged.
+  const lockedPreview =
+    buyEnabled && !effectiveOwned && isPurchaseFunnelHost();
+
+  // Auto-open the offer modal once the locked-preview surface is ready, so the
+  // base page reads like the real player with the offer fronting it.
+  useEffect(() => {
+    if (lockedPreview && album && !offerAutoOpenedRef.current) {
+      offerAutoOpenedRef.current = true;
+      setShowOfferModal(true);
+    }
+  }, [lockedPreview, album]);
 
   // Task #1185 — resolve the fan's owning order(s) for this album so the ⋯
   // menu can offer GoodDeed actions (view cert/provenance/ownership +
@@ -657,6 +678,9 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             onShuffle={handleShuffle}
             onPlayPreview={handlePlayPreview}
             previewActive={previewActive}
+            lockedPreview={lockedPreview}
+            onGetNotified={() => setShowOfferModal(true)}
+            onGetDetails={() => setShowOfferModal(true)}
             onPlayTrack={handlePlayTrack}
             onAddTrack={handleAddTrack}
             onPlayNextTrack={handlePlayNextTrack}
@@ -976,6 +1000,26 @@ export function AlbumDetailDesktop({ albumId }: { albumId?: string } = {}) {
             setShowBuySheet(false);
             setBuyAddons({ signedCert: false });
           }}
+        />
+      )}
+
+      {lockedPreview && album && (
+        <LockedOfferModal
+          open={showOfferModal}
+          onClose={() => setShowOfferModal(false)}
+          albumId={album.id}
+          title={album.title}
+          artist={album.artist}
+          artworkUrl={album.artwork}
+          priceCents={album.priceCents ?? null}
+          salesPending={salesPending}
+          salesBeginLabel={salesBeginLabel}
+          onBuy={() => {
+            setShowOfferModal(false);
+            handleBuyBundle();
+          }}
+          prefilledEmail={user?.email ?? null}
+          source="get"
         />
       )}
 

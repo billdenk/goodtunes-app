@@ -124,6 +124,9 @@ import {
   creditRoles,
   albumVideos,
   albumPhotos,
+  releaseNotifySignups,
+  type ReleaseNotifySignup,
+  type InsertReleaseNotifySignup,
   orders,
   uploadValidations,
   pressingOrderRequests,
@@ -209,6 +212,13 @@ export interface IStorage {
   createAlbumPhoto(data: InsertAlbumPhoto): Promise<AlbumPhoto>;
   updateAlbumPhoto(id: string, data: Partial<AlbumPhoto>): Promise<AlbumPhoto | undefined>;
   deleteAlbumPhoto(id: string): Promise<void>;
+
+  // Task #1734 — "Get Notified" waitlist for pre-launch releases. Capture is
+  // idempotent per (album, email); the admin list is how operators reach the
+  // waitlist when sales open.
+  addReleaseNotifySignup(data: InsertReleaseNotifySignup): Promise<ReleaseNotifySignup>;
+  listReleaseNotifySignups(albumId: string): Promise<ReleaseNotifySignup[]>;
+  countReleaseNotifySignups(albumId: string): Promise<number>;
 
   // Admin bootstrap
   countAdmins(): Promise<number>;
@@ -1439,6 +1449,36 @@ export class DbStorage implements IStorage {
   }
   async deleteAlbumPhoto(id: string, userId?: string | null): Promise<void> {
     await softDeleteEntity("album_photo", id, userId ?? null);
+  }
+  async addReleaseNotifySignup(data: InsertReleaseNotifySignup): Promise<ReleaseNotifySignup> {
+    // Idempotent: a fan re-tapping "Get Notified" must not error or
+    // duplicate. On conflict we touch the row (keeps the latest customer
+    // link / source) and return it.
+    const email = data.email.trim().toLowerCase();
+    const [row] = await db
+      .insert(releaseNotifySignups)
+      .values({ ...data, email } as any)
+      .onConflictDoUpdate({
+        target: [releaseNotifySignups.albumId, releaseNotifySignups.email],
+        set: {
+          customerUserId: data.customerUserId ?? null,
+          source: data.source ?? null,
+        },
+      })
+      .returning();
+    return row;
+  }
+  async listReleaseNotifySignups(albumId: string): Promise<ReleaseNotifySignup[]> {
+    return db.select().from(releaseNotifySignups)
+      .where(eq(releaseNotifySignups.albumId, albumId))
+      .orderBy(desc(releaseNotifySignups.createdAt));
+  }
+  async countReleaseNotifySignups(albumId: string): Promise<number> {
+    const [r] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(releaseNotifySignups)
+      .where(eq(releaseNotifySignups.albumId, albumId));
+    return r?.n ?? 0;
   }
   async updateSong(id: string, data: Partial<Song>): Promise<Song | undefined> {
     const { id: _i, ...rest } = data as any;

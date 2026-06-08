@@ -131,6 +131,18 @@ export interface AlbumDetailMobileSurfaceProps {
    *  replaced by a disabled "Sales Begin {label}" pill (e.g. "Sales Begin
    *  6/8"); previews stay playable. Null/undefined = live buy behavior. */
   salesBeginLabel?: string | null;
+  /** Task #1734 — purchase-funnel "locked unlock" presentation. When true,
+   *  the surface hides the ⋯ album menu (share-only chrome) and the action
+   *  row leads with a secondary Play + primary Buy/Get Notified + a "Get
+   *  Details" text link that re-opens the offer modal. Only set on the
+   *  get./store. host; the MY player never passes it. */
+  lockedPreview?: boolean;
+  /** Re-open the offer modal (Get Details link, and the pre-launch primary
+   *  CTA when sales haven't begun). */
+  onGetDetails?: () => void;
+  /** Pre-launch primary CTA — capture the fan's email so operators can
+   *  message them when the release goes live. */
+  onGetNotified?: () => void;
   onToggleAlbumDownload?: () => void;
   onToggleSongDownload?: (songId: string) => void;
   onOpenSongMenu?: (song: AlbumDetailMobileSurfaceSong, rect: DOMRect) => void;
@@ -188,6 +200,9 @@ export function AlbumDetailMobileSurface({
   onPlaySong,
   onOpenBuy,
   salesBeginLabel,
+  lockedPreview = false,
+  onGetDetails,
+  onGetNotified,
   onToggleAlbumDownload,
   onToggleSongDownload,
   onOpenSongMenu,
@@ -312,25 +327,32 @@ export function AlbumDetailMobileSurface({
         >
           <Share className="w-[19px] h-[19px]" strokeWidth={2} />
         </button>
-        <div className="w-px h-4 bg-white/25" aria-hidden />
-        <div className="relative">
-          <button
-            ref={menuBtnRef}
-            type="button"
-            onClick={() => {
-              if (!onOpenAlbumMenu) return;
-              onOpenAlbumMenu();
-              setShowMenu((s) => !s);
-            }}
-            aria-label="Album options"
-            aria-haspopup="menu"
-            aria-expanded={showMenu}
-            className="w-11 h-11 flex items-center justify-center text-white active:scale-[0.94] transition-transform"
-            data-testid="button-album-menu"
-          >
-            <MoreHorizontal className="w-[19px] h-[19px]" strokeWidth={2} />
-          </button>
-        </div>
+        {/* Task #1734 — the locked purchase-funnel preview is share-only: the
+            ⋯ album-options menu (owner/GoodDeed actions) is hidden so the page
+            reads like a public "unlock" landing. */}
+        {!lockedPreview && (
+          <>
+            <div className="w-px h-4 bg-white/25" aria-hidden />
+            <div className="relative">
+              <button
+                ref={menuBtnRef}
+                type="button"
+                onClick={() => {
+                  if (!onOpenAlbumMenu) return;
+                  onOpenAlbumMenu();
+                  setShowMenu((s) => !s);
+                }}
+                aria-label="Album options"
+                aria-haspopup="menu"
+                aria-expanded={showMenu}
+                className="w-11 h-11 flex items-center justify-center text-white active:scale-[0.94] transition-transform"
+                data-testid="button-album-menu"
+              >
+                <MoreHorizontal className="w-[19px] h-[19px]" strokeWidth={2} />
+              </button>
+            </div>
+          </>
+        )}
         {createPortal(
         <AnimatePresence>
         {showMenu && onOpenAlbumMenu && menuPos && (
@@ -607,8 +629,9 @@ export function AlbumDetailMobileSurface({
         {/* Play / Shuffle / Add bar */}
         <div className="bg-[color:var(--brand-bg)] flex items-center justify-center gap-3 px-5 mt-1 mb-3">
           {/* Shuffle is meaningless when GoodTunes hosts no master, so a
-              stream-only album hides it. */}
-          {!isStreamOnlyAlbum && (
+              stream-only album hides it. Task #1734 — the locked purchase-
+              funnel preview also hides it (share-only "unlock" chrome). */}
+          {!isStreamOnlyAlbum && !lockedPreview && (
             <button
               type="button"
               onClick={onShuffle}
@@ -693,6 +716,33 @@ export function AlbumDetailMobileSurface({
             // Buy CTA is replaced by a disabled "Sales Begin {date}" pill.
             // Previews still play (the Play control above is untouched).
             (salesBeginLabel ? (
+              // Task #1734 — pre-launch on the purchase-funnel host: the
+              // disabled "Sales Begin" pill becomes an active "Get Notified"
+              // CTA that re-opens the offer modal to capture the fan's email.
+              lockedPreview && onGetNotified ? (
+                <button
+                  type="button"
+                  onClick={onGetNotified}
+                  className="flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-[15px] text-white active:scale-[0.98] transition-transform flex-shrink-0"
+                  style={{ background: "linear-gradient(135deg, var(--brand-purple), var(--brand-blue))" }}
+                  data-testid="button-get-notified"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                    <path d="M13.73 21a2 2 0 01-3.46 0" />
+                  </svg>
+                  Get Notified
+                </button>
+              ) : (
               <button
                 type="button"
                 disabled
@@ -716,6 +766,7 @@ export function AlbumDetailMobileSurface({
                 </svg>
                 Sales Begin {salesBeginLabel}
               </button>
+              )
             ) : (
               <button
                 type="button"
@@ -741,11 +792,23 @@ export function AlbumDetailMobileSurface({
                 Buy {formatUsdCents(album.priceCents)}
               </button>
             ))}
+          {/* Task #1734 — "Get Details" re-opens the offer modal so the fan can
+              read the full package after dismissing it. Locked preview only. */}
+          {lockedPreview && onGetDetails && (
+            <button
+              type="button"
+              onClick={onGetDetails}
+              className="flex items-center justify-center h-12 px-3 font-semibold text-sm text-fan-secondary active:scale-[0.98] transition-transform flex-shrink-0"
+              data-testid="button-get-details"
+            >
+              Get Details
+            </button>
+          )}
           {/* Task #1580 — the album-level credits "i" button is hidden; credits
               are now per-track only (opened from each track's row). The
               `hasAlbumCredits`/`onOpenAlbumCredits` wiring stays in place so it
               can be flipped back on if album-level credits return. */}
-          {nativeDownloadsEnabled && !isStreamOnlyAlbum && (
+          {nativeDownloadsEnabled && !isStreamOnlyAlbum && !lockedPreview && (
             <button
               type="button"
               onClick={onToggleAlbumDownload}

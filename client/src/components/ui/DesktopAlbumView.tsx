@@ -4,7 +4,7 @@ import { formatUsdCents } from "@shared/money";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Link } from "wouter";
 import { popBounce } from "@/lib/motion";
-import { ChevronRight, Play, Pause, Shuffle, Lock, Share, MoreHorizontal, X, Maximize2 } from "lucide-react";
+import { ChevronRight, Play, Pause, Shuffle, Lock, Share, MoreHorizontal, X, Maximize2, Bell, ShoppingCart } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { BonusPlayBadge } from "@/components/ui/BonusPlayBadge";
 import { IconButton } from "@/components/ui/IconButton";
@@ -108,6 +108,17 @@ export type DesktopAlbumViewProps = {
   /** When true, the Preview pill renders in its "Pause" state because a
    *  preview session is currently auditing this album. */
   previewActive?: boolean;
+
+  /** Task #1734 — purchase-funnel "locked unlock" presentation. When true
+   *  (get./store. host, web, not owned) the not-owned transport row becomes
+   *  Play · Buy/Get-Notified · Get Details, matching the auto-opening offer
+   *  modal. Off on the MY player, where the row stays the normal preview/buy
+   *  surface. */
+  lockedPreview?: boolean;
+  /** Pre-launch (sunrise pending) CTA: opens the offer modal's notify step. */
+  onGetNotified?: () => void;
+  /** Reopens the centered offer modal ("Get Details"). */
+  onGetDetails?: () => void;
 
   // Per-row CTAs. `state` is computed inside; the row handlers receive the
   // raw song so callers can dispatch into PlayerContext / toast / etc.
@@ -297,6 +308,9 @@ export function DesktopAlbumView({
   signedCertSoldOut = false,
   onPlayPreview,
   previewActive = false,
+  lockedPreview = false,
+  onGetNotified,
+  onGetDetails,
   onPlayTrack,
   onAddTrack,
   onPlayNextTrack,
@@ -746,6 +760,64 @@ export function DesktopAlbumView({
                   {/* Task #1580 — album-level credits "i" button hidden; credits
                       are per-track only. `hasAlbumCredits`/`onOpenAlbumCredits`
                       wiring stays in place so it can be re-enabled later. */}
+                </>
+              ) : lockedPreview ? (
+                /* Task #1734 — purchase-funnel "locked unlock" transport row:
+                   Play (white) · Buy {price} / Get Notified · Get Details.
+                   Mirrors the auto-opening offer modal so the base page reads
+                   like the real player with the offer fronting it. */
+                <>
+                  {canPlay && (
+                    <button
+                      type="button"
+                      onClick={onPlayPreview}
+                      data-testid="button-play-album"
+                      className="h-11 pl-5 pr-6 rounded-full inline-flex items-center gap-2 font-semibold text-sm transition-transform active:scale-[0.97]"
+                      style={{ background: "#fff", color: "var(--brand-bg)" }}
+                    >
+                      <Play className="w-[18px] h-[18px] fill-current" strokeWidth={0} />
+                      Play
+                    </button>
+                  )}
+                  {salesBeginLabel ? (
+                    <button
+                      type="button"
+                      onClick={onGetNotified}
+                      data-testid="button-get-notified"
+                      className="h-11 px-5 rounded-full inline-flex items-center gap-2 font-semibold text-sm text-white transition-transform active:scale-[0.97]"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, var(--brand-purple), var(--brand-blue))",
+                      }}
+                    >
+                      <Bell className="w-4 h-4" strokeWidth={2.2} />
+                      Get Notified
+                    </button>
+                  ) : onBuyBundle && album.priceCents != null ? (
+                    <button
+                      type="button"
+                      onClick={() => onBuyBundle?.()}
+                      data-testid="button-buy-bundle"
+                      className="h-11 px-5 rounded-full inline-flex items-center gap-2 font-semibold text-sm text-white transition-transform active:scale-[0.97]"
+                      style={{
+                        background: "#070B22",
+                        border: "1px solid rgba(255,255,255,0.12)",
+                      }}
+                    >
+                      <ShoppingCart className="w-4 h-4" strokeWidth={2.2} />
+                      Buy {formatPrice(album.priceCents)}
+                    </button>
+                  ) : null}
+                  {onGetDetails && (
+                    <button
+                      type="button"
+                      onClick={onGetDetails}
+                      data-testid="button-get-details"
+                      className="h-11 px-2 inline-flex items-center font-medium text-sm text-fan-secondary hover:text-fan-primary transition-colors"
+                    >
+                      Get Details
+                    </button>
+                  )}
                 </>
               ) : (
                 /* Apple-tone preview/buy transport row, mirroring the owned

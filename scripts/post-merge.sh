@@ -120,6 +120,40 @@ SQL
 migrate_memberships dev  "${DATABASE_URL:-}"
 migrate_memberships prod "${PROD_DATABASE_URL:-}"
 
+# Task #1734 — "Get Notified" waitlist for pre-launch releases. shared/schema.ts
+# declares release_notify_signups; drizzle-kit push is unreliable on additive
+# DDL, so hand-apply the canonical CREATE TABLE on BOTH dev and prod to keep
+# the schema-drift guard green and the publish dev→prod diff empty. Idempotent.
+migrate_release_notify_signups() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping release_notify_signups migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS release_notify_signups (
+  id               varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id         varchar NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  email            text    NOT NULL,
+  customer_user_id varchar,
+  source           text,
+  created_at       timestamp NOT NULL DEFAULT now(),
+  notified_at      timestamp
+);
+CREATE UNIQUE INDEX IF NOT EXISTS release_notify_album_email_uniq
+  ON release_notify_signups (album_id, email);
+COMMIT;
+SQL
+  then
+    echo "post-merge: release_notify_signups migration ok on $label"
+  else
+    echo "post-merge: WARNING — release_notify_signups migration failed on $label (continuing)"
+  fi
+}
+migrate_release_notify_signups dev  "${DATABASE_URL:-}"
+migrate_release_notify_signups prod "${PROD_DATABASE_URL:-}"
+
 # Task #1036 — TRUE ONE-TIME backfill: give every existing account exactly
 # ONE membership reproducing its current users.role / role_scope_id +
 # folded partner_permission_overrides. Marker-guarded in
