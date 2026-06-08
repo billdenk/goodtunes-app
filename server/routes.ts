@@ -21262,6 +21262,69 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).end();
   });
 
+  // Task #1786 — partners can see custom add-ons but only super-admins can
+  // edit them. Instead of letting a partner hit a write and bounce off an
+  // "Insufficient role" error, the read-only card offers "Request changes"
+  // which lands here: it emails every super-admin best-effort. There's no
+  // queue yet — the email IS the request. requireAdmin only (NOT
+  // super_admin); a super-admin would just edit directly. Best-effort send
+  // never fails the request.
+  app.post("/api/admin/custom-addons/:id/request-changes", requireAdmin, async (req, res) => {
+    const id = String(req.params.id);
+    const addonRow = await db.execute<{ name: string }>(sql`
+      SELECT name FROM custom_addons WHERE id = ${id} LIMIT 1
+    `);
+    const addon = ((addonRow as any).rows ?? [])[0];
+    if (!addon) return res.status(404).json({ message: "Add-on not found" });
+
+    // Track whether at least one super-admin was actually emailed. We must
+    // be honest with the partner: if mail is unconfigured/down, telling
+    // them "sent" would be a lie, so we surface a graceful fallback instead.
+    let delivered = false;
+    try {
+      const { listSuperAdminEmails } = await import("./auth/roles");
+      const superEmails = await listSuperAdminEmails();
+      const requesterRow = await storage.getUser(req.session.userId!);
+      const requester = {
+        displayName:
+          requesterRow?.displayName || requesterRow?.username || requesterRow?.email || "A partner",
+        email: requesterRow?.email || "",
+      };
+      const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+      const host = req.headers["x-forwarded-host"] || req.headers.host || "admin.goodtunes.music";
+      const manageUrl = `${proto}://${host}/admin/custom-addons`;
+      const { sendCustomAddonChangeRequestEmail } = await import("./mail");
+      for (const email of superEmails) {
+        try {
+          const result = await sendCustomAddonChangeRequestEmail(
+            email,
+            requester,
+            { id, name: addon.name },
+            manageUrl,
+          );
+          if (result?.ok) delivered = true;
+          else console.warn("[task-1786] addon change-request not sent", email, (result as any)?.reason);
+        } catch (e) {
+          console.warn("[task-1786] addon change-request notify failed", email, e);
+        }
+      }
+    } catch (e) {
+      console.warn("[task-1786] addon change-request notify lookup failed", e);
+    }
+
+    if (delivered) {
+      return res.json({
+        sent: true,
+        message: "Your request was sent to GoodTunes. A super-admin will follow up.",
+      });
+    }
+    return res.json({
+      sent: false,
+      message:
+        "We couldn't send your request automatically right now. Please email GoodTunes directly and we'll get it sorted.",
+    });
+  });
+
   // ---------------------------------------------------------------------
   // Task #295 — entity-detail Albums + Analytics tabs (NPO / Reseller /
   // Press). Each entity has its own connection-to-album semantics; the

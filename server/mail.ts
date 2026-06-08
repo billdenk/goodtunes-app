@@ -431,6 +431,43 @@ export async function sendAlbumDeleteRequestEmail(
   return sendViaResend("album-delete-request", toEmail, subject, html, text);
 }
 
+// Notify super-admins that a partner (the only roles that can't edit
+// custom add-ons) is asking for a change to a custom add-on they can
+// see but not modify. There's no in-app queue for this yet — the email
+// is the request. Best-effort: the caller swallows send failures so the
+// partner's request never errors out.
+export async function sendCustomAddonChangeRequestEmail(
+  toEmail: string,
+  requester: { displayName: string; email: string },
+  addon: { id: string; name: string },
+  manageUrl: string,
+): Promise<SendResult> {
+  const subject = `${requester.displayName} requested a change to "${addon.name}"`;
+  const text = [
+    `${requester.displayName} <${requester.email}> asked for a change to the custom add-on "${addon.name}".`,
+    ``,
+    `Open the add-on to make the change:`,
+    manageUrl,
+    ``,
+    `Custom add-ons can only be edited by a super-admin, so this request came to you.`,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Request</div>
+      <h1 style="font-size: 22px; margin: 12px 0 12px; font-weight: 700;">Change requested for an add-on</h1>
+      <p style="font-size: 15px; line-height: 1.5; color: #333;">
+        <strong>${escapeHtml(requester.displayName)}</strong> &lt;${escapeHtml(requester.email)}&gt; asked for a change to the custom add-on <strong>${escapeHtml(addon.name)}</strong>.
+      </p>
+      <p style="margin: 24px 0;">
+        <a href="${manageUrl}" style="display: inline-block; background: #319ED8; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600; font-size: 14px;">Open the add-on</a>
+      </p>
+      <p style="font-size: 13px; color: #888; line-height: 1.5;">Custom add-ons can only be edited by a super-admin, so this request came to you.</p>
+    </div>
+  `;
+  return sendViaResend("custom-addon-change-request", toEmail, subject, html, text);
+}
+
 // Task #269 — Admin "Forgot password?" reset link. Always called from
 // a neutral 200 endpoint, so the caller can't use mail-send failure to
 // probe account existence. Mirror the OTP template visually so the

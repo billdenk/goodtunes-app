@@ -104,6 +104,16 @@ export function AdminCustomAddons() {
   const { user, isLoading: authLoading } = useAuth();
   const [search, setSearch] = useState("");
 
+  // Task #1786 — only super-admins can edit custom add-ons (the server
+  // enforces it regardless). Everyone else (partners like the Nightbirde
+  // Foundation) gets a read-only card instead of an editable form they
+  // can't save, so they never bounce off a bare "Insufficient role" error.
+  const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
+    queryKey: ["/api/me/role"],
+    enabled: !!user?.isAdmin,
+  });
+  const canEdit = roleInfo?.role === "super_admin";
+
   const {
     data: rows = [],
     isLoading,
@@ -167,11 +177,13 @@ export function AdminCustomAddons() {
                   data-testid="input-search-custom-addons"
                 />
               </div>
-              <AddEntityButton
-                label="Add"
-                onClick={() => setAddOpen(true)}
-                testId="button-open-add-custom-addon"
-              />
+              {canEdit && (
+                <AddEntityButton
+                  label="Add"
+                  onClick={() => setAddOpen(true)}
+                  testId="button-open-add-custom-addon"
+                />
+              )}
             </>
           }
         />
@@ -256,18 +268,222 @@ export function AdminCustomAddons() {
         )}
       </div>
 
-      <AddonDialog
-        mode="create"
-        open={addOpen}
-        onOpenChange={setAddOpen}
-      />
-      <AddonDialog
-        mode="edit"
-        addon={editing}
-        open={!!editing}
-        onOpenChange={(o) => !o && setEditing(null)}
-      />
+      {canEdit ? (
+        <>
+          <AddonDialog
+            mode="create"
+            open={addOpen}
+            onOpenChange={setAddOpen}
+          />
+          <AddonDialog
+            mode="edit"
+            addon={editing}
+            open={!!editing}
+            onOpenChange={(o) => !o && setEditing(null)}
+          />
+        </>
+      ) : (
+        <ReadOnlyAddonDialog
+          addon={editing}
+          open={!!editing}
+          onOpenChange={(o) => !o && setEditing(null)}
+        />
+      )}
     </AdminFrame>
+  );
+}
+
+/* ─── Read-only view (partners who can't edit) ─────────────────────── */
+
+// Task #1786 — partners (non-super-admins) can see custom add-ons but
+// can't edit them. Rather than show an editable form that bounces off an
+// "Insufficient role" error on save, render a calm read-only card of
+// every field plus a single "Request changes" action that emails the
+// operator. Kind copy, no inputs, no destructive affordances.
+function ReadOnlyAddonDialog({
+  addon,
+  open,
+  onOpenChange,
+}: {
+  addon: CustomAddon | null;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
+  const { toast } = useToast();
+
+  const requestChanges = useMutation({
+    mutationFn: async () => {
+      if (!addon) throw new Error("No add-on selected.");
+      const res = await apiRequest(
+        "POST",
+        `/api/admin/custom-addons/${addon.id}/request-changes`,
+      );
+      return (await res.json()) as { sent: boolean; message: string };
+    },
+    onSuccess: (data) => {
+      // The server tells us whether an operator was actually emailed. Only
+      // claim success when it truly went out; otherwise show the honest
+      // fallback and keep the dialog open so they can act on it.
+      if (data?.sent) {
+        toast({
+          title: "Request sent",
+          description: data.message || "A super-admin will follow up.",
+        });
+        onOpenChange(false);
+      } else {
+        toast({
+          title: "Couldn't send your request",
+          description:
+            data?.message ||
+            "We couldn't reach GoodTunes automatically — please email them directly.",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't send your request",
+        description: humanizeApiError(err),
+        variant: "destructive",
+      }),
+  });
+
+  const scopeLabel = !addon
+    ? ""
+    : addon.appliesToAllArtists
+      ? "All artists — every eligible album"
+      : addon.artists.length > 0
+        ? addon.artists.map((p) => p.name).join(", ")
+        : "No artists attached yet";
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !requestChanges.isPending && onOpenChange(o)}>
+      <DialogContent
+        className="max-w-lg bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4 max-h-[90vh] overflow-y-auto"
+        data-testid="dialog-view-custom-addon"
+      >
+        <DialogHeader className="text-left space-y-1">
+          <DialogTitle className="text-base font-semibold text-slate-900">
+            {addon?.name ?? "Add-on"}
+          </DialogTitle>
+          <DialogDescription className="text-sm text-slate-500 leading-relaxed">
+            This add-on is managed by GoodTunes. You can review every detail here;
+            to change anything, send a note and a super-admin will take care of it.
+          </DialogDescription>
+        </DialogHeader>
+
+        {addon && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 bg-slate-50 ring-1 ring-slate-200">
+                {addon.imageUrl ? (
+                  <img
+                    src={addon.imageUrl}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    data-testid="img-view-custom-addon"
+                  />
+                ) : (
+                  <Gift className="w-7 h-7 text-slate-300" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="text-slate-900 text-base font-semibold truncate"
+                    data-testid="text-view-custom-addon-name"
+                  >
+                    {addon.name}
+                  </span>
+                  <span
+                    className={`text-xs uppercase tracking-wide font-bold rounded px-1.5 py-0.5 ${
+                      addon.active
+                        ? "text-emerald-700 bg-emerald-50"
+                        : "text-slate-400 bg-slate-100"
+                    }`}
+                    data-testid="status-view-custom-addon-active"
+                  >
+                    {addon.active ? "Active" : "Inactive"}
+                  </span>
+                </div>
+                <div className="text-slate-500 text-sm" data-testid="text-view-custom-addon-price">
+                  {addon.orgName} · {formatPrice(addon.priceCents)}
+                </div>
+              </div>
+            </div>
+
+            <dl className="rounded-lg border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+              <ReadOnlyRow label="Non-profit" value={addon.orgName} testId="text-view-custom-addon-npo" />
+              <ReadOnlyRow label="Price" value={formatPrice(addon.priceCents)} testId="text-view-custom-addon-price-row" />
+              <ReadOnlyRow label="Who sees it" value={scopeLabel} testId="text-view-custom-addon-scope" />
+              <ReadOnlyRow
+                label="Fulfiller"
+                value={addon.fulfiller?.trim() || "Not set"}
+                testId="text-view-custom-addon-fulfiller"
+              />
+              <ReadOnlyRow
+                label="Display order"
+                value={String(addon.position ?? 0)}
+                testId="text-view-custom-addon-position"
+              />
+              <ReadOnlyRow
+                label="Description"
+                value={addon.description?.trim() || "No description"}
+                testId="text-view-custom-addon-description"
+              />
+            </dl>
+
+            <p className="text-xs text-slate-500 leading-relaxed pt-1">
+              Need a change? Custom add-ons are managed by GoodTunes — tap{" "}
+              <span className="font-semibold text-slate-600">Request changes</span> and a
+              super-admin will take care of it for you.
+            </p>
+          </div>
+        )}
+
+        <DialogFooter className="gap-2 sm:gap-2 pt-1">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={requestChanges.isPending}
+            data-testid="button-view-custom-addon-close"
+          >
+            Close
+          </Button>
+          <Button
+            type="button"
+            onClick={() => requestChanges.mutate()}
+            disabled={requestChanges.isPending || !addon}
+            size="sm"
+            className="text-xs font-semibold"
+            data-testid="button-request-custom-addon-changes"
+          >
+            {requestChanges.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            Request changes
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ReadOnlyRow({
+  label,
+  value,
+  testId,
+}: {
+  label: string;
+  value: string;
+  testId: string;
+}) {
+  return (
+    <div className="flex items-baseline gap-3 px-3 py-2.5">
+      <dt className="text-xs font-semibold text-slate-500 w-28 flex-shrink-0">{label}</dt>
+      <dd className="text-sm text-slate-800 flex-1 min-w-0 break-words" data-testid={testId}>
+        {value}
+      </dd>
+    </div>
   );
 }
 
