@@ -132,6 +132,39 @@ both consoles verbatim at submission time.
 
 ---
 
+## Google Play player-only submission — in-repo readiness re-verified (June 2026)
+
+Pre-submission pass for the **Android player-only** Play upload. Confirmed every
+in-repo prerequisite is in place; everything that remains is operator/Codemagic/
+console only (no code gap found, nothing changed):
+
+- **API 35.** `android/variables.gradle` pins `compileSdkVersion` /
+  `targetSdkVersion = 35`; `android/build.gradle` carries AGP `8.7.2`; the Gradle
+  wrapper is `8.9`. (Clean release `bundleRelease` still only runnable on the
+  Codemagic Linux runner — see C1.)
+- **Player-only Buy gating.** `client/src/lib/platform.ts` → `buyEnabled = !isNative`,
+  so Android native hides every Buy CTA exactly like iOS. `chatEnabled = !isNative`
+  hides Chat too.
+- **App Links.** `AndroidManifest.xml` has the `autoVerify="true"` intent-filter for
+  `https://my.goodtunes.music/*` (apex intentionally not claimed). `assetlinks.json`
+  served live with the **real** SHA-256 from `ANDROID_RELEASE_SHA256` (verified: no
+  sentinel, `package_name: fm.goodtunes.player`). AASA likewise serves the real
+  `APPLE_TEAM_ID`.
+- **Account deletion.** `DELETE /api/customer/me` returns `401` unauthenticated
+  (route exists, gated); the public deletion page resolves `200` at
+  `/delete-account` for the Data safety form's deletion-URL field.
+- **Codemagic `android-internal` workflow** is wired end-to-end: `npm ci` → web
+  build → `cap sync android` → auto-increment `versionCode` from the latest Play
+  build → icon guard → `./gradlew bundleRelease` → publish to the Play `internal`
+  track. Manual-trigger only.
+
+Operator steps remaining (cannot be done in the container): run `android-internal`
+in Codemagic to produce + upload the signed `.aab`; complete the Play listing,
+Data safety form (+ deletion URL), content rating, and privacy-policy URL; confirm
+the seeded `appreview@goodtunes.music` demo account in the reviewer-facing env and
+paste the player-only reviewer notes; after install, run Google's Statement List
+Tester against `my.goodtunes.music` and the on-device smoke test.
+
 ## Validation state at audit time
 - `npm run design:lint` — **clean** (after migrating the new Delete-Account UI hex
   to `var(--brand-heart)`).
@@ -140,3 +173,6 @@ both consoles verbatim at submission time.
 - `test` — the one failing file (`client/src/pages/mobilePlayerScrubber.test.ts`) is
   a **pre-existing, unrelated** failure (a stale `isWebIOS` import in `Player.tsx`),
   present before this task and out of scope.
+- **Re-verified June 2026 (this pass):** `test` — **416/416 pass** (the scrubber
+  failure noted above has since been fixed); `schema-drift-smoke` — clean (dev +
+  prod, 112 tables); `db-query-smoke` — 29/29; `design:lint` — clean.
