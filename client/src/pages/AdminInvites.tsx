@@ -13,6 +13,13 @@ import {
   ScopePicker,
 } from "@/components/admin/RoleScopePicker";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface PendingInvite {
   id: string;
@@ -425,17 +432,19 @@ export function AdminInvites() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Role</label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
-                  data-testid="select-invite-role"
+                <Select
+                  value={role || undefined}
+                  onValueChange={(v) => setRole(v)}
                 >
-                  <option value="">— Choose a role —</option>
-                  {visibleRoleOptions.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
+                  <SelectTrigger data-testid="select-invite-role">
+                    <SelectValue placeholder="— Choose a role —" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {visibleRoleOptions.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               {/* Optional referrer attribution. */}
               <div>
@@ -444,22 +453,21 @@ export function AdminInvites() {
                     <Heart className="w-3.5 h-3.5 text-[color:var(--brand-pink)]" /> Referrer (optional)
                   </span>
                 </label>
-                <select
-                  value={referrerKind}
-                  onChange={(e) => setReferrerKind(e.target.value as any)}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
-                  data-testid="select-referrer-kind"
+                <Select
+                  value={referrerKind || undefined}
+                  onValueChange={(v) => setReferrerKind(v === "__none__" ? "" : v as any)}
                 >
-                  <option value="">— none —</option>
-                  <option value="artist">Artist</option>
-                  <option value="non_profit">Non-profit</option>
-                  <option value="manufacturer">Press (manufacturer)</option>
-                  {/* Task #350 — NPO partners promote contact people to
-                      ambassadors; ambassador-attributed invites give the
-                      ambassador the per-unit credit while still rolling up
-                      to their NPO. */}
-                  <option value="ambassador">Ambassador (non-profit contact)</option>
-                </select>
+                  <SelectTrigger data-testid="select-referrer-kind">
+                    <SelectValue placeholder="— none —" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— none —</SelectItem>
+                    <SelectItem value="artist">Artist</SelectItem>
+                    <SelectItem value="non_profit">Non-profit</SelectItem>
+                    <SelectItem value="manufacturer">Press (manufacturer)</SelectItem>
+                    <SelectItem value="ambassador">Ambassador (non-profit contact)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               {/* Task #351 — Team invite (Identity / Manager / Team). When a
                   role is picked, the invite is gated to a specific Person;
@@ -468,18 +476,28 @@ export function AdminInvites() {
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
                   Team invite (optional)
                 </label>
-                <select
-                  value={inviteRole}
-                  onChange={(e) => { setInviteRole(e.target.value as any); setTargetPersonId(null); setTargetPersonName(""); setPreFlightedAlbumId(null); setPersonSearch(""); }}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
-                  data-testid="select-invite-role-team"
+                <Select
+                  value={inviteRole || undefined}
+                  onValueChange={(v) => {
+                    const val = v === "__none__" ? "" : v as any;
+                    setInviteRole(val);
+                    setTargetPersonId(null);
+                    setTargetPersonName("");
+                    setPreFlightedAlbumId(null);
+                    setPersonSearch("");
+                  }}
                 >
-                  <option value="">— Not a team invite —</option>
-                  <option value="identity">Identity (this person IS the artist)</option>
-                  <option value="manager">Manager (manages the artist)</option>
-                  <option value="team">Team (band/team member — credits + gear only)</option>
-                  <option value="label">Label (the artist's record label — recognition only)</option>
-                </select>
+                  <SelectTrigger data-testid="select-invite-role-team">
+                    <SelectValue placeholder="— Not a team invite —" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Not a team invite —</SelectItem>
+                    <SelectItem value="identity">Identity (this person IS the artist)</SelectItem>
+                    <SelectItem value="manager">Manager (manages the artist)</SelectItem>
+                    <SelectItem value="team">Team (band/team member — credits + gear only)</SelectItem>
+                    <SelectItem value="label">Label (the artist's record label — recognition only)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           )}
@@ -605,17 +623,20 @@ export function AdminInvites() {
               {effectiveTargetPersonId && targetAlbums.data && targetAlbums.data.length > 0 && (
                 <div className="mt-3">
                   <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Pre-flight an album draft (optional)</label>
-                  <select
-                    value={preFlightedAlbumId || ""}
-                    onChange={(e) => setPreFlightedAlbumId(e.target.value || null)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white focus:border-[var(--brand-blue)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/20"
-                    data-testid="select-preflight-album"
+                  <Select
+                    value={preFlightedAlbumId || undefined}
+                    onValueChange={(v) => setPreFlightedAlbumId(v === "__none__" ? null : v)}
                   >
-                    <option value="">— None — invitee lands on welcome page —</option>
-                    {targetAlbums.data.map((a) => (
-                      <option key={a.id} value={a.id}>{a.title}</option>
-                    ))}
-                  </select>
+                    <SelectTrigger data-testid="select-preflight-album">
+                      <SelectValue placeholder="— None — invitee lands on welcome page —" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— None — invitee lands on welcome page —</SelectItem>
+                      {targetAlbums.data.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>{a.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <p className="mt-1 text-xs text-slate-500">The invitee lands straight in the album editor after sign-up.</p>
                 </div>
               )}
