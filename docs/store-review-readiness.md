@@ -68,7 +68,107 @@ These existing claims were checked against code and hold:
   see `app-store-submission.md § App identity`.
 - **Permissions hygiene.** ATT / StoreKit / Camera / Mic / Location are *not*
   declared — correct, since declaring an unused capability is itself a rejection
-  trigger.
+  trigger. (Note: this is the *device-permission* surface. We still **collect**
+  coarse, IP-derived country/region server-side for analytics — that is a
+  data-collection disclosure, not a runtime permission, and is mapped in A4. No
+  `NSUserTrackingUsageDescription` / `NSLocationWhenInUseUsageDescription` is
+  needed: we never request the OS Location permission and we never track across
+  other companies' apps.)
+
+### A4. App Privacy / Data-safety disclosure — first-party analytics + affiliate
+
+GoodTunes runs a typed, first-party analytics pipeline (see
+[`docs/analytics.md`](./analytics.md); registry in `shared/analytics.ts`, envelope
++ ingest in `client/src/lib/analytics.ts` / `server/analytics.ts`). This section
+maps what we **actually** collect to the exact App Store Connect *App Privacy* and
+Google Play *Data safety* fields, and records the affiliate / ATT posture. It is
+built from the real event registry, not invented.
+
+**Three posture statements (the "why this is compliant" summary):**
+
+1. **Affiliate commissions on physical goods are not an IAP / 3.1.1 issue.** The
+   gear exit click (`gear_vendor_clicked`) sends the fan to a maker's or
+   reseller's *own* website to buy a **physical** instrument; GoodTunes later
+   earns an affiliate commission and passes 70% to the artist who built the kit.
+   Apple guideline **3.1.1** (IAP) governs *digital* content consumed in-app;
+   **3.1.3(e) / 3.1.5(a)** explicitly allow physical goods and services to be
+   bought with other payment methods. Outbound affiliate links for physical gear
+   are permitted. (On the native store builds, in-app Buy + Chat are gated off
+   anyway — `buyEnabled` / `chatEnabled` `= !isNative` in
+   `client/src/lib/platform.ts`.)
+2. **First-party analytics for personalization needs disclosure but NOT the ATT
+   prompt.** We collect usage to personalize the fan experience and to reconcile
+   affiliate clicks. None of it is shared with a third party for *their* own
+   advertising, and none is combined with third-party data to track a user across
+   other companies' apps/sites — so Apple's **App Tracking Transparency** does not
+   apply and no `NSUserTrackingUsageDescription` is declared (consistent with A3).
+   PostHog is a server-side **data processor** for our own project
+   (`server/analytics.ts` forwards over plain `fetch`; it is *not* a client SDK
+   and not a data broker), so it does not change the first-party posture.
+3. **Maker / reseller reconciliation is aggregate-only.** The vendor-facing
+   reporting surface returns counts grouped by instrument — never any fan-level
+   identifier. Verified below.
+
+**App Privacy / Data-safety field mapping** (data type → linked-to-identity →
+purpose). "Linked to a fan identity" is *yes* whenever the fan is signed in
+(`userId` is stamped via `identifyAnalyticsUser`); anonymous fans carry only a
+pseudonymous `deviceId` (a localStorage UUID — **not** an advertising / IDFA id),
+which is also what stitches an anonymous session to the account after sign-in.
+
+| What we collect | Real events / fields | Linked to fan identity? | App Store Connect "App Privacy" data type | Google Play "Data safety" type | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| Account identity | `userId`; `sign_in` / `sign_up` / `sign_out` (`provider`, `kind`) | Yes | **User ID** (Identifiers) | **Personal info → User IDs** | App Functionality, Analytics |
+| Device / session id | envelope `deviceId`, `sessionId` | Pseudonymous; stitched to `userId` after sign-in | **Device ID** (Identifiers) | **Device or other IDs** | Analytics |
+| Product interaction / usage | `play_*`, `video_*`, `favorite_*`, `follow_artist`, playlist events, `album_viewed` / `artist_viewed` / `song_viewed`, `lyrics_opened`, `credits_*`, `gear_viewed`, `share_*`, welcome-back events | Signed-in: yes; else device-only | **Product Interaction** (Usage Data) | **App activity → App interactions** | Analytics, Product Personalization |
+| Search history | `search_performed` (`query`), `search_result_clicked` | Signed-in: yes; else device-only | **Search History** | **App activity → In-app search history** | Analytics, Product Personalization |
+| Gear / affiliate exit clicks | `gear_vendor_clicked` (`vendorId`, `instrumentId`, `affiliateUrl`, `vendorDomain`, `url`), `gear_vendor_chat_opened` | Signed-in: yes; else device-only | **Product Interaction** (Usage Data) | **App activity → App interactions** | App Functionality, Analytics (affiliate reconciliation) |
+| Purchases | `bundle_viewed`, `checkout_started`, `checkout_completed` (`priceCents`, `orderId`), `gift_initiated` | Yes | **Purchase History** | **Financial info → Purchase history** | App Functionality, Analytics — **web-only**; native store builds hide Buy (`buyEnabled = !isNative`), so these generally don't fire on iOS/Android |
+| Coarse location | server-stamped `country` / `region` from CDN IP headers (`geoFromRequest`) | Signed-in: yes; else device-only | **Coarse Location** (IP-derived country/region only; never GPS/precise) | **Location → Approximate location** | Analytics |
+
+Notes kept honest to the code: the envelope `referrer` (`document.referrer`) is
+in-app navigation context, not cross-site browsing history, and isn't declared as
+a separate data type. We do **not** collect contacts, health, messages, photos,
+audio recordings, or precise location. PostHog forwarding (`POSTHOG_API_KEY`) is
+server-side only; the canonical record always lives in our own `analytics_events`
+table.
+
+**Aggregate-only reconciliation — verified.** The maker/reseller-facing reporting
+surface is `GET /api/admin/vendors/:id/analytics` (`server/routes.ts`), which calls
+`loadConnectedAnalytics`. For gear it runs:
+
+```sql
+SELECT (ae.payload->>'instrumentId') AS instrument_id,
+       (SELECT name FROM instruments WHERE id = (ae.payload->>'instrumentId')) AS name,
+       COUNT(*)::int AS clicks
+FROM analytics_events ae
+WHERE ae.name = 'gear_vendor_clicked' AND (ae.payload->>'vendorId') = $vendorId
+GROUP BY (ae.payload->>'instrumentId')
+ORDER BY clicks DESC LIMIT 25
+```
+
+The response (`byGear` / `byAlbum` / `byTrack` / `byPerson`) carries only
+`{ id, label, count }` rows (instrument / album / track / **artist** ids — never a
+*fan* id) plus scalar totals. There is **no `userId`, `deviceId`, `sessionId`,
+email, or any fan-level identifier in the payload** — individual fan context is
+collapsed by `COUNT(*) … GROUP BY` before anything reaches the vendor. The
+non-profit and manufacturer analytics routes reuse the same aggregate helper.
+
+**⚠ Blocking code finding — surfaced, NOT fixed here (out of this doc-task's
+scope).** The reconciliation payload above is clean, but the *raw-event* debug
+tail `GET /api/admin/events/recent` (`server/routes.ts`) returns whole
+`analytics_events` rows — including raw `userId` / `deviceId` — and is gated only
+by `requireAdmin`. `requireAdmin` proves `isAdmin === true`, and **partner roles
+(vendor / reseller / label / etc.) are also `isAdmin`** (see
+`.agents/memory/requireadmin-includes-partners.md`), so a partner-kind account
+could in principle read raw fan-level analytics for *all* fans, unscoped. It is
+operator-only by intent (the admin debug overlay is off-by-default behind a
+feature flag) but the server route does not enforce that intent. **Must-fix before
+submission / before relying on the "no fan identifiers reach a maker" guarantee:**
+add an explicit operator check (`getUserRole` → `super_admin` / `admin`) on
+`/api/admin/events/recent` and `/api/admin/events`-family routes, mirroring the
+operator-only pattern already used elsewhere in `routes.ts`. Tracked here rather
+than silently patched because tightening an auth gate is a behavior change that
+deserves its own review.
 
 ---
 
@@ -112,6 +212,24 @@ The mandatory review demo account and the reviewer notes (web-only purchases, no
 StoreKit) are documented in `app-store-submission.md`; confirm the seeded demo
 account is live in the environment the reviewer will hit and paste the notes into
 both consoles verbatim at submission time.
+
+### B5. Enter the App Privacy / Data-safety fields + privacy-policy URL
+The data-type mapping is written in A4, but **filling out the forms is operator
+work** — no API does it:
+- **App Store Connect → App Privacy:** declare the data types from the A4 table
+  (User ID, Device ID, Product Interaction, Search History, Purchase History,
+  Coarse Location), each marked **Used for analytics / product personalization +
+  app functionality**, **Linked to the user**, and **Not Used for Tracking** (so
+  no ATT prompt). Do **not** declare any data type "Used for Tracking."
+- **Google Play → Data safety:** declare the matching types (Personal info → User
+  IDs; Device or other IDs; App activity → App interactions + In-app search
+  history; Financial info → Purchase history; Location → Approximate location),
+  collected + processed, with the same analytics / app-functionality purposes, and
+  paste the public deletion URL (B3).
+- **Privacy-policy URL (both consoles):** the linked policy must mention that we
+  collect first-party analytics for personalization and that gear pages contain
+  **affiliate links** that may earn GoodTunes a commission. Confirm the live policy
+  copy says this before submission (copywriting beyond this note is out of scope).
 
 ---
 
@@ -176,3 +294,11 @@ Tester against `my.goodtunes.music` and the on-device smoke test.
 - **Re-verified June 2026 (this pass):** `test` — **416/416 pass** (the scrubber
   failure noted above has since been fixed); `schema-drift-smoke` — clean (dev +
   prod, 112 tables); `db-query-smoke` — 29/29; `design:lint` — clean.
+- **A4/B5 disclosure pass (doc-only):** no code, schema, or UI files changed —
+  only `docs/store-review-readiness.md` and the `replit.md` doc-map pointer. The
+  A4 mapping was built by reading the live event registry (`shared/analytics.ts`),
+  the envelope/ingest (`client/src/lib/analytics.ts`, `server/analytics.ts`), and
+  the reconciliation handler (`loadConnectedAnalytics` /
+  `GET /api/admin/vendors/:id/analytics` in `server/routes.ts`). One blocking code
+  finding (`/api/admin/events/recent` admits partner-kind accounts) is surfaced in
+  A4, not patched — see its callout.
