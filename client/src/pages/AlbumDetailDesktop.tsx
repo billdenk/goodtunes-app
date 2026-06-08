@@ -189,10 +189,9 @@ export function AlbumDetailDesktop({
     if (notifyOnly) return false;
     return new URL(window.location.href).searchParams.get("buy") === "1";
   });
-  // Task #1734 — auto-opening "offer" modal on the purchase-funnel host. Opens
-  // once when the locked-preview surface is ready; "Get Details" reopens it.
+  // Task #1766 — the offer modal is now the on-demand "Get Notified" capture
+  // only (opened from the transport's Get Notified CTA); never auto-opened.
   const [showOfferModal, setShowOfferModal] = useState(false);
-  const offerAutoOpenedRef = useRef(false);
   // When the fan ticked the signed-cert add-on chip on the hero before
   // clicking Buy, we hand the toggle into BuySheet so the checkout sheet
   // opens with it pre-checked. Cleared whenever the sheet closes.
@@ -330,15 +329,6 @@ export function AlbumDetailDesktop({
   // player (my.goodtunes.music) never sets this, so it stays 100% unchanged.
   const lockedPreview =
     buyEnabled && !effectiveOwned && isPurchaseFunnelHost();
-
-  // Auto-open the offer modal once the locked-preview surface is ready, so the
-  // base page reads like the real player with the offer fronting it.
-  useEffect(() => {
-    if (lockedPreview && album && !offerAutoOpenedRef.current) {
-      offerAutoOpenedRef.current = true;
-      setShowOfferModal(true);
-    }
-  }, [lockedPreview, album]);
 
   // Task #1185 — resolve the fan's owning order(s) for this album so the ⋯
   // menu can offer GoodDeed actions (view cert/provenance/ownership +
@@ -517,6 +507,7 @@ export function AlbumDetailDesktop({
   // Only fires on web (buyEnabled) and only when we have an id.
   const { data: buyOptions } = useQuery<{
     addons: { kind: string; priceCents: number }[];
+    skus?: { priceCents: number }[];
     signedCertSoldOut?: boolean;
   }>({
     queryKey: ["/api/albums", id, "buy-options"],
@@ -532,6 +523,15 @@ export function AlbumDetailDesktop({
   );
   const signedCertPriceCents = signedCertAddon?.priceCents ?? null;
   const signedCertSoldOut = !!buyOptions?.signedCertSoldOut;
+  // Task #1766 — Buy CTA price reads from the active SKU/buy-options (e.g. a
+  // 7" single at $25.00), NOT the legacy albums.price_cents column (Hope's is
+  // a 25¢ placeholder). Falls back to the legacy field only when no SKU exists.
+  const buyPriceCents = ((): number | null => {
+    const prices = (buyOptions?.skus ?? [])
+      .map((s) => s.priceCents)
+      .filter((n): n is number => typeof n === "number" && n > 0);
+    return prices.length ? Math.min(...prices) : (album?.priceCents ?? null);
+  })();
 
   // Preview-session end → open Buy. When the fan auditioned all preview
   // tracks back-to-back, the player's natural-end path lands on the last
@@ -671,7 +671,7 @@ export function AlbumDetailDesktop({
             <DesktopSearchView onNavigate={() => setSearchMode(false)} />
           ) : (
           <DesktopAlbumView
-            album={album}
+            album={album ? { ...album, priceCents: buyPriceCents } : album}
             songs={songs}
             videos={videos}
             photos={photos}
@@ -687,7 +687,6 @@ export function AlbumDetailDesktop({
             lockedPreview={lockedPreview}
             notifyOnly={notifyOnly}
             onGetNotified={() => setShowOfferModal(true)}
-            onGetDetails={() => setShowOfferModal(true)}
             onPlayTrack={handlePlayTrack}
             onAddTrack={handleAddTrack}
             onPlayNextTrack={handlePlayNextTrack}
@@ -1018,7 +1017,7 @@ export function AlbumDetailDesktop({
           title={album.title}
           artist={album.artist}
           artworkUrl={album.artwork}
-          priceCents={album.priceCents ?? null}
+          priceCents={buyPriceCents}
           salesPending={salesPending}
           notifyOnly={notifyOnly}
           salesBeginLabel={salesBeginLabel}

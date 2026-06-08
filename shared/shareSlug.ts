@@ -83,6 +83,9 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   // being prepped. First segment must be reserved so an artist slug can never
   // shadow the staging preview route.
   "staging",
+  // Task #1766 — /testing: private end-to-end checkout entry for a staged
+  // release (real charge). Reserved so an artist slug can never shadow it.
+  "testing",
   // Task #1310 — /g/:shortId (cert provenance short-link; first segment
   // must be reserved even though "g" can't pass the min-length slug check,
   // so the drift-guard test never flags it as missing).

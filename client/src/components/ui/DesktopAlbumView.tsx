@@ -813,16 +813,6 @@ export function DesktopAlbumView({
                       Buy {formatPrice(album.priceCents)}
                     </button>
                   ) : null}
-                  {onGetDetails && (
-                    <button
-                      type="button"
-                      onClick={onGetDetails}
-                      data-testid="button-get-details"
-                      className="h-11 px-2 inline-flex items-center font-medium text-sm text-fan-secondary hover:text-fan-primary transition-colors"
-                    >
-                      Get Details
-                    </button>
-                  )}
                 </>
               ) : (
                 /* Apple-tone preview/buy transport row, mirroring the owned

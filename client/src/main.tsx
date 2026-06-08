@@ -4,6 +4,7 @@ import "./index.css";
 import { installGlobalErrorReporter } from "@/components/GlobalErrorBoundary";
 import { armBootWatchdog } from "@/lib/bootHeal";
 import { setAuthToken } from "@/lib/queryClient";
+import { setPreviewPass } from "@/lib/previewPass";
 
 // Task #1631 — Cross-host purchase handoff pickup. After a sale on the buy
 // funnel (get./store.goodtunes.music), the fan is redirected to
@@ -25,6 +26,28 @@ try {
     url.hash = "";
     url.searchParams.set("gtwelcome", "1");
     window.history.replaceState({}, "", url.toString());
+  }
+} catch {}
+
+// Task #1766 — staged-launch review "preview pass" pickup. The operator's
+// "See Preview Flow" link lands on the get-host page with the pass in the URL
+// fragment (#previewpass=<token>). Stash it BEFORE React mounts so the very
+// first by-slug / buy-options call resolves the prepping release in staging
+// mode, then scrub it from the URL + history (fragments never hit an access
+// log, but a reviewer shouldn't accidentally re-share the live link with it).
+// The pass is read-only by construction — the server rejects any checkout that
+// carries it.
+try {
+  const hash = window.location.hash;
+  if (hash.includes("previewpass=")) {
+    const params = new URLSearchParams(hash.slice(1));
+    const pp = params.get("previewpass");
+    if (pp) {
+      setPreviewPass(pp);
+      const url = new URL(window.location.href);
+      url.hash = "";
+      window.history.replaceState({}, "", url.toString());
+    }
   }
 } catch {}
 

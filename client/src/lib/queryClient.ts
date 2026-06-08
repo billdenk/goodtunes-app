@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { getPreviewPass } from "./previewPass";
 
 const TOKEN_KEY = "goodtunes_auth_token";
 
@@ -15,7 +16,16 @@ export function setAuthToken(token: string | null) {
 
 function authHeaders(): Record<string, string> {
   const token = getAuthToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  const headers: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}` }
+    : {};
+  // Task #1766 — attach the staged-launch review "preview pass" (if present)
+  // on every request so a prepping release resolves in staging mode for the
+  // reviewer. The server never lets a request carrying a pass complete a
+  // charge, so this is read-only by construction.
+  const pass = getPreviewPass();
+  if (pass) headers["X-Preview-Pass"] = pass;
+  return headers;
 }
 
 async function throwIfResNotOk(res: Response) {

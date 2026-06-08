@@ -772,7 +772,14 @@ export function registerCommerceRoutes(app: Express) {
   app.get("/api/albums/:id/buy-options", async (req, res) => {
     // Admin-aware: an admin previewing a staged release sees the Buy sheet
     // (mirrors the /api/albums/:id detail route); real fans stay sunrise-gated.
-    const includeHidden = await viewerIsAdmin(req);
+    // Task #1766 — a valid preview pass for THIS album also unlocks the Buy
+    // sheet (so family reviewers see real pricing) without granting a charge.
+    let includeHidden = await viewerIsAdmin(req);
+    if (!includeHidden) {
+      const { readPreviewPass } = await import("./previewPass");
+      const pass = readPreviewPass(req);
+      if (pass && pass.albumId === req.params.id) includeHidden = true;
+    }
     const album = await storage.getAlbumById(req.params.id, { includeHidden });
     if (!album) return res.status(404).json({ message: "Album not found" });
     const [skus, addons] = await Promise.all([
@@ -1933,6 +1940,15 @@ export function registerCommerceRoutes(app: Express) {
     certName: z.string().max(80).optional(),
   });
   app.post("/api/checkout/session", async (req, res) => {
+    // Task #1766 — review pass is preview-only: a family reviewer can walk the
+    // whole buyer flow on a staged release but can NEVER complete a charge.
+    // Reject before any auth/SKU work so no surface can checkout in review mode.
+    {
+      const { readPreviewPass } = await import("./previewPass");
+      if (readPreviewPass(req)) {
+        return res.status(403).json({ message: "Preview mode — checkout is disabled." });
+      }
+    }
     const auth = req.headers.authorization;
     if (!auth?.startsWith("Bearer ")) return res.status(401).json({ message: "Sign in required" });
     const a = await storage.getAuthBy(auth.slice(7));

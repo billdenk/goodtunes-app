@@ -807,18 +807,6 @@ export function AlbumDetailMobileSurface({
                 Buy {formatUsdCents(album.priceCents)}
               </button>
             ))}
-          {/* Task #1734 — "Get Details" re-opens the offer modal so the fan can
-              read the full package after dismissing it. Locked preview only. */}
-          {lockedPreview && onGetDetails && (
-            <button
-              type="button"
-              onClick={onGetDetails}
-              className="flex items-center justify-center h-12 px-3 font-semibold text-sm text-fan-secondary active:scale-[0.98] transition-transform flex-shrink-0"
-              data-testid="button-get-details"
-            >
-              Get Details
-            </button>
-          )}
           {/* Task #1580 — the album-level credits "i" button is hidden; credits
               are now per-track only (opened from each track's row). The
               `hasAlbumCredits`/`onOpenAlbumCredits` wiring stays in place so it

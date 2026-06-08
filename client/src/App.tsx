@@ -18,6 +18,7 @@ import { useAuthKind, isStoreHost } from "@/hooks/useAuthKind";
 import { STOREFRONT_LAUNCH_ALBUM_ID } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { getPreviewPass } from "@/lib/previewPass";
 import { AccessNotAuthorizedDialog } from "@/components/AccessNotAuthorizedDialog";
 import { Player } from "@/pages/Player";
 import { DesktopNowPlaying } from "@/components/ui/DesktopNowPlaying";
@@ -31,6 +32,7 @@ import {
 } from "@/pages/Collection";
 import { AlbumDetail } from "@/pages/AlbumDetail";
 import { AlbumDetailMobileSkeleton, AlbumNotFound, FanAppLoader } from "@/components/ui/AlbumDetailSkeleton";
+import { ComingSoon, type ComingSoonRelease } from "@/components/ui/ComingSoon";
 import { InstrumentDetail } from "@/pages/InstrumentDetail";
 import { Playlists } from "@/pages/Playlists";
 import { Account } from "@/pages/Account";
@@ -193,6 +195,17 @@ function Storefront() {
 // endpoint (no login wall), primes the React Query cache under
 // ["/api/albums", id] so AlbumDetail renders without an authed refetch.
 // A path that doesn't resolve to a buy-eligible release shows not-found.
+// Task #1766 — manual slug-resolver fetches bypass the queryClient auth-header
+// injection, so the operator's "See Preview Flow" preview pass would be dropped
+// and a prepping release would 404 for a family reviewer. Re-attach it here so
+// the by-slug resolvers honor the pass (read-only staging; checkout still 403s
+// server-side). Returns undefined when no pass is set so a normal fan request
+// is unchanged.
+function previewPassHeaders(): HeadersInit | undefined {
+  const pass = getPreviewPass();
+  return pass ? { "X-Preview-Pass": pass } : undefined;
+}
+
 function ShareSlugTwo() {
   const params = useParams<{ artistSlug: string; albumSlug: string }>();
   const artistSlug = params.artistSlug ?? "";
@@ -206,7 +219,7 @@ function ShareSlugTwo() {
     queryFn: async () => {
       const r = await fetch(
         `/api/public/album-by-slug/${encodeURIComponent(artistSlug)}/${encodeURIComponent(albumSlug)}`,
-        { credentials: "include" },
+        { credentials: "include", headers: previewPassHeaders() },
       );
       if (r.status === 404) return null;
       if (!r.ok) throw new Error(`Failed to load (${r.status})`);
@@ -218,14 +231,95 @@ function ShareSlugTwo() {
     },
   });
 
+  // Task #1766 — when the release isn't buy-eligible yet (still prepping), the
+  // by-slug route 404s. Before showing "not found", try the coming-soon
+  // resolver: if the release is prepping, we show a branded "Coming <date>"
+  // placeholder with a Get-Notified capture instead of a dead end. Fires only
+  // after the main resolver has resolved to null (404), never racing it.
+  const mainResolved = !isLoading;
+  const { data: comingSoon, isLoading: comingLoading } = useQuery<ComingSoonRelease | null>({
+    queryKey: ["/api/public/coming-soon", cacheKey],
+    enabled: !!(artistSlug && albumSlug) && mainResolved && !data && !isError,
+    retry: false,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/public/coming-soon/${encodeURIComponent(artistSlug)}/${encodeURIComponent(albumSlug)}`,
+        { credentials: "include" },
+      );
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error(`Failed to load (${r.status})`);
+      return (await r.json()) as ComingSoonRelease;
+    },
+  });
+
   if (isLoading) return <AlbumDetailMobileSkeleton />;
-  if (isError || !data) return <AlbumNotFound variant="mobile" />;
+  if (!data) {
+    if (comingLoading) return <AlbumDetailMobileSkeleton />;
+    if (comingSoon) return <ComingSoon release={comingSoon} />;
+    return <AlbumNotFound variant="mobile" />;
+  }
   // Task #1755 — campaign releases (e.g. nightbirde/hope) are notify-only on
   // the bare fan link: same locked Preview & Purchase surface, but the primary
   // CTA captures an email instead of opening checkout. The family link
   // (/:artist/:release/staging) keeps the full Buy flow — see ShareSlugStaging.
   const notifyOnly = isCampaignRelease(artistSlug, albumSlug);
   return <AlbumDetail albumId={data.id} notifyOnly={notifyOnly} />;
+}
+
+// Task #1766 — single-segment share link (get.goodtunes.music/<slug>, e.g.
+// /hope). Companion to ShareSlugTwo: resolves through the single-segment
+// album-by-slug endpoint (which honors staging + the preview pass for prepping
+// releases), and falls back to the same branded "Coming <date>" placeholder
+// when the release isn't buy-eligible yet. MUST stay below every literal
+// single-segment route (all reserved — see shared/shareSlug.ts), so those win.
+function ShareSlugOne() {
+  const params = useParams<{ slug: string }>();
+  const slug = params.slug ?? "";
+  const { data, isLoading, isError } = useQuery<{ id: string } | null>({
+    queryKey: ["/api/public/album-by-slug", slug],
+    enabled: !!slug,
+    retry: false,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/public/album-by-slug/${encodeURIComponent(slug)}`,
+        { credentials: "include", headers: previewPassHeaders() },
+      );
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error(`Failed to load (${r.status})`);
+      const album = (await r.json()) as { id: string };
+      queryClient.setQueryData(["/api/albums", album.id], album);
+      return album;
+    },
+  });
+
+  // Same coming-soon fallback as ShareSlugTwo: only after the main resolver has
+  // settled to null (404), try the prepping teaser before showing "not found".
+  const mainResolved = !isLoading;
+  const { data: comingSoon, isLoading: comingLoading } = useQuery<ComingSoonRelease | null>({
+    queryKey: ["/api/public/coming-soon", slug],
+    enabled: !!slug && mainResolved && !data && !isError,
+    retry: false,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/public/coming-soon/${encodeURIComponent(slug)}`,
+        { credentials: "include" },
+      );
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error(`Failed to load (${r.status})`);
+      return (await r.json()) as ComingSoonRelease;
+    },
+  });
+
+  if (isLoading) return <AlbumDetailMobileSkeleton />;
+  if (!data) {
+    if (comingLoading) return <AlbumDetailMobileSkeleton />;
+    if (comingSoon) return <ComingSoon release={comingSoon} />;
+    return <AlbumNotFound variant="mobile" />;
+  }
+  return <AlbumDetail albumId={data.id} />;
 }
 
 // Task #1755 — family-review link for a campaign release
@@ -249,7 +343,40 @@ function ShareSlugStaging() {
     queryFn: async () => {
       const r = await fetch(
         `/api/public/album-by-slug/${encodeURIComponent(artistSlug)}/${encodeURIComponent(albumSlug)}`,
-        { credentials: "include" },
+        { credentials: "include", headers: previewPassHeaders() },
+      );
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error(`Failed to load (${r.status})`);
+      const album = (await r.json()) as { id: string };
+      queryClient.setQueryData(["/api/albums", album.id], album);
+      return album;
+    },
+  });
+
+  if (isLoading) return <AlbumDetailMobileSkeleton />;
+  if (isError || !data) return <AlbumNotFound variant="mobile" />;
+  return <AlbumDetail albumId={data.id} />;
+}
+
+// Task #1766 — private /testing entry. Renders the FULL buyer page for the
+// staged "Hope" release (nightbirde/hope) with real checkout enabled, so the
+// operator can dry-run the whole purchase flow before the release is live.
+// Resolves through the same public album-by-slug endpoint, which grants staging
+// access via the full-access session (admin / full-access email) — no preview
+// pass, so checkout is NOT blocked. "testing" is reserved (shared/shareSlug.ts)
+// so no release can ever claim this slug.
+const TESTING_ARTIST_SLUG = "nightbirde";
+const TESTING_ALBUM_SLUG = "hope";
+function Testing() {
+  const cacheKey = `${TESTING_ARTIST_SLUG}/${TESTING_ALBUM_SLUG}`;
+  const { data, isLoading, isError } = useQuery<{ id: string } | null>({
+    queryKey: ["/api/public/album-by-slug", cacheKey],
+    retry: false,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/public/album-by-slug/${TESTING_ARTIST_SLUG}/${TESTING_ALBUM_SLUG}`,
+        { credentials: "include", headers: previewPassHeaders() },
       );
       if (r.status === 404) return null;
       if (!r.ok) throw new Error(`Failed to load (${r.status})`);
@@ -482,6 +609,10 @@ function Router() {
         {/* Suffix form Bill shares with family: /:artist/:release/staging
             (e.g. /nightbirde/hope/staging) — family tier, buy flow on. */}
         <Route path="/:artist/:release/staging" component={ShareSlugStaging} />
+        {/* Task #1766 — private /testing dry-run of the staged Hope buyer
+            page with real checkout (full-access session). "testing" is a
+            reserved slug so no release can claim it. */}
+        <Route path="/testing" component={Testing} />
         {/* Admin tool for the wave-1 welcome-back campaign. */}
         <Route path="/admin/welcome-back">
           <ProtectedRoute component={AdminWelcomeBack} />
@@ -809,6 +940,12 @@ function Router() {
             validated as non-reserved by the server before the album
             resolves. */}
         <Route path="/:artistSlug/:albumSlug" component={ShareSlugTwo} />
+        {/* Task #1766 — single-segment share link (get.goodtunes.music/<slug>,
+            e.g. /hope). MUST stay below every literal single-segment route
+            above (all reserved — see shared/shareSlug.ts) so those win; only
+            unmatched single segments fall through to the public single-slug
+            resolver. Disjoint from the two-part route above (segment count). */}
+        <Route path="/:slug" component={ShareSlugOne} />
         <Route path="/">
           {isStoreHost() ? (
             <Redirect to="/store" />

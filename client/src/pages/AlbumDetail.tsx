@@ -48,10 +48,11 @@ import { toast } from "@/hooks/use-toast";
 import { IconButton } from "@/components/ui/IconButton";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { GearDetailBody, type GearArtist, type GearArtistNote } from "@/components/gear/GearDetailBody";
-import { ChevronLeft, Share, MoreHorizontal, Lock, ShieldCheck, Music2, ArrowRight } from "lucide-react";
+import { ChevronLeft, Share, MoreHorizontal, Lock, ShieldCheck, Music2, ArrowRight, Eye } from "lucide-react";
 import { buyEnabled, nativeDownloadsEnabled, streamingHandoffEnabled } from "@/lib/platform";
 import { isPurchaseFunnelHost } from "@/hooks/useAuthKind";
 import { LockedOfferModal } from "@/components/ui/LockedOfferModal";
+import { hasPreviewPass } from "@/lib/previewPass";
 import { downloadSong, removeDownload, listDownloadedSongs } from "@/lib/nativeDownloads";
 import { track } from "@/lib/analytics";
 import Hls from "hls.js";
@@ -348,9 +349,30 @@ export function AlbumDetail({
   // floating toggle pill has been removed.
   return (
     <FanPreviewProvider>
+      <PreviewModeBanner />
       {surface}
       <PurchaseThankYouModal albumId={albumId} />
     </FanPreviewProvider>
+  );
+}
+
+// Task #1766 — staged-launch review banner. When the operator's "See Preview
+// Flow" link planted a preview pass (sessionStorage, via #previewpass=), the
+// reviewer is walking the real buyer experience on a not-yet-live release.
+// Make that unmistakable and remind them checkout is disabled — the server
+// also hard-rejects any checkout that carries the pass, so this is purely a UX
+// signal, never the enforcement.
+function PreviewModeBanner() {
+  if (!hasPreviewPass()) return null;
+  return (
+    <div
+      className="fixed top-0 inset-x-0 z-[100] flex items-center justify-center gap-2 px-3 py-1.5 text-center text-xs font-semibold"
+      style={{ backgroundColor: "var(--brand-mint)", color: "var(--brand-bg)" }}
+      data-testid="banner-preview-mode"
+    >
+      <Eye className="w-3.5 h-3.5 shrink-0" />
+      <span>Preview mode — this release isn’t live yet. Checkout is disabled.</span>
+    </div>
   );
 }
 
@@ -409,10 +431,9 @@ function AlbumDetailMobile({
     if (typeof window === "undefined") return false;
     return new URL(window.location.href).searchParams.get("buy") === "1";
   });
-  // Task #1734 — auto-opening offer modal on the purchase-funnel host. Opens
-  // once when the locked-preview surface is ready; "Get Details" reopens it.
+  // Task #1766 — the offer modal is now the on-demand "Get Notified" capture
+  // only (opened from the transport's Get Notified CTA); never auto-opened.
   const [showOfferModal, setShowOfferModal] = useState(false);
-  const offerAutoOpenedRef = useRef(false);
   const [singleCertNum, setSingleCertNum] = useState<number | null>(null);
   const [provenanceCertNum, setProvenanceCertNum] = useState<number | null>(null);
   const [showOwnership, setShowOwnership] = useState(false);
@@ -549,6 +570,21 @@ function AlbumDetailMobile({
     staleTime: 0,
     refetchOnMount: "always",
   });
+  // Task #1766 — the Buy CTA price must read from the active SKU/buy-options
+  // (e.g. a 7" single at $25.00), NOT the legacy albums.price_cents column,
+  // which can be a stale placeholder (Hope's is 25¢). Mirrors the desktop
+  // page's buy-options fetch; shares the same cache key.
+  const { data: buyOptions } = useQuery<{ skus?: { priceCents: number }[] }>({
+    queryKey: ["/api/albums", id, "buy-options"],
+    enabled: !!id && buyEnabled && !isOwned,
+    staleTime: 60_000,
+  });
+  const buyPriceCents = ((): number | null => {
+    const prices = (buyOptions?.skus ?? [])
+      .map((s) => s.priceCents)
+      .filter((n): n is number => typeof n === "number" && n > 0);
+    return prices.length ? Math.min(...prices) : ((apiAlbum as any)?.priceCents ?? null);
+  })();
   const staticAlbum = ALBUMS.find((a) => a.id === id);
   // Task #530 — stamp the album into fan recents whenever the
   // resolved record changes (mount, switch albums via internal links,
@@ -895,14 +931,12 @@ function AlbumDetailMobile({
     if (pending && showBuySheet) setShowBuySheet(false);
   }, [isOwned, apiAlbum?.goodTunesReleaseDate, showBuySheet]);
 
-  // Task #1734 — once the locked-preview surface is ready, front it with the
-  // offer modal so the page reads like the real player behind an unlock.
-  useEffect(() => {
-    if (lockedPreview && album && !offerAutoOpenedRef.current) {
-      offerAutoOpenedRef.current = true;
-      setShowOfferModal(true);
-    }
-  }, [lockedPreview, album]);
+  // Task #1766 — the get-host preview/purchase page now renders the full rich
+  // album layout (hero, metadata, tracklist, Videos) instead of fronting it
+  // with an auto-opening offer modal. The offer modal stays mounted purely as
+  // the on-demand "Get Notified" capture (opened from the transport row); it is
+  // never auto-opened, so fans land on the real album page with a Buy / Get
+  // Notified CTA.
 
   if (!album && isAlbumLoading) {
     return <AlbumDetailMobileSkeleton />;
@@ -1058,7 +1092,7 @@ function AlbumDetailMobile({
             description: album.description,
             isExplicit: album.isExplicit,
             genre: album.genre,
-            priceCents: (album as any).priceCents ?? null,
+            priceCents: buyPriceCents,
             originalReleaseDate: apiAlbum?.originalReleaseDate ?? null,
             copyrightLine: apiAlbum?.copyrightLine ?? null,
             copyrightSymbol: apiAlbum?.copyrightSymbol ?? null,
@@ -1106,7 +1140,6 @@ function AlbumDetailMobile({
           salesBeginLabel={salesBeginLabel}
           lockedPreview={lockedPreview}
           notifyOnly={notifyOnly}
-          onGetDetails={() => setShowOfferModal(true)}
           onGetNotified={() => setShowOfferModal(true)}
           onToggleAlbumDownload={handleToggleAlbumDownload}
           onToggleSongDownload={(id) => toggleSongDownload(id)}
@@ -1163,7 +1196,7 @@ function AlbumDetailMobile({
             title={album.title}
             artist={album.artist}
             artworkUrl={album.artwork}
-            priceCents={(album as any).priceCents ?? null}
+            priceCents={buyPriceCents}
             salesPending={salesPending}
             notifyOnly={notifyOnly}
             salesBeginLabel={salesBeginLabel}

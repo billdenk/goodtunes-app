@@ -57,6 +57,8 @@ import {
   Download,
   PieChart,
   AlertTriangle,
+  Rocket,
+  Eye,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { LyricsGapDots } from "@/components/LyricsGapDots";
@@ -2347,6 +2349,33 @@ function ShareLinkPanel({
   const qc = useQueryClient();
   const { toast } = useToast();
 
+  // Task #1766 — one-click "Make live" for a staged release. While the album
+  // is prepping, the public get-host link shows a "Coming <date>" placeholder;
+  // clearing isPrepping flips the rich Preview & Purchase page on with no
+  // second deploy. Rides the same PUT endpoint as every other album edit, so
+  // partner-permissions + post-sale lock apply automatically.
+  const makeLive = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("PUT", `/api/admin/albums/${album.id}`, {
+        isPrepping: false,
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
+      qc.invalidateQueries({ queryKey: ["/api/albums"] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/albums"] });
+      toast({ title: "Release is live.", description: "Fans can now preview and buy." });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't make live",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // ── Artist slug (person.artistShareSlug) ───────────────────────────────
   const artistId = album.primaryArtistId ?? null;
   // Single source of truth for the bound primary-artist record: use the
@@ -2655,6 +2684,34 @@ function ShareLinkPanel({
     const win = window.open(`/${savedArtistSlug}/${savedAlbumSlug}`, "_blank");
     if (win) { try { win.opener = null; } catch { /* harmless */ } }
   };
+
+  // Task #1766 — "See Preview Flow": mint a short-lived signed preview pass for
+  // this album and open the LIVE get-host share URL with it in the fragment, so
+  // the operator (or a family reviewer they forward the link to) walks the real
+  // buyer experience on a prepping release. The pass never allows a charge —
+  // the server rejects any checkout that carries it.
+  const seePreviewFlow = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/albums/${album.id}/preview-pass`);
+      return (await r.json()) as { token: string };
+    },
+    onSuccess: ({ token }) => {
+      const base = fullUrl || copyUrl;
+      if (!base || !token) {
+        toast({ title: "Couldn't open preview", variant: "destructive" });
+        return;
+      }
+      const win = window.open(`${base}#previewpass=${encodeURIComponent(token)}`, "_blank");
+      if (win) { try { win.opener = null; } catch { /* harmless */ } }
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't open preview",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
   const copy = async () => {
     if (!copyUrl) return;
     const ok = await copyTextToClipboard(copyUrl);
@@ -2856,6 +2913,72 @@ function ShareLinkPanel({
           </div>
         </>
       )}
+
+      {/* Task #1766 — staged-launch status + one-click Make live. While the
+          release is prepping, the public get-host link shows a "Coming <date>"
+          placeholder; flipping it live opens the rich Preview & Purchase page
+          (buyable) with no second deploy. */}
+      <div className="mt-4 pt-3 border-t border-slate-100">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-medium text-slate-600">Status</span>
+              {album.isPrepping ? (
+                <span
+                  className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800"
+                  data-testid="badge-release-status"
+                >
+                  Prepping
+                </span>
+              ) : (
+                <span
+                  className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800"
+                  data-testid="badge-release-status"
+                >
+                  Live
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 mt-1 leading-snug">
+              {album.isPrepping
+                ? "Fans see a \u201CComing soon\u201D placeholder. Make it live to open the Preview & Purchase page."
+                : "The share link is live \u2014 fans can preview and buy."}
+            </p>
+          </div>
+          {album.isPrepping && (
+            <Button
+              type="button"
+              className="h-8 shrink-0"
+              disabled={disabled || makeLive.isPending}
+              onClick={() => makeLive.mutate()}
+              data-testid="button-make-live"
+            >
+              {makeLive.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Rocket className="w-4 h-4" />
+              )}
+              <span className="ml-1.5">{makeLive.isPending ? "Going live\u2026" : "Make live"}</span>
+            </Button>
+          )}
+        </div>
+        {album.isPrepping && (
+          <button
+            type="button"
+            className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-sky-700 hover:text-sky-900 disabled:opacity-50"
+            disabled={!canPreview || seePreviewFlow.isPending}
+            onClick={() => seePreviewFlow.mutate()}
+            data-testid="button-see-preview-flow"
+          >
+            {seePreviewFlow.isPending ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Eye className="w-3.5 h-3.5" />
+            )}
+            See Preview Flow
+          </button>
+        )}
+      </div>
     </div>
   );
 }
