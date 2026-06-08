@@ -183,6 +183,17 @@ function IconStep({
   );
 }
 
+// Refined section label — slightly tighter, bolder, and more spaced than a
+// raw form caption, so the checkout reads like a continuation of the polished
+// campaign offer modal it follows (Task #1734/#1816) rather than a dense form.
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-fan-faint text-xs font-bold uppercase tracking-widest mb-2.5">
+      {children}
+    </div>
+  );
+}
+
 // Destination countries offered in the shipping selector. The eight in
 // PRICED_COUNTRIES have their own Spinney rate; every other destination prices
 // off the INTL average (the server resolves the band + rate for whatever is
@@ -675,23 +686,23 @@ export function BuySheet({
             )}
             {options && (
               <>
-                <div className="flex items-center gap-3 mb-5">
+                <div className="flex items-center gap-3.5 mb-6">
                   {options.artwork && (
                     <img
                       src={options.artwork}
                       alt=""
-                      className="w-14 h-14 rounded-lg object-cover"
+                      className="w-16 h-16 rounded-xl object-cover shadow-lg"
                     />
                   )}
                   <div className="min-w-0">
-                    <div className="text-[15px] font-semibold truncate">{options.title}</div>
-                    <div className="text-[13px] text-white/55 truncate">{options.artist}</div>
+                    <div className="text-lg font-bold tracking-tight truncate text-fan-primary">{options.title}</div>
+                    <div className="text-sm text-fan-secondary truncate">{options.artist}</div>
                   </div>
                 </div>
 
                 {selectedSku && isVinylFormat(selectedSku.format as AlbumFormat) && (
                   <div className="mb-5" data-testid="youll-get-vinyl">
-                    <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">You'll get</div>
+                    <SectionLabel>You'll get</SectionLabel>
                     <div className="rounded-2xl bg-white/[0.05] p-4">
                       <VinylPreview
                         artworkUrl={options.artwork}
@@ -702,7 +713,7 @@ export function BuySheet({
                         jacketUpgrade={selectedSku.jacketUpgrade ?? DEFAULT_JACKET_UPGRADE}
                         size="md"
                       />
-                      <div className="mt-3 text-[12px] text-white/60 leading-snug">
+                      <div className="mt-3 text-xs text-fan-secondary leading-snug">
                         {(VINYL_COLOR_BY_ID[selectedSku.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ?? VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID]).name}
                         {" · "}
                         {selectedSku.label}
@@ -711,9 +722,9 @@ export function BuySheet({
                   </div>
                 )}
 
-                <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">Format</div>
+                <SectionLabel>Format</SectionLabel>
                 {options.skus.length === 0 ? (
-                  <div className="text-white/55 text-sm py-6 text-center">
+                  <div className="text-fan-secondary text-sm py-6 text-center">
                     Not available for sale yet.
                   </div>
                 ) : (
@@ -778,9 +789,9 @@ export function BuySheet({
                     MAX_COPIES_PER_CHECKOUT and remaining stock. */}
                 {selectedSku && (
                   <div className="mb-5">
-                    <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">Quantity</div>
+                    <SectionLabel>Quantity</SectionLabel>
                     <div className="flex items-center justify-between rounded-2xl bg-white/[0.05] px-4 py-3">
-                      <span className="text-[14px] text-white/85">How many copies?</span>
+                      <span className="text-sm text-fan-secondary">How many copies?</span>
                       <div className="flex items-center gap-3">
                         <IconButton
                           label="Decrease quantity"
@@ -806,7 +817,7 @@ export function BuySheet({
                       </div>
                     </div>
                     {quantity >= maxQuantity && maxQuantity < MAX_COPIES_PER_CHECKOUT && (
-                      <p className="text-white/40 text-[11px] mt-1.5 ml-1" data-testid="text-qty-cap">
+                      <p className="text-fan-faint text-xs mt-1.5 ml-1" data-testid="text-qty-cap">
                         That's all we have in stock for this format.
                       </p>
                     )}
@@ -821,9 +832,7 @@ export function BuySheet({
                     toggle (rendered in the branch below). */}
                 {bookletAddon && bundleAvailable && selectedSku && (
                   <div className="mb-5">
-                    <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">
-                      Booklet
-                    </div>
+                    <SectionLabel>Booklet</SectionLabel>
                     <Group>
                       {[false, true].map((withBooklet) => {
                         const selected = booklet === withBooklet;
@@ -957,9 +966,7 @@ export function BuySheet({
                     non-profit so the fan knows where the money goes. */}
                 {selectedSku && customAddonsList.length > 0 && (
                   <div className="mb-5">
-                    <div className="text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2">
-                      Add a little extra
-                    </div>
+                    <SectionLabel>Add a little extra</SectionLabel>
                     <Group>
                       {customAddonsList.map((ca) => {
                         const qty = customAddonQty[ca.id] ?? 0;
@@ -1155,26 +1162,26 @@ export function BuySheet({
 
                 {/* Live breakdown — separate lines so the fan can verify
                     the math before tapping checkout. */}
-                <div className="rounded-2xl bg-white/[0.05] p-4 mb-4 text-[13px]" data-testid="block-breakdown">
+                <div className="rounded-2xl bg-white/[0.05] p-5 mb-4 text-sm" data-testid="block-breakdown">
                   <div className="flex items-center justify-between">
-                    <span className="text-white/65">
+                    <span className="text-fan-secondary">
                       {selectedSku?.label ?? "Format"}
                       {bundleAvailable && booklet ? " + booklet" : ""} × {quantity}
                     </span>
-                    <span className="text-white/85" data-testid="text-line-format">{dollars(formatLineCents)}</span>
+                    <span className="text-fan-primary" data-testid="text-line-format">{dollars(formatLineCents)}</span>
                   </div>
                   {addon && certCount > 0 && (
                     <div className="flex items-center justify-between mt-1.5">
-                      <span className="text-white/65">{addon.label} × {certCount}</span>
-                      <span className="text-white/85" data-testid="text-line-cert">{dollars(certLineCents)}</span>
+                      <span className="text-fan-secondary">{addon.label} × {certCount}</span>
+                      <span className="text-fan-primary" data-testid="text-line-cert">{dollars(certLineCents)}</span>
                     </div>
                   )}
                   {/* Booklet shows as its own line only for the cassette
                       stacked add-on; the 7" variant is folded above. */}
                   {bookletAddon && booklet && bookletAvailable && !bundleAvailable && (
                     <div className="flex items-center justify-between mt-1.5">
-                      <span className="text-white/65">{bookletAddon.label}</span>
-                      <span className="text-white/85" data-testid="text-line-booklet">{dollars(bookletLineCents)}</span>
+                      <span className="text-fan-secondary">{bookletAddon.label}</span>
+                      <span className="text-fan-primary" data-testid="text-line-booklet">{dollars(bookletLineCents)}</span>
                     </div>
                   )}
                   {/* Task #844 — one line per ticked custom add-on. Each item
@@ -1183,11 +1190,11 @@ export function BuySheet({
                       Total already folds in (customAddonsLineCents). */}
                   {selectedCustomAddons.map((ca) => (
                     <div key={ca.addon.id} className="flex items-center justify-between mt-1.5">
-                      <span className="text-white/65">
+                      <span className="text-fan-secondary">
                         {ca.addon.name}
                         {ca.qty > 1 ? ` × ${ca.qty}` : ""}
                       </span>
-                      <span className="text-white/85" data-testid={`text-line-custom-addon-${ca.addon.id}`}>
+                      <span className="text-fan-primary" data-testid={`text-line-custom-addon-${ca.addon.id}`}>
                         {dollars(ca.addon.priceCents * ca.qty)}
                       </span>
                     </div>
@@ -1239,9 +1246,9 @@ export function BuySheet({
                       </span>
                     </div>
                   )}
-                  <div className="border-t border-white/[0.08] mt-3 pt-3 flex items-center justify-between">
-                    <span className="text-fan-faint">Total</span>
-                    <span className="text-[18px] font-bold" data-testid="text-buy-total">
+                  <div className="border-t border-white/[0.08] mt-4 pt-4 flex items-center justify-between">
+                    <span className="text-fan-secondary font-medium">Total</span>
+                    <span className="text-xl font-bold text-fan-primary tabular-nums" data-testid="text-buy-total">
                       {dollars(totalCents)}
                     </span>
                   </div>
@@ -1281,7 +1288,7 @@ export function BuySheet({
                           ? "Continue"
                           : `Checkout — ${dollars(totalCents)}`}
                 </button>
-                <p className="mt-3 text-white/40 text-[11px] text-center leading-snug">
+                <p className="mt-3 text-fan-faint text-xs text-center leading-snug">
                   {taxAvailable
                     ? "Includes shipping and sales tax. Instant digital access in the player."
                     : "Shipping shown above; sales tax is added at checkout. Instant digital access in the player."}
@@ -1302,16 +1309,16 @@ export function BuySheet({
         {!inCheckout && step === "cert" && addon && (
           <div className="px-5 pb-6 overflow-y-auto max-h-[78vh]" data-testid="cert-step">
             {/* Album art + cert identity header */}
-            <div className="flex items-center gap-3 mb-5">
+            <div className="flex items-center gap-3.5 mb-5">
               {options?.artwork && (
                 <img
                   src={options.artwork}
                   alt=""
-                  className="w-14 h-14 rounded-lg object-cover"
+                  className="w-16 h-16 rounded-xl object-cover shadow-lg"
                 />
               )}
               <div className="min-w-0">
-                <div className="text-[15px] font-semibold truncate">{addon.label}</div>
+                <div className="text-lg font-bold tracking-tight truncate text-fan-primary">{addon.label}</div>
                 <div className="text-[13px] text-fan-secondary truncate">
                   {dollars(addon.priceCents)} per copy · {options?.title}
                 </div>
