@@ -130,7 +130,7 @@ The Android button is in the config but **dormant** — it never runs unless you
 
 1. In Codemagic, upload the GoodTunes **upload keystore** under **Code signing identities → Android keystores**, with reference name **`goodtunes_keystore`**.
 2. Create a Play **service-account JSON** (Google Play Console → Setup → API access), and add it to a Codemagic env-var group named **`google_play`** as **`GCLOUD_SERVICE_ACCOUNT_CREDENTIALS`**.
-3. Start the **`Android → Play internal testing`** workflow. It builds a signed `.aab` and uploads to the internal track.
+3. Start the **`Android → Play internal testing`** workflow. It builds a signed `.aab`, **runs the same icon guards iOS gets** (source + built-binary — see *Publishing reliability* below), and uploads to the internal track.
 
 Until you do all three, just leave it alone — it costs nothing sitting idle.
 
@@ -182,7 +182,10 @@ Codemagic is the day-to-day path, but your Mac still works as a backup. The full
 ## Publishing reliability (two guards the pipeline runs for you)
 
 These two safeguards were added after real failures and run automatically on
-**both** iOS workflows — you don't configure anything.
+**both** iOS workflows — you don't configure anything. The **icon guard** below
+also runs on the **Android** workflow (see *Android gets the icon guard too*);
+the App Store Connect publish retry is iOS-only (the Play API doesn't need it —
+see that note for why).
 
 ### 1. The build won't ship the generic placeholder icon
 
@@ -240,6 +243,35 @@ also submits to App Store review (after-approval, phased, cancel-previous).
 > then re-run. The build that hit this still uploaded — internal testers may
 > already have it — only the external beta-review submission failed.
 
+### Android gets the icon guard too (but not the publish retry)
+
+The Android workflow runs the **same two-layer icon protection** iOS gets:
+
+- **Source guard** (`verify-android-appicon.py`) — before the build, checks the
+  committed `res/` tree (per-density launcher rasters + adaptive-icon XML, plus
+  the white-on-transparent notification silhouette).
+- **Built-binary guard** (`verify-android-aab-icon.py`) — *after* `Build the
+  signed .aab`. It unzips the produced `.aab`, confirms the adaptive-icon XML
+  survived into the bundle, that the per-density `ic_launcher` rasters are
+  actually packaged at the right sizes, and (best-effort) that the **navy brand
+  icon — not a near-white blank/default — is embedded**. If not, the build
+  **hard-fails right there** so an icon-broken bundle never reaches Google Play.
+  (This catches the Android version of the iOS "source-correct, binary-wrong"
+  failure that shipped a placeholder to TestFlight.)
+
+The **publish retry is intentionally iOS-only.** Google Play's Developer API is
+*transactional* — Codemagic inserts an edit, uploads the bundle, assigns the
+track, then **commits**. A transient `5xx` *before* commit aborts the whole edit,
+so nothing partially registers and a simple re-run cleanly re-does the upload
+(re-uploading the same `versionCode` in a fresh edit is fine because the prior
+edit was discarded). That removes the entire reason `publish-ios.sh` is complex:
+App Store Connect can *register* a binary and then 500 the submission, which
+forces the skip-upload / duplicate-binary handling — Play has no such
+half-committed state. Google's publisher client also already retries transient
+`5xx`/`429`. So Android publishing stays the simple declarative `google_play`
+block. (If transient publish failures ever become common, the future path is
+fastlane `supply`, pre-installed on the runner, with its own retry.)
+
 ---
 
 ## Quick troubleshooting
@@ -253,3 +285,4 @@ also submits to App Store review (after-approval, phased, cancel-previous).
 | Publish logged a `500` but the build still made it | Expected — the scripted publish detects an upload that 500'd *after* registering and retries only the submission. No action needed. |
 | Build uploads but never appears in TestFlight | Apple is still processing (give it 20 min), or the **GoGoods Test Group** name doesn't match App Store Connect exactly. |
 | Android build fails | The `goodtunes_keystore` reference or `google_play` credentials aren't set yet — Android is off until you add them (see above). |
+| Android build fails at **"Guard — fail fast if the BUILT .aab ships a wrong/blank launcher icon"** | The bundle didn't carry the real launcher icon (would ship a blank/default). The script prints exactly which density/asset is missing or whether the embedded icon read as near-white. Re-run; if it recurs, confirm the `res/mipmap-*` launcher rasters + `mipmap-anydpi-v26` adaptive XML are committed and that `minifyEnabled`/resource-shrinking isn't renaming them. See *Android gets the icon guard too* above. |

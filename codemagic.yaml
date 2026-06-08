@@ -353,9 +353,43 @@ workflows:
         script: |
           cd android
           ./gradlew bundleRelease
+      - name: Guard — fail fast if the BUILT .aab ships a wrong/blank launcher icon
+        script: |
+          # WHY THIS EXISTS (and why it's separate from the source-icon guard above):
+          # the iOS side learned the hard way that a build can be "source-correct,
+          # binary-wrong" — TestFlight builds 59/64/66 shipped Apple's GENERIC
+          # placeholder even though the committed icons were fine, because the build
+          # tooling dropped the icon when assembling the binary. The source guard
+          # (verify-android-appicon.py) above validates the res/ tree and cannot see
+          # that. This guard inspects the actual produced .aab: it unzips it, confirms
+          # the adaptive-icon XML survived, that the per-density launcher rasters are
+          # actually packaged at the right sizes, and (best-effort) that the navy
+          # brand icon — not a near-white blank/default — is embedded. If no real
+          # launcher icon is present it HARD-FAILS, so an icon-broken bundle can never
+          # reach Google Play. Pillow gives a precise color check; we install it here
+          # so the inspection is deterministic on the Linux runner (it also falls back
+          # to ImageMagick / the raw PNG header). See scripts/verify-android-aab-icon.py.
+          pip3 install --quiet --disable-pip-version-check Pillow || true
+          python3 scripts/verify-android-aab-icon.py
     artifacts:
       - android/app/build/outputs/**/*.aab
       - android/app/build/outputs/**/mapping.txt
+    # NOTE: publishing is kept DECLARATIVE here on purpose — unlike iOS we do NOT
+    # need a publish-ios.sh-style scripted retry. The Play Developer API is
+    # transactional (insert edit → upload → assign track → COMMIT): a transient 5xx
+    # before commit aborts the whole edit, so nothing partially registers and a
+    # re-run cleanly re-does the upload (re-uploading the same versionCode in a
+    # fresh edit is fine — the prior edit was discarded). That removes the entire
+    # reason publish-ios.sh is complex (App Store Connect can REGISTER a binary and
+    # then 500 the submission, forcing skip-upload/duplicate-binary handling — Play
+    # has no such half-committed state). Google's publisher client also already
+    # retries transient 5xx/429 with backoff, and codemagic-cli-tools' `google-play`
+    # action group has no bundle-UPLOAD command to script around (only build-number /
+    # track reads), so a scripted publish would mean re-implementing the upload
+    # against the raw Play API — more risk than the rare transient failure justifies.
+    # If transient publish failures ever become common, the path is fastlane
+    # `supply` (pre-installed on the runner) with its own retry. See
+    # docs/codemagic-builds.md → "Publishing reliability" and docs/google-play-setup.md.
     publishing:
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS

@@ -9,8 +9,9 @@ compliance forms.
 
 The build itself is already wired — the `android-internal` workflow in
 [`codemagic.yaml`](../codemagic.yaml) does `npm ci` → web build → `cap sync` →
-auto-increment `versionCode` → icon guard → signed `.aab` → upload to Play
-internal. You don't edit it. Everything in-repo (API 35, App Links, account
+auto-increment `versionCode` → source icon guard → signed `.aab` → **built-`.aab`
+icon guard** → upload to Play internal. You don't edit it. Everything in-repo
+(API 35, App Links, account
 deletion, icons, player-only gating) was already verified — see
 [`store-review-readiness.md`](./store-review-readiness.md). The **only** gap is
 the operator/console work below.
@@ -254,8 +255,8 @@ Codemagic and the Play app + internal track exist:
    (`android-internal`) workflow → **Start new build**.
 3. The build runs: lockfile check → `npm ci` → `npm run build` →
    `cap sync android` → auto-increment `versionCode` from the latest internal
-   build → Android icon guard → `./gradlew bundleRelease` → upload the signed
-   `.aab` to the Play **internal** track.
+   build → **source** icon guard → `./gradlew bundleRelease` → **built-`.aab`**
+   icon guard → upload the signed `.aab` to the Play **internal** track.
 4. After it finishes, the `.aab` appears in **Play Console → Test and release →
    Internal testing**. Complete the listing + compliance forms (above) if you
    haven't, then **Review release → Roll out to internal testing**.
@@ -271,8 +272,12 @@ user-visible version string to change.
 > reference name/passwords. Publish/`get-latest-build-number` errors → check the
 > `google_play` group has `GCLOUD_SERVICE_ACCOUNT_CREDENTIALS` and that the
 > service account has release-to-testing permission (and that permissions have
-> propagated). Icon-guard failures → `scripts/verify-android-appicon.py` prints
-> exactly which density/asset is wrong.
+> propagated). Icon-guard failures → the **source** guard
+> (`scripts/verify-android-appicon.py`, before the build) and the **built-`.aab`**
+> guard (`scripts/verify-android-aab-icon.py`, after the build) each print exactly
+> which density/asset is wrong — the latter inspects the produced bundle to prove
+> the real navy launcher icon was actually packaged (not a blank/default). See
+> [`codemagic-builds.md`](./codemagic-builds.md) → "Android gets the icon guard too".
 
 ---
 
