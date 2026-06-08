@@ -176,6 +176,33 @@ definitions:
           pip3 install --quiet --disable-pip-version-check PyJWT cryptography || true
           python3 scripts/verify-ios-testflight-info.py
         fi
+    - name: Guard — fail fast if the App Store listing metadata is incomplete
+      script: |
+        # WHY THIS EXISTS: PUBLISH_MODE=appstore doesn't just upload to TestFlight,
+        # it also submits the version to PUBLIC App Store review. Apple rejects that
+        # submission when the version's listing is incomplete — missing screenshots,
+        # description, keywords, support URL, privacy-policy URL, or an unanswered
+        # age-rating questionnaire — but, like the Test Information case, only AFTER
+        # the full ~10-25 minute Mac build + sign + upload. This up-front guard asks
+        # App Store Connect whether the in-prep version's listing is complete BEFORE
+        # the build, so a forgotten field fails in seconds with an actionable message
+        # + the distribution URL instead of wasting the whole build.
+        #
+        # appstore-mode ONLY: a plain TestFlight build never touches the public
+        # listing, so this guard self-skips unless PUBLISH_MODE=appstore. It is
+        # FAIL-OPEN on uncertainty (missing creds, no JWT lib, API/network hiccup,
+        # unexpected response, or simply no version in a prepare-for-submission
+        # state) — it warns and continues rather than blocking a legitimate build,
+        # mirroring the marketing-version and Test Information guards. It only
+        # HARD-FAILS when App Store Connect proves a required listing field is empty.
+        # PyJWT+cryptography sign the API request; if they aren't present the guard
+        # simply fails open. See scripts/verify-ios-appstore-listing.py.
+        if [ "$PUBLISH_MODE" != "appstore" ]; then
+          echo "PUBLISH_MODE='$PUBLISH_MODE' does not submit to App Store review; skipping the listing guard."
+        else
+          pip3 install --quiet --disable-pip-version-check PyJWT cryptography || true
+          python3 scripts/verify-ios-appstore-listing.py
+        fi
     - name: Guard — fail fast if the AppIcon set is invalid
       script: |
         # WHY THIS EXISTS: TestFlight Build 59 shipped Apple's GENERIC placeholder

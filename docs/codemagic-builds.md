@@ -294,6 +294,33 @@ proves a required field is empty. The guard self-skips on any `PUBLISH_MODE` tha
 doesn't submit to TestFlight. (PyJWT + cryptography are pip-installed in the step
 to sign the API request; if that install fails the guard simply fails open.)
 
+### 4. Incomplete App Store listing metadata fails in seconds (appstore mode only)
+
+The **`iOS → App Store (submit for review)`** workflow (`PUBLISH_MODE=appstore`)
+doesn't just upload to TestFlight — it also submits the version to the **public App
+Store review**. Apple rejects that submission when the version's **listing** is
+incomplete, and (just like the Test Information case) only surfaces it at the very
+end of a ~10–25 minute build. So an **appstore-only** up-front guard runs right
+after the Test Information guard, **before** `Build the signed .ipa`:
+
+- **`verify-ios-appstore-listing.py`** finds the version currently in a
+  prepare-for-submission state and asks App Store Connect (via the same API key)
+  whether its required listing fields are filled in: **screenshots**,
+  **description**, **keywords**, **support URL**, the app-level **privacy-policy
+  URL** (App Information), and the **age-rating** questionnaire. If a required field
+  is empty it **hard-fails in seconds** with the exact missing fields and the
+  `…/distribution` URL to fix them.
+
+It is **fail-open** on uncertainty — exactly like the other guards. If the API
+credentials aren't present, the JWT libraries can't be loaded, an API call errors,
+the response shape is unexpected, or there simply is **no version in a
+prepare-for-submission state**, it **warns and continues** rather than blocking a
+legitimate build; it only hard-fails when App Store Connect proves a required field
+is empty. The guard self-skips unless `PUBLISH_MODE=appstore` (a plain TestFlight
+build never touches the public listing). Per-field nested lookups (screenshots,
+privacy URL, age rating) each fail open on their own errors, so one flaky sub-call
+never produces a false "missing" verdict.
+
 ---
 
 ## Quick troubleshooting
@@ -305,6 +332,7 @@ to sign the API request; if that install fails the guard simply fails open.)
 | Build fails at **"Guard — fail fast if the BUILT .ipa ships Apple's placeholder icon"** | The archive compiled without the app icon (would ship the generic placeholder). Re-run; if it recurs, confirm `Assets.xcassets` is in Copy Bundle Resources and `ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon`. See *Publishing reliability* above. |
 | Build fails at **"Guard — fail fast if TestFlight Test Information is incomplete"** | App Store Connect is missing required Beta App Review Information / Feedback Email. The guard prints the exact fields + the `…/testflight/test-info` URL. Fill them in, then re-run. Catches this in seconds *before* the build. See *Publishing reliability* above. |
 | Publish fails with **"Complete test information is required" / "missing required Beta App Review Information"** | **Not transient** — fill in TestFlight → Test Information (Feedback Email + review contact name/phone/email), then re-run. The up-front guard usually catches this first; if it slipped through (fail-open), this post-upload check is the backstop. See *Publishing reliability* above. |
+| Build fails at **"Guard — fail fast if the App Store listing metadata is incomplete"** (appstore submit) | App Store Connect is missing required listing fields on the in-prep version. The guard prints the exact fields (screenshots / description / keywords / support URL / privacy-policy URL / age rating) + the `…/distribution` URL. Fill them in, then re-run. Catches this in seconds *before* the build. See *Publishing reliability* above. |
 | Publish logged a `500` but the build still made it | Expected — the scripted publish detects an upload that 500'd *after* registering and retries only the submission. No action needed. |
 | Build uploads but never appears in TestFlight | Apple is still processing (give it 20 min), or the **GoGoods Test Group** name doesn't match App Store Connect exactly. |
 | Android build fails | The `goodtunes_keystore` reference or `google_play` credentials aren't set yet — Android is off until you add them (see above). |
