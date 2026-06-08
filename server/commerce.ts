@@ -1960,6 +1960,18 @@ export function registerCommerceRoutes(app: Express) {
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request" });
     const album = await storage.getAlbumById(parsed.data.albumId);
     if (!album) return res.status(404).json({ message: "Album not found" });
+    // Task #1778 — a PREPPING (pre-launch) release shows the rich page in
+    // notify-only "Get Early Access" mode; there is no fan checkout for it.
+    // Hard-reject any charge before we touch SKUs/stock so no surface can
+    // complete a purchase on a not-yet-launched release. Full-access operator
+    // accounts (Bill's fan account, used by the /testing dry-run) are exempt so
+    // the buyer flow can be rehearsed against real Stripe before go-live.
+    if ((album as any).isPrepping) {
+      const { isFullAccessEmail } = await import("@shared/fullAccess");
+      if (!isFullAccessEmail(customer.email)) {
+        return res.status(403).json({ message: "This release isn't on sale yet." });
+      }
+    }
     // Task #1049 — the buy window closes the moment the sunset date arrives
     // (album moves to streaming). Reject before we touch SKUs/stock so no
     // surface that skipped the sold-out buy-options can still check out.

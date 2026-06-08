@@ -32,7 +32,6 @@ import {
 } from "@/pages/Collection";
 import { AlbumDetail } from "@/pages/AlbumDetail";
 import { AlbumDetailMobileSkeleton, AlbumNotFound, FanAppLoader } from "@/components/ui/AlbumDetailSkeleton";
-import { ComingSoon, type ComingSoonRelease } from "@/components/ui/ComingSoon";
 import { InstrumentDetail } from "@/pages/InstrumentDetail";
 import { Playlists } from "@/pages/Playlists";
 import { Account } from "@/pages/Account";
@@ -211,7 +210,7 @@ function ShareSlugTwo() {
   const artistSlug = params.artistSlug ?? "";
   const albumSlug = params.albumSlug ?? "";
   const cacheKey = `${artistSlug}/${albumSlug}`;
-  const { data, isLoading, isError } = useQuery<{ id: string } | null>({
+  const { data, isLoading } = useQuery<{ id: string; isPrepping?: boolean } | null>({
     queryKey: ["/api/public/album-by-slug", cacheKey],
     enabled: !!(artistSlug && albumSlug),
     retry: false,
@@ -223,7 +222,7 @@ function ShareSlugTwo() {
       );
       if (r.status === 404) return null;
       if (!r.ok) throw new Error(`Failed to load (${r.status})`);
-      const album = (await r.json()) as { id: string };
+      const album = (await r.json()) as { id: string; isPrepping?: boolean };
       // Prime the same cache key AlbumDetail reads so it renders without an
       // authed /api/albums/:id refetch (which would 401 when logged out).
       queryClient.setQueryData(["/api/albums", album.id], album);
@@ -231,39 +230,15 @@ function ShareSlugTwo() {
     },
   });
 
-  // Task #1766 — when the release isn't buy-eligible yet (still prepping), the
-  // by-slug route 404s. Before showing "not found", try the coming-soon
-  // resolver: if the release is prepping, we show a branded "Coming <date>"
-  // placeholder with a Get-Notified capture instead of a dead end. Fires only
-  // after the main resolver has resolved to null (404), never racing it.
-  const mainResolved = !isLoading;
-  const { data: comingSoon, isLoading: comingLoading } = useQuery<ComingSoonRelease | null>({
-    queryKey: ["/api/public/coming-soon", cacheKey],
-    enabled: !!(artistSlug && albumSlug) && mainResolved && !data && !isError,
-    retry: false,
-    staleTime: Infinity,
-    queryFn: async () => {
-      const r = await fetch(
-        `/api/public/coming-soon/${encodeURIComponent(artistSlug)}/${encodeURIComponent(albumSlug)}`,
-        { credentials: "include" },
-      );
-      if (r.status === 404) return null;
-      if (!r.ok) throw new Error(`Failed to load (${r.status})`);
-      return (await r.json()) as ComingSoonRelease;
-    },
-  });
-
   if (isLoading) return <AlbumDetailMobileSkeleton />;
-  if (!data) {
-    if (comingLoading) return <AlbumDetailMobileSkeleton />;
-    if (comingSoon) return <ComingSoon release={comingSoon} />;
-    return <AlbumNotFound variant="mobile" />;
-  }
-  // Task #1755 — campaign releases (e.g. nightbirde/hope) are notify-only on
-  // the bare fan link: same locked Preview & Purchase surface, but the primary
-  // CTA captures an email instead of opening checkout. The family link
-  // (/:artist/:release/staging) keeps the full Buy flow — see ShareSlugStaging.
-  const notifyOnly = isCampaignRelease(artistSlug, albumSlug);
+  // Hidden / trashed / unknown releases still 404 server-side → not found.
+  if (!data) return <AlbumNotFound variant="mobile" />;
+  // Task #1778 — a PREPPING (pre-launch) release now resolves to the full rich
+  // page in notify-only "Get Early Access" mode (the primary CTA captures an
+  // email into the waitlist instead of opening checkout). Campaign releases
+  // (e.g. nightbirde/hope) stay notify-only on the bare fan link too. The
+  // family link (/:artist/:release/staging) follows the same prepping rule.
+  const notifyOnly = !!data.isPrepping || isCampaignRelease(artistSlug, albumSlug);
   return <AlbumDetail albumId={data.id} notifyOnly={notifyOnly} />;
 }
 
@@ -276,7 +251,7 @@ function ShareSlugTwo() {
 function ShareSlugOne() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug ?? "";
-  const { data, isLoading, isError } = useQuery<{ id: string } | null>({
+  const { data, isLoading } = useQuery<{ id: string; isPrepping?: boolean } | null>({
     queryKey: ["/api/public/album-by-slug", slug],
     enabled: !!slug,
     retry: false,
@@ -288,38 +263,18 @@ function ShareSlugOne() {
       );
       if (r.status === 404) return null;
       if (!r.ok) throw new Error(`Failed to load (${r.status})`);
-      const album = (await r.json()) as { id: string };
+      const album = (await r.json()) as { id: string; isPrepping?: boolean };
       queryClient.setQueryData(["/api/albums", album.id], album);
       return album;
     },
   });
 
-  // Same coming-soon fallback as ShareSlugTwo: only after the main resolver has
-  // settled to null (404), try the prepping teaser before showing "not found".
-  const mainResolved = !isLoading;
-  const { data: comingSoon, isLoading: comingLoading } = useQuery<ComingSoonRelease | null>({
-    queryKey: ["/api/public/coming-soon", slug],
-    enabled: !!slug && mainResolved && !data && !isError,
-    retry: false,
-    staleTime: Infinity,
-    queryFn: async () => {
-      const r = await fetch(
-        `/api/public/coming-soon/${encodeURIComponent(slug)}`,
-        { credentials: "include" },
-      );
-      if (r.status === 404) return null;
-      if (!r.ok) throw new Error(`Failed to load (${r.status})`);
-      return (await r.json()) as ComingSoonRelease;
-    },
-  });
-
   if (isLoading) return <AlbumDetailMobileSkeleton />;
-  if (!data) {
-    if (comingLoading) return <AlbumDetailMobileSkeleton />;
-    if (comingSoon) return <ComingSoon release={comingSoon} />;
-    return <AlbumNotFound variant="mobile" />;
-  }
-  return <AlbumDetail albumId={data.id} />;
+  // Hidden / trashed / unknown releases still 404 server-side → not found.
+  if (!data) return <AlbumNotFound variant="mobile" />;
+  // Task #1778 — a PREPPING (pre-launch) release resolves to the full rich page
+  // in notify-only "Get Early Access" mode instead of a dead-end teaser.
+  return <AlbumDetail albumId={data.id} notifyOnly={!!data.isPrepping} />;
 }
 
 // Task #1755 — family-review link for a campaign release
@@ -335,7 +290,7 @@ function ShareSlugStaging() {
   const artistSlug = params.artist ?? "";
   const albumSlug = params.release ?? "";
   const cacheKey = `${artistSlug}/${albumSlug}`;
-  const { data, isLoading, isError } = useQuery<{ id: string } | null>({
+  const { data, isLoading, isError } = useQuery<{ id: string; isPrepping?: boolean } | null>({
     queryKey: ["/api/public/album-by-slug", cacheKey],
     enabled: !!(artistSlug && albumSlug),
     retry: false,
@@ -347,7 +302,7 @@ function ShareSlugStaging() {
       );
       if (r.status === 404) return null;
       if (!r.ok) throw new Error(`Failed to load (${r.status})`);
-      const album = (await r.json()) as { id: string };
+      const album = (await r.json()) as { id: string; isPrepping?: boolean };
       queryClient.setQueryData(["/api/albums", album.id], album);
       return album;
     },
@@ -355,7 +310,10 @@ function ShareSlugStaging() {
 
   if (isLoading) return <AlbumDetailMobileSkeleton />;
   if (isError || !data) return <AlbumNotFound variant="mobile" />;
-  return <AlbumDetail albumId={data.id} />;
+  // Task #1778 — the family review link now lands on the SAME rich page as the
+  // fan link. While the release is prepping it's notify-only ("Get Early
+  // Access"); the operator real-checkout dry-run lives at /testing instead.
+  return <AlbumDetail albumId={data.id} notifyOnly={!!data.isPrepping} />;
 }
 
 // Task #1766 — private /testing entry. Renders the FULL buyer page for the

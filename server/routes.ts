@@ -18348,10 +18348,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // design (the UUID URL was never access control), so a logged-out fan
   // hitting a slug gets the same full album+songs payload the authed
   // /api/albums/:id returns and the client primes its React Query cache
-  // with it. Slugs resolve ONLY for buy-eligible releases — not hidden,
-  // not prepping, not soft-deleted, past the sunrise gate (all enforced
-  // by getAlbumBySlug's default gating + the explicit isPrepping check) —
-  // so this exposes nothing the fan couldn't already reach by UUID.
+  // with it. Slugs resolve for any non-hidden, non-deleted release — a
+  // PREPPING (pre-launch) release resolves too (Task #1778) so the share
+  // link shows the full rich page in notify-only "Get Early Access" mode;
+  // hidden / trashed rows still 404 via getAlbumBySlug's default gating.
   app.get("/api/public/album-by-slug/:slug", async (req, res) => {
     const { normalizeShareSlug } = await import("@shared/shareSlug");
     const slug = normalizeShareSlug(String(req.params.slug));
@@ -18380,16 +18380,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Non-staging viewers opt into `includeSunrisePending` so a *staged*
     // (sales-begin-date-pending) release resolves for EVERYONE in read-only
     // "locked" preview mode (Task #1628). This relaxes ONLY the sunrise gate
-    // — hidden / trashed / prepping rows still 404 below. OG/unfurl stays
-    // gated (server/og.ts calls the resolver with no opts).
+    // — hidden / trashed rows still 404 below. OG/unfurl stays gated
+    // (server/og.ts calls the resolver with no opts).
     let album = await storage.getAlbumBySlug(
       slug,
       staging ? { includeHidden: true } : { includeSunrisePending: true },
     );
-    // getAlbumBySlug already filters hidden / trashed / sunrise (relaxed for
-    // staging above). Prepping (not-yet-released shells) must also 404 for
-    // everyone else — a slug is only valid once the release is buy-eligible.
-    if (album && album.isPrepping && !staging) album = null;
+    // Task #1778 — a PREPPING (not hidden, not deleted) release now resolves
+    // publicly so the share link shows the full rich AlbumDetail page in
+    // notify-only "Get Early Access" mode instead of a dead end. Hidden /
+    // trashed rows still 404 (getAlbumBySlug filters them above, not relaxed
+    // for the public path); OG/unfurl stays gated (server/og.ts checks
+    // !isPrepping); and the checkout route hard-rejects a prepping charge.
     // Task #1766 — a valid preview pass (operator "See Preview Flow" link)
     // grants staging read of its OWN album only. We re-resolve with
     // includeHidden and require the resolved id to match the pass's albumId,
@@ -18415,12 +18417,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Task #1310 — PUBLIC two-part share-link resolver
-  // (get.goodtunes.music/<artist>/<album>). Identical buy-eligibility
-  // gating as the single-segment resolver above: hidden / prepping /
-  // trashed / pre-sunrise all 404 for regular fans; staging viewers see
-  // hidden/prepping rows. Must sit ABOVE the /api/albums/:id route
-  // (which also has a single-segment catch, though Express would
-  // differentiate them by method anyway).
+  // (get.goodtunes.music/<artist>/<album>). Identical gating as the
+  // single-segment resolver above: hidden / trashed / pre-sunrise 404 for
+  // regular fans, while a PREPPING (pre-launch) release resolves publicly in
+  // notify-only mode (Task #1778); staging viewers see hidden rows too. Must
+  // sit ABOVE the /api/albums/:id route (which also has a single-segment
+  // catch, though Express would differentiate them by method anyway).
   app.get("/api/public/album-by-slug/:artistSlug/:albumSlug", async (req, res) => {
     const { normalizeShareSlug } = await import("@shared/shareSlug");
     const artistSlug = normalizeShareSlug(String(req.params.artistSlug));
@@ -18444,13 +18446,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     // Same staged-release relaxation as the single-segment route (Task #1628):
     // non-staging viewers see a sunrise-pending release in locked preview mode,
-    // while hidden / trashed / prepping stay 404 and OG/unfurl stays gated.
+    // while hidden / trashed stay 404 and OG/unfurl stays gated. Task #1778 —
+    // a PREPPING (not hidden, not deleted) release now also resolves publicly
+    // so the share link shows the full rich AlbumDetail page in notify-only
+    // "Get Early Access" mode; checkout still hard-rejects a prepping charge.
     let album = await storage.getAlbumByArtistAndSlug(
       artist.id,
       albumSlug,
       staging ? { includeHidden: true } : { includeSunrisePending: true },
     );
-    if (album && album.isPrepping && !staging) album = null;
     // Task #1766 — a valid preview pass grants staging read of its OWN album
     // only (same leak-safe re-resolve as the single-slug route).
     if (!album && !staging) {
@@ -18475,70 +18479,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ ...album, isExplicit: derivedExplicit, songs });
   });
 
-  // Task #1766 — PUBLIC "coming soon" resolver for a prepping release. The
-  // full by-slug routes above 404 a prepping (not-yet-launched) release for
-  // regular fans, so a shared link to a release still being prepped would dead-
-  // end on "not found". This returns ONLY the minimal teaser fields (no songs,
-  // no pricing, no master URLs) for a *prepping* row so the client can show a
-  // branded "Coming <date>" placeholder with a Get-Notified capture. Resolves
-  // for everyone (no staging needed) but ONLY while the release is prepping —
-  // once it's live, the real by-slug route serves it and this 404s.
-  //
-  // Access control: this MUST preserve hidden gating. We resolve with the SAME
-  // non-staging options the by-slug routes use for the public (no-pass) path
-  // (`includeSunrisePending`, which does NOT relax the hidden filter), so a
-  // hidden row never reaches this teaser even if its slugs are guessed. We also
-  // defensively reject `isHidden`. A staged-launch teaser is inherently public,
-  // so the operator preps the release WITHOUT hiding it. OG/unfurl stays gated.
-  app.get("/api/public/coming-soon/:artistSlug/:albumSlug", async (req, res) => {
-    const { normalizeShareSlug } = await import("@shared/shareSlug");
-    const artistSlug = normalizeShareSlug(String(req.params.artistSlug));
-    const albumSlug = normalizeShareSlug(String(req.params.albumSlug));
-    if (!artistSlug || !albumSlug) return res.status(404).json({ message: "Not found" });
-    const artist = await storage.getPersonByArtistShareSlug(artistSlug);
-    if (!artist) return res.status(404).json({ message: "Not found" });
-    const album = await storage.getAlbumByArtistAndSlug(artist.id, albumSlug, {
-      includeSunrisePending: true,
-    });
-    if (!album || !album.isPrepping || (album as any).isHidden) {
-      return res.status(404).json({ message: "Not found" });
-    }
-    return res.json({
-      id: album.id,
-      title: album.title,
-      artist: album.artist,
-      artwork: album.artwork,
-      type: album.type ?? null,
-      goodTunesReleaseDate: (album as any).goodTunesReleaseDate ?? null,
-    });
-  });
-
-  // Task #1766 — single-segment companion to the coming-soon resolver above
-  // (get.goodtunes.music/<slug>, e.g. /hope). Same contract and access control
-  // as the two-part route: returns ONLY the minimal teaser fields for a
-  // *prepping* row so the client can show a branded "Coming <date>" placeholder,
-  // resolves for everyone but ONLY while prepping, and preserves hidden gating
-  // (non-staging `includeSunrisePending` does NOT relax the hidden filter, plus
-  // a defensive isHidden reject). OG/unfurl stays gated.
-  app.get("/api/public/coming-soon/:slug", async (req, res) => {
-    const { normalizeShareSlug } = await import("@shared/shareSlug");
-    const slug = normalizeShareSlug(String(req.params.slug));
-    if (!slug) return res.status(404).json({ message: "Not found" });
-    const album = await storage.getAlbumBySlug(slug, {
-      includeSunrisePending: true,
-    });
-    if (!album || !album.isPrepping || (album as any).isHidden) {
-      return res.status(404).json({ message: "Not found" });
-    }
-    return res.json({
-      id: album.id,
-      title: album.title,
-      artist: album.artist,
-      artwork: album.artwork,
-      type: album.type ?? null,
-      goodTunesReleaseDate: (album as any).goodTunesReleaseDate ?? null,
-    });
-  });
+  // Task #1778 — the standalone "Coming <date>" teaser endpoints were retired:
+  // a PREPPING release now resolves through the by-slug routes above and shows
+  // the full rich AlbumDetail page in notify-only "Get Early Access" mode, so
+  // there is no longer a separate coming-soon placeholder to feed.
 
   // Task #1766 — mint a signed "preview pass" for the staged-launch review
   // flow ("See Preview Flow" in the admin Share panel). Operator-only:

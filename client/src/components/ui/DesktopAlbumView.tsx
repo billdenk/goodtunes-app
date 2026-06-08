@@ -796,7 +796,7 @@ export function DesktopAlbumView({
                       }}
                     >
                       <Bell className="w-4 h-4" strokeWidth={2.2} />
-                      Get early access
+                      Get Early Access
                     </button>
                   ) : onBuyBundle && album.priceCents != null ? (
                     <button
