@@ -339,8 +339,11 @@ export function Account() {
   };
 
   const handleLogout = async () => {
-    await logout();
-    navigate("/login");
+    try {
+      await logout();
+    } finally {
+      navigate("/login");
+    }
   };
 
   // In-app account deletion (App Store 5.1.1(v) + Google Play). Calls the

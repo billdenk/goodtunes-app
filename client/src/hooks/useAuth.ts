@@ -140,9 +140,16 @@ export function useAuth() {
         const me = queryClient.getQueryData<AuthUser | null>(["/api/me"]);
         track("sign_out", { kind: me?.kind });
       } catch {}
-      await apiRequest("POST", "/api/logout");
-    },
-    onSuccess: () => {
+
+      // Sign-out is fire-and-forget: tell the server to destroy the session
+      // best-effort, but never let a failed/500 `POST /api/logout` reject and
+      // escape to the global error reporter as a fatal banner. Either way we
+      // clear local auth state below so the user ends up signed out locally.
+      try {
+        await apiRequest("POST", "/api/logout");
+      } catch {}
+
+      // Always clear local auth state, even if the server request failed.
       setAuthToken(null);
       queryClient.setQueryData(["/api/me"], null);
       queryClient.clear();
