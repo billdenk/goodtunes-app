@@ -279,6 +279,29 @@ user-visible version string to change.
 > the real navy launcher icon was actually packaged (not a blank/default). See
 > [`codemagic-builds.md`](./codemagic-builds.md) → "Android gets the icon guard too".
 
+### Confirm the icon on the first real build (one-time)
+
+The built-`.aab` guard had only ever run against synthetic/reconstructed input
+before the first real Gradle bundle. On that first `android-internal` run, do a
+quick by-hand confirmation that it didn't false-positive on a genuine store
+binary:
+
+1. **Guard step is green.** In the build log, the **"fail fast if the BUILT
+   `.aab` ships a wrong/blank launcher icon"** step should end with
+   `Built-AAB icon guard passed`, and the lines above it should report the
+   adaptive-icon XML present, the largest legacy launcher icon `192px` (`>= 192`),
+   and a composited luminance `~0.30` (`<= 0.7` — the dark navy brand, not a
+   near-white placeholder). The color check runs even if the `pip3 install Pillow`
+   line fails, because the guard falls back to ImageMagick / the raw PNG header.
+2. **Installed icon is the navy "G".** After rolling out to internal testing,
+   install on a real device and confirm the launcher icon is the navy GoodTunes
+   "G" — not a blank/default/white square.
+
+If both hold, the guard is confirmed working against a real bundle and needs no
+threshold/path changes. (The iOS built-`.ipa` guard's authoritative check —
+`assetutil` on the compiled `Assets.car` — is macOS-only and is exercised on the
+TestFlight build's macOS runner, not locally.)
+
 ---
 
 ## What's intentionally out of scope
