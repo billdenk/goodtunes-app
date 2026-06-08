@@ -37,7 +37,13 @@ export const PRIVACY_POLICY_URL = "https://goodtunes.music/privacy";
 // Task #936 — the album the store.goodtunes.music launch storefront drops fans
 // into (Nightbirde "Hope", June 8 launch). Prod-only row; dev DBs can point the
 // storefront at a local album via VITE_LAUNCH_ALBUM_ID for testing.
-export const STOREFRONT_LAUNCH_ALBUM_ID = "54d46505-2d23-4066-88f3-0337bb2e8b79";
+// This MUST be the canonical 7" "Hope" (share_slug "hope"): the fully-configured
+// go-live release carrying the 12 songs, the 7" SKU, the signed-cert + Gift of
+// Hope add-ons, and the Nightbirde Foundation donation split. It matches the
+// server-side CAMPAIGN_PREVIEWS mapping for nightbirde/hope. Prod also holds an
+// EMPTY single_lp "Hope" duplicate (54d46505-…, 0 songs / no SKU / no add-ons) —
+// do NOT point the storefront at it or fans land on a blank, unpurchasable page.
+export const STOREFRONT_LAUNCH_ALBUM_ID = "b250a5a5-98cc-4673-9903-ab39e5278d8c";
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
