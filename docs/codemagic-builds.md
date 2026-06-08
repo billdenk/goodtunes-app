@@ -272,6 +272,28 @@ half-committed state. Google's publisher client also already retries transient
 block. (If transient publish failures ever become common, the future path is
 fastlane `supply`, pre-installed on the runner, with its own retry.)
 
+### 3. Incomplete TestFlight Test Information fails in seconds, not after the build
+
+The deterministic check above (in `scripts/publish-ios.sh`) only sees the missing
+Test Information **after** the binary uploads — i.e. at the very end of a ~10–25
+minute Mac build. To avoid wasting that build, an **up-front guard** now runs
+right after the marketing-version guard, **before** `Build the signed .ipa`:
+
+- **`verify-ios-testflight-info.py`** asks App Store Connect (via the same API key
+  the rest of the pipeline uses) whether the app's **Beta App Review Information**
+  (contact First/Last Name, Phone Number, Email — plus demo-account name/password
+  when the app marks one required) and **Beta App Information** (Feedback Email)
+  are filled in. If a required field is empty it **hard-fails in seconds** with the
+  exact missing fields and the `…/testflight/test-info` URL to fix them.
+
+It is **fail-open** on uncertainty — exactly like the marketing-version guard. If
+the API credentials aren't present, the JWT libraries can't be loaded, the API
+call errors, or the response shape is unexpected, it **warns and continues**
+rather than blocking a legitimate build; it only hard-fails when App Store Connect
+proves a required field is empty. The guard self-skips on any `PUBLISH_MODE` that
+doesn't submit to TestFlight. (PyJWT + cryptography are pip-installed in the step
+to sign the API request; if that install fails the guard simply fails open.)
+
 ---
 
 ## Quick troubleshooting
@@ -281,7 +303,8 @@ fastlane `supply`, pre-installed on the runner, with its own retry.)
 | Build fails at signing | The **`GoodTunes ASC API key`** integration isn't set, is misnamed, or the key lacks **App Manager** role. Re-check step 2–3. |
 | "No app found for Apple ID" / build-number step fails | `APP_STORE_APPLE_ID` in the `apple_app` group is missing or wrong. It's the long number from App Information. |
 | Build fails at **"Guard — fail fast if the BUILT .ipa ships Apple's placeholder icon"** | The archive compiled without the app icon (would ship the generic placeholder). Re-run; if it recurs, confirm `Assets.xcassets` is in Copy Bundle Resources and `ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon`. See *Publishing reliability* above. |
-| Publish fails with **"Complete test information is required" / "missing required Beta App Review Information"** | **Not transient** — fill in TestFlight → Test Information (Feedback Email + review contact name/phone/email), then re-run. See *Publishing reliability* above. |
+| Build fails at **"Guard — fail fast if TestFlight Test Information is incomplete"** | App Store Connect is missing required Beta App Review Information / Feedback Email. The guard prints the exact fields + the `…/testflight/test-info` URL. Fill them in, then re-run. Catches this in seconds *before* the build. See *Publishing reliability* above. |
+| Publish fails with **"Complete test information is required" / "missing required Beta App Review Information"** | **Not transient** — fill in TestFlight → Test Information (Feedback Email + review contact name/phone/email), then re-run. The up-front guard usually catches this first; if it slipped through (fail-open), this post-upload check is the backstop. See *Publishing reliability* above. |
 | Publish logged a `500` but the build still made it | Expected — the scripted publish detects an upload that 500'd *after* registering and retries only the submission. No action needed. |
 | Build uploads but never appears in TestFlight | Apple is still processing (give it 20 min), or the **GoGoods Test Group** name doesn't match App Store Connect exactly. |
 | Android build fails | The `goodtunes_keystore` reference or `google_play` credentials aren't set yet — Android is off until you add them (see above). |

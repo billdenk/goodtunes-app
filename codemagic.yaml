@@ -152,6 +152,30 @@ definitions:
           --json > /tmp/live_app_store_versions.json 2>/dev/null \
           || echo "[]" > /tmp/live_app_store_versions.json
         python3 scripts/verify-ios-marketing-version.py "$STAMPED" /tmp/live_app_store_versions.json
+    - name: Guard — fail fast if TestFlight Test Information is incomplete
+      script: |
+        # WHY THIS EXISTS: every build on these workflows submits to TestFlight,
+        # and App Store Connect rejects a TestFlight submission whose Beta App
+        # Review Information (contact First/Last Name, Phone Number, Email) or
+        # Beta App Information (Feedback Email) is incomplete. scripts/publish-ios.sh
+        # already catches that deterministic failure — but only AFTER the full
+        # ~10-25 minute Mac build + sign + upload. This up-front guard asks App
+        # Store Connect whether that Test Information is complete BEFORE the build,
+        # so a forgotten field fails in seconds with an actionable message + the
+        # test-info URL instead of wasting the whole build.
+        #
+        # It is FAIL-OPEN on uncertainty (missing creds, no JWT lib, API/network
+        # hiccup, unexpected response) — it warns and continues rather than
+        # blocking a legitimate build, mirroring the marketing-version guard. It
+        # only HARD-FAILS when App Store Connect proves a required field is empty.
+        # PyJWT+cryptography sign the API request; if they aren't present the guard
+        # simply fails open. See scripts/verify-ios-testflight-info.py.
+        if [ "$PUBLISH_MODE" != "testflight" ] && [ "$PUBLISH_MODE" != "appstore" ]; then
+          echo "PUBLISH_MODE='$PUBLISH_MODE' does not submit to TestFlight; skipping the Test Information guard."
+        else
+          pip3 install --quiet --disable-pip-version-check PyJWT cryptography || true
+          python3 scripts/verify-ios-testflight-info.py
+        fi
     - name: Guard — fail fast if the AppIcon set is invalid
       script: |
         # WHY THIS EXISTS: TestFlight Build 59 shipped Apple's GENERIC placeholder
