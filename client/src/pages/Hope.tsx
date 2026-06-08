@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 /**
- * "Get Hope. Give Hope." campaign registry.
+ * "Get Hope. Gift Hope." campaign registry.
  *
  * The redesigned campaign rendering chrome (CampaignFlow + its steps) was
  * retired once every campaign link — fan and family — was routed to the shared
@@ -16,7 +16,7 @@ import type { ReactNode } from "react";
 
 type Edition = { label: string; items: { head: string; body: string }[] };
 
-type ReleaseContent = {
+export type ReleaseContent = {
   artistName: string;
   releaseName: string;
   launchLabel: string;
@@ -163,4 +163,16 @@ function releaseKey(artist?: string, release?: string): string | null {
 // shared /:artistSlug/:albumSlug route.
 export function isCampaignRelease(artist?: string, release?: string): boolean {
   return releaseKey(artist, release) !== null;
+}
+
+// The full campaign content for an artist/release pair, or null when the pair
+// isn't a known campaign. LockedOfferModal uses this to render the rich
+// "Get Hope. Gift Hope." flow over the locked preview page; non-campaign
+// releases fall through to the modal's generic offer/notify card.
+export function getCampaignRelease(
+  artist?: string,
+  release?: string,
+): ReleaseContent | null {
+  const key = releaseKey(artist, release);
+  return key ? RELEASES[key] : null;
 }

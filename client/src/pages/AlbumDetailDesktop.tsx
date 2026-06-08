@@ -1039,9 +1039,9 @@ export function AlbumDetailDesktop({
           forceBuy={publicPreview === "buy"}
           accentMint={!!publicPreview}
           dismissLabel={publicPreview ? "Preview the Music" : undefined}
-          onBuy={() => {
+          onBuy={(opts) => {
             setShowOfferModal(false);
-            handleBuyBundle();
+            handleBuyBundle(opts);
           }}
           prefilledEmail={user?.email ?? null}
           source="get"

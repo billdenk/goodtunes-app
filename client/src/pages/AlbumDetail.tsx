@@ -453,6 +453,10 @@ function AlbumDetailMobile({
     if (typeof window === "undefined") return false;
     return new URL(window.location.href).searchParams.get("buy") === "1";
   });
+  // Task #1816 — the campaign offer flow can pre-select the signed-cert upgrade
+  // before handing off to the Buy sheet. (Quantity/gift selections are
+  // editorial only and are re-collected on the Stripe screen by design.)
+  const [buySheetSignedDefault, setBuySheetSignedDefault] = useState(false);
   // Task #1766 — the offer modal is the on-demand "Get Notified" capture
   // (opened from the transport's Get Notified CTA). Task #1784 — on the public
   // preview surfaces (/hope, /staging) it auto-opens on arrival so the page
@@ -1210,8 +1214,10 @@ function AlbumDetailMobile({
         {showBuySheet && !notifyOnly && (
           <BuySheet
             albumId={album.id}
+            signedCertDefault={buySheetSignedDefault}
             onClose={() => {
               setShowBuySheet(false);
+              setBuySheetSignedDefault(false);
               // Strip the ?buy=1 marker so a refresh doesn't keep
               // popping the sheet open after the fan closes it.
               try {
@@ -1240,8 +1246,9 @@ function AlbumDetailMobile({
             forceBuy={publicPreview === "buy"}
             accentMint={!!publicPreview}
             dismissLabel={publicPreview ? "Preview the Music" : undefined}
-            onBuy={() => {
+            onBuy={(opts) => {
               setShowOfferModal(false);
+              setBuySheetSignedDefault(!!opts?.signedCert);
               setShowBuySheet(true);
             }}
             prefilledEmail={user?.email ?? null}
