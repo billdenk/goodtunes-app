@@ -84,7 +84,7 @@ import { FinishSetup } from "@/pages/FinishSetup";
 import { AccountMerge } from "@/pages/AccountMerge";
 // Task #1496 — Public account-deletion page for the Play Store Data safety form.
 import DeleteAccount from "@/pages/DeleteAccount";
-import { CampaignPreview, CampaignPublic, CampaignStaging, isCampaignRelease } from "@/pages/Hope";
+import { CampaignPreview, CampaignStaging } from "@/pages/Hope";
 import { AdminWelcomeBack } from "@/pages/AdminWelcomeBack";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
@@ -221,19 +221,6 @@ function ShareSlugTwo() {
   if (isLoading) return <AlbumDetailMobileSkeleton />;
   if (isError || !data) return <AlbumNotFound variant="mobile" />;
   return <AlbumDetail albumId={data.id} />;
-}
-
-// The two-segment /:artist/:release route is shared: a known campaign (e.g.
-// /nightbirde/hope) renders the public campaign teaser, everything else falls
-// through to the normal share-link album resolver.
-function ArtistAlbumOrCampaign() {
-  const params = useParams<{ artistSlug: string; albumSlug: string }>();
-  if (isCampaignRelease(params.artistSlug, params.albumSlug)) {
-    return (
-      <CampaignPublic artist={params.artistSlug} release={params.albumSlug} />
-    );
-  }
-  return <ShareSlugTwo />;
 }
 
 function Router() {
@@ -440,12 +427,14 @@ function Router() {
             Google Play Data safety form. No auth gate; host-agnostic so it
             resolves at goodtunes.music/delete-account. */}
         <Route path="/delete-account" component={DeleteAccount} />
-        {/* Campaign "Get Hope. Give Hope." — the public artist-first teaser
-            lives on the shared /:artist/:release share-link route below (see
-            ArtistAlbumOrCampaign); /staging/:artist/:release is the reusable
-            family-review preview. Both are public; the preview's ordering
-            buttons are disabled until launch. Copy + pricing live in the
-            RELEASES registry in client/src/pages/Hope.tsx. */}
+        {/* Campaign "Get Hope. Give Hope." family-review preview only.
+            Task #1735 retired the public artist-first "Coming today" teaser:
+            the bare /:artist/:release route now always falls through to the
+            standard buyable album surface (ShareSlugTwo → AlbumDetail's
+            locked-player landing). /staging/:artist/:release (and the
+            /:artist/:release/staging suffix Bill shares with family) keep the
+            reusable family-review preview. Copy + pricing live in the RELEASES
+            registry in client/src/pages/Hope.tsx. */}
         <Route path="/staging/:artist/:release" component={CampaignPreview} />
         {/* Suffix form Bill shares with family: /:artist/:release/staging
             (e.g. /nightbirde/hope/staging) — family tier, buy flow on. */}
@@ -776,7 +765,7 @@ function Router() {
             the public two-part resolver otherwise. Both segments are
             validated as non-reserved by the server before the album
             resolves. */}
-        <Route path="/:artistSlug/:albumSlug" component={ArtistAlbumOrCampaign} />
+        <Route path="/:artistSlug/:albumSlug" component={ShareSlugTwo} />
         <Route path="/">
           {isStoreHost() ? (
             <Redirect to="/store" />

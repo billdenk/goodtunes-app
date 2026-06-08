@@ -4,6 +4,17 @@ Operator runbook for flipping `get.goodtunes.music/nightbirde/hope` from a stage
 preview to a live, purchasable release. Bill runs this. Nightbirde's data is
 **prod-only**, so every step is performed against production.
 
+> **Code status (task #1735 — done):** the public "Coming today" campaign teaser
+> has been **retired in code**. The bare `get.goodtunes.music/nightbirde/hope`
+> route no longer renders the `CampaignPublic` teaser — it now falls through to
+> the standard buyable album surface (the task #1734 locked-player landing →
+> offer modal → existing Buy sheet). The only thing still holding sales closed is
+> the **prod data flip** below (sections 4–5: turn off `is_prepping`, confirm the
+> sunrise time). Once Jane's family approves the copy + images and Bill does that
+> flip + republishes, logged-out fans can complete a real purchase. The
+> family-review `/staging/...` (and `/nightbirde/hope/staging`) preview links are
+> untouched and still work for any last approval pass.
+
 The fan-facing page and the Buy → shipping → tax → Stripe checkout flow are already
 launch-polished (sold-out, tax-unavailable, no-shipping-quote, and staged/locked
 states all render cleanly). What remains is operator/infra configuration that the
@@ -34,10 +45,11 @@ app can't set for itself.
   the sales-begin date is today. He just doesn't yet know the exact time today, and
   sales must **not** open to the public until Jane's family approves the copy +
   images. So today = the **non-buyable** teaser only (above). Opening real sales is a
-  later, separate flip held until family sign-off — and lives with **task #1734
-  (GET locked-player landing)**, since the slug currently renders the campaign
-  teaser, not the standard buy page. Do **not** turn off `is_prepping` on the album
-  today (sections 4–5 stay deferred).
+  later, separate flip held until family sign-off. **Task #1735 has since done the
+  code half of that flip** — retiring the public teaser so the slug now resolves to
+  the standard buyable surface (task #1734's locked-player landing). What's left is
+  the **prod data flip** in sections 4–5 (turn off `is_prepping`, confirm the
+  sunrise time), which Bill runs once the family approves.
 - **Google Play (player-only) = land today if it flows, web is the priority.** This
   is an operator/Codemagic/console track — every in-repo prerequisite is already
   done (see `store-review-readiness.md`). Remaining steps are the Codemagic
@@ -45,6 +57,12 @@ app can't set for itself.
   which only Bill can run. It can proceed in tandem with the web launch.
 
 ## A. Step one — get the page up today (non-buyable)
+
+> **⚠️ Superseded by task #1735.** This section described today's launch-day
+> teaser. That public "Coming today" teaser is now **retired in code** — the bare
+> `/nightbirde/hope` route no longer renders it; it falls through to the standard
+> buyable surface. Kept here for history. To go live, run the **prod data flip**
+> in sections 4–5, not this teaser publish.
 
 This is the only action needed for today's goal. It puts the public landing
 experience live with **no way to buy** — exactly the dimmed page + offer modal +
