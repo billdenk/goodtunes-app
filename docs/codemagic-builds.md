@@ -4,6 +4,8 @@ This is the plain-English runbook for cutting GoodTunes iOS builds **without a M
 
 The pipeline itself lives in [`codemagic.yaml`](../codemagic.yaml) at the repo root. You don't have to read it — this doc covers everything you actually do. For the older Mac-in-Xcode way (the fallback if Codemagic is ever down), see [`native-builds.md`](./native-builds.md).
 
+> **Where Codemagic gets the code:** Codemagic builds from the GitHub mirror `github.com/billdenk/goodtunes-app` (branch `main`). Replit is the source of truth; GitHub is just a build mirror. That mirror now updates **automatically on every merge** to the project's main — `scripts/post-merge.sh` force-pushes the merged code to GitHub at the end of each merge, so a Codemagic build always picks up the latest. You don't push anything by hand. (If GitHub ever drifts behind — e.g. the push token was revoked — the manual catch-up recipe lives in `.agents/memory/github-mirror-push.md`.)
+
 ---
 
 ## What the pipeline does (the short version)

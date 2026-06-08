@@ -5830,3 +5830,51 @@ SQL
 }
 backfill_task_1710_strip_apple_bio dev  "${DATABASE_URL:-}"
 backfill_task_1710_strip_apple_bio prod "${PROD_DATABASE_URL:-}"
+
+# Task #1718 — Keep the GitHub build mirror in lock-step automatically.
+# Codemagic builds iOS from github.com/billdenk/goodtunes-app (branch main).
+# Replit is the source of truth; GitHub is only a build mirror. This step runs
+# on EVERY merge to project main, so the merged HEAD lands on GitHub within the
+# post-merge window — no more manual catch-up pushes, no more silent drift.
+#
+# Three gotchas (see .agents/memory/github-mirror-push.md for the full story):
+#   1. HTTPS password auth is dead — authenticate with the Replit-provided
+#      GITHUB_TOKEN as an Authorization: Basic base64(x-access-token:TOKEN)
+#      header. Never echo the token or the base64 blob.
+#   2. The repo's LFS pre-push hook blocks on an SSH password prompt for the
+#      Replit lfsurl. Only two screen-recording files are LFS-tracked and they
+#      are irrelevant to the build, so push with --no-verify (skip the hook) +
+#      GIT_LFS_SKIP_PUSH=1 (GitHub gets the tiny pointer blobs, which is fine).
+#   3. The remote NAME differs per environment (and may be absent in a fresh
+#      post-merge clone), so we push to the URL directly instead of a remote
+#      name. We force-push (mirror semantics): GitHub main is disposable and
+#      must always equal project main even across history rewrites/rebases.
+#
+# Best-effort by design: a sync failure (offline, token missing, GitHub
+# hiccup) logs a WARNING and never fails the merge. Incremental pushes are a
+# handful of commits, so they finish in seconds; the timeout is a safety net
+# against a pathological hang, not the expected path.
+GITHUB_MIRROR_URL="https://github.com/billdenk/goodtunes-app.git"
+sync_github_build_mirror() {
+  if [ -z "${GITHUB_TOKEN:-}" ]; then
+    echo "post-merge: skipping GitHub mirror sync (GITHUB_TOKEN not set)"
+    return 0
+  fi
+  local head auth
+  head=$(git rev-parse HEAD 2>/dev/null || true)
+  if [ -z "$head" ]; then
+    echo "post-merge: WARNING — GitHub mirror sync skipped (could not resolve HEAD)"
+    return 0
+  fi
+  auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
+  echo "post-merge: syncing GitHub build mirror (main -> github.com/billdenk/goodtunes-app)"
+  if GIT_LFS_SKIP_PUSH=1 GIT_TERMINAL_PROMPT=0 timeout 90 \
+       git -c http.extraheader="Authorization: Basic $auth" \
+           push --no-verify --force "$GITHUB_MIRROR_URL" "HEAD:refs/heads/main" >/dev/null 2>&1
+  then
+    echo "post-merge: GitHub mirror sync ok ($head)"
+  else
+    echo "post-merge: WARNING — GitHub mirror sync failed (continuing; Codemagic may build stale code until the next successful sync)"
+  fi
+}
+sync_github_build_mirror

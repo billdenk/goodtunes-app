@@ -7,8 +7,21 @@ description: How to manually sync this Replit project's main to github.com/billd
 
 Codemagic builds iOS from `github.com/billdenk/goodtunes-app` branch `main`. Replit is the
 source of truth; GitHub is only a build mirror. The remote already exists locally as
-`subrepl-8shaawlm` -> `https://github.com/billdenk/goodtunes-app.git`. The automated
-Replit->GitHub sync has stalled before, requiring a manual one-time push.
+`subrepl-8shaawlm` -> `https://github.com/billdenk/goodtunes-app.git`, but the remote NAME
+differs per environment and may be absent in a fresh post-merge clone, so always push to the
+**URL directly**, not a remote name.
+
+## This is now automatic (post-merge), so you rarely push by hand
+
+`scripts/post-merge.sh` ends with `sync_github_build_mirror`, which force-pushes the merged
+HEAD to GitHub `main` on **every merge to project main**. It uses the same recipe below
+(token header + `--no-verify` + `GIT_LFS_SKIP_PUSH=1`), pushes to the URL directly, is
+best-effort (a failure only logs a WARNING, never fails the merge), and is `timeout 90`-bounded.
+So GitHub tracks project main within the post-merge window with no manual steps. The manual
+recipe below is the fallback for a one-time catch-up if the auto-sync ever WARNs repeatedly
+(e.g. token revoked, GitHub outage) and GitHub drifts behind. The big ~2.4 GB catch-up only
+happens once after a long stall; steady-state incremental pushes are a handful of commits and
+finish in seconds, which is why the foreground post-merge step is safe.
 
 ## The two gotchas that make a naive `git push` fail
 
