@@ -990,7 +990,7 @@ export function AdminFrame({
             three columns. The Admin chip lives here on the right;
             pages can use AdminPageHeader inside the body to render
             their own breadcrumb/title beneath this strip. */}
-        <div className="sticky top-0 z-30 h-14 flex-shrink-0 border-b border-slate-200 bg-white flex items-center justify-between gap-3 px-4 sm:px-6">
+        <div className="sticky top-0 z-30 h-14 flex-shrink-0 border-b border-slate-200 bg-white flex items-center gap-3 px-4 sm:px-6">
           {/* Task #336 — On mobile the sidebar (and its search bar) is
               hidden, so render a second copy of the search input in the
               top strip so admins on phones still have a way in. */}
@@ -1000,8 +1000,15 @@ export function AdminFrame({
                 don't race for focus/open state. */}
             <AdminSearchBar registerShortcut={false} />
           </div>
-          <ViewAsSwitcher />
-          <AdminUserMenu />
+          {/* Task #1794 — Hard-pin the avatar group to the right with
+              ml-auto. justify-between collapsed a lone avatar to the left
+              whenever its left-side siblings rendered nothing (mobile
+              search is md:hidden; ViewAsSwitcher returns null for
+              non-super-admins), so the right group must own its anchor. */}
+          <div className="ml-auto flex items-center gap-3">
+            <ViewAsSwitcher />
+            <AdminUserMenu />
+          </div>
         </div>
         {/* Task #138 — Passive STT-creep alert banner. Lives outside
             the page-content max-width wrapper so it spans uniformly
