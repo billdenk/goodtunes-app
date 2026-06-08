@@ -2,7 +2,6 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode 
 import { createPortal } from "react-dom";
 import { formatUsdCents } from "@shared/money";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Link } from "wouter";
 import { popBounce } from "@/lib/motion";
 import { ChevronRight, Play, Pause, Shuffle, Lock, Share, MoreHorizontal, X, Maximize2, Bell, ShoppingCart } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
@@ -701,24 +700,18 @@ export function DesktopAlbumView({
               {album.title}
             </h1>
 
-            {album.primaryArtistId ? (
-              <Link
-                href={`/admin/people/${album.primaryArtistId}`}
-                data-testid="link-artist"
-                className="self-start mt-1.5 text-[18px] font-semibold tracking-[-0.01em] transition-colors hover:underline underline-offset-4"
-                style={{ color: BRAND_BLUE, textDecorationColor: BRAND_BLUE }}
-              >
-                {album.artist}
-              </Link>
-            ) : (
-              <span
-                className="self-start mt-1.5 text-[18px] font-semibold tracking-[-0.01em]"
-                style={{ color: BRAND_BLUE }}
-                data-testid="text-artist"
-              >
-                {album.artist}
-              </span>
-            )}
+            {/* Artist name is intentionally NOT a link here. The buyer-facing
+                album page lives on the storefront/purchase host, where the old
+                `/admin/people/:id` artist link dead-ended fans on a GoodTunes
+                admin login mid-purchase. Render it as plain (non-navigating)
+                blue text so nothing pulls a buyer off the Buy flow. */}
+            <span
+              className="self-start mt-1.5 text-[18px] font-semibold tracking-[-0.01em]"
+              style={{ color: BRAND_BLUE }}
+              data-testid="text-artist"
+            >
+              {album.artist}
+            </span>
 
             {meta && (
               <div
