@@ -374,17 +374,21 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
 
 /* ── faint album page behind the modal ────────────────────────────── */
 
-function AlbumBackdrop({ c }: { c: ReleaseContent }) {
+function AlbumBackdrop({ c, dimmed = true }: { c: ReleaseContent; dimmed?: boolean }) {
   const img = (name: string) => `${c.imageBase}/${name}`;
   return (
-    <div className="absolute inset-0 overflow-hidden" aria-hidden style={{ background: BG }}>
+    <div className="absolute inset-0 overflow-hidden" aria-hidden={dimmed} style={{ background: BG }}>
       <img
         src={img(c.images.logo)}
         alt=""
         className="absolute top-7 left-8 w-[120px] h-auto opacity-90"
         draggable={false}
       />
-      <div className="absolute left-[6%] top-[26%] opacity-25 blur-[1px]">
+      <div
+        className={`absolute left-[6%] top-[26%] transition-all duration-500 ${
+          dimmed ? "opacity-25 blur-[1px]" : "opacity-100 blur-0"
+        }`}
+      >
         <div
           className="rounded-2xl overflow-hidden"
           style={{ width: 230, height: 230, boxShadow: "0 18px 50px rgba(0,0,0,0.5)" }}
@@ -392,7 +396,11 @@ function AlbumBackdrop({ c }: { c: ReleaseContent }) {
           <img src={img(c.images.hero)} alt="" className="w-full h-full object-cover" />
         </div>
       </div>
-      <div className="absolute right-[6%] top-[40%] w-[34%] flex flex-col gap-5 opacity-20">
+      <div
+        className={`absolute right-[6%] top-[40%] w-[34%] flex flex-col gap-5 transition-opacity duration-500 ${
+          dimmed ? "opacity-20" : "opacity-100"
+        }`}
+      >
         {c.tracklist.map((t, i) => (
           <div key={t.title} className="flex items-center gap-4">
             <span className="text-white/50 text-[13px] tabular-nums">{i + 1}.</span>
@@ -401,10 +409,12 @@ function AlbumBackdrop({ c }: { c: ReleaseContent }) {
           </div>
         ))}
       </div>
-      <div
-        className="absolute inset-0"
-        style={{ background: "rgba(0,3,18,0.6)", backdropFilter: "blur(3px)" }}
-      />
+      {dimmed && (
+        <div
+          className="absolute inset-0"
+          style={{ background: "rgba(0,3,18,0.6)", backdropFilter: "blur(3px)", pointerEvents: "none" }}
+        />
+      )}
     </div>
   );
 }
@@ -790,6 +800,7 @@ function CampaignFlow({ c, mode }: { c: ReleaseContent; mode: "comingSoon" | "pr
   const [boxQty, setBoxQty] = useState(0);
   const [giftAmount, setGiftAmount] = useState(c.gift.min);
   const [zoomSrc, setZoomSrc] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {
     if (signedQty > bundleQty) setSignedQty(bundleQty);
@@ -818,8 +829,9 @@ function CampaignFlow({ c, mode }: { c: ReleaseContent; mode: "comingSoon" | "pr
       style={{ fontFamily: "system-ui, -apple-system, 'SF Pro Text', sans-serif" }}
       data-testid="hope-offer-flow"
     >
-      <AlbumBackdrop c={c} />
+      <AlbumBackdrop c={c} dimmed={!previewing} />
 
+      {!previewing && (
       <div
         className="relative z-10 w-[min(720px,calc(100vw-48px))] max-h-[calc(100vh-56px)] rounded-[28px] flex flex-col overflow-hidden"
         style={{
@@ -906,15 +918,16 @@ function CampaignFlow({ c, mode }: { c: ReleaseContent; mode: "comingSoon" | "pr
               <ChevronLeft className="w-4 h-4" strokeWidth={2.4} />
               Back
             </button>
-          ) : !comingSoon ? (
+          ) : (
             <button
               type="button"
-              data-testid="button-later"
-              className="h-11 px-2 text-white/45 hover:text-white/75 text-[14px] font-medium transition-colors"
+              onClick={() => setPreviewing(true)}
+              data-testid="button-preview-music"
+              className="h-11 px-2 text-white/55 hover:text-white text-[14px] font-medium transition-colors"
             >
-              Preview the Music
+              Preview the music
             </button>
-          ) : null}
+          )}
 
           <div className="flex-1" />
 
@@ -944,6 +957,20 @@ function CampaignFlow({ c, mode }: { c: ReleaseContent; mode: "comingSoon" | "pr
           )}
         </div>
       </div>
+      )}
+
+      {previewing && (
+        <button
+          type="button"
+          onClick={() => setPreviewing(false)}
+          data-testid="button-back-to-offer"
+          className="absolute z-20 bottom-7 left-1/2 -translate-x-1/2 h-11 pl-4 pr-6 rounded-full inline-flex items-center gap-1.5 text-white font-semibold text-[14px] transition-all active:scale-[0.97]"
+          style={{ background: BLUE, boxShadow: "0 12px 34px rgba(0,0,0,0.55)" }}
+        >
+          <ChevronLeft className="w-4 h-4" strokeWidth={2.4} />
+          Back to offer
+        </button>
+      )}
 
       {zoomSrc && <Lightbox src={zoomSrc} onClose={() => setZoomSrc(null)} />}
     </div>
