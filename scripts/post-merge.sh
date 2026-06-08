@@ -5855,11 +5855,32 @@ backfill_task_1710_strip_apple_bio prod "${PROD_DATABASE_URL:-}"
 # handful of commits, so they finish in seconds; the timeout is a safety net
 # against a pathological hang, not the expected path.
 GITHUB_MIRROR_URL="https://github.com/billdenk/goodtunes-app.git"
+# Best-effort: scrub Replit's internal npm proxy host out of package-lock.json
+# before we force-push the mirror. Those `resolved` URLs (package-firewall.replit.local)
+# only resolve inside Replit's network, so if one ever leaks into the lockfile the
+# CodeMagic `npm ci` step dies with ENOTFOUND. Rewriting them to the public registry
+# keeps the integrity hashes valid (content-based) and lets the build fetch the same
+# tarballs. Commits the fix so the pushed HEAD carries it. Never fatal.
+sanitize_lockfile_for_mirror() {
+  [ -f package-lock.json ] || return 0
+  grep -q "package-firewall.replit.local" package-lock.json 2>/dev/null || return 0
+  echo "post-merge: lockfile references package-firewall.replit.local — rewriting to registry.npmjs.org"
+  sed -i 's#http://package-firewall\.replit\.local/npm/#https://registry.npmjs.org/#g' package-lock.json || {
+    echo "post-merge: WARNING — lockfile sanitize sed failed (continuing)"; return 0; }
+  if git -c user.email="bot@goodtunes.music" -c user.name="GoodTunes post-merge" \
+       commit --no-verify -m "chore(mirror): repoint npm firewall lockfile URLs to public registry" \
+       -- package-lock.json >/dev/null 2>&1; then
+    echo "post-merge: committed sanitized package-lock.json"
+  else
+    echo "post-merge: WARNING — could not commit sanitized lockfile (continuing)"
+  fi
+}
 sync_github_build_mirror() {
   if [ -z "${GITHUB_TOKEN:-}" ]; then
     echo "post-merge: skipping GitHub mirror sync (GITHUB_TOKEN not set)"
     return 0
   fi
+  sanitize_lockfile_for_mirror
   local head auth
   head=$(git rev-parse HEAD 2>/dev/null || true)
   if [ -z "$head" ]; then
