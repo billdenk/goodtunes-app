@@ -26,3 +26,24 @@ must use `b250a5a5` and match the slug `hope`. When picking a Nightbirde row in 
 verify it has songs + a SKU before trusting it — title alone is ambiguous across the
 duplicates ("Hope", "Love", "Brave", "Test" prepping rows all exist). Prod is
 read-only from the agent; the duplicate cleanup itself is an operator action.
+
+# Campaign preview/buy flow images are STATIC repo files, not DB rows
+
+The "Get Hope. Gift Hope." preview/buy/gift flow renders through `LockedOfferModal`
+reading the **hardcoded** `RELEASES` registry in `client/src/pages/Hope.tsx`
+(`getCampaignRelease`). Its `images.{hero,box,cert}` are filenames under `imageBase`
+`/campaigns/nightbirde/`, served as static committed files from
+`client/public/campaigns/nightbirde/`. `hero` = intro thumbnail + "Get Hope" gallery
+main + Zoomable; `box` = "Gift of Hope Box" + zoom; `cert` = framed GoodDeed composite.
+
+**Why:** this flow does NOT read `album_photos` (empty for Hope on both dev+prod) or
+`custom_addons.image_url` — those feed the *standard* `BuySheet`, a different surface.
+Swapping campaign imagery is editing the static files (run through
+`makeDisplayDerivative` for ≤1500px JPEG q82) + the registry filename strings — NOT an
+Object Storage upload + post-merge DB backfill. Static repo assets ship identically to
+dev and prod via the build, so no dual-DB reconciliation is needed.
+
+**How to apply:** before any "repoint Hope buy-flow image" task, confirm which surface
+renders — campaign LockedOfferModal (static `/campaigns/nightbirde/*`) vs standard
+BuySheet (DB). `artifacts/mockup-sandbox/.../hope-offer/Flow.tsx` keeps its OWN parallel
+copies under `artifacts/mockup-sandbox/public/images/` — out of scope for live changes.

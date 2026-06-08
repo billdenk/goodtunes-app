@@ -60,9 +60,9 @@ const RELEASES: Record<string, ReleaseContent> = {
     previewNote: "Preview — ordering opens June 8, 2026.",
     imageBase: "/campaigns/nightbirde",
     images: {
-      hero: "hope-get-hope.png",
+      hero: "hope-get-hope.jpg",
       cert: "hope-cert-framed.jpg",
-      box: "hope-gift-box.png",
+      box: "hope-gift-box.jpg",
       logo: "goodtunes-logo-white.png",
       cover: "hope-cover.png",
     },
