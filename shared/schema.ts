@@ -866,9 +866,22 @@ export const userAlbums = pgTable(
     // it's read). Real owned/comp rows keep isPreview=false / null expiry.
     isPreview: boolean("is_preview").notNull().default(false),
     previewExpiresAt: timestamp("preview_expires_at"),
+    // Task #1514 — legacy gogoods.com QR provenance bridge. Fans hold
+    // physical signed GoodDeed certs printed in the gogoods era whose QR
+    // codes point at gogoods.com paths that resolve to nothing today. The
+    // stable per-copy identifier in the gogoods export is the `collectible`
+    // table's bigserial `id`; we stamp it here so the resolver
+    // (GET /legacy/g/:code in server/certificates.ts) can map an old QR
+    // code back to this owned copy and forward to its current
+    // /g/:shortId provenance page. NULL on every non-gogoods row. See
+    // docs/migrations/gogoods-qr-resolver-2026-06-08.md.
+    legacyGogoodsCollectibleId: varchar("legacy_gogoods_collectible_id"),
   },
   (t) => ({
     userAlbumUnique: uniqueIndex("user_albums_user_album_uniq").on(t.userId, t.albumId),
+    userAlbumLegacyCollectibleUnique: uniqueIndex(
+      "user_albums_legacy_gogoods_collectible_uniq",
+    ).on(t.legacyGogoodsCollectibleId),
   }),
 );
 

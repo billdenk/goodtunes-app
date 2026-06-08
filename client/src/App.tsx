@@ -94,6 +94,7 @@ import { AdminPrintQueue } from "@/pages/AdminPrintQueue";
 import { AdminCertNames } from "@/pages/AdminCertNames";
 import { AdminLegacyImageAudit } from "@/pages/AdminLegacyImageAudit";
 import { CertProvenance } from "@/pages/CertProvenance";
+import { FindGoodDeed } from "@/pages/FindGoodDeed";
 import AdminSecurity from "@/pages/AdminSecurity";
 import { AdminInvites } from "@/pages/AdminInvites";
 import { AdminPressEarlyCutQueue } from "@/pages/AdminPressEarlyCutQueue";
@@ -650,6 +651,10 @@ function Router() {
         {/* Task #128 — Public per-deed provenance page (QR target).
             No auth — the short id is the secret. */}
         <Route path="/g/:shortId" component={CertProvenance} />
+        {/* Task #1514 — friendly fallback for the legacy gogoods.com QR
+            bridge. The server resolver (/legacy/g/:code) redirects here on
+            any miss; never a dead 404. */}
+        <Route path="/find-gooddeed" component={FindGoodDeed} />
         <Route path="/admin/security">
           <ProtectedRoute component={AdminSecurity} />
         </Route>

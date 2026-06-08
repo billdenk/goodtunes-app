@@ -312,6 +312,35 @@ SQL
 }
 migrate_cert_paper_size dev  "${DATABASE_URL:-}"
 migrate_cert_paper_size prod "${PROD_DATABASE_URL:-}"
+
+# Task #1514 — legacy gogoods.com QR provenance bridge.
+# user_albums.legacy_gogoods_collectible_id stamps the gogoods `collectible`
+# bigserial id onto the owned copy so the resolver (GET /legacy/g/:code) can
+# map an old printed QR code back to its current /g/:shortId provenance page.
+# Declared in shared/schema.ts (column + partial-unique index); hand-apply the
+# additive DDL on BOTH dev and prod so the schema-drift guard stays green on a
+# freshly-cloned dev and the publish dev→prod diff stays empty. Idempotent
+# (IF NOT EXISTS). The data backfill itself runs further below (marker-guarded).
+migrate_gogoods_collectible_id() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping gogoods_collectible_id migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE IF EXISTS user_albums
+  ADD COLUMN IF NOT EXISTS legacy_gogoods_collectible_id varchar;
+CREATE UNIQUE INDEX IF NOT EXISTS user_albums_legacy_gogoods_collectible_uniq
+  ON user_albums (legacy_gogoods_collectible_id);
+SQL
+  then
+    echo "post-merge: gogoods_collectible_id migration ok on $label"
+  else
+    echo "post-merge: WARNING — gogoods_collectible_id migration failed on $label (continuing)"
+  fi
+}
+migrate_gogoods_collectible_id dev  "${DATABASE_URL:-}"
+migrate_gogoods_collectible_id prod "${PROD_DATABASE_URL:-}"
 # Push notifications — device-token table. shared/schema.ts declares
 # `push_devices` (one row per fan × installed app, keyed on the unique
 # APNs/FCM token). Hand-apply the canonical additive DDL on BOTH dev and
@@ -403,6 +432,31 @@ backfill_nick_publishing() {
 }
 backfill_nick_publishing dev  "${DATABASE_URL:-}"
 backfill_nick_publishing prod "${PROD_DATABASE_URL:-}"
+
+# Task #1514 — legacy gogoods.com QR provenance bridge: stamp the gogoods
+# `collectible` bigserial id onto each owned user_albums row so the resolver
+# (GET /legacy/g/:code) can map an old printed QR code back to its current
+# /g/:shortId provenance page. Reads the committed gogoods export zip, resolves
+# legacy→live ids via the legacy_gogoods_id pointers, and only stamps rows
+# whose collectible-id is still NULL. Self-gates: a fresh dev clone with no
+# gogoods import finds nothing, writes nothing, and leaves the marker unset so
+# it re-checks on a later merge. Idempotent + marker-guarded
+# (post_merge_data_backfills) so operator edits survive future merges. Runs
+# AFTER migrate_gogoods_collectible_id (needs the column).
+backfill_gogoods_collectible_ids() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping gogoods-collectible-ids backfill on $label (no URL set)"
+    return 0
+  fi
+  if DATABASE_URL="$url" npx tsx scripts/backfill-gogoods-collectible-ids.ts; then
+    echo "post-merge: gogoods-collectible-ids backfill ok on $label"
+  else
+    echo "post-merge: WARNING — gogoods-collectible-ids backfill failed on $label (continuing)"
+  fi
+}
+backfill_gogoods_collectible_ids dev  "${DATABASE_URL:-}"
+backfill_gogoods_collectible_ids prod "${PROD_DATABASE_URL:-}"
 
 # Real fan shipping — seed Spinney Media's April-2026 rate card. base_cents
 # is Spinney's own published rate; markup_cents is the flat $1.00 GoodTunes

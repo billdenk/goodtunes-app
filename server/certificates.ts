@@ -29,6 +29,7 @@ import {
   orderItems,
   orders,
   signedCertCertificates,
+  userAlbums,
   type SignedCertCertificate,
 } from "@shared/schema";
 // Task #551 — the ONE locked print template. drawCertOnto below is a
@@ -350,6 +351,51 @@ export function registerCertificateRoutes(app: Express) {
       recipientName: row.cert.confirmedName,
       nameStatus: row.cert.nameStatus,
     });
+  });
+
+  // ─── Task #1514 — legacy gogoods.com QR provenance bridge ───────
+  // Fans who bought physical signed GoodDeed certs in the gogoods.com era
+  // hold printed QR codes that point at gogoods.com paths which resolve to
+  // nothing today. The operator forwards those old paths to this resolver
+  // (see docs/migrations/gogoods-qr-resolver-2026-06-08.md). The QR encodes
+  // the gogoods `collectible` bigserial id; we backfilled it onto the owned
+  // user_albums row as `legacyGogoodsCollectibleId`, so we can map the old
+  // code → owned copy → its current GoodTunes /g/:shortId provenance page.
+  //
+  // This is a 302 redirect (NOT a JSON /api route) so a phone camera lands
+  // straight on the live provenance page. It MUST be matched before the SPA
+  // catch-all — registerCertificateRoutes runs inside registerRoutes, ahead
+  // of serveStaticFallback/setupVite, so it is. Unresolvable codes never
+  // 404: they land on the friendly /find-gooddeed lookup page.
+  app.get("/legacy/g/:code", async (req, res) => {
+    const FALLBACK = "/find-gooddeed";
+    // Tolerant of trailing punctuation / whitespace the old print/scan path
+    // may have introduced; the legacy id is a bare bigserial integer.
+    const code = String(req.params.code ?? "").trim().replace(/[^0-9]/g, "");
+    if (!code) return res.redirect(302, FALLBACK);
+    try {
+      const [row] = await db
+        .select({ shortId: signedCertCertificates.shortId })
+        .from(userAlbums)
+        .innerJoin(
+          orders,
+          and(
+            eq(orders.customerId, userAlbums.userId),
+            eq(orders.albumId, userAlbums.albumId),
+            eq(orders.goodDeedNumber, userAlbums.certificateNumber),
+          ),
+        )
+        .innerJoin(
+          signedCertCertificates,
+          eq(signedCertCertificates.orderId, orders.id),
+        )
+        .where(eq(userAlbums.legacyGogoodsCollectibleId, code))
+        .limit(1);
+      if (row?.shortId) return res.redirect(302, `/g/${row.shortId}`);
+    } catch (e) {
+      console.error("[legacy-gogoods-resolver] lookup failed", (e as Error)?.message);
+    }
+    return res.redirect(302, FALLBACK);
   });
 
   // ─── Fan: read + confirm name ───────────────────────────────────
