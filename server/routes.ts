@@ -248,6 +248,15 @@ type CampaignPreview = {
   albumId: string;
   previewKey: string;
   familyKey: string;
+  // When the operator "turns the link on" for launch, the bare share URL
+  // (no token) becomes the PUBLIC fan-preview link: 30s previews + the
+  // dismissable offer card, but never the buy flow and never the embargoed
+  // title track. Operator decision — see campaignTier.
+  publicPreview?: boolean;
+  // Campaign Buy/Give pricing in whole dollars. The single source of truth for
+  // the price the fan sees — the access endpoint echoes this so the client
+  // never hardcodes the figure. Update here to re-price the campaign.
+  prices: { bundle: number; signed: number };
 };
 const CAMPAIGN_PREVIEWS: CampaignPreview[] = [
   {
@@ -255,6 +264,8 @@ const CAMPAIGN_PREVIEWS: CampaignPreview[] = [
     albumId: "b250a5a5-98cc-4673-9903-ab39e5278d8c",
     previewKey: "hope-listen-7f3a2c9b41e8",
     familyKey: "hope-family-4e8d1a5fce27",
+    publicPreview: true,
+    prices: { bundle: 25, signed: 25 },
   },
 ];
 const findCampaignBySlug = (slug: string): CampaignPreview | undefined =>
@@ -263,10 +274,17 @@ const findCampaignBySlug = (slug: string): CampaignPreview | undefined =>
 const campaignTier = (
   c: CampaignPreview,
   token: string | null | undefined,
+  staging = false,
 ): "none" | "preview" | "family" => {
-  if (!token) return "none";
-  if (token === c.familyKey) return "family";
+  // family: the buy/give/pay flow. Gated behind the staging context (the
+  // /staging link the operator shares with family for pricing approval) or the
+  // explicit family token. Never granted on the bare public link.
+  if (staging || token === c.familyKey) return "family";
   if (token === c.previewKey) return "preview";
+  // Operator turned the link on: the bare public URL is the fan-preview tier
+  // (30s previews + offer card, no buy). The embargoed title track and full
+  // masters stay protected regardless of tier.
+  if (c.publicPreview) return "preview";
   return "none";
 };
 
@@ -19706,9 +19724,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const campaign = findCampaignBySlug(slug);
     if (!campaign) return res.status(404).json({ message: "Unknown campaign" });
     const token = typeof req.query.k === "string" ? req.query.k : null;
-    const tier = campaignTier(campaign, token);
+    const staging = req.query.staging === "1";
+    const tier = campaignTier(campaign, token, staging);
     if (tier === "none") {
-      return res.json({ tier, albumId: campaign.albumId, tracks: [] });
+      return res.json({
+        tier,
+        albumId: campaign.albumId,
+        tracks: [],
+        prices: campaign.prices,
+      });
     }
     const songs = await storage.getSongsByAlbum(campaign.albumId);
     const tracks = songs
@@ -19737,7 +19761,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const videos = (await storage.listAlbumVideos(campaign.albumId)).map((v) => ({
       title: v.title,
     }));
-    res.json({ tier, albumId: campaign.albumId, tracks, lockedTracks, videos });
+    res.json({
+      tier,
+      albumId: campaign.albumId,
+      tracks,
+      lockedTracks,
+      videos,
+      prices: campaign.prices,
+    });
   });
 
   app.post("/api/songs/:id/playback-url", requireAuthOrCampaignPreview, async (req, res) => {

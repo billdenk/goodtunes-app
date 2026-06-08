@@ -18,6 +18,8 @@ import {
   Play,
   Pause,
   X,
+  Share2,
+  MoreHorizontal,
 } from "lucide-react";
 import { usePlayer } from "@/context/PlayerContext";
 import type { PlayerSong } from "@/context/PlayerContext";
@@ -76,6 +78,10 @@ type CampaignAccess = {
   tracks: PreviewTrack[];
   lockedTracks?: LockedTrack[];
   videos?: PreviewVideo[];
+  // Authoritative campaign pricing (whole dollars) from the server config — the
+  // client overrides its local registry with this so the Buy price the fan sees
+  // is never hardcoded in the bundle.
+  prices?: { bundle: number; signed: number };
 };
 
 const fmtDur = (sec: number) => {
@@ -129,7 +135,7 @@ const RELEASES: Record<string, ReleaseContent> = {
   "nightbirde/hope": {
     artistName: "Nightbirde",
     releaseName: "Hope",
-    launchLabel: "Coming 6/8/26",
+    launchLabel: "Coming today",
     previewNote: "Preview — ordering opens June 8, 2026.",
     imageBase: "/campaigns/nightbirde",
     images: {
@@ -422,6 +428,10 @@ function AlbumBackdrop({
   lockedTracks,
   videos,
   albumId,
+  canBuy = false,
+  priceLabel,
+  onBuy,
+  onLearnMore,
 }: {
   c: ReleaseContent;
   dimmed?: boolean;
@@ -429,9 +439,16 @@ function AlbumBackdrop({
   lockedTracks?: LockedTrack[];
   videos?: PreviewVideo[];
   albumId?: string;
+  // Buy is OFF for fans (bare link) and ON for family (/staging). The price
+  // label always comes from the backend, never hardcoded here.
+  canBuy?: boolean;
+  priceLabel?: string;
+  onBuy?: () => void;
+  onLearnMore?: () => void;
 }) {
   const img = (name: string) => `${c.imageBase}/${name}`;
   const { playSong, setPreviewMode, togglePlay, currentSong, isPlaying } = usePlayer();
+  const [shared, setShared] = useState(false);
 
   // Real, playable tracks supersede the static placeholder tracklist. Each row
   // streams a 30s preview (setPreviewMode caps it; the server signs a Mux URL).
@@ -482,6 +499,43 @@ function AlbumBackdrop({
     if (song) playSong(song, queue);
   };
 
+  // Play-all starts the first previewable track and runs the queue. The
+  // embargoed title track carries no id (it lives in lockedTracks, not the
+  // queue) so it is skipped automatically — exactly the "skip the dimmed Hope
+  // track" behaviour Bill asked for. Previews stay capped at 30s.
+  const queuePlaying = !!currentSong && queue.some((q) => q.id === currentSong.id) && isPlaying;
+  const onPlayAll = () => {
+    if (queuePlaying) {
+      togglePlay();
+      return;
+    }
+    if (currentSong && queue.some((q) => q.id === currentSong.id)) {
+      togglePlay();
+      return;
+    }
+    if (queue[0]) onRow(queue[0].id);
+  };
+
+  const onShare = async () => {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    try {
+      if (typeof navigator !== "undefined" && (navigator as any).share) {
+        await (navigator as any).share({
+          title: `${c.artistName} — ${c.releaseName}`,
+          url,
+        });
+        return;
+      }
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(url);
+      }
+    } catch {
+      /* user dismissed the share sheet — no-op */
+    }
+    setShared(true);
+    setTimeout(() => setShared(false), 1800);
+  };
+
   return (
     <div className="absolute inset-0 overflow-hidden" aria-hidden={dimmed} style={{ background: BG }}>
       <img
@@ -490,6 +544,30 @@ function AlbumBackdrop({
         className="absolute top-7 left-8 w-[120px] h-auto opacity-90 z-10"
         draggable={false}
       />
+      {!dimmed && (
+        <div className="absolute top-7 right-8 z-20 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onShare}
+            data-testid="button-share-campaign"
+            aria-label="Share this link"
+            className="h-11 px-4 rounded-full inline-flex items-center gap-1.5 text-white/80 hover:text-white text-[13px] font-semibold bg-white/[0.08] hover:bg-white/[0.14] transition-colors"
+          >
+            <Share2 className="w-4 h-4" strokeWidth={2.2} />
+            {shared ? "Link copied" : "Share"}
+          </button>
+          {/* GoodDeed / album menu is intentionally locked before launch — shown
+              but grayed + unselectable so fans can't open it (sharing is fine). */}
+          <span
+            data-testid="button-menu-locked"
+            aria-disabled="true"
+            title="Available after launch"
+            className="h-11 w-11 rounded-full inline-flex items-center justify-center text-white/25 bg-white/[0.04] cursor-not-allowed"
+          >
+            <MoreHorizontal className="w-4 h-4" strokeWidth={2.2} />
+          </span>
+        </div>
+      )}
       <div
         className={`absolute inset-0 flex items-center justify-center transition-all duration-500 ${
           dimmed ? "opacity-35 blur-[3px] scale-[1.02]" : "opacity-100 blur-0 scale-100"
@@ -511,9 +589,57 @@ function AlbumBackdrop({
             <div className="text-white/55 text-[13px] font-semibold uppercase tracking-[0.12em] mb-1">
               {c.artistName}
             </div>
-            <div className="text-white text-[34px] font-bold tracking-[-0.02em] mb-6">
+            <div className="text-white text-[34px] font-bold tracking-[-0.02em] mb-5">
               {c.releaseName}
             </div>
+            {!dimmed && (
+              <div className="flex items-center gap-3 mb-6">
+                <button
+                  type="button"
+                  onClick={onPlayAll}
+                  disabled={queue.length === 0}
+                  data-testid="button-play-all"
+                  className="h-11 pl-5 pr-6 rounded-full inline-flex items-center gap-2 text-white font-semibold text-[14.5px] transition-all active:scale-[0.97] disabled:opacity-40"
+                  style={{ background: BLUE }}
+                >
+                  {queuePlaying ? (
+                    <Pause className="w-4 h-4" strokeWidth={2.6} />
+                  ) : (
+                    <Play className="w-4 h-4" strokeWidth={2.6} />
+                  )}
+                  {queuePlaying ? "Pause" : "Play"}
+                </button>
+                {canBuy ? (
+                  <button
+                    type="button"
+                    onClick={onBuy}
+                    data-testid="button-buy"
+                    className="h-11 px-5 rounded-full inline-flex items-center gap-2 font-semibold text-[14.5px] text-white bg-white/[0.1] hover:bg-white/[0.16] transition-colors active:scale-[0.97]"
+                  >
+                    <ShoppingBag className="w-4 h-4" strokeWidth={2.4} />
+                    Buy{priceLabel ? ` ${priceLabel}` : ""}
+                  </button>
+                ) : (
+                  <span
+                    data-testid="button-buy-locked"
+                    aria-disabled="true"
+                    title="Ordering opens soon"
+                    className="h-11 px-5 rounded-full inline-flex items-center gap-2 font-semibold text-[14.5px] text-white/40 bg-white/[0.05] cursor-not-allowed"
+                  >
+                    <Lock className="w-4 h-4" strokeWidth={2.4} />
+                    Buy{priceLabel ? ` ${priceLabel}` : ""}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={onLearnMore}
+                  data-testid="button-learn-more"
+                  className="h-11 px-4 rounded-full inline-flex items-center text-white/70 hover:text-white text-[14px] font-semibold transition-colors"
+                >
+                  Learn More
+                </button>
+              </div>
+            )}
             {rows.length > 0 ? (
               <div className="flex flex-col gap-1">
                 {rows.map((row) => {
@@ -1062,6 +1188,16 @@ function CampaignFlow({
         lockedTracks={lockedTracks}
         videos={videos}
         albumId={albumId}
+        canBuy={!comingSoon}
+        priceLabel={usd(c.prices.bundle)}
+        onBuy={() => {
+          setStep("buy");
+          setPreviewing(false);
+        }}
+        onLearnMore={() => {
+          setStep("overview");
+          setPreviewing(false);
+        }}
       />
 
       {!previewing && (
@@ -1249,20 +1385,22 @@ export function isCampaignRelease(artist?: string, release?: string): boolean {
 function CampaignExperience({
   artist,
   release,
+  staging = false,
 }: {
   artist: string;
   release: string;
+  staging?: boolean;
 }) {
   const search = useSearch();
   const token = new URLSearchParams(search).get("k") ?? "";
   const key = releaseKey(artist, release);
   const { data } = useQuery<CampaignAccess>({
-    queryKey: ["/api/campaign", artist, release, "access", token],
+    queryKey: ["/api/campaign", artist, release, "access", token, staging],
     queryFn: async () => {
       const r = await fetch(
         `/api/campaign/${encodeURIComponent(artist)}/${encodeURIComponent(
           release,
-        )}/access?k=${encodeURIComponent(token)}`,
+        )}/access?k=${encodeURIComponent(token)}${staging ? "&staging=1" : ""}`,
         { credentials: "include" },
       );
       if (!r.ok) throw new Error(`access ${r.status}`);
@@ -1276,9 +1414,14 @@ function CampaignExperience({
   if (!key) return <NotFound />;
   const tier = data?.tier ?? "none";
   const mode = tier === "family" ? "preview" : "comingSoon";
+  // The server config is the source of truth for price — override the local
+  // registry so every downstream price (control row, Buy sheet, totals) shows
+  // the backend figure, never a hardcoded one.
+  const base = RELEASES[key];
+  const c = data?.prices ? { ...base, prices: data.prices } : base;
   return (
     <CampaignFlow
-      c={RELEASES[key]}
+      c={c}
       mode={mode}
       tracks={data?.tracks}
       lockedTracks={data?.lockedTracks}
@@ -1288,9 +1431,9 @@ function CampaignExperience({
   );
 }
 
-// Artist-first share link at /:artist/:release (e.g. /nightbirde/hope). Tier
-// (and therefore whether music + the offer flow appear) is decided by the
-// `?k=` token; a bare/guessable URL only ever shows the locked teaser.
+// Artist-first share link at /:artist/:release (e.g. /nightbirde/hope). This is
+// the PUBLIC fan link the operator hands out at launch: 30s previews + the
+// dismissable offer card with a disabled "Coming today" CTA. Buy stays off.
 export function CampaignPublic({
   artist,
   release,
@@ -1301,9 +1444,20 @@ export function CampaignPublic({
   return <CampaignExperience artist={artist} release={release} />;
 }
 
-// /staging/:artist/:release — same token-gated experience for any campaign in
-// the RELEASES registry.
+// /staging/:artist/:release — family-tier link (buy/give/pay flow turned on)
+// for pricing approval before launch.
 export function CampaignPreview() {
   const params = useParams<{ artist: string; release: string }>();
-  return <CampaignExperience artist={params.artist} release={params.release} />;
+  return (
+    <CampaignExperience artist={params.artist} release={params.release} staging />
+  );
+}
+
+// /:artist/:release/staging — same family-tier link with the staging segment as
+// a suffix (e.g. /nightbirde/hope/staging), the link Bill shares with family.
+export function CampaignStaging() {
+  const params = useParams<{ artist: string; release: string }>();
+  return (
+    <CampaignExperience artist={params.artist} release={params.release} staging />
+  );
 }

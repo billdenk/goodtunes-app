@@ -84,7 +84,7 @@ import { FinishSetup } from "@/pages/FinishSetup";
 import { AccountMerge } from "@/pages/AccountMerge";
 // Task #1496 — Public account-deletion page for the Play Store Data safety form.
 import DeleteAccount from "@/pages/DeleteAccount";
-import { CampaignPreview, CampaignPublic, isCampaignRelease } from "@/pages/Hope";
+import { CampaignPreview, CampaignPublic, CampaignStaging, isCampaignRelease } from "@/pages/Hope";
 import { AdminWelcomeBack } from "@/pages/AdminWelcomeBack";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
@@ -447,6 +447,9 @@ function Router() {
             buttons are disabled until launch. Copy + pricing live in the
             RELEASES registry in client/src/pages/Hope.tsx. */}
         <Route path="/staging/:artist/:release" component={CampaignPreview} />
+        {/* Suffix form Bill shares with family: /:artist/:release/staging
+            (e.g. /nightbirde/hope/staging) — family tier, buy flow on. */}
+        <Route path="/:artist/:release/staging" component={CampaignStaging} />
         {/* Admin tool for the wave-1 welcome-back campaign. */}
         <Route path="/admin/welcome-back">
           <ProtectedRoute component={AdminWelcomeBack} />
