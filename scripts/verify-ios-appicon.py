@@ -22,6 +22,7 @@ falls back to Pillow so the script can also be run on a Linux dev box.
 Exit status: 0 = valid, non-zero = invalid (with a human-readable reason list).
 """
 
+import argparse
 import json
 import os
 import shutil
@@ -37,7 +38,6 @@ APPICONSET = os.path.join(
     "Assets.xcassets",
     "AppIcon.appiconset",
 )
-CONTENTS = os.path.join(APPICONSET, "Contents.json")
 
 # The full set of slots a modern universal iOS app icon must declare. Keyed by
 # (idiom, size, scale). If any of these is absent from Contents.json the catalog
@@ -119,13 +119,26 @@ def inspect_image(path):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--appiconset",
+        default=APPICONSET,
+        help="Inspect this AppIcon.appiconset instead of the committed one (tests).",
+    )
+    args = parser.parse_args()
+    appiconset = args.appiconset
+    contents_path = os.path.join(appiconset, "Contents.json")
+
     errors = []
 
-    if not os.path.isfile(CONTENTS):
-        print(f"ERROR: AppIcon Contents.json not found at {CONTENTS}", file=sys.stderr)
+    if not os.path.isfile(contents_path):
+        print(
+            f"ERROR: AppIcon Contents.json not found at {contents_path}",
+            file=sys.stderr,
+        )
         return 1
 
-    with open(CONTENTS, "r", encoding="utf-8") as f:
+    with open(contents_path, "r", encoding="utf-8") as f:
         contents = json.load(f)
 
     images = contents.get("images", [])
@@ -144,7 +157,7 @@ def main():
             errors.append(f"Slot [{slot_label}] has no filename in Contents.json.")
             continue
 
-        path = os.path.join(APPICONSET, filename)
+        path = os.path.join(appiconset, filename)
         if not os.path.isfile(path):
             errors.append(
                 f"Slot [{slot_label}] references '{filename}' but the file is missing."

@@ -37,6 +37,7 @@ on a dev box.
 Exit status: 0 = valid, non-zero = invalid (with a human-readable reason list).
 """
 
+import argparse
 import os
 import shutil
 import subprocess
@@ -171,9 +172,9 @@ def inspect_image(path):
     return width, height, True, fully_opaque, visible_all_white
 
 
-def check_launcher(errors):
+def check_launcher(errors, res):
     for xml_rel in ADAPTIVE_XML:
-        if not os.path.isfile(os.path.join(RES, xml_rel)):
+        if not os.path.isfile(os.path.join(res, xml_rel)):
             errors.append(
                 f"Adaptive-icon definition '{xml_rel}' is missing — Android will "
                 f"fall back to a default launcher icon."
@@ -186,7 +187,7 @@ def check_launcher(errors):
             ("ic_launcher_foreground.png", FOREGROUND_SIZES[density]),
         )
         for filename, expected in checks:
-            path = os.path.join(RES, f"mipmap-{density}", filename)
+            path = os.path.join(res, f"mipmap-{density}", filename)
             if not os.path.isfile(path):
                 errors.append(
                     f"Launcher icon 'mipmap-{density}/{filename}' is missing."
@@ -204,11 +205,11 @@ def check_launcher(errors):
                 )
 
 
-def check_notification(errors):
+def check_notification(errors, res):
     for density in DENSITIES:
         expected = NOTIFY_SIZES[density]
         rel = f"drawable-{density}/ic_stat_notify.png"
-        path = os.path.join(RES, f"drawable-{density}", "ic_stat_notify.png")
+        path = os.path.join(res, f"drawable-{density}", "ic_stat_notify.png")
         if not os.path.isfile(path):
             errors.append(
                 f"Notification icon '{rel}' is missing — the status-bar icon "
@@ -247,13 +248,22 @@ def check_notification(errors):
 
 
 def main():
-    if not os.path.isdir(RES):
-        print(f"ERROR: Android res directory not found at {RES}", file=sys.stderr)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--res-dir",
+        default=RES,
+        help="Inspect this android res/ tree instead of the committed one (tests).",
+    )
+    args = parser.parse_args()
+    res = args.res_dir
+
+    if not os.path.isdir(res):
+        print(f"ERROR: Android res directory not found at {res}", file=sys.stderr)
         return 1
 
     errors = []
-    check_launcher(errors)
-    check_notification(errors)
+    check_launcher(errors, res)
+    check_notification(errors, res)
 
     if errors:
         print(
