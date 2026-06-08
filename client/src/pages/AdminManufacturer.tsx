@@ -19,6 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { postAdminImage } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -1173,23 +1174,12 @@ async function uploadSwatchImage(
   file: File,
   opts?: { cropToDisc?: boolean },
 ): Promise<{ url: string; maskApplied?: boolean }> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const tok = (await import("@/lib/queryClient")).getAuthToken();
-  if (!tok) throw new Error("Sign out and back in — your session token is missing.");
-  const qs = opts?.cropToDisc ? "?mask=disc" : "";
-  const r = await fetch(`/api/admin/upload${qs}`, {
-    method: "POST",
-    body: fd,
-    headers: { Authorization: `Bearer ${tok}` },
-    credentials: "include",
+  // Shared admin uploader handles the Bearer token, client-side downscaling,
+  // and friendly error copy; the `mask: "disc"` flag triggers the server-side
+  // vinyl-disc crop for color swatches.
+  return postAdminImage(file, {
+    mask: opts?.cropToDisc ? "disc" : undefined,
   });
-  if (!r.ok) {
-    const body = await r.json().catch(() => ({}));
-    throw new Error(body.message || `Upload failed (${r.status})`);
-  }
-  const { url, maskApplied } = await r.json();
-  return { url, maskApplied };
 }
 
 // Task #669 — Hellbender color-library importer UI. Only mounted on

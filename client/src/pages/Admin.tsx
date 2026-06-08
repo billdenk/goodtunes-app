@@ -3,6 +3,7 @@ import { normalizeAudioUrl } from "@shared/audioUrl";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
+import { uploadImageFile } from "@/lib/adminUpload";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -259,28 +260,9 @@ function ArtworkPicker({
     setErr(null);
     setBusy(true);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      // Token lives in localStorage (managed by queryClient); apiRequest
-      // already adds it but expects JSON, so we hit fetch directly here.
-      // Bearer is *required* by the backend for /api/admin/upload — the
-      // cookie session alone is rejected to block cross-site CSRF uploads.
-      const token = getAuthToken();
-      if (!token)
-        throw new Error(
-          "Sign out and back in — your session token is missing.",
-        );
-      const res = await fetch("/api/admin/upload", {
-        method: "POST",
-        body: fd,
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.message || `Upload failed (${res.status})`);
-      }
-      const { url } = await res.json();
+      // `uploadImageFile` downscales large rasters, posts to /api/admin/upload
+      // with the required Bearer token, and throws an already-friendly message.
+      const url = await uploadImageFile(file);
       onChange(url);
     } catch (e: any) {
       setErr(e.message || "Upload failed");
@@ -1252,26 +1234,6 @@ async function uploadAudioFile(file: File): Promise<string> {
   }
   const { url } = (await finRes.json()) as { url: string };
   return url;
-}
-
-// Same helper but for the image-upload route (poster frames + photos).
-async function uploadImageFile(file: File): Promise<string> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const token = getAuthToken();
-  if (!token) throw new Error("Sign out and back in — your session token is missing.");
-  const res = await fetch("/api/admin/upload", {
-    method: "POST",
-    body: fd,
-    headers: { Authorization: `Bearer ${token}` },
-    credentials: "include",
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Upload failed (${res.status})`);
-  }
-  const { url } = await res.json();
-  return url as string;
 }
 
 interface AdminAlbumVideo {

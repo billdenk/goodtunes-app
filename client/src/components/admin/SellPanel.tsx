@@ -7410,25 +7410,6 @@ function CatalogPicksBlock({
 // next rung in the live cost preview. Vendor cost stays editable
 // post-sale (see memory: vendor-pricing-bypasses-post-sale-lock); only
 // the fan-facing fields respect the partner-permissions lock.
-async function uploadAdminImage(file: File): Promise<string> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const token = getAuthToken();
-  if (!token) throw new Error("Sign out and back in — your session token is missing.");
-  const res = await fetch("/api/admin/upload", {
-    method: "POST",
-    body: fd,
-    headers: { Authorization: `Bearer ${token}` },
-    credentials: "include",
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Upload failed (${res.status})`);
-  }
-  const { url } = await res.json();
-  return url as string;
-}
-
 // Task #687 — display-only "request a quote" placeholder for add-ons
 // whose per-press pricing isn't wired yet (CD across every press today;
 // the 7×7 booklet on a vinyl format no press has quoted, e.g. 12"). It

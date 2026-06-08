@@ -99,6 +99,7 @@ import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
 import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
+import { uploadImageFile } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import Hls from "hls.js";
 import {

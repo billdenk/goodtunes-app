@@ -43,6 +43,7 @@ import { InstrumentPreviewCard } from "@/components/admin/previews/InstrumentPre
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { SHORT_CATEGORIES } from "@shared/categories";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
+import { uploadImageFile } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
 
@@ -1569,27 +1570,6 @@ function AddMakerComposer({
 }
 
 /* ─── Photo tab ────────────────────────────────────────────────────── */
-
-async function uploadImageFile(file: File): Promise<string> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const token = getAuthToken();
-  if (!token) {
-    throw new Error("Sign out and back in — your session token is missing.");
-  }
-  const res = await fetch("/api/admin/upload", {
-    method: "POST",
-    body: fd,
-    headers: { Authorization: `Bearer ${token}` },
-    credentials: "include",
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Upload failed (${res.status})`);
-  }
-  const { url } = await res.json();
-  return url as string;
-}
 
 function PhotoPanel({ instrument }: { instrument: InstrumentFull }) {
   const { toast } = useToast();
@@ -3333,6 +3313,3 @@ function ImagePicker({
     </div>
   );
 }
-
-/* ─── Photo upload helper (exported for AdminInstruments if needed) ── */
-export { uploadImageFile };
