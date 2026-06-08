@@ -182,14 +182,14 @@ export function AdminInviteDirectory() {
             {isArtist ? "Invites" : "Invite directory"}
           </h1>
           {isArtist && (
-            <a
+            <Link
               href="/admin/invites"
               className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-[var(--brand-blue)] text-white text-sm font-semibold hover:opacity-90 transition-opacity flex-shrink-0"
               data-testid="link-new-invite"
             >
               <UserPlus className="w-4 h-4" />
               + Add Invite
-            </a>
+            </Link>
           )}
         </div>
         <p className="text-sm text-slate-600 mb-6">

@@ -16420,6 +16420,11 @@
     "snippet": "<p className=\"text-slate-400 text-[12.5px] mt-1 max-w-xs\">"
   },
   {
+    "rule": "admin-link-missing-shared-treatment",
+    "file": "client/src/pages/AdminInviteDirectory.tsx",
+    "snippet": "<Link"
+  },
+  {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AdminInvites.tsx",
     "snippet": "<Heart className=\"w-3 h-3 text-[#FF5470]\" /> {inv.referrerName}"
