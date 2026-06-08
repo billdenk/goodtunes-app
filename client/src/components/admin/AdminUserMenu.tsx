@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AdminEditProfileDialog } from "@/components/admin/AdminEditProfileDialog";
+import { canAccessAdminSecurity } from "@/lib/adminAccess";
 
 function initialsFor(name: string | undefined, email: string | undefined): string {
   const source = (name || "").trim();
@@ -195,14 +196,16 @@ export function AdminUserMenu() {
           <UserPlus className="w-4 h-4 mr-2 text-slate-500" />
           Invite teammate
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => navigate("/admin/security")}
-          data-testid="menu-item-security"
-          className="text-[13px] cursor-pointer text-slate-700 focus:bg-slate-100 focus:text-slate-900"
-        >
-          <ShieldCheck className="w-4 h-4 mr-2 text-slate-500" />
-          Security
-        </DropdownMenuItem>
+        {canAccessAdminSecurity(roleInfo?.role) && (
+          <DropdownMenuItem
+            onClick={() => navigate("/admin/security")}
+            data-testid="menu-item-security"
+            className="text-[13px] cursor-pointer text-slate-700 focus:bg-slate-100 focus:text-slate-900"
+          >
+            <ShieldCheck className="w-4 h-4 mr-2 text-slate-500" />
+            Security
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator className="bg-slate-200" />
         <DropdownMenuItem
           onClick={handleSignOut}

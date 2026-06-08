@@ -19,6 +19,7 @@ import { STOREFRONT_LAUNCH_ALBUM_ID } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getPreviewPass } from "@/lib/previewPass";
+import { canAccessAdminSecurity } from "@/lib/adminAccess";
 import { AccessNotAuthorizedDialog } from "@/components/AccessNotAuthorizedDialog";
 import { Player } from "@/pages/Player";
 import { DesktopNowPlaying } from "@/components/ui/DesktopNowPlaying";
@@ -497,14 +498,23 @@ function Router() {
       "/admin/invites",
       "/admin/trash",
     ];
+    // /admin/security is gated by the shared canAccessAdminSecurity()
+    // predicate (also drives the account-menu Security item) so the two
+    // can never drift; it's intentionally absent from allowedPrefixes.
+    const isSecurityPath =
+      location === "/admin/security" ||
+      location.startsWith("/admin/security?") ||
+      location.startsWith("/admin/security/");
     const isAllowed =
       isAuthPath ||
-      allowedPrefixes.some(
-        (p) =>
-          location === p ||
-          location.startsWith(p + "?") ||
-          location.startsWith(p + "/"),
-      );
+      (isSecurityPath
+        ? canAccessAdminSecurity(adminRole.data?.role)
+        : allowedPrefixes.some(
+            (p) =>
+              location === p ||
+              location.startsWith(p + "?") ||
+              location.startsWith(p + "/"),
+          ));
     if (!isAllowed) {
       return <Redirect to="/admin/dashboard" />;
     }
