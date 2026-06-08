@@ -2,6 +2,8 @@
 
 *Updated May 22, 2026.*
 
+> **Asked "what's it built on / is it robust enough to trust / does AI-built matter?"** — see the companion [`technology-and-architecture-brief.md`](./technology-and-architecture-brief.md): a tiered tech-stack + robustness + due-diligence brief written for Press CEOs, engineers, and acquirers.
+
 **GoodTunes is a fan-first music player that treats every song as a structured object — audio, synced lyrics, per-track credits, and the gear behind it — so fans buy direct from artists, listen in an Apple-Music-quality experience, and discover the people, instruments, and brands behind every take.**
 
 ---
