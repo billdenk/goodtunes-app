@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Camera, Upload, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { fileToUploadDataUrl, friendlyPhotoError } from "@/lib/photoUpload";
+import { fileToUploadDataUrl, friendlyPhotoError, isSupportedPhotoFile } from "@/lib/photoUpload";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/Spinner";
 import {
@@ -12,11 +12,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-// Same allowlist + size cap the fan player editor enforces (the server
-// allowlist is PNG/JPEG/WEBP/GIF only — anything else, notably HEIC from
-// iOS, 400s). Reject up front with a clear message instead of letting the
-// silent server reject bury the bug.
-const ALLOWED_MIMES = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"];
+// Same accepted set + size cap the fan player editor enforces. The server
+// allowlist is PNG/JPEG/WEBP/GIF, but HEIC/HEIF (e.g. an iPhone photo
+// AirDropped to a Mac) is also accepted — `fileToUploadDataUrl` transcodes it
+// to JPEG before upload. Genuinely unsupported types are rejected up front via
+// `isSupportedPhotoFile` with a clear message instead of letting the silent
+// server reject bury the bug.
 const MAX_BYTES = 5 * 1024 * 1024;
 
 function initialsFor(name: string | undefined, email: string | undefined): string {
@@ -90,8 +91,8 @@ export function AdminEditProfileDialog({
   const acceptFile = (file: File | undefined | null) => {
     setPhotoError(null);
     if (!file || !user?.id) return;
-    if (!ALLOWED_MIMES.includes(file.type.toLowerCase())) {
-      setPhotoError(`That format isn't supported (${file.type || "unknown"}). Use a JPEG, PNG, WEBP, or GIF.`);
+    if (!isSupportedPhotoFile(file)) {
+      setPhotoError(`That format isn't supported (${file.type || "unknown"}). Use a JPEG, PNG, WEBP, GIF, or HEIC.`);
       return;
     }
     if (file.size > MAX_BYTES) {
@@ -234,14 +235,14 @@ export function AdminEditProfileDialog({
               )}
             </div>
             <p className="mt-2 text-xs text-slate-400 leading-relaxed">
-              Drag an image onto the photo, or click to pick. JPEG, PNG, WEBP, or GIF · up to 5 MB.
+              Drag an image onto the photo, or click to pick. JPEG, PNG, WEBP, GIF, or HEIC · up to 5 MB.
             </p>
           </div>
 
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
+            accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif,.heic,.heif"
             className="hidden"
             onChange={(e) => {
               acceptFile(e.target.files?.[0]);

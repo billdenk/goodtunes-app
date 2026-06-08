@@ -7,7 +7,7 @@ import { useAuthKind } from "@/hooks/useAuthKind";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { scrimFade } from "@/lib/motion";
 import { IconButton } from "@/components/ui/IconButton";
-import { fileToUploadDataUrl, friendlyPhotoError } from "@/lib/photoUpload";
+import { fileToUploadDataUrl, friendlyPhotoError, isSupportedPhotoFile } from "@/lib/photoUpload";
 
 export function EditAccount() {
   const { user, updateProfile, updatePhoto, removePhoto, isUpdatePending, updateError } = useAuth();
@@ -64,14 +64,13 @@ export function EditAccount() {
     e.target.value = "";
     setPhotoError(null);
     if (!file || !user?.id) return;
-    // The server allowlist is PNG/JPEG/WEBP/GIF only — anything else (notably
-    // HEIC straight from iOS Photos) will 400. iPhone Safari normally
-    // auto-converts when `accept` lists explicit MIME types, but Files /
-    // share sheets can still hand us a HEIC. Reject up front with a clear
-    // message instead of letting the silent server reject bury the bug.
-    const allowedMimes = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"];
-    if (!allowedMimes.includes(file.type.toLowerCase())) {
-      setPhotoError(`That format isn't supported (${file.type || "unknown"}). Use a JPEG or PNG.`);
+    // The server allowlist is PNG/JPEG/WEBP/GIF only, but HEIC/HEIF from an
+    // iPhone (Files / share sheet) is also accepted here — `fileToUploadDataUrl`
+    // transcodes it to JPEG client-side before the PUT. Genuinely unsupported
+    // types (PDF, TIFF, etc.) are rejected up front with a clear message
+    // instead of letting the silent server reject bury the bug.
+    if (!isSupportedPhotoFile(file)) {
+      setPhotoError(`That format isn't supported (${file.type || "unknown"}). Use a JPEG, PNG, WEBP, GIF, or HEIC.`);
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
@@ -151,7 +150,7 @@ export function EditAccount() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif,.heic,.heif"
               className="hidden"
               onChange={handlePhotoPick}
               data-testid="input-profile-photo"
