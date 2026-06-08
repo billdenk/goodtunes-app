@@ -179,7 +179,18 @@ function AdminOrdersInner() {
     isError: ordersError,
     error: ordersErrorObj,
     refetch: refetchOrders,
-  } = useQuery<AdminOrderRow[]>({ queryKey: ["/api/admin/orders"] });
+  } = useQuery<AdminOrderRow[]>({
+    queryKey: ["/api/admin/orders"],
+    // Task #1782 — auto-refresh the queue so a fresh sale lands in front
+    // of the operator without a manual reload. 15s is frequent enough to
+    // feel live but light on the API. `refetchIntervalInBackground` stays
+    // false (the TanStack default) so the timer pauses whenever the tab is
+    // hidden/backgrounded. We also pause while the payout-settings popover
+    // is open so a background refresh can't reorder the list out from under
+    // an operator who's mid-edit.
+    refetchInterval: showSettings ? false : 15_000,
+    refetchIntervalInBackground: false,
+  });
   const { data: stuck } = useQuery<AdminOrderRow[]>({ queryKey: ["/api/admin/payouts/stuck"] });
   // Task #216 — per-album worst preflight status, used by the pill in
   // each order row. One query for the whole queue (not per-row).
