@@ -156,7 +156,12 @@ type ApiAlbumPhoto = {
 export function AlbumDetailDesktop({
   albumId,
   notifyOnly = false,
-}: { albumId?: string; notifyOnly?: boolean } = {}) {
+  publicPreview,
+}: {
+  albumId?: string;
+  notifyOnly?: boolean;
+  publicPreview?: "notify" | "buy";
+} = {}) {
   const params = useParams<{ id: string }>();
   const id = albumId ?? params.id;
   const { user, updateProfile } = useAuth();
@@ -189,9 +194,11 @@ export function AlbumDetailDesktop({
     if (notifyOnly) return false;
     return new URL(window.location.href).searchParams.get("buy") === "1";
   });
-  // Task #1766 — the offer modal is now the on-demand "Get Notified" capture
-  // only (opened from the transport's Get Notified CTA); never auto-opened.
-  const [showOfferModal, setShowOfferModal] = useState(false);
+  // Task #1766 — the offer modal is the on-demand "Get Notified" capture
+  // (opened from the transport's Get Notified CTA). Task #1784 — on the public
+  // preview surfaces (/hope, /staging) it auto-opens on arrival so the page
+  // reads like the real player with the offer fronting it.
+  const [showOfferModal, setShowOfferModal] = useState(!!publicPreview);
   // When the fan ticked the signed-cert add-on chip on the hero before
   // clicking Buy, we hand the toggle into BuySheet so the checkout sheet
   // opens with it pre-checked. Cleared whenever the sheet closes.
@@ -496,7 +503,9 @@ export function AlbumDetailDesktop({
   };
   const handleBuyBundle = (opts?: { signedCert?: boolean }) => {
     // Task #1628 — read-only during a "Sales Begin" locked preview.
-    if (salesPending) return;
+    // Task #1784 — EXCEPT the /staging dry-run, which intentionally walks the
+    // BuySheet to the Stripe card screen even while the release is prepping.
+    if (salesPending && publicPreview !== "buy") return;
     setBuyAddons({ signedCert: !!opts?.signedCert });
     setShowBuySheet(true);
   };
@@ -570,8 +579,11 @@ export function AlbumDetailDesktop({
   // (the `?buy=1` deep link initializes showBuySheet before the album data has
   // loaded, etc.). Force it closed.
   useEffect(() => {
-    if (salesPending && showBuySheet) setShowBuySheet(false);
-  }, [salesPending, showBuySheet]);
+    // Task #1784 — the /staging dry-run keeps the Buy sheet open through to the
+    // Stripe card screen even while the release is prepping; don't force-close.
+    if (salesPending && showBuySheet && publicPreview !== "buy")
+      setShowBuySheet(false);
+  }, [salesPending, showBuySheet, publicPreview]);
 
   // Turn preview mode off when the route unmounts so a navigation away
   // from Preview & Purchase doesn't leave the 30-sec cap armed for
@@ -662,6 +674,7 @@ export function AlbumDetailDesktop({
         }
         searchActive={searchMode}
         onSearch={() => setSearchMode(true)}
+        hideLogin={!!publicPreview}
       />
 
       <div className="relative flex-1 min-w-0 flex flex-col h-full overflow-hidden">
@@ -686,7 +699,9 @@ export function AlbumDetailDesktop({
             previewActive={previewActive}
             lockedPreview={lockedPreview}
             notifyOnly={notifyOnly}
+            publicPreview={publicPreview}
             onGetNotified={() => setShowOfferModal(true)}
+            onGetDetails={() => setShowOfferModal(true)}
             onPlayTrack={handlePlayTrack}
             onAddTrack={handleAddTrack}
             onPlayNextTrack={handlePlayNextTrack}
@@ -1021,6 +1036,9 @@ export function AlbumDetailDesktop({
           salesPending={salesPending}
           notifyOnly={notifyOnly}
           salesBeginLabel={salesBeginLabel}
+          forceBuy={publicPreview === "buy"}
+          accentMint={!!publicPreview}
+          dismissLabel={publicPreview ? "Preview the Music" : undefined}
           onBuy={() => {
             setShowOfferModal(false);
             handleBuyBundle();

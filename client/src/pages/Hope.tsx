@@ -77,7 +77,7 @@ const RELEASES: Record<string, ReleaseContent> = {
       { title: "Brave", len: "3:24" },
     ],
     overview: {
-      heading: "Get Hope. Give Hope.",
+      heading: "Get Hope. Gift Hope.",
       paragraphs: [
         <>
           It's been five years since <strong className="text-white">Nightbirde</strong> (Jane
@@ -90,7 +90,7 @@ const RELEASES: Record<string, ReleaseContent> = {
           music and gave them a mission — use whatever you can to help women with breast cancer.
         </>,
         <>
-          The "Get Hope. Give Hope." campaign was built to do just that — proceeds from every
+          The "Get Hope. Gift Hope." campaign was built to do just that — proceeds from every
           purchase go to Nightbirde Foundation. You can also donate a "Gift of Hope" box to someone
           you know with cancer, or let us choose someone in need on your behalf.
         </>,
@@ -130,7 +130,7 @@ const RELEASES: Record<string, ReleaseContent> = {
         "Some people buy more than one as a gift for friends — sharing the music, and the chance to help women facing cancer.",
     },
     give: {
-      heading: "Give Hope",
+      heading: "Gift Hope",
       intro:
         "Send a Gift of Hope box to someone facing cancer — or let us choose someone in need on your behalf. Every box is a donation to the Nightbirde Foundation.",
       boxName: "Gift of Hope Box",

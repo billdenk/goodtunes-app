@@ -51,6 +51,7 @@ export function AlbumDesktopSidebar({
   user,
   searchActive = false,
   onSearch,
+  hideLogin = false,
 }: {
   user?: AlbumDesktopSidebarUser | null;
   /** True while the album shell has swapped its content into search
@@ -59,6 +60,10 @@ export function AlbumDesktopSidebar({
   /** Selecting the top "Search" entry. The host swaps the main content
    *  area into search mode (the sidebar just highlights). */
   onSearch?: () => void;
+  /** Task #1784 — on the public preview surfaces (/hope, /staging) we hide the
+   *  logged-out "Log in" rail button so the page reads as a clean preview and
+   *  doesn't push reviewers/fans into the auth flow. */
+  hideLogin?: boolean;
 }) {
   const [, navigate] = useLocation();
   const { logout } = useAuth();
@@ -215,7 +220,7 @@ export function AlbumDesktopSidebar({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      ) : (
+      ) : hideLogin ? null : (
         <div className="px-4 pt-4" style={{ paddingBottom: chipMarginBottom }}>
           <button
             type="button"

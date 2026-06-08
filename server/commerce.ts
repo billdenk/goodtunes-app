@@ -1940,14 +1940,21 @@ export function registerCommerceRoutes(app: Express) {
     certName: z.string().max(80).optional(),
   });
   app.post("/api/checkout/session", async (req, res) => {
-    // Task #1766 — review pass is preview-only: a family reviewer can walk the
-    // whole buyer flow on a staged release but can NEVER complete a charge.
-    // Reject before any auth/SKU work so no surface can checkout in review mode.
-    {
-      const { readPreviewPass } = await import("./previewPass");
-      if (readPreviewPass(req)) {
-        return res.status(403).json({ message: "Preview mode — checkout is disabled." });
-      }
+    // Task #1766 / #1784 — a review "preview pass" is normally preview-only and
+    // can NEVER complete a charge. EXCEPTION (Task #1784): the /staging dry-run
+    // must reach the Stripe card screen for a family reviewer, so a pass that
+    // matches THIS album (resolved below) is allowed through to mint the
+    // session — the reviewer stops at the card input; no charge completes here.
+    // A pass for a DIFFERENT album is still rejected outright.
+    const { readPreviewPass } = await import("./previewPass");
+    const previewPass = readPreviewPass(req);
+    // Task #1784 — a pass minted for a DIFFERENT album can never drive this
+    // checkout: reject it up front (before any auth / SKU work) exactly as
+    // Task #1766 did for ALL passes. A pass that MATCHES the album being
+    // purchased is allowed to fall through so the /staging family reviewer can
+    // reach the Stripe card screen on the prepping release.
+    if (previewPass && previewPass.albumId !== (req.body?.albumId ?? null)) {
+      return res.status(403).json({ message: "Preview mode — checkout is disabled." });
     }
     const auth = req.headers.authorization;
     if (!auth?.startsWith("Bearer ")) return res.status(401).json({ message: "Sign in required" });
@@ -1960,15 +1967,22 @@ export function registerCommerceRoutes(app: Express) {
     if (!parsed.success) return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request" });
     const album = await storage.getAlbumById(parsed.data.albumId);
     if (!album) return res.status(404).json({ message: "Album not found" });
+    // Task #1784 — the /staging dry-run carries a preview pass for THIS album.
+    // A wrong-album pass was already rejected up front (above); here a matching
+    // pass authorizes the reviewer to proceed past the prepping gate so they
+    // reach the Stripe card screen. No pass means a normal (live) fan checkout.
+    const stagingAuthorized =
+      !!previewPass && previewPass.albumId === album.id;
     // Task #1778 — a PREPPING (pre-launch) release shows the rich page in
     // notify-only "Get Early Access" mode; there is no fan checkout for it.
     // Hard-reject any charge before we touch SKUs/stock so no surface can
     // complete a purchase on a not-yet-launched release. Full-access operator
     // accounts (Bill's fan account, used by the /testing dry-run) are exempt so
-    // the buyer flow can be rehearsed against real Stripe before go-live.
+    // the buyer flow can be rehearsed against real Stripe before go-live; the
+    // /staging reviewer (a pass matching this album) is exempt too (Task #1784).
     if ((album as any).isPrepping) {
       const { isFullAccessEmail } = await import("@shared/fullAccess");
-      if (!isFullAccessEmail(customer.email)) {
+      if (!isFullAccessEmail(customer.email) && !stagingAuthorized) {
         return res.status(403).json({ message: "This release isn't on sale yet." });
       }
     }

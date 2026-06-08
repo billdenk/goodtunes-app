@@ -45,6 +45,14 @@ export type LockedOfferModalProps = {
   prefilledEmail?: string | null;
   /** Light attribution stamped on the signup row ("get" / "store"). */
   source?: string;
+  /** Task #1784 — /staging dry-run: force the Buy CTA even while the release
+   *  is prepping/notify-only, so a reviewer can walk the purchase screens. */
+  forceBuy?: boolean;
+  /** Task #1784 — preview surfaces (/hope, /staging) paint the primary CTA in
+   *  the brand mint treatment (mint fill, deep-navy text) to match the page. */
+  accentMint?: boolean;
+  /** Task #1784 — override the bottom dismiss label (e.g. "Preview the Music"). */
+  dismissLabel?: string;
 };
 
 const CARD_BG = "#0B1547";
@@ -63,10 +71,20 @@ export function LockedOfferModal({
   onBuy,
   prefilledEmail,
   source,
+  forceBuy,
+  accentMint,
+  dismissLabel,
 }: LockedOfferModalProps) {
   // Lead with the notify flow either pre-launch (sunrise pending) OR when the
   // campaign fan link forces notify-only on an otherwise-live release.
-  const leadNotify = salesPending || !!notifyOnly;
+  // Task #1784 — the /staging dry-run forces the Buy CTA past both gates so a
+  // reviewer can reach the Stripe card screen on a still-prepping release.
+  const leadNotify = !forceBuy && (salesPending || !!notifyOnly);
+  // Task #1784 — mint primary treatment for the preview surfaces. Brand vars
+  // only (design-system.md): mint fill + deep-navy text, never raw hex.
+  const primaryAccentStyle = accentMint
+    ? { background: "var(--brand-mint)", color: "var(--brand-bg)" }
+    : null;
   const [mode, setMode] = useState<"offer" | "notify" | "done">("offer");
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -277,8 +295,13 @@ export function LockedOfferModal({
                 <button
                   type="button"
                   onClick={() => setMode("notify")}
-                  className="mt-6 w-full h-12 rounded-full font-semibold text-base text-white flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
-                  style={{ background: "linear-gradient(135deg, var(--brand-purple), var(--brand-blue))" }}
+                  className={`mt-6 w-full h-12 rounded-full font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-transform ${accentMint ? "" : "text-white"}`}
+                  style={
+                    primaryAccentStyle ?? {
+                      background:
+                        "linear-gradient(135deg, var(--brand-purple), var(--brand-blue))",
+                    }
+                  }
                   data-testid="button-offer-get-notified"
                 >
                   <Bell className="w-[18px] h-[18px]" strokeWidth={2.2} />
@@ -288,8 +311,12 @@ export function LockedOfferModal({
                 <button
                   type="button"
                   onClick={onBuy}
-                  className="mt-6 w-full h-12 rounded-full font-semibold text-base text-white flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
-                  style={{ background: "linear-gradient(135deg, #1D5E8F, var(--brand-blue))" }}
+                  className={`mt-6 w-full h-12 rounded-full font-semibold text-base flex items-center justify-center gap-2 active:scale-[0.98] transition-transform ${accentMint ? "" : "text-white"}`}
+                  style={
+                    primaryAccentStyle ?? {
+                      background: "linear-gradient(135deg, #1D5E8F, var(--brand-blue))",
+                    }
+                  }
                   data-testid="button-offer-buy"
                 >
                   <ShoppingCart className="w-[18px] h-[18px]" strokeWidth={2.2} />
@@ -304,7 +331,7 @@ export function LockedOfferModal({
                 data-testid="button-offer-preview"
               >
                 <Play className="w-4 h-4" fill="currentColor" strokeWidth={0} />
-                Preview first
+                {dismissLabel ?? "Preview first"}
               </button>
             </>
           )}

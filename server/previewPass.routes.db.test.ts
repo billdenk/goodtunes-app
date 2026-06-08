@@ -7,10 +7,14 @@
 // Express surfaces that consume a pass, so a regression in how the routes apply
 // it fails loudly:
 //
-//   1. POST /api/checkout/session → 403 the moment a pass is present, BEFORE
-//      any auth / SKU work (server/commerce.ts ~1945). A reviewer can never
-//      reach Stripe. A control request with no pass must NOT 403 (it 401s on
-//      the missing sign-in), proving the 403 is specifically the pass guard.
+//   1. POST /api/checkout/session → a pass for a DIFFERENT album than the one
+//      being purchased is 403'd the moment it is seen, BEFORE any auth / SKU
+//      work (server/commerce.ts ~1945) — a reviewer holding the wrong release's
+//      pass can never reach Stripe. A pass that MATCHES the checkout's album is
+//      NOT blocked by this guard (Task #1784 lets the /staging family reviewer
+//      reach the card screen); with no auth it falls through to the sign-in 401.
+//      A control request with no pass also falls through to 401, proving the
+//      403 is specifically the wrong-album pass guard.
 //   2. GET /api/albums/:id/buy-options (commerce.ts ~775) only widens to a
 //      hidden release when the pass's albumId === the requested album id. A
 //      pass for a DIFFERENT album leaves the hidden Buy sheet 404 (no leak).
@@ -131,17 +135,32 @@ async function seedHiddenAlbum(opts: {
   return id;
 }
 
-test("checkout/session returns 403 when a preview pass is present (before auth)", async () => {
-  const pass = signPreviewPass(randomUUID());
+test("checkout/session 403s a wrong-album pass before auth, but lets a matching pass through", async () => {
+  const albumId = randomUUID();
   // A valid-looking body so we know the 403 is the pass guard, not validation.
-  const body = { albumId: randomUUID(), skuFormat: "12_lp" };
+  const body = { albumId, skuFormat: "12_lp" };
 
-  const withPass = await post("/api/checkout/session", body, { "x-preview-pass": pass });
-  assert.equal(withPass.status, 403, "a request carrying a preview pass must be rejected");
+  // A pass minted for a DIFFERENT album can never drive this checkout — it is
+  // rejected up front (before the sign-in check), so a reviewer holding the
+  // wrong release's pass never reaches Stripe.
+  const wrong = await post("/api/checkout/session", body, {
+    "x-preview-pass": signPreviewPass(randomUUID()),
+  });
+  assert.equal(wrong.status, 403, "a wrong-album pass must be rejected outright");
 
-  // Control: the SAME request with no pass must NOT 403 — it falls through to
-  // the sign-in requirement (401). This proves the 403 is specifically the
-  // preview-pass guard and not some unrelated rejection.
+  // A pass minted for THIS album is NOT blocked by the preview guard (Task
+  // #1784 lets the /staging family reviewer reach the card screen). With no
+  // auth it falls through to the sign-in requirement (401), proving the guard
+  // let it pass rather than 403ing it.
+  const matching = await post("/api/checkout/session", body, {
+    "x-preview-pass": signPreviewPass(albumId),
+  });
+  assert.notEqual(matching.status, 403, "a matching pass must not hit the preview-mode rejection");
+  assert.equal(matching.status, 401, "matching pass + no auth → sign-in required");
+
+  // Control: the SAME request with no pass also falls through to the sign-in
+  // requirement (401). This proves the 403 is specifically the wrong-album
+  // pass guard and not some unrelated rejection.
   const noPass = await post("/api/checkout/session", body);
   assert.notEqual(noPass.status, 403, "no pass → not the preview-mode rejection");
   assert.equal(noPass.status, 401, "no pass + no auth → sign-in required");

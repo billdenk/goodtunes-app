@@ -325,8 +325,21 @@ function PurchaseThankYouModal({ albumId: albumIdProp }: { albumId?: string }) {
 export function AlbumDetail({
   albumId,
   notifyOnly = false,
-}: { albumId?: string; notifyOnly?: boolean } = {}) {
+  publicPreview,
+}: {
+  albumId?: string;
+  notifyOnly?: boolean;
+  // Task #1784 — the pre-launch preview surfaces. "notify" = /hope (fan early
+  // access, email capture); "buy" = /staging (family review, walks the buy
+  // flow to the Stripe card screen). Undefined elsewhere so normal owned/store
+  // album views are untouched.
+  publicPreview?: "notify" | "buy";
+} = {}) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
+  // /hope leads with the notify (email-capture) flow; /staging stays buy-
+  // enabled. Fold the notify preview into the existing notifyOnly path so the
+  // child surfaces keep their current notify wiring.
+  const effectiveNotifyOnly = notifyOnly || publicPreview === "notify";
   // Surface choice is width-only so an iPad running the native app gets the
   // SAME desktop chrome (left rail + hero + tracklist) it gets in a desktop
   // browser. This mirrors `useDesktopShell`, which already lets the
@@ -340,9 +353,17 @@ export function AlbumDetail({
   // `buyEnabled`. Native iPhone keeps the mobile shell purely on width
   // (<768px), TARGETED_DEVICE_FAMILY="1,2" notwithstanding.
   const surface = isDesktop ? (
-    <AlbumDetailDesktop albumId={albumId} notifyOnly={notifyOnly} />
+    <AlbumDetailDesktop
+      albumId={albumId}
+      notifyOnly={effectiveNotifyOnly}
+      publicPreview={publicPreview}
+    />
   ) : (
-    <AlbumDetailMobile albumId={albumId} notifyOnly={notifyOnly} />
+    <AlbumDetailMobile
+      albumId={albumId}
+      notifyOnly={effectiveNotifyOnly}
+      publicPreview={publicPreview}
+    />
   );
   // FanPreviewProvider keeps the fan-preview lens wiring intact (read via
   // useFanPreview, still toggleable through the `?fan=1` URL flag); the visible
@@ -382,7 +403,8 @@ function PreviewModeBanner() {
 function AlbumDetailMobile({
   albumId,
   notifyOnly = false,
-}: { albumId?: string; notifyOnly?: boolean }) {
+  publicPreview,
+}: { albumId?: string; notifyOnly?: boolean; publicPreview?: "notify" | "buy" }) {
   const params = useParams<{ id: string }>();
   const id = albumId ?? params.id;
   const _recordRecent = useRecordRecent();
@@ -431,9 +453,11 @@ function AlbumDetailMobile({
     if (typeof window === "undefined") return false;
     return new URL(window.location.href).searchParams.get("buy") === "1";
   });
-  // Task #1766 — the offer modal is now the on-demand "Get Notified" capture
-  // only (opened from the transport's Get Notified CTA); never auto-opened.
-  const [showOfferModal, setShowOfferModal] = useState(false);
+  // Task #1766 — the offer modal is the on-demand "Get Notified" capture
+  // (opened from the transport's Get Notified CTA). Task #1784 — on the public
+  // preview surfaces (/hope, /staging) it auto-opens on arrival so the page
+  // reads like the real player with the offer fronting it.
+  const [showOfferModal, setShowOfferModal] = useState(!!publicPreview);
   const [singleCertNum, setSingleCertNum] = useState<number | null>(null);
   const [provenanceCertNum, setProvenanceCertNum] = useState<number | null>(null);
   const [showOwnership, setShowOwnership] = useState(false);
@@ -567,8 +591,15 @@ function AlbumDetailMobile({
     // rename). Force a fresh read on every visit to this page so a normal
     // navigation back reflects the current admin title/metadata without a
     // hard reload. Scoped to this query — the global default is unchanged.
-    staleTime: 0,
-    refetchOnMount: "always",
+    //
+    // Task #1784 — EXCEPT on the public preview surfaces (/hope, /staging).
+    // There the route's by-slug resolve already primed this exact cache key
+    // with the full payload; an "always" refetch fires a fresh GET that
+    // returns null on a 401 (logged-out reviewer) for a beat, flashing the
+    // "couldn't find that album" screen before the cache wins. Trust the
+    // primed payload: no stale read, no refetch, no flash.
+    staleTime: publicPreview ? Infinity : 0,
+    refetchOnMount: publicPreview ? false : "always",
   });
   // Task #1766 — the Buy CTA price must read from the active SKU/buy-options
   // (e.g. a 7" single at $25.00), NOT the legacy albums.price_cents column,
@@ -926,10 +957,14 @@ function AlbumDetailMobile({
   // stays stable across the loading→loaded transition (otherwise React #310:
   // "rendered more hooks than during the previous render").
   useEffect(() => {
+    // Task #1784 — the /staging dry-run keeps the Buy sheet open through to the
+    // Stripe card screen even while the release is prepping (sunrise pending);
+    // don't force it closed there.
+    if (publicPreview === "buy") return;
     const pending =
       !isOwned && isSunrisePending(apiAlbum?.goodTunesReleaseDate);
     if (pending && showBuySheet) setShowBuySheet(false);
-  }, [isOwned, apiAlbum?.goodTunesReleaseDate, showBuySheet]);
+  }, [isOwned, apiAlbum?.goodTunesReleaseDate, showBuySheet, publicPreview]);
 
   // Task #1766 — the get-host preview/purchase page now renders the full rich
   // album layout (hero, metadata, tracklist, Videos) instead of fronting it
@@ -1140,7 +1175,9 @@ function AlbumDetailMobile({
           salesBeginLabel={salesBeginLabel}
           lockedPreview={lockedPreview}
           notifyOnly={notifyOnly}
+          publicPreview={publicPreview}
           onGetNotified={() => setShowOfferModal(true)}
+          onGetDetails={() => setShowOfferModal(true)}
           onToggleAlbumDownload={handleToggleAlbumDownload}
           onToggleSongDownload={(id) => toggleSongDownload(id)}
           onOpenSongMenu={(s, rect) => {
@@ -1200,6 +1237,9 @@ function AlbumDetailMobile({
             salesPending={salesPending}
             notifyOnly={notifyOnly}
             salesBeginLabel={salesBeginLabel}
+            forceBuy={publicPreview === "buy"}
+            accentMint={!!publicPreview}
+            dismissLabel={publicPreview ? "Preview the Music" : undefined}
             onBuy={() => {
               setShowOfferModal(false);
               setShowBuySheet(true);

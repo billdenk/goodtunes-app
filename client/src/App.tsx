@@ -274,7 +274,16 @@ function ShareSlugOne() {
   if (!data) return <AlbumNotFound variant="mobile" />;
   // Task #1778 — a PREPPING (pre-launch) release resolves to the full rich page
   // in notify-only "Get Early Access" mode instead of a dead-end teaser.
-  return <AlbumDetail albumId={data.id} notifyOnly={!!data.isPrepping} />;
+  // Task #1784 — that prepping fan link is the "notify" public-preview surface
+  // (auto-opening mint offer modal, clean chrome). Gate on isPrepping: this
+  // route handles ALL single-segment shares, so a LIVE release stays a normal
+  // album page (publicPreview undefined).
+  return (
+    <AlbumDetail
+      albumId={data.id}
+      publicPreview={data.isPrepping ? "notify" : undefined}
+    />
+  );
 }
 
 // Task #1755 — family-review link for a campaign release
@@ -310,10 +319,17 @@ function ShareSlugStaging() {
 
   if (isLoading) return <AlbumDetailMobileSkeleton />;
   if (isError || !data) return <AlbumNotFound variant="mobile" />;
-  // Task #1778 — the family review link now lands on the SAME rich page as the
-  // fan link. While the release is prepping it's notify-only ("Get Early
-  // Access"); the operator real-checkout dry-run lives at /testing instead.
-  return <AlbumDetail albumId={data.id} notifyOnly={!!data.isPrepping} />;
+  // Task #1784 — the family review link is the "buy" public-preview surface:
+  // the primary CTA reads "Buy $X" and walks the existing purchase screens to
+  // the Stripe card input (the staging reviewer's preview pass unlocks checkout
+  // server-side; the charge is finished in Bill's separate purchase task).
+  // Gate on isPrepping so a LIVE release stays a normal album page.
+  return (
+    <AlbumDetail
+      albumId={data.id}
+      publicPreview={data.isPrepping ? "buy" : undefined}
+    />
+  );
 }
 
 // Task #1766 — private /testing entry. Renders the FULL buyer page for the

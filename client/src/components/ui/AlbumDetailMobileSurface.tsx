@@ -141,6 +141,10 @@ export interface AlbumDetailMobileSurfaceProps {
    *  notify-only, so the locked-preview action row leads with "Get Notified"
    *  (no checkout) even though there's no sunrise `salesBeginLabel`. */
   notifyOnly?: boolean;
+  /** Task #1784 — pre-launch preview surface. "notify" = /hope (Get Early
+   *  Access), "buy" = /staging (Buy $X to the Stripe card screen). Drives the
+   *  mint primary CTA + the "Get Details" link. Undefined on normal views. */
+  publicPreview?: "notify" | "buy";
   /** Re-open the offer modal (Get Details link, and the pre-launch primary
    *  CTA when sales haven't begun). */
   onGetDetails?: () => void;
@@ -206,6 +210,7 @@ export function AlbumDetailMobileSurface({
   salesBeginLabel,
   lockedPreview = false,
   notifyOnly = false,
+  publicPreview,
   onGetDetails,
   onGetNotified,
   onToggleAlbumDownload,
@@ -735,12 +740,43 @@ export function AlbumDetailMobileSurface({
             // forces notify-only on a live release. Otherwise the disabled
             // "Sales Begin {date}" pill (admin previews) or the live Buy CTA.
             // Previews still play (the Play control above is untouched).
-            (lockedPreview && (salesBeginLabel || notifyOnly) && onGetNotified ? (
+            // Task #1784 — /staging dry-run leads with Buy $X (mint) even while
+            // the release is prepping, walking the BuySheet to the Stripe card
+            // screen. /hope leads with mint "Get Early Access".
+            (publicPreview === "buy" ? (
+                <button
+                  type="button"
+                  onClick={onOpenBuy}
+                  className="flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-[15px] text-white active:scale-[0.98] transition-transform flex-shrink-0"
+                  style={{ background: "var(--brand-mint)", color: "var(--brand-bg)" }}
+                  data-testid="button-open-buy-sheet"
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="9" cy="21" r="1" />
+                    <circle cx="20" cy="21" r="1" />
+                    <path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6" />
+                  </svg>
+                  Buy {formatUsdCents(album.priceCents)}
+                </button>
+              ) : lockedPreview && (salesBeginLabel || notifyOnly) && onGetNotified ? (
                 <button
                   type="button"
                   onClick={onGetNotified}
                   className="flex items-center justify-center gap-2 h-12 px-5 rounded-full font-semibold text-[15px] text-white active:scale-[0.98] transition-transform flex-shrink-0"
-                  style={{ background: "linear-gradient(135deg, var(--brand-purple), var(--brand-blue))" }}
+                  style={
+                    publicPreview
+                      ? { background: "var(--brand-mint)", color: "var(--brand-bg)" }
+                      : { background: "linear-gradient(135deg, var(--brand-purple), var(--brand-blue))" }
+                  }
                   data-testid="button-get-notified"
                 >
                   <svg
@@ -807,6 +843,18 @@ export function AlbumDetailMobileSurface({
                 Buy {formatUsdCents(album.priceCents)}
               </button>
             ))}
+          {/* Task #1784 — "Get Details" re-opens the offer modal; sits just to
+              the right of the non-Play action button on the preview surfaces. */}
+          {publicPreview && onGetDetails && (
+            <button
+              type="button"
+              onClick={onGetDetails}
+              className="h-12 px-2 inline-flex items-center text-sm font-medium text-fan-secondary active:opacity-70 transition-opacity flex-shrink-0 underline underline-offset-2"
+              data-testid="link-get-details"
+            >
+              Get Details
+            </button>
+          )}
           {/* Task #1580 — the album-level credits "i" button is hidden; credits
               are now per-track only (opened from each track's row). The
               `hasAlbumCredits`/`onOpenAlbumCredits` wiring stays in place so it

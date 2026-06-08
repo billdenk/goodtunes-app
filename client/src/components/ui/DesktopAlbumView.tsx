@@ -119,6 +119,10 @@ export type DesktopAlbumViewProps = {
    *  notify-only, so the locked transport row leads with "Get Notified"
    *  (no checkout) even without a sunrise `salesBeginLabel`. */
   notifyOnly?: boolean;
+  /** Task #1784 — pre-launch preview surface. "notify" = /hope (Get Early
+   *  Access), "buy" = /staging (Buy $X straight to the Stripe card screen).
+   *  Drives the mint primary CTA on the locked transport row. */
+  publicPreview?: "notify" | "buy";
   /** Pre-launch (sunrise pending) CTA: opens the offer modal's notify step. */
   onGetNotified?: () => void;
   /** Reopens the centered offer modal ("Get Details"). */
@@ -314,6 +318,7 @@ export function DesktopAlbumView({
   onPlayPreview,
   previewActive = false,
   lockedPreview = false,
+  publicPreview,
   onGetNotified,
   onGetDetails,
   onPlayTrack,
@@ -384,8 +389,12 @@ export function DesktopAlbumView({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  // Task #1784 — the public preview surfaces (/hope, /staging) are share-only:
+  // the top-right ⋯ "More" menu is hidden so the page reads like a clean public
+  // landing (matches the mobile surface, which drops ⋯ under lockedPreview).
   const hasMenuItems =
-    !!onViewCertificate || !!onDownloadCert || !!onViewProvenance || !!onAddAlbumToPlaylist;
+    !publicPreview &&
+    (!!onViewCertificate || !!onDownloadCert || !!onViewProvenance || !!onAddAlbumToPlaylist);
   const openMenu = () => {
     const rect = menuBtnRef.current?.getBoundingClientRect();
     if (rect) {
@@ -784,16 +793,38 @@ export function DesktopAlbumView({
                       Play
                     </button>
                   )}
-                  {salesBeginLabel || notifyOnly ? (
+                  {/* Task #1784 — /staging dry-run leads with Buy {price} (mint)
+                      even while the release is prepping, walking the BuySheet to
+                      the Stripe card screen. /hope leads with mint Get Early
+                      Access. Otherwise the Task #1755/#1734 defaults. */}
+                  {publicPreview === "buy" && onBuyBundle && album.priceCents != null ? (
+                    <button
+                      type="button"
+                      onClick={() => onBuyBundle?.()}
+                      data-testid="button-buy-bundle"
+                      className="h-11 px-5 rounded-full inline-flex items-center gap-2 font-semibold text-sm transition-transform active:scale-[0.97]"
+                      style={{
+                        background: "var(--brand-mint)",
+                        color: "var(--brand-bg)",
+                      }}
+                    >
+                      <ShoppingCart className="w-4 h-4" strokeWidth={2.2} />
+                      Buy {formatPrice(album.priceCents)}
+                    </button>
+                  ) : salesBeginLabel || notifyOnly ? (
                     <button
                       type="button"
                       onClick={onGetNotified}
                       data-testid="button-get-notified"
-                      className="h-11 px-5 rounded-full inline-flex items-center gap-2 font-semibold text-sm text-white transition-transform active:scale-[0.97]"
-                      style={{
-                        background:
-                          "linear-gradient(135deg, var(--brand-purple), var(--brand-blue))",
-                      }}
+                      className={`h-11 px-5 rounded-full inline-flex items-center gap-2 font-semibold text-sm transition-transform active:scale-[0.97] ${publicPreview ? "" : "text-white"}`}
+                      style={
+                        publicPreview
+                          ? { background: "var(--brand-mint)", color: "var(--brand-bg)" }
+                          : {
+                              background:
+                                "linear-gradient(135deg, var(--brand-purple), var(--brand-blue))",
+                            }
+                      }
                     >
                       <Bell className="w-4 h-4" strokeWidth={2.2} />
                       Get Early Access
@@ -813,6 +844,18 @@ export function DesktopAlbumView({
                       Buy {formatPrice(album.priceCents)}
                     </button>
                   ) : null}
+                  {/* Task #1784 — "Get Details" re-opens the offer modal; sits
+                      to the right of the primary CTA on the preview surfaces. */}
+                  {publicPreview && onGetDetails && (
+                    <button
+                      type="button"
+                      onClick={onGetDetails}
+                      data-testid="link-get-details"
+                      className="h-11 px-2 inline-flex items-center text-sm font-medium text-fan-secondary transition-opacity active:opacity-70 underline underline-offset-2"
+                    >
+                      Get Details
+                    </button>
+                  )}
                 </>
               ) : (
                 /* Apple-tone preview/buy transport row, mirroring the owned
