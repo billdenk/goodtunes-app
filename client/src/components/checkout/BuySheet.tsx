@@ -603,7 +603,10 @@ export function BuySheet({
     setBusy(true);
     setError(null);
     try {
-      const effectiveCerts = overrideCerts ?? copyCerts;
+      // Defensive: only honor `overrideCerts` when it's actually an array.
+      // A bare `onClick={beginCheckout}` would pass the click event in here,
+      // and `event.filter(Boolean)` throws "et.filter is not a function".
+      const effectiveCerts = Array.isArray(overrideCerts) ? overrideCerts : copyCerts;
       const effectiveCertCount = effectiveCerts.filter(Boolean).length;
       track("checkout_started", { albumId, priceCents: totalCents });
       const willSendCert = !!(addon && !signedCertSoldOut);
@@ -1406,8 +1409,8 @@ export function BuySheet({
                 />
               )}
               <div className="min-w-0">
-                <div className="text-lg font-bold tracking-tight truncate text-fan-primary">{addon.label}</div>
-                <div className="text-[13px] text-fan-secondary truncate">
+                <div className="text-lg font-bold tracking-tight leading-tight text-fan-primary line-clamp-2">{addon.label}</div>
+                <div className="text-[13px] text-fan-secondary truncate mt-0.5">
                   {dollars(addon.priceCents)} per copy · {options?.title}
                 </div>
               </div>
@@ -1466,27 +1469,36 @@ export function BuySheet({
                       data-testid={`button-toggle-signed-cert-${i}`}
                     >
                       <div className="flex flex-col flex-1 min-w-0 pr-2">
-                        <span className="text-[14px] font-medium">
+                        <span className="text-[15px] font-medium text-fan-primary">
                           {quantity === 1 ? addon.label : `Copy ${i + 1} · ${addon.label}`}
                         </span>
-                        <span className="text-[12px] text-fan-secondary leading-snug mt-0.5">
+                        <span className="text-[13px] text-fan-secondary leading-snug mt-0.5">
                           {on
                             ? "Numbered, printed, and signed by the artist. Mailed with your record."
                             : "Tap to add a signed certificate for this copy."}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 whitespace-nowrap">
-                        {on && (
-                          <span className="text-[14px] font-semibold whitespace-nowrap">
-                            + {dollars(addon.priceCents)}
-                          </span>
-                        )}
-                        {on && (
-                          <Check
-                            className="w-[18px] h-[18px] text-[color:var(--brand-pink)]"
-                            strokeWidth={2.75}
-                          />
-                        )}
+                      <div className="flex items-center gap-2.5 whitespace-nowrap shrink-0">
+                        <span
+                          className={cn(
+                            "text-[14px] font-semibold",
+                            on ? "text-fan-primary" : "text-fan-secondary",
+                          )}
+                        >
+                          +{dollars(addon.priceCents)}
+                        </span>
+                        <span
+                          className={cn(
+                            "flex items-center justify-center w-6 h-6 rounded-full border transition-colors",
+                            on
+                              ? "bg-[color:var(--brand-pink)] border-transparent"
+                              : "border-white/25",
+                          )}
+                        >
+                          {on && (
+                            <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
+                          )}
+                        </span>
                       </div>
                     </button>
                   );
@@ -1524,20 +1536,20 @@ export function BuySheet({
               </div>
             )}
 
-            {/* Primary action — proceeds to Stripe with current cert choices */}
+            {/* Primary action — proceeds to Stripe with current cert choices.
+                NOTE: must be an arrow wrapper — a bare `onClick={beginCheckout}`
+                passes the click event in as `overrideCerts`, and the event
+                object then fails `.filter(Boolean)` ("et.filter is not a
+                function"). */}
             <button
               type="button"
-              onClick={beginCheckout}
+              onClick={() => beginCheckout()}
               disabled={busy}
               className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 transition-all active:scale-[0.98] mb-3"
               style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
               data-testid="button-cert-checkout"
             >
-              {busy
-                ? "Opening checkout…"
-                : certCount > 0
-                  ? `Checkout — ${dollars(totalCents)}`
-                  : `Checkout — ${dollars(totalCents)}`}
+              {busy ? "Opening checkout…" : `Checkout — ${dollars(totalCents)}`}
             </button>
 
             {/* Skip — clears all cert picks and proceeds without a certificate.

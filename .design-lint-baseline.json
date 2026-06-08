@@ -11857,51 +11857,6 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-[13px] text-white/55 truncate\">{options.artist}</div>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2\">You'll get</div>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"mt-3 text-[12px] text-white/60 leading-snug\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2\">Format</div>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-white/55 text-sm py-6 text-center\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2\">Quantity</div>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-[14px] text-white/85\">How many copies?</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<p className=\"text-white/40 text-[11px] mt-1.5 ml-1\" data-testid=\"text-qty-cap\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
     "snippet": "<span className=\"text-xs text-white/40 font-semibold uppercase tracking-wider\">"
   },
   {
@@ -11917,72 +11872,7 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-white/65\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-white/85\" data-testid=\"text-line-format\">{dollars(formatLineCents)}</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-white/65\">{addon.label} × {certCount}</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-white/85\" data-testid=\"text-line-cert\">{dollars(certLineCents)}</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-white/65\">{bookletAddon.label}</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-white/85\" data-testid=\"text-line-booklet\">{dollars(bookletLineCents)}</span>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-white/85\" data-testid={`text-line-custom-addon-${ca.addon.id}`}>"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<p className=\"mt-3 text-white/40 text-[11px] text-center leading-snug\">"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/checkout/BuySheet.tsx",
     "snippet": "<div className=\"px-5 py-10 text-center text-white/55 text-sm\">Loading checkout…</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-[15px] font-semibold truncate\">{options.title}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-[13px] text-white/55 truncate\">{options.artist}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2\">You'll get</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"mt-3 text-[12px] text-white/60 leading-snug\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2\">Format</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -12002,27 +11892,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2\">Quantity</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-[14px] text-white/85\">How many copies?</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
     "snippet": "<span className=\"text-[18px] font-semibold w-6 text-center tabular-nums\" data-testid=\"text-quantity\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<p className=\"text-white/40 text-[11px] mt-1.5 ml-1\" data-testid=\"text-qty-cap\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-white/55 text-[11px] font-semibold uppercase tracking-wider mb-2\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -12037,37 +11907,27 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"rounded-2xl bg-white/[0.05] p-4 mb-4 text-[13px]\" data-testid=\"block-breakdown\">"
+    "snippet": "<div className=\"text-[13px] text-fan-secondary truncate mt-0.5\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-[18px] font-bold\" data-testid=\"text-buy-total\">"
+    "snippet": "<span className=\"text-[15px] font-medium text-fan-primary\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<p className=\"mt-3 text-white/40 text-[11px] text-center leading-snug\">"
+    "snippet": "<span className=\"text-[13px] text-fan-secondary leading-snug mt-0.5\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-[15px] font-semibold truncate\">{addon.label}</div>"
+    "snippet": "\"text-[14px] font-semibold\","
   },
   {
-    "rule": "hardcoded-font-size",
+    "rule": "player-touch-target-too-small",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-[13px] text-fan-secondary truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-[14px] font-medium\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-[12px] text-fan-secondary leading-snug mt-0.5\">"
+    "snippet": "\"flex items-center justify-center w-6 h-6 rounded-full border transition-colors\","
   },
   {
     "rule": "fan-text-tone",
@@ -12993,11 +12853,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/ui/DesktopAlbumView.tsx",
     "snippet": "title: \"text-fan-primary font-bold tracking-[-0.015em] leading-[1.05] text-[24px] lg:text-[28px] text-balance\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/ui/DesktopAlbumView.tsx",
-    "snippet": "className=\"self-start mt-1.5 text-[18px] font-semibold tracking-[-0.01em] transition-colors hover:underline underline-offset-4\""
   },
   {
     "rule": "hardcoded-font-size",
