@@ -15216,14 +15216,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const artistAlbumIds: string[] = (albumRows as any).rows?.map((r: any) => r.id) ?? [];
       if (artistAlbumIds.length) {
         const instrIds = await db.execute<{ instrument_id: string }>(sql`
-          SELECT DISTINCT instrument_id FROM (
-            SELECT tp.instrument_id FROM track_performers tp
-            JOIN songs s ON s.id = tp.song_id
-            WHERE s.album_id = ANY(${pgArray(artistAlbumIds)}::text[]) AND tp.instrument_id IS NOT NULL
-            UNION ALL
-            SELECT ac.instrument_id FROM album_credits ac
-            WHERE ac.album_id = ANY(${pgArray(artistAlbumIds)}::text[]) AND ac.instrument_id IS NOT NULL
-          ) q
+          SELECT DISTINCT tp.instrument_id FROM track_performers tp
+          JOIN songs s ON s.id = tp.song_id
+          WHERE s.album_id = ANY(${pgArray(artistAlbumIds)}) AND tp.instrument_id IS NOT NULL
         `);
         const scopedIds = new Set(
           (instrIds as any).rows?.map((r: any) => String(r.instrument_id)) ?? [],

@@ -18,6 +18,7 @@
 
 import { sql, type SQL } from "drizzle-orm";
 import { db, pool } from "../server/db";
+import { pgArray } from "../server/lib/pgArray";
 import {
   sqlResolveAlbumPressTier,
   sqlUnitsSoldForAlbum,
@@ -95,6 +96,16 @@ const SMOKE_QUERIES: { name: string; sql: SQL }[] = [
   { name: "partnerInvites.ambassadorOrg", sql: sqlAmbassadorOrg(PRESS) },
   { name: "partnerInvites.placeholderScopeInUseCount(artist)", sql: sqlPlaceholderScopeInUseCount("artist", ORG, ORDER) },
   { name: "partnerInvites.placeholderScopeInUseCount(label)", sql: sqlPlaceholderScopeInUseCount("label", ORG, ORDER) },
+  // server/routes.ts — Task #1787 artist-scoped Gear list. Instruments are only
+  // credited per-track via track_performers; album_credits has no instrument_id.
+  {
+    name: "routes.artistScopedInstrumentIds",
+    sql: sql`
+      SELECT DISTINCT tp.instrument_id FROM track_performers tp
+      JOIN songs s ON s.id = tp.song_id
+      WHERE s.album_id = ANY(${pgArray([ALBUM])}) AND tp.instrument_id IS NOT NULL
+    `,
+  },
 ];
 
 async function main() {
