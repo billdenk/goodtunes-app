@@ -1,7 +1,8 @@
 import { useRef, useState, type ComponentType } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Trash2, Upload, Factory } from "lucide-react";
-import { apiRequest, getAuthToken } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
+import { uploadImageFile } from "@/lib/adminUpload";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,27 +24,6 @@ import {
  * generic so the same primitive can serve every partner-shaped admin
  * page without forking a near-identical dialog per entity.
  */
-async function uploadImageFile(file: File): Promise<string> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const token = getAuthToken();
-  if (!token) {
-    throw new Error("Sign out and back in — your session token is missing.");
-  }
-  const res = await fetch("/api/admin/upload", {
-    method: "POST",
-    body: fd,
-    headers: { Authorization: `Bearer ${token}` },
-    credentials: "include",
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Upload failed (${res.status})`);
-  }
-  const { url } = await res.json();
-  return url as string;
-}
-
 export interface PressLogoEditorDialogProps {
   open: boolean;
   onOpenChange: (v: boolean) => void;

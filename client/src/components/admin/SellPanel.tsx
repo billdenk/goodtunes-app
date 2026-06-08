@@ -28,7 +28,8 @@ import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import { Plus, X, Info, MapPin, Clock, ChevronDown, Pencil, Eye, EyeOff, Trash2, Lock, LockOpen, Award, BookOpen, Disc3, Loader2, Copy, Share, Gift } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
-import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { uploadImageFile as uploadAdminImage } from "@/lib/adminUpload";
 import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
 import { useToast } from "@/hooks/use-toast";
 import {

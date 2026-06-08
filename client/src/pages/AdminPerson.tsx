@@ -49,7 +49,8 @@ import { RolePicker } from "@/components/admin/RolePicker";
 import { PersonSplitsRail } from "@/components/admin/SplitsPanels";
 import { PersonGearManager } from "@/components/admin/PersonGearManager";
 import { NotificationsCard } from "@/components/admin/NotificationsCard";
-import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { uploadImageFile } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import type { PartnerAddressSnapshot } from "@shared/schema";
 import { normalizeShareSlug, validateShareSlug, SHARE_LINK_HOST } from "@shared/shareSlug";
@@ -1446,27 +1447,6 @@ function OverviewPanel({
 }
 
 /* ─── Photo / Cover tabs ───────────────────────────────────────────── */
-
-async function uploadImageFile(file: File): Promise<string> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const token = getAuthToken();
-  if (!token) {
-    throw new Error("Sign out and back in — your session token is missing.");
-  }
-  const res = await fetch("/api/admin/upload", {
-    method: "POST",
-    body: fd,
-    headers: { Authorization: `Bearer ${token}` },
-    credentials: "include",
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Upload failed (${res.status})`);
-  }
-  const { url } = await res.json();
-  return url as string;
-}
 
 /**
  * PhotoEditorDialog — wraps the same drop-zone upload UI used by the

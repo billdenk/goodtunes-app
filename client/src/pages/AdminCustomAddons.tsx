@@ -16,7 +16,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { uploadImageFile } from "@/lib/adminUpload";
 
 // Task #844 — Super-admin surface for operator-created custom ("Gift of
 // Hope") add-ons. Each add-on is owned by a non-profit, attached to one
@@ -71,27 +72,6 @@ function humanizeApiError(err: unknown): string {
 
 function formatPrice(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
-}
-
-async function uploadImageFile(file: File): Promise<string> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const token = getAuthToken();
-  if (!token) {
-    throw new Error("Sign out and back in — your session token is missing.");
-  }
-  const res = await fetch("/api/admin/upload", {
-    method: "POST",
-    body: fd,
-    headers: { Authorization: `Bearer ${token}` },
-    credentials: "include",
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Upload failed (${res.status})`);
-  }
-  const { url } = await res.json();
-  return url as string;
 }
 
 const ADDONS_KEY = ["/api/admin/custom-addons"] as const;

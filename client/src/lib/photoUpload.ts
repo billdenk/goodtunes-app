@@ -1,14 +1,23 @@
-// Shared helpers for the profile-photo upload flow used by both the admin
-// Edit Profile dialog and the fan-player profile editor.
+// Shared helpers for client-side image uploads.
 //
-// Two jobs:
-//  1. `fileToUploadDataUrl` — downscale/re-encode a picked image client-side so
-//     the base64 PUT body to `/api/me/photo` stays well under the edge proxy's
-//     request-body limit. Ordinary phone-camera photos are multiple MB and the
-//     proxy rejects the large PUT with a raw `403 Forbidden` HTML page before it
-//     ever reaches Express — shrinking the payload prevents that 403 entirely.
-//  2. `friendlyPhotoError` — map any upload/remove failure to short, on-brand
-//     copy. Never surfaces raw HTML, a doctype, or a bare `NNN:` status prefix.
+// Originally built for the profile-photo flow (admin Edit Profile dialog + the
+// fan-player profile editor), the generic pieces are now reused by every admin
+// image-upload surface (album art, person/vendor/label photos, logos, covers,
+// add-on art, swatches) via `client/src/lib/adminUpload.ts`.
+//
+// Jobs:
+//  1. `fileToUploadDataUrl` — downscale/re-encode a picked image to a data URL
+//     for the base64 PUT to `/api/me/photo`, keeping it under the edge proxy's
+//     request-body limit. Phone-camera photos are multiple MB and the proxy
+//     rejects the large PUT with a raw `403 Forbidden` HTML page before it ever
+//     reaches Express — shrinking the payload prevents that 403 entirely.
+//  2. `downscaleImageFile` — the same shrink, but returning a `File` for a
+//     multipart (`FormData`) POST to `/api/admin/upload`. Best-effort: anything
+//     it can't safely re-encode (GIF/AVIF/SVG/HEIC/unknown) is passed through
+//     untouched so a valid upload is never lost to the shrink step.
+//  3. `friendlyUploadError` / `friendlyPhotoError` — map any upload/remove
+//     failure to short, on-brand copy. Never surfaces raw HTML, a doctype, or a
+//     bare `NNN:` status prefix.
 
 export const PHOTO_ALLOWED_MIMES = [
   "image/png",
@@ -186,23 +195,100 @@ export async function fileToUploadDataUrl(file: File): Promise<string> {
   }
 }
 
+// Raster types we can safely decode + re-encode in the same family without
+// surprises. GIF is excluded (a canvas re-encode flattens animation); AVIF/SVG
+// and anything else are passed through untouched (canvas.toBlob support for
+// AVIF is spotty and SVG is vector — rasterizing it would wreck a logo).
+const DOWNSCALE_MIMES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+]);
+
+// Admin surfaces (album art, covers, instrument shots) display larger than an
+// avatar, so we keep more detail than `fileToUploadDataUrl`'s 1024 cap while
+// still collapsing a 12MP+ phone shot to comfortably under the server's 8MB
+// multipart limit.
+const ADMIN_MAX_EDGE = 2048;
+
+/**
+ * Downscale a large raster image to a `File` suitable for a multipart POST,
+ * preserving the source encoding family (PNG stays PNG to keep transparency;
+ * JPEG/WEBP stay themselves). Best-effort by design:
+ *  - Types we can't safely re-encode (GIF/AVIF/SVG/HEIC/unknown) are returned
+ *    unchanged.
+ *  - Images already within `maxEdge` are returned unchanged (no needless
+ *    recompression).
+ *  - Any decode/encode failure falls back to the original file, so a valid
+ *    upload is never lost to the shrink step.
+ */
+export async function downscaleImageFile(
+  file: File,
+  maxEdge: number = ADMIN_MAX_EDGE,
+): Promise<File> {
+  const type = (file.type || "").toLowerCase();
+  if (!DOWNSCALE_MIMES.has(type)) return file;
+
+  let objectUrl: string | null = null;
+  try {
+    objectUrl = URL.createObjectURL(file);
+    const img = await loadImage(objectUrl);
+    const width = img.naturalWidth || img.width;
+    const height = img.naturalHeight || img.height;
+    if (!width || !height) return file;
+
+    const longest = Math.max(width, height);
+    if (longest <= maxEdge) return file;
+
+    const scale = maxEdge / longest;
+    const w = Math.max(1, Math.round(width * scale));
+    const h = Math.max(1, Math.round(height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(img, 0, 0, w, h);
+
+    const outType = type === "image/png" ? "image/png" : type === "image/webp" ? "image/webp" : "image/jpeg";
+    const quality = outType === "image/png" ? undefined : 0.85;
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, outType, quality),
+    );
+    // A broken/empty encode, or one that somehow ended up larger than the
+    // source, isn't worth sending — keep the original bytes.
+    if (!blob || blob.size === 0 || blob.size >= file.size) return file;
+
+    return new File([blob], file.name, { type: outType });
+  } catch {
+    return file;
+  } finally {
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+  }
+}
+
 /**
  * Map an upload/remove failure to short, friendly, on-brand copy.
  *
- * `apiRequest` throws `Error("<status>: <message>")` where <message> is a clean
- * JSON `message` (HTML/doctype bodies are stripped upstream in queryClient), or
- * a bare `TypeError` ("Failed to fetch") when the request never reached a
- * server. We translate those into a human line and never echo the raw body or a
- * bare status code into the UI.
+ * `apiRequest` (and `adminUpload`'s `uploadImageFile`) throw
+ * `Error("<status>: <message>")` where <message> is a clean JSON `message`
+ * (HTML/doctype bodies are stripped upstream), or a bare `TypeError`
+ * ("Failed to fetch") when the request never reached a server. We translate
+ * those into a human line and never echo the raw body or a bare status code
+ * into the UI. `noun` ("photo", "image", "logo"…) lets callers tune the copy.
  */
-export function friendlyPhotoError(
+export function friendlyUploadError(
   err: unknown,
-  mode: "upload" | "remove" = "upload",
+  opts: { mode?: "upload" | "remove"; noun?: string } = {},
 ): string {
+  const mode = opts.mode ?? "upload";
+  const noun = opts.noun ?? "image";
   const generic =
     mode === "remove"
-      ? "Couldn't remove that photo. Please try again."
-      : "Couldn't upload that photo. Please try again.";
+      ? `Couldn't remove that ${noun}. Please try again.`
+      : `Couldn't upload that ${noun}. Please try again.`;
 
   const raw = (err instanceof Error ? err.message : String(err ?? "")).trim();
   if (!raw) return generic;
@@ -228,7 +314,7 @@ export function friendlyPhotoError(
   if (status === 413 || status === 403) {
     return mode === "remove"
       ? generic
-      : "That photo's too large to upload. Try a smaller image.";
+      : `That ${noun}'s too large to upload. Try a smaller image.`;
   }
 
   // Client-side validation errors (400/422) carry helpful, already-friendly
@@ -244,4 +330,16 @@ export function friendlyPhotoError(
   }
 
   return generic;
+}
+
+/**
+ * Profile-photo-flavoured wrapper around `friendlyUploadError` — kept for the
+ * two profile editors (EditAccount + admin Edit Profile dialog) so their copy
+ * reads "photo" rather than the generic "image".
+ */
+export function friendlyPhotoError(
+  err: unknown,
+  mode: "upload" | "remove" = "upload",
+): string {
+  return friendlyUploadError(err, { mode, noun: "photo" });
 }

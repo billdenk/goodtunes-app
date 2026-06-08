@@ -13305,27 +13305,6 @@ function TrackChip({
 
 /* ─── Artwork tab ──────────────────────────────────────────────────── */
 
-async function uploadImageFile(file: File): Promise<string> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const token = getAuthToken();
-  if (!token) {
-    throw new Error("Sign out and back in — your session token is missing.");
-  }
-  const res = await fetch("/api/admin/upload", {
-    method: "POST",
-    body: fd,
-    headers: { Authorization: `Bearer ${token}` },
-    credentials: "include",
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Upload failed (${res.status})`);
-  }
-  const { url } = await res.json();
-  return url as string;
-}
-
 /**
  * ArtworkPanel — read/edit chrome that matches every other panel on
  * AdminAlbum (Release, Metadata, etc.).

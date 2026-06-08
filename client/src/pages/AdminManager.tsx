@@ -39,7 +39,8 @@ import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
-import { apiRequest, getAuthToken } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
+import { uploadImageFile } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
 
@@ -594,27 +595,6 @@ function OverviewPanel({ label }: { label: Manager }) {
 }
 
 /* ─── Upload helper ────────────────────────────────────────────────── */
-
-async function uploadImageFile(file: File): Promise<string> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const token = getAuthToken();
-  if (!token) {
-    throw new Error("Sign out and back in — your session token is missing.");
-  }
-  const res = await fetch("/api/admin/upload", {
-    method: "POST",
-    body: fd,
-    headers: { Authorization: `Bearer ${token}` },
-    credentials: "include",
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `Upload failed (${res.status})`);
-  }
-  const { url } = await res.json();
-  return url as string;
-}
 
 function ImageUploadPanel({
   label,
