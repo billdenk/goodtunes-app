@@ -55,7 +55,7 @@ type ReleaseContent = {
   launchLabel: string;
   previewNote: string;
   imageBase: string;
-  images: { hero: string; cert: string; box: string; logo: string };
+  images: { hero: string; cert: string; box: string; logo: string; cover: string };
   org: string;
   prices: { bundle: number; signed: number };
   gift: { min: number; presets: number[] };
@@ -97,6 +97,7 @@ const RELEASES: Record<string, ReleaseContent> = {
       cert: "hope-cert-framed.jpg",
       box: "hope-gift-box.png",
       logo: "goodtunes-logo-white.png",
+      cover: "hope-cover.png",
     },
     org: "Nightbirde Foundation",
     prices: { bundle: 25, signed: 25 },
@@ -381,38 +382,49 @@ function AlbumBackdrop({ c, dimmed = true }: { c: ReleaseContent; dimmed?: boole
       <img
         src={img(c.images.logo)}
         alt=""
-        className="absolute top-7 left-8 w-[120px] h-auto opacity-90"
+        className="absolute top-7 left-8 w-[120px] h-auto opacity-90 z-10"
         draggable={false}
       />
       <div
-        className={`absolute left-[6%] top-[26%] transition-all duration-500 ${
-          dimmed ? "opacity-25 blur-[1px]" : "opacity-100 blur-0"
+        className={`absolute inset-0 flex items-center justify-center transition-all duration-500 ${
+          dimmed ? "opacity-35 blur-[3px] scale-[1.02]" : "opacity-100 blur-0 scale-100"
         }`}
       >
-        <div
-          className="rounded-2xl overflow-hidden"
-          style={{ width: 230, height: 230, boxShadow: "0 18px 50px rgba(0,0,0,0.5)" }}
-        >
-          <img src={img(c.images.hero)} alt="" className="w-full h-full object-cover" />
-        </div>
-      </div>
-      <div
-        className={`absolute right-[6%] top-[40%] w-[34%] flex flex-col gap-5 transition-opacity duration-500 ${
-          dimmed ? "opacity-20" : "opacity-100"
-        }`}
-      >
-        {c.tracklist.map((t, i) => (
-          <div key={t.title} className="flex items-center gap-4">
-            <span className="text-white/50 text-[13px] tabular-nums">{i + 1}.</span>
-            <span className="text-white text-[14px] flex-1">{t.title}</span>
-            <span className="text-white/40 text-[13px] tabular-nums">{t.len}</span>
+        <div className="flex items-center gap-10 px-8 w-[min(880px,calc(100vw-64px))]">
+          <div
+            className="flex-shrink-0 rounded-2xl overflow-hidden"
+            style={{ width: 300, height: 300, boxShadow: "0 24px 60px rgba(0,0,0,0.55)" }}
+          >
+            <img
+              src={img(c.images.cover)}
+              alt={`${c.releaseName} album cover`}
+              className="w-full h-full object-cover"
+              draggable={false}
+            />
           </div>
-        ))}
+          <div className="flex-1 min-w-0">
+            <div className="text-white/55 text-[13px] font-semibold uppercase tracking-[0.12em] mb-1">
+              {c.artistName}
+            </div>
+            <div className="text-white text-[34px] font-bold tracking-[-0.02em] mb-6">
+              {c.releaseName}
+            </div>
+            <div className="flex flex-col gap-3.5">
+              {c.tracklist.map((t, i) => (
+                <div key={t.title} className="flex items-center gap-4">
+                  <span className="text-white/40 text-[14px] tabular-nums w-4">{i + 1}</span>
+                  <span className="text-white text-[15px] flex-1">{t.title}</span>
+                  <span className="text-white/40 text-[13px] tabular-nums">{t.len}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
       {dimmed && (
         <div
           className="absolute inset-0"
-          style={{ background: "rgba(0,3,18,0.6)", backdropFilter: "blur(3px)", pointerEvents: "none" }}
+          style={{ background: "rgba(0,3,18,0.5)", pointerEvents: "none" }}
         />
       )}
     </div>
@@ -905,7 +917,7 @@ function CampaignFlow({ c, mode }: { c: ReleaseContent; mode: "comingSoon" | "pr
 
         {/* footer nav */}
         <div
-          className="flex items-center gap-3 px-7 py-4 border-t border-white/8"
+          className="flex items-center gap-3 px-7 py-4"
           style={{ background: "rgba(0,0,0,0.18)" }}
         >
           {!comingSoon && idx > 0 ? (
