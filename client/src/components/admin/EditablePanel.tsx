@@ -572,9 +572,13 @@ function ReadField({
   let display: string | null = value;
   if (value && field.type === "date") display = formatDateRead(value);
   else if (value && field.type === "currency") display = `$${value}`;
-  else if (value && field.type === "select" && field.options) {
-    display =
-      field.options.find((o) => o.value === value)?.label ?? value;
+  else if (field.type === "select" && field.options) {
+    // Match on current value (including ""). An empty-value option (e.g.
+    // "Solo artist") takes priority over the generic "—" fallback so a
+    // solo artist doesn't read as blank in read mode.
+    const matched = field.options.find((o) => o.value === (value ?? ""));
+    if (matched) display = matched.label;
+    else display = value;
   } else if (field.type === "entity-combobox" && field.options) {
     // Resolve the stored id → record name. The empty/none option (id "")
     // maps to its label (e.g. "Independent") so an album with no label
@@ -786,7 +790,9 @@ function EditInput({
           className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 text-[13.5px] text-slate-900 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)] focus:border-transparent"
           data-testid={testId}
         >
-          {!field.required && <option value="">—</option>}
+          {!field.required && !(field.options ?? []).some((o) => o.value === "") && (
+            <option value="">—</option>
+          )}
           {(field.options ?? []).map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
