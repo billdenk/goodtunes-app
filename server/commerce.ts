@@ -1421,6 +1421,34 @@ export function registerCommerceRoutes(app: Express) {
     }
     const demoKind = demo?.kind ?? null;
 
+    // Task #1830 — Gather catalogs for any presses referenced by saved SKUs
+    // that differ from the resolved invited press. The /catalog endpoint is
+    // gated by requirePressScope (blocks artists and non-press partners), so
+    // we embed the needed catalog data here where artists already have access.
+    // Albums are single-press in practice, so at most one extra entry lands.
+    const skuPressCatalogs: Record<string, Awaited<ReturnType<typeof getPressCatalog>>> = {};
+    try {
+      const albumId = String(req.params.id);
+      const skuRows = await db
+        .select({ pressId: albumSkus.pressId })
+        .from(albumSkus)
+        .where(eq(albumSkus.albumId, albumId));
+      const extraPressIds = [
+        ...new Set(
+          skuRows
+            .map((s) => (s.pressId ? String(s.pressId) : null))
+            .filter((id): id is string => !!id && id !== (pressId ?? "")),
+        ),
+      ];
+      await Promise.all(
+        extraPressIds.map(async (id) => {
+          try {
+            skuPressCatalogs[id] = await getPressCatalog(id);
+          } catch {}
+        }),
+      );
+    } catch {}
+
     if (!pressId) {
       // Task #656 — no press has been invited yet. Default the
       // manufacturing-cost lookup to MRP's seeded catalog so the
@@ -1448,6 +1476,7 @@ export function registerCommerceRoutes(app: Express) {
         mrpDefaults,
         pressMode,
         demo: demoKind,
+        skuPressCatalogs,
       });
     }
 
@@ -1530,6 +1559,7 @@ export function registerCommerceRoutes(app: Express) {
       catalog: await getPressCatalog(pressId),
       pressMode,
       demo: demoKind,
+      skuPressCatalogs,
     });
   });
   app.delete("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {

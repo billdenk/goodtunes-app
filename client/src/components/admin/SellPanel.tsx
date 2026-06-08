@@ -185,6 +185,10 @@ type InvitedPressResponse = {
   // "all" unlocks the press picker + cross-press bid comparison;
   // "dedicated" (or absent) locks the panel to the single resolved plant.
   pressMode?: "dedicated" | "all";
+  // Task #1830 — catalogs for any presses referenced by saved SKUs that
+  // differ from the invited press. The /catalog endpoint has requirePressScope
+  // so artists can't fetch them directly; the server embeds them here.
+  skuPressCatalogs?: Record<string, Catalog>;
 };
 
 // Mirrors `snapToCatalogQuantityTier` server-side. Walks an ordered
@@ -895,6 +899,37 @@ export function SellPanel({
     return m;
   }, [activeCatalog]);
 
+  // Task #1830 — The saved SKU may reference a press that differs from the
+  // artist's (or label's) invited press. This happens when an operator
+  // configured a catalog color in god-view from a press the artist is not
+  // directly invited to. In that case `selectedCatalogByFormat` resolves
+  // against the wrong plant's catalog, breaking tier/color resolution and
+  // silently reverting the artist's view to Black + a different Artist Net.
+  //
+  // Fix: the server now embeds the extra catalogs in the invited-press
+  // response as `skuPressCatalogs` (bypassing requirePressScope that would
+  // block artists from the /catalog endpoint). Here we derive which press
+  // id is "extra" and build a by-format map for those SkuRows.
+  // Albums are single-press so there is at most one extra press in practice.
+  const extraSkuPressIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const s of data?.skus ?? []) {
+      if (s.pressId && s.pressId !== invitedPressId) ids.add(s.pressId);
+    }
+    return [...ids];
+  }, [data?.skus, invitedPressId]);
+  const firstExtraSkuPressId = extraSkuPressIds[0] ?? null;
+  // Map the extra catalog by format so each SkuRow gets the correct
+  // CatalogFormatRow for the press it was actually saved against.
+  const extraSkuPressCatalogByFormat = useMemo(() => {
+    const m = new Map<AlbumFormat, CatalogFormatRow>();
+    const catalog = firstExtraSkuPressId
+      ? (invitedPress?.skuPressCatalogs?.[firstExtraSkuPressId] ?? null)
+      : null;
+    (catalog?.formats ?? []).forEach((f) => m.set(f.format, f));
+    return m;
+  }, [firstExtraSkuPressId, invitedPress]);
+
   // Task #454 — Listen for Path-to-press chip navigation. Chips dispatch
   // via `dispatchPathToPressNavigate`; AdminAlbum flips into the Sell
   // tab when needed (and stashes the key in the pending slot) so this
@@ -1260,13 +1295,28 @@ export function SellPanel({
                   <>
                     {configuredFormats.map((f) => {
                       const existing = skuByFormat.get(f)!;
+                      // Task #1830 — supply the catalog for the press the SKU
+                      // was actually saved against. When the saved pressId is
+                      // an "extra" press (differs from the invited press) AND
+                      // the operator hasn't specifically selected that press
+                      // via the chip switcher (in which case selectedCatalogByFormat
+                      // already contains it), use the extra catalog so the
+                      // artist's view resolves the saved tier/color identically
+                      // to God View — without touching economics masking.
+                      const skuSavedPressId = existing.pressId ?? null;
+                      const catalogFormat =
+                        skuSavedPressId &&
+                        skuSavedPressId === firstExtraSkuPressId &&
+                        selectedRealPressId !== firstExtraSkuPressId
+                          ? extraSkuPressCatalogByFormat.get(f) ?? selectedCatalogByFormat.get(f) ?? null
+                          : selectedCatalogByFormat.get(f) ?? null;
                       return (
                         <SkuRow
                           key={f}
                           format={f}
                           existing={existing}
                           liveCost={costByFormat.get(f) ?? null}
-                          catalogFormat={selectedCatalogByFormat.get(f) ?? null}
+                          catalogFormat={catalogFormat}
                           artworkUrl={artworkUrl}
                           offeredFormats={offeredFormats}
                           onSwitchFormat={switchFormat(f, f)}
