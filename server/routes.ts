@@ -21184,9 +21184,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   const updateCustomAddon: import("express").RequestHandler = async (req, res) => {
     const b = req.body ?? {};
-    const exists = await db.execute(sql`SELECT 1 FROM custom_addons WHERE id = ${req.params.id} LIMIT 1`);
-    if (((exists as any).rows ?? []).length === 0) {
+    const addonCheck = await db.execute<{ applies_to_all_artists: boolean }>(sql`
+      SELECT applies_to_all_artists FROM custom_addons WHERE id = ${req.params.id} LIMIT 1
+    `);
+    if (((addonCheck as any).rows ?? []).length === 0) {
       return res.status(404).json({ message: "Add-on not found" });
+    }
+    // Permission: super_admin may edit anything; artist-role admins may edit
+    // non-global add-ons that are explicitly scoped to their own artist.
+    // All other roles are rejected.
+    const { getUserRole } = await import("./auth/roles");
+    const callerInfo = await getUserRole(req.session?.userId ?? "");
+    const isSuperAdmin = callerInfo?.role === "super_admin";
+    if (!isSuperAdmin) {
+      if (!callerInfo || callerInfo.role !== "artist" || !callerInfo.roleScopeId) {
+        return res.status(403).json({ message: "Insufficient role" });
+      }
+      const addonMeta = ((addonCheck as any).rows ?? [])[0] as { applies_to_all_artists: boolean };
+      if (addonMeta.applies_to_all_artists) {
+        return res.status(403).json({ message: "Global add-ons can only be edited by a super-admin" });
+      }
+      const attached = await db.execute(sql`
+        SELECT 1 FROM custom_addon_artists
+        WHERE custom_addon_id = ${req.params.id} AND person_id = ${callerInfo.roleScopeId}
+        LIMIT 1
+      `);
+      if (((attached as any).rows ?? []).length === 0) {
+        return res.status(403).json({ message: "This add-on is not scoped to your artist" });
+      }
+      // Artist Admins cannot promote a per-artist add-on to global scope — that
+      // would give them reach beyond their own artist and is super-admin only.
+      if (b.appliesToAllArtists !== undefined) {
+        return res.status(403).json({ message: "Only a super-admin can change an add-on's artist scope" });
+      }
     }
     const sets: any[] = [];
     if (b.name !== undefined) {
@@ -21246,8 +21276,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ message: "Couldn't save the add-on, please try again" });
     }
   };
-  app.put("/api/admin/custom-addons/:id", requireAdmin, requireRole("super_admin"), updateCustomAddon);
-  app.patch("/api/admin/custom-addons/:id", requireAdmin, requireRole("super_admin"), updateCustomAddon);
+  app.put("/api/admin/custom-addons/:id", requireAdmin, updateCustomAddon);
+  app.patch("/api/admin/custom-addons/:id", requireAdmin, updateCustomAddon);
 
   // Attach an artist (person) to a custom add-on. Idempotent.
   app.post("/api/admin/custom-addons/:id/artists", requireAdmin, requireRole("super_admin"), async (req, res) => {

@@ -7657,9 +7657,9 @@ function AddonQuotePill({
 /* Task #987 — inline "Custom" add-on tile. Sits in the Add-ons row next
    to GoodDeed / Booklet / CD and opens the same create dialog used on the
    dedicated Custom add-ons page, pre-scoped to this album's primary
-   artist. Writes are super-admin only (server enforces requireRole), so
-   non-super-admins get a clear toast rather than a dead button — flag
-   this with Bill before loosening the permission. */
+   artist. Creates and global-addon edits are super-admin only; Artist
+   Admins can edit per-artist add-ons scoped to their own artist
+   (server enforces the scope boundary regardless). */
 function CustomAddonInlineTile({
   artistName,
   primaryArtistId,
@@ -7675,6 +7675,18 @@ function CustomAddonInlineTile({
     queryKey: ["/api/me/role"],
   });
   const canCreate = roleInfo?.role === "super_admin";
+  // An Artist Admin may edit a non-global add-on that is explicitly
+  // scoped to their own artist. Super-admins can edit anything.
+  const canEditAddon = (a: CustomAddon): boolean => {
+    if (roleInfo?.role === "super_admin") return true;
+    if (roleInfo?.role === "artist" && roleInfo.roleScopeId) {
+      return (
+        !a.appliesToAllArtists &&
+        a.artists.some((p) => p.personId === roleInfo.roleScopeId)
+      );
+    }
+    return false;
+  };
 
   // Task #1002 — load every custom add-on so we can surface the ones that
   // apply to THIS album right on the Sell page (closing the feedback gap
@@ -7714,11 +7726,12 @@ function CustomAddonInlineTile({
           }
           active={editing?.id === a.id}
           onClick={() => {
-            if (!canCreate) {
+            if (!canEditAddon(a)) {
               toast({
                 title: "Super-admin only",
-                description:
-                  "Custom non-profit add-ons can only be edited by a super-admin. Ask one to change it for you.",
+                description: a.appliesToAllArtists
+                  ? "Global non-profit add-ons can only be edited by a super-admin. Ask one to change it for you."
+                  : "Custom non-profit add-ons can only be edited by a super-admin. Ask one to change it for you.",
               });
               return;
             }
@@ -7775,7 +7788,7 @@ function CustomAddonInlineTile({
           }}
         />
       )}
-      {canCreate && (
+      {!!editing && (
         <AddonDialog
           mode="edit"
           addon={editing}
