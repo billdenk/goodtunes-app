@@ -48,8 +48,6 @@ type Timeseries = {
   plays: { day: string; starts: number; completes: number; listeners: number }[];
 };
 type GeoPayload = {
-  buyers: { country: string; buyers: number; revenueCents: number }[];
-  listeners: { country: string; listeners: number; plays: number }[];
   sales?: SalesGeoPayload;
 };
 type Tracks = { tracks: { songId: string; title: string; albumTitle: string; plays: number; completes: number; favorites: number; playlistAdds: number; shares: number }[] };
@@ -594,48 +592,6 @@ function PlaysChart({ data, loading }: { data: Timeseries["plays"]; loading: boo
           <Line type="monotone" dataKey="listeners" stroke={C.mint} strokeWidth={2} dot={false} />
         </AreaChart>
       </ResponsiveContainer>
-    </div>
-  );
-}
-
-function GeoTable({ buyers, listeners, loading }: { buyers: GeoPayload["buyers"]; listeners: GeoPayload["listeners"]; loading: boolean }) {
-  // Merge by country code so we get one row per country with both
-  // dimensions side-by-side. A real map ships in a follow-up.
-  const merged = useMemo(() => {
-    const m = new Map<string, { country: string; buyers: number; revenueCents: number; listeners: number; plays: number }>();
-    for (const r of buyers) m.set(r.country, { country: r.country, buyers: r.buyers, revenueCents: r.revenueCents, listeners: 0, plays: 0 });
-    for (const r of listeners) {
-      const existing = m.get(r.country) ?? { country: r.country, buyers: 0, revenueCents: 0, listeners: 0, plays: 0 };
-      existing.listeners = r.listeners;
-      existing.plays = r.plays;
-      m.set(r.country, existing);
-    }
-    return Array.from(m.values()).sort((a, b) => (b.buyers + b.listeners) - (a.buyers + a.listeners)).slice(0, 12);
-  }, [buyers, listeners]);
-  if (loading) return <SkeletonBlock />;
-  if (merged.length === 0) return <p className="py-10 text-center text-white/45 text-[13px]">No geo data yet.</p>;
-  const maxBuyers = Math.max(1, ...merged.map((r) => r.buyers));
-  const maxListeners = Math.max(1, ...merged.map((r) => r.listeners));
-  return (
-    <div className="space-y-1.5" data-testid="geo-list">
-      <div className="grid grid-cols-[1fr_60px_60px] gap-2 text-[10px] uppercase tracking-wider text-white/45 font-semibold px-1">
-        <span>Country</span><span className="text-right">Buyers</span><span className="text-right">Listeners</span>
-      </div>
-      {merged.map((r) => (
-        <div key={r.country} className="grid grid-cols-[1fr_60px_60px] gap-2 items-center text-[13px]" data-testid={`geo-row-${r.country}`}>
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="font-mono text-white/65 text-[11px] w-7">{r.country}</span>
-            <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
-              <div className="h-full bg-[color:var(--brand-blue)]" style={{ width: `${(r.buyers / maxBuyers) * 100}%` }} />
-            </div>
-            <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
-              <div className="h-full bg-[color:var(--brand-mint)]" style={{ width: `${(r.listeners / maxListeners) * 100}%` }} />
-            </div>
-          </div>
-          <span className="text-right tabular-nums">{r.buyers}</span>
-          <span className="text-right tabular-nums">{compact(r.listeners)}</span>
-        </div>
-      ))}
     </div>
   );
 }
