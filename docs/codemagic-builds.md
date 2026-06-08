@@ -179,11 +179,77 @@ Codemagic is the day-to-day path, but your Mac still works as a backup. The full
 
 ---
 
+## Publishing reliability (two guards the pipeline runs for you)
+
+These two safeguards were added after real failures and run automatically on
+**both** iOS workflows — you don't configure anything.
+
+### 1. The build won't ship the generic placeholder icon
+
+TestFlight builds 59, 64 and 66 shipped Apple's **generic placeholder** icon (a
+white tile with light-blue arrows) instead of the navy "G" — even though the
+committed icon artwork was correct. The cause is subtle: Xcode sometimes archives
+the app **without baking the icon into the binary**, and iOS silently renders the
+placeholder at display time. Xcode never fails the build over this.
+
+There are now **two** icon guards:
+
+- **Source guard** (`verify-ios-appicon.py`) — checks the committed
+  `AppIcon.appiconset` *before* the archive.
+- **Built-binary guard** (`verify-ios-ipa-icon.py`) — runs *after* `Build the
+  signed .ipa`. It unzips the produced `.ipa`, runs macOS `assetutil` on the
+  compiled `Assets.car`, and confirms a real app icon (≥120 px) is actually
+  embedded. If it isn't, the build **hard-fails right there** so the placeholder
+  binary never reaches Apple. (It also does a best-effort near-white check on any
+  loose icon PNG to catch a placeholder-colored image.)
+
+If you ever see the built-binary guard fail, the fix is on the **build** side, not
+the artwork: re-run the build, and if it recurs confirm the App target's
+`Assets.xcassets` is in **Copy Bundle Resources** and
+`ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon` (it is, today).
+
+### 2. A transient App Store Connect 500 no longer wastes a whole build
+
+App Store Connect occasionally returns a **`500 internal server error`** on the
+post-upload poll **after the binary has already uploaded** ("UPLOAD SUCCEEDED with
+no errors", then a 500). The old declarative publishing step treated that as fatal
+and threw away the entire ~10-minute Mac build (this is what killed build 65).
+
+Publishing is now a **scripted, retry-aware** step (`scripts/publish-ios.sh`):
+
+- It lets the CLI auto-retry transient 5xx (`--altool-retries`,
+  `--api-server-error-retries`).
+- On failure it **checks whether the binary actually registered** on App Store
+  Connect. If it did, it does **not** re-upload (a duplicate binary is rejected) —
+  it retries only the submission. If it didn't, it retries the upload. Up to 4
+  attempts with growing back-off.
+- It **fails fast** (no pointless retries) on **deterministic** errors a retry
+  can't fix — see the next row.
+
+The behavior is otherwise identical to before: `iOS → TestFlight` submits to
+TestFlight + the **GoGoods Test Group**; `iOS → App Store (submit for review)`
+also submits to App Store review (after-approval, phased, cancel-previous).
+
+> **Deterministic vs. transient.** A `500` on the upload poll is *transient* — the
+> retry handles it. A message like **"Complete test information is required …
+> missing required Beta App Review Information: First Name, Last Name, Phone
+> Number, Email"** is **not** transient: it's a one-time setup task. Fill in
+> **TestFlight → Test Information** (Beta App Information *Feedback Email* + Beta
+> App Review Information contact name/phone/email) at
+> `https://appstoreconnect.apple.com/apps/<APP_STORE_APPLE_ID>/testflight/test-info`,
+> then re-run. The build that hit this still uploaded — internal testers may
+> already have it — only the external beta-review submission failed.
+
+---
+
 ## Quick troubleshooting
 
 | Symptom | Likely cause / fix |
 |---|---|
 | Build fails at signing | The **`GoodTunes ASC API key`** integration isn't set, is misnamed, or the key lacks **App Manager** role. Re-check step 2–3. |
 | "No app found for Apple ID" / build-number step fails | `APP_STORE_APPLE_ID` in the `apple_app` group is missing or wrong. It's the long number from App Information. |
-| Build uploads but never appears in TestFlight | Apple is still processing (give it 20 min), or the tester group name in `beta_groups` doesn't match App Store Connect. |
+| Build fails at **"Guard — fail fast if the BUILT .ipa ships Apple's placeholder icon"** | The archive compiled without the app icon (would ship the generic placeholder). Re-run; if it recurs, confirm `Assets.xcassets` is in Copy Bundle Resources and `ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon`. See *Publishing reliability* above. |
+| Publish fails with **"Complete test information is required" / "missing required Beta App Review Information"** | **Not transient** — fill in TestFlight → Test Information (Feedback Email + review contact name/phone/email), then re-run. See *Publishing reliability* above. |
+| Publish logged a `500` but the build still made it | Expected — the scripted publish detects an upload that 500'd *after* registering and retries only the submission. No action needed. |
+| Build uploads but never appears in TestFlight | Apple is still processing (give it 20 min), or the **GoGoods Test Group** name doesn't match App Store Connect exactly. |
 | Android build fails | The `goodtunes_keystore` reference or `google_play` credentials aren't set yet — Android is off until you add them (see above). |

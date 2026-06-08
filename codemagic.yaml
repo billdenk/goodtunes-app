@@ -172,6 +172,38 @@ definitions:
         xcode-project build-ipa \
           --workspace "ios/App/App.xcworkspace" \
           --scheme "App"
+    - name: Guard — fail fast if the BUILT .ipa ships Apple's placeholder icon
+      script: |
+        # WHY THIS EXISTS (and why it's separate from the source-icon guard above):
+        # the source AppIcon.appiconset is correct, yet TestFlight builds 59/64/66
+        # STILL shipped Apple's GENERIC placeholder. That means the archive compiled
+        # WITHOUT baking the icon into the app bundle — a fault the source guard
+        # cannot see. This guard inspects the actual produced .ipa: it unzips it,
+        # runs `assetutil` on the compiled Assets.car, and confirms a real AppIcon
+        # rendition (>=120px) is embedded (plus a best-effort near-white placeholder
+        # check on any loose icon PNG). If no real icon is present it HARD-FAILS, so
+        # a placeholder binary can never reach Apple again. Pillow is installed only
+        # to enable the optional color check; the authoritative Assets.car check uses
+        # macOS-native assetutil and needs no extra deps. See
+        # scripts/verify-ios-ipa-icon.py.
+        pip3 install --quiet --disable-pip-version-check Pillow || true
+        python3 scripts/verify-ios-ipa-icon.py
+    - name: Publish to App Store Connect (tolerant of transient 500s)
+      script: |
+        # WHY THIS REPLACES THE DECLARATIVE `publishing:` BLOCK: App Store Connect
+        # intermittently returns a 500 on the post-upload poll AFTER the binary has
+        # already transferred. The declarative block treats that as fatal and wastes
+        # the whole ~10-minute Mac build (build 65 died this way). This scripted
+        # publish lets the CLI auto-retry transient 5xx, and on failure checks
+        # whether the binary actually REGISTERED — retrying the upload only if it did
+        # not (never re-uploading a registered binary), while failing fast on
+        # DETERMINISTIC errors a retry can't fix (e.g. missing TestFlight Beta App
+        # Review info). PUBLISH_MODE (set per workflow) selects testflight vs app
+        # store; the submission flags inside mirror the old declarative blocks 1:1.
+        # The `app_store_connect` integration on each workflow supplies the API-key
+        # auth, exactly like the other scripted app-store-connect calls above. See
+        # scripts/publish-ios.sh and docs/codemagic-builds.md.
+        bash scripts/publish-ios.sh
 
   ios_artifacts: &ios_artifacts
     - build/ios/ipa/*.ipa
@@ -193,6 +225,10 @@ workflows:
       <<: *ios_env
       groups:
         - apple_app # provides APP_STORE_APPLE_ID
+      vars:
+        # Selects the scripted publish behavior (scripts/publish-ios.sh):
+        # "testflight" = upload + submit to TestFlight + add to the beta group.
+        PUBLISH_MODE: testflight
     # NOTE: no declarative `ios_signing:` block on purpose — signing is done
     # manually in the "Set up iOS code signing" script above so we can pass
     # `--create` (the declarative block only fetches and fails when no profile
@@ -204,20 +240,12 @@ workflows:
     #       include: true
     scripts: *ios_build_scripts
     artifacts: *ios_artifacts
-    publishing:
-      app_store_connect:
-        auth: integration
-        # Ship to TestFlight. submit_to_app_store is intentionally absent /
-        # false here — TestFlight only. Use ios-appstore-submit for review.
-        submit_to_testflight: true
-        # Auto-add the build to your internal TestFlight tester group(s).
-        # This name must match an existing group in App Store Connect →
-        # TestFlight → Internal Testing EXACTLY (case- and space-sensitive),
-        # or the post-upload "App Store distribution" step fails with the build
-        # already uploaded. "GoGoods Test Group" is the real group that holds
-        # the internal testers.
-        beta_groups:
-          - GoGoods Test Group
+    # NOTE: no declarative `publishing.app_store_connect:` block on purpose —
+    # publishing is done by the scripted, transient-500-tolerant
+    # "Publish to App Store Connect" step in the shared scripts above
+    # (scripts/publish-ios.sh), driven by PUBLISH_MODE=testflight. That step
+    # reproduces the old declarative behavior exactly: submit to TestFlight +
+    # add the build to the "GoGoods Test Group" beta group.
 
   # ---------------------------------------------------------------------------
   # iOS → App Store review ("push the button"). Same build, but it also SUBMITS
@@ -234,25 +262,23 @@ workflows:
       <<: *ios_env
       groups:
         - apple_app # provides APP_STORE_APPLE_ID
+      vars:
+        # Selects the scripted publish behavior (scripts/publish-ios.sh):
+        # "appstore" = upload + submit to TestFlight + submit to App Store review
+        # (AFTER_APPROVAL, phased release, cancel previous submissions).
+        PUBLISH_MODE: appstore
     # NOTE: no declarative `ios_signing:` block on purpose — see the matching
     # note in the ios-testflight workflow. Signing runs in the shared script
     # with `--create`; the `app_store_connect` integration authorizes it.
     scripts: *ios_build_scripts
     artifacts: *ios_artifacts
-    publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
-        # The one-button bit: hand the build to App Store review automatically.
-        submit_to_app_store: true
-        # Phased release rolls the update out to a widening % of users over 7
-        # days once Apple approves it. Set to false to release to everyone at
-        # once on approval.
-        release_type: AFTER_APPROVAL
-        phased_release: true
-        # cancel_previous_submissions avoids "you already have a build in
-        # review" errors if Bill clicks twice.
-        cancel_previous_submissions: true
+    # NOTE: no declarative `publishing.app_store_connect:` block on purpose —
+    # publishing is done by the scripted, transient-500-tolerant
+    # "Publish to App Store Connect" step in the shared scripts above
+    # (scripts/publish-ios.sh), driven by PUBLISH_MODE=appstore. That step
+    # reproduces the old declarative behavior exactly: submit to TestFlight +
+    # submit to App Store review with release_type AFTER_APPROVAL, phased
+    # release, and cancel_previous_submissions (so a double-click doesn't error).
 
   # ---------------------------------------------------------------------------
   # Android → Play internal testing. OPTIONAL / DISABLED BY DEFAULT.
