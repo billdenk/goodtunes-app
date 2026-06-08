@@ -1175,7 +1175,14 @@ function AlbumDetailMobile({
             const full = songs.find((x) => x.id === s.id);
             if (full) handlePlaySong({ ...full, album });
           }}
-          onOpenBuy={buyEnabled ? () => setShowBuySheet(true) : undefined}
+          onOpenBuy={
+            buyEnabled
+              ? () =>
+                  publicPreview === "buy"
+                    ? setShowOfferModal(true)
+                    : setShowBuySheet(true)
+              : undefined
+          }
           salesBeginLabel={salesBeginLabel}
           lockedPreview={lockedPreview}
           notifyOnly={notifyOnly}
@@ -1231,7 +1238,7 @@ function AlbumDetailMobile({
           />
         )}
 
-        {lockedPreview && (
+        {(lockedPreview || publicPreview) && (
           <LockedOfferModal
             open={showOfferModal}
             onClose={() => setShowOfferModal(false)}

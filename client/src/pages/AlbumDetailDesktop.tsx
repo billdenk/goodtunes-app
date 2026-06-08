@@ -509,6 +509,17 @@ export function AlbumDetailDesktop({
     setBuyAddons({ signedCert: !!opts?.signedCert });
     setShowBuySheet(true);
   };
+  // Task #1784 — on the staged preview surface (/staging) the Buy pill fronts
+  // the stepped "Get Hope" offer modal (which then hands off to the BuySheet
+  // checkout via its own onBuy), instead of jumping straight into the legacy
+  // BuySheet. Everywhere else the Buy pill opens the BuySheet directly.
+  const handleBuyClick = (opts?: { signedCert?: boolean }) => {
+    if (publicPreview === "buy") {
+      setShowOfferModal(true);
+      return;
+    }
+    handleBuyBundle(opts);
+  };
 
 
   // Fetch buy-options up front so the hero can render the signed-cert
@@ -718,7 +729,7 @@ export function AlbumDetailDesktop({
             onDownloadCert={pdfOrder ? openCertPdf : undefined}
             isMultiOwned={isMulti}
             onPlayVideo={effectiveOwned ? setPlayingVideoId : undefined}
-            onBuyBundle={buyEnabled ? handleBuyBundle : undefined}
+            onBuyBundle={buyEnabled ? handleBuyClick : undefined}
             salesBeginLabel={salesBeginLabel}
             signedCertPriceCents={buyEnabled ? signedCertPriceCents : null}
             signedCertSoldOut={signedCertSoldOut}
@@ -1024,7 +1035,7 @@ export function AlbumDetailDesktop({
         />
       )}
 
-      {lockedPreview && album && (
+      {(lockedPreview || publicPreview) && album && (
         <LockedOfferModal
           open={showOfferModal}
           onClose={() => setShowOfferModal(false)}
