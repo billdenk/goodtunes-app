@@ -9,6 +9,71 @@ launch-polished (sold-out, tax-unavailable, no-shipping-quote, and staged/locked
 states all render cleanly). What remains is operator/infra configuration that the
 app can't set for itself.
 
+## Decisions locked in (June 8 2026, with Bill)
+
+- **Buy surface = the standard release page.** Fans buy Hope on
+  `get.goodtunes.music/nightbirde/hope` (cover → previews → Buy → 7" + add-ons →
+  shipping → tax → Stripe). The "Get Hope. Give Hope." walkthrough (`/hope`) is
+  **not** the launch buy page; whether/how it becomes a buyable surface is the
+  separate design decision Bill spun out as **task #1734 (GET locked-player
+  landing)** — which generalizes the Hope.tsx offer-modal + locked-preview pattern
+  onto the shared GET album surface (so every release inherits the MY player look
+  with locked-down chrome, an auto-opening package modal, and the existing Buy
+  sheet). That makes the campaign-walkthrough wiring (#1716) and #1734's durable
+  landing **post-launch**, not launch-critical for today's teaser.
+- **Get the page publicly UP today, but NOT buyable ("step one").** Bill wants the
+  public landing experience live now — the dimmed page backdrop, the offer modal
+  popping up, and (on dismiss) a preview of the page — with **Buy disabled and
+  labelled "Coming today."** This is exactly the coming-soon campaign teaser at
+  `get.goodtunes.music/nightbirde/hope` (the `CampaignPublic` surface in
+  `client/src/pages/Hope.tsx`, `publicPreview: true` in the server's
+  `CAMPAIGN_PREVIEWS`). It has **no working buy path anywhere** (every Buy/CTA is a
+  disabled "Coming today" pill), so putting it up cannot take an order. See
+  **section A** for how to make it live.
+- **Sunrise DATE = today, June 8 2026; exact on-sale TIME is TBD.** Bill confirmed
+  the sales-begin date is today. He just doesn't yet know the exact time today, and
+  sales must **not** open to the public until Jane's family approves the copy +
+  images. So today = the **non-buyable** teaser only (above). Opening real sales is a
+  later, separate flip held until family sign-off — and lives with **task #1734
+  (GET locked-player landing)**, since the slug currently renders the campaign
+  teaser, not the standard buy page. Do **not** turn off `is_prepping` on the album
+  today (sections 4–5 stay deferred).
+- **Google Play (player-only) = land today if it flows, web is the priority.** This
+  is an operator/Codemagic/console track — every in-repo prerequisite is already
+  done (see `store-review-readiness.md`). Remaining steps are the Codemagic
+  `android-internal` build + Play-console listing/data-safety/demo-account actions,
+  which only Bill can run. It can proceed in tandem with the web launch.
+
+## A. Step one — get the page up today (non-buyable)
+
+This is the only action needed for today's goal. It puts the public landing
+experience live with **no way to buy** — exactly the dimmed page + offer modal +
+"Coming today" disabled Buy.
+
+**What the public will see** at `get.goodtunes.music/nightbirde/hope`:
+the offer modal ("Get Hope. Give Hope.") over a dimmed page; a "Let me hear the
+previews" link that dismisses the modal to reveal the page with 30s track previews;
+and every Buy/primary CTA rendered as a disabled **"Coming today"** pill. No
+checkout, sign-in-to-pay, or order can happen — `publicPreview` resolves to the
+preview tier, which has the buy flow turned off everywhere.
+
+**Why it's safe:** the coming-soon teaser is purely a preview. The full
+buy/give/pay flow is gated behind the family token / `/staging` link and is never
+reachable from the bare public URL. The album also stays in Prepping, so the
+standard buy page stays unresolvable to the public.
+
+**The one action — Publish.** The teaser is already built and verified in dev, but
+the **live prod bundle predates this campaign routing**: `get.goodtunes.music/
+nightbirde/hope` currently shows "We couldn't find that album," which means prod is
+serving an older build where `/nightbirde/hope` isn't yet recognized as a campaign.
+Making it live = **publishing the app** (Replit Publish / Deploy). No prod data
+change and no admin toggle is involved or wanted today.
+
+After publishing, confirm: load `get.goodtunes.music/nightbirde/hope` logged out and
+verify the modal + "Coming today" disabled CTA render, the previews play 30s, and
+there is no working Buy. (If it still shows "We couldn't find that album," the new
+build hasn't gone live yet — re-check the deploy.)
+
 ## 0. Verified prod state (read-only audit, June 8 2026)
 
 **Canonical go-live album — use this one, nothing else:**

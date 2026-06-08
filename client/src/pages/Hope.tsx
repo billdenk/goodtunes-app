@@ -627,7 +627,7 @@ function AlbumBackdrop({
                     className="h-11 px-5 rounded-full inline-flex items-center gap-2 font-semibold text-[14.5px] text-white/40 bg-white/[0.05] cursor-not-allowed"
                   >
                     <Lock className="w-4 h-4" strokeWidth={2.4} />
-                    Buy{priceLabel ? ` ${priceLabel}` : ""}
+                    {c.launchLabel}
                   </span>
                 )}
                 <button
