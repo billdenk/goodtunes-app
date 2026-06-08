@@ -224,7 +224,7 @@ export function StorefrontSidebar() {
               <div className="text-white text-sm font-semibold truncate">
                 {accountName}
               </div>
-              <div className="text-white/45 text-xs truncate">View profile</div>
+              <div className="text-[color:var(--brand-blue)] text-xs truncate">View profile</div>
             </div>
           </button>
         </DropdownMenuTrigger>
