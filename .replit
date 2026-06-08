@@ -49,6 +49,10 @@ args = "test"
 task = "workflow.run"
 args = "schema-drift-smoke"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "android-aab-icon-smoke"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -98,6 +102,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "tsx scripts/schema-drift-smoke.ts"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "android-aab-icon-smoke"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python3 scripts/verify-android-aab-icon-smoke.py"
 
 [workflows.workflow.metadata]
 isValidation = true
