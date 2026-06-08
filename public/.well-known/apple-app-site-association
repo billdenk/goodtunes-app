@@ -6,8 +6,9 @@
         "appIDs": ["REPLACE_WITH_TEAM_ID.Io.GoGoods.music"],
         "components": [
           {
-            "/": "/*",
-            "comment": "Match every path on my.goodtunes.music — the web SPA router already handles unknown paths, so handing the whole namespace to the app keeps fans in-app on any deep link. The bare goodtunes.music apex is the Webflow marketing site and is intentionally not claimed by the app."
+            "/": "*",
+            "exclude": true,
+            "comment": "TEMPORARILY DISABLED (Bill's request): claim no paths so iOS Safari stops showing the 'Open in the GoodTunes app' Universal Links banner on my.goodtunes.music. The appIDs entry and file structure are left intact so this is a one-line revert: to re-enable in-app deep linking, replace this exclude component with { \"/\": \"/*\" } to claim every path again. Tradeoff while disabled: tapping a my.goodtunes.music link from Messages/Mail/etc. opens in Safari instead of the installed app."
           }
         ]
       }
