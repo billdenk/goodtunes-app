@@ -19726,7 +19726,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         muxPlaybackId: s.muxPlaybackId,
         muxStatus: s.muxStatus,
       }));
-    res.json({ tier, albumId: campaign.albumId, tracks });
+    // Embargoed tracks (the title track) are shown LOCKED in the album view —
+    // title + number only, never an id or playback handle, so they stay
+    // unplayable until release. The playback middleware also refuses them.
+    const lockedTracks = songs
+      .filter((s) => (s as any).previewHidden)
+      .map((s) => ({ title: s.title, trackNumber: s.trackNumber }));
+    // Bonus videos are shown LOCKED in the campaign preview — they unlock only
+    // after purchase + account. Titles only; no playback id is handed out here.
+    const videos = (await storage.listAlbumVideos(campaign.albumId)).map((v) => ({
+      title: v.title,
+    }));
+    res.json({ tier, albumId: campaign.albumId, tracks, lockedTracks, videos });
   });
 
   app.post("/api/songs/:id/playback-url", requireAuthOrCampaignPreview, async (req, res) => {

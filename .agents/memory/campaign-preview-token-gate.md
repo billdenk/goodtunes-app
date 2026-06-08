@@ -28,6 +28,14 @@ a signed-in fan ignores the token entirely (ownership decides server-side). Veri
 matrix: {no token, wrong token, preview token, family token} × {embargoed, non-embargoed}
 plus a non-campaign song with a valid-looking token (must stay 401).
 
+**Locked content is title-only metadata, never a handle:** the access endpoint also
+returns the embargoed material so the campaign page can render a realistic LOCKED album
+view — but `lockedTracks` carry `{title, trackNumber}` only and `videos` carry `{title}`
+only. NEVER include a song/video id or `muxPlaybackId` for locked content; those fields
+are the playback capability, and the client renders locked rows as non-interactive
+(grayed + Lock icon), so an id would be both a leak and dead weight. Only previewable,
+non-embargoed, Mux-ready tracks get ids + handles.
+
 **Hardening backlog:** campaign keys currently live as hardcoded literals in
 `server/routes.ts`; move to secret/config storage with rotation for real operational
 secrecy.

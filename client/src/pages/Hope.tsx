@@ -63,10 +63,19 @@ type PreviewTrack = {
   muxPlaybackId: string;
   muxStatus: string;
 };
+type LockedTrack = {
+  title: string;
+  trackNumber: number;
+};
+type PreviewVideo = {
+  title: string;
+};
 type CampaignAccess = {
   tier: "none" | "preview" | "family";
   albumId: string;
   tracks: PreviewTrack[];
+  lockedTracks?: LockedTrack[];
+  videos?: PreviewVideo[];
 };
 
 const fmtDur = (sec: number) => {
@@ -410,11 +419,15 @@ function AlbumBackdrop({
   c,
   dimmed = true,
   tracks,
+  lockedTracks,
+  videos,
   albumId,
 }: {
   c: ReleaseContent;
   dimmed?: boolean;
   tracks?: PreviewTrack[];
+  lockedTracks?: LockedTrack[];
+  videos?: PreviewVideo[];
   albumId?: string;
 }) {
   const img = (name: string) => `${c.imageBase}/${name}`;
@@ -423,6 +436,22 @@ function AlbumBackdrop({
   // Real, playable tracks supersede the static placeholder tracklist. Each row
   // streams a 30s preview (setPreviewMode caps it; the server signs a Mux URL).
   const hasReal = !!tracks && tracks.length > 0;
+  // The locked album view (shown once the offer card is dismissed) mirrors the
+  // real release page: previewable tracks interleaved with the embargoed title
+  // track shown grayed, in track-number order. Locked rows carry no id/Mux
+  // handle, so they can never play before launch.
+  const rows: (
+    | { kind: "preview"; trackNumber: number; t: PreviewTrack }
+    | { kind: "locked"; trackNumber: number; title: string }
+  )[] = [
+    ...(tracks ?? []).map(
+      (t) => ({ kind: "preview" as const, trackNumber: t.trackNumber, t }),
+    ),
+    ...(lockedTracks ?? []).map(
+      (l) => ({ kind: "locked" as const, trackNumber: l.trackNumber, title: l.title }),
+    ),
+  ].sort((a, b) => a.trackNumber - b.trackNumber);
+  const lockedVideos = videos ?? [];
   const album: Album = {
     id: albumId ?? "",
     title: c.releaseName,
@@ -485,9 +514,27 @@ function AlbumBackdrop({
             <div className="text-white text-[34px] font-bold tracking-[-0.02em] mb-6">
               {c.releaseName}
             </div>
-            {hasReal ? (
+            {rows.length > 0 ? (
               <div className="flex flex-col gap-1">
-                {tracks!.map((t, i) => {
+                {rows.map((row) => {
+                  if (row.kind === "locked") {
+                    return (
+                      <div
+                        key={`locked-${row.trackNumber}-${row.title}`}
+                        data-testid={`track-locked-${row.trackNumber}`}
+                        className="flex items-center gap-4 -mx-2 px-2 py-1.5 rounded-lg"
+                      >
+                        <span className="w-4 flex items-center justify-center text-[14px] tabular-nums text-white/30">
+                          {row.trackNumber}
+                        </span>
+                        <span className="text-[15px] flex-1 truncate text-white/35">
+                          {row.title}
+                        </span>
+                        <Lock className="w-3.5 h-3.5 text-white/30" strokeWidth={2.2} />
+                      </div>
+                    );
+                  }
+                  const t = row.t;
                   const isCurrent = currentSong?.id === t.id;
                   const playing = isCurrent && isPlaying;
                   return (
@@ -506,7 +553,7 @@ function AlbumBackdrop({
                           <Play className="w-3.5 h-3.5" style={{ color: BLUE }} strokeWidth={2.4} />
                         ) : (
                           <>
-                            <span className="text-white/40 group-hover:hidden">{i + 1}</span>
+                            <span className="text-white/40 group-hover:hidden">{row.trackNumber}</span>
                             <Play
                               className="w-3.5 h-3.5 hidden group-hover:block text-white"
                               strokeWidth={2.4}
@@ -536,6 +583,38 @@ function AlbumBackdrop({
                     <span className="text-white/40 text-[13px] tabular-nums">{t.len}</span>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {lockedVideos.length > 0 && (
+              <div className="mt-7">
+                <div className="flex items-center gap-2 text-white/45 text-[12px] font-semibold uppercase tracking-[0.12em] mb-3">
+                  Videos
+                  <Lock className="w-3 h-3" strokeWidth={2.4} />
+                </div>
+                <div className="flex gap-3">
+                  {lockedVideos.map((v) => (
+                    <div
+                      key={v.title}
+                      data-testid={`video-locked-${v.title}`}
+                      className="relative flex-shrink-0 w-[124px] rounded-xl overflow-hidden border border-white/10"
+                      style={{ background: PANEL }}
+                    >
+                      <div className="relative aspect-video flex items-center justify-center">
+                        <img
+                          src={img(c.images.cover)}
+                          alt=""
+                          className="absolute inset-0 w-full h-full object-cover opacity-25"
+                          draggable={false}
+                        />
+                        <Lock className="relative w-4 h-4 text-white/80" strokeWidth={2.4} />
+                      </div>
+                      <div className="px-2 py-1.5 text-white/55 text-[11px] font-medium truncate">
+                        {v.title}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -928,11 +1007,15 @@ function CampaignFlow({
   c,
   mode,
   tracks,
+  lockedTracks,
+  videos,
   albumId,
 }: {
   c: ReleaseContent;
   mode: "comingSoon" | "preview";
   tracks?: PreviewTrack[];
+  lockedTracks?: LockedTrack[];
+  videos?: PreviewVideo[];
   albumId?: string;
 }) {
   const comingSoon = mode === "comingSoon";
@@ -972,7 +1055,14 @@ function CampaignFlow({
       style={{ fontFamily: "system-ui, -apple-system, 'SF Pro Text', sans-serif" }}
       data-testid="hope-offer-flow"
     >
-      <AlbumBackdrop c={c} dimmed={!previewing} tracks={tracks} albumId={albumId} />
+      <AlbumBackdrop
+        c={c}
+        dimmed={!previewing}
+        tracks={tracks}
+        lockedTracks={lockedTracks}
+        videos={videos}
+        albumId={albumId}
+      />
 
       {!previewing && (
       <div
@@ -1068,7 +1158,7 @@ function CampaignFlow({
               data-testid="button-preview-music"
               className="h-11 px-2 text-white/55 hover:text-white text-[14px] font-medium transition-colors"
             >
-              Preview the music
+              Let me hear the previews
             </button>
           ) : null}
 
@@ -1191,6 +1281,8 @@ function CampaignExperience({
       c={RELEASES[key]}
       mode={mode}
       tracks={data?.tracks}
+      lockedTracks={data?.lockedTracks}
+      videos={data?.videos}
       albumId={data?.albumId}
     />
   );
