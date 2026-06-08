@@ -210,29 +210,65 @@ def inspect_png_dimensions(path):
     return _png_size_from_header(path)
 
 
+def _im_tool(name):
+    """Return an ImageMagick subcommand list, preferring v7 `magick`."""
+    magick = shutil.which("magick")
+    if magick:
+        return [magick] + ([name] if name != "magick" else [])
+    legacy = shutil.which(name)
+    if legacy:
+        return [legacy]
+    return None
+
+
 def mean_luminance(path):
-    """Average perceptual luminance (0..1) of an image, or None if PIL is absent.
+    """Average perceptual luminance (0..1) of an image, or None if unreadable.
 
     Used only to tell the dark navy real icon (~0.02) apart from Apple's near-white
-    placeholder (~0.95). Best-effort: returns None when Pillow isn't installed.
+    placeholder (~0.95). Prefers Pillow, then falls back to ImageMagick
+    (`magick`/`convert`) so the check still runs on the Linux CI runner where
+    Pillow isn't installed. Best-effort: returns None when neither is available.
     """
     try:
         from PIL import Image
-    except ImportError:
-        return None
-    try:
+
         with Image.open(path) as im:
             small = im.convert("RGB").resize((16, 16))
             pixels = list(small.getdata())
-    except Exception:  # noqa: BLE001
-        return None
-    if not pixels:
-        return None
-    n = len(pixels)
-    r = sum(p[0] for p in pixels) / n
-    g = sum(p[1] for p in pixels) / n
-    b = sum(p[2] for p in pixels) / n
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+        if pixels:
+            n = len(pixels)
+            r = sum(p[0] for p in pixels) / n
+            g = sum(p[1] for p in pixels) / n
+            b = sum(p[2] for p in pixels) / n
+            return (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+    except Exception:  # noqa: BLE001 - fall through to ImageMagick
+        pass
+    convert = _im_tool("convert")
+    if convert:
+        try:
+            out = subprocess.check_output(
+                convert
+                + [
+                    path,
+                    "-background",
+                    "white",
+                    "-alpha",
+                    "remove",
+                    "-alpha",
+                    "off",
+                    "-colorspace",
+                    "Gray",
+                    "-format",
+                    "%[fx:mean]",
+                    "info:",
+                ],
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            return float(out)
+        except Exception:  # noqa: BLE001
+            pass
+    return None
 
 
 def verify_app_dir(app_dir):

@@ -53,6 +53,10 @@ args = "schema-drift-smoke"
 task = "workflow.run"
 args = "android-aab-icon-smoke"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "ios-ipa-icon-smoke"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -113,6 +117,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python3 scripts/verify-android-aab-icon-smoke.py"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "ios-ipa-icon-smoke"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python3 scripts/verify-ios-ipa-icon-smoke.py"
 
 [workflows.workflow.metadata]
 isValidation = true
