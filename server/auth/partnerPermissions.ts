@@ -33,6 +33,9 @@ import {
   partnerPermissions,
   adminOverrides,
   pendingChanges,
+  ADMIN_ROLES,
+  PARTNER_SCOPE_KINDS,
+  type AdminRole,
   type PartnerPermissionVerb,
   type PartnerScopeKind,
 } from "@shared/schema";
@@ -269,6 +272,69 @@ export async function getPartnerPermissions(
     .from(partnerPermissions)
     .where(and(eq(partnerPermissions.scopeKind, scopeKind), eq(partnerPermissions.scopeId, scopeId)));
   return row ?? null;
+}
+
+// Task #1791 — single source of truth for *which* invites a caller may
+// create, so the Invites UI can render only the partner types / roles
+// the server will actually accept. This MUST mirror the carveouts in the
+// POST /api/admin/invites gate (the authoritative check); it is surfaced
+// via GET /api/me/role purely so the client doesn't re-implement (and
+// drift from) that logic.
+//
+//   • super_admin              → unrestricted power form (every role,
+//                                referrer attribution, team invites).
+//   • scoped partner + verb on → quick partner invite only, limited to:
+//       artist       → artist | non_profit
+//       label        → artist | label
+//       manufacturer → artist | label
+//       fulfillment/vendor/manager → may only grow their own team
+//                                    (gate forces role+scope to own).
+//   • everyone else (unscoped admin, non_profit caller, or any partner
+//     missing invite_subusers) → can't invite at all.
+export interface InviteCapability {
+  canInvite: boolean;
+  // Roles the caller may target. Drives both the quick partner-type
+  // cards and the advanced role dropdown on the client.
+  allowedRoles: AdminRole[];
+  // Only super-admins get the full power form (referrer + team invite).
+  allowAdvanced: boolean;
+}
+
+export function computeInviteCapability(
+  role: AdminRole | string | null | undefined,
+  roleScopeId: string | null,
+  canInviteSubusers: boolean,
+): InviteCapability {
+  if (role === "super_admin") {
+    return { canInvite: true, allowedRoles: [...ADMIN_ROLES], allowAdvanced: true };
+  }
+  // Only scoped partners holding invite_subusers may invite. Unscoped
+  // `admin`, the non_profit role (absent from PARTNER_SCOPE_KINDS), and
+  // anyone missing the verb are all rejected by the gate.
+  if (
+    !PARTNER_SCOPE_KINDS.includes(role as any) ||
+    !roleScopeId ||
+    !canInviteSubusers
+  ) {
+    return { canInvite: false, allowedRoles: [], allowAdvanced: false };
+  }
+  let allowedRoles: AdminRole[];
+  switch (role) {
+    case "artist":
+      allowedRoles = ["artist", "non_profit"];
+      break;
+    case "label":
+      allowedRoles = ["artist", "label"];
+      break;
+    case "manufacturer":
+      allowedRoles = ["artist", "label"];
+      break;
+    default:
+      // fulfillment / vendor / manager — the gate forces the new invite
+      // to the caller's own role + scope (grow your own team).
+      allowedRoles = [role as AdminRole];
+  }
+  return { canInvite: true, allowedRoles, allowAdvanced: false };
 }
 
 export async function upsertPartnerPermissions(

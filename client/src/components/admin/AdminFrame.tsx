@@ -382,11 +382,20 @@ export function AdminFrame({
   // Task #119 — Platform Pricing is super-admin-only; we hide the
   // sidebar link entirely for other roles so they don't see a tab
   // that 403s when they click it.
-  const { data: roleInfo } = useQuery<{ role: string; roleScopeId: string | null }>({
+  const { data: roleInfo } = useQuery<{
+    role: string;
+    roleScopeId: string | null;
+    canInvite?: boolean;
+  }>({
     queryKey: ["/api/me/role"],
     enabled: !!user?.isAdmin,
   });
   const isSuperAdmin = roleInfo?.role === "super_admin";
+  // Task #1791 — hide the Invites nav entry entirely when the backend
+  // says this caller can't send invites (matches the AdminInvites gate +
+  // POST /api/admin/invites). Default permissive until role resolves so
+  // super-admins never see a flash of a missing item.
+  const canInvite = roleInfo === undefined || roleInfo.canInvite !== false;
   // Artist partners now get a full sectioned nav (not just "My releases").
   // Global search (which spans every entity) is still hidden for artists.
   const isArtist = roleInfo?.role === "artist";
@@ -594,23 +603,28 @@ export function AdminFrame({
                   testId="nav-reports"
                 />
 
-                {/* System — invite management + soft-delete bin. */}
-                <Section
-                  id="system"
-                  label="System"
-                  containsActive={activeSection === "system"}
-                  expanded={isSectionOpen("system")}
-                  onToggle={() => toggleSection("system")}
-                >
-                  <SidebarLink
-                    icon={UserPlus}
-                    label="Invites"
-                    count={-1}
-                    active={active === "invite-directory"}
-                    onClick={() => navigate("/admin/invite-directory")}
-                    testId="nav-invites"
-                  />
-                </Section>
+                {/* System — invite management. Task #1791 — hidden when
+                    this artist's team can't invite (no invite_subusers),
+                    matching the AdminInvites gate so they never click into
+                    a surface they can't use. */}
+                {canInvite && (
+                  <Section
+                    id="system"
+                    label="System"
+                    containsActive={activeSection === "system"}
+                    expanded={isSectionOpen("system")}
+                    onToggle={() => toggleSection("system")}
+                  >
+                    <SidebarLink
+                      icon={UserPlus}
+                      label="Invites"
+                      count={-1}
+                      active={active === "invite-directory"}
+                      onClick={() => navigate("/admin/invite-directory")}
+                      testId="nav-invites"
+                    />
+                  </Section>
+                )}
               </>
             ) : isPress || isNonProfit ? (
               <>

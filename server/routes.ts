@@ -22103,7 +22103,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       welcomeNote = ((r as any).rows ?? [])[0]?.welcome_note ?? null;
     } catch {}
 
-    res.json({ role, roleScopeId, scopeName, welcomeNote });
+    // Task #1791 — surface what the caller may invite so AdminInvites
+    // renders only the partner types / roles the POST /api/admin/invites
+    // gate will actually accept (no client-side re-implementation that
+    // can drift from the server). The gate authorizes on the SCOPE-level
+    // partner_permissions.inviteSubusers (it does NOT consult per-user
+    // overrides), so resolve the exact same value here; super-admins are
+    // unrestricted regardless.
+    const { computeInviteCapability, getPartnerPermissions } =
+      await import("./auth/partnerPermissions");
+    const { PARTNER_SCOPE_KINDS } = await import("@shared/schema");
+    let canInviteSubusers = false;
+    if (PARTNER_SCOPE_KINDS.includes(role as any) && roleScopeId) {
+      try {
+        const perms = await getPartnerPermissions(role as any, roleScopeId);
+        canInviteSubusers = !!perms?.inviteSubusers;
+      } catch {}
+    }
+    const cap = computeInviteCapability(role, roleScopeId, canInviteSubusers);
+
+    res.json({
+      role,
+      roleScopeId,
+      scopeName,
+      welcomeNote,
+      canInvite: cap.canInvite,
+      allowedInviteRoles: cap.allowedRoles,
+      allowAdvancedInvite: cap.allowAdvanced,
+    });
   });
 
   // Task #1038 — Unified identity P3 hat-switcher. List EVERY hat this

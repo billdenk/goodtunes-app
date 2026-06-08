@@ -5,7 +5,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { Link } from "wouter";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Copy, Check, X, ChevronDown, RefreshCw, Heart, Factory, HeartHandshake, Star, SlidersHorizontal, ArrowLeft, Plus } from "lucide-react";
+import { Trash2, Copy, Check, X, ChevronDown, RefreshCw, Heart, Factory, HeartHandshake, Star, SlidersHorizontal, ArrowLeft, Plus, Building2, Truck, Wrench, UserCog, Lock } from "lucide-react";
 import {
   ROLE_OPTIONS,
   ROLE_LABEL,
@@ -56,11 +56,26 @@ const REFERRER_CONFIG = {
 // flow. Each maps onto an existing server role; the scope picker +
 // welcome note are all that type needs. Power options (any role,
 // referrer attribution, team sub-roles) live behind "Advanced invite".
-const PARTNER_TYPES: { value: string; label: string; Icon: typeof Factory; blurb: string }[] = [
+type PartnerType = { value: string; label: string; Icon: typeof Factory; blurb: string };
+const PARTNER_TYPES: PartnerType[] = [
   { value: "manufacturer", label: "Press", Icon: Factory, blurb: "A vinyl pressing plant or printer." },
   { value: "non_profit", label: "Non-profit", Icon: HeartHandshake, blurb: "A charity partner referring artists." },
   { value: "artist", label: "Artist", Icon: Star, blurb: "An artist running their own releases." },
 ];
+
+// Task #1791 — a scoped partner sees quick cards derived from the roles
+// the backend says they may invite (`allowedInviteRoles` off /api/me/role).
+// This meta covers every role a partner carveout can expose; super-admins
+// keep the three curated lead cards above instead.
+const PARTNER_TYPE_META: Record<string, Omit<PartnerType, "value">> = {
+  manufacturer: { label: "Press", Icon: Factory, blurb: "A vinyl pressing plant or printer." },
+  non_profit: { label: "Non-profit", Icon: HeartHandshake, blurb: "A charity partner referring artists." },
+  artist: { label: "Artist", Icon: Star, blurb: "An artist running their own releases." },
+  label: { label: "Label", Icon: Building2, blurb: "A record label running its roster." },
+  fulfillment: { label: "Fulfillment", Icon: Truck, blurb: "A fulfillment teammate on your team." },
+  vendor: { label: "Vendor", Icon: Wrench, blurb: "A gear vendor teammate on your team." },
+  manager: { label: "Manager", Icon: UserCog, blurb: "A manager teammate on your team." },
+};
 
 export function AdminInvites() {
   const { toast } = useToast();
@@ -130,17 +145,42 @@ export function AdminInvites() {
     setPreFlightedAlbumId(null);
   }, [effectiveTargetPersonId]);
 
-  const { data: adminMe } = useQuery<{ role: string; roleScopeId: string | null }>({
-    queryKey: ["/api/admin/me"],
+  // Task #1791 — invite capability is surfaced by the backend off
+  // /api/me/role (the same endpoint the rest of the admin shell reads),
+  // so the UI shows only the partner types / roles the POST
+  // /api/admin/invites gate will actually accept — no client-side
+  // re-implementation of the carveouts that could drift from the server.
+  const { data: adminMe } = useQuery<{
+    role: string;
+    roleScopeId: string | null;
+    canInvite?: boolean;
+    allowedInviteRoles?: string[];
+    allowAdvancedInvite?: boolean;
+  }>({
+    queryKey: ["/api/me/role"],
   });
-  const isArtistCaller = adminMe?.role === "artist";
+  const roleLoaded = adminMe !== undefined;
+  // Default permissive while the role is still loading (the common caller
+  // is a super-admin); the friendly "can't invite" state only renders
+  // once we've confirmed the backend says so.
+  const canInvite = !roleLoaded || adminMe.canInvite !== false;
+  const allowAdvanced = adminMe?.allowAdvancedInvite ?? !roleLoaded;
+  // null = unrestricted (super-admin / still loading). Otherwise the
+  // explicit set of roles the caller may target.
+  const allowedRoles: string[] | null = allowAdvanced
+    ? null
+    : adminMe?.allowedInviteRoles ?? null;
 
-  // Artists may only invite Artist or Non-profit partners.
-  const visiblePartnerTypes = isArtistCaller
-    ? PARTNER_TYPES.filter((t) => t.value === "artist" || t.value === "non_profit")
+  // Quick-mode partner-type cards. Super-admins keep the three curated
+  // lead cards; a scoped partner gets cards derived from their allowed
+  // roles so they never see a type the server would reject.
+  const visiblePartnerTypes: PartnerType[] = allowedRoles
+    ? allowedRoles
+        .filter((r) => PARTNER_TYPE_META[r])
+        .map((r) => ({ value: r, ...PARTNER_TYPE_META[r] }))
     : PARTNER_TYPES;
-  const visibleRoleOptions = isArtistCaller
-    ? ROLE_OPTIONS.filter((o) => o.value === "artist" || o.value === "non_profit")
+  const visibleRoleOptions = allowedRoles
+    ? ROLE_OPTIONS.filter((o) => allowedRoles.includes(o.value))
     : ROLE_OPTIONS;
 
   const {
@@ -273,6 +313,34 @@ export function AdminInvites() {
     createMutation.isPending || !email.trim() || !role || (needsScope && !scopeId) ||
     (!!referrerKind && !referrerScopeId) ||
     (!!inviteRole && !effectiveTargetPersonId);
+
+  // Task #1791 — a partner whose team can't invite (e.g. an NPO caller,
+  // or any partner missing invite_subusers) gets a friendly explainer
+  // instead of a form they can't submit. The backend (/api/me/role,
+  // canInvite=false) is the source of truth, so this matches the POST
+  // gate exactly. Render nothing role-specific until the role resolves.
+  if (roleLoaded && !canInvite) {
+    return (
+      <AdminFrame active="invites" contentWidth="narrow">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900 mb-1" data-testid="text-page-title">Invites</h1>
+          <div
+            className="bg-white border border-slate-200 rounded-2xl p-6 mt-6 text-center"
+            data-testid="state-cannot-invite"
+          >
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+              <Lock className="h-6 w-6 text-slate-400" />
+            </div>
+            <h2 className="text-base font-semibold text-slate-900 mb-1">Inviting isn't enabled for your team</h2>
+            <p className="text-sm text-slate-600 max-w-sm mx-auto">
+              Your account doesn't have permission to send invites yet. If you need to add a partner or teammate, just
+              ask GoodTunes and we'll set it up for you.
+            </p>
+          </div>
+        </div>
+      </AdminFrame>
+    );
+  }
 
   return (
     <AdminFrame active="invites" contentWidth="narrow">
@@ -579,14 +647,22 @@ export function AdminInvites() {
               invite button anchors the bottom of the form. */}
           <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
             {inviteMode === "quick" ? (
-              <button
-                type="button"
-                onClick={() => { setInviteMode("advanced"); if (!role) setRole("super_admin"); }}
-                className="text-xs font-semibold text-[var(--brand-blue)] hover:underline inline-flex items-center gap-1.5"
-                data-testid="button-advanced-invite"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" /> Advanced invite — other roles, referrer attribution, team
-              </button>
+              // Task #1791 — the Advanced power form (any role, referrer
+              // attribution, team invites) is super-admin only; scoped
+              // partners never see it. The empty span keeps Send invite
+              // right-aligned when the toggle is hidden.
+              allowAdvanced ? (
+                <button
+                  type="button"
+                  onClick={() => { setInviteMode("advanced"); if (!role) setRole("super_admin"); }}
+                  className="text-xs font-semibold text-[var(--brand-blue)] hover:underline inline-flex items-center gap-1.5"
+                  data-testid="button-advanced-invite"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" /> Advanced invite — other roles, referrer attribution, team
+                </button>
+              ) : (
+                <span />
+              )
             ) : (
               <button
                 type="button"
