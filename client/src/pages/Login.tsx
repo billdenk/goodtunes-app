@@ -611,10 +611,15 @@ export function Login() {
       const res = await apiRequest("POST", "/api/auth/totp/verify", body);
       const j = await res.json();
       if (j.token) setAuthToken(j.token);
+      // Seed the signed-in user before navigating so the protected admin
+      // route sees an authenticated user on first mount instead of
+      // bouncing back to the login screen (mirrors the password-login path).
+      const { token, landingPath, ...user } = j;
+      queryClient.setQueryData(["/api/me"], user);
       queryClient.invalidateQueries();
       // Task #78 — honor server-supplied role-scoped landing so OAuth
       // invite recipients land in their partner shell (/non-profit etc).
-      navigate(typeof j.landingPath === "string" && j.landingPath.startsWith("/") ? j.landingPath : "/admin");
+      navigate(typeof landingPath === "string" && landingPath.startsWith("/") ? landingPath : "/admin");
     } catch (e: any) {
       setTotpError(e?.message ?? "Code didn't match");
     } finally {
@@ -628,8 +633,13 @@ export function Login() {
       const res = await apiRequest("POST", "/api/auth/email-otp/verify", { code: emailCode.trim() });
       const j = await res.json();
       if (j.token) setAuthToken(j.token);
+      // Seed the signed-in user before navigating so the protected admin
+      // route sees an authenticated user on first mount instead of
+      // bouncing back to the login screen (mirrors the password-login path).
+      const { token, landingPath, ...user } = j;
+      queryClient.setQueryData(["/api/me"], user);
       queryClient.invalidateQueries();
-      navigate(typeof j.landingPath === "string" && j.landingPath.startsWith("/") ? j.landingPath : "/admin");
+      navigate(typeof landingPath === "string" && landingPath.startsWith("/") ? landingPath : "/admin");
     } catch (e: any) {
       setEmailOtpError(e?.message ?? "Code didn't match");
     } finally {
@@ -664,6 +674,11 @@ export function Login() {
       const res = await apiRequest("POST", "/api/auth/totp/enroll/verify", { code: totpCode.trim() });
       const j = await res.json();
       if (j.token) setAuthToken(j.token);
+      // Seed the signed-in user before navigating so the protected admin
+      // route sees an authenticated user on first mount instead of
+      // bouncing back to the login screen (mirrors the password-login path).
+      const { token, ...user } = j;
+      queryClient.setQueryData(["/api/me"], user);
       queryClient.invalidateQueries();
       navigate("/admin");
     } catch (e: any) {
