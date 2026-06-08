@@ -452,7 +452,14 @@ function Router() {
     !isLoading && user?.kind === "customer" && !user.signupCompletedAt;
   const finishSignupAllow = ["/finish-setup", "/login", "/logout", "/error"];
   if (needsFinishSignup && !finishSignupAllow.some((p) => location.startsWith(p))) {
-    return <Redirect to="/finish-setup" />;
+    // Carry the current location as ?next= so a fan who was mid-purchase
+    // (e.g. /album/123?buy=1) lands back on their cart after completing
+    // "One last thing" — not on /account with nothing to do.
+    const finishSetupDest =
+      location && location !== "/" && location !== "/home"
+        ? `/finish-setup?next=${encodeURIComponent(location)}`
+        : "/finish-setup";
+    return <Redirect to={finishSetupDest} />;
   }
 
   if (isProdHost) {

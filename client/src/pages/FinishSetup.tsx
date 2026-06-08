@@ -53,6 +53,16 @@ type HandleStatus =
 export function FinishSetup() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  // Read the purchase-resume target that App.tsx carries as ?next= when it
+  // bounces a new OAuth fan here mid-checkout.  Falls back to /account so a
+  // plain signup (no cart) still lands on the profile page.
+  const postSetupDest = (() => {
+    try {
+      const q = new URL(window.location.href).searchParams.get("next");
+      if (q && q.startsWith("/")) return q;
+    } catch {}
+    return "/account";
+  })();
   const [state, setState] = useState<SetupState | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [handle, setHandle] = useState("");
@@ -74,7 +84,7 @@ export function FinishSetup() {
         const j: SetupState = await r.json();
         if (cancelled) return;
         if (j.isComplete) {
-          navigate("/account");
+          navigate(postSetupDest);
           return;
         }
         setState(j);
@@ -148,7 +158,7 @@ export function FinishSetup() {
       // Push the freshly-stamped user into the cache so the router
       // guard relaxes immediately (no flicker through the redirect).
       queryClient.setQueryData(["/api/me"], updated);
-      navigate("/account");
+      navigate(postSetupDest);
     } catch (err: any) {
       let msg = "Couldn't save your account. Please try again.";
       try {
