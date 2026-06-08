@@ -413,14 +413,14 @@ export function ScopePicker({
                     <button
                       type="button"
                       onClick={() => { setAddMode(false); setAddError(null); }}
-                      className="text-[11px] font-semibold text-slate-500 hover:text-slate-900"
+                      className="text-xs font-semibold text-slate-500 hover:text-slate-900"
                       data-testid={testId ? `${testId}-add-back` : "button-add-scope-back"}
                     >
                       Back
                     </button>
                   </div>
                   <div>
-                    <label className="block text-[10.5px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
                       {Noun} name {add.requireUrl ? "(optional — pulled from URL)" : ""}
                     </label>
                     <input
@@ -435,7 +435,7 @@ export function ScopePicker({
                     />
                   </div>
                   <div>
-                    <label className="block text-[10.5px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
                       Website URL {add.requireUrl ? "· required" : "(optional — we'll pull name, logo & bio)"}
                     </label>
                     <input

@@ -4991,7 +4991,7 @@ function ScrapeBar({
       const r = await onPrefill(data);
       const base = data.vendor?.known
         ? `Pulled from ${data.vendor.name}.`
-        : `Pulled from ${data.vendor.name} (new vendor — confirm the name).`;
+        : `Pulled from ${data.vendor.name} (new maker / reseller — confirm the name).`;
       const warn = r && "warn" in r && r.warn ? ` ${r.warn}` : "";
       setMsg({ kind: "ok", text: `${base} Review and Save.${warn}` });
       // Intentionally NOT clearing `url` — keeping the pulled URL visible
@@ -5168,7 +5168,7 @@ function InstrumentEditor({
   const addVendor = useMutation({
     mutationFn: async () => {
       const url = window.prompt(
-        "Paste the product URL (Reverb, Sweetwater, Carter, …). If this vendor already exists, the existing entity will be reused.",
+        "Paste the product URL (Reverb, Sweetwater, Carter, …). If this maker / reseller already exists, the existing entity will be reused.",
         "https://",
       );
       if (!url || url === "https://") throw new Error("cancelled");
@@ -5276,7 +5276,7 @@ function InstrumentEditor({
             </p>
             <div className="flex-shrink-0 ml-3">
               <AddEntityButton
-                label="Add vendor"
+                label="Add maker / reseller"
                 onClick={() => addVendor.mutate()}
                 disabled={addVendor.isPending}
                 testId="button-new-vendor"
@@ -5289,8 +5289,8 @@ function InstrumentEditor({
             ))}
             {form.vendors.length === 0 && (
               <p className="text-slate-400 text-sm py-3">
-                No vendors yet. Paste a product URL in the About tab's Pull
-                bar, or click + Add vendor above.
+                No makers or resellers yet. Paste a product URL in the About
+                tab's Pull bar, or click + Add maker / reseller above.
               </p>
             )}
           </div>
@@ -5478,7 +5478,7 @@ function InstrumentEditor({
           if (existing)
             return {
               ok: true,
-              warn: "(Vendor already on this gear — skipped.)",
+              warn: "(Maker / reseller already on this gear — skipped.)",
             };
 
           // Create the vendor row server-side, then splice it into local
@@ -5510,7 +5510,7 @@ function InstrumentEditor({
           } catch (e: any) {
             return {
               ok: false,
-              warn: `(Vendor row not added: ${e?.message || "save failed"})`,
+              warn: `(Maker / reseller not added: ${e?.message || "save failed"})`,
             };
           }
         }}
@@ -5576,7 +5576,7 @@ function InstrumentEditor({
         <button
           type="button"
           onClick={() => {
-            if (confirm(`Delete ${form.name}? Vendors will be removed too.`))
+            if (confirm(`Delete ${form.name}? Makers & resellers will be removed too.`))
               del.mutate();
           }}
           className="text-red-600 hover:bg-red-50 px-3 py-2 text-sm rounded"
@@ -5715,7 +5715,7 @@ function VendorRow({
           )}
           <div className="min-w-0 flex-1">
             <div className="text-slate-900 text-sm truncate">
-              {draft.name || "Untitled vendor"}
+              {draft.name || "Untitled maker / reseller"}
             </div>
             <div className="text-slate-400 text-xs truncate">
               {draft.affiliateUrl}
@@ -5741,14 +5741,14 @@ function VendorRow({
             e.stopPropagation();
             if (
               confirm(
-                `Remove "${draft.name || "this vendor"}" from this gear? The vendor entity stays available for other gear.`,
+                `Remove "${draft.name || "this maker / reseller"}" from this gear? The maker / reseller entity stays available for other gear.`,
               )
             )
               del.mutate();
           }}
           className="shrink-0 w-7 h-7 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 flex items-center justify-center text-base leading-none"
-          title="Detach vendor from this gear"
-          aria-label="Detach vendor from this gear"
+          title="Detach maker / reseller from this gear"
+          aria-label="Detach maker / reseller from this gear"
           data-testid={`button-remove-vendor-${vendor.id}`}
         >
           ×
@@ -5756,7 +5756,7 @@ function VendorRow({
       </div>
       {open && (
         <div className="px-3 pb-3 pt-1 space-y-2 border-t border-slate-200">
-          <Field label="Vendor name">
+          <Field label="Maker / reseller name">
             <input
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
@@ -5873,7 +5873,7 @@ function VendorRow({
               onClick={() => {
                 if (
                   confirm(
-                    "Detach this vendor from this gear? The vendor entity will remain for other gear.",
+                    "Detach this maker / reseller from this gear? The maker / reseller entity will remain for other gear.",
                   )
                 )
                   del.mutate();
@@ -6010,7 +6010,7 @@ function VendorPaneEditor({
             className="text-slate-900 text-lg font-semibold truncate"
             data-testid="text-vendor-title"
           >
-            {draft.name || "Untitled vendor"}
+            {draft.name || "Untitled maker / reseller"}
           </h1>
           <p className="text-[12px] text-slate-500 truncate">
             {draft.domain || "no domain"}
@@ -6021,7 +6021,7 @@ function VendorPaneEditor({
       {/* Tab strip — About | Gear N | Artists N. Mirrors PersonEditor and
           the fan-side VendorSheet so the admin can flip between the editable
           form and the read-only catalog views without leaving the pane. */}
-      <div role="tablist" aria-label="Vendor editor sections" className="flex gap-5 border-b border-slate-200 px-6">
+      <div role="tablist" aria-label="Maker / reseller editor sections" className="flex gap-5 border-b border-slate-200 px-6">
         {(["about", "gear", "artists"] as const).map((t) => {
           const active = tab === t;
           const label = t === "about" ? "About" : t === "gear" ? "Gear" : "Artists";
@@ -6117,12 +6117,12 @@ function VendorPaneEditor({
           data-testid="panel-admin-vendor-artists"
         >
           {!vendor.vendorId ? (
-            <p className="text-slate-400 text-sm">No vendor record yet — save first to load credited artists.</p>
+            <p className="text-slate-400 text-sm">No maker / reseller record yet — save first to load credited artists.</p>
           ) : !vendorProfile ? (
             <p className="text-slate-400 text-sm">Loading…</p>
           ) : artistsCount === 0 ? (
             <p className="text-slate-400 text-sm">
-              No artists have credited this vendor's gear on a track yet. As SuperCredits™ are filled in across the catalog, performers who played one of {draft.name || "this vendor"}'s gear will show up here.
+              No artists have credited this maker / reseller's gear on a track yet. As SuperCredits™ are filled in across the catalog, performers who played one of {draft.name || "this maker / reseller"}'s gear will show up here.
             </p>
           ) : (
             <ul className="divide-y divide-slate-100 border border-slate-200 rounded-md">
@@ -6160,7 +6160,7 @@ function VendorPaneEditor({
         className="px-6 py-5 space-y-3 max-w-2xl"
         data-testid="panel-admin-vendor-about"
       >
-        <Field label="Vendor name">
+        <Field label="Maker / reseller name">
           <input
             value={draft.name}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
@@ -6265,7 +6265,7 @@ function VendorPaneEditor({
         <button
           type="button"
           onClick={() => {
-            if (confirm(`Delete "${draft.name || "this vendor"}"?`))
+            if (confirm(`Delete "${draft.name || "this maker / reseller"}"?`))
               del.mutate();
           }}
           className="px-3 py-1.5 text-[12px] text-red-600 hover:bg-red-50 rounded mr-auto"
@@ -6879,7 +6879,7 @@ function VendorPreviewCard({
     }
   })();
   const tagline = vendor.tagline ?? domain;
-  const bioFallback = `${vendor.name || "This vendor"} is one of the trusted shops we link out to from SuperCredits™. Tap the globe icon to visit their full catalog, or start a chat to ask about availability, condition, and shipping.`;
+  const bioFallback = `${vendor.name || "This maker / reseller"} is one of the trusted shops we link out to from SuperCredits™. Tap the globe icon to visit their full catalog, or start a chat to ask about availability, condition, and shipping.`;
 
   const IconBtn = ({
     children,
@@ -7062,7 +7062,7 @@ function VendorPreviewCard({
                   style={{ fontSize: (vendor.name?.length ?? 0) > 18 ? 17 : 20 }}
                   data-testid="text-preview-vendor-name"
                 >
-                  {vendor.name || "Untitled vendor"}
+                  {vendor.name || "Untitled maker / reseller"}
                 </h2>
                 {tagline && (
                   <p
@@ -7123,7 +7123,7 @@ function VendorPreviewCard({
             {tab === "about" && (
               <div className="px-5 pt-4 pb-6">
                 <h3 className="text-white text-[18px] font-bold leading-tight tracking-tight mb-1.5">
-                  About {vendor.name || "this vendor"}
+                  About {vendor.name || "this maker / reseller"}
                 </h3>
                 {(() => {
                   const body = vendor.bio || bioFallback;
@@ -7259,10 +7259,10 @@ function VendorPreviewCard({
                   Artists
                 </h3>
                 <p className="text-[13px]" style={{ color: "rgba(235,235,245,0.5)" }}>
-                  Live in the app — pulls from SuperCredits™. Any performer who's credited one of {vendor.name || "this vendor"}'s gear on a track shows up here.
+                  Live in the app — pulls from SuperCredits™. Any performer who's credited one of {vendor.name || "this maker / reseller"}'s gear on a track shows up here.
                 </p>
                 <p className="pt-3 text-[11px] leading-relaxed" style={{ color: "rgba(235,235,245,0.45)" }}>
-                  Producers and lyricists won't appear here because vendors are reached through gear; only people who actually played a vendor's gear get tagged.
+                  Producers and lyricists won't appear here because makers & resellers are reached through gear; only people who actually played a maker's or reseller's gear get tagged.
                 </p>
               </div>
             )}
@@ -7270,8 +7270,8 @@ function VendorPreviewCard({
         </div>
       </div>
       <p className="text-slate-300 text-xs mt-3">
-        Preview of the in-app VendorSheet (About tab) — surfaces wherever this
-        vendor is attached ({gearCount}{" "}
+        Preview of the in-app maker / reseller page (About tab) — surfaces wherever
+        this maker or reseller is attached ({gearCount}{" "}
         gear).
       </p>
     </>
@@ -9324,7 +9324,7 @@ export function Admin() {
                   count: instruments.length,
                   Icon: Guitar,
                 },
-                { key: "vendors", label: "Vendors", count: allVendors.length, Icon: Store },
+                { key: "vendors", label: "Makers & Resellers", count: allVendors.length, Icon: Store },
                 { key: "labels", label: "Labels", count: labels.length, Icon: Tag },
               ] as { key: EntityKey; label: string; count: number; Icon: typeof Disc3 }[]
             ).map((t) => {
@@ -9369,7 +9369,7 @@ export function Admin() {
                 {entity === "instruments" ? "Gear"
                   : entity === "albums" ? "Albums"
                   : entity === "people" ? "People"
-                  : entity === "vendors" ? "Vendors"
+                  : entity === "vendors" ? "Makers & Resellers"
                   : "Labels"}
               </h2>
               <div className="flex items-center gap-3">
@@ -9418,7 +9418,7 @@ export function Admin() {
                   aria-label={`New ${entity.slice(0, -1)}`}
                   title={
                     entity === "vendors"
-                      ? "Vendors are added via a gear item's scraper"
+                      ? "Makers & resellers are added via a gear item's scraper"
                       : `New ${entity.slice(0, -1)}`
                   }
                   data-testid={`button-new-${entity.slice(0, -1)}`}
@@ -9590,7 +9590,7 @@ export function Admin() {
                       )}
                       <div className="min-w-0">
                         <div className="text-slate-900 text-sm truncate">
-                          {v.name || "Untitled vendor"}
+                          {v.name || "Untitled maker / reseller"}
                         </div>
                         <div className="text-slate-400 text-xs truncate">
                           {summary}
@@ -9625,7 +9625,7 @@ export function Admin() {
                       <div className="text-slate-400 text-xs truncate">
                         {i.category}
                         {i.vendors.length > 0 &&
-                          ` · ${i.vendors.length} vendor${i.vendors.length === 1 ? "" : "s"}`}
+                          ` · ${i.vendors.length} maker / reseller${i.vendors.length === 1 ? "" : "s"}`}
                       </div>
                     </div>
                   </button>
@@ -9679,8 +9679,8 @@ export function Admin() {
             {entity === "vendors" && filteredVendors.length === 0 && (
               <li className="px-4 py-6 text-slate-400 text-sm leading-relaxed">
                 {needle
-                  ? `No vendors match "${search}".`
-                  : "No vendors yet. Open a gear item and paste a Reverb / Sweetwater / Carter Vintage URL into its Vendors scraper."}
+                  ? `No makers or resellers match "${search}".`
+                  : "No makers or resellers yet. Open a gear item and paste a Reverb / Sweetwater / Carter Vintage URL into its scraper."}
               </li>
             )}
             {entity === "labels" &&
@@ -9765,7 +9765,7 @@ export function Admin() {
               if (!v)
                 return (
                   <div className="h-full flex items-center justify-center text-slate-400">
-                    Vendor not found.
+                    Maker / reseller not found.
                   </div>
                 );
               return (

@@ -417,7 +417,7 @@ export function AdminVendor() {
               "group relative w-24 h-24 rounded-xl overflow-hidden shadow-sm flex-shrink-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2",
               vendor.logoUrl ? "" : "bg-white ring-1 ring-slate-200",
             ].join(" ")}
-            aria-label="Edit vendor logo"
+            aria-label="Edit logo"
             data-testid="button-edit-vendor-logo"
           >
             {vendor.logoUrl ? (
@@ -530,7 +530,7 @@ export function AdminVendor() {
             type="button"
             onClick={() => setDeleteConfirmOpen(true)}
             disabled={deleteVendor.isPending}
-            aria-label="Delete vendor"
+            aria-label={`Delete ${mode === "maker" ? "maker" : "reseller"}`}
             className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
             data-testid="button-delete-vendor"
           >
@@ -571,7 +571,7 @@ export function AdminVendor() {
             entityKind="vendor"
             entityId={vendor.id}
             entityName={vendor.name}
-            blurb="People at this vendor — buyer, A&R, accounts payable, whoever you need to reach."
+            blurb={`People at this ${mode === "maker" ? "maker" : "reseller"} — buyer, A&R, accounts payable, whoever you need to reach.`}
           />
         )}
         {tab === "albums" && (
@@ -625,7 +625,7 @@ export function AdminVendor() {
             <DialogDescription className="text-[13px] font-normal text-slate-500">
               {instruments.length > 0 ? (
                 <>
-                  This vendor is listed on{" "}
+                  This maker / reseller is listed on{" "}
                   <span className="font-semibold text-slate-700">
                     {instruments.length}{" "}
                     {instruments.length === 1
@@ -637,8 +637,8 @@ export function AdminVendor() {
                 </>
               ) : (
                 <>
-                  Nothing currently links to this vendor. This cannot be
-                  undone.
+                  Nothing currently links to this maker / reseller. This cannot
+                  be undone.
                 </>
               )}
             </DialogDescription>
@@ -660,7 +660,7 @@ export function AdminVendor() {
               className="bg-rose-600 hover:bg-rose-700 text-white ml-2"
               data-testid="button-delete-vendor-confirm"
             >
-              {deleteVendor.isPending ? "Deleting…" : "Delete vendor"}
+              {deleteVendor.isPending ? "Deleting…" : `Delete ${mode === "maker" ? "maker" : "reseller"}`}
             </Button>
           </div>
         </DialogContent>
@@ -790,7 +790,7 @@ function LineagePanel({
             </div>
           ) : hasChildren ? (
             <p className="text-slate-400 text-[12.5px]">
-              This vendor owns sub-brands, so it can't itself be a sub-brand.
+              This maker / reseller owns sub-brands, so it can't itself be a sub-brand.
             </p>
           ) : (
             <div className="flex items-center gap-2">
@@ -883,7 +883,7 @@ function RolesPanel({ vendor }: { vendor: Vendor }) {
     if (!nextMaker && !nextReseller) {
       toast({
         title: "Pick at least one role",
-        description: "A vendor must be a Maker, a Reseller, or both.",
+        description: "A partner must be a Maker, a Reseller, or both.",
         variant: "destructive",
       });
       return false;
@@ -953,7 +953,7 @@ function RolesPanel({ vendor }: { vendor: Vendor }) {
               if (next && vendor.isMaker) {
                 toast({
                   title: "Can't be both",
-                  description: "Maker is on; turn it off first to mark this vendor a Quickprinter.",
+                  description: "Maker is on; turn it off first to mark this partner a Quickprinter.",
                   variant: "destructive",
                 });
                 return;
@@ -1065,7 +1065,7 @@ function OverviewPanel({ vendor }: { vendor: Vendor }) {
             key: "tagline",
             label: "Tagline",
             type: "text",
-            placeholder: "Short line shown on vendor cards.",
+            placeholder: "Short line shown on maker & reseller cards.",
           },
           {
             key: "location",
@@ -1406,7 +1406,7 @@ function LogoPanel({ vendor }: { vendor: Vendor }) {
       fieldLabel="Logo"
       aspect="square"
       emptyIcon={Store}
-      description="Square works best — used in the SuperCredits™ vendor row and every instrument that links to this vendor."
+      description="Square works best — used in the SuperCredits™ credit row and on every instrument that links to this maker or reseller."
     />
   );
 }
@@ -1454,7 +1454,7 @@ function CoverPanel({ vendor }: { vendor: Vendor }) {
       fieldLabel="Cover"
       aspect="wide"
       emptyIcon={Store}
-      description="3:1 banner — used as the header backdrop on the fan-facing VendorSheet."
+      description="3:1 banner — used as the header backdrop on the fan-facing maker / reseller page."
     />
   );
 }
@@ -1478,7 +1478,7 @@ function InstrumentsPanel({
   // back to this vendor is rendered by useSmartBackCrumb on the Gear
   // index/detail pages.
   const addGearHref = `/admin/instruments?from=vendor&vendorId=${vendorId}`;
-  const headerCopy = isMaker ? "Gear built by this maker" : "Gear sold by this vendor";
+  const headerCopy = isMaker ? "Gear built by this maker" : "Gear sold by this reseller";
   const countLine =
     instruments.length === 0
       ? null
@@ -1522,12 +1522,12 @@ function InstrumentsPanel({
             <p className="text-slate-700 text-sm font-semibold">
               {isMaker
                 ? "No gear yet attributes its build to this maker"
-                : "No gear linked to this vendor yet"}
+                : "No gear linked to this reseller yet"}
             </p>
             <p className="text-slate-400 text-xs mt-1 max-w-xs mx-auto">
               {isMaker
                 ? "Open a piece of gear and pick this brand as its Maker — it'll show up here."
-                : "Attach a product URL to any piece of gear and this vendor will appear here."}
+                : "Attach a product URL to any piece of gear and this reseller will appear here."}
             </p>
           </div>
         ) : (

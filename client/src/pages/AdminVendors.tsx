@@ -286,7 +286,7 @@ export function AdminVendors() {
         return { vendor, scrapedName: opts.scrapedName ?? null, payload: opts.payload };
       }
       let payload: Record<string, unknown> = {
-        name: "New vendor",
+        name: "New maker / reseller",
         domain: `new-vendor-${Date.now()}.example`,
         // Task #174 — POST role flags reflect which surface the operator
         // created the row from. The Maker surface defaults isReseller
@@ -317,7 +317,7 @@ export function AdminVendors() {
         scrapedName = scraped.name;
         payload = {
           ...payload,
-          name: scraped.name || "New vendor",
+          name: scraped.name || "New maker / reseller",
           // Fall back to a unique placeholder so the partial-unique
           // index never blocks the create when scrape returns null.
           domain: scraped.domain || `new-vendor-${Date.now()}.example`,
@@ -498,7 +498,7 @@ export function AdminVendors() {
     onSuccess: () => {
       invalidateTrash();
       invalidateActive();
-      toast({ title: "Restored", description: "Vendor is back in the live list." });
+      toast({ title: "Restored", description: "Back in the live list." });
     },
     onError: (err) => {
       toast({
@@ -516,7 +516,7 @@ export function AdminVendors() {
     onSuccess: () => {
       setPendingPurge(null);
       invalidateTrash();
-      toast({ title: "Purged", description: "Vendor permanently deleted." });
+      toast({ title: "Purged", description: "Permanently deleted." });
     },
     onError: (err) => {
       toast({
@@ -575,7 +575,7 @@ export function AdminVendors() {
     if (createVendor.isPending) return;
     const u = pasteUrl.trim();
     if (!u) {
-      setPasteError("Paste a vendor URL, or click Skip to create a blank entry.");
+      setPasteError("Paste a maker / reseller URL, or click Skip to create a blank entry.");
       return;
     }
     if (!/^https?:\/\//i.test(u)) {
@@ -929,7 +929,7 @@ export function AdminVendors() {
                       type="text"
                       value={subBrandPickerQuery}
                       onChange={(e) => setSubBrandPickerQuery(e.target.value)}
-                      placeholder="Search top-level vendors…"
+                      placeholder="Search top-level makers & resellers…"
                       autoFocus
                       className="flex-1 text-xs bg-transparent outline-none placeholder:text-slate-400"
                       data-testid="input-sub-brand-parent-search"

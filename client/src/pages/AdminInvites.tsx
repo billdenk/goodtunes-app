@@ -12,6 +12,7 @@ import {
   SCOPE_CONFIG,
   ScopePicker,
 } from "@/components/admin/RoleScopePicker";
+import { ArtistPickerField } from "@/components/admin/ArtistPickerField";
 
 interface PendingInvite {
   id: string;
@@ -410,13 +411,28 @@ export function AdminInvites() {
             </div>
           )}
 
-          {/* Role scope picker — applies to both quick and advanced modes. */}
+          {/* Role scope picker — applies to both quick and advanced modes.
+              Task #1792 — the Artist scope uses the same combobox as the album
+              "add artist" flow (type → DB match → create by name OR import from
+              an Apple Music / Spotify URL) so an artist who isn't in the DB yet
+              can be created and selected without leaving the page. */}
           {needsScope && (
-            <ScopePicker
-              cfg={SCOPE_CONFIG[role]}
-              value={scopeId}
-              onChange={(id, name) => { setScopeId(id); setScopeName(name || ""); }}
-            />
+            role === "artist" ? (
+              <div className="mt-3">
+                <ArtistPickerField
+                  label="Artist"
+                  nameValue={scopeName}
+                  idValue={scopeId || ""}
+                  onChange={({ name, id }) => { setScopeId(id || null); setScopeName(name); }}
+                />
+              </div>
+            ) : (
+              <ScopePicker
+                cfg={SCOPE_CONFIG[role]}
+                value={scopeId}
+                onChange={(id, name) => { setScopeId(id); setScopeName(name || ""); }}
+              />
+            )
           )}
 
           {/* Referrer detail — full-width beneath the dropdown row once a kind is chosen. */}

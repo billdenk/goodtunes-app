@@ -727,7 +727,7 @@ const CONTACT_ATTACHMENT_HREF: Record<NonNullable<PersonFull["attachments"]>[num
   non_profit: (id) => `/admin/non-profits/${id}`,
 };
 const CONTACT_ATTACHMENT_LABEL: Record<NonNullable<PersonFull["attachments"]>[number]["entityKind"], string> = {
-  vendor: "Vendor",
+  vendor: "Maker / Reseller",
   manufacturer: "Press",
   label: "Label",
   fulfillment_partner: "Fulfillment partner",

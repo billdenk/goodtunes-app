@@ -49,7 +49,7 @@ const TYPE_LABEL: Record<string, string> = {
   band_member: "Band members",
   instrument: "Gear",
   label: "Labels",
-  vendor: "Vendors",
+  vendor: "Makers & Resellers",
   manufacturer: "Presses",
   fulfillment_partner: "Fulfillment partners",
   track_writer: "Track writers",

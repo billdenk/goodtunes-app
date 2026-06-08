@@ -47,7 +47,7 @@ const ROLE_LABELS: Record<string, string> = {
   non_profit: "Non-Profit",
   manufacturer: "Press",
   fulfillment: "Fulfillment",
-  vendor: "Vendor",
+  vendor: "Maker / Reseller",
 };
 
 function membershipLabel(m: Membership): string {

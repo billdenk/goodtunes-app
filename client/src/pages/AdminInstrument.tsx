@@ -434,7 +434,7 @@ export function AdminInstrument() {
                     This piece of gear is linked to{" "}
                     {vc > 0 && (
                       <span className="font-semibold text-slate-700">
-                        {vc} {vc === 1 ? "vendor listing" : "vendor listings"}
+                        {vc} {vc === 1 ? "maker / reseller listing" : "maker / reseller listings"}
                       </span>
                     )}
                     {vc > 0 && pc > 0 && " and "}
@@ -1873,11 +1873,11 @@ function VendorsPanel({ instrument }: { instrument: InstrumentFull }) {
     },
     onSuccess: async () => {
       await invalidate();
-      toast({ title: "Vendor detached" });
+      toast({ title: "Maker / reseller detached" });
     },
     onError: (e: any) => {
       toast({
-        title: "Couldn't detach vendor",
+        title: "Couldn't detach maker / reseller",
         description: e?.message || "Try again in a moment.",
         variant: "destructive",
       });
@@ -1893,11 +1893,11 @@ function VendorsPanel({ instrument }: { instrument: InstrumentFull }) {
         <div>
           <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
             <Store className="w-4 h-4 text-slate-400" />
-            Vendors
+            Makers & Resellers
           </h2>
           <p className="text-slate-400 text-[11.5px]">
-            {vendors.length} attached · hidden vendors show on the fan side
-            as removed, useful when a competing brand is sponsoring this track
+            {vendors.length} attached · hidden makers & resellers show on the fan
+            side as removed, useful when a competing brand is sponsoring this track
           </p>
         </div>
         {adding ? (
@@ -1912,7 +1912,7 @@ function VendorsPanel({ instrument }: { instrument: InstrumentFull }) {
           </button>
         ) : (
           <AddEntityButton
-            label="Add vendor"
+            label="Add maker / reseller"
             onClick={() => setAdding(true)}
             testId="button-toggle-add-vendor"
           />
@@ -1933,11 +1933,11 @@ function VendorsPanel({ instrument }: { instrument: InstrumentFull }) {
             <Store className="w-6 h-6" />
           </div>
           <p className="text-slate-700 text-[14px] font-semibold">
-            No vendors attached yet
+            No makers or resellers attached yet
           </p>
           <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs mx-auto">
-            Click "Add vendor" above — paste the product URL and we'll find
-            or create the vendor entity for you.
+            Click "Add maker / reseller" above — paste the product URL and we'll
+            find or create the entity for you.
           </p>
         </div>
       ) : (
@@ -2038,7 +2038,7 @@ function AddVendorForm({
           typeof q.queryKey[0] === "string" &&
           q.queryKey[0].startsWith("/api/vendors"),
       });
-      toast({ title: "Vendor attached" });
+      toast({ title: "Maker / reseller attached" });
       onClose();
     },
     onError: (e: any) => {
@@ -2048,11 +2048,11 @@ function AddVendorForm({
       if (/name is required/i.test(msg)) {
         setNeedsName(true);
         setError(
-          "We haven't seen this vendor before — add a display name to create it.",
+          "We haven't seen this maker / reseller before — add a display name to create it.",
         );
         return;
       }
-      setError(msg || "Couldn't attach the vendor. Try again in a moment.");
+      setError(msg || "Couldn't attach the maker / reseller. Try again in a moment.");
     },
   });
 
@@ -2069,7 +2069,7 @@ function AddVendorForm({
       return;
     }
     if (needsName && !vendorName.trim()) {
-      setError("Add a display name for this new vendor.");
+      setError("Add a display name for this new maker / reseller.");
       nameRef.current?.focus();
       return;
     }
@@ -2198,7 +2198,7 @@ function AddVendorForm({
             {createMut.isPending ? (
               <Spinner className="w-3.5 h-3.5 animate-spin" />
             ) : (
-              "Attach vendor"
+              "Attach maker / reseller"
             )}
           </Button>
         </div>
@@ -2890,8 +2890,8 @@ function VendorRow({
             type="button"
             onClick={onToggleHidden}
             disabled={busy || editing}
-            aria-label={vendor.isHidden ? "Show vendor" : "Hide vendor"}
-            title={vendor.isHidden ? "Show vendor" : "Hide vendor"}
+            aria-label={vendor.isHidden ? "Show maker / reseller" : "Hide maker / reseller"}
+            title={vendor.isHidden ? "Show maker / reseller" : "Hide maker / reseller"}
             className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-slate-100"
             data-testid={`button-toggle-hidden-${vendor.id}`}
           >
@@ -2904,7 +2904,7 @@ function VendorRow({
           <button
             type="button"
             onClick={() => setEditing((v) => !v)}
-            aria-label={editing ? "Close vendor editor" : "Edit vendor"}
+            aria-label={editing ? "Close maker / reseller editor" : "Edit maker / reseller"}
             aria-expanded={editing}
             title={editing ? "Close" : "Edit"}
             className={
@@ -2921,8 +2921,8 @@ function VendorRow({
             type="button"
             onClick={onDetach}
             disabled={busy || editing}
-            aria-label="Detach vendor"
-            title="Detach vendor"
+            aria-label="Detach maker / reseller"
+            title="Detach maker / reseller"
             className="w-7 h-7 rounded-full bg-slate-100 text-rose-600 hover:bg-rose-50 hover:text-rose-700 inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-slate-100"
             data-testid={`button-detach-${vendor.id}`}
           >
@@ -2994,7 +2994,7 @@ function VendorEditForm({
       // the entity update when something on it actually changed.
       if (vendorEntityDirty) {
         if (!draft.name.trim()) {
-          throw new Error("Vendor name can't be empty.");
+          throw new Error("Maker / reseller name can't be empty.");
         }
         await apiRequest("PUT", `/api/admin/vendors/${vendor.vendorId}`, {
           name: draft.name.trim(),
@@ -3016,12 +3016,12 @@ function VendorEditForm({
     },
     onSuccess: async () => {
       await onSaved();
-      toast({ title: "Vendor saved" });
+      toast({ title: "Maker / reseller saved" });
       onClose();
     },
     onError: (e: any) =>
       toast({
-        title: "Couldn't save vendor",
+        title: "Couldn't save maker / reseller",
         description: e?.message || "Try again in a moment.",
         variant: "destructive",
       }),
@@ -3063,7 +3063,7 @@ function VendorEditForm({
     >
       {/* Identity */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-        <Field label="Vendor name">
+        <Field label="Maker / reseller name">
           <input
             ref={nameRef}
             type="text"
@@ -3140,7 +3140,7 @@ function VendorEditForm({
           onChange={(e) => setDraft({ ...draft, bio: e.target.value })}
           disabled={saveMut.isPending}
           rows={3}
-          placeholder="Short paragraph the fan sees when they tap a vendor card in SuperCredits™."
+          placeholder="Short paragraph the fan sees when they tap a maker / reseller card in SuperCredits™."
           className={
             vendorInputCls +
             " py-2 resize-y min-h-[72px] leading-snug"
@@ -3152,7 +3152,7 @@ function VendorEditForm({
       {/* Affiliate URL (attachment-only) */}
       <Field
         label="Affiliate URL for this gear"
-        hint="The product page link fans land on from this gear's SuperCredits card. Vendor-wide fields above apply everywhere this vendor appears."
+        hint="The product page link fans land on from this gear's SuperCredits card. Profile-wide fields above apply everywhere this maker / reseller appears."
         className="mb-4"
       >
         <input
@@ -3192,7 +3192,7 @@ function VendorEditForm({
             {saveMut.isPending ? (
               <Spinner className="w-3.5 h-3.5 animate-spin" />
             ) : (
-              "Save vendor"
+              "Save maker / reseller"
             )}
           </button>
         </div>

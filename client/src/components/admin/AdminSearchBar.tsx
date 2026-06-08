@@ -161,7 +161,7 @@ const KIND_ICON: Record<SearchResult["kind"], LucideIcon> = {
 const GROUP_ORDER: Array<{ key: keyof ServerPayload | "pages"; label: string }> = [
   { key: "pages", label: "Pages" },
   { key: "people", label: "People" },
-  { key: "vendors", label: "Vendors" },
+  { key: "vendors", label: "Makers & Resellers" },
   { key: "labels", label: "Labels" },
   { key: "nonprofits", label: "NPOs" },
   { key: "albums", label: "Albums" },

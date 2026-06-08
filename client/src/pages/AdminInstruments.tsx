@@ -890,7 +890,7 @@ function VendorChip({
       {!slot.domain && (
         <span
           className="text-slate-400 italic flex-shrink-0"
-          title="No domain — admin will need to fill this in by hand on the vendor row"
+          title="No domain — admin will need to fill this in by hand on the maker / reseller row"
         >
           (no domain)
         </span>
@@ -1014,7 +1014,7 @@ function EmptyState({ searching }: { searching: boolean }) {
       <p className="text-slate-400 text-[12.5px] mt-1 max-w-xs">
         {searching
           ? "Try a different name or category."
-          : "Add a guitar, amp, mic, or anything else artists play on — each can carry its own vendor links."}
+          : "Add a guitar, amp, mic, or anything else artists play on — each can carry its own maker / reseller links."}
       </p>
     </div>
   );
