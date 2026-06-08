@@ -13,7 +13,6 @@ import {
   Gift,
   Sparkles,
   Expand,
-  Apple,
   Lock,
   Play,
   Pause,
@@ -1038,6 +1037,30 @@ function GiveStep({
   );
 }
 
+function ApplePayMark() {
+  return (
+    <span className="inline-flex items-center gap-[3px]" aria-label="Apple Pay">
+      <svg
+        viewBox="0 0 24 24"
+        className="w-[17px] h-[21px]"
+        fill="currentColor"
+        aria-hidden="true"
+      >
+        <path d="M17.05 12.04c-.03-2.6 2.13-3.85 2.22-3.91-1.21-1.77-3.1-2.01-3.77-2.04-1.6-.16-3.13.94-3.94.94-.81 0-2.07-.92-3.41-.89-1.75.03-3.37 1.02-4.27 2.59-1.82 3.16-.47 7.84 1.31 10.41.87 1.26 1.91 2.67 3.27 2.62 1.31-.05 1.81-.85 3.4-.85 1.58 0 2.03.85 3.41.82 1.41-.02 2.3-1.28 3.16-2.55.99-1.46 1.4-2.88 1.43-2.95-.03-.01-2.74-1.05-2.77-4.16zM14.46 4.4c.72-.87 1.21-2.08 1.07-3.29-1.04.04-2.29.69-3.04 1.56-.67.77-1.26 2-1.1 3.18 1.16.09 2.34-.59 3.07-1.45z" />
+      </svg>
+      <span
+        className="text-[18px] font-semibold tracking-[-0.01em]"
+        style={{
+          fontFamily:
+            '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
+        }}
+      >
+        Pay
+      </span>
+    </span>
+  );
+}
+
 function PayStep({
   c,
   bundleQty,
@@ -1089,14 +1112,20 @@ function PayStep({
         </div>
         <div className="h-px bg-white/10 my-4" />
         <div className="flex items-center justify-between">
-          <span className="text-white/75 text-[14px] font-semibold">Subtotal</span>
-          <span className="text-white text-[17px] font-bold tabular-nums" data-testid="text-subtotal">
+          <span className="text-white/55 text-[14px]">Subtotal</span>
+          <span className="text-white/80 text-[14px] tabular-nums" data-testid="text-subtotal">
+            {usd(subtotal)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between mt-2.5">
+          <span className="text-white text-[15px] font-semibold">Total</span>
+          <span className="text-white text-[19px] font-bold tabular-nums" data-testid="text-total">
             {usd(subtotal)}
           </span>
         </div>
         <div className="flex items-center gap-2 text-white/55 text-[12.5px] mt-3">
           <Lock className="w-3.5 h-3.5" strokeWidth={2} />
-          Shipping &amp; sales tax calculated at checkout.
+          Shipping &amp; sales tax added at the final checkout step.
         </div>
       </div>
 
@@ -1104,11 +1133,10 @@ function PayStep({
         <button
           type="button"
           disabled
-          className="h-12 rounded-full inline-flex items-center justify-center gap-2 text-[15px] font-semibold bg-white text-black opacity-40 cursor-not-allowed"
+          className="h-12 rounded-full inline-flex items-center justify-center bg-white text-black opacity-40 cursor-not-allowed"
           data-testid="button-applepay"
         >
-          <Apple className="w-5 h-5 fill-current" strokeWidth={0} />
-          Pay
+          <ApplePayMark />
         </button>
         <button
           type="button"

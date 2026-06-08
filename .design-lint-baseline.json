@@ -20432,7 +20432,12 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/pages/Hope.tsx",
-    "snippet": "<span className=\"text-white/75 text-[14px] font-semibold\">Subtotal</span>"
+    "snippet": "<span className=\"text-white/55 text-[14px]\">Subtotal</span>"
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/Hope.tsx",
+    "snippet": "<span className=\"text-white/80 text-[14px] tabular-nums\" data-testid=\"text-subtotal\">"
   },
   {
     "rule": "fan-text-tone",
@@ -20707,6 +20712,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Hope.tsx",
+    "snippet": "className=\"text-[18px] font-semibold tracking-[-0.01em]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Hope.tsx",
     "snippet": "<h1 className=\"text-white text-[28px] font-bold tracking-[-0.02em] mb-1\">Almost there</h1>"
   },
   {
@@ -20742,22 +20752,27 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Hope.tsx",
-    "snippet": "<span className=\"text-white/75 text-[14px] font-semibold\">Subtotal</span>"
+    "snippet": "<span className=\"text-white/55 text-[14px]\">Subtotal</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Hope.tsx",
-    "snippet": "<span className=\"text-white text-[17px] font-bold tabular-nums\" data-testid=\"text-subtotal\">"
+    "snippet": "<span className=\"text-white/80 text-[14px] tabular-nums\" data-testid=\"text-subtotal\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Hope.tsx",
+    "snippet": "<span className=\"text-white text-[15px] font-semibold\">Total</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Hope.tsx",
+    "snippet": "<span className=\"text-white text-[19px] font-bold tabular-nums\" data-testid=\"text-total\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Hope.tsx",
     "snippet": "<div className=\"flex items-center gap-2 text-white/55 text-[12.5px] mt-3\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Hope.tsx",
-    "snippet": "className=\"h-12 rounded-full inline-flex items-center justify-center gap-2 text-[15px] font-semibold bg-white text-black opacity-40 cursor-not-allowed\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -20808,6 +20823,11 @@
     "rule": "naked-icon-button",
     "file": "client/src/pages/Hope.tsx",
     "snippet": "<button type=\"button\" aria-label=\"Close\" onClick={onClose} data-testid=\"button-lightbox-close\" className=\"absolute top-5 right-5 w-10 h-10 rounded-full inline-flex items-center justify-center text-whi"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/Hope.tsx",
+    "snippet": "<button type=\"button\" disabled className=\"h-12 rounded-full inline-flex items-center justify-center bg-white text-black opacity-40 cursor-not-allowed\" data-testid=\"button-applepay\" > <ApplePayMark /> "
   },
   {
     "rule": "player-touch-target-too-small",
