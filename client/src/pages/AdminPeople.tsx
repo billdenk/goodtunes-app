@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Search, X, User as UserIcon, Check } from "lucide-react";
@@ -580,9 +580,13 @@ function creditTags(person: PersonLite): string[] {
 }
 
 /**
- * Per-row credit badge — shows up to two credit chips with a "+N"
- * overflow so a dense grid card / list row stays scannable. Quiet
- * slate pills, consistent with RolePicker's read-only "From credits".
+ * Per-row credit badge — shows as many descriptor pills as actually fit
+ * on a single non-wrapping line, folding the rest into a trailing "+N"
+ * overflow pill. Uses a hidden measurement row + ResizeObserver so the
+ * visible count re-evaluates whenever the container width changes (grid
+ * resize, grid↔list toggle, window resize).
+ *
+ * Quiet slate pills, consistent with RolePicker's read-only "From credits".
  */
 function CreditBadges({
   credits,
@@ -593,29 +597,124 @@ function CreditBadges({
   personId: string;
   align?: "start" | "center";
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Individual pill measurement refs (hidden row).
+  const pillMeasureRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const extraMeasureRef = useRef<HTMLSpanElement | null>(null);
+  const [visibleCount, setVisibleCount] = useState<number>(credits.length);
+
+  const creditKey = credits.join("\x00");
+
+  const recompute = useCallback(() => {
+    const container = containerRef.current;
+    if (!container || credits.length === 0) return;
+    const containerWidth = container.offsetWidth;
+    if (!containerWidth) return;
+
+    const GAP = 4; // gap-1 = 4 px between flex items
+
+    const pillWidths = pillMeasureRefs.current
+      .slice(0, credits.length)
+      .map((el) => el?.offsetWidth ?? 0);
+    const extraW = extraMeasureRef.current?.offsetWidth ?? 0;
+
+    // Greedy: try to fit as many pills as possible on one line, always
+    // reserving space for the +N pill unless this is the very last pill.
+    let used = 0; // accumulated width of visible pills (including inter-gaps)
+    let count = 0;
+
+    for (let i = 0; i < credits.length; i++) {
+      const w = pillWidths[i];
+      const gapBefore = i > 0 ? GAP : 0;
+      const isLast = i === credits.length - 1;
+
+      if (isLast) {
+        // Last pill: no +N needed if it fits on its own.
+        if (used + gapBefore + w <= containerWidth) {
+          count = credits.length;
+        }
+        // If it doesn't fit, count stays at the value locked in by the
+        // previous iteration, which already reserved room for +N.
+      } else {
+        // Non-last pill: only add it if there's still room for the +N
+        // pill after it.
+        if (used + gapBefore + w + GAP + extraW <= containerWidth) {
+          used += gapBefore + w;
+          count = i + 1;
+        } else {
+          break;
+        }
+      }
+    }
+
+    setVisibleCount(count);
+  }, [creditKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const ro = new ResizeObserver(recompute);
+    ro.observe(container);
+    recompute();
+    return () => ro.disconnect();
+  }, [recompute]);
+
   if (credits.length === 0) return null;
-  const shown = credits.slice(0, 2);
-  const extra = credits.length - shown.length;
+
+  const shown = credits.slice(0, visibleCount);
+  const hidden = credits.slice(visibleCount);
+  const extra = hidden.length;
+
+  const PILL_CLS =
+    "inline-flex shrink-0 items-center rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-medium";
+
   return (
     <div
-      className={`mt-1 flex flex-wrap gap-1 ${
+      ref={containerRef}
+      className={`relative mt-1 flex items-center gap-1 overflow-hidden ${
         align === "center" ? "justify-center" : ""
       }`}
       data-testid={`credits-person-${personId}`}
     >
-      {shown.map((c) => (
+      {/*
+       * Hidden measurement row — absolutely positioned so it never
+       * affects layout height. Renders every pill + the worst-case +N
+       * pill so we can read their offsetWidths.
+       */}
+      <div
+        className="pointer-events-none absolute left-0 top-0 flex gap-1 opacity-0"
+        aria-hidden="true"
+        style={{ whiteSpace: "nowrap" }}
+      >
+        {credits.map((c, i) => (
+          <span
+            key={c}
+            ref={(el) => {
+              pillMeasureRefs.current[i] = el;
+            }}
+            className={`${PILL_CLS} text-slate-500`}
+          >
+            {c}
+          </span>
+        ))}
         <span
-          key={c}
-          className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-medium text-slate-500"
-          title={c}
+          ref={extraMeasureRef}
+          className={`${PILL_CLS} text-slate-400`}
         >
+          +{credits.length}
+        </span>
+      </div>
+
+      {/* Visible pills */}
+      {shown.map((c) => (
+        <span key={c} className={`${PILL_CLS} text-slate-500`} title={c}>
           {c}
         </span>
       ))}
       {extra > 0 && (
         <span
-          className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-medium text-slate-400"
-          title={credits.slice(2).join(", ")}
+          className={`${PILL_CLS} text-slate-400`}
+          title={hidden.join(", ")}
         >
           +{extra}
         </span>
