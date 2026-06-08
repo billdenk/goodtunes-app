@@ -420,12 +420,22 @@ export function Player() {
               is just the affordance — the gesture itself works on a much
               larger area. */}
           <div
-            className="relative z-10 pt-3 pb-2 flex justify-center select-none cursor-grab active:cursor-grabbing"
+            className="relative z-10 pb-2 flex justify-center select-none cursor-grab active:cursor-grabbing"
             onTouchStart={dismissOnSwipeDown}
             onClick={() => setShowPlayer(false)}
             role="button"
             aria-label="Close Now Playing"
             data-testid="grabber-now-playing"
+            style={{
+              // Drop the grabber (and the artwork below it) clear of the iOS
+              // status bar / Dynamic Island. The outer surface is full-bleed
+              // `inset-0`, so the content column must add the top safe-area
+              // inset itself. The `+ 12px` keeps Apple-Music-like breathing
+              // room below the clock/battery, and the `0px` fallback means
+              // non-notch devices / the web still get the same 12px the old
+              // `pt-3` gave (so nothing regresses off-device).
+              paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)",
+            }}
           >
             <div className="w-9 h-[5px] rounded-full" style={{ background: "rgba(255,255,255,0.35)" }} />
           </div>
