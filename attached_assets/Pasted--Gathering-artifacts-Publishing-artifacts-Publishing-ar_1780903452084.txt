@@ -1,0 +1,76 @@
+== Gathering artifacts ==
+
+== Publishing artifacts ==
+
+Publishing artifact App.ipa
+Publishing artifact goodtunes-app_35_artifacts.zip
+Publishing App.ipa to App Store Connect
+> app-store-connect publish --path /Users/builder/clone/build/ios/ipa/App.ipa
+
+Publish "/Users/builder/clone/build/ios/ipa/App.ipa" to App Store Connect
+App name: GoodTunes
+Bundle identifier: Io.GoGoods.music
+Certificate expires: 2027-06-05T14:27:34.000+0000
+Distribution type: App Store
+Min OS version: 13.0
+Provisioned devices: N/A
+Provisions all devices: No
+Supported platforms: iPhoneOS
+Version code: 65
+Version: 3.0.1
+
+Upload "/Users/builder/clone/build/ios/ipa/App.ipa" to App Store Connect
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+26.30.4 (173004)
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+2026-06-08 07:16:33.008 ERROR: [ContentDelivery.Uploader.91302C5C0] RETRIEVE UPLOAD OPERATIONS (ASSET_UPLOAD): received status code 500; internal server error. (66XFSI46IGEYSBUSNJEJJTGCNA) (500)
+2026-06-08 07:16:37.420  INFO: [ContentDelivery.Uploader.91302C5C0] 
+==========================================
+UPLOAD SUCCEEDED with no errors
+Delivery UUID: 51ea5faa-3b09-4e77-907b-34f6b2287dc3
+Transferred 31221310 bytes in 0.622 seconds (50.2MB/s, 401.467Mbps)
+==========================================
+{
+  "details" : {
+    "delivery-uuid" : "51ea5faa-3b09-4e77-907b-34f6b2287dc3",
+    "transferred" : "31221310 bytes in 0.622 seconds (50.2MB/s, 401.467Mbps)"
+  },
+  "os-version" : "Version 26.4.1 (Build 25E253)",
+  "success-message" : "No errors uploading archive at '/Users/builder/clone/build/ios/ipa/App.ipa'.",
+  "tool-path" : "/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources",
+  "tool-version" : "26.30.4 (173004)"
+}
+
+Running altool at path '/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+2026-06-08 07:16:33.008 ERROR: [ContentDelivery.Uploader.91302C5C0] RETRIEVE UPLOAD OPERATIONS (ASSET_UPLOAD): received status code 500; internal server error. (66XFSI46IGEYSBUSNJEJJTGCNA) (500)
+2026-06-08 07:16:37.420  INFO: [ContentDelivery.Uploader.91302C5C0] 
+==========================================
+UPLOAD SUCCEEDED with no errors
+Delivery UUID: 51ea5faa-3b09-4e77-907b-34f6b2287dc3
+Transferred 31221310 bytes in 0.622 seconds (50.2MB/s, 401.467Mbps)
+==========================================
+{
+  "details" : {
+    "delivery-uuid" : "51ea5faa-3b09-4e77-907b-34f6b2287dc3",
+    "transferred" : "31221310 bytes in 0.622 seconds (50.2MB/s, 401.467Mbps)"
+  },
+  "os-version" : "Version 26.4.1 (Build 25E253)",
+  "success-message" : "No errors uploading archive at '/Users/builder/clone/build/ios/ipa/App.ipa'.",
+  "tool-path" : "/Applications/Xcode-26.4.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources",
+  "tool-version" : "26.30.4 (173004)"
+}
+
+[ContentDelivery.Uploader.91302C5C0] RETRIEVE UPLOAD OPERATIONS (ASSET_UPLOAD): received status code 500; internal server error. (66XFSI46IGEYSBUSNJEJJTGCNA) (500)
+Failed to publish /Users/builder/clone/build/ios/ipa/App.ipa
+
+Failed to publish App.ipa to App Store Connect.
+
+Build failed :|
+
+
+Publishing failed :|
+Failed to publish App.ipa to App Store Connect.
+
