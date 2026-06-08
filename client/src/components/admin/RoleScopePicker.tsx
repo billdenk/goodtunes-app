@@ -62,8 +62,10 @@ export type ScrapeResult = {
 export type ScopeAddConfig = {
   createEndpoint: string;
   scrapeEndpoint: string;
-  // Vendor scope shows Maker/Reseller toggles and REQUIRES a URL (domain is
-  // mandatory server-side and is derived from the scraped page).
+  // Vendor scope shows Maker/Reseller toggles. `requireUrl` is unused now
+  // (vendors create name-first; a missing domain is synthesized like the
+  // admin Makers/Resellers "blank entry" path) but kept on the type for any
+  // future scope whose server contract truly demands a pasted URL.
   withRoles?: boolean;
   requireUrl?: boolean;
   buildBody: (args: {
@@ -190,15 +192,22 @@ export const SCOPE_CONFIG: Record<string, ScopeCfg> = {
       createEndpoint: "/api/admin/vendors",
       scrapeEndpoint: "/api/admin/vendors/scrape",
       withRoles: true,
-      requireUrl: true,
-      buildBody: ({ name, scraped, roles }) => ({
-        name: scraped?.name || name,
-        ...pickTruthy(scraped, ["domain", "homeUrl", "aboutUrl", "logoUrl", "coverUrl", "tagline", "bio", "location"]),
-        // Server only acts on isMaker===true / isReseller===false; the column
-        // defaults are isMaker=false, isReseller=true.
-        isMaker: !!roles?.isMaker,
-        isReseller: roles?.isReseller !== false,
-      }),
+      // Name-first like the admin Makers/Resellers "blank entry" path. A URL
+      // is optional (it scrapes domain/logo/bio). Vendors need a domain
+      // server-side, so when none is scraped we synthesize a placeholder
+      // exactly like AdminVendors' blank-create does.
+      buildBody: ({ name, scraped, roles }) => {
+        const picked = pickTruthy(scraped, ["domain", "homeUrl", "aboutUrl", "logoUrl", "coverUrl", "tagline", "bio", "location"]);
+        return {
+          name: scraped?.name || name,
+          ...picked,
+          domain: picked.domain || `new-vendor-${Date.now()}.example`,
+          // Server only acts on isMaker===true / isReseller===false; the column
+          // defaults are isMaker=false, isReseller=true.
+          isMaker: !!roles?.isMaker,
+          isReseller: roles?.isReseller !== false,
+        };
+      },
     },
   },
   // Task #350 — ambassador picker reuses the people endpoint; server

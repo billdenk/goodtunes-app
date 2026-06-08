@@ -5228,13 +5228,13 @@ function InstrumentEditor({
       </div>
 
       {/* Tab strip — mirrors the Person editor pattern. About holds the
-          editing surface; Vendors holds the affiliate-link rows; People is
-          a catalog view derived from SuperCredits performer credits.
+          editing surface; Makers & Resellers holds the affiliate-link rows;
+          People is a catalog view derived from SuperCredits performer credits.
           Counts shown when > 0. */}
       <div role="tablist" aria-label="Instrument editor sections" className="flex gap-5 border-b border-slate-200 -mx-6 px-6">
         {(["about", "vendors", "people"] as const).map((t) => {
           const active = tab === t;
-          const label = t === "about" ? "About" : t === "vendors" ? "Vendors" : "People";
+          const label = t === "about" ? "About" : t === "vendors" ? "Makers & Resellers" : "People";
           const count =
             t === "vendors" ? form.vendors.length :
             t === "people" ? profile?.artists.length :
@@ -6064,7 +6064,7 @@ function VendorPaneEditor({
         >
           {gearCount === 0 ? (
             <p className="text-slate-400 text-sm">
-              Not attached to any gear yet. Add a vendor row inside a gear item's editor to populate this list.
+              Not attached to any gear yet. Add a maker / reseller inside a gear item's editor to populate this list.
             </p>
           ) : (
             <ul className="divide-y divide-slate-100 border border-slate-200 rounded-md">
@@ -6103,7 +6103,7 @@ function VendorPaneEditor({
             </ul>
           )}
           <p className="mt-3 text-[11px] text-slate-400">
-            Every gear item this vendor is attached to. Tap to open and edit the per-attachment affiliate URL or visibility.
+            Every gear item this maker / reseller is attached to. Tap to open and edit the per-attachment affiliate URL or visibility.
           </p>
         </div>
       )}
@@ -6147,7 +6147,7 @@ function VendorPaneEditor({
             </ul>
           )}
           <p className="mt-3 text-[11px] text-slate-400">
-            From SuperCredits™ — performers who've credited one of this vendor's gear. Producers and lyricists won't appear because the vendor sheet is reached through gear.
+            From SuperCredits™ — performers who've credited one of this maker / reseller's gear. Producers and lyricists won't appear because the maker / reseller sheet is reached through gear.
           </p>
         </div>
       )}
@@ -6271,7 +6271,7 @@ function VendorPaneEditor({
           className="px-3 py-1.5 text-[12px] text-red-600 hover:bg-red-50 rounded mr-auto"
           data-testid="button-delete-vendor-pane"
         >
-          Delete vendor
+          Delete maker / reseller
         </button>
         <button
           type="button"
@@ -7077,8 +7077,8 @@ function VendorPreviewCard({
 
             {/* Tabs — About | Gear N | Artists. Interactive so admins can
                 proof each tab; "Artists" (not "People") because you only
-                land on a vendor sheet through gear, so the only people who
-                end up here are performers who actually played one. */}
+                land on a maker / reseller sheet through gear, so the only
+                people who end up here are performers who actually played one. */}
             <div className="px-5 pt-4">
               <div className="flex gap-5 border-b border-white/10">
                 {([
@@ -7201,7 +7201,7 @@ function VendorPreviewCard({
                 </h3>
                 {gearCount === 0 ? (
                   <p className="text-[13px]" style={{ color: "rgba(235,235,245,0.5)" }}>
-                    Not attached to any gear yet. Add a vendor row inside a gear item's editor to populate this list.
+                    Not attached to any gear yet. Add a maker / reseller inside a gear item's editor to populate this list.
                   </p>
                 ) : (
                   // 2-col grid of instrument tiles — same shape as the

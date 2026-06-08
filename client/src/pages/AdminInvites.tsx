@@ -5,14 +5,14 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { Link } from "wouter";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Copy, Check, X, ChevronDown, RefreshCw, Heart, Factory, HeartHandshake, Star, SlidersHorizontal, ArrowLeft } from "lucide-react";
+import { Trash2, Copy, Check, X, ChevronDown, RefreshCw, Heart, Factory, HeartHandshake, Star, SlidersHorizontal, ArrowLeft, Plus } from "lucide-react";
 import {
   ROLE_OPTIONS,
   ROLE_LABEL,
   SCOPE_CONFIG,
   ScopePicker,
 } from "@/components/admin/RoleScopePicker";
-import { ArtistPickerField } from "@/components/admin/ArtistPickerField";
+import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 
 interface PendingInvite {
   id: string;
@@ -86,6 +86,11 @@ export function AdminInvites() {
   const [targetPersonName, setTargetPersonName] = useState<string>("");
   const [preFlightedAlbumId, setPreFlightedAlbumId] = useState<string | null>(null);
   const [personSearch, setPersonSearch] = useState("");
+  // Task #1792 — Artist scope opens the SAME dialog the album "add artist"
+  // flow uses (NewAlbumArtistDialog, mode="person"): type a name → live DB
+  // match, streaming search-by-name (Spotify/Apple candidate grid), or
+  // paste-a-URL import — all without leaving the invite page.
+  const [composerOpen, setComposerOpen] = useState(false);
   const personResults = useQuery<Array<{ id: string; name: string; photoUrl: string | null }>>({
     queryKey: ["/api/admin/people", { q: personSearch }],
     queryFn: async () => {
@@ -412,19 +417,40 @@ export function AdminInvites() {
           )}
 
           {/* Role scope picker — applies to both quick and advanced modes.
-              Task #1792 — the Artist scope uses the same combobox as the album
-              "add artist" flow (type → DB match → create by name OR import from
-              an Apple Music / Spotify URL) so an artist who isn't in the DB yet
-              can be created and selected without leaving the page. */}
+              Task #1792 — the Artist scope mirrors the album "add artist"
+              experience by mounting the same NewAlbumArtistDialog (streaming
+              search-by-name + paste-a-URL + create-by-name) so an artist who
+              isn't in the DB yet can be created and selected without leaving
+              the page. */}
           {needsScope && (
             role === "artist" ? (
               <div className="mt-3">
-                <ArtistPickerField
-                  label="Artist"
-                  nameValue={scopeName}
-                  idValue={scopeId || ""}
-                  onChange={({ name, id }) => { setScopeId(id || null); setScopeName(name); }}
-                />
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                  Artist
+                </label>
+                {scopeId ? (
+                  <div className="flex items-center gap-3 px-3 py-2 rounded-lg border border-slate-300 bg-white">
+                    <div className="w-8 h-8 rounded-full bg-slate-200" />
+                    <div className="flex-1 min-w-0 font-medium text-slate-900 truncate">{scopeName}</div>
+                    <button
+                      type="button"
+                      onClick={() => { setScopeId(null); setScopeName(""); }}
+                      className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                      aria-label="Clear selection"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setComposerOpen(true)}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white text-left text-sm text-slate-600 hover:border-[var(--brand-blue)] hover:text-slate-900"
+                  >
+                    <Plus className="w-4 h-4 text-[var(--brand-blue)] flex-shrink-0" />
+                    Search or add an artist…
+                  </button>
+                )}
               </div>
             ) : (
               <ScopePicker
@@ -433,6 +459,16 @@ export function AdminInvites() {
                 onChange={(id, name) => { setScopeId(id); setScopeName(name || ""); }}
               />
             )
+          )}
+
+          {role === "artist" && (
+            <NewAlbumArtistDialog
+              open={composerOpen}
+              onOpenChange={setComposerOpen}
+              mode="person"
+              onSelect={({ name, id }) => { setScopeId(id || null); setScopeName(name); setComposerOpen(false); }}
+              onSkip={() => setComposerOpen(false)}
+            />
           )}
 
           {/* Referrer detail — full-width beneath the dropdown row once a kind is chosen. */}
