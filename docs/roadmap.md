@@ -723,6 +723,8 @@ A new **Manufacturing tab** on the album page. An album can have multiple physic
 
 ## Multi-tenant accounts — GoodTunes.music + /admin (planned)
 
+> **White-label (GTPress / MRP):** a deck-grade scope + recommendation for white-labeling the upload/partner portal under a neutral umbrella domain (`mrp.gtpress.com`) lives in [`gtpress-white-label-proposal.md`](./gtpress-white-label-proposal.md). It builds directly on the host-routing + membership-scoping foundation described below. Awaiting Bill's reactions to the commercial questions before any build.
+
 The current temporary bearer-token admin login is a single-user placeholder. The real product needs **five kinds of principals** sharing one auth system, one user table, and one permission model. Plain language first, then schema.
 
 ### The five principals
