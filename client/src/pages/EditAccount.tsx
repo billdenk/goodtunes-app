@@ -7,6 +7,7 @@ import { useAuthKind } from "@/hooks/useAuthKind";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { scrimFade } from "@/lib/motion";
 import { IconButton } from "@/components/ui/IconButton";
+import { fileToUploadDataUrl, friendlyPhotoError } from "@/lib/photoUpload";
 
 export function EditAccount() {
   const { user, updateProfile, updatePhoto, removePhoto, isUpdatePending, updateError } = useAuth();
@@ -77,28 +78,27 @@ export function EditAccount() {
       setPhotoError("That image is over 5MB. Pick a smaller one.");
       return;
     }
-    const reader = new FileReader();
-    reader.onerror = () => setPhotoError("Couldn't read that file. Try a different photo.");
-    reader.onload = () => {
-      const dataUrl = String(reader.result || "");
-      if (!dataUrl) {
-        setPhotoError("Couldn't read that file. Try a different photo.");
-        return;
-      }
-      updatePhoto(dataUrl).catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err ?? "");
-        setPhotoError(msg || "Upload failed. Please try again.");
+    // Downscale/re-encode before upload so the base64 PUT body stays well under
+    // the edge proxy's body limit (a too-large body comes back as a raw 403
+    // HTML page), then map any failure to short, friendly copy.
+    fileToUploadDataUrl(file)
+      .then((dataUrl) => {
+        if (!dataUrl) {
+          setPhotoError("Couldn't read that file. Try a different photo.");
+          return;
+        }
+        return updatePhoto(dataUrl);
+      })
+      .catch((err: unknown) => {
+        setPhotoError(friendlyPhotoError(err, "upload"));
       });
-    };
-    reader.readAsDataURL(file);
   };
 
   const handlePhotoRemove = () => {
     if (!user?.id) return;
     setPhotoError(null);
     removePhoto().catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err ?? "");
-      setPhotoError(msg || "Couldn't remove photo.");
+      setPhotoError(friendlyPhotoError(err, "remove"));
     });
   };
 

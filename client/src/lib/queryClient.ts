@@ -30,8 +30,30 @@ function authHeaders(): Record<string, string> {
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    // Never let a raw response body (notably an edge-proxy HTML 403/5xx page)
+    // leak into `err.message`. Prefer a JSON `message`; otherwise fall back to
+    // a clean status-based message. The `${status}: ${message}` shape is kept
+    // for backward compatibility with callers that key off the leading code.
+    let message = res.statusText || "Request failed";
+    try {
+      const text = await res.text();
+      const trimmed = (text || "").trim();
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        try {
+          const j = JSON.parse(trimmed);
+          if (j && typeof j.message === "string" && j.message.trim()) {
+            message = j.message.trim();
+          }
+        } catch {
+          // Malformed JSON — keep the generic status message.
+        }
+      }
+      // Any non-JSON body (HTML doctype pages, plain text) is intentionally
+      // discarded; we only surface the status-based message above.
+    } catch {
+      // Body already consumed / unreadable — keep the generic status message.
+    }
+    throw new Error(`${res.status}: ${message}`);
   }
 }
 
