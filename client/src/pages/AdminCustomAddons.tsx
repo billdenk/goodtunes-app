@@ -814,9 +814,9 @@ export function AddonDialog({
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              rows={2}
+              rows={4}
               placeholder="Shown to fans under the checkbox."
-              className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 resize-none"
+              className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 resize-y min-h-[5rem]"
               data-testid="input-custom-addon-description"
             />
           </div>
