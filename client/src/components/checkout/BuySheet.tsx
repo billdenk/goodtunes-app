@@ -101,6 +101,10 @@ type CustomAddon = {
   priceCents: number;
   orgName: string;
   orgLogoUrl: string | null;
+  // Task #1842 — variable / fan-chosen amount
+  fanChoosesAmount?: boolean;
+  minAmountCents?: number | null;
+  presetAmountsCents?: number[] | null;
 };
 
 // Task #579 — Booklet anchors to a 7" vinyl or cassette purchase. Kept
@@ -316,6 +320,10 @@ export function BuySheet({
   const [customAddonMode, setCustomAddonMode] = useState<
     Record<string, "anonymous" | "specific">
   >({});
+  // Task #1842 — for variable-amount add-ons: maps addon id → fan-chosen
+  // amount in cents. Initialized from the add-on's priceCents when the fan
+  // first expands the picker; preset chips snap-select here.
+  const [customAddonAmount, setCustomAddonAmount] = useState<Record<string, number>>({});
   const MAX_CUSTOM_ADDON_QTY = 25;
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -455,14 +463,19 @@ export function BuySheet({
     booklet && bookletAvailable && !bundleAvailable ? bookletAddon!.priceCents : 0;
   // Task #844 / #1630 — each ticked custom add-on adds its price times the
   // chosen quantity.
+  // Task #1842 — variable-amount add-ons use the fan-chosen amount instead
+  // of the fixed priceCents. The chosen amount is clamped to minAmountCents
+  // in the UI (and again server-side for safety).
   const customAddonsList = options?.customAddons ?? [];
   const selectedCustomAddons = customAddonsList
     .map((c) => ({ addon: c, qty: customAddonQty[c.id] ?? 0 }))
     .filter((x) => x.qty > 0);
-  const customAddonsLineCents = selectedCustomAddons.reduce(
-    (sum, x) => sum + x.addon.priceCents * x.qty,
-    0,
-  );
+  const customAddonsLineCents = selectedCustomAddons.reduce((sum, x) => {
+    const unitCents = x.addon.fanChoosesAmount
+      ? (customAddonAmount[x.addon.id] ?? x.addon.priceCents)
+      : x.addon.priceCents;
+    return sum + unitCents * x.qty;
+  }, 0);
   const itemsTotalCents = formatLineCents + certLineCents + bookletLineCents + customAddonsLineCents;
 
   // Booklet weight: the 7" set variant ships one booklet per copy; the
@@ -618,6 +631,11 @@ export function BuySheet({
           id: x.addon.id,
           quantity: x.qty,
           recipientMode: customAddonMode[x.addon.id] ?? "anonymous",
+          // Task #1842 — send chosen amount for variable-amount add-ons.
+          // The server enforces the minimum floor regardless.
+          ...(x.addon.fanChoosesAmount && customAddonAmount[x.addon.id]
+            ? { chosenAmountCents: customAddonAmount[x.addon.id] }
+            : {}),
         })),
         // Destination drives the server-side shipping quote that becomes
         // the Stripe shipping_option; allowed_countries is locked to it.
@@ -1010,7 +1028,11 @@ export function BuySheet({
                               </div>
                               <div className="flex items-center gap-2 whitespace-nowrap">
                                 <span className="text-[14px] font-semibold whitespace-nowrap">
-                                  + {dollars(ca.priceCents)}
+                                  {ca.fanChoosesAmount
+                                    ? selected
+                                      ? `+ ${dollars(customAddonAmount[ca.id] ?? ca.priceCents)}`
+                                      : "You choose"
+                                    : `+ ${dollars(ca.priceCents)}`}
                                 </span>
                                 {selected && (
                                   <Check
@@ -1022,6 +1044,67 @@ export function BuySheet({
                             </button>
                             {selected && (
                               <div className="px-4 pb-4 pt-1 flex flex-col gap-3 border-t border-white/[0.06]">
+                                {/* Task #1842 — variable-amount picker. Shown
+                                    when the operator has flagged this add-on
+                                    as fan-chooses-amount. Presets are quick-
+                                    select chips; the text input lets the fan
+                                    type their own amount. The minimum floor is
+                                    enforced here and again server-side. */}
+                                {ca.fanChoosesAmount && (() => {
+                                  const minCents = ca.minAmountCents ?? 0;
+                                  const currentCents = customAddonAmount[ca.id] ?? ca.priceCents;
+                                  const presets = ca.presetAmountsCents ?? [];
+                                  const setAmount = (cents: number) =>
+                                    setCustomAddonAmount((prev) => ({
+                                      ...prev,
+                                      [ca.id]: Math.max(minCents, cents),
+                                    }));
+                                  return (
+                                    <div className="flex flex-col gap-3 pt-3">
+                                      <span className="text-sm text-fan-secondary">Your gift</span>
+                                      {presets.length > 0 && (
+                                        <div className="flex flex-wrap gap-2">
+                                          {presets.map((presetCents) => (
+                                            <button
+                                              key={presetCents}
+                                              type="button"
+                                              onClick={() => setAmount(presetCents)}
+                                              className={cn(
+                                                "rounded-full px-4 py-1.5 text-sm font-semibold transition-colors",
+                                                currentCents === presetCents
+                                                  ? "bg-[color:var(--brand-mint)]/20 text-[color:var(--brand-mint)]"
+                                                  : "bg-white/[0.07] text-fan-secondary hover:bg-white/[0.11]",
+                                              )}
+                                              data-testid={`button-custom-addon-preset-${ca.id}-${presetCents}`}
+                                            >
+                                              {dollars(presetCents)}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-fan-secondary text-sm">$</span>
+                                        <input
+                                          type="number"
+                                          min={(minCents / 100).toFixed(2)}
+                                          step="1"
+                                          value={(currentCents / 100).toFixed(2)}
+                                          onChange={(e) => {
+                                            const raw = parseFloat(e.target.value);
+                                            if (!isNaN(raw) && raw > 0) setAmount(Math.round(raw * 100));
+                                          }}
+                                          className="flex-1 h-10 px-3 rounded-2xl bg-white/[0.07] border border-white/[0.09] text-base text-fan-primary placeholder:text-white/35 appearance-none focus:outline-none focus:border-white/25 tabular-nums"
+                                          data-testid={`input-custom-addon-amount-${ca.id}`}
+                                        />
+                                      </div>
+                                      {minCents > 0 && (
+                                        <p className="text-xs text-fan-faint">
+                                          Minimum gift: {dollars(minCents)}
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                                 {/* Quantity stepper — total scales by count */}
                                 <div className="flex items-center justify-between gap-3 pt-3">
                                   <span className="text-sm text-fan-secondary">How many?</span>
@@ -1188,17 +1271,22 @@ export function BuySheet({
                       is { addon, qty }, so read through `.addon` and multiply
                       by the chosen quantity so this line matches the qty the
                       Total already folds in (customAddonsLineCents). */}
-                  {selectedCustomAddons.map((ca) => (
-                    <div key={ca.addon.id} className="flex items-center justify-between mt-1.5">
-                      <span className="text-fan-secondary">
-                        {ca.addon.name}
-                        {ca.qty > 1 ? ` × ${ca.qty}` : ""}
-                      </span>
-                      <span className="text-fan-primary" data-testid={`text-line-custom-addon-${ca.addon.id}`}>
-                        {dollars(ca.addon.priceCents * ca.qty)}
-                      </span>
-                    </div>
-                  ))}
+                  {selectedCustomAddons.map((ca) => {
+                    const unitCents = ca.addon.fanChoosesAmount
+                      ? (customAddonAmount[ca.addon.id] ?? ca.addon.priceCents)
+                      : ca.addon.priceCents;
+                    return (
+                      <div key={ca.addon.id} className="flex items-center justify-between mt-1.5">
+                        <span className="text-fan-secondary">
+                          {ca.addon.name}
+                          {ca.qty > 1 ? ` × ${ca.qty}` : ""}
+                        </span>
+                        <span className="text-fan-primary" data-testid={`text-line-custom-addon-${ca.addon.id}`}>
+                          {dollars(unitCents * ca.qty)}
+                        </span>
+                      </div>
+                    );
+                  })}
                   {/* Real shipping — quoted live for the chosen destination
                       (Spinney rate + GoodTunes markup). The fan pays exactly
                       this; the server re-prices it as the Stripe shipping

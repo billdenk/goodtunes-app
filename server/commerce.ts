@@ -186,6 +186,10 @@ type CustomAddonForAlbum = {
   fulfiller: string | null;
   orgName: string;
   orgLogoUrl: string | null;
+  // Task #1842 — variable amount fields
+  fanChoosesAmount: boolean;
+  minAmountCents: number | null;
+  presetAmountsCents: number[] | null;
 };
 async function listCustomAddonsForAlbum(
   primaryArtistId: string | null,
@@ -216,12 +220,18 @@ async function listCustomAddonsForAlbum(
       fulfiller: customAddons.fulfiller,
       orgName: organizations.name,
       orgLogoUrl: organizations.logoUrl,
+      fanChoosesAmount: customAddons.fanChoosesAmount,
+      minAmountCents: customAddons.minAmountCents,
+      presetAmountsCents: customAddons.presetAmountsCents,
     })
     .from(customAddons)
     .innerJoin(organizations, eq(organizations.id, customAddons.organizationId))
     .where(and(eq(customAddons.active, true), scope))
     .orderBy(asc(customAddons.position), asc(customAddons.createdAt));
-  return rows;
+  return rows.map((r) => ({
+    ...r,
+    presetAmountsCents: Array.isArray(r.presetAmountsCents) ? (r.presetAmountsCents as number[]) : null,
+  }));
 }
 
 async function upsertSku(input: {
@@ -877,6 +887,11 @@ export function registerCommerceRoutes(app: Express) {
         priceCents: c.priceCents,
         orgName: c.orgName,
         orgLogoUrl: c.orgLogoUrl,
+        // Task #1842 — variable amount fields so the Buy sheet can render
+        // the gift-amount picker when the operator has enabled it.
+        fanChoosesAmount: c.fanChoosesAmount,
+        minAmountCents: c.minAmountCents,
+        presetAmountsCents: c.presetAmountsCents,
       })),
     });
   });
@@ -1974,6 +1989,11 @@ export function registerCommerceRoutes(app: Express) {
           id: z.string().min(1),
           quantity: z.number().int().min(1).max(MAX_CUSTOM_ADDON_QTY),
           recipientMode: z.enum(["anonymous", "specific"]).optional(),
+          // Task #1842 — fan-chosen amount (cents) for variable-amount
+          // add-ons. Only used when the add-on has fanChoosesAmount=true;
+          // ignored for fixed-price add-ons (server always uses stored price).
+          // Server enforces the stored minimum floor regardless of this value.
+          chosenAmountCents: z.number().int().positive().optional(),
         }),
       )
       .optional(),
@@ -2165,21 +2185,25 @@ export function registerCommerceRoutes(app: Express) {
     // and a lightweight anonymous/specific recipient intent. The newer
     // `customAddons` payload wins; we fall back to the legacy
     // `customAddonIds` (quantity 1, no recipient choice) for old clients.
+    // Task #1842 — variable-amount addons carry a fan-chosen per-box amount.
     type SelectedCustomAddon = {
       addon: CustomAddonForAlbum;
       quantity: number;
       recipientMode: "anonymous" | "specific" | null;
+      unitAmountCents: number;
     };
     const requestedAddons: Array<{
       id: string;
       quantity: number;
       recipientMode: "anonymous" | "specific" | null;
+      chosenAmountCents?: number;
     }> =
       parsed.data.customAddons && parsed.data.customAddons.length > 0
         ? parsed.data.customAddons.map((c) => ({
             id: c.id,
             quantity: c.quantity,
             recipientMode: c.recipientMode ?? null,
+            chosenAmountCents: c.chosenAmountCents,
           }))
         : (parsed.data.customAddonIds ?? []).map((id) => ({
             id,
@@ -2199,7 +2223,18 @@ export function registerCommerceRoutes(app: Express) {
           return res.status(400).json({ message: "That add-on isn't available for this album." });
         }
         const quantity = Math.max(1, Math.min(MAX_CUSTOM_ADDON_QTY, req.quantity));
-        selectedCustomAddons.push({ addon: match, quantity, recipientMode: req.recipientMode });
+        // Task #1842 — for variable-amount add-ons, use the client's chosen
+        // amount but clamp it to the stored minimum floor. Fixed-price add-ons
+        // always use the stored priceCents (client amount is ignored).
+        let unitAmountCents: number;
+        if (match.fanChoosesAmount) {
+          const floor = match.minAmountCents ?? 0;
+          const chosen = req.chosenAmountCents ?? match.priceCents;
+          unitAmountCents = Math.max(floor, chosen);
+        } else {
+          unitAmountCents = match.priceCents;
+        }
+        selectedCustomAddons.push({ addon: match, quantity, recipientMode: req.recipientMode, unitAmountCents });
       }
     }
 
@@ -2301,11 +2336,11 @@ export function registerCommerceRoutes(app: Express) {
     // chosen quantity. The add-on id + fulfiller + recipient mode ride in
     // the product metadata so materialize can persist them on the
     // order_items row for the fulfiller.
-    for (const { addon: ca, quantity: caQty, recipientMode } of selectedCustomAddons) {
+    for (const { addon: ca, quantity: caQty, recipientMode, unitAmountCents: caUnitAmount } of selectedCustomAddons) {
       lineItems.push({
         price_data: {
           currency: "usd",
-          unit_amount: ca.priceCents,
+          unit_amount: caUnitAmount,
           tax_behavior: TAX_BEHAVIOR,
           product_data: {
             name: ca.name,

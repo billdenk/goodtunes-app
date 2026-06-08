@@ -2152,6 +2152,71 @@ SQL
 migrate_custom_addons_all_artists dev  "${DATABASE_URL:-}"
 migrate_custom_addons_all_artists prod "${PROD_DATABASE_URL:-}"
 
+# Task #1842 — custom add-on variable / fan-chosen amount.
+# Adds three nullable columns to custom_addons:
+#   fan_chooses_amount boolean NOT NULL DEFAULT false
+#   min_amount_cents   integer (floor enforced server-side)
+#   preset_amounts_cents jsonb (array of integer cents for preset chips)
+# All additive + idempotent. Safe to re-run on both DBs.
+migrate_custom_addons_variable_amount() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping custom_addons variable-amount migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE custom_addons
+  ADD COLUMN IF NOT EXISTS fan_chooses_amount   boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS min_amount_cents      integer,
+  ADD COLUMN IF NOT EXISTS preset_amounts_cents  jsonb;
+SQL
+  then
+    echo "post-merge: custom_addons variable-amount migration ok on $label"
+  else
+    echo "post-merge: WARNING — custom_addons variable-amount migration failed on $label (continuing)"
+  fi
+}
+migrate_custom_addons_variable_amount dev  "${DATABASE_URL:-}"
+migrate_custom_addons_variable_amount prod "${PROD_DATABASE_URL:-}"
+
+# Task #1842 — backfill Nightbirde Foundation's "Gift of Hope" add-on with
+# fan_chooses_amount=true, min_amount_cents=5000 ($50), and four preset chips
+# ($50/$75/$100/$250). Identified by name to survive env-to-env ID drift.
+# Marker-guarded so it only runs once per DB.
+backfill_nightbirde_gift_of_hope_variable() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping Gift of Hope variable-amount backfill on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE marker = 'nightbirde_gift_of_hope_variable_amount_v1'
+  ) THEN
+    UPDATE custom_addons
+    SET
+      fan_chooses_amount    = true,
+      min_amount_cents      = 5000,
+      preset_amounts_cents  = '[5000, 7500, 10000, 25000]'::jsonb
+    WHERE name = 'Gift of Hope'
+      AND fan_chooses_amount IS NOT TRUE;
+    INSERT INTO post_merge_data_backfills (marker) VALUES ('nightbirde_gift_of_hope_variable_amount_v1')
+      ON CONFLICT (marker) DO NOTHING;
+  END IF;
+END;
+$$;
+SQL
+  then
+    echo "post-merge: Gift of Hope variable-amount backfill ok on $label"
+  else
+    echo "post-merge: WARNING — Gift of Hope variable-amount backfill failed on $label (continuing)"
+  fi
+}
+backfill_nightbirde_gift_of_hope_variable dev  "${DATABASE_URL:-}"
+backfill_nightbirde_gift_of_hope_variable prod "${PROD_DATABASE_URL:-}"
+
 # Task #350 — Invite tree + multi-level referrals.
 #   1. people.can_invite_ambassadors — per-person flag NPO partners
 #      toggle on a contact to grant them the ambassador invite verb.

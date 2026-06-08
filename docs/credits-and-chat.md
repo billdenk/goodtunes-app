@@ -141,6 +141,22 @@ See `docs/admin-conventions.md` → **Press Catalog** for the editor + cost-spli
 - Song row layout: track # · title · **download cloud-arrow** · ⋯ menu. Heart moved into the ⋯ sheet.
 - Song ⋯ sheet (Apple-trimmed): Favorite + Share (top two-up), then Add to Playlist · Play Next · Play Last · View Credits. Intentionally omitted: Pin Song, Create Station, Suggest Less, Rate Song.
 
+## Custom non-profit add-ons (e.g. Gift of Hope)
+
+Operator-configured charity gifts that appear in the Buy sheet alongside the album purchase. Each add-on is tied to a non-profit organization and is scoped either to all artists or to specific artists.
+
+**Variable-amount mode (Task #1842):** When an operator enables `fanChoosesAmount` on an add-on, the fan chooses how much to give instead of paying a fixed price. Configuration fields:
+
+- `fanChoosesAmount` — boolean flag; enables the fan-picker UI in the Buy sheet.
+- `minAmountCents` — integer minimum gift floor (server clamps the fan's input; UI also enforces it client-side). For Nightbirde's Gift of Hope this is $50.
+- `presetAmountsCents` — JSONB array of integer cents for the quick-pick chip row shown to the fan. Gift of Hope ships with `[5000, 7500, 10000, 25000]` ($50 / $75 / $100 / $250).
+
+The fan sees preset chips in the expanded card; any chip tap snaps the amount and highlights the chip. The free-entry dollar field lets the fan type a custom number. The price chip in the collapsed card header shows "You choose" until an amount is picked, then "**+ $X**".
+
+Admin configuration is in the Custom Add-Ons CMS (super-admin only). The three variable-amount fields appear below the price field when the "Fan chooses amount" checkbox is ticked.
+
+**Server safety:** the server always clamps the fan's submitted `chosenAmountCents` to `max(minAmountCents, chosenAmountCents)` regardless of what the client sends.
+
 ## GoodDeed cost stack & ladder
 
 What the artist actually owes us per signed copy, and how the Design tab reads it. Source of truth for the rung values: [`docs/shopify-pricing-strategy.md`](./shopify-pricing-strategy.md) § "Signed-cert wholesale ladder".

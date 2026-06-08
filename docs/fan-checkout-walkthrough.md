@@ -95,6 +95,23 @@ The booklet behaves **differently by format** — this is the trickiest conditio
 - **Only when** the album actually has a 7″ or cassette SKU *and* an active booklet
   add-on. On a 12″-only release the booklet section is hidden entirely.
 
+### 2e.5. Custom non-profit add-ons (e.g. Gift of Hope) — *only when offered*
+
+Shown when the album's artist has one or more active custom add-ons (operator-configured charity gifts and programs). Each add-on renders as a tappable card showing the non-profit's name, logo, a short description, and a price.
+
+**Two modes — operator-controlled:**
+
+1. **Fixed-price add-on** (the default): the price chip is fixed (e.g. "**+ $25**"). Tapping the card selects it; tapping again deselects it. The card expands to let the fan choose a quantity (1–25) and indicate whether the gift is for "Anyone in need" or "Someone specific."
+
+2. **Fan-chooses-amount add-on** (e.g. Nightbirde's Gift of Hope): the price chip reads **"You choose"** until the fan selects an amount. When the card is tapped and expanded, the fan sees:
+   - A row of **quick-pick preset chips** (e.g. $50 / $75 / $100 / $250), each snapping the amount on tap (the active chip is highlighted).
+   - A **free-input dollar field** for a custom amount — the fan can type any number.
+   - A **minimum gift** caption when the operator has set a floor (e.g. "Minimum gift: $50"). The UI enforces the floor on input; the server also clamps the value server-side, so the floor is honoured regardless.
+   - Once an amount is chosen, the price chip in the card header updates to show the current selection (e.g. "**+ $75**").
+   - Quantity and recipient-mode controls work identically to fixed-price add-ons.
+
+**Only when:** the album's primary artist has at least one active, scoped custom add-on. None appear when the artist has none configured.
+
 ### 2f. Ship-to country + live price breakdown — *always*
 
 - **"Ship to" country picker** *(physical formats only)*: a dropdown above the

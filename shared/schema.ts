@@ -1583,6 +1583,16 @@ export const customAddons = pgTable("custom_addons", {
   // Operator-controlled display order on the Buy sheet (lower = shown
   // first). Ties fall back to createdAt so older add-ons stay stable.
   position: integer("position").notNull().default(0),
+  // Task #1842 — variable / fan-chosen amount. When fanChoosesAmount is
+  // true the fan picks how much to donate (preset chips + free input)
+  // instead of paying the fixed priceCents. minAmountCents is the floor
+  // enforced both in the UI and server-side at checkout. presetAmountsCents
+  // is an operator-defined jsonb array of integer suggestions shown as
+  // quick-pick chips (e.g. [5000, 7500, 10000, 25000]). priceCents still
+  // acts as the default/starting suggestion when variable mode is on.
+  fanChoosesAmount: boolean("fan_chooses_amount").notNull().default(false),
+  minAmountCents: integer("min_amount_cents"),
+  presetAmountsCents: jsonb("preset_amounts_cents").$type<number[]>(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 export type CustomAddon = typeof customAddons.$inferSelect;

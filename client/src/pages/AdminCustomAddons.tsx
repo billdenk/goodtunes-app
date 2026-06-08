@@ -45,6 +45,10 @@ export type CustomAddon = {
   appliesToAllArtists: boolean;
   position: number;
   artists: AddonArtist[];
+  // Task #1842 — variable / fan-chosen amount
+  fanChoosesAmount: boolean;
+  minAmountCents: number | null;
+  presetAmountsCents: number[] | null;
 };
 
 type NonProfit = {
@@ -504,6 +508,10 @@ export function AddonDialog({
   // "specific" = attach to particular artists (the join table); "all" =
   // applies to every eligible album regardless of attachments.
   const [scope, setScope] = useState<"specific" | "all">("specific");
+  // Task #1842 — variable / fan-chosen amount
+  const [fanChoosesAmount, setFanChoosesAmount] = useState(false);
+  const [minAmountDollars, setMinAmountDollars] = useState("");
+  const [presetsText, setPresetsText] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [imageEditorOpen, setImageEditorOpen] = useState(false);
@@ -526,6 +534,13 @@ export function AddonDialog({
       setActive(addon.active);
       setPosition(String(addon.position ?? 0));
       setScope(addon.appliesToAllArtists ? "all" : "specific");
+      setFanChoosesAmount(addon.fanChoosesAmount ?? false);
+      setMinAmountDollars(addon.minAmountCents ? (addon.minAmountCents / 100).toFixed(2) : "");
+      setPresetsText(
+        addon.presetAmountsCents && addon.presetAmountsCents.length > 0
+          ? addon.presetAmountsCents.map((c) => `$${(c / 100).toFixed(0)}`).join(", ")
+          : "",
+      );
     } else if (!isEdit) {
       setName("");
       setOrganizationId("");
@@ -536,6 +551,9 @@ export function AddonDialog({
       setActive(true);
       setPosition("0");
       setScope(inline && !albumArtist?.personId ? "all" : "specific");
+      setFanChoosesAmount(false);
+      setMinAmountDollars("");
+      setPresetsText("");
     }
     setFormError(null);
   }, [open, isEdit, addon, inline, albumArtist?.personId]);
@@ -550,6 +568,18 @@ export function AddonDialog({
       const priceCents = Math.round(parseFloat(priceDollars) * 100);
       const positionNum = Math.round(parseFloat(position));
       const appliesToAllArtists = scope === "all";
+      // Task #1842 — parse preset chips: comma-separated "$50, $100" or "50, 100"
+      let presetAmountsCents: number[] | null = null;
+      if (fanChoosesAmount && presetsText.trim()) {
+        const parsed = presetsText
+          .split(",")
+          .map((s) => Math.round(parseFloat(s.replace(/[^0-9.]/g, "")) * 100))
+          .filter((n) => Number.isFinite(n) && n > 0);
+        presetAmountsCents = parsed.length > 0 ? parsed : null;
+      }
+      const minAmountCentsVal = fanChoosesAmount && minAmountDollars.trim()
+        ? Math.round(parseFloat(minAmountDollars) * 100)
+        : null;
       const payload = {
         name: name.trim(),
         organizationId,
@@ -559,6 +589,9 @@ export function AddonDialog({
         imageUrl: imageUrl || null,
         position: Number.isFinite(positionNum) ? positionNum : 0,
         appliesToAllArtists,
+        fanChoosesAmount,
+        minAmountCents: fanChoosesAmount ? (minAmountCentsVal ?? null) : null,
+        presetAmountsCents: fanChoosesAmount ? presetAmountsCents : null,
         ...(isEdit ? { active } : {}),
       };
       if (isEdit && addon) {
@@ -799,6 +832,60 @@ export function AddonDialog({
               className="w-full px-3 py-2 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20 resize-y min-h-[5rem]"
               data-testid="input-custom-addon-description"
             />
+          </div>
+
+          {/* Task #1842 — variable / fan-chosen amount. When on, the fan
+              picks how much to give (preset chips + free input) rather than
+              paying a flat price. The Price field above becomes the suggested
+              default shown in the input when no chip is selected. */}
+          <div className="space-y-3 rounded-md border border-slate-200 p-3">
+            <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={fanChoosesAmount}
+                onChange={(e) => setFanChoosesAmount(e.target.checked)}
+                className="w-4 h-4 accent-[var(--brand-blue)]"
+                data-testid="checkbox-custom-addon-fan-chooses-amount"
+              />
+              <span className="font-semibold">Fan chooses amount</span>
+              <span className="text-xs text-slate-400 ml-0.5">
+                (fan picks; Price above is the starting suggestion)
+              </span>
+            </label>
+            {fanChoosesAmount && (
+              <div className="space-y-3 pl-6">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Minimum amount (USD)
+                    <span className="text-slate-400 font-normal ml-1">— enforced server-side</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={minAmountDollars}
+                    onChange={(e) => setMinAmountDollars(e.target.value)}
+                    placeholder="50.00"
+                    className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                    data-testid="input-custom-addon-min-amount"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Preset suggestions
+                    <span className="text-slate-400 font-normal ml-1">— shown as quick-pick chips (comma-separated, e.g. "$50, $75, $100, $250")</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={presetsText}
+                    onChange={(e) => setPresetsText(e.target.value)}
+                    placeholder="$50, $75, $100, $250"
+                    className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                    data-testid="input-custom-addon-presets"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {isEdit && (

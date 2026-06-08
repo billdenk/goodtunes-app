@@ -21057,6 +21057,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       SELECT ca.id, ca.organization_id, ca.name, ca.description, ca.image_url,
              ca.price_cents, ca.fulfiller, ca.active, ca.applies_to_all_artists,
              ca.position, ca.created_at,
+             ca.fan_chooses_amount, ca.min_amount_cents, ca.preset_amounts_cents,
              o.name AS org_name, o.logo_url AS org_logo_url,
              COALESCE(
                json_agg(
@@ -21089,6 +21090,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       active: r.active,
       appliesToAllArtists: r.applies_to_all_artists,
       position: r.position,
+      fanChoosesAmount: r.fan_chooses_amount ?? false,
+      minAmountCents: r.min_amount_cents ?? null,
+      presetAmountsCents: Array.isArray(r.preset_amounts_cents) ? r.preset_amounts_cents : null,
       artists: r.artists ?? [],
     })));
     } catch (err) {
@@ -21104,7 +21108,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const rows = await db.execute<any>(sql`
       SELECT ca.id, ca.organization_id, ca.name, ca.description, ca.image_url,
              ca.price_cents, ca.fulfiller, ca.active, ca.applies_to_all_artists,
-             ca.position,
+             ca.position, ca.fan_chooses_amount, ca.min_amount_cents, ca.preset_amounts_cents,
              o.name AS org_name, o.logo_url AS org_logo_url,
              COALESCE(
                json_agg(
@@ -21140,6 +21144,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       active: r.active,
       appliesToAllArtists: r.applies_to_all_artists,
       position: r.position,
+      fanChoosesAmount: r.fan_chooses_amount ?? false,
+      minAmountCents: r.min_amount_cents ?? null,
+      presetAmountsCents: Array.isArray(r.preset_amounts_cents) ? r.preset_amounts_cents : null,
       artists: r.artists ?? [],
     });
     } catch (err) {
@@ -21169,10 +21176,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     let position = Math.round(Number(req.body?.position));
     if (!Number.isFinite(position)) position = 0;
     const appliesToAllArtists = !!req.body?.appliesToAllArtists;
+    // Task #1842 — variable amount
+    const fanChoosesAmount = !!req.body?.fanChoosesAmount;
+    const minAmountCents = fanChoosesAmount && req.body?.minAmountCents != null
+      ? Math.round(Number(req.body.minAmountCents)) || null
+      : null;
+    const presetAmountsCents = fanChoosesAmount && Array.isArray(req.body?.presetAmountsCents)
+      ? (req.body.presetAmountsCents as unknown[]).map(Number).filter((n) => Number.isFinite(n) && n > 0)
+      : null;
     try {
       const ins = await db.execute<{ id: string }>(sql`
-        INSERT INTO custom_addons (organization_id, name, description, image_url, price_cents, fulfiller, applies_to_all_artists, position)
-        VALUES (${organizationId}, ${name}, ${description}, ${imageUrl}, ${priceCents}, ${fulfiller}, ${appliesToAllArtists}, ${position})
+        INSERT INTO custom_addons (organization_id, name, description, image_url, price_cents, fulfiller, applies_to_all_artists, position, fan_chooses_amount, min_amount_cents, preset_amounts_cents)
+        VALUES (${organizationId}, ${name}, ${description}, ${imageUrl}, ${priceCents}, ${fulfiller}, ${appliesToAllArtists}, ${position}, ${fanChoosesAmount}, ${minAmountCents}, ${presetAmountsCents ? JSON.stringify(presetAmountsCents) : null})
         RETURNING id
       `);
       res.status(201).json({ id: (ins as any).rows?.[0]?.id });
@@ -21265,6 +21280,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Display order must be a number" });
       }
       sets.push(sql`position = ${position}`);
+    }
+    // Task #1842 — variable amount fields
+    if (b.fanChoosesAmount !== undefined) {
+      sets.push(sql`fan_chooses_amount = ${!!b.fanChoosesAmount}`);
+    }
+    if (b.minAmountCents !== undefined) {
+      const v = b.minAmountCents == null ? null : Math.round(Number(b.minAmountCents)) || null;
+      sets.push(sql`min_amount_cents = ${v}`);
+    }
+    if (b.presetAmountsCents !== undefined) {
+      const v = Array.isArray(b.presetAmountsCents) && b.presetAmountsCents.length > 0
+        ? JSON.stringify((b.presetAmountsCents as unknown[]).map(Number).filter((n) => Number.isFinite(n) && n > 0))
+        : null;
+      sets.push(sql`preset_amounts_cents = ${v}`);
     }
     if (sets.length === 0) return res.status(400).json({ message: "Nothing to update" });
     const setSql = sets.reduce((acc, frag, i) => (i === 0 ? frag : sql`${acc}, ${frag}`));
