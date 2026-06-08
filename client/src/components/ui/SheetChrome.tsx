@@ -91,14 +91,16 @@ interface SheetChromeButtonProps {
 /**
  * The one shared circular close ("X") chip used by every fan sheet.
  *
- * Apple's `xmark.circle.fill`: a large opaque light-gray circle with a dark
- * glyph, pinned top-right. Defaults to `fill` + `lg` so every sheet closes
- * with the same big, unmistakable X — callers no longer hand-pick a variant.
+ * Quiet glass treatment to match the `SheetBack` chevron — a translucent
+ * white scrim on the dark sheet, pinned top-right, sized `lg`. The X glyph
+ * stays large and unmistakable; only its background is muted from the old
+ * opaque light-gray `fill` chip so close + back read as one chrome pair.
+ * Callers can still pass `variant="fill"` for the rare high-contrast case.
  */
 export function SheetClose({
   onClick,
   label = "Close",
-  variant = "fill",
+  variant = "glass",
   className,
   "data-testid": testId = "button-sheet-close",
 }: SheetChromeButtonProps) {

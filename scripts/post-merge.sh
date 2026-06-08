@@ -5769,3 +5769,64 @@ SQL
 }
 seed_task_1643_demo_rig dev  "${DATABASE_URL:-}"
 seed_task_1643_demo_rig prod "${PROD_DATABASE_URL:-}"
+
+# Task #1710 — Strip Apple Music's boilerplate "Listen to music by … on Apple
+# Music." sentence out of person/vendor/label bios that the scraper captured
+# before we started filtering it at import. One-time, marker-guarded via
+# post_merge_data_backfills so it runs exactly once per DB and never re-touches
+# operator edits. Runs on BOTH dev and prod. Idempotent + best-effort: a
+# failure here never blocks a merge.
+backfill_task_1710_strip_apple_bio() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1710 apple-bio strip on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_1710_strip_apple_bio') THEN
+    RAISE NOTICE 'task-1710 apple-bio strip already applied — skipping';
+    RETURN;
+  END IF;
+
+  -- Remove the boilerplate sentence; if nothing alphanumeric survives, null it.
+  UPDATE people
+  SET bio = NULLIF(
+    trim(regexp_replace(bio, 'listen to music by .+? on apple music\.?', ' ', 'gi')),
+    ''
+  )
+  WHERE bio ~* 'listen to music by .+? on apple music';
+  UPDATE people SET bio = NULL
+  WHERE bio IS NOT NULL AND bio !~ '[A-Za-z0-9]';
+
+  UPDATE vendors
+  SET bio = NULLIF(
+    trim(regexp_replace(bio, 'listen to music by .+? on apple music\.?', ' ', 'gi')),
+    ''
+  )
+  WHERE bio ~* 'listen to music by .+? on apple music';
+  UPDATE vendors SET bio = NULL
+  WHERE bio IS NOT NULL AND bio !~ '[A-Za-z0-9]';
+
+  UPDATE labels
+  SET bio = NULLIF(
+    trim(regexp_replace(bio, 'listen to music by .+? on apple music\.?', ' ', 'gi')),
+    ''
+  )
+  WHERE bio ~* 'listen to music by .+? on apple music';
+  UPDATE labels SET bio = NULL
+  WHERE bio IS NOT NULL AND bio !~ '[A-Za-z0-9]';
+
+  INSERT INTO post_merge_data_backfills (name) VALUES ('task_1710_strip_apple_bio');
+  RAISE NOTICE 'task-1710 apple-bio strip applied';
+END $$;
+SQL
+  then
+    echo "post-merge: task-1710 apple-bio strip ok on $label"
+  else
+    echo "post-merge: WARNING — task-1710 apple-bio strip failed on $label (continuing)"
+  fi
+}
+backfill_task_1710_strip_apple_bio dev  "${DATABASE_URL:-}"
+backfill_task_1710_strip_apple_bio prod "${PROD_DATABASE_URL:-}"

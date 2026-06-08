@@ -5449,16 +5449,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (/(^|\.)linkedin\.com$/.test(host)) return { kind: "linkedinUrl", url: u.toString() };
     return { kind: "websiteUrl", url: u.toString() };
   }
+  // Drop Apple Music's boilerplate "Listen to music by … on Apple Music."
+  // sentence wherever it appears. Apple serves this as the og:description on
+  // artist/label pages, so the person/vendor/label scrapers used to capture
+  // it verbatim as a "bio" — it's noise, not biography. If nothing of
+  // substance survives the strip, the bio collapses to "" (treated as no bio
+  // by callers). Shared by cleanBioText (person path) and the label/vendor
+  // scrapers. (Task #1710)
+  function stripAppleMusicBoilerplate(s: string | null | undefined): string {
+    if (!s) return "";
+    const out = s
+      .replace(/listen to music by .+? on apple music\.?/gi, " ")
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    // Only-punctuation/whitespace left over → treat as empty.
+    return /[a-z0-9]/i.test(out) ? out : "";
+  }
   // Strip HTML out of a JSON-LD description (Shopify / Squarespace embed
-  // <p>/<br>) and collapse whitespace.
+  // <p>/<br>) and collapse whitespace, then drop Apple Music boilerplate.
   function cleanBioText(s: string): string {
-    return decodeEntities(
+    const cleaned = decodeEntities(
       s.replace(/<br\s*\/?>/gi, "\n")
        .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
        .replace(/<[^>]+>/g, "")
        .replace(/\n{3,}/g, "\n\n")
        .trim(),
     );
+    return stripAppleMusicBoilerplate(cleaned);
   }
   // Gravatar — md5(lowercased trimmed email). The ?d=404 sentinel makes
   // Gravatar 404 instead of returning the generic mystery-person silhouette
@@ -14705,7 +14723,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           meta["twitter:description"] ||
           meta["description"] ||
           null;
-        if (rawBio) bio = cleanBioText(String(rawBio));
+        if (rawBio) bio = cleanBioText(String(rawBio)) || null;
 
         // Image — JSON-LD image can be { @type: ImageObject, url } or a
         // bare URL or an array. Same picker the instrument scraper uses.
@@ -15770,10 +15788,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           .trim();
       }
       const bio =
-        meta["og:description"] ||
-        meta["twitter:description"] ||
-        meta["description"] ||
-        null;
+        stripAppleMusicBoilerplate(
+          meta["og:description"] ||
+          meta["twitter:description"] ||
+          meta["description"] ||
+          "",
+        ) || null;
       // Location: most plants put their city in the OG description or a
       // dedicated meta tag. We don't try too hard — the admin can fill it
       // in by hand on the detail page if it's missing.
@@ -15979,10 +15999,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           .trim();
       }
       const bio =
-        meta["og:description"] ||
-        meta["twitter:description"] ||
-        meta["description"] ||
-        null;
+        stripAppleMusicBoilerplate(
+          meta["og:description"] ||
+          meta["twitter:description"] ||
+          meta["description"] ||
+          "",
+        ) || null;
       const location =
         meta["business:contact_data:locality"] ||
         meta["og:locality"] ||
@@ -16321,10 +16343,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           .trim();
       }
       const bio =
-        meta["og:description"] ||
-        meta["twitter:description"] ||
-        meta["description"] ||
-        null;
+        stripAppleMusicBoilerplate(
+          meta["og:description"] ||
+          meta["twitter:description"] ||
+          meta["description"] ||
+          "",
+        ) || null;
 
       return res.json({
         name,
@@ -16406,10 +16430,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           .trim();
       }
       const bio =
-        meta["og:description"] ||
-        meta["twitter:description"] ||
-        meta["description"] ||
-        null;
+        stripAppleMusicBoilerplate(
+          meta["og:description"] ||
+          meta["twitter:description"] ||
+          meta["description"] ||
+          "",
+        ) || null;
 
       return res.json({
         name,
@@ -16852,10 +16878,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       );
 
       const bio =
-        meta["og:description"] ||
-        meta["twitter:description"] ||
-        meta["description"] ||
-        null;
+        stripAppleMusicBoilerplate(
+          meta["og:description"] ||
+          meta["twitter:description"] ||
+          meta["description"] ||
+          "",
+        ) || null;
       // Use og:site_name as a tagline when the title (which we used for
       // name) duplicates it; otherwise leave tagline null for the admin
       // to fill in by hand.

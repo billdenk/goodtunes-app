@@ -2016,6 +2016,54 @@ export function SheetHeader({ eyebrow, title, subtitle, onClose }: { eyebrow?: s
   );
 }
 
+// Drop Apple Music's boilerplate "Listen to music by … on Apple Music."
+// sentence wherever it appears. The scraper used to capture this as a "bio";
+// the server now strips it at import and a one-time backfill nulls existing
+// rows, but this is a defensive render-time guard so any boilerplate that
+// slips through never shows on the fan sheet. Returns "" when nothing of
+// substance survives. (Task #1710)
+export function stripAppleMusicBoilerplate(s: string | null | undefined): string {
+  if (!s) return "";
+  const out = s
+    .replace(/listen to music by .+? on apple music\.?/gi, " ")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return /[a-z0-9]/i.test(out) ? out : "";
+}
+
+// A credited *instrument* role — guitar, bass, drums, keys, horns, … — as
+// opposed to vocals or production/engineering credits, which aren't gear.
+// Drives both the unlinked-instrument list on the person sheet and the
+// "is this profile worth opening" richness check. (Task #1710)
+export function roleIsInstrumentCredit(role: string | null | undefined): boolean {
+  if (!role) return false;
+  const r = role.trim().toLowerCase();
+  if (!r) return false;
+  // Vocals are a performance but not an instrument we'd open a gear page for.
+  if (/vocal|\bvox\b|backing vocal|lead vocal|\bsing(s|er|ing)?\b|choir|harmon(y|ies)\b/.test(r)) return false;
+  // Production / engineering / writing credits — not instruments.
+  if (/produc|engineer|mixed|mixing|master(ed|ing)\b|programming|arrang|\ba&r\b|recording|composer|composit|songwrit|writ|lyric|featuring|remix|edit\b|technician|assistant|director|management|manager|design|photograph|artwork|liner/.test(r)) return false;
+  if (/^(other|misc|miscellaneous|performer|musician|instruments?)$/.test(r)) return false;
+  return true;
+}
+
+// A short category label for an unlinked instrument *role* (we have no
+// linked Instrument record, so we infer it from the role text). Falls back
+// to null when nothing matches — callers default to "Instrument". (Task #1710)
+export function shortCategoryForRole(role: string | null | undefined): string | null {
+  if (!role) return null;
+  const r = role.toLowerCase();
+  if (/bass/.test(r)) return "Bass";
+  if (/guitar|guitarra/.test(r)) return "Guitar";
+  if (/drum/.test(r)) return "Drums";
+  if (/percussion|congas|bongos|tambourine|shaker|timbales|cajon|vibraphone|marimba|glockenspiel/.test(r)) return "Percussion";
+  if (/piano|keyboard|organ|synth|rhodes|wurlitzer|mellotron|clavinet|accordion|harpsichord/.test(r)) return "Keys";
+  if (/violin|viola|cello|fiddle|double bass|upright bass|\bstrings?\b/.test(r)) return "Strings";
+  if (/banjo|mandolin|ukulele|harp\b|sitar|dulcimer|lap steel|pedal steel|dobro|lute|oud/.test(r)) return "Strings";
+  if (/sax|trumpet|trombone|\bhorn|flute|clarinet|oboe|bassoon|brass|woodwind|harmonica|cornet|tuba|flugelhorn/.test(r)) return "Horns";
+  return null;
+}
 
 export function PerformerProfileContent({
   person,
@@ -2113,8 +2161,30 @@ export function PerformerProfileContent({
   // don't have a real personId to look up. Same shape either way so the
   // render path is identical.
   const gear = (() => {
-    type GearEntry = { id: string; name: string; shortCategory: string | null; category: string | null; photoUrl: string | null; tracks: Set<string> };
+    // `tappable` rows link to a real Instrument (gear page); unlinked
+    // instrument *credits* (a named role like "Pedal Steel" with no linked
+    // Instrument record) still surface, named with their category, but as a
+    // plain non-tappable row. (Task #1710)
+    type GearEntry = { id: string; name: string; shortCategory: string | null; category: string | null; photoUrl: string | null; tappable: boolean; tracks: Set<string> };
     const byInstrument = new Map<string, GearEntry>();
+    // De-dupe an unlinked instrument credit by its role text.
+    const addRole = (role: string | null | undefined, songId: string) => {
+      if (!roleIsInstrumentCredit(role)) return;
+      const name = role!.trim();
+      const key = `role:${name.toLowerCase()}`;
+      if (byInstrument.has(key) && byInstrument.get(key)!.tappable) return;
+      const entry = byInstrument.get(key) ?? {
+        id: key,
+        name,
+        shortCategory: shortCategoryForRole(name) ?? "Instrument",
+        category: null,
+        photoUrl: null,
+        tappable: false,
+        tracks: new Set<string>(),
+      };
+      entry.tracks.add(songId);
+      byInstrument.set(key, entry);
+    };
     if (profile) {
       for (const t of profile.tracks ?? []) {
         if (!t.instrumentId) continue;
@@ -2124,10 +2194,16 @@ export function PerformerProfileContent({
           shortCategory: t.instrumentShortCategory,
           category: t.instrumentCategory,
           photoUrl: t.instrumentPhotoUrl,
+          tappable: true,
           tracks: new Set<string>(),
         };
         entry.tracks.add(t.songId);
         byInstrument.set(t.instrumentId, entry);
+      }
+      // Unlinked instrument credits — named roles with no linked Instrument.
+      for (const t of profile.tracks ?? []) {
+        if (t.instrumentId) continue;
+        addRole(t.role, t.songId);
       }
     } else {
       // Fallback: this album only. Combine onThisSong (current song) +
@@ -2142,6 +2218,7 @@ export function PerformerProfileContent({
           shortCategory: inst.shortCategory ?? null,
           category: inst.category ?? null,
           photoUrl: inst.photoUrl ?? null,
+          tappable: true,
           tracks: new Set<string>(),
         };
         entry.tracks.add(songId);
@@ -2149,10 +2226,14 @@ export function PerformerProfileContent({
       };
       for (const p of onThisSong) add(p.instrumentId, song?.id ?? "");
       for (const { song: s, performer } of otherTracks) add(performer.instrumentId, s.id);
+      // Unlinked instrument credits from the same album-scoped performers.
+      for (const p of onThisSong) if (!p.instrumentId) addRole(p.role, song?.id ?? "");
+      for (const { song: s, performer } of otherTracks) if (!performer.instrumentId) addRole(performer.role, s.id);
     }
     return Array.from(byInstrument.values())
       .map(({ tracks, ...rest }) => ({ ...rest, trackCount: tracks.size }))
-      .sort((a, b) => b.trackCount - a.trackCount || a.name.localeCompare(b.name));
+      // Linked (tappable) gear leads, then by track count, then name.
+      .sort((a, b) => Number(b.tappable) - Number(a.tappable) || b.trackCount - a.trackCount || a.name.localeCompare(b.name));
   })();
 
   // Open an instrument by id, even when it lives on an album outside the
@@ -2184,7 +2265,7 @@ export function PerformerProfileContent({
     onOpenInstrument(synthetic, tuningNotes ?? undefined, { personId: person.id, songId: songIdForContext });
   };
 
-  const bio = profile?.person.bio ?? person.bio;
+  const bio = stripAppleMusicBoilerplate(profile?.person.bio ?? person.bio) || null;
   // Discography lower down: this album's other tracks + other albums.
   const hasDiscography = otherTracks.length > 0 || otherAlbums.length > 0;
 
@@ -2239,45 +2320,67 @@ export function PerformerProfileContent({
             <section className="pt-4">
               <h3 className="px-5 pb-2 text-fan-primary text-[22px] font-bold leading-tight tracking-tight">Gear</h3>
               <div className="px-5 space-y-2">
-                {gear.map((g) => (
-                  <button
-                    key={g.id}
-                    type="button"
-                    onClick={() => openByIdWithFallback(
-                      g.id,
-                      { name: g.name, category: g.category, shortCategory: g.shortCategory, photoUrl: g.photoUrl },
-                      null,
-                      song?.id ?? "",
-                    )}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-left transition-colors active:bg-white/[0.08]"
-                    style={{ background: "rgba(255,255,255,0.04)" }}
-                    data-testid={`button-performer-gear-${g.id}`}
-                  >
-                    <div
-                      className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center"
-                      style={{ background: "rgba(255,255,255,0.06)" }}
-                    >
-                      {g.photoUrl ? (
-                        <img src={g.photoUrl} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="text-fan-faint" aria-hidden="true">
-                          <path d="M9 18V5l12-2v13" />
-                          <circle cx="6" cy="18" r="3" />
-                          <circle cx="18" cy="16" r="3" />
+                {gear.map((g) => {
+                  // Shared row contents. Tappable (linked-Instrument) rows
+                  // get the trailing chevron + open the gear page; unlinked
+                  // instrument credits render the same row, named with their
+                  // category, but with no chevron and no tap. (Task #1710)
+                  const inner = (
+                    <>
+                      <div
+                        className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center"
+                        style={{ background: "rgba(255,255,255,0.06)" }}
+                      >
+                        {g.photoUrl ? (
+                          <img src={g.photoUrl} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="text-fan-faint" aria-hidden="true">
+                            <path d="M9 18V5l12-2v13" />
+                            <circle cx="6" cy="18" r="3" />
+                            <circle cx="18" cy="16" r="3" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-fan-primary text-[15px] font-medium truncate">{g.name}</p>
+                        <p className="text-fan-secondary text-[12px] truncate">
+                          {g.shortCategory ?? g.category ?? "Gear"}
+                        </p>
+                      </div>
+                      {g.tappable && (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-fan-faint flex-shrink-0" aria-hidden="true">
+                          <path d="M9 6l6 6-6 6" />
                         </svg>
                       )}
+                    </>
+                  );
+                  return g.tappable ? (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => openByIdWithFallback(
+                        g.id,
+                        { name: g.name, category: g.category, shortCategory: g.shortCategory, photoUrl: g.photoUrl },
+                        null,
+                        song?.id ?? "",
+                      )}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-left transition-colors active:bg-white/[0.08]"
+                      style={{ background: "rgba(255,255,255,0.04)" }}
+                      data-testid={`button-performer-gear-${g.id}`}
+                    >
+                      {inner}
+                    </button>
+                  ) : (
+                    <div
+                      key={g.id}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-left"
+                      style={{ background: "rgba(255,255,255,0.04)" }}
+                      data-testid={`text-performer-gear-${g.id}`}
+                    >
+                      {inner}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-fan-primary text-[15px] font-medium truncate">{g.name}</p>
-                      <p className="text-fan-secondary text-[12px] truncate">
-                        {g.shortCategory ?? g.category ?? "Gear"}
-                      </p>
-                    </div>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-fan-faint flex-shrink-0" aria-hidden="true">
-                      <path d="M9 6l6 6-6 6" />
-                    </svg>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             </section>
           )}
@@ -2382,13 +2485,15 @@ export function PerformerProfileContent({
 // list can render them as plain, non-tappable rows instead of dead-ending on
 // an empty page (matching Apple Music, where such credits aren't links).
 export function personProfileIsRich(
-  profile: { person?: { bio?: string | null } | null; tracks?: Array<{ instrumentId?: string | null; albumId?: string | null }> } | undefined,
+  profile: { person?: { bio?: string | null } | null; tracks?: Array<{ instrumentId?: string | null; albumId?: string | null; role?: string | null }> } | undefined,
   currentAlbumId: string | undefined,
 ): boolean {
   if (!profile) return false;
-  if (profile.person?.bio) return true;
+  // A bio counts only if it survives the Apple-Music-boilerplate strip.
+  if (stripAppleMusicBoilerplate(profile.person?.bio)) return true;
   const tracks = profile.tracks ?? [];
-  return tracks.some((t) => !!t.instrumentId || (!!t.albumId && t.albumId !== currentAlbumId));
+  // Linked gear, an unlinked instrument credit, or a track on another album.
+  return tracks.some((t) => !!t.instrumentId || roleIsInstrumentCredit(t.role) || (!!t.albumId && t.albumId !== currentAlbumId));
 }
 
 // Resolves a static instrument from the in-code seed map. Used by surfaces
