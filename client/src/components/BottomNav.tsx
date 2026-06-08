@@ -83,15 +83,24 @@ const NavItem = ({
 }) => {
   const reduceMotion = useReducedMotion();
   const dir = align === "right" ? 1 : align === "left" ? -1 : 0;
-  // End tabs push their OUTER edge further toward the dock's `rounded-full`
-  // cap (Home left, Recents right) and pull the inner edge in, so the
-  // stadium's outer semicircle hugs the dock curve while its inner end keeps
-  // a small even gap to the neighbour. The net center still shifts 6px
-  // outward, matched by contentShift so the icon+label stay centered.
-  const pillLeft = dir === -1 ? "-8px" : dir === 1 ? "4px" : "-2px";
-  const pillRight = dir === -1 ? "4px" : dir === 1 ? "-8px" : "-2px";
+  // Apple-parity concentric gutter (Task #1767). The active stadium keeps an
+  // EVEN ~6px gap from the dock's inner edge on every side instead of hugging
+  // / overflowing it. Vertically that gap is the dock's own py-1.5 — the pill
+  // runs flush to the icon+label box (top/bottom: 0), and since the pill is
+  // shorter than the dock its cap radius is smaller too, so its semicircle
+  // sits ~6px inside the dock's rounded-full cap rather than tracing it.
+  // Horizontally the middle tab is centered; the end tabs (Home left, Recents
+  // right) shift their whole pill OUTWARD by 7px so the outer cap lands that
+  // same ~6px inside the dock's left/right curve — concentric with it — rather
+  // than bleeding to the edge. The pill WIDTH never changes (so the inner cap
+  // keeps a clean gap to the neighbour); contentShift moves the icon+label by
+  // the same 7px so they stay centered inside the shifted stadium. Tuned for
+  // the ~390px iPhone target.
+  const shiftPx = dir * 7;
+  const pillLeft = `${shiftPx}px`;
+  const pillRight = `${-shiftPx}px`;
   const contentShift =
-    dir === -1 ? "-translate-x-[6px]" : dir === 1 ? "translate-x-[6px]" : "";
+    dir === -1 ? "-translate-x-[7px]" : dir === 1 ? "translate-x-[7px]" : "";
   return (
     <button
       type="button"
@@ -101,21 +110,21 @@ const NavItem = ({
     >
       <span
         aria-hidden
-        // Apple Music's active-tab highlight is a tall STADIUM that nearly
-        // fills the dock's interior height and whose ends are true
-        // semicircles, so the selection belongs to the dock's `rounded-full`
-        // outline rather than floating as a separate rounded-rect chip
-        // (Task #1760). `rounded-full` + near-zero top/bottom gap gives the
-        // stadium; the end tabs (Home/Recents) shift their outer edge toward
-        // the dock curve via pillLeft/pillRight so the leftmost pill mirrors
-        // the dock's left curve and the rightmost mirrors the right.
+        // Apple Music's active-tab highlight is a rounded-full STADIUM that
+        // floats inside the dock with an even concentric gap to the dock's own
+        // `rounded-full` outline (Task #1767). top/bottom: 0 runs the pill
+        // flush to the icon+label box, so the dock's py-1.5 becomes an even
+        // ~6px gap above and below; the shorter pill's smaller cap radius keeps
+        // that same gap around its semicircle ends. pillLeft/pillRight shift the
+        // end tabs outward so their outer cap holds the same gap to the dock's
+        // left/right curve instead of bleeding into it.
         className="absolute rounded-full transition-colors duration-200"
         style={{
           background: active ? "rgba(49,158,216,0.18)" : "transparent",
           left: pillLeft,
           right: pillRight,
-          top: "-5px",
-          bottom: "-5px",
+          top: "0px",
+          bottom: "0px",
         }}
       />
       <div className={`relative w-14 h-[26px] flex items-center justify-center ${contentShift}`}>
