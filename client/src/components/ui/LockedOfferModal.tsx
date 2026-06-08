@@ -282,7 +282,7 @@ export function LockedOfferModal({
                   data-testid="button-offer-get-notified"
                 >
                   <Bell className="w-[18px] h-[18px]" strokeWidth={2.2} />
-                  Get Notified
+                  Get early access
                 </button>
               ) : (
                 <button

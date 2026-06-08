@@ -1,0 +1,21 @@
+Hi all,
+
+My apologies for the last-minute timing of things. This is rare for me and was only due to June 8 landing right in the middle of our build-out of the new platform, plus my need to travel to NY.
+
+But I truly felt that today was a special day and have done everything humanly possible to make the date — including a 37-hour day yesterday, two hours of sleep on Sunday morning, and working straight through the past 23 hours.
+
+So, where are we? I think it's good news:
+
+1. PLACEHOLDER IS LIVE: We have the fan page at get.goodtunes.music/nightbirde/hope. It shows fans exactly what they get, lets them dismiss the offer and preview the music, and gives them a "Get early access" button to take action. When they tap it we capture their email — no account or sign-in required — so we can email them the moment we go on sale.
+
+2. STAGING FOR YOUR REVIEW: I have a staging page for you to review. I want to make sure the imaging and copy are correct. I also built in a flow for people to donate for the Gift of Hope boxes — it seems important that people be able to give to the foundation.
+
+I can make any copy or image changes you need in a few minutes. Once everything looks good we launch, and the "Get early access" button becomes "Buy."
+
+Two important items:
+
+1. PLAYERS: People can immediately use the web player on desktop and mobile to listen and enjoy the video. Apple and Google still need to approve the native apps, so I think we'll be fine as long as we don't tell people to go to the App Store and download. We can also send them an email update immediately after purchase letting them know the app is in the process of being approved and that we'll notify them the moment it's available.
+
+2. ADMIN: I worked very hard to give you instant reporting, and it's in. On each album's admin page there's now an "Early access" tab that shows the live waitlist: total signups, how many have been emailed, and how many of those came back to buy after we notified them — over a full list of every signup (email, sign-up date, and whether they've been notified). When we're ready to go on sale, a single "Send early access email" button emails everyone who hasn't been notified yet, with a one-tap link straight to the album, and marks them as notified so we never double-send. I'll get you an invite today, and if you're willing to work with me I can tweak anything you need to dial it in.
+
+It's taken a lot to get here. There's more to do. But I'm grateful to be part of this launch. If it's helpful to know, I expect there will be some issues, and I'll be here to fix them immediately. In getting here, every piece of code has gone through regression testing — a total of 423 automated tests across the platform, all currently passing.

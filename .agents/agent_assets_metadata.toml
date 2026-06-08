@@ -239,3 +239,9 @@ id = "oGjciagXmdu2YW8BAxMxF"
 uri = "file://attached_assets/screenshots/rig-final/5-hunt-cta-agnostic.png"
 type = "image"
 title = "Hunt CTA — agnostic copy (\"Track down this guitar\")"
+
+[[outputs]]
+id = "CxFMFZE7pVOgmK4oPUkEo"
+uri = "file://early-access-launch-letter.txt"
+type = "text"
+title = "Updated launch letter (reflects what shipped)"

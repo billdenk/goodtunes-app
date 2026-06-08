@@ -57,6 +57,7 @@ import { z } from "zod";
 import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema, insertTrackPublishingSplitSchema, insertTrackMechanicalSplitSchema, insertOrganizationSchema, insertReleaseNotifySignupSchema } from "@shared/schema";
 import { ALBUM_FORMATS, type AlbumFormat } from "@shared/schema";
 import { SHORT_CATEGORIES } from "@shared/categories";
+import { SHARE_LINK_HOST } from "@shared/shareSlug";
 import { normalizeAudioUrl } from "@shared/audioUrl";
 import {
   evaluateAutoSyncRun,
@@ -13025,16 +13026,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Build the one-tap album link for an early-access email. Fans on the
+  // waitlist don't own the release yet, so we point them at the public
+  // preview/purchase surface: the clean two-part share link
+  // (get.goodtunes.music/<artist>/<album>) when both slugs exist, falling back
+  // to the canonical /album/:id origin otherwise.
+  const earlyAccessAlbumUrl = (
+    album: { id: string; shareSlug?: string | null },
+    artistShareSlug: string | null,
+  ): string => {
+    if (artistShareSlug && album.shareSlug) {
+      return `https://${SHARE_LINK_HOST}/${artistShareSlug}/${album.shareSlug}`;
+    }
+    const explicit = (process.env.APP_URL || "").trim();
+    const origin = explicit
+      ? explicit.replace(/\/+$/, "")
+      : `https://${(process.env.GOODTUNES_HOST || "my.goodtunes.music").trim()}`;
+    return `${origin}/album/${album.id}`;
+  };
+
   // Operator view of the waitlist — this is the "something simple to reach
   // them" surface. Returns the signups (newest first) plus a count so the
   // admin can copy emails / export and message the waitlist at launch.
+  // Operator-only: requireAdmin admits partner accounts too, but the waitlist
+  // is fan PII (emails), so we re-check for a real super_admin/admin — matching
+  // the gate on the send endpoint below.
   app.get("/api/admin/albums/:id/notify-signups", requireAdmin, async (req, res) => {
+    const auth = await getAuthFromRequest(req);
+    if (!auth || auth.kind !== "admin") {
+      return res.status(403).json({ message: "Operators only." });
+    }
+    const role = (await getUserRole(auth.userId))?.role;
+    if (role !== "super_admin" && role !== "admin") {
+      return res.status(403).json({ message: "Operators only." });
+    }
     const albumId = String(req.params.id);
     const album = await storage.getAlbumById(albumId);
     if (!album) return res.status(404).json({ message: "Album not found" });
     const rows = await storage.listReleaseNotifySignups(albumId);
+    const stats = await storage.releaseNotifyStats(albumId);
     return res.json({
       count: rows.length,
+      // Task #1772 — headline reporting numbers for the admin Early-access
+      // panel: total signups, how many have been emailed, and how many of
+      // those came back to buy after we notified them.
+      stats,
       signups: rows.map((r) => ({
         id: r.id,
         email: r.email,
@@ -13044,6 +13080,62 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         notifiedAt: r.notifiedAt ?? null,
       })),
     });
+  });
+
+  // Task #1772 — one-click "Send early access email": emails every signup that
+  // hasn't been notified yet. Operator-only (requireAdmin admits partner
+  // accounts, so we re-check for a real super_admin/admin) since this fans out
+  // a mass email. We stamp notifiedAt only on the rows we SUCCESSFULLY email,
+  // so a transient mail failure leaves that fan eligible for the next press —
+  // already-delivered fans are never re-sent.
+  app.post("/api/admin/albums/:id/notify-send", requireAdmin, async (req, res) => {
+    const auth = await getAuthFromRequest(req);
+    if (!auth || auth.kind !== "admin") {
+      return res.status(403).json({ message: "Operators only." });
+    }
+    const role = (await getUserRole(auth.userId))?.role;
+    if (role !== "super_admin" && role !== "admin") {
+      return res.status(403).json({ message: "Operators only." });
+    }
+
+    const albumId = String(req.params.id);
+    const album = await storage.getAlbumById(albumId);
+    if (!album) return res.status(404).json({ message: "Album not found" });
+
+    let artistName: string | null = null;
+    let artistShareSlug: string | null = null;
+    if (album.primaryArtistId) {
+      const person = await storage.getPersonById(album.primaryArtistId);
+      artistName = person?.name ?? null;
+      artistShareSlug = person?.artistShareSlug ?? null;
+    }
+
+    const albumUrl = earlyAccessAlbumUrl(album, artistShareSlug);
+
+    // Email each pending recipient, then stamp ONLY the ones that succeeded.
+    const pending = await storage.listPendingReleaseNotifySignups(albumId);
+    const { sendEarlyAccessEmail } = await import("./mail");
+    const stampedIds: string[] = [];
+    let failed = 0;
+    for (const r of pending) {
+      try {
+        const result = await sendEarlyAccessEmail(
+          r.email,
+          album.title,
+          artistName,
+          albumUrl,
+        );
+        if (result?.ok) stampedIds.push(r.id);
+        else failed += 1;
+      } catch (err) {
+        failed += 1;
+        console.error("[early-access-send] failed for", r.email, err);
+      }
+    }
+    const sent = await storage.markReleaseNotifySignupsNotified(stampedIds);
+
+    const stats = await storage.releaseNotifyStats(albumId);
+    return res.json({ ok: true, recipients: pending.length, sent, failed, stats });
   });
 
   app.post("/api/admin/albums/:id/videos", requireAdminBearer, async (req, res) => {

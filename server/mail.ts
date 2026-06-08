@@ -291,6 +291,48 @@ export async function sendWelcomeBackEmail(toEmail: string, displayName: string 
   return sendViaResend("customer-welcome-back", toEmail, subject, html, text);
 }
 
+// Task #1772 — the "early access is open" email blasted to a release's
+// waitlist when the operator presses "Send early access email". One-tap link
+// straight to the album page where they can now buy.
+export async function sendEarlyAccessEmail(
+  toEmail: string,
+  albumTitle: string,
+  artistName: string | null,
+  albumUrl: string,
+): Promise<SendResult> {
+  const artistLine = (artistName ?? "").trim();
+  const subject = artistLine
+    ? `Early access is open — ${albumTitle} by ${artistLine}`
+    : `Early access is open — ${albumTitle}`;
+
+  const text = [
+    `Good news — early access for ${albumTitle}${artistLine ? ` by ${artistLine}` : ""} is now open.`,
+    ``,
+    `You asked us to let you know the moment it dropped. It's live now — tap to listen and make it yours:`,
+    albumUrl,
+    ``,
+    `— The GoodTunes team`,
+  ].join("\n");
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">Early access is open</div>
+      <h1 style="font-size: 26px; margin: 12px 0 16px; font-weight: 700; line-height: 1.2;">${escapeHtml(albumTitle)}${artistLine ? `<span style="color: #4a4a4a; font-weight: 600;"> by ${escapeHtml(artistLine)}</span>` : ""} is here.</h1>
+      <p style="font-size: 15px; color: #333; line-height: 1.55; margin: 0 0 20px;">
+        You asked us to let you know the moment it dropped — it's live now. Tap below to listen and make it yours.
+      </p>
+      <p style="margin: 28px 0;">
+        <a href="${albumUrl}" style="display: inline-block; background: linear-gradient(135deg, #7F10A7, #319ED8); color: #fff; text-decoration: none; padding: 14px 24px; border-radius: 12px; font-weight: 600; font-size: 15px;">Get early access</a>
+      </p>
+      <p style="font-size: 13px; color: #888; line-height: 1.55; margin: 24px 0 0;">
+        You're getting this because you signed up to be notified about <strong>${escapeHtml(albumTitle)}</strong> on GoodTunes.
+      </p>
+    </div>
+  `;
+  return sendViaResend("early-access", toEmail, subject, html, text);
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }

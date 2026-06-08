@@ -219,6 +219,15 @@ export interface IStorage {
   addReleaseNotifySignup(data: InsertReleaseNotifySignup): Promise<ReleaseNotifySignup>;
   listReleaseNotifySignups(albumId: string): Promise<ReleaseNotifySignup[]>;
   countReleaseNotifySignups(albumId: string): Promise<number>;
+  // The not-yet-notified signups for an album — i.e. the recipients a "Send
+  // early access email" press should actually try to reach.
+  listPendingReleaseNotifySignups(albumId: string): Promise<ReleaseNotifySignup[]>;
+  // Stamp notifiedAt on exactly the given signup ids (the ones we successfully
+  // emailed). Failed sends are left un-stamped so a later press retries them.
+  markReleaseNotifySignupsNotified(ids: string[]): Promise<number>;
+  // Admin reporting: how many signups have been notified, and how many of
+  // those came back to buy the album after their notifiedAt stamp.
+  releaseNotifyStats(albumId: string): Promise<{ total: number; notified: number; cameBack: number }>;
 
   // Admin bootstrap
   countAdmins(): Promise<number>;
@@ -1479,6 +1488,76 @@ export class DbStorage implements IStorage {
       .from(releaseNotifySignups)
       .where(eq(releaseNotifySignups.albumId, albumId));
     return r?.n ?? 0;
+  }
+  async listPendingReleaseNotifySignups(albumId: string): Promise<ReleaseNotifySignup[]> {
+    // The recipients a send should try to reach: everyone for this album who
+    // hasn't been stamped notified yet. Already-notified rows are skipped, so a
+    // second press only re-targets people we never successfully reached.
+    return db
+      .select()
+      .from(releaseNotifySignups)
+      .where(
+        and(
+          eq(releaseNotifySignups.albumId, albumId),
+          isNull(releaseNotifySignups.notifiedAt),
+        ),
+      )
+      .orderBy(desc(releaseNotifySignups.createdAt));
+  }
+  async markReleaseNotifySignupsNotified(ids: string[]): Promise<number> {
+    // Stamp ONLY the ids we successfully emailed (and only if still un-stamped,
+    // so concurrent presses can't double-count). Failed sends keep notifiedAt
+    // NULL and stay eligible for the next press — no permanently-missed fans.
+    if (ids.length === 0) return 0;
+    const rows = await db
+      .update(releaseNotifySignups)
+      .set({ notifiedAt: new Date() })
+      .where(
+        and(
+          inArray(releaseNotifySignups.id, ids),
+          isNull(releaseNotifySignups.notifiedAt),
+        ),
+      )
+      .returning({ id: releaseNotifySignups.id });
+    return rows.length;
+  }
+  async releaseNotifyStats(
+    albumId: string,
+  ): Promise<{ total: number; notified: number; cameBack: number }> {
+    const [counts] = await db
+      .select({
+        total: sql<number>`count(*)::int`,
+        notified: sql<number>`count(*) filter (where ${releaseNotifySignups.notifiedAt} is not null)::int`,
+      })
+      .from(releaseNotifySignups)
+      .where(eq(releaseNotifySignups.albumId, albumId));
+    // "Came back" = a notified signup that has a paid-ish order on THIS album
+    // placed after we stamped notifiedAt. Match on the linked customer id or,
+    // failing that, the captured email (case-insensitive).
+    const [back] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(releaseNotifySignups)
+      .where(
+        and(
+          eq(releaseNotifySignups.albumId, albumId),
+          isNotNull(releaseNotifySignups.notifiedAt),
+          sql`exists (
+            select 1 from ${orders} o
+            where o.album_id = ${albumId}
+              and o.status in ('paid','fulfilled','shipped','delivered')
+              and o.created_at > ${releaseNotifySignups.notifiedAt}
+              and (
+                o.customer_id = ${releaseNotifySignups.customerUserId}
+                or lower(o.buyer_email) = ${releaseNotifySignups.email}
+              )
+          )`,
+        ),
+      );
+    return {
+      total: counts?.total ?? 0,
+      notified: counts?.notified ?? 0,
+      cameBack: back?.n ?? 0,
+    };
   }
   async updateSong(id: string, data: Partial<Song>): Promise<Song | undefined> {
     const { id: _i, ...rest } = data as any;

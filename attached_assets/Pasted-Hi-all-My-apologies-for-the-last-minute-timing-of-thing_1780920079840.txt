@@ -1,0 +1,19 @@
+Hi all, 
+
+My apologies for the last minute timing of things. This is rare for me and was only due to June 8 being in the midst of our building out the new platform + my need to travel to NY. 
+
+But, I truly felt that today was a special day and have done everything humanly possible to make the date, including having a 37 hour day yesterday, two hours of sleep on Sunday morning and will working for the past 23 hours. 
+
+So, where are we? I think it’s good news: 
+
+1. PLACEHOLDER IS LIVE: We have the fan page at ... it shows what they get and allows them to dismiss it and preview the music. Plus a “Get Notified’ button is available for them to take an action and we’re set up to send them an email and/or text when we go on sale. 
+2. STAGING FOR YOUR REVEW: I have a staging page for you to review. I want to make sure that the imaging and copy is correct. Also, I built in a flow for people to donate for the Gift of Hope boxes. It seems important that people be able to give to the foundation. 
+
+
+I can make any copy/image changes needed in a few minutes. If all is good we can launch and the “Notify” button becomes “Buy”
+
+Two important items:
+1. Players: People can immediately use the web player on desktop and mobile to listen and enjoy the video. But, Apple/Google need to approve the native apps. So, I think we’ll be okay as long as we don’t announce to go to the App Store and download. We can also send them an update in email immediately after purchase to let them know it’s in the process of being approved and that we will notify them as soon as it’s available. 
+2. ADMIN: I worked very hard to provide you with instant reporting. We might be there. But, there was a lot to do with the apps, the back end, creating the new donation flow for the Gift of Hope boxes, etc. So, I can give you an invite today and if you’re willing to work with me I can tweak anything that you need to dial it in. 
+
+It’s taken a lot to get here. There’s more to do. But, I’m grateful to be a part of this launch. If it’s helpful to know, I expect there will be some issues, and I’ll be here to fix them immediately. But, in getting here every piece of code has had [regressing testing... and a Toal of N tests N different...]

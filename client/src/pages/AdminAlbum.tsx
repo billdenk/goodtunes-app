@@ -116,6 +116,7 @@ import { SellPanel } from "@/components/admin/SellPanel";
 import { PressPanel } from "@/components/admin/PressPanel";
 import { ShopifyPanel } from "@/components/admin/ShopifyPanel";
 import { AlbumCustomersPanel } from "@/components/admin/AlbumCustomersPanel";
+import { AlbumWaitlistPanel } from "@/components/admin/AlbumWaitlistPanel";
 import { AlbumDashboardPanel } from "@/components/admin/AlbumDashboardPanel";
 import { NewAlbumModeDialog } from "@/components/admin/NewAlbumModeDialog";
 import {
@@ -300,7 +301,7 @@ type AirPlayAudioElement = HTMLAudioElement & {
   webkitShowPlaybackTargetPicker?: () => void;
 };
 
-type Tab = "dashboard" | "overview" | "tracks" | "sell" | "press" | "shopify" | "customers";
+type Tab = "dashboard" | "overview" | "tracks" | "sell" | "press" | "shopify" | "customers" | "waitlist";
 // Task #335 — the visible tab set is now driven by `sellMode` +
 // `sellQuoteLockedAt`. Before the operator locks a quote we only show
 // Overview/Tracks/Sell so the page stays focused on "decide what we're
@@ -353,8 +354,17 @@ function visibleTabsFor(
   // hidden for artist/label partners (same gating as Physical, via
   // `hidePress`) and never for SPIN-promo (returned above). Appended after
   // the sell-mode-specific tabs so it always reads last in the bar.
+  // Task #1772 — the Early-access waitlist panel rides alongside Customers:
+  // operator-only (hidden for artist/label partners via `hidePress`) and reads
+  // last in the bar, right after Customers.
   const withCustomers = (tabs: { key: Tab; label: string }[]) =>
-    opts?.hidePress ? tabs : [...tabs, { key: "customers" as Tab, label: "Customers" }];
+    opts?.hidePress
+      ? tabs
+      : [
+          ...tabs,
+          { key: "customers" as Tab, label: "Customers" },
+          { key: "waitlist" as Tab, label: "Early access" },
+        ];
   if (album.sellMode === "direct") {
     // Artist and label partners don't manage manufacturing, so the Physical
     // tab (pressing plant + master preflight) is hidden for them for now.
@@ -491,7 +501,7 @@ export function AdminAlbum() {
   const initialTab = useMemo(() => {
     try {
       const t = new URLSearchParams(search).get("tab");
-      const valid: Tab[] = ["dashboard", "overview", "tracks", "sell", "press", "shopify", "customers"];
+      const valid: Tab[] = ["dashboard", "overview", "tracks", "sell", "press", "shopify", "customers", "waitlist"];
       return valid.includes(t as Tab) ? (t as Tab) : null;
     } catch {
       return null;
@@ -1537,6 +1547,9 @@ export function AdminAlbum() {
               )}
               {safeTab === "customers" && allowed.has("customers") && (
                 <AlbumCustomersPanel albumId={album.id} />
+              )}
+              {safeTab === "waitlist" && allowed.has("waitlist") && (
+                <AlbumWaitlistPanel albumId={album.id} />
               )}
             </>
           );
