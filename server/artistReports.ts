@@ -549,6 +549,11 @@ async function geoHandler(req: Request, res: Response) {
     ORDER BY 2 DESC NULLS LAST
   `) : ({ rows: [] } as any);
 
+  const { salesGeography } = await import("./reports/buyers");
+  const sales = scope.albumIds.length
+    ? await salesGeography(ordersFilter(scope), range.from, range.to)
+    : null;
+
   return res.json({
     range,
     buyers: ((buyersByCountry as any).rows || []).map((r: any) => ({
@@ -561,6 +566,7 @@ async function geoHandler(req: Request, res: Response) {
       listeners: Number(r.listeners),
       plays: Number(r.plays),
     })),
+    sales,
   });
 }
 

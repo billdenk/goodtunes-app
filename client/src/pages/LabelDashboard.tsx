@@ -29,6 +29,7 @@ import { OperatorShell } from "@/components/operator/OperatorShell";
 import { modulesForRole } from "@/components/operator/registry";
 import { PartnerDashboard } from "@/components/partner/PartnerDashboard";
 import { CertRunsSection } from "@/components/partner/cert-runs-section";
+import { SalesMap, type SalesGeoPayload } from "@/components/partner/SalesMap";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { BRAND, CHART_STACK_PALETTE, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 
@@ -70,6 +71,7 @@ type GeoPayload = {
   range: Range;
   buyers: { country: string; buyers: number; revenueCents: number }[];
   listeners: { country: string; listeners: number; plays: number }[];
+  sales?: SalesGeoPayload;
 };
 type AlbumsPayload = {
   range: Range;
@@ -295,16 +297,17 @@ function OverviewTab({ qs, labelId, labelName }: { qs: string; labelId: string |
         <Kpi label="Avg. revenue / artist" value={cur && cur.rosterSize ? dollars(cur.grossCents / cur.rosterSize) : "—"} testId="kpi-arpa" />
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card title="Daily revenue" subtitle="Across the entire roster" testId="chart-revenue">
           <RevenueChart data={series.data?.revenue ?? []} loading={series.isLoading} />
         </Card>
         <Card title="Daily plays" subtitle="Starts & unique listeners" testId="chart-plays">
           <PlaysChart data={series.data?.plays ?? []} loading={series.isLoading} />
         </Card>
-        <Card title="Geography" subtitle="Buyers & listeners by country" testId="chart-geo">
-          <GeoTable buyers={geo.data?.buyers ?? []} listeners={geo.data?.listeners ?? []} loading={geo.isLoading} />
-        </Card>
+      </section>
+
+      <section className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-4" data-testid="chart-geo">
+        <SalesMap data={geo.data?.sales} loading={geo.isLoading} />
       </section>
 
       <Card title="Revenue by artist" subtitle="Stacked daily revenue across the roster" testId="chart-rev-by-artist">

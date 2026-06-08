@@ -11,6 +11,7 @@
 import { useMemo, useState } from "react";
 import { formatUsd, formatUsdCents } from "@shared/money";
 import { Link } from "wouter";
+import { SalesMap, type SalesGeoPayload } from "@/components/partner/SalesMap";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -49,6 +50,7 @@ type Timeseries = {
 type GeoPayload = {
   buyers: { country: string; buyers: number; revenueCents: number }[];
   listeners: { country: string; listeners: number; plays: number }[];
+  sales?: SalesGeoPayload;
 };
 type Tracks = { tracks: { songId: string; title: string; albumTitle: string; plays: number; completes: number; favorites: number; playlistAdds: number; shares: number }[] };
 type AlbumsPayload = { albums: { albumId: string; title: string; artist: string; artwork: string | null; revenueCents: number; artistShareCents: number; units: number; buyers: number; plays: number; listeners: number }[] };
@@ -285,16 +287,17 @@ function OverviewTab({ qs }: { qs: string }) {
         <Kpi label="Completion rate" value={cur ? pct(cur.completionRate) : "—"} sub={cur ? `${compact(cur.completions)} completions` : undefined} testId="kpi-completion" />
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card title="Daily revenue" subtitle="By SKU type" testId="chart-revenue">
           <RevenueChart data={series.data?.revenue ?? []} loading={series.isLoading} />
         </Card>
         <Card title="Daily plays" subtitle="Starts & unique listeners" testId="chart-plays">
           <PlaysChart data={series.data?.plays ?? []} loading={series.isLoading} />
         </Card>
-        <Card title="Geography" subtitle="Buyers & listeners by country" testId="chart-geo">
-          <GeoTable buyers={geo.data?.buyers ?? []} listeners={geo.data?.listeners ?? []} loading={geo.isLoading} />
-        </Card>
+      </section>
+
+      <section className="rounded-2xl bg-white/[0.04] ring-1 ring-white/10 p-4" data-testid="chart-geo">
+        <SalesMap data={geo.data?.sales} loading={geo.isLoading} />
       </section>
 
       <CertRunsSection kind="artist" qs={qs} />
