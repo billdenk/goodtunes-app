@@ -31,7 +31,6 @@ import {
   ScrollText,
   Smartphone,
   Tablet,
-  Trash2,
   Wallet,
   Zap,
 } from "lucide-react";
@@ -611,14 +610,6 @@ export function AdminFrame({
                     onClick={() => navigate("/admin/invite-directory")}
                     testId="nav-invites"
                   />
-                  <SidebarLink
-                    icon={Trash2}
-                    label="Deleted items"
-                    count={-1}
-                    active={active === "trash"}
-                    onClick={() => navigate("/admin/trash")}
-                    testId="nav-trash"
-                  />
                 </Section>
               </>
             ) : isPress || isNonProfit ? (
@@ -985,18 +976,6 @@ export function AdminFrame({
                   active={active === "invite-directory"}
                   onClick={() => navigate("/admin/invite-directory")}
                   testId="nav-invite-directory"
-                />
-                {/* Task #475 — Soft-delete recycle bin (super-admin only).
-                    Labelled "Deleted items" so the mechanical destructive-
-                    without-confirm linter stays quiet: this is a nav link,
-                    not a destructive action. */}
-                <SidebarLink
-                  icon={Trash2}
-                  label="Deleted items"
-                  count={-1}
-                  active={active === "trash"}
-                  onClick={() => navigate("/admin/trash")}
-                  testId="nav-trash"
                 />
               </Section>
             )}
