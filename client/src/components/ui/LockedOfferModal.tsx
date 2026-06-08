@@ -92,8 +92,8 @@ const CARD = "#0E1A4E";
 const PANEL = "#19295D";
 const ORANGE = "#F09837";
 
-type Step = "overview" | "buy" | "give" | "pay";
-const ORDER: Step[] = ["overview", "buy", "give", "pay"];
+type Step = "overview" | "buy" | "signed" | "give" | "pay";
+const ORDER: Step[] = ["overview", "buy", "signed", "give", "pay"];
 
 /* ── campaign primitives ──────────────────────────────────────────── */
 
@@ -329,27 +329,19 @@ function OverviewStep({ c, heroSrc }: { c: ReleaseContent; heroSrc: string }) {
   );
 }
 
-function BuyStep({
+function BundleStep({
   c,
   heroSrc,
-  certSrc,
   bundleQty,
   onBundle,
-  signedQty,
-  onSigned,
   bundleUnitCents,
-  signedUnitCents,
   onZoom,
 }: {
   c: ReleaseContent;
   heroSrc: string;
-  certSrc: string;
   bundleQty: number;
   onBundle: (n: number) => void;
-  signedQty: number;
-  onSigned: (n: number) => void;
   bundleUnitCents: number;
-  signedUnitCents: number;
   onZoom: (src: string) => void;
 }) {
   return (
@@ -361,7 +353,6 @@ function BuyStep({
         {c.buy.intro}
       </p>
 
-      {/* bundle */}
       <div className="flex gap-4 sm:gap-5">
         <Zoomable src={heroSrc} alt={c.buy.bundleName} onZoom={onZoom} testid="zoom-bundle" />
         <div className="flex-1 min-w-0 flex flex-col">
@@ -388,14 +379,41 @@ function BuyStep({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* signed upgrade — coupled to the bundle count just chosen */}
-      <div className="h-px bg-white/10 my-6" />
+function SignedStep({
+  c,
+  certSrc,
+  bundleQty,
+  signedQty,
+  onSigned,
+  signedUnitCents,
+  onZoom,
+}: {
+  c: ReleaseContent;
+  certSrc: string;
+  bundleQty: number;
+  signedQty: number;
+  onSigned: (n: number) => void;
+  signedUnitCents: number;
+  onZoom: (src: string) => void;
+}) {
+  return (
+    <div data-testid="step-signed">
+      <h1 className="text-fan-primary text-2xl font-bold tracking-tight mb-1.5">
+        {c.buy.signedHeading}
+      </h1>
+      <p className="text-fan-secondary text-sm leading-snug mb-6 max-w-[520px]">
+        {c.buy.signedIntro}
+      </p>
+
       <div className="flex gap-4 sm:gap-5">
         <Zoomable src={certSrc} alt={c.buy.signedName} onZoom={onZoom} testid="zoom-signed" />
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex items-start justify-between gap-3">
-            <h3 className="text-fan-primary text-base font-bold tracking-tight">
+            <h3 className="text-fan-primary text-lg font-bold tracking-tight">
               {c.buy.signedName}
             </h3>
             <div
@@ -662,7 +680,7 @@ function PayStep({
           Sign in &amp; pay with card
         </button>
         <p className="text-fan-faint text-xs text-center mt-1">
-          New here? We'll create your account automatically after purchase.
+          New here? You'll create your account during checkout.
         </p>
       </div>
     </div>
@@ -819,7 +837,9 @@ export function LockedOfferModal({
         case "overview":
           return { label: campaign.buy.heading, onClick: () => go("buy"), Icon: ChevronRight };
         case "buy":
-          return { label: `Add ${bundleQty} to Bag`, onClick: () => go("give"), Icon: ShoppingBag };
+          return { label: `Add ${bundleQty} to Bag`, onClick: () => go("signed"), Icon: ShoppingBag };
+        case "signed":
+          return { label: "Gift Hope", onClick: () => go("give"), Icon: ChevronRight };
         case "give":
           return { label: "Review order", onClick: () => go("pay"), Icon: ChevronRight };
         case "pay":
@@ -957,15 +977,22 @@ export function LockedOfferModal({
               <>
                 {step === "overview" && <OverviewStep c={campaign} heroSrc={heroSrc} />}
                 {step === "buy" && (
-                  <BuyStep
+                  <BundleStep
                     c={campaign}
                     heroSrc={heroSrc}
-                    certSrc={certSrc}
                     bundleQty={bundleQty}
                     onBundle={setBundleQty}
+                    bundleUnitCents={bundleUnitCents}
+                    onZoom={setZoomSrc}
+                  />
+                )}
+                {step === "signed" && (
+                  <SignedStep
+                    c={campaign}
+                    certSrc={certSrc}
+                    bundleQty={bundleQty}
                     signedQty={signedQty}
                     onSigned={setSignedQty}
-                    bundleUnitCents={bundleUnitCents}
                     signedUnitCents={signedUnitCents}
                     onZoom={setZoomSrc}
                   />

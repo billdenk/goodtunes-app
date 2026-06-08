@@ -39,9 +39,11 @@ export type ReleaseContent = {
     intro: string;
     bundleName: string;
     bundleBody: string;
+    whyMore: string;
+    signedHeading: string;
+    signedIntro: string;
     signedName: string;
     signedBody: string;
-    whyMore: string;
   };
   give: {
     heading: string;
@@ -123,11 +125,14 @@ const RELEASES: Record<string, ReleaseContent> = {
       bundleName: "Hope Bundle",
       bundleBody:
         "Physical 7\" vinyl + companion booklet, plus the Digital Collector Edition with GoodDeed® certificate and bonus content from Jane's family.",
+      whyMore:
+        "Some people buy more than one as a gift for friends — sharing the music, and the chance to help women facing cancer.",
+      signedHeading: "Add a Signed Certificate",
+      signedIntro:
+        "Upgrade any of your copies with a hand-signed GoodDeed® Certificate — personalized with your name, holographic seal, and QR provenance.",
       signedName: "Signed GoodDeed® Certificate",
       signedBody:
         "Hand-signed by Jane's family, personalized with your name and unique number, finished with a holographic seal + QR provenance. Ships with your vinyl.",
-      whyMore:
-        "Some people buy more than one as a gift for friends — sharing the music, and the chance to help women facing cancer.",
     },
     give: {
       heading: "Gift Hope",
