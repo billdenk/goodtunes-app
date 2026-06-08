@@ -28,6 +28,16 @@ Why this exists:
   where `assetutil` would otherwise be required to read a real compiled
   Assets.car.
 
+  The end-to-end fixtures above can only exercise the loose-PNG path off macOS,
+  because the guard's PRIMARY real-world signal — reading AppIcon renditions out
+  of a compiled `Assets.car` via `assetutil` — needs a Mac. That signal is
+  exactly the "source-correct, binary-wrong" placeholder case (TestFlight 59, 64,
+  66) the guard exists to catch, so leaving its parser untested is the biggest
+  gap. We close it by unit-testing the pure `parse_appicon_renditions()` directly
+  against captured `assetutil --info` JSON strings (a healthy catalog with
+  >= 120px AppIcon renditions, and a placeholder catalog with zero AppIcon
+  renditions), which runs on Linux with no Mac required.
+
 PNG fixtures are written with a tiny pure-stdlib solid-color PNG encoder so the
 test has no third-party dependency.
 
@@ -35,6 +45,8 @@ Run with: `python3 scripts/verify-ios-ipa-icon-smoke.py`
 Exit status: 0 = the guard behaves correctly on every case, 1 = it misbehaved.
 """
 
+import importlib.util
+import json
 import os
 import plistlib
 import shutil
@@ -47,6 +59,16 @@ import zlib
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GUARD = os.path.join(REPO_ROOT, "scripts", "verify-ios-ipa-icon.py")
+
+
+def _load_guard_module():
+    """Import the hyphenated guard script as a module so we can unit-test its
+    pure parser (`parse_appicon_renditions`) directly, without a Mac."""
+    spec = importlib.util.spec_from_file_location("verify_ios_ipa_icon", GUARD)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 
 APP_NAME = "GoodTunes.app"
 
@@ -162,6 +184,133 @@ class Results:
             for line in output.strip().splitlines():
                 print(f"         | {line}", file=sys.stderr)
 
+    def check_truth(self, name, ok, detail=""):
+        """Assert a boolean condition (used by the in-process parser unit tests)."""
+        if ok:
+            self.passed += 1
+            print(f"  ok   {name}")
+        else:
+            self.failed += 1
+            print(f"  FAIL {name}", file=sys.stderr)
+            if detail:
+                print(f"         | {detail}", file=sys.stderr)
+
+
+# --- Captured `assetutil --info` fixtures (Linux-safe parser unit tests) ------
+#
+# `assetutil --info <Assets.car>` prints a JSON array whose first element is
+# catalog metadata (no PixelWidth) and whose remaining elements describe each
+# rendition. We capture trimmed-but-realistic samples here so the guard's pure
+# parser can be exercised on Linux, where the real `assetutil` doesn't exist.
+
+# A HEALTHY catalog: real AppIcon renditions baked in at 120px and 180px (the
+# iPhone home-screen sizes), plus an unrelated AccentColor the parser must skip.
+GOOD_ASSETUTIL_JSON = json.dumps(
+    [
+        {
+            "AssetStorageVersion": "IBCocoaTouchImageCatalogTool-15.0",
+            "Authoring Tool": "@(#)PROGRAM:CoreThemeDefinition  PROJECT:...",
+            "CoreUIVersion": 692,
+            "SchemaVersion": 2,
+        },
+        {
+            "AssetType": "Color",
+            "Color components": [0.0, 0.0, 0.0, 1.0],
+            "Name": "AccentColor",
+            "Colorspace": "srgb",
+        },
+        {
+            "AssetType": "Image",
+            "Idiom": "iphone",
+            "Name": "AppIcon",
+            "PixelHeight": 120,
+            "PixelWidth": 120,
+            "RenditionName": "AppIcon60x60@2x.png",
+            "Scale": 2,
+            "SizeOnDisk": 4096,
+        },
+        {
+            "AssetType": "Image",
+            "Idiom": "iphone",
+            "Name": "AppIcon",
+            "PixelHeight": 180,
+            "PixelWidth": 180,
+            "RenditionName": "AppIcon60x60@3x.png",
+            "Scale": 3,
+            "SizeOnDisk": 8192,
+        },
+    ]
+)
+
+# A PLACEHOLDER catalog: the build compiled WITHOUT the AppIcon, so the car holds
+# only unrelated assets (AccentColor, a launch image). Zero AppIcon renditions is
+# the definitive "source-correct, binary-wrong" placeholder signal.
+PLACEHOLDER_ASSETUTIL_JSON = json.dumps(
+    [
+        {
+            "AssetStorageVersion": "IBCocoaTouchImageCatalogTool-15.0",
+            "CoreUIVersion": 692,
+            "SchemaVersion": 2,
+        },
+        {
+            "AssetType": "Color",
+            "Color components": [1.0, 1.0, 1.0, 1.0],
+            "Name": "AccentColor",
+            "Colorspace": "srgb",
+        },
+        {
+            "AssetType": "Image",
+            "Idiom": "universal",
+            "Name": "LaunchImage",
+            "PixelHeight": 2048,
+            "PixelWidth": 1536,
+            "RenditionName": "LaunchImage.png",
+            "Scale": 2,
+        },
+    ]
+)
+
+
+def run_parser_unit_cases(res):
+    """Unit-test the pure `parse_appicon_renditions()` against captured assetutil
+    JSON, locking in the macOS-only Assets.car signal without needing a Mac."""
+    guard = _load_guard_module()
+    parse = guard.parse_appicon_renditions
+    floor = guard.MIN_REQUIRED_ICON_PX
+
+    # Healthy catalog: parser must surface BOTH AppIcon renditions (and not the
+    # AccentColor), with the largest at/over the guard's required size floor.
+    good = parse(GOOD_ASSETUTIL_JSON)
+    good_sizes = sorted(min(r["width"], r["height"]) for r in good)
+    res.check_truth(
+        "parser: healthy catalog yields exactly the AppIcon renditions",
+        good_sizes == [120, 180],
+        f"got renditions sizes {good_sizes!r} (expected [120, 180])",
+    )
+    largest_good = max((min(r["width"], r["height"]) for r in good), default=0)
+    res.check_truth(
+        "parser: healthy catalog clears the icon-size floor",
+        largest_good >= floor,
+        f"largest AppIcon {largest_good}px < floor {floor}px",
+    )
+
+    # Placeholder catalog: parser must find ZERO AppIcon renditions, which is what
+    # makes the guard hard-fail the "source-correct, binary-wrong" build.
+    placeholder = parse(PLACEHOLDER_ASSETUTIL_JSON)
+    res.check_truth(
+        "parser: placeholder catalog yields zero AppIcon renditions",
+        placeholder == [],
+        f"expected [] but got {placeholder!r}",
+    )
+
+    # Malformed / empty input must degrade to [] (never throw), since the parser
+    # is fed whatever assetutil emits.
+    res.check_truth(
+        "parser: malformed JSON degrades to []",
+        parse("not json at all") == [] and parse("{}") == [],
+        "malformed/non-list assetutil output should parse to an empty list",
+    )
+
 
 def main():
     if not os.path.isfile(GUARD):
@@ -171,6 +320,9 @@ def main():
     work = tempfile.mkdtemp(prefix="ipa-icon-smoke-")
     res = Results()
     try:
+        # --- Parser unit tests: lock in the macOS-only Assets.car signal ---
+        run_parser_unit_cases(res)
+
         # --- GOOD bundle: extracted .app -> exit 0 ---
         good_parent = os.path.join(work, "good")
         good_app = make_app_bundle(good_parent, icon_px=GOOD_ICON_PX, icon_rgba=NAVY)
