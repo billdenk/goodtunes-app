@@ -623,7 +623,9 @@ export function Player() {
                 trackBg="rgba(255,255,255,0.22)"
                 leftIconSize={14}
                 rightIconSize={16}
-                className="w-full flex items-center gap-3 mb-2 flex-shrink-0"
+                className={`w-full flex items-center gap-3 mb-2 flex-shrink-0${
+                  previewMode ? " opacity-40 pointer-events-none" : ""
+                }`}
               />
             )}
 
@@ -675,11 +677,16 @@ export function Player() {
               {airPlaySupported && (
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={previewMode ? undefined : () => {
                     showAirPlayPicker();
                     track("airplay_picker_opened", { songId: currentSong.id, albumId: currentSong.album?.id });
                   }}
-                  className="w-11 h-11 flex items-center justify-center text-white/55 active:text-white transition-colors"
+                  disabled={previewMode}
+                  className={`w-11 h-11 flex items-center justify-center transition-colors ${
+                    previewMode
+                      ? "text-fan-faint cursor-default"
+                      : "text-fan-secondary active:text-white"
+                  }`}
                   aria-label="AirPlay"
                   data-testid="button-airplay"
                 >
@@ -693,8 +700,13 @@ export function Player() {
               )}
               <button
                 type="button"
-                onClick={() => setShowQueue(true)}
-                className="w-11 h-11 flex items-center justify-center text-white/55 active:text-white transition-colors"
+                onClick={previewMode ? undefined : () => setShowQueue(true)}
+                disabled={previewMode}
+                className={`w-11 h-11 flex items-center justify-center transition-colors ${
+                  previewMode
+                    ? "text-fan-faint cursor-default"
+                    : "text-fan-secondary active:text-white"
+                }`}
                 aria-label="Up Next"
                 data-testid="button-queue"
               >
@@ -990,7 +1002,9 @@ export function Player() {
                   trackBg="rgba(255,255,255,0.25)"
                   leftIconSize={16}
                   rightIconSize={18}
-                  className="flex items-center gap-3"
+                  className={`flex items-center gap-3${
+                    previewMode ? " opacity-40 pointer-events-none" : ""
+                  }`}
                 />
               )}
             </div>
@@ -1058,14 +1072,17 @@ export function Player() {
             <div className="relative z-10 flex items-center gap-2 px-5 pt-1 pb-3">
               <button
                 type="button"
-                onClick={toggleShuffle}
-                className="flex-1 h-10 rounded-full flex items-center justify-center transition-colors"
+                onClick={previewMode ? undefined : toggleShuffle}
+                disabled={previewMode}
+                className={`flex-1 h-10 rounded-full flex items-center justify-center transition-colors${
+                  previewMode ? " opacity-40 pointer-events-none" : ""
+                }`}
                 style={{
                   background: shuffle ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.10)",
                   color: shuffle ? "#00062B" : "rgba(255,255,255,0.85)",
                 }}
                 aria-label="Shuffle"
-                aria-pressed={shuffle}
+                aria-pressed={previewMode ? undefined : shuffle}
                 data-testid="toggle-shuffle"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1078,14 +1095,17 @@ export function Player() {
               </button>
               <button
                 type="button"
-                onClick={toggleRepeat}
-                className="flex-1 h-10 rounded-full flex items-center justify-center transition-colors"
+                onClick={previewMode ? undefined : toggleRepeat}
+                disabled={previewMode}
+                className={`flex-1 h-10 rounded-full flex items-center justify-center transition-colors${
+                  previewMode ? " opacity-40 pointer-events-none" : ""
+                }`}
                 style={{
                   background: repeat !== "none" ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.10)",
                   color: repeat !== "none" ? "#00062B" : "rgba(255,255,255,0.85)",
                 }}
                 aria-label="Repeat"
-                aria-pressed={repeat !== "none"}
+                aria-pressed={previewMode ? undefined : repeat !== "none"}
                 data-testid="toggle-repeat"
               >
                 {repeat === "one" ? (
@@ -1107,14 +1127,17 @@ export function Player() {
               </button>
               <button
                 type="button"
-                onClick={toggleAutoplay}
-                className="flex-1 h-10 rounded-full flex items-center justify-center transition-colors"
+                onClick={previewMode ? undefined : toggleAutoplay}
+                disabled={previewMode}
+                className={`flex-1 h-10 rounded-full flex items-center justify-center transition-colors${
+                  previewMode ? " opacity-40 pointer-events-none" : ""
+                }`}
                 style={{
                   background: autoplay ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.10)",
                   color: autoplay ? "#00062B" : "rgba(255,255,255,0.85)",
                 }}
                 aria-label="Autoplay"
-                aria-pressed={autoplay}
+                aria-pressed={previewMode ? undefined : autoplay}
                 data-testid="toggle-autoplay"
                 title="Autoplay similar songs after the queue ends"
               >
