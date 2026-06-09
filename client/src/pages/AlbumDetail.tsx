@@ -606,6 +606,14 @@ function AlbumDetailMobile({
       streamOnly: boolean;
       spotifyTrackUrl: string | null;
       appleMusicTrackUrl: string | null;
+      // Streamable master pointer. The fan player (resolveStream) only fetches
+      // a signed playback URL when muxPlaybackId is present AND muxStatus ===
+      // "ready". These MUST be carried through the `songs` useMemo below — if
+      // they're stripped, the queued song has no master, resolveStream bails
+      // before fetching, and the dock sits in a phantom "playing" state with no
+      // sound (no playback-url POST). Desktop carries them for the same reason.
+      muxPlaybackId: string | null;
+      muxStatus: string | null;
     }[];
   };
   const { data: apiAlbum, isLoading: isAlbumLoading } = useQuery<ApiAlbum>({
@@ -700,6 +708,8 @@ function AlbumDetailMobile({
           streamOnly: !!s.streamOnly,
           spotifyTrackUrl: s.spotifyTrackUrl ?? null,
           appleMusicTrackUrl: s.appleMusicTrackUrl ?? null,
+          muxPlaybackId: s.muxPlaybackId ?? null,
+          muxStatus: s.muxStatus ?? null,
         }));
     }
     return album ? getSongsByAlbum(id) : [];
