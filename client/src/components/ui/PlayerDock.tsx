@@ -605,13 +605,14 @@ export function PlayerDock({
             <button
               type="button"
               aria-label="Shuffle"
-              aria-pressed={shuffleOn}
+              aria-pressed={previewMode ? undefined : shuffleOn}
               title={shuffleOn ? "Shuffle on" : "Shuffle off"}
-              onClick={toggleShuffle}
+              onClick={previewMode ? undefined : toggleShuffle}
+              disabled={previewMode}
               data-testid="button-shuffle"
               className={[
                 `${D.transportBtn} rounded-full inline-flex items-center justify-center transition-colors`,
-                !hasSelection
+                previewMode || !hasSelection
                   ? "text-fan-faint cursor-default"
                   : shuffleOn
                   ? "text-[#319ED8] bg-[#319ED8]/15 hover:bg-[#319ED8]/20"
@@ -686,11 +687,12 @@ export function PlayerDock({
                   ? "Repeat all"
                   : "Repeat one"
               }
-              onClick={cycleRepeat}
+              onClick={previewMode ? undefined : cycleRepeat}
+              disabled={previewMode}
               data-testid="button-repeat"
               className={[
                 `${D.transportBtn} rounded-full inline-flex items-center justify-center transition-colors`,
-                !hasSelection
+                previewMode || !hasSelection
                   ? "text-fan-faint cursor-default"
                   : repeatMode === "off"
                   ? "text-fan-primary hover:text-white hover:bg-white/10"
@@ -895,16 +897,23 @@ export function PlayerDock({
                 anatomy). Only rendered where the host reports an output
                 target exists (`airPlaySupported`, e.g. iOS Safari + the
                 native iPad/iPhone app) AND wires `onAirPlay`; stays hidden on
-                Android/desktop. Output routing is independent of the bought
-                track, so it stays OUT of the `previewMode` gate. */}
+                Android/desktop. Dimmed + non-interactive in `previewMode`
+                (the Preview & Purchase surface) like the other non-working
+                controls, since there's nothing to route until purchase. */}
             {airPlaySupported && onAirPlay && (
               <button
                 type="button"
                 aria-label="AirPlay"
                 title="AirPlay"
-                onClick={onAirPlay}
+                onClick={previewMode ? undefined : onAirPlay}
+                disabled={previewMode}
                 data-testid="button-airplay"
-                className={`${D.utilityBtn} rounded-full inline-flex items-center justify-center transition-colors text-fan-primary hover:text-white hover:bg-white/10`}
+                className={[
+                  `${D.utilityBtn} rounded-full inline-flex items-center justify-center transition-colors`,
+                  previewMode
+                    ? "text-fan-faint cursor-default"
+                    : "text-fan-primary hover:text-white hover:bg-white/10",
+                ].join(" ")}
               >
                 {/* Apple's AirPlay glyph: a rounded display with a small
                     upward triangle centered at its base. */}
@@ -928,27 +937,29 @@ export function PlayerDock({
                 queue, mutually exclusive with lyrics (host's toggleRail
                 closes the other). Rendered ALWAYS when the host wires
                 `onQueue`; disabled (like the lyrics mic) without a selection.
-                Not gated by previewMode — the audition queue is real even in
-                preview. Active state mirrors the lyrics mic's brand-blue. */}
+                Dimmed + non-interactive in `previewMode` (the Preview &
+                Purchase surface) — there's no real queue to open until the
+                album is bought. Active state mirrors the lyrics mic's
+                brand-blue. */}
             {onQueue && (
               <button
                 type="button"
                 aria-label={queueActive ? "Hide Up Next" : "Show Up Next"}
-                aria-pressed={queueActive}
+                aria-pressed={previewMode ? undefined : queueActive}
                 title={queueActive ? "Hide Up Next" : "Show Up Next"}
-                onClick={onQueue}
-                disabled={!hasSelection}
+                onClick={previewMode ? undefined : onQueue}
+                disabled={previewMode || !hasSelection}
                 data-testid="button-queue"
                 className={[
                   `${D.utilityBtn} rounded-full inline-flex items-center justify-center transition-colors`,
-                  hasSelection
+                  !previewMode && hasSelection
                     ? queueActive
                       ? "bg-white/10 hover:bg-white/15"
                       : "text-fan-primary hover:text-white hover:bg-white/10"
                     : "text-fan-faint cursor-default",
                 ].join(" ")}
                 style={
-                  hasSelection && queueActive
+                  !previewMode && hasSelection && queueActive
                     ? { color: "var(--brand-blue)" }
                     : undefined
                 }
@@ -969,12 +980,21 @@ export function PlayerDock({
                 the dark pill. Fill transition dropped so clicks on the
                 rail snap immediately to the new level. */}
             {!compact && !isIOS && (
-              <div className="group/vol flex items-center pr-0.5">
+              <div
+                className={[
+                  "group/vol flex items-center pr-0.5",
+                  // Preview & Purchase surface: the whole volume cluster
+                  // (slide-out slider + mute toggle) is dead until purchase,
+                  // so dim it and kill pointer events — the slider can't even
+                  // slide out and the speaker can't be toggled.
+                  previewMode ? "opacity-40 pointer-events-none" : "",
+                ].join(" ")}
+              >
                 <div className="overflow-hidden transition-[width,margin] duration-200 ease-out w-0 group-hover/vol:w-[68px] group-hover/vol:mr-1.5">
                   <div
                     ref={volumeRail.railRef}
                     className="relative w-16 h-[3px] bg-slate-500 rounded-full cursor-pointer touch-none select-none"
-                    onPointerDown={volumeRail.onPointerDown}
+                    onPointerDown={previewMode ? undefined : volumeRail.onPointerDown}
                     data-testid="rail-volume"
                   >
                     <div

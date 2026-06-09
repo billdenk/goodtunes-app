@@ -11907,21 +11907,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<div className=\"text-[13px] text-fan-secondary truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-[14px] font-medium\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
-    "snippet": "<span className=\"text-[12px] text-fan-secondary leading-snug mt-0.5\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/checkout/BuySheet.tsx",
     "snippet": "<div className=\"text-[13px] text-fan-secondary truncate mt-0.5\">"
   },
   {
@@ -13002,7 +12987,7 @@
   {
     "rule": "naked-icon-button",
     "file": "client/src/components/ui/PlayerDock.tsx",
-    "snippet": "<button type=\"button\" aria-label=\"Shuffle\" aria-pressed={shuffleOn} title={shuffleOn ? \"Shuffle on\" : \"Shuffle off\"} onClick={toggleShuffle} data-testid=\"button-shuffle\" className={[ `${D.transportBtn"
+    "snippet": "<button type=\"button\" aria-label=\"Shuffle\" aria-pressed={previewMode ? undefined : shuffleOn} title={shuffleOn ? \"Shuffle on\" : \"Shuffle off\"} onClick={previewMode ? undefined : toggleShuffle} disable"
   },
   {
     "rule": "naked-icon-button",
@@ -13027,7 +13012,7 @@
   {
     "rule": "naked-icon-button",
     "file": "client/src/components/ui/PlayerDock.tsx",
-    "snippet": "<button type=\"button\" aria-label={queueActive ? \"Hide Up Next\" : \"Show Up Next\"} aria-pressed={queueActive} title={queueActive ? \"Hide Up Next\" : \"Show Up Next\"} onClick={onQueue} disabled={!hasSelect"
+    "snippet": "<button type=\"button\" aria-label={queueActive ? \"Hide Up Next\" : \"Show Up Next\"} aria-pressed={previewMode ? undefined : queueActive} title={queueActive ? \"Hide Up Next\" : \"Show Up Next\"} onClick={pre"
   },
   {
     "rule": "naked-icon-button",
