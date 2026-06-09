@@ -28,6 +28,18 @@ items-subtotal + shipping + tax exceeds the order total.
 The order's stored total stays the tax-inclusive grand total; the tax field is
 display-only and never re-added.
 
+**Shipping options need their OWN tax_behavior (separate from line items).** With
+`automatic_tax` enabled, Stripe rejects `checkout.sessions.create` with
+`400: each shipping option needs to have a tax behavior specified` unless every
+`shipping_options[].shipping_rate_data` carries `tax_behavior` (and ideally
+`tax_code: "txcd_92010001"` Shipping). Setting `tax_behavior` on the line items is
+NOT enough — the shipping rate is a distinct object. The inline/Shopify path that
+passes `shipping_cost: { amount, tax_behavior }` already has it; the embedded
+`shipping_options` (fixed_amount rate) path is the one that silently shipped without
+it and 400'd at the cert step in prod.
+**Why:** the shipping rate is taxed independently, so Stripe demands its behavior
+explicitly rather than inheriting from the goods.
+
 **Fail-safe is free.** With automatic tax on, Stripe blocks completion in the
 embedded UI if it can't determine tax for an address — no extra code needed. A
 registered-but-non-taxing jurisdiction returns a real computed $0, not an error.

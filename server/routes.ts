@@ -234,6 +234,30 @@ async function requireAuth(req: Request, res: Response, next: Function) {
   next();
 }
 
+// Like requireAuth but never 401s: if a valid auth (cookie OR bearer) is
+// present it hydrates req.session so owner-bypass / admin-includeHidden work,
+// otherwise it simply falls through so the handler can serve a public,
+// visibility-gated read to a logged-out fan. Used by public catalog reads
+// (e.g. GET /api/albums/:id) that must render for anonymous visitors on
+// get.goodtunes.music without flashing "couldn't find that album".
+async function optionalAuth(req: Request, res: Response, next: Function) {
+  const a = await getAuthFromRequest(req);
+  if (!a) return next();
+  // Merged-customer deny stays enforced even on a public read: a session for
+  // a merged-away row must be torn down, not silently treated as anonymous.
+  if (a.kind === "customer") {
+    const c = await storage.getCustomer(a.userId);
+    if (!c) return next();
+    if (c.mergedIntoId) {
+      await destroyMergedSession(req, res, a.userId);
+      return res.status(401).json({ message: "Account merged", mergedIntoId: c.mergedIntoId });
+    }
+  }
+  req.session.userId = a.userId;
+  req.session.kind = a.kind;
+  next();
+}
+
 async function requireAdmin(req: Request, res: Response, next: Function) {
   const a = await getAuthFromRequest(req);
   if (!a || a.kind !== "admin") return res.status(401).json({ message: "Unauthorized" });
@@ -18561,7 +18585,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ token });
   });
 
-  app.get("/api/albums/:id", requireAuth, async (req, res) => {
+  // Public, visibility-gated read: a logged-out fan opening a LIVE release on
+  // get.goodtunes.music (the launch root or a /<artist>/<release> share link)
+  // must get the album, not a 401 → "couldn't find that album". optionalAuth
+  // still hydrates the session for owners (owner-bypass) and admins
+  // (includeHidden). Mirrors the already-public /api/public/album-by-slug
+  // payload, so this exposes nothing new.
+  app.get("/api/albums/:id", optionalAuth, async (req, res) => {
     const id = String(req.params.id);
     const includeHidden = await isAdminUser(req);
     let album = await storage.getAlbumById(id, { includeHidden });
