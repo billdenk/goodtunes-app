@@ -1368,6 +1368,11 @@ export function BuySheet({
                         "Sign in to continue"
                       ) : shippingUnavailable ? (
                         "Choose a shippable destination"
+                      ) : addon ? (
+                        <>
+                          Continue
+                          <ChevronRight className="w-4 h-4" strokeWidth={2.4} />
+                        </>
                       ) : (
                         <>
                           Payment
