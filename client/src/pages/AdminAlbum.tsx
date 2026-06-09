@@ -3,6 +3,7 @@ import { normalizeAudioUrl } from "@shared/audioUrl";
 import { normalizeShareSlug, validateShareSlug, shareUrlForSlugs, SHARE_LINK_HOST } from "@shared/shareSlug";
 import { createPortal } from "react-dom";
 import { Card } from "@/components/ui/card";
+import { AlbumCover } from "@/components/ui/AlbumCover";
 import { Link, useLocation, useRoute, useSearch } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -174,6 +175,9 @@ interface AlbumFull {
   artist: string;
   primaryArtistId?: string | null;
   artwork: string;
+  // Primary artist's profile photo joined in from AlbumWithLabel — the
+  // ghosted fallback for the branded placeholder cover (Task #1884).
+  artistPhoto?: string | null;
   year: number | null;
   type: "Single" | "Duo" | "EP" | "LP";
   description: string | null;
@@ -1086,18 +1090,13 @@ export function AdminAlbum() {
             aria-label="Edit album artwork"
             data-testid="button-edit-album-cover"
           >
-            {album.artwork ? (
-              <img
-                src={album.artwork}
-                alt=""
-                className="w-full h-full object-cover transition-transform group-hover:scale-[1.03]"
-                data-testid="img-album-cover"
+            <div className="w-full h-full transition-transform group-hover:scale-[1.03]" data-testid="img-album-cover">
+              <AlbumCover
+                artwork={album.artwork}
+                artistPhoto={album.artistPhoto}
+                title={album.title}
               />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-slate-400">
-                <ImagePlus className="w-7 h-7" strokeWidth={1.5} />
-              </div>
-            )}
+            </div>
             {/* Dim scrim + pencil chip on hover. Gray chip (slate-200)
                 with a slate-700 pencil — softer than the previous white
                 chip, and the deeper scrim makes the pill pop on any

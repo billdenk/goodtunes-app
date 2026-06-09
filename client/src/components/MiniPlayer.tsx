@@ -11,6 +11,7 @@ import { PlayerDock } from "@/components/ui/PlayerDock";
 import { PlayerNameLinks } from "@/components/ui/PlayerNameLinks";
 import { PlayerTitleLink } from "@/components/ui/PlayerTitleLink";
 import { useLyricsRailOpen } from "@/components/ui/DesktopLyricsRail";
+import { AlbumCover } from "@/components/ui/AlbumCover";
 
 // MiniPlayer splits by shell:
 //   * lg+ web desktop — the full-width bottom PlayerDock (storefront
@@ -46,11 +47,11 @@ function DesktopMiniPlayer() {
   };
 
   const dockCover = (
-    <img
-      src={player.currentSong.album.artwork}
-      alt=""
-      className="w-full h-full object-cover"
-      draggable={false}
+    <AlbumCover
+      artwork={player.currentSong.album.artwork}
+      artistPhoto={player.currentSong.album.artistPhoto}
+      title={player.currentSong.album.title}
+      showName={false}
     />
   );
 
@@ -217,12 +218,17 @@ function MobileMiniPlayer() {
             {/* Apple-parity mini art (Task #1767): inset with an even ~6px
                 margin (left == top == bottom) so it sits in a well rather than
                 hugging the capsule edge; capsule height is unchanged. */}
-            <img
-              src={currentSong.album.artwork}
-              alt={currentSong.album.title}
-              className="flex-shrink-0 object-cover"
+            <div
+              className="flex-shrink-0 overflow-hidden"
               style={{ width: 32, height: 32, borderRadius: 8, boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}
-            />
+            >
+              <AlbumCover
+                artwork={currentSong.album.artwork}
+                artistPhoto={currentSong.album.artistPhoto}
+                title={currentSong.album.title}
+                showName={false}
+              />
+            </div>
             <div className="flex-1 min-w-0">
               <PlayerTitleLink
                 title={currentSong.title}
@@ -263,12 +269,17 @@ function MobileMiniPlayer() {
             {/* Apple-parity mini art (Task #1767): inset with an even ~8px
                 margin (left == top == bottom) so it sits in a well rather than
                 hugging the capsule edge; capsule height is unchanged. */}
-            <img
-              src={currentSong.album.artwork}
-              alt={currentSong.album.title}
-              className="flex-shrink-0 object-cover"
+            <div
+              className="flex-shrink-0 overflow-hidden"
               style={{ width: 36, height: 36, borderRadius: 8, boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}
-            />
+            >
+              <AlbumCover
+                artwork={currentSong.album.artwork}
+                artistPhoto={currentSong.album.artistPhoto}
+                title={currentSong.album.title}
+                showName={false}
+              />
+            </div>
 
             <div className="flex-1 min-w-0">
               <PlayerTitleLink

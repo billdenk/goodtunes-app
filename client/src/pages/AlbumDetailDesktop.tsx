@@ -56,6 +56,7 @@ import { CertPdfViewerSheet } from "@/components/ui/CertPdfViewerSheet";
 import { track } from "@/lib/analytics";
 import { isSunrisePending, formatSalesBeginDate } from "@shared/albumStage";
 import { SalesBeginArrivalModal } from "@/components/ui/SalesBeginArrivalModal";
+import { AlbumCover } from "@/components/ui/AlbumCover";
 
 /** Left inset of the desktop album content channel, used to center the
  *  PlayerDock between the rails: AlbumDesktopSidebar sits 12px from the
@@ -89,6 +90,7 @@ type ApiAlbum = {
   title: string;
   artist: string;
   artwork: string;
+  artistPhoto?: string | null;
   year: number | null;
   type: "Single" | "EP" | "LP";
   description: string | null;
@@ -403,6 +405,7 @@ export function AlbumDetailDesktop({
       title: album.title,
       artist: album.artist,
       artwork: album.artwork,
+      artistPhoto: album.artistPhoto,
       year: album.year ?? 0,
       type: album.type,
       description: album.description ?? "",
@@ -681,11 +684,11 @@ export function AlbumDetailDesktop({
       }
     : { title: "", subtitle: undefined, playable: false };
   const dockCover = player.currentSong ? (
-    <img
-      src={player.currentSong.album.artwork}
-      alt=""
-      className="w-full h-full object-cover"
-      draggable={false}
+    <AlbumCover
+      artwork={player.currentSong.album.artwork}
+      artistPhoto={player.currentSong.album.artistPhoto}
+      title={player.currentSong.album.title}
+      showName={false}
     />
   ) : undefined;
 

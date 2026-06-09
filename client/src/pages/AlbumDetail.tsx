@@ -1146,6 +1146,7 @@ function AlbumDetailMobile({
             title: album.title,
             artist: album.artist,
             artwork: album.artwork,
+            artistPhoto: album.artistPhoto,
             year: album.year,
             type: album.type,
             description: album.description,

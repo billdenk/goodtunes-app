@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, forwardRef, useMemo, type Ref } from "react";
 import { Album } from "@/data/musicData";
+import { AlbumCover } from "@/components/ui/AlbumCover";
 import { useAuth } from "@/hooks/useAuth";
 
 export interface ShareIdentities {
@@ -745,6 +746,12 @@ const CertCard = forwardRef(function CertCard(
   { album, ownerName, num, isPreview = false, ownerPhotoUrl, shape, w }: CertCardProps,
   ref: Ref<HTMLDivElement>,
 ) {
+  const [artFailed, setArtFailed] = useState(false);
+  useEffect(() => {
+    setArtFailed(false);
+  }, [album.artwork]);
+  const showArt = !!album.artwork && !artFailed;
+
   const certNumStr = isPreview ? "[Demo]" : `#${num.toString().padStart(2, "0")}`;
   const initial = (ownerName.replace(/^@/, "").trim()[0] || "?").toUpperCase();
   const u = w / 1080;
@@ -779,27 +786,42 @@ const CertCard = forwardRef(function CertCard(
           edges, no object-cover zoom/crop), with the cover's own bottom edge
           dissolving into transparent so it melts into the navy below. Both ride
           under the same BLEED_SCRIM that ramps to solid navy at the bottom. */}
-      {shape === "square" ? (
-        <img
-          src={album.artwork}
-          alt={album.title}
-          className="absolute inset-0 w-full h-full object-cover object-top block"
-          style={{ zIndex: 0 }}
-          data-testid="img-cert-art"
-        />
+      {showArt ? (
+        shape === "square" ? (
+          <img
+            src={album.artwork}
+            alt={album.title}
+            className="absolute inset-0 w-full h-full object-cover object-top block"
+            style={{ zIndex: 0 }}
+            onError={() => setArtFailed(true)}
+            data-testid="img-cert-art"
+          />
+        ) : (
+          <img
+            src={album.artwork}
+            alt={album.title}
+            className="absolute top-0 left-0 w-full block"
+            style={{
+              zIndex: 0,
+              height: "auto",
+              WebkitMaskImage: COVER_BOTTOM_MASK,
+              maskImage: COVER_BOTTOM_MASK,
+            }}
+            onError={() => setArtFailed(true)}
+            data-testid="img-cert-art"
+          />
+        )
       ) : (
-        <img
-          src={album.artwork}
-          alt={album.title}
-          className="absolute top-0 left-0 w-full block"
-          style={{
-            zIndex: 0,
-            height: "auto",
-            WebkitMaskImage: COVER_BOTTOM_MASK,
-            maskImage: COVER_BOTTOM_MASK,
-          }}
-          data-testid="img-cert-art"
-        />
+        // No artwork → branded placeholder (artist photo ghosted, or the
+        // brand-toned tile) so the cert never shows a broken-image glyph.
+        <div className="absolute inset-0" style={{ zIndex: 0 }} data-testid="img-cert-art">
+          <AlbumCover
+            artwork={null}
+            artistPhoto={album.artistPhoto}
+            title={album.title}
+            showName={shape === "square"}
+          />
+        </div>
       )}
       <div className="absolute inset-0" style={{ zIndex: 0, background: BLEED_SCRIM }} />
 

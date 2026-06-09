@@ -20,6 +20,7 @@ import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { popBounce } from "@/lib/motion";
 import { formatReleaseDateLong } from "@shared/albumStage";
 import { streamingHandoffEnabled } from "@/lib/platform";
+import { AlbumCover } from "@/components/ui/AlbumCover";
 
 // Height (px) of the top ChromeScrim band. The scrim is rendered at this
 // height and the album-options menu is clamped to open strictly below it so
@@ -37,6 +38,9 @@ export interface AlbumDetailMobileSurfaceAlbum {
   title: string;
   artist: string;
   artwork: string | null;
+  // Primary artist's profile photo — the ghosted fallback the branded
+  // placeholder cover uses when `artwork` is missing or dead (Task #1884).
+  artistPhoto?: string | null;
   year: number | null;
   type: "Single" | "Duo" | "EP" | "LP";
   description?: string | null;
@@ -536,13 +540,11 @@ export function AlbumDetailMobileSurface({
                 boxShadow: "0 18px 50px rgba(0,0,0,0.55)",
               }}
             >
-              {album.artwork && (
-                <img
-                  src={album.artwork}
-                  alt=""
-                  className="w-full h-full object-cover block"
-                />
-              )}
+              <AlbumCover
+                artwork={album.artwork}
+                artistPhoto={album.artistPhoto}
+                title={album.title}
+              />
               {/* Task #734 — SuperCredits™ badge. Only shown on albums that
                   actually carry credits, so it doubles as the "this album
                   has full liner notes" signal even when the master streams

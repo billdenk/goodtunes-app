@@ -45,11 +45,11 @@ export interface AlbumCoverProps {
 const BRAND_TILE_BACKGROUND =
   "radial-gradient(circle at 28% 18%, rgba(49,158,216,0.40), transparent 58%)," +
   "radial-gradient(circle at 82% 88%, rgba(127,16,167,0.40), transparent 55%)," +
-  "#00062B";
+  "var(--brand-bg)";
 
 // Navy scrim over the ghosted artist photo so the overlaid name always reads.
 const GHOST_SCRIM =
-  "linear-gradient(to bottom, rgba(0,6,43,0.30) 0%, rgba(0,6,43,0.78) 100%)";
+  "linear-gradient(to bottom, rgba(var(--brand-bg-rgb), 0.30) 0%, rgba(var(--brand-bg-rgb), 0.78) 100%)";
 
 export function AlbumCover({
   artwork,
@@ -94,7 +94,7 @@ export function AlbumCover({
         // cover's actual rendered size (large on the detail hero, hidden
         // on tiny surfaces via showName=false).
         containerType: "size",
-        background: hasPhoto ? "#00062B" : BRAND_TILE_BACKGROUND,
+        background: hasPhoto ? "var(--brand-bg)" : BRAND_TILE_BACKGROUND,
       }}
       data-testid={hasPhoto ? "album-cover-ghost" : "album-cover-brandtile"}
     >
@@ -119,7 +119,7 @@ export function AlbumCover({
         style={{
           background: hasPhoto
             ? GHOST_SCRIM
-            : "radial-gradient(circle at 50% 50%, transparent 35%, rgba(0,6,43,0.45) 100%)",
+            : "radial-gradient(circle at 50% 50%, transparent 35%, rgba(var(--brand-bg-rgb), 0.45) 100%)",
         }}
       />
       {overlayName && (

@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { shareAlbum } from "@/lib/shareAlbum";
 import { formatReleaseDateLong } from "@shared/albumStage";
 import { trackPlaybackState } from "@shared/trackPlayback";
+import { AlbumCover } from "@/components/ui/AlbumCover";
 
 /* Trimmed-down song/album/video/photo shapes — DesktopAlbumView consumes
    the SAME response shapes the fan route + admin preview do. We pin only
@@ -33,6 +34,9 @@ export type DesktopAlbumData = {
   title: string;
   artist: string;
   artwork: string;
+  // Primary artist's profile photo — ghosted fallback for the branded
+  // placeholder cover when `artwork` is missing/dead (Task #1884).
+  artistPhoto?: string | null;
   year: number | null;
   type: "Single" | "EP" | "LP";
   description: string | null;
@@ -694,7 +698,7 @@ export function DesktopAlbumView({
               boxShadow: "0 18px 50px rgba(0,0,0,0.55)",
             }}
           >
-            <img src={album.artwork} alt="" className="w-full h-full object-cover" />
+            <AlbumCover artwork={album.artwork} artistPhoto={album.artistPhoto} title={album.title} />
           </div>
 
           <div className="flex-1 min-w-0 flex flex-col pt-2">
