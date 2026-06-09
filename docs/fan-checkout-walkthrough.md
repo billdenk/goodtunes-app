@@ -49,7 +49,19 @@ sheet re-opens automatically.
 **Where the fan is:** still on `/album/:id`, with the Buy sheet open over it. Data
 comes from `GET /api/albums/:id/buy-options`.
 
-The sheet is built top-to-bottom from these sections. Several are conditional.
+**Two layouts — chosen by screen width (same component, same state):**
+
+- **Phone (< 768 px) — bottom sheet.** Slides up from the bottom of the screen, max-width 440 px, scrolls top-to-bottom: format picker → vinyl preview → quantity → booklet → custom add-ons → ship-to country → ZIP → live breakdown → checkout button.
+- **Desktop / tablet (≥ 768 px) — two-column cart panel.** Opens as a centered, wide dialog (max-width 820 px, max-height 88 vh) with a visible dark scrim behind it. The panel is split into:
+  - **Left column (scrollable, ~55%):** album art + title, vinyl preview, format picker, quantity stepper, booklet variant or toggle, custom add-on cards — all the *selection* controls.
+  - **Right column (fixed-width ~300 px, "Your order" panel):** ship-to country selector, ZIP / postal code field, live price breakdown (format, cert, booklet, custom add-ons, shipping, sales tax, total), and the checkout CTA button. All interactive — country/ZIP changes update the live numbers in real time exactly as on mobile.
+  - The header bar (close × or back ‹ chevron) and centered "Buy this album" title sit above both columns.
+  - When advancing to the cert step, the left/right split gives way to a centered single-column cert screen (max-width 560 px) — the header navigation stays.
+  - The Stripe Embedded Checkout (Step 4) fills the full panel width on desktop.
+
+All state (selected format, quantity, ship-to, postal code, breakdown figures, cert picks, Stripe session) is shared between the two layouts — the layout is purely visual. Every `data-testid` is identical in both.
+
+The sheet contents are built from these sections. Several are conditional.
 
 ### 2a. Format picker — *required*
 

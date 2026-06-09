@@ -16,6 +16,7 @@
 //    buttons are surfaced automatically by Stripe when the device
 //    supports them.
 import { useEffect, useMemo, useState } from "react";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { formatUsdCents } from "@shared/money";
 import { useLocation } from "wouter";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
@@ -660,7 +661,860 @@ export function BuySheet({
   };
 
   const inCheckout = !!clientSecret;
+  const isDesktop = useMediaQuery("(min-width: 768px)");
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Desktop layout — wide two-column panel (≥768px)
+  // ─────────────────────────────────────────────────────────────────────────
+  if (isDesktop) {
+    return (
+      <div
+        className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-6"
+        onClick={onClose}
+        data-testid="overlay-buy-sheet"
+      >
+        <div
+          className="relative w-full max-w-[820px] max-h-[88vh] rounded-3xl bg-[#0d1235] text-white shadow-2xl flex flex-col overflow-hidden"
+          style={{ boxShadow: "0 24px 80px rgba(0,0,0,0.65)" }}
+          onClick={(e) => e.stopPropagation()}
+          data-testid="sheet-buy"
+        >
+          {/* Header */}
+          <div className="relative flex-shrink-0 flex items-center px-6 pt-5 pb-4 border-b border-white/[0.07]">
+            {step === "cert" && !inCheckout ? (
+              <SheetBack onClick={() => setStep("main")} data-testid="button-cert-back" />
+            ) : (
+              <SheetClose onClick={onClose} data-testid="button-close-buy" />
+            )}
+            <div className="absolute left-1/2 -translate-x-1/2 text-base font-semibold">
+              {inCheckout
+                ? "Checkout"
+                : step === "cert"
+                  ? "Add a certificate?"
+                  : "Buy this album"}
+            </div>
+          </div>
+
+          {/* ── Stripe Embedded Checkout (full-width) ── */}
+          {inCheckout && (
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {stripe && clientSecret ? (
+                <div className="bg-white text-slate-900" data-testid="embedded-checkout">
+                  <EmbeddedCheckoutProvider stripe={stripe} options={{ clientSecret }}>
+                    <EmbeddedCheckout />
+                  </EmbeddedCheckoutProvider>
+                </div>
+              ) : (
+                <div className="py-10 text-center text-fan-secondary text-sm">Loading checkout…</div>
+              )}
+            </div>
+          )}
+
+          {/* ── Main step: two-column ── */}
+          {!inCheckout && step === "main" && (
+            <div className="flex flex-1 min-h-0 overflow-hidden">
+
+              {/* Left column — album art + all options */}
+              <div className="flex-1 min-w-0 overflow-y-auto px-6 py-6">
+                {!options && !error && (
+                  <div className="py-10 text-center text-white/55 text-sm">Loading…</div>
+                )}
+                {error && (
+                  <div className="mb-4 rounded-xl bg-red-500/10 px-4 py-3 text-red-300 text-sm" data-testid="text-buy-error">
+                    {error}
+                  </div>
+                )}
+                {options && (
+                  <>
+                    {/* Album header */}
+                    <div className="flex items-center gap-4 mb-7">
+                      {options.artwork && (
+                        <img
+                          src={options.artwork}
+                          alt=""
+                          className="w-[72px] h-[72px] rounded-2xl object-cover shadow-lg flex-shrink-0"
+                        />
+                      )}
+                      <div className="min-w-0">
+                        <div className="text-xl font-bold tracking-tight text-fan-primary truncate">{options.title}</div>
+                        <div className="text-sm text-fan-secondary mt-0.5 truncate">{options.artist}</div>
+                      </div>
+                    </div>
+
+                    {/* Vinyl preview */}
+                    {selectedSku && isVinylFormat(selectedSku.format as AlbumFormat) && (
+                      <div className="mb-6" data-testid="youll-get-vinyl">
+                        <SectionLabel>You'll get</SectionLabel>
+                        <div className="rounded-2xl bg-white/[0.05] p-4">
+                          <VinylPreview
+                            artworkUrl={options.artwork}
+                            color={
+                              VINYL_COLOR_BY_ID[selectedSku.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ??
+                              VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID]
+                            }
+                            jacketUpgrade={selectedSku.jacketUpgrade ?? DEFAULT_JACKET_UPGRADE}
+                            size="md"
+                          />
+                          <div className="mt-3 text-xs text-fan-secondary leading-snug">
+                            {(VINYL_COLOR_BY_ID[selectedSku.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ?? VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID]).name}
+                            {" · "}
+                            {selectedSku.label}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Format picker */}
+                    <SectionLabel>Format</SectionLabel>
+                    {options.skus.length === 0 ? (
+                      <div className="text-fan-secondary text-sm py-6 text-center">
+                        Not available for sale yet.
+                      </div>
+                    ) : (
+                      <Group className="mb-6">
+                        {options.skus.map((s) => {
+                          const selected = format === s.format;
+                          return (
+                            <button
+                              key={s.id}
+                              type="button"
+                              disabled={s.soldOut}
+                              onClick={() => setFormat(s.format)}
+                              className={cn(
+                                "w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors",
+                                s.soldOut
+                                  ? "opacity-40 cursor-not-allowed"
+                                  : selected
+                                    ? "bg-[color:var(--brand-blue)]/15"
+                                    : "hover:bg-white/[0.03]",
+                              )}
+                              data-testid={`button-format-${s.format}`}
+                            >
+                              <div className="flex flex-col">
+                                <span className="text-[14px] font-medium">{s.label}</span>
+                                {s.soldOut && <span className="text-[11px] text-rose-300">Sold out</span>}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[14px] font-semibold">{dollars(s.priceCents)}</span>
+                                {selected && (
+                                  <Check
+                                    className="w-[18px] h-[18px] text-[color:var(--brand-blue)]"
+                                    strokeWidth={2.75}
+                                  />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </Group>
+                    )}
+
+                    {allSoldOut && (
+                      <div
+                        className="rounded-2xl bg-white/[0.05] px-4 py-5 text-center mb-6"
+                        data-testid="block-all-sold-out"
+                      >
+                        <div className="text-base font-semibold text-white">Sold out</div>
+                        <p className="text-fan-secondary text-sm mt-1 leading-snug">
+                          Every format for this release has sold out.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Quantity */}
+                    {selectedSku && (
+                      <div className="mb-6">
+                        <SectionLabel>Quantity</SectionLabel>
+                        <div className="flex items-center justify-between rounded-2xl bg-white/[0.05] px-4 py-3">
+                          <span className="text-sm text-fan-secondary">How many copies?</span>
+                          <div className="flex items-center gap-3">
+                            <IconButton
+                              label="Decrease quantity"
+                              variant="glass"
+                              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                              disabled={quantity <= 1}
+                              data-testid="button-qty-dec"
+                            >
+                              <Minus />
+                            </IconButton>
+                            <span className="text-[18px] font-semibold w-6 text-center tabular-nums" data-testid="text-quantity">
+                              {quantity}
+                            </span>
+                            <IconButton
+                              label="Increase quantity"
+                              variant="glass"
+                              onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}
+                              disabled={quantity >= maxQuantity}
+                              data-testid="button-qty-inc"
+                            >
+                              <Plus />
+                            </IconButton>
+                          </div>
+                        </div>
+                        {quantity >= maxQuantity && maxQuantity < MAX_COPIES_PER_CHECKOUT && (
+                          <p className="text-fan-faint text-xs mt-1.5 ml-1" data-testid="text-qty-cap">
+                            That's all we have in stock for this format.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Booklet 7" either/or variant */}
+                    {bookletAddon && bundleAvailable && selectedSku && (
+                      <div className="mb-6">
+                        <SectionLabel>Booklet</SectionLabel>
+                        <Group>
+                          {[false, true].map((withBooklet) => {
+                            const selected = booklet === withBooklet;
+                            const priceCents = withBooklet
+                              ? bookletBundleCents!
+                              : selectedSku.priceCents;
+                            return (
+                              <button
+                                key={withBooklet ? "with-booklet" : "alone"}
+                                type="button"
+                                onClick={() => setBooklet(withBooklet)}
+                                className={cn(
+                                  "w-full flex items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors",
+                                  selected
+                                    ? "bg-[color:var(--brand-mint)]/15"
+                                    : "hover:bg-white/[0.03]",
+                                )}
+                                data-testid={`button-booklet-variant-${withBooklet ? "with" : "alone"}`}
+                              >
+                                <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
+                                  <div
+                                    className="w-12 h-12 rounded-md bg-white/[0.06] flex-shrink-0 overflow-hidden flex items-center justify-center"
+                                    data-testid={`img-booklet-variant-${withBooklet ? "with" : "alone"}`}
+                                  >
+                                    {withBooklet && bookletAddon.artworkUrl ? (
+                                      <img src={bookletAddon.artworkUrl} alt="" className="w-full h-full object-cover" />
+                                    ) : withBooklet ? (
+                                      <span className="text-xs text-fan-faint font-semibold uppercase tracking-wider">16pp</span>
+                                    ) : (
+                                      <span className="text-xs text-fan-faint font-semibold uppercase tracking-wider">7&quot;</span>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col flex-1 min-w-0">
+                                    <span className="text-sm font-medium">
+                                      {withBooklet
+                                        ? `${selectedSku.label} + booklet`
+                                        : `${selectedSku.label} alone`}
+                                    </span>
+                                    <span className="text-[12px] text-white/55 leading-snug mt-0.5">
+                                      {withBooklet
+                                        ? "Includes a 7.125″ × 7.125″, 16-page full-colour booklet tucked in with your record."
+                                        : "Just the 7\" record."}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 whitespace-nowrap">
+                                  <span className="text-sm font-semibold whitespace-nowrap">{dollars(priceCents)}</span>
+                                  {selected && (
+                                    <Check
+                                      className="w-[18px] h-[18px] text-[color:var(--brand-mint)]"
+                                      strokeWidth={2.75}
+                                    />
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </Group>
+                      </div>
+                    )}
+
+                    {/* Booklet cassette stacked toggle */}
+                    {bookletAddon && bookletAvailable && !bundleAvailable && (
+                      <button
+                        type="button"
+                        onClick={() => setBooklet((v) => !v)}
+                        className={cn(
+                          "w-full flex items-start justify-between gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors mb-6",
+                          booklet
+                            ? "bg-[color:var(--brand-mint)]/15"
+                            : "bg-white/[0.05] hover:bg-white/[0.07]",
+                        )}
+                        data-testid="button-toggle-booklet"
+                      >
+                        <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
+                          <div
+                            className="w-12 h-12 rounded-md bg-white/[0.06] flex-shrink-0 overflow-hidden flex items-center justify-center"
+                            data-testid="img-booklet-thumb"
+                          >
+                            {bookletAddon.artworkUrl ? (
+                              <img src={bookletAddon.artworkUrl} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-xs text-fan-faint font-semibold uppercase tracking-wider">16pp</span>
+                            )}
+                          </div>
+                          <div className="flex flex-col flex-1 min-w-0">
+                            <span className="text-sm font-medium">{bookletAddon.label}</span>
+                            <span className="text-[12px] text-white/55 leading-snug mt-0.5">
+                              7.125&quot; × 7.125&quot;, 16 full-colour pages on 100# gloss text. Tucked in with your record.
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 whitespace-nowrap">
+                          <span className="text-sm font-semibold whitespace-nowrap">+ {dollars(bookletAddon.priceCents)}</span>
+                          {booklet && (
+                            <Check
+                              className="w-[18px] h-[18px] text-[color:var(--brand-mint)]"
+                              strokeWidth={2.75}
+                            />
+                          )}
+                        </div>
+                      </button>
+                    )}
+
+                    {/* Custom non-profit add-ons */}
+                    {selectedSku && customAddonsList.length > 0 && (
+                      <div className="mb-2">
+                        <SectionLabel>Add a little extra</SectionLabel>
+                        <Group>
+                          {customAddonsList.map((ca) => {
+                            const qty = customAddonQty[ca.id] ?? 0;
+                            const selected = qty > 0;
+                            const mode = customAddonMode[ca.id] ?? "anonymous";
+                            const setQty = (next: number) =>
+                              setCustomAddonQty((prev) => {
+                                const clamped = Math.max(0, Math.min(MAX_CUSTOM_ADDON_QTY, next));
+                                return { ...prev, [ca.id]: clamped };
+                              });
+                            return (
+                              <div key={ca.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => setQty(selected ? 0 : 1)}
+                                  className={cn(
+                                    "w-full flex items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors",
+                                    selected
+                                      ? "bg-[color:var(--brand-mint)]/15"
+                                      : "hover:bg-white/[0.03]",
+                                  )}
+                                  data-testid={`button-toggle-custom-addon-${ca.id}`}
+                                >
+                                  <div className="flex items-start gap-3 flex-1 min-w-0 pr-2">
+                                    <div
+                                      className="w-12 h-12 rounded-md bg-white/[0.06] flex-shrink-0 overflow-hidden flex items-center justify-center"
+                                      data-testid={`img-custom-addon-${ca.id}`}
+                                    >
+                                      {ca.imageUrl ? (
+                                        <img src={ca.imageUrl} alt="" className="w-full h-full object-cover" />
+                                      ) : (
+                                        <Gift className="w-5 h-5 text-white/40" />
+                                      )}
+                                    </div>
+                                    <div className="flex flex-col flex-1 min-w-0">
+                                      <span className="text-sm font-medium">{ca.name}</span>
+                                      <span className="text-[12px] text-white/55 leading-snug mt-0.5">
+                                        {ca.description || `Supports ${ca.orgName}.`}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 whitespace-nowrap">
+                                    <span className="text-[14px] font-semibold whitespace-nowrap">
+                                      {ca.fanChoosesAmount
+                                        ? selected
+                                          ? `+ ${dollars(customAddonAmount[ca.id] ?? ca.priceCents)}`
+                                          : "You choose"
+                                        : `+ ${dollars(ca.priceCents)}`}
+                                    </span>
+                                    {selected && (
+                                      <Check
+                                        className="w-[18px] h-[18px] text-[color:var(--brand-mint)]"
+                                        strokeWidth={2.75}
+                                      />
+                                    )}
+                                  </div>
+                                </button>
+                                {selected && (
+                                  <div className="px-4 pb-4 pt-1 flex flex-col gap-3 border-t border-white/[0.06]">
+                                    {ca.fanChoosesAmount && (() => {
+                                      const minCents = ca.minAmountCents ?? 0;
+                                      const currentCents = customAddonAmount[ca.id] ?? ca.priceCents;
+                                      const presets = ca.presetAmountsCents ?? [];
+                                      const setAmount = (cents: number) =>
+                                        setCustomAddonAmount((prev) => ({
+                                          ...prev,
+                                          [ca.id]: Math.max(minCents, cents),
+                                        }));
+                                      return (
+                                        <div className="flex flex-col gap-3 pt-3">
+                                          <span className="text-sm text-fan-secondary">Your gift</span>
+                                          {presets.length > 0 && (
+                                            <div className="flex flex-wrap gap-2">
+                                              {presets.map((presetCents) => (
+                                                <button
+                                                  key={presetCents}
+                                                  type="button"
+                                                  onClick={() => setAmount(presetCents)}
+                                                  className={cn(
+                                                    "rounded-full px-4 py-1.5 text-sm font-semibold transition-colors",
+                                                    currentCents === presetCents
+                                                      ? "bg-[color:var(--brand-mint)]/20 text-[color:var(--brand-mint)]"
+                                                      : "bg-white/[0.07] text-fan-secondary hover:bg-white/[0.11]",
+                                                  )}
+                                                  data-testid={`button-custom-addon-preset-${ca.id}-${presetCents}`}
+                                                >
+                                                  {dollars(presetCents)}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-fan-secondary text-sm">$</span>
+                                            <input
+                                              type="number"
+                                              min={(minCents / 100).toFixed(2)}
+                                              step="1"
+                                              value={(currentCents / 100).toFixed(2)}
+                                              onChange={(e) => {
+                                                const raw = parseFloat(e.target.value);
+                                                if (!isNaN(raw) && raw > 0) setAmount(Math.round(raw * 100));
+                                              }}
+                                              className="flex-1 h-10 px-3 rounded-2xl bg-white/[0.07] border border-white/[0.09] text-base text-fan-primary placeholder:text-white/35 appearance-none focus:outline-none focus:border-white/25 tabular-nums"
+                                              data-testid={`input-custom-addon-amount-${ca.id}`}
+                                            />
+                                          </div>
+                                          {minCents > 0 && (
+                                            <p className="text-xs text-fan-faint">
+                                              Minimum gift: {dollars(minCents)}
+                                            </p>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+                                    <div className="flex items-center justify-between gap-3 pt-3">
+                                      <span className="text-sm text-fan-secondary">How many?</span>
+                                      <div className="flex items-center gap-3">
+                                        <IconStep
+                                          icon={<Minus className="w-4 h-4" strokeWidth={2.5} />}
+                                          onClick={() => setQty(qty - 1)}
+                                          disabled={qty <= 1}
+                                          testId={`button-custom-addon-qty-dec-${ca.id}`}
+                                          label="Decrease quantity"
+                                        />
+                                        <span
+                                          className="text-base font-semibold tabular-nums w-6 text-center"
+                                          data-testid={`text-custom-addon-qty-${ca.id}`}
+                                        >
+                                          {qty}
+                                        </span>
+                                        <IconStep
+                                          icon={<Plus className="w-4 h-4" strokeWidth={2.5} />}
+                                          onClick={() => setQty(qty + 1)}
+                                          disabled={qty >= MAX_CUSTOM_ADDON_QTY}
+                                          testId={`button-custom-addon-qty-inc-${ca.id}`}
+                                          label="Increase quantity"
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                      <span className="text-sm text-fan-secondary">Who is this for?</span>
+                                      <div className="grid grid-cols-2 gap-1 rounded-lg bg-white/[0.04] p-1">
+                                        {(
+                                          [
+                                            ["anonymous", "Anyone in need"],
+                                            ["specific", "Someone specific"],
+                                          ] as const
+                                        ).map(([value, copy]) => (
+                                          <button
+                                            key={value}
+                                            type="button"
+                                            onClick={() =>
+                                              setCustomAddonMode((prev) => ({ ...prev, [ca.id]: value }))
+                                            }
+                                            className={cn(
+                                              "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                                              mode === value
+                                                ? "bg-[color:var(--brand-mint)]/20 text-fan-primary"
+                                                : "text-fan-secondary hover:text-fan-primary",
+                                            )}
+                                            data-testid={`button-custom-addon-recipient-${value}-${ca.id}`}
+                                          >
+                                            {copy}
+                                          </button>
+                                        ))}
+                                      </div>
+                                      <p className="text-xs text-fan-faint leading-snug">
+                                        {mode === "specific"
+                                          ? "You'll be able to assign the copies and certificates you purchase to specific recipients after checkout."
+                                          : "These go to fans the foundation chooses. You can still assign your own purchased copies and certificates to recipients after checkout."}
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </Group>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Right column — destination + order summary + CTA */}
+              <div
+                className="w-[300px] flex-shrink-0 border-l border-white/[0.07] overflow-y-auto px-6 py-6 flex flex-col"
+                style={{ background: "rgba(255,255,255,0.018)" }}
+              >
+                {selectedSku && !allSoldOut ? (
+                  <>
+                    <div className="text-xs font-bold uppercase tracking-widest text-fan-faint mb-5">
+                      Your order
+                    </div>
+
+                    {/* Ship-to country */}
+                    <div className="mb-4">
+                      <label
+                        htmlFor="buy-ship-country-d"
+                        className="block text-fan-secondary text-sm mb-1.5"
+                      >
+                        Ship to
+                      </label>
+                      <select
+                        id="buy-ship-country-d"
+                        value={country}
+                        onChange={(e) => setCountry(e.target.value)}
+                        className="w-full rounded-2xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-base text-white appearance-none focus:outline-none focus:border-white/25"
+                        data-testid="select-ship-country"
+                      >
+                        <optgroup label="Common destinations" className="bg-[#0d1235]">
+                          {PRICED_COUNTRIES.map((c) => (
+                            <option key={c.code} value={c.code} className="bg-[#0d1235]">
+                              {c.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="All other countries" className="bg-[#0d1235]">
+                          {OTHER_COUNTRIES.map((c) => (
+                            <option key={c.code} value={c.code} className="bg-[#0d1235]">
+                              {c.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    </div>
+
+                    {/* ZIP / postal code */}
+                    <div className="mb-5">
+                      <label
+                        htmlFor="buy-postal-code-d"
+                        className="block text-fan-secondary text-sm mb-1.5"
+                      >
+                        ZIP / Postal code
+                      </label>
+                      <input
+                        id="buy-postal-code-d"
+                        type="text"
+                        inputMode="text"
+                        autoComplete="postal-code"
+                        value={postalCode}
+                        onChange={(e) => setPostalCode(e.target.value)}
+                        placeholder="e.g. 90210"
+                        className="w-full rounded-2xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-base text-white placeholder:text-white/35 appearance-none focus:outline-none focus:border-white/25"
+                        data-testid="input-postal-code"
+                      />
+                    </div>
+
+                    {/* Live price breakdown */}
+                    <div className="rounded-2xl bg-white/[0.05] p-4 mb-5 text-sm" data-testid="block-breakdown">
+                      <div className="flex items-center justify-between">
+                        <span className="text-fan-secondary">
+                          {selectedSku.label}
+                          {bundleAvailable && booklet ? " + booklet" : ""} × {quantity}
+                        </span>
+                        <span className="text-fan-primary" data-testid="text-line-format">
+                          {dollars(formatLineCents)}
+                        </span>
+                      </div>
+                      {addon && certCount > 0 && (
+                        <div className="flex items-center justify-between mt-1.5">
+                          <span className="text-fan-secondary">{addon.label} × {certCount}</span>
+                          <span className="text-fan-primary" data-testid="text-line-cert">
+                            {dollars(certLineCents)}
+                          </span>
+                        </div>
+                      )}
+                      {bookletAddon && booklet && bookletAvailable && !bundleAvailable && (
+                        <div className="flex items-center justify-between mt-1.5">
+                          <span className="text-fan-secondary">{bookletAddon.label}</span>
+                          <span className="text-fan-primary" data-testid="text-line-booklet">
+                            {dollars(bookletLineCents)}
+                          </span>
+                        </div>
+                      )}
+                      {selectedCustomAddons.map((ca) => {
+                        const unitCents = ca.addon.fanChoosesAmount
+                          ? (customAddonAmount[ca.addon.id] ?? ca.addon.priceCents)
+                          : ca.addon.priceCents;
+                        return (
+                          <div key={ca.addon.id} className="flex items-center justify-between mt-1.5">
+                            <span className="text-fan-secondary">
+                              {ca.addon.name}
+                              {ca.qty > 1 ? ` × ${ca.qty}` : ""}
+                            </span>
+                            <span className="text-fan-primary" data-testid={`text-line-custom-addon-${ca.addon.id}`}>
+                              {dollars(unitCents * ca.qty)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      <div className="flex items-center justify-between mt-1.5">
+                        <span className="text-fan-secondary">Shipping</span>
+                        <span className="text-fan-primary" data-testid="text-line-shipping">
+                          {shippingLoading
+                            ? "…"
+                            : shippingUnavailable
+                              ? "—"
+                              : dollars(shippingCents)}
+                        </span>
+                      </div>
+                      {shippingUnavailable && (
+                        <p
+                          className="text-xs mt-1.5"
+                          style={{ color: "var(--brand-heart)" }}
+                          data-testid="text-shipping-unavailable"
+                        >
+                          We can't quote shipping to this destination yet — try another country.
+                        </p>
+                      )}
+                      {taxReady && (
+                        <div className="flex items-center justify-between mt-1.5">
+                          <span className="text-fan-secondary">Sales tax</span>
+                          <span className="text-fan-primary" data-testid="text-line-tax">
+                            {taxLoading
+                              ? "…"
+                              : taxAvailable
+                                ? dollars(taxCents)
+                                : "At checkout"}
+                          </span>
+                        </div>
+                      )}
+                      <div className="border-t border-white/[0.08] mt-4 pt-4 flex items-center justify-between">
+                        <span className="text-fan-secondary font-medium">Total</span>
+                        <span className="text-xl font-bold text-fan-primary tabular-nums" data-testid="text-buy-total">
+                          {dollars(totalCents)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Checkout CTA */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!isCustomerSignedIn) {
+                          const next = `/album/${albumId}?buy=1`;
+                          navigate(`/login?next=${encodeURIComponent(next)}`);
+                          return;
+                        }
+                        if (addon) {
+                          setStep("cert");
+                        } else {
+                          beginCheckout();
+                        }
+                      }}
+                      disabled={!selectedSku || busy || shippingUnavailable}
+                      className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 transition-all active:scale-[0.98]"
+                      style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
+                      data-testid="button-checkout"
+                    >
+                      {busy
+                        ? "Opening checkout…"
+                        : !isCustomerSignedIn
+                          ? "Sign in to continue"
+                          : shippingUnavailable
+                            ? "Choose a shippable destination"
+                            : addon
+                              ? "Continue"
+                              : `Checkout — ${dollars(totalCents)}`}
+                    </button>
+                    <p className="mt-3 text-fan-faint text-xs text-center leading-snug">
+                      {taxAvailable
+                        ? "Includes shipping and sales tax. Instant digital access in the player."
+                        : "Shipping shown above; sales tax is added at checkout. Instant digital access in the player."}
+                    </p>
+                  </>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center py-10">
+                    <p className="text-fan-faint text-sm text-center">
+                      Select a format above to continue.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Cert step: centered single-column ── */}
+          {!inCheckout && step === "cert" && addon && (
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="max-w-[560px] mx-auto px-6 py-6" data-testid="cert-step">
+                <div className="flex items-center gap-3.5 mb-5">
+                  {options?.artwork && (
+                    <img
+                      src={options.artwork}
+                      alt=""
+                      className="w-16 h-16 rounded-xl object-cover shadow-lg"
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-lg font-bold tracking-tight truncate text-fan-primary">{addon.label}</div>
+                    <div className="text-[13px] text-fan-secondary truncate">
+                      {dollars(addon.priceCents)} per copy · {options?.title}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-fan-secondary text-sm leading-snug mb-5">
+                  Numbered, printed, and personally signed by the artist. Mailed with your record.
+                </p>
+
+                {signedCertRemaining != null && !signedCertSoldOut && (
+                  <div
+                    className={cn(
+                      "mb-3 text-sm font-semibold",
+                      signedCertRemaining <= 5
+                        ? "text-[color:var(--brand-pink)]"
+                        : "text-fan-faint",
+                    )}
+                    data-testid="text-signed-cert-remaining"
+                  >
+                    {signedCertRemaining <= 5
+                      ? `Only ${signedCertRemaining} signed left`
+                      : `${signedCertRemaining} signed copies remaining`}
+                  </div>
+                )}
+
+                {signedCertSoldOut ? (
+                  <div
+                    className="rounded-2xl bg-white/[0.05] px-4 py-5 text-center mb-5"
+                    data-testid="block-signed-cert-sold-out"
+                  >
+                    <div className="text-base font-semibold text-fan-primary">All signed copies claimed</div>
+                    <p className="text-fan-secondary text-sm mt-1 leading-snug">
+                      The signed run for this release has been fully reserved.
+                    </p>
+                  </div>
+                ) : (
+                  <Group className="mb-5">
+                    {copyCerts.map((on, i) => {
+                      const disabled = !on && !canToggleMoreCerts(i);
+                      return (
+                        <button
+                          key={`cert-step-copy-${i}`}
+                          type="button"
+                          onClick={() => toggleCopyCert(i)}
+                          disabled={disabled}
+                          className={cn(
+                            "w-full flex items-start justify-between gap-3 px-4 py-3.5 text-left transition-colors",
+                            disabled
+                              ? "opacity-50 cursor-not-allowed"
+                              : on
+                                ? "bg-[color:var(--brand-pink)]/15"
+                                : "hover:bg-white/[0.03]",
+                          )}
+                          data-testid={`button-toggle-signed-cert-${i}`}
+                        >
+                          <div className="flex flex-col flex-1 min-w-0 pr-2">
+                            <span className="text-[14px] font-medium">
+                              {quantity === 1 ? addon.label : `Copy ${i + 1} · ${addon.label}`}
+                            </span>
+                            <span className="text-[12px] text-fan-secondary leading-snug mt-0.5">
+                              {on
+                                ? "Numbered, printed, and signed by the artist. Mailed with your record."
+                                : "Tap to add a signed certificate for this copy."}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 whitespace-nowrap">
+                            {on && (
+                              <span className="text-[14px] font-semibold whitespace-nowrap">
+                                + {dollars(addon.priceCents)}
+                              </span>
+                            )}
+                            {on && (
+                              <Check
+                                className="w-[18px] h-[18px] text-[color:var(--brand-pink)]"
+                                strokeWidth={2.75}
+                              />
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </Group>
+                )}
+
+                {showCertNameField && (
+                  <div className="mb-5" data-testid="block-cert-name">
+                    <label
+                      htmlFor="cert-step-cert-name-d"
+                      className="block text-fan-secondary text-sm mb-1.5"
+                    >
+                      Name on your GoodDeed® certificate{" "}
+                      <span className="text-fan-faint">(optional)</span>
+                    </label>
+                    <input
+                      id="cert-step-cert-name-d"
+                      type="text"
+                      value={certName}
+                      maxLength={80}
+                      onChange={(e) => setCertName(e.target.value)}
+                      placeholder={defaultCertName || "e.g. Jane Doe"}
+                      className="w-full rounded-2xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-base text-white placeholder:text-white/35 focus:outline-none focus:border-white/25"
+                      data-testid="input-cert-name"
+                    />
+                    <p className="text-fan-faint text-xs mt-1.5 ml-1 leading-snug">
+                      {defaultCertName
+                        ? `Leave blank to use "${defaultCertName}." You can change it later, too.`
+                        : "This prints on your digital certificate. You can change it later, too."}
+                    </p>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={beginCheckout}
+                  disabled={busy}
+                  className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 transition-all active:scale-[0.98] mb-3"
+                  style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
+                  data-testid="button-cert-checkout"
+                >
+                  {busy ? "Opening checkout…" : `Checkout — ${dollars(totalCents)}`}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const zeroed = copyCerts.map(() => false);
+                    setCopyCerts(zeroed);
+                    beginCheckout(zeroed);
+                  }}
+                  disabled={busy}
+                  className="w-full py-3 rounded-2xl font-medium text-sm text-fan-secondary hover:text-fan-primary transition-colors disabled:opacity-40"
+                  data-testid="button-cert-skip"
+                >
+                  Skip — no certificate
+                </button>
+
+                {error && (
+                  <div className="mt-3 rounded-xl bg-red-500/10 px-4 py-3 text-red-300 text-sm" data-testid="text-buy-error">
+                    {error}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Mobile layout — existing bottom-sheet (unchanged)
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div
       className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/70"
