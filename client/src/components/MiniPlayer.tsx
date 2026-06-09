@@ -214,10 +214,11 @@ function MobileMiniPlayer() {
         onClick={() => setShowPlayer(true)}
       >
         {hidden ? (
-          <div className="flex items-center gap-2.5 pl-1.5 pr-1 py-1.5">
-            {/* Apple-parity mini art (Task #1767): inset with an even ~6px
-                margin (left == top == bottom) so it sits in a well rather than
-                hugging the capsule edge; capsule height is unchanged. */}
+          <div className="flex items-center gap-2.5 pl-3 pr-1 py-1.5">
+            {/* Apple-parity mini art: full-pill capsule curves inward, so the
+                left inset (pl-3 ≈ 12px) is larger than the vertical pad
+                (py-1.5 = 6px) so the art clears the curve and sits in a well
+                rather than hugging the rounded edge; capsule height unchanged. */}
             <div
               className="flex-shrink-0 overflow-hidden"
               style={{ width: 32, height: 32, borderRadius: 8, boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}
@@ -265,10 +266,14 @@ function MobileMiniPlayer() {
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-3 pl-2 pr-1.5 py-2">
-            {/* Apple-parity mini art (Task #1767): inset with an even ~8px
-                margin (left == top == bottom) so it sits in a well rather than
-                hugging the capsule edge; capsule height is unchanged. */}
+          <div className="flex items-center gap-3 pl-3.5 pr-1.5 py-2">
+            {/* Apple-parity mini art: the capsule is a full pill (radius =
+                height/2), so its left corner curves inward and a flat 8px pad
+                left the art's top-left corner kissing the curve. The left
+                inset (pl-3.5 ≈ 14px) is larger than the vertical pad (py-2 =
+                8px) on purpose so the art clears the curvature and sits in a
+                true "well" — matching Apple Music's now-playing bar. Capsule
+                height is unchanged. */}
             <div
               className="flex-shrink-0 overflow-hidden"
               style={{ width: 36, height: 36, borderRadius: 8, boxShadow: "0 2px 8px rgba(0,0,0,0.45)" }}
