@@ -25,10 +25,21 @@ trap the fan or clobber the stream):**
   non-qualifying gesture (scroll, rejected play) must not permanently burn the
   one-shot. The old "set done=true before confirming success" design trapped
   users in the silent state.
-- **Non-destructive borrow.** Only pause/remove-src during restore while
+- **Non-destructive borrow.** Only act during restore while
   `a.src.startsWith("data:audio/wav")`; never touch a real src. The silent clip
   resolves in a microtask, long before the network fetch for the signed URL
   completes, so the restore always runs before the real src is attached.
+- **Restore must ONLY pause — never `removeAttribute("src") + load()`.** The
+  WebKit gesture bless is per-element and is DROPPED the instant the element is
+  reset to a no-source state via removeAttribute+load(). Since the restore
+  microtask runs BEFORE the deferred attachSrc play(), de-blessing here re-blocks
+  that play → dock loads the track but sits PAUSED, and a SECOND tap is needed
+  (the symptom was desktop-Safari "two taps to play"). Just `a.pause()` the
+  silent clip and leave the (zero-length, paused) data: src attached;
+  resolveStream overwrites `a.src` wholesale, so the lingering URL is harmless,
+  and pausing also kills a spurious zero-length `ended` that would advance the
+  queue. A plain `a.src = realUrl` swap preserves the bless; a no-source reset
+  does not.
 - **Real-src branch must still attempt an in-gesture play.** Because the real
   play normally fires from an effect (out of gesture), if the silent bless ever
   got blocked the element stays locked forever. So when a real src is already

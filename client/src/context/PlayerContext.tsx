@@ -258,11 +258,24 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const restore = () => {
       // Only undo our own silent borrow — if resolveStream has already swapped
       // in the real (Mux/offline) source, leave it completely alone.
+      //
+      // CRITICAL: we only PAUSE the silent clip — we must NOT removeAttribute
+      // + load() it. On WebKit (Safari desktop + iOS) the gesture "bless" that
+      // play() grants is per-element and is dropped the moment the element is
+      // reset to a no-source state via removeAttribute("src") + load(). The
+      // real play() fires later from attachSrc/the isPlaying effect — OUTSIDE
+      // the gesture — so if we de-bless here that deferred play is autoplay-
+      // blocked, flipping isPlaying back to false. The fan then sees the dock
+      // load the track but sit paused, and a SECOND tap is needed to actually
+      // play. Leaving the (zero-length, paused) silent src attached preserves
+      // the bless; resolveStream overwrites a.src wholesale with the real
+      // source, so the lingering data: URL is harmless (hasRealSrc checks key
+      // off the data:audio/wav prefix). Pausing also stops the silent clip
+      // before it can fire a spurious zero-length `ended` that would advance
+      // the queue.
       try {
         if (a.src.startsWith("data:audio/wav")) {
           a.pause();
-          a.removeAttribute("src");
-          a.load();
         }
       } catch {
         /* best-effort */
@@ -767,7 +780,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
-    if (!a.src && !hlsRef.current) return; // nothing attached yet
+    // A lingering silent-bless clip (data:audio/wav, left attached by
+    // ensureAudioUnlocked's restore to preserve the WebKit gesture activation)
+    // is NOT a real source — treat it as "nothing attached yet" so this effect
+    // never resumes the silent clip before resolveStream swaps in the real
+    // Mux/offline src.
+    const hasAttachedSrc =
+      (!!a.src && !a.src.startsWith("data:audio/wav")) || !!hlsRef.current;
+    if (!hasAttachedSrc) return;
     if (isPlaying) {
       a.play().catch(() => setIsPlaying(false));
     } else {
