@@ -35,6 +35,16 @@ after launch while logged-in/owner accounts (different entry) worked. ShareSlugO
 `/<artist>/<album>/staging` (prefix or suffix) = ShareSlugStaging → full buy/gift
 walkthrough even while prepping. Use the `get.` host (purchase funnel), never `my.`.
 
+**Headless/external_url screenshots FALSE-ALARM "We couldn't find that album"
+on the slug page:** the `get.goodtunes.music/<artist>/<album>` page resolves through
+a CHAINED query (ShareSlugTwo `by-slug` → primes `["/api/albums",id]` cache, `retry:false`),
+and the external_url screenshot tool reproducibly renders `AlbumNotFound` even when curl
+AND real prod traffic get 200 on every endpoint (the headless capture doesn't await the
+chained resolve / Cloudflare treats the datacenter headless request differently). Do NOT
+trust an external_url screenshot of a fan slug page as evidence the page is broken —
+verify with anon `curl` of `by-slug` + `albums/:id` + `playback-url` and grep the
+deployment logs for real fans hitting those endpoints (look for `POST .../playback-url 200`).
+
 **Embargoed title track (`previewHidden`) does NOT unlock for owners:** desktop
 `playableSongs` filters `isPreviewable !== false` for EVERYONE (server derives
 `isPreviewable = !previewHidden`), and the campaign gate comment says it "stays locked
