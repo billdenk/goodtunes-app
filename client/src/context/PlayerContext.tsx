@@ -5,7 +5,7 @@ import { Song, Album, getSongById } from "@/data/musicData";
 import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { track } from "@/lib/analytics";
 import { apiRequest } from "@/lib/queryClient";
-import { isNative } from "@/lib/platform";
+import { isNative, isWebIOS } from "@/lib/platform";
 import { offlineSrcFor } from "@/lib/nativeDownloads";
 
 export interface PlayerSong extends Song {
@@ -666,11 +666,27 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         hls.attachMedia(a);
       } else {
         // Native HLS (Safari/iOS), progressive (wav/mp3), or a decrypted
-        // offline `blob:` URL — direct src assignment + load() queues the
-        // resource fetch and play() is safe to call immediately (the browser
-        // will begin actual output once enough data is buffered).
+        // offline `blob:` URL — direct src assignment. play() is safe to call
+        // immediately (the browser begins actual output once enough data is
+        // buffered).
         a.src = url;
-        a.load();
+        // iOS WebKit quirk — the missing half of the autoplay-unlock fix.
+        // ensureAudioUnlocked() blesses the element with a gesture-bound
+        // silent-clip play(), and the restore() carefully avoids
+        // removeAttribute+load() so the bless survives until we swap in the
+        // real source here. But calling HTMLMediaElement.load() ALSO re-locks
+        // the element on iOS WebKit: it drops the gesture activation, so the
+        // real play() below — which fires from this async attach, OUTSIDE the
+        // original tap — is autoplay-blocked and the fan hears nothing (the
+        // anon-preview "flips to playing, no sound" bug on iPhone Safari AND
+        // Chrome; both are WebKit). This is the same quirk howler.js works
+        // around by never calling load() after the unlock. Assigning a.src
+        // already invokes the media-element load algorithm, so the explicit
+        // load() is redundant — skipping it on iOS web preserves the bless so
+        // the deferred play() is permitted on the FIRST tap. Desktop Safari
+        // (already working, leave it alone), Android (hls.js branch above),
+        // and the native apps are untouched.
+        if (!isWebIOS) a.load();
         if (isPlayingRef.current) {
           a.play().catch(() => setIsPlaying(false));
         }

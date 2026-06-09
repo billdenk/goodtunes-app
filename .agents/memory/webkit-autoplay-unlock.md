@@ -48,6 +48,21 @@ trap the fan or clobber the stream):**
 - Call `ensureAudioUnlocked()` synchronously at the TOP of both `playSong` and
   `togglePlay` (the gesture entry points), not just from the global listeners.
 
+- **`a.load()` RE-LOCKS the element on iOS WebKit — the missing half.** The
+  restore() avoiding removeAttribute+load() is not enough: `attachSrc` swaps in
+  the real source via `a.src = url; a.load()`, and that explicit `load()` ALSO
+  drops the gesture bless on iOS WebKit (iPhone Safari AND Chrome — both
+  WebKit). The deferred play() then fails and the fan hears nothing even though
+  the silent bless succeeded. Desktop Safari tolerates load() (stays blessed),
+  which is why desktop worked but iPhone didn't. Fix: skip the explicit
+  `a.load()` on `isWebIOS` in the native-HLS/direct-src branch — assigning
+  `a.src` already invokes the media-element load algorithm, so load() is
+  redundant; skipping it preserves the bless so play() lands on the FIRST tap.
+  Same quirk howler.js works around (never call load() after the unlock).
+  **Android is NOT affected:** it uses the hls.js/MSE branch (play() from
+  MANIFEST_PARSED) and shares Chromium's session-activation autoplay policy with
+  desktop Chrome (confirmed working) — Chromium has no load() re-lock quirk.
+
 **Why:** masters never leave as a file (Mux signing is mandatory), so the
 async-signed-URL → deferred-play shape is structural and can't be made
 synchronous; the unlock is the only lever. Do not "fix" this by pre-fetching to
