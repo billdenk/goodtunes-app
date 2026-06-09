@@ -15,6 +15,14 @@ import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
 export function DesktopLyricsBody() {
   const player = usePlayer();
   const cs = player.currentSong;
+  // Clamp lyric-line taps into the active preview window (no-op off-preview).
+  const lyricsSeek = (s: number) =>
+    player.previewMode
+      ? player.seekTo(
+          player.previewStartSec +
+            Math.min(Math.max(0, s - player.previewStartSec), player.previewWindowSec - 0.1),
+        )
+      : player.seekTo(s);
 
   if (!cs) {
     return (
@@ -47,7 +55,9 @@ export function DesktopLyricsBody() {
       duration={player.duration}
       syncedLyrics={cs.syncedLyrics}
       currentTime={player.currentTime}
-      onSeek={player.seekTo}
+      // Highlight tracks absolute currentTime; a lyric-line tap clamps into the
+      // preview window so previews stay within the ≤30s compliance cap.
+      onSeek={lyricsSeek}
       writers={(cs as any).writers}
       active={player.showLyrics}
       fontSize={22}

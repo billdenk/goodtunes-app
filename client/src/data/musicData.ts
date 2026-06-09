@@ -84,6 +84,11 @@ export interface Song {
   muxAssetId?: string | null;
   muxPlaybackId?: string | null;
   muxStatus?: "preparing" | "ready" | "errored" | string | null;
+  // Operator/GoodSync-placed 30-sec preview window, in milliseconds into the
+  // master. When set, the fan preview starts at previewStartMs (e.g. the
+  // chorus) instead of 0:00; null → fall back to the first 30 seconds.
+  previewStartMs?: number | null;
+  previewEndMs?: number | null;
   // Task #734 — stream-elsewhere tracks. When `streamOnly` is true,
   // GoodTunes does NOT host the master: the player must never attempt
   // Mux/raw playback and instead hands the fan off to their chosen

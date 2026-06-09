@@ -14,7 +14,7 @@ import {
   Volume1,
   VolumeX,
 } from "lucide-react";
-import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
+import { usePlayer } from "@/context/PlayerContext";
 import { IconButton } from "@/components/ui/IconButton";
 import { LyricsIcon } from "@/components/ui/LyricsIcon";
 import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
@@ -101,15 +101,22 @@ export function DesktopNowPlaying() {
     player.setShowQueue(!player.showQueue);
   };
 
-  // Preview-mode scrubber denominator mirrors the dock: the 30-sec cap, not
-  // the song's true duration, so the bar fills as previews auto-advance.
-  const total = player.previewMode ? PREVIEW_CAP_SECONDS : player.duration;
+  // Preview-mode scrubber mirrors the dock: window-relative, so the rail length
+  // is the placed previewWindowSec and 0 maps to previewStartSec. The bar fills
+  // as previews auto-advance at the window end.
+  const total = player.previewMode ? player.previewWindowSec : player.duration;
+  const elapsed = player.previewMode
+    ? Math.max(0, player.currentTime - player.previewStartSec)
+    : player.currentTime;
   const progressPct =
-    total > 0 ? Math.min(100, (player.currentTime / total) * 100) : 0;
+    total > 0 ? Math.min(100, (elapsed / total) * 100) : 0;
   const onSeek = (pct: number) => {
     const secs = (pct / 100) * total;
     if (player.previewMode) {
-      player.seekTo(Math.min(secs, PREVIEW_CAP_SECONDS - 0.1));
+      player.seekTo(
+        player.previewStartSec +
+          Math.min(Math.max(0, secs), player.previewWindowSec - 0.1),
+      );
     } else {
       player.seekTo(secs);
     }
@@ -461,6 +468,14 @@ export function DesktopNowPlaying() {
 function LyricsPanelBody() {
   const player = usePlayer();
   const cs = player.currentSong;
+  // Clamp lyric-line taps into the active preview window (no-op off-preview).
+  const lyricsSeek = (s: number) =>
+    player.previewMode
+      ? player.seekTo(
+          player.previewStartSec +
+            Math.min(Math.max(0, s - player.previewStartSec), player.previewWindowSec - 0.1),
+        )
+      : player.seekTo(s);
   if (!cs) return null;
   const hasPlain = !!cs.lyrics && cs.lyrics.trim().length > 0;
   const hasSynced = !!cs.syncedLyrics && cs.syncedLyrics.length > 0;
@@ -482,7 +497,9 @@ function LyricsPanelBody() {
       duration={player.duration}
       syncedLyrics={cs.syncedLyrics}
       currentTime={player.currentTime}
-      onSeek={player.seekTo}
+      // Highlight tracks absolute currentTime; a lyric-line tap clamps into the
+      // preview window so previews stay within the ≤30s compliance cap.
+      onSeek={lyricsSeek}
       writers={(cs as any).writers}
       active={player.showLyrics}
       fontSize={28}

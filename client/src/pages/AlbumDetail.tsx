@@ -13,7 +13,7 @@ import { PhotoLightbox } from "@/components/ui/PhotoLightbox";
 export { BonusVideoPlayer } from "@/components/ui/BonusVideoPlayer";
 import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
+import { usePlayer } from "@/context/PlayerContext";
 import { useAlbumOwnership } from "@/hooks/useAlbumOwnership";
 import { useFullPlaybackAccess } from "@/hooks/useFullPlaybackAccess";
 import { FanPreviewProvider, useFanPreview } from "@/hooks/useFanPreview";
@@ -410,7 +410,7 @@ function AlbumDetailMobile({
   const id = albumId ?? params.id;
   const _recordRecent = useRecordRecent();
   const [, navigate] = useLocation();
-  const { playSong, currentSong, isPlaying, togglePlay, playNext, playLast, addToQueue, queue, currentIndex, previewMode, setPreviewMode, currentTime } = usePlayer();
+  const { playSong, currentSong, isPlaying, togglePlay, playNext, playLast, addToQueue, queue, currentIndex, previewMode, setPreviewMode, currentTime, previewEndSec } = usePlayer();
   const isOwnedRaw = useAlbumOwnership(id);
   // Task #909 — is this album an *active* admin-granted preview (vs a real
   // owned/comp copy)? Drives the [Demo] GoodDeed cert. Server already
@@ -906,9 +906,9 @@ function AlbumDetailMobile({
     if (!was || isPlaying) return;
     if (queue.length === 0) return;
     if (currentIndex !== queue.length - 1) return;
-    if (currentTime < PREVIEW_CAP_SECONDS - 0.5) return;
+    if (currentTime < previewEndSec - 0.5) return;
     setShowBuySheet(true);
-  }, [isPlaying, previewMode, queue.length, currentIndex, currentTime, isOwned, apiAlbum?.goodTunesReleaseDate]);
+  }, [isPlaying, previewMode, queue.length, currentIndex, currentTime, previewEndSec, isOwned, apiAlbum?.goodTunesReleaseDate]);
 
   // Leaving the album shouldn't leave preview-mode armed on whatever
   // the fan plays next (a downloaded album from their library, a

@@ -78,6 +78,15 @@ interface PlayerContextValue extends PlayerState {
   playNext: (song: PlayerSong) => void;
   playLast: (song: PlayerSong) => void;
   setPreviewMode: (on: boolean) => void;
+  /** Preview window for the current song, in seconds, derived from the
+   *  operator/GoodSync-placed previewStartMs/previewEndMs. previewStartSec is
+   *  where the 30-sec preview begins (0 when no window is set), previewEndSec
+   *  where it ends, and previewWindowSec the clamped length (≤ PREVIEW_CAP_
+   *  SECONDS). Only meaningful while previewMode is on; off-preview they
+   *  resolve to 0 / cap / cap so scrubber math reduces to 0..duration. */
+  previewStartSec: number;
+  previewEndSec: number;
+  previewWindowSec: number;
   /** Sets output volume (0–100). Unmutes when the new level is > 0. */
   setVolume: (level: number) => void;
   /** Toggles mute, preserving the prior volume level. */
@@ -232,6 +241,30 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const currentSong = queue[currentIndex] ?? null;
 
+  // Preview window (seconds) for the current song, derived from the
+  // operator/GoodSync-placed previewStartMs/previewEndMs. The fan preview
+  // starts at previewStartSec (the placed chorus) instead of always 0:00, and
+  // auto-advances at previewEndSec. Falls back to the first PREVIEW_CAP_SECONDS
+  // when no window is set, and the window length never exceeds PREVIEW_CAP_
+  // SECONDS so the "30s preview" guarantee holds. Resolves to 0 / cap / cap
+  // off-preview (gated on previewMode) so the consuming scrubbers' subtractions
+  // collapse back to the original 0..duration math.
+  const rawPreviewStartMs = previewMode ? currentSong?.previewStartMs : null;
+  const previewStartSec =
+    Number.isFinite(rawPreviewStartMs) && (rawPreviewStartMs as number) > 0
+      ? (rawPreviewStartMs as number) / 1000
+      : 0;
+  const rawPreviewEndMs = previewMode ? currentSong?.previewEndMs : null;
+  let previewEndSec =
+    Number.isFinite(rawPreviewEndMs) &&
+    (rawPreviewEndMs as number) / 1000 > previewStartSec
+      ? (rawPreviewEndMs as number) / 1000
+      : previewStartSec + PREVIEW_CAP_SECONDS;
+  if (previewEndSec - previewStartSec > PREVIEW_CAP_SECONDS) {
+    previewEndSec = previewStartSec + PREVIEW_CAP_SECONDS;
+  }
+  const previewWindowSec = previewEndSec - previewStartSec;
+
   // On-demand lyrics hydration for the currently playing song. The
   // catalog list (/api/songs) omits lyrics/syncedLyrics/waveform to
   // keep the response small on mobile Safari, so we lazily fetch the
@@ -317,6 +350,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // Keep live refs so audio-event callbacks (which close over the initial
   // render) can always read the latest values without stale-closure bugs.
   const currentSongRef = useRef<PlayerSong | null>(null);
+  // One-shot target (seconds) for the initial seek into a preview window. Set
+  // when a song attaches under previewMode; consumed by the loadedmetadata
+  // handler once the media is seekable, then cleared. Covers hls.js + native
+  // HLS + offline blobs (all fire loadedmetadata) and re-arms on every
+  // preview song-change because the attach effect re-runs per currentSong.id.
+  const previewSeekTargetRef = useRef<number | null>(null);
   const currentTimeRef = useRef(0);
   const durationRef = useRef(0);
   useEffect(() => { currentSongRef.current = currentSong; }, [currentSong]);
@@ -394,14 +433,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!previewMode) return;
     if (!isPlaying) return;
-    if (currentTime < PREVIEW_CAP_SECONDS) return;
+    if (currentTime < previewEndSec) return;
     milestonesRef.current.completed = true;
     const a = audioRef.current;
     if (a && hasRealAudio) {
       try { a.pause(); } catch {}
     }
     handleNext(false);
-  }, [previewMode, isPlaying, currentTime, hasRealAudio, handleNext]);
+  }, [previewMode, isPlaying, currentTime, previewEndSec, hasRealAudio, handleNext]);
 
   // Exiting preview mode while paused at the cap shouldn't trap the
   // dock at 30s — leave currentTime where it is so the song resumes
@@ -477,6 +516,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
+
+    // Arm the one-shot preview seek for this attach. When the host is in
+    // preview mode and this song has a placed start, the loadedmetadata
+    // handler will jump straight to the chorus instead of playing the intro.
+    previewSeekTargetRef.current =
+      previewMode && previewStartSec > 0.05 ? previewStartSec : null;
 
     const teardownHls = () => {
       if (hlsRef.current) {
@@ -702,6 +747,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const onSeeked = () => setCurrentTime(a.currentTime);
     const onMeta = () => {
       if (Number.isFinite(a.duration)) setAudioDuration(Math.floor(a.duration));
+      // Initial seek into the placed preview window, once the media reports a
+      // finite duration (so the target is within the seekable range). One-shot:
+      // cleared after the first seek so durationchange re-fires don't fight a
+      // fan's manual scrub. iOS native HLS + hls.js both reach this.
+      const target = previewSeekTargetRef.current;
+      if (
+        target != null &&
+        Number.isFinite(a.duration) &&
+        a.duration > target
+      ) {
+        try {
+          a.currentTime = target;
+        } catch {}
+        previewSeekTargetRef.current = null;
+      }
     };
     const onEnded = () => {
       milestonesRef.current.completed = true;
@@ -835,13 +895,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     });
   }, [songMeta]);
   const seekTo = useCallback((time: number) => {
-    const clamped = Math.max(0, Math.min(time, duration));
+    let clamped = Math.max(0, Math.min(time, duration));
+    // Store-compliance hard guard: in preview mode EVERY seek (including any
+    // future fan surface) is clamped into the placed window, so a fan can never
+    // reach audio outside the <=30s preview even if a call site forgets to clamp.
+    if (previewMode) {
+      const hi = Math.max(previewStartSec, previewEndSec - 0.1);
+      clamped = Math.min(Math.max(clamped, previewStartSec), hi);
+    }
     const song = currentSongRef.current;
     if (song) track("play_seek", { ...songMeta(song), from: currentTime, to: clamped, duration });
     setCurrentTime(clamped);
     const a = audioRef.current;
     if (a && hasRealAudio) a.currentTime = clamped;
-  }, [duration, hasRealAudio, currentTime, songMeta]);
+  }, [duration, hasRealAudio, currentTime, songMeta, previewMode, previewStartSec, previewEndSec]);
   const toggleShuffle = useCallback(() => setShuffle((s) => !s), []);
   const toggleRepeat = useCallback(() => {
     setRepeat((r) => (r === "none" ? "all" : r === "all" ? "one" : "none"));
@@ -975,6 +1042,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         playNext,
         playLast,
         previewMode,
+        previewStartSec,
+        previewEndSec,
+        previewWindowSec,
         setPreviewMode,
         volume,
         muted,

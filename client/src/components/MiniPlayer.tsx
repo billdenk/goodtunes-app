@@ -1,4 +1,4 @@
-import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
+import { usePlayer } from "@/context/PlayerContext";
 import { useLocation } from "wouter";
 import { useReducedMotion } from "framer-motion";
 import { useNavVisibility } from "@/hooks/useNavVisibility";
@@ -54,11 +54,19 @@ function DesktopMiniPlayer() {
     />
   );
 
-  // Preview-mode mirrors AlbumDetailDesktop: the scrubber denominator is the
-  // 30-sec cap (not the song's true duration) so the bar fills as the player
-  // auto-advances previews.
+  // Preview-mode mirrors AlbumDetailDesktop: the scrubber is window-relative
+  // (rail length = the placed previewWindowSec, 0 = previewStartSec) so the bar
+  // fills as the player auto-advances at the window end.
   const progress = player.previewMode
-    ? Math.min(100, (player.currentTime / PREVIEW_CAP_SECONDS) * 100)
+    ? Math.max(
+        0,
+        Math.min(
+          100,
+          ((player.currentTime - player.previewStartSec) /
+            player.previewWindowSec) *
+            100,
+        ),
+      )
     : player.duration > 0
       ? Math.min(100, (player.currentTime / player.duration) * 100)
       : 0;
@@ -95,13 +103,16 @@ function DesktopMiniPlayer() {
           playing={player.isPlaying}
           previewMode={player.previewMode}
           progress={progress}
-          totalSeconds={player.previewMode ? PREVIEW_CAP_SECONDS : player.duration}
+          totalSeconds={player.previewMode ? player.previewWindowSec : player.duration}
           onTogglePlay={player.togglePlay}
           onPrev={player.prev}
           onNext={player.next}
           onSeek={(s) => {
             if (player.previewMode) {
-              player.seekTo(Math.min(s, PREVIEW_CAP_SECONDS - 0.1));
+              player.seekTo(
+                player.previewStartSec +
+                  Math.min(Math.max(0, s), player.previewWindowSec - 0.1),
+              );
             } else {
               player.seekTo(s);
             }

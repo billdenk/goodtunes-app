@@ -205,7 +205,27 @@ export function Player() {
     showAirPlayPicker,
     volume,
     setVolume,
+    previewMode,
+    previewStartSec,
+    previewWindowSec,
   } = usePlayer();
+
+  // Preview windowing for the mobile full-screen scrubbers. When the host has
+  // flipped on previewMode the scrubber works in window-relative seconds — 0
+  // maps to previewStartSec and the rail length is the placed window
+  // (previewWindowSec, ≤30s) — so a fan dragging the bar stays inside the
+  // operator/GoodSync-placed preview instead of seeking back into the (unsold)
+  // full master. Off-preview these reduce to the original values.
+  const scrubDuration = previewMode ? previewWindowSec : duration;
+  const scrubCurrent = previewMode
+    ? Math.max(0, currentTime - previewStartSec)
+    : currentTime;
+  const scrubSeek = previewMode
+    ? (s: number) =>
+        seekTo(
+          previewStartSec + Math.min(Math.max(0, s), previewWindowSec - 0.1),
+        )
+    : seekTo;
 
   // On native iOS the slider mirrors (and drives) the phone's hardware volume
   // via the SystemVolume plugin; everywhere else it drives PlayerContext's
@@ -529,9 +549,9 @@ export function Player() {
             {/* Progress bar */}
             <div className="w-full mb-2">
               <MobileScrubber
-                currentTime={currentTime}
-                duration={duration}
-                onSeek={seekTo}
+                currentTime={scrubCurrent}
+                duration={scrubDuration}
+                onSeek={scrubSeek}
                 trackBg="rgba(255,255,255,0.2)"
                 railHeightClass="h-1"
                 labelWrapClassName="flex justify-between"
@@ -886,7 +906,12 @@ export function Player() {
               duration={duration}
               syncedLyrics={currentSong.syncedLyrics}
               currentTime={currentTime}
-              onSeek={seekTo}
+              // Highlight stays on absolute currentTime (lyrics are timestamped
+              // against the master), but tapping a line must clamp into the
+              // preview window — otherwise a fan could seek before previewStart
+              // and, since auto-advance only fires at previewEnd, hear well past
+              // the 30s store-compliance cap.
+              onSeek={scrubSeek}
               writers={(currentSong as any).writers}
               active={showLyrics}
               enableManualScroll
@@ -907,9 +932,9 @@ export function Player() {
             >
               {/* Progress bar */}
               <MobileScrubber
-                currentTime={currentTime}
-                duration={duration}
-                onSeek={seekTo}
+                currentTime={scrubCurrent}
+                duration={scrubDuration}
+                onSeek={scrubSeek}
                 trackBg="rgba(255,255,255,0.25)"
                 railHeightClass="h-[3px]"
                 labelWrapClassName="flex justify-between mb-5"
@@ -1172,9 +1197,9 @@ export function Player() {
             {/* Bottom transport — progress, controls, volume */}
             <div className="relative z-10 px-5 pt-2 pb-6" style={{ background: "linear-gradient(to top, rgba(0,6,43,0.85), rgba(0,6,43,0))" }}>
               <MobileScrubber
-                currentTime={currentTime}
-                duration={duration}
-                onSeek={seekTo}
+                currentTime={scrubCurrent}
+                duration={scrubDuration}
+                onSeek={scrubSeek}
                 trackBg="rgba(255,255,255,0.22)"
                 railHeightClass="h-[3px]"
                 labelWrapClassName="flex justify-between mb-3"

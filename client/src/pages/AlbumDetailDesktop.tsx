@@ -8,7 +8,7 @@ import {
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
+import { usePlayer } from "@/context/PlayerContext";
 import { BuySheet, type OfferSelection } from "@/components/checkout/BuySheet";
 import { buyEnabled } from "@/lib/platform";
 import { apiRequest } from "@/lib/queryClient";
@@ -581,7 +581,7 @@ export function AlbumDetailDesktop({
     if (!was || player.isPlaying) return;
     if (player.queue.length === 0) return;
     if (player.currentIndex !== player.queue.length - 1) return;
-    if (player.currentTime < PREVIEW_CAP_SECONDS - 0.5) return;
+    if (player.currentTime < player.previewEndSec - 0.5) return;
     setBuyAddons({ signedCert: false });
     setShowBuySheet(true);
   }, [
@@ -912,14 +912,20 @@ export function AlbumDetailDesktop({
             playing={player.isPlaying}
             previewMode={player.previewMode}
             progress={(() => {
-              // Under preview-mode the scrubber denominator is the 30-sec
-              // cap, not the song's true duration — so the bar fills to
-              // 100% right as PlayerContext auto-advances to the next
-              // preview, mirroring Apple Music's preview behavior.
+              // Under preview-mode the scrubber works in window-relative
+              // seconds — the rail length is the placed preview window
+              // (previewWindowSec, ≤30s) and 0 maps to previewStartSec — so
+              // the bar fills as PlayerContext auto-advances at the window end,
+              // mirroring Apple Music's preview behavior.
               if (player.previewMode) {
-                return Math.min(
-                  100,
-                  (player.currentTime / PREVIEW_CAP_SECONDS) * 100,
+                return Math.max(
+                  0,
+                  Math.min(
+                    100,
+                    ((player.currentTime - player.previewStartSec) /
+                      player.previewWindowSec) *
+                      100,
+                  ),
                 );
               }
               return player.duration > 0
@@ -928,17 +934,21 @@ export function AlbumDetailDesktop({
             })()}
             totalSeconds={
               player.previewMode
-                ? PREVIEW_CAP_SECONDS
+                ? player.previewWindowSec
                 : player.duration
             }
             onTogglePlay={player.togglePlay}
             onPrev={player.prev}
             onNext={player.next}
             onSeek={(s) => {
-              // Clamp seeks during preview-mode so dragging the scrubber
-              // past the 30-sec cap doesn't desync the auto-advance.
+              // Map the window-relative scrub position back onto the master:
+              // 0 → previewStartSec, clamped to just inside the window so the
+              // fan can scrub within the preview but never out of it.
               if (player.previewMode) {
-                player.seekTo(Math.min(s, PREVIEW_CAP_SECONDS - 0.1));
+                player.seekTo(
+                  player.previewStartSec +
+                    Math.min(Math.max(0, s), player.previewWindowSec - 0.1),
+                );
               } else {
                 player.seekTo(s);
               }
