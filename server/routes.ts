@@ -18762,6 +18762,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           enriched.filter((a) => !!scopeId && a.primaryArtistId === scopeId),
         );
       }
+      // A `manager` partner sees ONLY the albums of artists on their roster
+      // (people.manager_id = the manager's scope). Catalog is always DERIVED
+      // through the roster — there is no albums.manager_id — so a manager who
+      // is assigned to nobody sees NOTHING, never the full catalog. Mirrors the
+      // per-album access gate in artistReports.resolveAlbumScope.
+      if (info?.role === "manager") {
+        const scopeId = info.roleScopeId;
+        if (!scopeId) return res.json([]);
+        const rosterRows = await db.execute<{ id: string }>(sql`
+          SELECT id FROM people WHERE manager_id = ${scopeId} AND deleted_at IS NULL
+        `);
+        const roster = new Set(
+          ((rosterRows as any).rows || []).map((r: any) => r.id as string),
+        );
+        return res.json(
+          enriched.filter(
+            (a) => !!a.primaryArtistId && roster.has(a.primaryArtistId),
+          ),
+        );
+      }
     }
     return res.json(enriched);
   });
