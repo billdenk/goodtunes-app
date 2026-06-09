@@ -216,6 +216,94 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (a) a.volume = muted ? 0 : volume / 100;
   }, [volume, muted]);
 
+  // WebKit autoplay unlock. iPhone/iPad Safari, desktop Safari, and
+  // standalone home-screen installs refuse to start *unmuted* playback on a
+  // media element unless that element was first played from inside a real
+  // user gesture. Our signed Mux URL is fetched asynchronously after the tap,
+  // so the eventual a.play() lands OUTSIDE the gesture stack and WebKit
+  // silently blocks it — the dock flips to "playing" but no sound comes out.
+  // (Chrome and high-engagement operator devices are exempted by the Media
+  // Engagement Index, which is why fresh fans hit this and we don't.)
+  //
+  // ensureAudioUnlocked() blesses the persistent element by playing a
+  // zero-length silent clip from inside a user gesture. It is:
+  //   • idempotent — no-ops once the element is blessed;
+  //   • success-driven — it only marks the element unlocked after play()
+  //     actually resolves, so a non-qualifying gesture (a scroll, a rejected
+  //     play) never permanently "burns" the unlock; the next gesture retries;
+  //   • non-destructive — it only borrows the element while nothing real is
+  //     attached, and restores it only while the silent clip is still loaded,
+  //     so it can never clobber a Mux/offline source resolveStream swapped in
+  //     (the silent clip resolves in a microtask, long before the network
+  //     fetch for the real signed URL completes, and the restore is guarded).
+  // It runs both on the first qualifying interaction anywhere (the listeners
+  // below, kept alive and retried until success) and synchronously at the top
+  // of the play handlers, guaranteeing a gesture-bound attempt on the very tap
+  // that starts playback.
+  const audioUnlockedRef = useRef(false);
+  const ensureAudioUnlocked = useCallback(() => {
+    const a = audioRef.current;
+    if (a === null || audioUnlockedRef.current) return;
+    const SILENT_WAV =
+      "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+    // When a REAL (Mux/offline) source is already attached we must still issue
+    // a play() inside THIS gesture — in this app the actual play/resume usually
+    // fires from an effect (the isPlaying effect / attachSrc), i.e. OUTSIDE the
+    // gesture, so if the silent bless above ever got blocked the element can
+    // stay locked forever and the fan is trapped in "flips to playing, no
+    // sound". The in-gesture play here resolves that. We must NOT borrow or
+    // restore in this case — the source is real, so we only finalize the unlock
+    // on resolve and otherwise leave playback entirely to the normal effect.
+    const hasRealSrc = !!a.src && !a.src.startsWith("data:audio/wav");
+    const restore = () => {
+      // Only undo our own silent borrow — if resolveStream has already swapped
+      // in the real (Mux/offline) source, leave it completely alone.
+      try {
+        if (a.src.startsWith("data:audio/wav")) {
+          a.pause();
+          a.removeAttribute("src");
+          a.load();
+        }
+      } catch {
+        /* best-effort */
+      }
+    };
+    try {
+      if (!a.src) a.src = SILENT_WAV;
+      const p = a.play();
+      if (p && typeof p.then === "function") {
+        p.then(() => {
+          audioUnlockedRef.current = true;
+          if (!hasRealSrc) restore();
+        }).catch(() => {
+          // Gesture didn't qualify — leave it for the next one to retry. Never
+          // restore over a real source (don't disturb an in-flight stream).
+          if (!hasRealSrc) restore();
+        });
+      } else {
+        // Older browsers return no promise; assume the in-gesture play took.
+        audioUnlockedRef.current = true;
+        if (!hasRealSrc) restore();
+      }
+    } catch {
+      /* best-effort; the next gesture (or the play tap) will retry */
+    }
+  }, []);
+
+  // Keep listening for the first qualifying interaction anywhere on the page
+  // and retry until the bless succeeds; ensureAudioUnlocked() no-ops after.
+  useEffect(() => {
+    const handler = () => ensureAudioUnlocked();
+    document.addEventListener("click", handler, true);
+    document.addEventListener("touchend", handler, true);
+    document.addEventListener("keydown", handler, true);
+    return () => {
+      document.removeEventListener("click", handler, true);
+      document.removeEventListener("touchend", handler, true);
+      document.removeEventListener("keydown", handler, true);
+    };
+  }, [ensureAudioUnlocked]);
+
   // Per-play analytics milestones. Reset whenever the current song changes
   // (or restarts via repeat-one). `started`/`hit30`/`completed` ensure each
   // event fires at most once per play instance.
@@ -821,6 +909,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [handleNext]);
 
   const playSong = useCallback((song: PlayerSong, newQueue?: PlayerSong[]) => {
+    // Bless the audio element inside this user gesture (WebKit autoplay
+    // unlock) BEFORE the async signed-URL fetch, so the deferred play() that
+    // resolveStream issues is permitted on iOS/desktop Safari. No-ops once
+    // unlocked, and harmless when called outside a gesture (autoplay/next).
+    ensureAudioUnlocked();
     // Hydrate every song in the incoming queue against the DB so GoodSync
     // cues + real audioUrl + canonical lyrics light up regardless of which
     // surface assembled the queue (album page, artist page, Songs tab,
@@ -876,9 +969,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     })
       .then(() => queryClient.invalidateQueries({ queryKey: ["/api/me/recents"] }))
       .catch(() => { /* fire-and-forget */ });
-  }, [hydrate, beginPlayInstance, queryClient]);
+  }, [hydrate, beginPlayInstance, queryClient, ensureAudioUnlocked]);
 
   const togglePlay = useCallback(() => {
+    // Bless the element on the resume tap too (WebKit autoplay unlock).
+    ensureAudioUnlocked();
     setIsPlaying((p) => {
       const next = !p;
       const song = currentSongRef.current;
@@ -893,7 +988,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }
       return next;
     });
-  }, [songMeta]);
+  }, [songMeta, ensureAudioUnlocked]);
   const seekTo = useCallback((time: number) => {
     let clamped = Math.max(0, Math.min(time, duration));
     // Store-compliance hard guard: in preview mode EVERY seek (including any
