@@ -27,7 +27,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { IconButton } from "@/components/ui/IconButton";
 import { SheetBack, SheetClose } from "@/components/ui/SheetChrome";
 import { cn } from "@/lib/utils";
-import { Check, Gift, Minus, Plus } from "lucide-react";
+import { Check, ChevronRight, Gift, Minus, Plus, ShoppingBag } from "lucide-react";
 import { VinylPreview } from "@/components/VinylPreview";
 import {
   DEFAULT_VINYL_COLOR_ID,
@@ -336,6 +336,9 @@ export function BuySheet({
   // collected country to this one).
   const [country, setCountry] = useState("US");
   const [postalCode, setPostalCode] = useState("");
+  // Desktop checkout is a Cart → Shipping → Payment card wizard. This drives
+  // the first two cards; the existing Stripe Embedded step is `inCheckout`.
+  const [desktopPhase, setDesktopPhase] = useState<"cart" | "shipping">("cart");
   const [shipping, setShipping] = useState<{
     shippable?: boolean;
     available?: boolean;
@@ -683,15 +686,27 @@ export function BuySheet({
           <div className="relative flex-shrink-0 flex items-center px-6 pt-5 pb-4 border-b border-white/[0.07]">
             {step === "cert" && !inCheckout ? (
               <SheetBack onClick={() => setStep("main")} data-testid="button-cert-back" />
+            ) : !inCheckout && step === "main" && desktopPhase === "shipping" ? (
+              <SheetBack onClick={() => setDesktopPhase("cart")} data-testid="button-shipping-back" />
             ) : (
               <SheetClose onClick={onClose} data-testid="button-close-buy" />
             )}
-            <div className="absolute left-1/2 -translate-x-1/2 text-base font-semibold">
-              {inCheckout
-                ? "Checkout"
-                : step === "cert"
-                  ? "Add a certificate?"
-                  : "Buy this album"}
+            <div className="absolute left-1/2 -translate-x-1/2 text-base font-semibold inline-flex items-center gap-2">
+              {inCheckout ? (
+                "Checkout"
+              ) : step === "cert" ? (
+                "Add a certificate?"
+              ) : desktopPhase === "shipping" ? (
+                <>
+                  <ShoppingBag className="w-[18px] h-[18px]" strokeWidth={2.2} />
+                  Shipping
+                </>
+              ) : (
+                <>
+                  <ShoppingBag className="w-[18px] h-[18px]" strokeWidth={2.2} />
+                  Cart
+                </>
+              )}
             </div>
           </div>
 
@@ -710,12 +725,13 @@ export function BuySheet({
             </div>
           )}
 
-          {/* ── Main step: two-column ── */}
+          {/* ── Main step: Cart → Shipping card wizard ── */}
           {!inCheckout && step === "main" && (
-            <div className="flex flex-1 min-h-0 overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-y-auto">
 
-              {/* Left column — album art + all options */}
-              <div className="flex-1 min-w-0 overflow-y-auto px-6 py-6">
+              {/* ── Cart card — what you're buying ── */}
+              {desktopPhase === "cart" && (
+              <div className="max-w-[560px] mx-auto px-6 py-6" data-testid="cart-phase">
                 {!options && !error && (
                   <div className="py-10 text-center text-white/55 text-sm">Loading…</div>
                 )}
@@ -1153,13 +1169,38 @@ export function BuySheet({
                     )}
                   </>
                 )}
-              </div>
 
-              {/* Right column — destination + order summary + CTA */}
-              <div
-                className="w-[300px] flex-shrink-0 border-l border-white/[0.07] overflow-y-auto px-6 py-6 flex flex-col"
-                style={{ background: "rgba(255,255,255,0.018)" }}
-              >
+                {/* Subtotal + advance to Shipping */}
+                {selectedSku && !allSoldOut && (
+                  <div className="mt-8 pt-5 border-t border-white/[0.08]">
+                    <div className="flex items-center justify-between mb-5">
+                      <span className="text-fan-secondary text-sm font-semibold">Subtotal</span>
+                      <span
+                        className="text-xl font-bold text-fan-primary tabular-nums"
+                        data-testid="text-cart-subtotal"
+                      >
+                        {dollars(itemsTotalCents)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDesktopPhase("shipping")}
+                      disabled={!selectedSku}
+                      className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 transition-all active:scale-[0.98] inline-flex items-center justify-center gap-2"
+                      style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
+                      data-testid="button-to-shipping"
+                    >
+                      Shipping
+                      <ChevronRight className="w-4 h-4" strokeWidth={2.4} />
+                    </button>
+                  </div>
+                )}
+              </div>
+              )}
+
+              {/* ── Shipping card — destination + order summary ── */}
+              {desktopPhase === "shipping" && (
+              <div className="max-w-[560px] mx-auto px-6 py-6 flex flex-col" data-testid="shipping-phase">
                 {selectedSku && !allSoldOut ? (
                   <>
                     <div className="text-xs font-bold uppercase tracking-widest text-fan-faint mb-5">
@@ -1301,7 +1342,7 @@ export function BuySheet({
                       </div>
                     </div>
 
-                    {/* Checkout CTA */}
+                    {/* Payment CTA — hands to the existing Stripe step */}
                     <button
                       type="button"
                       onClick={() => {
@@ -1317,19 +1358,22 @@ export function BuySheet({
                         }
                       }}
                       disabled={!selectedSku || busy || shippingUnavailable}
-                      className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 transition-all active:scale-[0.98]"
+                      className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 transition-all active:scale-[0.98] inline-flex items-center justify-center gap-2"
                       style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
                       data-testid="button-checkout"
                     >
-                      {busy
-                        ? "Opening checkout…"
-                        : !isCustomerSignedIn
-                          ? "Sign in to continue"
-                          : shippingUnavailable
-                            ? "Choose a shippable destination"
-                            : addon
-                              ? "Continue"
-                              : `Checkout — ${dollars(totalCents)}`}
+                      {busy ? (
+                        "Opening checkout…"
+                      ) : !isCustomerSignedIn ? (
+                        "Sign in to continue"
+                      ) : shippingUnavailable ? (
+                        "Choose a shippable destination"
+                      ) : (
+                        <>
+                          Payment
+                          <ChevronRight className="w-4 h-4" strokeWidth={2.4} />
+                        </>
+                      )}
                     </button>
                     <p className="mt-3 text-fan-faint text-xs text-center leading-snug">
                       {taxAvailable
@@ -1340,11 +1384,12 @@ export function BuySheet({
                 ) : (
                   <div className="flex-1 flex items-center justify-center py-10">
                     <p className="text-fan-faint text-sm text-center">
-                      Select a format above to continue.
+                      Go back to your cart to choose a format.
                     </p>
                   </div>
                 )}
               </div>
+              )}
             </div>
           )}
 
@@ -1362,7 +1407,7 @@ export function BuySheet({
                   )}
                   <div className="min-w-0">
                     <div className="text-lg font-bold tracking-tight truncate text-fan-primary">{addon.label}</div>
-                    <div className="text-[13px] text-fan-secondary truncate">
+                    <div className="text-sm text-fan-secondary truncate">
                       {dollars(addon.priceCents)} per copy · {options?.title}
                     </div>
                   </div>
@@ -1419,10 +1464,10 @@ export function BuySheet({
                           data-testid={`button-toggle-signed-cert-${i}`}
                         >
                           <div className="flex flex-col flex-1 min-w-0 pr-2">
-                            <span className="text-[14px] font-medium">
+                            <span className="text-sm font-medium">
                               {quantity === 1 ? addon.label : `Copy ${i + 1} · ${addon.label}`}
                             </span>
-                            <span className="text-[12px] text-fan-secondary leading-snug mt-0.5">
+                            <span className="text-xs text-fan-secondary leading-snug mt-0.5">
                               {on
                                 ? "Numbered, printed, and signed by the artist. Mailed with your record."
                                 : "Tap to add a signed certificate for this copy."}
