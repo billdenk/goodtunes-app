@@ -796,8 +796,11 @@ export function BuySheet({
           onClick={(e) => e.stopPropagation()}
           data-testid="sheet-buy"
         >
-          {/* Header */}
-          <div className="relative flex-shrink-0 flex items-center px-6 pt-5 pb-4 border-b border-white/[0.07]">
+          {/* Header — the divider rule separates the header from the scrollable
+              cart/shipping content, but on the Stripe Embedded Checkout step the
+              iframe brings its own framing, so we drop the rule there for a
+              cleaner hand-off (Bill's request). */}
+          <div className={`relative flex-shrink-0 flex items-center px-6 pt-5 pb-4${inCheckout ? "" : " border-b border-white/[0.07]"}`}>
             {step === "cert" && !inCheckout ? (
               <SheetBack onClick={() => setStep("main")} data-testid="button-cert-back" />
             ) : !inCheckout && step === "main" && desktopPhase === "shipping" ? (
