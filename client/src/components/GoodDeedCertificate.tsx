@@ -279,22 +279,18 @@ export function GoodDeedCertificate({
         onClick={onClose}
       />
 
-      {/* Framed backdrop — for the Square + Portrait previews (which don't fill
-          the screen) the surround is a soft, blurred wash of the album art over
-          navy instead of flat black, so the card reads as framed. Uses a plain
-          `filter: blur` on an <img> (not a second backdrop-filter) to avoid the
-          iOS-WebKit stacked-blur crash. Story is full-bleed, so it's skipped. */}
-      {shape !== "story" && (
-        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-          <img
-            src={album.artwork}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{ filter: "blur(48px)", transform: "scale(1.25)", opacity: 0.45 }}
-          />
-          <div className="absolute inset-0" style={{ background: "rgba(0,6,43,0.55)" }} />
-        </div>
-      )}
+      {/* Fixed brand-color surround — consistent across all three formats (Story,
+          Portrait, Square). A pure CSS gradient using the brand palette so the
+          surround never reflects the album art or the page behind it. No second
+          backdrop-filter surface — avoids the known iOS-WebKit stacked-blur crash. */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        aria-hidden="true"
+        style={{
+          background:
+            "linear-gradient(150deg, rgba(0,6,43,1) 0%, rgba(127,16,167,0.30) 55%, rgba(49,158,216,0.18) 100%)",
+        }}
+      />
 
       <div className="absolute inset-0 z-10 flex flex-col animate-slide-up">
         {/* Top controls: close + identity + share */}
