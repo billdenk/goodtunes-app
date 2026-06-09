@@ -341,10 +341,13 @@ export function AlbumDetailMobileSurface({
         >
           <Share className="w-[19px] h-[19px]" strokeWidth={2} />
         </button>
-        {/* Task #1734 — the locked purchase-funnel preview is share-only: the
-            ⋯ album-options menu (owner/GoodDeed actions) is hidden so the page
-            reads like a public "unlock" landing. */}
-        {!lockedPreview && (
+        {/* The ⋯ album-options menu only carries owner/GoodDeed actions (View
+            GoodDeed, Download PDF, Ownership/Provenance, Add to Playlist), so it
+            is shown ONLY to owners — matching the desktop `showMenu={isOwned}`
+            rule. Non-owners (locked purchase-funnel previews AND live public
+            previews on get./store.) get a share-only capsule, so the page reads
+            like a public "unlock" landing. */}
+        {isOwned && (
           <>
             <div className="w-px h-4 bg-white/25" aria-hidden />
             <div className="relative">
