@@ -45,6 +45,19 @@ trust an external_url screenshot of a fan slug page as evidence the page is brok
 verify with anon `curl` of `by-slug` + `albums/:id` + `playback-url` and grep the
 deployment logs for real fans hitting those endpoints (look for `POST .../playback-url 200`).
 
+**Silent preview but playback-url returns 200 = DEVICE-side, not code/flag/deploy:**
+If the operator says "I tap the song and hear NOTHING," before touching code grep the
+deployment logs for that exact session — if you see `POST /api/songs/<id>/playback-url 200`
+(a signed Mux URL, even `fullAccess:false`) followed by `POST /api/me/recents 201` for every
+track they tapped, the server handed them a working stream and the client accepted it and
+started a play session. The silence is then **device audio output**, overwhelmingly the
+iPhone ring/silent hardware switch (HTML5 `<audio>` on iOS Safari plays SILENTLY when the
+switch is set to silent — UI animates, no sound) or device/Bluetooth volume. This is NOT a
+flag leak, NOT the backend, NOT a stale deploy, NOT the client mux-ready gate. Ask the
+operator to flip the silent switch / check volume and re-tap. A web-only OS-policy workaround
+(routing playback through Web Audio API / `<video>` to bypass the iOS ring switch) is a
+deliberate player rewrite — propose it, don't sneak it in mid-launch.
+
 **Embargoed title track (`previewHidden`) does NOT unlock for owners:** desktop
 `playableSongs` filters `isPreviewable !== false` for EVERYONE (server derives
 `isPreviewable = !previewHidden`), and the campaign gate comment says it "stays locked
