@@ -22,9 +22,8 @@ import type { PayoutSettings, AlbumFormat } from "@shared/schema";
 import { VinylPreview } from "@/components/VinylPreview";
 import {
   DEFAULT_JACKET_UPGRADE,
-  DEFAULT_VINYL_COLOR_ID,
   JACKET_UPGRADE_LABEL,
-  VINYL_COLOR_BY_ID,
+  resolveVinylColor,
   isVinylFormat,
   type JacketUpgrade,
 } from "@shared/pressing";
@@ -432,9 +431,7 @@ function AdminOrdersInner() {
                   (it) => it.kind === "format" && isVinylFormat(it.sku as AlbumFormat),
                 );
                 if (vinylItem) {
-                  const color =
-                    VINYL_COLOR_BY_ID[vinylItem.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ??
-                    VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
+                  const color = resolveVinylColor(vinylItem.vinylColor);
                   return (
                     <div className="flex-shrink-0" data-testid={`admin-order-vinyl-preview-${o.id}`}>
                       <VinylPreview
@@ -583,9 +580,7 @@ function AdminOrdersInner() {
                   return (
                     <div className="mt-2 flex flex-col gap-2" data-testid={`admin-order-vinyl-lines-${o.id}`}>
                       {vinylLines.map((it) => {
-                        const color =
-                          VINYL_COLOR_BY_ID[it.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ??
-                          VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
+                        const color = resolveVinylColor(it.vinylColor);
                         const jacket = it.jacketUpgrade ?? DEFAULT_JACKET_UPGRADE;
                         return (
                           <div

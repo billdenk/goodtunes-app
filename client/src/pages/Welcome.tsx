@@ -15,8 +15,7 @@ import { VinylPreview } from "@/components/VinylPreview";
 import { CertNameConfirmCard } from "@/components/ui/CertNameConfirmCard";
 import {
   DEFAULT_JACKET_UPGRADE,
-  DEFAULT_VINYL_COLOR_ID,
-  VINYL_COLOR_BY_ID,
+  resolveVinylColor,
   isVinylFormat,
   type JacketUpgrade,
 } from "@shared/pressing";
@@ -332,9 +331,7 @@ export function Welcome() {
           {data.items
             .filter((it) => it.kind === "format" && isVinylFormat(it.sku as AlbumFormat))
             .map((it) => {
-              const color =
-                VINYL_COLOR_BY_ID[it.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ??
-                VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
+              const color = resolveVinylColor(it.vinylColor);
               return (
                 <div
                   key={`preview-${it.id}`}

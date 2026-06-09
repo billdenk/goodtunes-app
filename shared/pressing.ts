@@ -171,6 +171,22 @@ export const VINYL_COLOR_BY_ID: Record<string, VinylColorOption> = (() => {
 // Default picks for a fresh vinyl draft row — black, 100 units,
 // standard jacket. Hellbender's cheapest mainstream entry point.
 export const DEFAULT_VINYL_COLOR_ID = "black";
+
+// Resolve a stored vinyl_color value to a VinylColorOption for display.
+//
+// Legacy SKUs store a snake_case id (e.g. "black", "gold") — look those up
+// in VINYL_COLOR_BY_ID so they keep their real swatch. Catalog (manufacturer)
+// colors are snapshotted as their display name ("Metallic Marble") which is
+// NOT a key in that map. Rather than falling back to Black, treat the stored
+// value as an already-resolved display name and surface it with a neutral
+// swatch. Null / empty always falls back to the Black default.
+export function resolveVinylColor(storedValue: string | null | undefined): VinylColorOption {
+  if (!storedValue) return VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
+  const legacyMatch = VINYL_COLOR_BY_ID[storedValue];
+  if (legacyMatch) return legacyMatch;
+  // Catalog display name — return a neutral swatch so VinylPreview renders
+  return { id: storedValue, name: storedValue, tier: "opaque", swatch: "#888888" };
+}
 export const DEFAULT_VINYL_QUANTITY: VinylQuantityTier = 100;
 export const DEFAULT_JACKET_UPGRADE: JacketUpgrade = "none";
 

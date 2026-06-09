@@ -30,9 +30,8 @@ import { cn } from "@/lib/utils";
 import { Check, ChevronRight, Gift, Minus, Plus, ShoppingBag } from "lucide-react";
 import { VinylPreview } from "@/components/VinylPreview";
 import {
-  DEFAULT_VINYL_COLOR_ID,
   DEFAULT_JACKET_UPGRADE,
-  VINYL_COLOR_BY_ID,
+  resolveVinylColor,
   isVinylFormat,
   type JacketUpgrade,
 } from "@shared/pressing";
@@ -764,15 +763,12 @@ export function BuySheet({
                         <div className="rounded-2xl bg-white/[0.05] p-4">
                           <VinylPreview
                             artworkUrl={options.artwork}
-                            color={
-                              VINYL_COLOR_BY_ID[selectedSku.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ??
-                              VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID]
-                            }
+                            color={resolveVinylColor(selectedSku.vinylColor)}
                             jacketUpgrade={selectedSku.jacketUpgrade ?? DEFAULT_JACKET_UPGRADE}
                             size="md"
                           />
                           <div className="mt-3 text-xs text-fan-secondary leading-snug">
-                            {(VINYL_COLOR_BY_ID[selectedSku.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ?? VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID]).name}
+                            {resolveVinylColor(selectedSku.vinylColor).name}
                             {" · "}
                             {selectedSku.label}
                           </div>
@@ -1631,15 +1627,12 @@ export function BuySheet({
                     <div className="flex flex-col items-center pt-1">
                       <VinylPreview
                         artworkUrl={options.artwork}
-                        color={
-                          VINYL_COLOR_BY_ID[selectedSku.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ??
-                          VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID]
-                        }
+                        color={resolveVinylColor(selectedSku.vinylColor)}
                         jacketUpgrade={selectedSku.jacketUpgrade ?? DEFAULT_JACKET_UPGRADE}
                         size="md"
                       />
                       <div className="mt-3 text-xs text-fan-secondary leading-snug">
-                        {(VINYL_COLOR_BY_ID[selectedSku.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ?? VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID]).name}
+                        {resolveVinylColor(selectedSku.vinylColor).name}
                         {" · "}
                         {selectedSku.label}
                       </div>

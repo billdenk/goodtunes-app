@@ -28,8 +28,7 @@ import { useLyricsRailOpen } from "@/components/ui/DesktopLyricsRail";
 import { LYRICS_RAIL_CONTENT_OFFSET } from "@/hooks/useDesktopShell";
 import {
   DEFAULT_JACKET_UPGRADE,
-  DEFAULT_VINYL_COLOR_ID,
-  VINYL_COLOR_BY_ID,
+  resolveVinylColor,
   isVinylFormat,
   type JacketUpgrade,
 } from "@shared/pressing";
@@ -339,9 +338,7 @@ export function Orders() {
                         (it) => it.kind === "format" && isVinylFormat(it.sku as AlbumFormat),
                       );
                       if (vinylItem) {
-                        const color =
-                          VINYL_COLOR_BY_ID[vinylItem.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ??
-                          VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
+                        const color = resolveVinylColor(vinylItem.vinylColor);
                         return (
                           <div className="flex-shrink-0" data-testid={`order-vinyl-preview-${o.id}`}>
                             <VinylPreview
@@ -879,10 +876,7 @@ function OrderDetailSheet({ order, onClose }: { order: OrderRow | null; onClose:
                   // <VinylPreview> in the detail row so the fan sees the
                   // exact disc color confirmed on their receipt.
                   const isVinyl = it.kind === "format" && isVinylFormat(it.sku as AlbumFormat);
-                  const color = isVinyl
-                    ? VINYL_COLOR_BY_ID[it.vinylColor ?? DEFAULT_VINYL_COLOR_ID] ??
-                      VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID]
-                    : null;
+                  const color = isVinyl ? resolveVinylColor(it.vinylColor) : null;
                   return (
                     <div key={it.id} className="flex items-center gap-3 px-4 py-3" data-testid={`detail-item-${it.id}`}>
                       {isVinyl && color && (
