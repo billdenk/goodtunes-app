@@ -204,6 +204,7 @@ export async function revenueBreakdown(ctx: AdminReportContext) {
       totalCents: orders.totalCents,
       albumId: orders.albumId,
       shippingAddress: orders.shippingAddress,
+      billingAddress: orders.billingAddress,
       skuKind: orders.skuKind,
       labelSnapshotId: orders.labelSnapshotId,
       artistSnapshotId: orders.artistSnapshotId,
@@ -279,7 +280,7 @@ export async function revenueBreakdown(ctx: AdminReportContext) {
     aSlot.cents += o.totalCents; aSlot.units += 1;
     byArtist.set(aKey, aSlot);
 
-    const country = ((o.shippingAddress as any)?.country as string | undefined) || "Unknown";
+    const country = (((o.shippingAddress as any)?.country || (o.billingAddress as any)?.country) as string | undefined) || "Unknown";
     const cSlot = byCountry.get(country) ?? { cents: 0, units: 0 };
     cSlot.cents += o.totalCents; cSlot.units += 1;
     byCountry.set(country, cSlot);

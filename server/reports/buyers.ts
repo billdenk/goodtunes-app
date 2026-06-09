@@ -20,6 +20,20 @@ import { db } from "../db";
 import { sql, type SQL } from "drizzle-orm";
 import { pgArray } from "../lib/pgArray";
 
+// Buyer location, resilient to the all-null shipping snapshot. Digital and
+// donation add-ons (e.g. Nightbirde's "Gift of Hope") collect only a billing
+// address at checkout, so `orders.shipping_address` lands as
+// {city:null,state:null,country:null} and the buyer would otherwise show as
+// "Location unknown". We prefer the shipping snapshot, then fall back to the
+// billing snapshot. Only city/region/country are ever read — street, postal,
+// email and phone never leave (billing city/region/country are the same
+// city-level privacy class as shipping). These fragments assume the orders
+// table is aliased `o`, matching every query in this module and the artist /
+// label report queries that import them.
+export const LOC_CITY = sql`coalesce(nullif(o.shipping_address->>'city',''), nullif(o.billing_address->>'city',''))`;
+export const LOC_REGION = sql`coalesce(nullif(o.shipping_address->>'state',''), nullif(o.billing_address->>'state',''))`;
+export const LOC_COUNTRY = sql`coalesce(nullif(o.shipping_address->>'country',''), nullif(o.billing_address->>'country',''))`;
+
 // First name + last initial only — the same trim the admin Top-Fans
 // report uses (server/reports/index.ts). Applied to the Stripe legal
 // `buyer_name` fallback; the public display name is shown as-is.
@@ -64,9 +78,9 @@ export async function buyerRoster(
     SELECT o.id AS order_id, o.created_at, o.status, o.album_id,
       a.title AS album_title,
       o.buyer_name, o.customer_id,
-      o.shipping_address->>'city' AS city,
-      o.shipping_address->>'state' AS region,
-      o.shipping_address->>'country' AS country,
+      ${LOC_CITY} AS city,
+      ${LOC_REGION} AS region,
+      ${LOC_COUNTRY} AS country,
       cu.display_name,
       pp.photo_url, pp.data_url
     FROM orders o
@@ -144,7 +158,8 @@ export async function buyerMap(
   to: Date,
 ): Promise<{ points: BuyerMapPoint[]; totalCities: number; geocoded: number }> {
   const rows = await db.execute<any>(sql`
-    SELECT o.shipping_address AS shipping_address, o.customer_id
+    SELECT ${LOC_CITY} AS city, ${LOC_REGION} AS region, ${LOC_COUNTRY} AS country,
+      o.customer_id
     FROM orders o
     WHERE ${scopeFilter}
       AND o.status IN ('paid','shipped','complete','completed')
@@ -155,10 +170,9 @@ export async function buyerMap(
     { city: string | null; region: string | null; country: string | null; orders: number; fans: Set<string> }
   >();
   for (const r of (rows as any).rows ?? []) {
-    const addr: any = r.shipping_address ?? {};
-    const city = (addr.city as string | undefined) ?? null;
-    const region = ((addr.state ?? addr.region) as string | undefined) ?? null;
-    const country = (addr.country as string | undefined) ?? null;
+    const city = (r.city as string | undefined) || null;
+    const region = (r.region as string | undefined) || null;
+    const country = (r.country as string | undefined) || null;
     if (!city && !country) continue;
     const key = `${(city ?? "").toLowerCase()}|${(region ?? "").toLowerCase()}|${(country ?? "").toLowerCase()}`;
     const slot = groups.get(key) ?? { city, region, country, orders: 0, fans: new Set<string>() };
@@ -263,7 +277,7 @@ export async function salesGeography(
   const regionRes = await db.execute<any>(sql`
     WITH ${COPY_COUNT_CTE}
     SELECT
-      upper(coalesce(nullif(trim(o.shipping_address->>'country'), ''), '')) AS code,
+      upper(coalesce(${LOC_COUNTRY}, '')) AS code,
       ${M_UNITS} AS units,
       ${M_REVENUE} AS revenue,
       ${M_CUSTOMERS} AS customers
@@ -283,15 +297,15 @@ export async function salesGeography(
   const stateRes = await db.execute<any>(sql`
     WITH ${COPY_COUNT_CTE}
     SELECT
-      trim(o.shipping_address->>'state') AS state_raw,
+      ${LOC_REGION} AS state_raw,
       ${M_UNITS} AS units,
       ${M_REVENUE} AS revenue,
       ${M_CUSTOMERS} AS customers
     FROM orders o
     LEFT JOIN cc ON cc.order_id = o.id
     WHERE ${scopeFilter} AND ${rangeFilter}
-      AND upper(coalesce(o.shipping_address->>'country', '')) IN ('US', 'USA', 'UNITED STATES', 'UNITED STATES OF AMERICA')
-      AND nullif(trim(o.shipping_address->>'state'), '') IS NOT NULL
+      AND upper(coalesce(${LOC_COUNTRY}, '')) IN ('US', 'USA', 'UNITED STATES', 'UNITED STATES OF AMERICA')
+      AND ${LOC_REGION} IS NOT NULL
     GROUP BY 1
   `);
   const stateAgg = new Map<string, SalesStateRow>();
@@ -325,17 +339,16 @@ export async function salesGeography(
   const cityRes = await db.execute<any>(sql`
     WITH ${COPY_COUNT_CTE}
     SELECT
-      o.shipping_address->>'city' AS city,
-      o.shipping_address->>'state' AS region,
-      o.shipping_address->>'country' AS country,
+      ${LOC_CITY} AS city,
+      ${LOC_REGION} AS region,
+      ${LOC_COUNTRY} AS country,
       ${M_UNITS} AS units,
       ${M_REVENUE} AS revenue,
       ${M_CUSTOMERS} AS customers
     FROM orders o
     LEFT JOIN cc ON cc.order_id = o.id
     WHERE ${scopeFilter} AND ${rangeFilter}
-      AND (nullif(trim(o.shipping_address->>'city'), '') IS NOT NULL
-           OR nullif(trim(o.shipping_address->>'country'), '') IS NOT NULL)
+      AND (${LOC_CITY} IS NOT NULL OR ${LOC_COUNTRY} IS NOT NULL)
     GROUP BY 1, 2, 3
     ORDER BY ${M_UNITS}::int DESC
     LIMIT 120

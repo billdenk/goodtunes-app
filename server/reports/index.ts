@@ -355,21 +355,25 @@ export async function topFans(ctx: ReportContext, limit = 25) {
       customerId: orders.customerId,
       totalCents: orders.totalCents,
       shippingAddress: orders.shippingAddress,
+      billingAddress: orders.billingAddress,
       buyerName: orders.buyerName,
     })
     .from(orders)
     .where(and(...filters));
   const agg = new Map<string, { customerId: string; spendCents: number; units: number; name: string; city: string | null; region: string | null; country: string | null }>();
   for (const r of rows) {
-    const addr: any = r.shippingAddress ?? {};
+    // Prefer the shipping snapshot, fall back to billing — digital/donation
+    // add-ons land an all-null shipping_address (see reports/buyers.ts).
+    const ship: any = r.shippingAddress ?? {};
+    const bill: any = r.billingAddress ?? {};
     const slot = agg.get(r.customerId) ?? {
       customerId: r.customerId,
       spendCents: 0,
       units: 0,
       name: r.buyerName ?? "Anonymous fan",
-      city: addr.city ?? null,
-      region: addr.state ?? addr.region ?? null,
-      country: addr.country ?? null,
+      city: ship.city || bill.city || null,
+      region: ship.state || ship.region || bill.state || bill.region || null,
+      country: ship.country || bill.country || null,
     };
     slot.spendCents += r.totalCents;
     slot.units += 1;
@@ -408,15 +412,18 @@ export async function fanMap(ctx: ReportContext) {
   if (sf) filters.push(sf as any);
   if (ctx.albumId) filters.push(eq(orders.albumId, ctx.albumId));
   const rows = await db
-    .select({ shippingAddress: orders.shippingAddress, customerId: orders.customerId })
+    .select({ shippingAddress: orders.shippingAddress, billingAddress: orders.billingAddress, customerId: orders.customerId })
     .from(orders)
     .where(and(...filters));
   const groups = new Map<string, { city: string | null; region: string | null; country: string | null; orders: number; fans: Set<string> }>();
   for (const r of rows) {
-    const addr: any = r.shippingAddress ?? {};
-    const city = (addr.city as string | undefined) ?? null;
-    const region = (addr.state ?? addr.region) as string | undefined ?? null;
-    const country = (addr.country as string | undefined) ?? null;
+    // Prefer shipping, fall back to billing — digital/donation add-ons land an
+    // all-null shipping_address (see reports/buyers.ts).
+    const ship: any = r.shippingAddress ?? {};
+    const bill: any = r.billingAddress ?? {};
+    const city = (ship.city || bill.city) as string | undefined ?? null;
+    const region = (ship.state || ship.region || bill.state || bill.region) as string | undefined ?? null;
+    const country = (ship.country || bill.country) as string | undefined ?? null;
     if (!city && !country) continue;
     const key = `${(city ?? "").toLowerCase()}|${(region ?? "").toLowerCase()}|${(country ?? "").toLowerCase()}`;
     const slot = groups.get(key) ?? { city, region, country, orders: 0, fans: new Set<string>() };

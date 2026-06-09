@@ -14834,6 +14834,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     const { pgArray } = await import("./lib/pgArray");
+    const { LOC_CITY, LOC_REGION, LOC_COUNTRY } = await import("./reports/buyers");
     const albumFilter = albumId ? sql`o.album_id = ${albumId}` : sql`o.album_id = ANY(${pgArray(albumIds)})`;
 
     const [kpisRows, perAlbumRows, orderRows, totalRow] = await Promise.all([
@@ -14860,9 +14861,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       db.execute<any>(sql`
         SELECT o.id, o.created_at, o.status, o.total_cents, o.buyer_name, o.buyer_email,
           o.customer_id, o.album_id, a.title AS album_title,
-          o.shipping_address->>'city' AS city,
-          o.shipping_address->>'state' AS state,
-          o.shipping_address->>'country' AS country,
+          ${LOC_CITY} AS city,
+          ${LOC_REGION} AS state,
+          ${LOC_COUNTRY} AS country,
           cu.email AS fan_email, cu.display_name, cu.real_name
         FROM orders o
         JOIN albums a ON a.id = o.album_id
@@ -14920,6 +14921,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const limit = Math.min(Number(req.query.limit) || 200, 2000);
     const offset = Number(req.query.offset) || 0;
     const REVENUE_STATUSES = `'paid','shipped','complete','completed'`;
+    const { LOC_CITY, LOC_REGION, LOC_COUNTRY } = await import("./reports/buyers");
 
     // Task #1499 — server-side search + sort so the Customers tab can
     // filter / order across the WHOLE roster, not just the rows already
@@ -14933,7 +14935,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           OR o.buyer_name ILIKE ${"%" + searchRaw + "%"}
           OR cu.email ILIKE ${"%" + searchRaw + "%"}
           OR o.buyer_email ILIKE ${"%" + searchRaw + "%"}
-          OR o.shipping_address->>'city' ILIKE ${"%" + searchRaw + "%"}
+          OR ${LOC_CITY} ILIKE ${"%" + searchRaw + "%"}
         )`
       : sql``;
 
@@ -14949,7 +14951,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       )
     )`;
     const nameExpr = sql`COALESCE(NULLIF(TRIM(cu.display_name), ''), NULLIF(TRIM(cu.real_name), ''), o.buyer_name, cu.email, o.buyer_email)`;
-    const locationExpr = sql`NULLIF(CONCAT_WS(', ', o.shipping_address->>'city', o.shipping_address->>'state', o.shipping_address->>'country'), '')`;
+    const locationExpr = sql`NULLIF(CONCAT_WS(', ', ${LOC_CITY}, ${LOC_REGION}, ${LOC_COUNTRY}), '')`;
 
     const sortKey = String(req.query.sort ?? "date");
     const dir = String(req.query.dir ?? "").toLowerCase() === "asc";
@@ -15080,9 +15082,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       db.execute<any>(sql`
         SELECT o.id, o.created_at, o.status, o.total_cents, o.buyer_name, o.buyer_email,
           o.customer_id,
-          o.shipping_address->>'city' AS city,
-          o.shipping_address->>'state' AS state,
-          o.shipping_address->>'country' AS country,
+          ${LOC_CITY} AS city,
+          ${LOC_REGION} AS state,
+          ${LOC_COUNTRY} AS country,
           cu.email AS fan_email, cu.display_name, cu.real_name,
           ${hasGoodDeedExpr} AS has_good_deed
         FROM orders o

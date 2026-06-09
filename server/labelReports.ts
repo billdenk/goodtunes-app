@@ -26,6 +26,7 @@ import type { Express, Request, Response } from "express";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { pgArray } from "./lib/pgArray";
+import { LOC_COUNTRY } from "./reports/buyers";
 import { getUserRole } from "./auth/roles";
 import { storage } from "./storage";
 
@@ -411,7 +412,7 @@ async function geoHandler(req: Request, res: Response) {
   const { range } = parseRange(req);
 
   const buyersByCountry = scope.albumIds.length ? await db.execute<{ country: string | null; buyers: string; revenue: string }>(sql`
-    SELECT o.shipping_address->>'country' AS country,
+    SELECT ${LOC_COUNTRY} AS country,
       COUNT(DISTINCT o.customer_id)::text AS buyers,
       SUM(CASE WHEN o.status <> 'refunded' THEN o.total_cents ELSE 0 END)::text AS revenue
     FROM orders o
@@ -567,7 +568,7 @@ async function ordersHandler(req: Request, res: Response) {
 
   const rows = await db.execute<any>(sql`
     SELECT o.id, o.created_at, o.status, o.total_cents,
-      o.shipping_address->>'country' AS country,
+      ${LOC_COUNTRY} AS country,
       o.album_id, a.title AS album_title, a.artist AS album_artist, a.primary_artist_id
     FROM orders o
     JOIN albums a ON a.id = o.album_id
