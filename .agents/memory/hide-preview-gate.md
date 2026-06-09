@@ -41,13 +41,12 @@ static seed omits it (undefined → previewable).
 song shape) must declare AND copy `isPreviewable` end-to-end. Don't just fix the
 gate read — verify the field survives the page's own ApiAlbum type + map/useMemo.
 
-**Historical note / open product tension:** "Hide preview" was first built so the
-embargo lifted on ownership; an EARLIER decision (Bill, Nightbirde "Hope") wanted
-the Apple/McCartney pre-release treatment for *everyone including owners*. The code
-has since reverted to owner-inclusive (owners see the full tracklist). Bill tests on
-get.goodtunes as a NON-OWNER (he 403s), so the non-owner path is what his bug reports
-exercise — but if he ever wants owners locked too, the change is the two queue filters
-+ the mobile/desktop row lock (drop the `isOwned`/`effectiveOwned` short-circuit), NOT
-`trackPlaybackState`. Confirm with Bill before changing owner behavior.
+**Why owners are NOT locked (settled with Bill, 2026-06-09):** the only reason
+"Hope — a note from Jane" is hidden is that the track is *shorter than the 30-sec
+preview*, so a preview would give away the whole thing. It is NOT a pre-release
+embargo. So the current owner-inclusive behavior is correct and intentional:
+non-owners must not hear the full short track, but buyers own it and should. Do
+NOT lock owners out (an earlier stale note wanted "dead for everyone" — that's
+wrong; ignore it).
 
 Default fan copy must NOT say "30 sec preview" (Bill's call) — CTA is "Play"/"Preview".
