@@ -170,7 +170,7 @@ function WhyMore({ children }: { children: React.ReactNode }) {
       {open && (
         <div
           data-testid="popover-why-more"
-          className="absolute z-30 left-0 top-full mt-2 w-[268px] rounded-xl p-3.5 text-xs leading-relaxed text-fan-primary"
+          className="absolute z-30 left-0 bottom-full mb-2 w-[268px] rounded-xl p-3.5 text-xs leading-relaxed text-fan-primary"
           style={{
             background: PANEL,
             border: "1px solid rgba(255,255,255,0.14)",
