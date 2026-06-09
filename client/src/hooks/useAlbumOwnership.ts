@@ -34,7 +34,7 @@ export function useAlbumOwnership(albumId: string | undefined): boolean {
   // Server-side collection (owned/comp + active previews; expired previews
   // already filtered out by the API). staleTime: Infinity in the shared
   // queryClient means this is fetched once and reused across surfaces.
-  const { data: myAlbums } = useQuery<MyAlbumRow[] | null>({
+  const { data: myAlbums } = useQuery<(MyAlbumRow & { isPreview?: boolean })[] | null>({
     queryKey: ["/api/my-albums"],
   });
   const serverOwned =
@@ -63,6 +63,19 @@ export function useAlbumOwnership(albumId: string | undefined): boolean {
   }, [albumId]);
 
   return serverOwned || devOwned;
+}
+
+/**
+ * Returns whether the fan has PERMANENT (non-preview) ownership of the album.
+ * Unlike `useAlbumOwnership`, an admin-granted temporary preview does NOT
+ * count. Used to gate playlist adds — a playlist entry is permanent, so it
+ * requires a real purchase/comp grant (isPreview = false).
+ */
+export function useTrueAlbumOwnership(albumId: string | undefined): boolean {
+  const { data: myAlbums } = useQuery<(MyAlbumRow & { isPreview?: boolean })[] | null>({
+    queryKey: ["/api/my-albums"],
+  });
+  return !!albumId && (myAlbums ?? []).some((a) => a.albumId === albumId && !a.isPreview);
 }
 
 /**

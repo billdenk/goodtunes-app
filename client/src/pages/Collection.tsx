@@ -606,9 +606,13 @@ export function CollectionSongs() {
       setAddToPlaylistSong(null);
     },
     onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "";
+      const is403 = msg.startsWith("403:");
       toast({
-        title: "Couldn't add song",
-        description: err instanceof Error ? err.message : "Please try again.",
+        title: is403 ? "Album not in your library" : "Couldn't add song",
+        description: is403
+          ? "You need to own this album to add songs to a playlist."
+          : "Please try again.",
         variant: "destructive",
       });
     },
@@ -686,6 +690,7 @@ export function CollectionSongs() {
                   </div>
                 )}
               </button>
+              {!previewAlbumIds.has(song.album.id) && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -701,6 +706,7 @@ export function CollectionSongs() {
                   <path d="M12 5v14M5 12h14" />
                 </svg>
               </button>
+              )}
             </div>
           );
         })}

@@ -182,6 +182,8 @@ export interface IStorage {
   // the album's hidden / sunrise / trashed state? Used by the fan album route
   // so a "View order" link never dead-ends on a 404 for an album they bought.
   userOwnsAlbum(userId: string, albumId: string): Promise<boolean>;
+  /** True only when the fan has a permanent (non-preview) grant — isPreview=false. */
+  userTrulyOwnsAlbum(userId: string, albumId: string): Promise<boolean>;
 
   // CMS mutations (admin-only at the route layer).
   createAlbum(data: Omit<Album, "id"> & { id?: string }): Promise<Album>;
@@ -3607,6 +3609,22 @@ export class DbStorage implements IStorage {
           eq(userAlbums.isPreview, false),
           sql`${userAlbums.previewExpiresAt} > now()`,
         ),
+      ))
+      .limit(1);
+    return !!row;
+  }
+
+  // Playlist-add ownership gate: requires a permanent, non-preview grant
+  // (isPreview = false). A temporary admin-preview does NOT entitle a fan
+  // to add the album's songs to a permanent playlist.
+  async userTrulyOwnsAlbum(userId: string, albumId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: userAlbums.id })
+      .from(userAlbums)
+      .where(and(
+        eq(userAlbums.userId, userId),
+        eq(userAlbums.albumId, albumId),
+        eq(userAlbums.isPreview, false),
       ))
       .limit(1);
     return !!row;

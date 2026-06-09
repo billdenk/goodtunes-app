@@ -115,6 +115,7 @@ function makeHarness(previewMode: boolean) {
       showQueue: false,
       autoplay: false,
       favorites: new Set<string>(),
+      trulyOwnedAlbumIds: new Set<string>(),
       airPlayAvailable: true,
       airPlaySupported: true,
       previewMode,

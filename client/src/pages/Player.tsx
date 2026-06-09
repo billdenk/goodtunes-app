@@ -209,6 +209,7 @@ export function Player() {
     previewMode,
     previewStartSec,
     previewWindowSec,
+    trulyOwnedAlbumIds,
   } = usePlayer();
 
   // Preview windowing for the mobile full-screen scrubbers. When the host has
@@ -237,6 +238,19 @@ export function Player() {
     ? systemVolume.level ?? volume
     : volume;
   const setVolumeLevel = systemVolume.active ? systemVolume.setLevel : setVolume;
+
+  // Gate the "Add to Playlist" action on permanent (non-preview) ownership.
+  // Two cases require blocking:
+  //   1. previewMode=true  → unowned album, 30 s preview clip only.
+  //   2. Current song's album is NOT in trulyOwnedAlbumIds → fan has at most a
+  //      preview grant (isPreview=true) which doesn't allow playlist adds.
+  // trulyOwnedAlbumIds comes from PlayerContext (populated from /api/my-albums)
+  // so this check is source-agnostic — correct regardless of which host surface
+  // (AlbumDetail, Collection, Playlists, etc.) queued the current song.
+  const canAddToPlaylist =
+    !previewMode &&
+    !!currentSong?.album?.id &&
+    trulyOwnedAlbumIds.has(currentSong.album.id);
 
   const [showLyricsMenu, setShowLyricsMenu] = useState(false);
   const [, navigate] = useLocation();
@@ -541,7 +555,8 @@ export function Player() {
                 <IconButton
                   variant="glass"
                   label="More"
-                  onClick={() => setShowAddToPlaylist(true)}
+                  onClick={canAddToPlaylist ? () => setShowAddToPlaylist(true) : undefined}
+                  disabled={!canAddToPlaylist}
                   data-testid="button-song-more"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor">
@@ -859,19 +874,23 @@ export function Player() {
                         animate={{ opacity: 1, scale: 1, y: 0, transition: goToMenuAnimate }}
                         exit={reduceMotion ? { opacity: 0, transition: { duration: 0.12 } } : { opacity: 0, scale: 0.92, y: -4, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }}
                       >
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => { setShowLyricsMenu(false); setShowAddToPlaylist(true); }}
-                          className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-white/10 transition-colors"
-                          data-testid="button-lyrics-add-to-playlist"
-                        >
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
-                            <path d="M3 6h13M3 12h9M3 18h9M16 15v6M13 18h6" />
-                          </svg>
-                          <span className="block text-white text-sm font-semibold leading-tight">Add to Playlist</span>
-                        </button>
-                        <div className="h-px bg-white/10 mx-4" />
+                        {canAddToPlaylist && (
+                          <>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => { setShowLyricsMenu(false); setShowAddToPlaylist(true); }}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-white/10 transition-colors"
+                              data-testid="button-lyrics-add-to-playlist"
+                            >
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+                                <path d="M3 6h13M3 12h9M3 18h9M16 15v6M13 18h6" />
+                              </svg>
+                              <span className="block text-white text-sm font-semibold leading-tight">Add to Playlist</span>
+                            </button>
+                            <div className="h-px bg-white/10 mx-4" />
+                          </>
+                        )}
                         <button
                           type="button"
                           role="menuitem"

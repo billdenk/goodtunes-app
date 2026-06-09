@@ -19130,6 +19130,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (playlist.userId !== req.session.userId) return res.status(403).json({ message: "Forbidden" });
     const { songId, position } = req.body;
     if (!songId) return res.status(400).json({ message: "songId required" });
+    // Ownership gate — look up the song's album and confirm the fan has a real
+    // (non-preview) ownership grant before allowing a permanent playlist entry.
+    const [songRow] = await db
+      .select({ albumId: songs.albumId })
+      .from(songs)
+      .where(and(eq(songs.id, String(songId)), isNull(songs.deletedAt)));
+    if (!songRow) return res.status(404).json({ message: "Song not found" });
+    const trueOwner = await storage.userTrulyOwnsAlbum(req.session.userId!, songRow.albumId);
+    if (!trueOwner) {
+      return res.status(403).json({ message: "You need to own this album to add songs to a playlist." });
+    }
     const ps = await storage.addSongToPlaylist(id, String(songId), position ?? 0);
     return res.status(201).json(ps);
   });

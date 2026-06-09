@@ -202,10 +202,21 @@ export function Playlists() {
   const { data: dbSongs } = useQuery<DbSong[]>({ queryKey: ["/api/songs"] });
   const { data: dbAlbums } = useQuery<DbAlbum[]>({ queryKey: ["/api/albums"] });
 
+  // True ownership — only albums the fan has bought/comped (isPreview=false).
+  // Preview grants cannot be playlisted (server enforces 403); filter them from
+  // the candidate list so fans never tap "+" only to hit a rejection.
+  const { data: myAlbumsRaw } = useQuery<Array<{ albumId: string; isPreview?: boolean }> | null>({
+    queryKey: ["/api/my-albums"],
+  });
+  const trulyOwnedAlbumIds = new Set(
+    (myAlbumsRaw ?? []).filter((a) => !a.isPreview).map((a) => a.albumId),
+  );
+
   const dbAddCandidates = (() => {
     if (!dbSongs || !dbAlbums) return [] as Array<{ id: string; title: string; artist: string; artwork: string }>;
     const albumById = new Map(dbAlbums.map((a) => [a.id, a] as const));
     return dbSongs
+      .filter((s) => trulyOwnedAlbumIds.has(s.albumId))
       .map((s) => {
         const a = albumById.get(s.albumId);
         if (!a) return null;
@@ -385,9 +396,13 @@ export function Playlists() {
       queryClient.invalidateQueries({ queryKey: ["/api/playlists"] });
     },
     onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "";
+      const is403 = msg.startsWith("403:");
       toast({
-        title: "Couldn't add song",
-        description: err instanceof Error ? err.message : "Please try again.",
+        title: is403 ? "Album not in your library" : "Couldn't add song",
+        description: is403
+          ? "You need to own this album to add songs to a playlist."
+          : "Please try again.",
         variant: "destructive",
       });
     },

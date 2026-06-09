@@ -93,6 +93,7 @@ function Harness() {
     showQueue: false,
     autoplay: false,
     favorites: new Set<string>(),
+    trulyOwnedAlbumIds: new Set<string>(),
     airPlayAvailable: false,
     airPlaySupported: false,
     previewMode: false,

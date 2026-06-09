@@ -460,7 +460,7 @@ export function AlbumCard({
                 <div className="h-px bg-white/8" />
               </>
             )}
-            {albumSongs.length > 0 && (
+            {albumSongs.length > 0 && isOwned && !isPreview && (
               <button
                 type="button"
                 onClick={() => { setMenuOpen(false); setShowPlaylist(true); }}

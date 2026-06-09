@@ -433,8 +433,9 @@ export function AlbumDetailDesktop({
         muxStatus: s.muxStatus ?? null,
         muxAssetId: s.muxAssetId ?? null,
         album: albumForSong,
+        isPreviewGrant: isPreviewAlbum,
       })) as PlayerSong[];
-  }, [album, songs, effectiveOwned]);
+  }, [album, songs, effectiveOwned, isPreviewAlbum]);
 
   const handlePlayAll = () => {
     if (playableSongs.length === 0) return;
@@ -748,7 +749,7 @@ export function AlbumDetailDesktop({
             onGetNotified={() => { setOfferStartAtBundle(false); setShowOfferModal(true); }}
             onGetDetails={() => { setOfferStartAtBundle(false); setShowOfferModal(true); }}
             onPlayTrack={handlePlayTrack}
-            onAddTrack={handleAddTrack}
+            onAddTrack={effectiveOwned && !isPreviewAlbum ? handleAddTrack : undefined}
             onPlayNextTrack={handlePlayNextTrack}
             onPlayLastTrack={handlePlayLastTrack}
             onToggleFavoriteTrack={handleToggleFavoriteTrack}
@@ -759,7 +760,7 @@ export function AlbumDetailDesktop({
             onOpenAlbumCredits={() => setShowAlbumCredits(true)}
             onViewCertificate={effectiveOwned ? () => setShowCert(true) : undefined}
             onViewProvenance={effectiveOwned ? handleViewProvenance : undefined}
-            onAddAlbumToPlaylist={() => setShowAlbumPlaylistPicker(true)}
+            onAddAlbumToPlaylist={effectiveOwned && !isPreviewAlbum ? () => setShowAlbumPlaylistPicker(true) : undefined}
             onDownloadCert={pdfOrder ? openCertPdf : undefined}
             isMultiOwned={isMulti}
             onPlayVideo={effectiveOwned ? setPlayingVideoId : undefined}

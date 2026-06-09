@@ -436,6 +436,9 @@ function AlbumDetailMobile({
   const { fanView } = useFanPreview();
   const isOwned = fanView ? false : isOwnedRaw;
   const fullPlaybackAccess = fanView ? false : fullPlaybackAccessRaw;
+  // True ownership = in library AND NOT a preview grant. Used specifically to
+  // gate Add-to-Playlist (previews cannot playlist songs they don't truly own).
+  const trulyOwns = isOwned && !isPreviewAlbum;
   const previewFirst = buyEnabled && !isOwned && !fullPlaybackAccess;
   // Task #1734 — purchase-funnel "locked unlock" presentation (get./store.
   // host, web only, not owned). The MY player never sets this so it stays
@@ -1012,7 +1015,7 @@ function AlbumDetailMobile({
     return <AlbumNotFound variant="mobile" />;
   }
 
-  const albumSongs = songs.map((s) => ({ ...s, album }));
+  const albumSongs = songs.map((s) => ({ ...s, album, isPreviewGrant: isPreviewAlbum }));
   // Preview-first surfaces only the songs the artist marked as
   // previewable; full-ownership playback walks the entire tracklist.
   // A track the operator hid (`isPreviewable === false`) is a quiet "locked"
@@ -1232,7 +1235,7 @@ function AlbumDetailMobile({
           onExpandDescription={() => setShowDescription(true)}
           onViewCertificate={() => setShowCert(true)}
           onViewProvenance={handleViewProvenance}
-          onAddAlbumToPlaylist={() => setShowAlbumPlaylistPicker(true)}
+          onAddAlbumToPlaylist={trulyOwns ? () => setShowAlbumPlaylistPicker(true) : undefined}
           onDownloadCert={pdfOrder ? openCertPdf : undefined}
         >
           {editorialPanel}
@@ -1402,7 +1405,7 @@ function AlbumDetailMobile({
                   }
                 } catch {}
               }}
-              onAddToPlaylist={() => { setSongMenuFor(null); setShowPlaylistPicker(s); }}
+              onAddToPlaylist={trulyOwns ? () => { setSongMenuFor(null); setShowPlaylistPicker(s); } : undefined}
               onPlayNext={() => { playNext({ ...s, album }); setShareToast("Playing next"); setTimeout(() => setShareToast(""), 1600); }}
               onAddToQueue={() => { addToQueue({ ...s, album }); setShareToast("Added to Queue"); setTimeout(() => setShareToast(""), 1600); }}
               onPlayLast={() => { playLast({ ...s, album }); setShareToast("Added to queue"); setTimeout(() => setShareToast(""), 1600); }}
@@ -1710,7 +1713,7 @@ function SongActionPopover({
   isFavorite: boolean;
   onToggleFavorite: () => void;
   onShare: () => void;
-  onAddToPlaylist: () => void;
+  onAddToPlaylist?: () => void;
   onPlayNext: () => void;
   onAddToQueue: () => void;
   onPlayLast: () => void;
@@ -1846,21 +1849,25 @@ function SongActionPopover({
             <span className="text-[12px] text-black">Share</span>
           </button>
         </div>
-        <Divider />
-        <Row
-          label="Add to Playlist"
-          testId="row-popover-add-playlist"
-          onClick={close(onAddToPlaylist)}
-          icon={
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="3" y1="6" x2="14" y2="6" />
-              <line x1="3" y1="12" x2="14" y2="12" />
-              <line x1="3" y1="18" x2="10" y2="18" />
-              <line x1="18" y1="9" x2="18" y2="21" />
-              <line x1="12" y1="15" x2="24" y2="15" />
-            </svg>
-          }
-        />
+        {onAddToPlaylist && (
+          <>
+            <Divider />
+            <Row
+              label="Add to Playlist"
+              testId="row-popover-add-playlist"
+              onClick={close(onAddToPlaylist)}
+              icon={
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="3" y1="6" x2="14" y2="6" />
+                  <line x1="3" y1="12" x2="14" y2="12" />
+                  <line x1="3" y1="18" x2="10" y2="18" />
+                  <line x1="18" y1="9" x2="18" y2="21" />
+                  <line x1="12" y1="15" x2="24" y2="15" />
+                </svg>
+              }
+            />
+          </>
+        )}
         <Divider />
         <Row
           label="Play Next"

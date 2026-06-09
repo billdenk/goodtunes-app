@@ -10,6 +10,10 @@ import { offlineSrcFor } from "@/lib/nativeDownloads";
 
 export interface PlayerSong extends Song {
   album: Album;
+  /** True when the fan has an admin-granted *preview* (full playback, but
+   *  not a real purchase/comp). Playlist adds require genuine ownership so
+   *  Player.tsx uses this — alongside previewMode — to gate the action. */
+  isPreviewGrant?: boolean;
 }
 
 interface PlayerState {
@@ -27,6 +31,10 @@ interface PlayerState {
   showQueue: boolean;
   autoplay: boolean;
   favorites: Set<string>;
+  /** Album IDs the fan has permanently purchased or comped (isPreview=false).
+   *  Derived from /api/my-albums inside the provider so Player.tsx can gate
+   *  Add-to-Playlist without knowing which host surface queued the song. */
+  trulyOwnedAlbumIds: Set<string>;
   /** True only when iOS WebKit reports at least one AirPlay target (Apple TV
    *  / HomePod) is reachable for the hidden audio element. Stays false on
    *  every non-Safari platform (Android, desktop, in-app browsers) because
@@ -145,6 +153,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const { data: dbSongList } = useQuery<Song[]>({
     queryKey: ["/api/songs"],
   });
+  // True ownership set — albums the fan has bought/comped (isPreview=false).
+  // Used by Player.tsx to gate "Add to Playlist" regardless of which host
+  // surface (AlbumDetail, Collection, Playlists, etc.) queued the songs.
+  const { data: myAlbumsForOwnership } = useQuery<Array<{ albumId: string; isPreview?: boolean }> | null>({
+    queryKey: ["/api/my-albums"],
+  });
+  const trulyOwnedAlbumIds = useMemo(
+    () => new Set((myAlbumsForOwnership ?? []).filter((a) => !a.isPreview).map((a) => a.albumId)),
+    [myAlbumsForOwnership],
+  );
   const dbSongById = useMemo(() => {
     const m = new Map<string, Song>();
     (dbSongList ?? []).forEach((s) => m.set(s.id, s));
@@ -1204,6 +1222,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         previewEndSec,
         previewWindowSec,
         setPreviewMode,
+        trulyOwnedAlbumIds,
         volume,
         muted,
         setVolume,

@@ -91,9 +91,12 @@ export function PlaylistPickerSheet({ songId, songIds, songTitle, heading, onClo
       setTimeout(onClose, 900);
     },
     onError: (err: unknown) => {
+      const is403 = err instanceof Error && err.message.startsWith("403:");
       toast({
-        title: "Couldn't add to playlist",
-        description: err instanceof Error ? err.message : "Please try again.",
+        title: is403 ? "Album not in your library" : "Couldn't add to playlist",
+        description: is403
+          ? "You need to own this album to add its songs to a playlist."
+          : err instanceof Error ? err.message : "Please try again.",
         variant: "destructive",
       });
     },
