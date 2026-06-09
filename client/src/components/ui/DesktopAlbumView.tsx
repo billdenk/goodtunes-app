@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { formatUsdCents } from "@shared/money";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -6,6 +6,7 @@ import { popBounce } from "@/lib/motion";
 import { ChevronRight, Play, Pause, Shuffle, Lock, Share, MoreHorizontal, X, Maximize2, Bell, ShoppingCart } from "lucide-react";
 import { AlbumDesktopTrackRow } from "@/components/ui/AlbumDesktopTrackRow";
 import { BonusPlayBadge } from "@/components/ui/BonusPlayBadge";
+import { PhotoLightbox, type LightboxPhoto } from "@/components/ui/PhotoLightbox";
 import { IconButton } from "@/components/ui/IconButton";
 import { FAN_TOP_CHROME_INSET } from "@/components/ui/SheetChrome";
 import { BRAND_BLUE } from "@/components/ui/AlbumDesktopSidebar";
@@ -439,6 +440,14 @@ export function DesktopAlbumView({
   const VIDEO_ROW_CAP = 10;
   const [showAllVideos, setShowAllVideos] = useState(false);
   const showVideoSeeAll = videos.length > 4;
+
+  const [activePhotoIndex, setActivePhotoIndex] = useState<number | null>(null);
+  const lightboxPhotos: LightboxPhoto[] = photos.map((p) => ({
+    id: p.id,
+    photoUrl: p.photoUrl,
+    caption: p.caption,
+  }));
+  const onPhotoClick = useCallback((i: number) => setActivePhotoIndex(i), []);
 
   return (
     <div className="flex gap-6 w-full" data-testid="desktop-album-view">
@@ -1092,6 +1101,7 @@ export function DesktopAlbumView({
                 }))}
                 locked={!isOwned}
                 kind="photo"
+                onPhotoClick={isOwned ? onPhotoClick : undefined}
               />
             </section>
           )}
@@ -1170,6 +1180,14 @@ export function DesktopAlbumView({
         )}
       </AnimatePresence>
 
+      {activePhotoIndex !== null && lightboxPhotos[activePhotoIndex] && (
+        <PhotoLightbox
+          photos={lightboxPhotos}
+          index={activePhotoIndex}
+          onIndexChange={setActivePhotoIndex}
+          onClose={() => setActivePhotoIndex(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1481,6 +1499,7 @@ export function BonusGrid({
   locked,
   kind,
   onPlayItem,
+  onPhotoClick,
   layout = "grid",
   limit,
 }: {
@@ -1491,6 +1510,10 @@ export function BonusGrid({
   // an unlocked tile, so the host can open the playback modal. Omitted for
   // photos and ignored while locked.
   onPlayItem?: (id: string) => void;
+  // Photo cards only: invoked with the tile's index in `items` when the fan
+  // clicks an unlocked photo, so the host can open the full-screen lightbox.
+  // Ignored while locked or when kind !== "photo".
+  onPhotoClick?: (index: number) => void;
   // "grid" — stacked 3-up grid (the See-All / photo layout). "row" — a single
   // horizontally scrolled Apple-Music rail of fixed-width tiles.
   layout?: "grid" | "row";
@@ -1603,12 +1626,31 @@ export function BonusGrid({
             )}
           </div>
         ) : (
-          // Photo card: unchanged square tile (layout, label overlay, and states
-          // match exactly what the single-branch version had before the split).
+          // Photo card: square tile. Unlocked tiles are accessible buttons
+          // that open the full-screen lightbox at the clicked photo's index.
+          // Locked tiles stay inert (no handler, no role) — matching mobile.
           <div
             key={it.id}
             className="group relative aspect-square rounded-2xl overflow-hidden bg-white/5"
             style={{ cursor: locked ? "default" : "pointer" }}
+            tabIndex={!locked && onPhotoClick ? 0 : undefined}
+            role={!locked && onPhotoClick ? "button" : undefined}
+            aria-label={!locked && onPhotoClick ? `View photo${it.label ? `: ${it.label}` : ""}` : undefined}
+            onClick={
+              !locked && onPhotoClick
+                ? () => onPhotoClick(items.findIndex((i) => i.id === it.id))
+                : undefined
+            }
+            onKeyDown={
+              !locked && onPhotoClick
+                ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onPhotoClick(items.findIndex((i) => i.id === it.id));
+                    }
+                  }
+                : undefined
+            }
             data-testid={`thumb-${kind}-${it.id}`}
           >
             <img
