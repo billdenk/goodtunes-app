@@ -165,9 +165,26 @@ dependent, not caused by client test work.
   natively so the wrapper survives. Without these the dialog throw is swallowed
   by AdminErrorBoundary and looks like "the dialog just didn't open."
 
+**Observing the persistent `<audio>` element (no handle on `new Audio()`):**
+PlayerContext news up ONE hidden audio element you can't reach from a test. To
+assert its call shape (e.g. the iOS `attachSrc` invariant: src set + play() but
+NO `load()` on `isWebIOS`), instrument `window.HTMLMediaElement.prototype` —
+record `load`/`play` calls and `src` assignments in ONE ordered array, make
+`canPlayType()` return `"maybe"` to force the native-HLS/direct-src branch, and
+have `play()` return `Promise.resolve()` so ensureAudioUnlocked's silent bless
+finalizes. Drive it by rendering the REAL `PlayerProvider` (inside a
+`QueryClientProvider`; `useAuth`/`useFavoriteSongs` are react-query hooks, no
+AuthProvider needed), mock `fetch` so `/playback-url` returns `{url:<signed
+.m3u8>}` and `/api/me` returns `null` (anon → localStorage favorites), then call
+`playSong()` and flush microtasks+macrotasks for the async signed-URL attach.
+Slice the event log AFTER the signed-src index to isolate the swap from the
+earlier bless. See `client/src/pages/playerAttachSrcLoad.test.ts`.
+
 Reference implementations: `client/src/components/ui/desktopLyricsPanel.test.ts`
 (prop-driven components), `client/src/pages/playerLyricsPanel.test.ts`
 (context-driven page), `client/src/pages/albumDetailLyricsBreakpoints.test.ts`
-(full-page, md vs lg lyrics surfaces), and
+(full-page, md vs lg lyrics surfaces),
 `client/src/pages/adminAlbumDeleteGating.test.ts` (AdminFrame-wrapped admin
-page with seeded panels + Radix dialogs).
+page with seeded panels + Radix dialogs), and
+`client/src/pages/playerAttachSrcLoad.test.ts` (real PlayerProvider +
+media-element prototype spy).
