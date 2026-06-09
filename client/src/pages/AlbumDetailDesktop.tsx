@@ -397,11 +397,12 @@ export function AlbumDetailDesktop({
       description: album.description ?? "",
     };
     return songs
-      // A track the operator hid (isPreviewable === false) is treated as
-      // unreleased for EVERYONE — even owners. It never enters the
-      // play-all / shuffle queue, so Play skips straight to the next
-      // released track (Apple's pre-release pattern).
-      .filter((s) => s.isPreviewable !== false)
+      // A track the operator hid (isPreviewable === false) is a quiet
+      // "locked" row for NON-OWNERS and never enters their play-all /
+      // shuffle queue, so Play skips straight to the next released track
+      // (Apple's pre-release pattern). Owners who bought the album get the
+      // full tracklist — embargoed title track included.
+      .filter((s) => effectiveOwned || s.isPreviewable !== false)
       .map((s) => ({
         id: s.id,
         albumId: s.albumId,

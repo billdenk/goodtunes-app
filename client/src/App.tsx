@@ -238,12 +238,14 @@ function ShareSlugTwo() {
   // page in notify-only "Get Early Access" mode (the primary CTA captures an
   // email into the waitlist instead of opening checkout). Once a release is
   // LIVE (is_prepping=false — sunrise/launch has fired), the bare campaign
-  // share link (e.g. nightbirde/hope) must open the normal album surface:
-  // 30s previews + Buy, exactly like the single-segment /hope route. Gating
-  // notify-only on isCampaignRelease pinned the launched campaign to email
-  // capture, which blocked the public from previewing or buying after launch.
-  const notifyOnly = !!data.isPrepping;
-  return <AlbumDetail albumId={data.id} notifyOnly={notifyOnly} />;
+  // share link (e.g. nightbirde/hope) opens the "buy" campaign surface: the
+  // on-arrival offer modal with the large order boxes, a "Get Details" link
+  // beside the Buy CTA, hidden login chrome, and 30s previews — the full launch
+  // experience. (A brief plain-album-page variant dropped the offer modal, the
+  // Get Details link, and the order boxes, and let the login chrome show.)
+  if (data.isPrepping)
+    return <AlbumDetail albumId={data.id} notifyOnly />;
+  return <AlbumDetail albumId={data.id} publicPreview="buy" />;
 }
 
 // Task #1766 — single-segment share link (get.goodtunes.music/<slug>, e.g.
@@ -279,13 +281,14 @@ function ShareSlugOne() {
   // Task #1778 — a PREPPING (pre-launch) release resolves to the full rich page
   // in notify-only "Get Early Access" mode instead of a dead-end teaser.
   // Task #1784 — that prepping fan link is the "notify" public-preview surface
-  // (auto-opening mint offer modal, clean chrome). Gate on isPrepping: this
-  // route handles ALL single-segment shares, so a LIVE release stays a normal
-  // album page (publicPreview undefined).
+  // (auto-opening mint offer modal, clean chrome). Once LIVE, the single-segment
+  // share opens the "buy" campaign surface (on-arrival offer modal + large order
+  // boxes, "Get Details" link beside Buy, hidden login chrome, 30s previews) so
+  // every campaign entry point reads the same as the two-part share link.
   return (
     <AlbumDetail
       albumId={data.id}
-      publicPreview={data.isPrepping ? "notify" : undefined}
+      publicPreview={data.isPrepping ? "notify" : "buy"}
     />
   );
 }

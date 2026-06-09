@@ -932,15 +932,14 @@ export function DesktopAlbumView({
               <span aria-hidden className="mx-3 h-px shrink-0 bg-white/20" />
               {songs.map((s) => {
                 // A hidden track (isPreviewable === false) reads as a quiet
-                // "locked" row for EVERYONE — even owners — matching Apple's
-                // pre-release pattern: greyed title, no runtime, not tappable.
-                const state =
-                  s.isPreviewable === false
-                    ? "locked"
-                    : trackPlaybackState({
-                        isOwned,
-                        isPreviewable: s.isPreviewable,
-                      });
+                // "locked" row for NON-OWNERS — matching Apple's pre-release
+                // pattern: greyed title, no runtime, not tappable. Owners who
+                // bought the album get the full, playable row (the shared
+                // rule returns "full" for owners regardless of the embargo).
+                const state = trackPlaybackState({
+                  isOwned,
+                  isPreviewable: s.isPreviewable,
+                });
                 // A locked (unreleased) row is never the "now playing" row —
                 // it can't be played, so it must not show the rose title or
                 // equalizer even if a stale session still points at it.

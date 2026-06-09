@@ -460,8 +460,13 @@ function AlbumDetailMobile({
   // Task #1766 — the offer modal is the on-demand "Get Notified" capture
   // (opened from the transport's Get Notified CTA). Task #1784 — on the public
   // preview surfaces (/hope, /staging) it auto-opens on arrival so the page
-  // reads like the real player with the offer fronting it.
-  const [showOfferModal, setShowOfferModal] = useState(!!publicPreview);
+  // reads like the real player with the offer fronting it. Owners and
+  // full-access operators who land on a campaign share link already have the
+  // music, so never auto-front the purchase/notify offer at them (they can
+  // still open it from the transport CTA).
+  const [showOfferModal, setShowOfferModal] = useState(
+    !!publicPreview && !isOwned && !fullPlaybackAccess,
+  );
   const [singleCertNum, setSingleCertNum] = useState<number | null>(null);
   const [provenanceCertNum, setProvenanceCertNum] = useState<number | null>(null);
   const [showOwnership, setShowOwnership] = useState(false);
@@ -988,13 +993,14 @@ function AlbumDetailMobile({
   const albumSongs = songs.map((s) => ({ ...s, album }));
   // Preview-first surfaces only the songs the artist marked as
   // previewable; full-ownership playback walks the entire tracklist.
-  // A track the operator hid (isPreviewable === false) is treated as
-  // unreleased for EVERYONE — even owners. It never enters the playback
-  // queue, so Play / Shuffle skip straight to the next released track
-  // (Apple's pre-release pattern). previewFirst still governs preview MODE
-  // (30-sec auditions) via beginPlay, but no longer changes the track set.
+  // A track the operator hid (isPreviewable === false) is a quiet "locked"
+  // row for NON-OWNERS and never enters their playback queue, so Play /
+  // Shuffle skip straight to the next released track (Apple's pre-release
+  // pattern). Owners who bought the album get the full tracklist — embargoed
+  // title track included. previewFirst still governs preview MODE (30-sec
+  // auditions) via beginPlay, but no longer changes the track set.
   const playableAlbumSongs = albumSongs.filter(
-    (s) => (s as any).isPreviewable !== false,
+    (s) => isOwned || (s as any).isPreviewable !== false,
   );
 
   const beginPlay = (

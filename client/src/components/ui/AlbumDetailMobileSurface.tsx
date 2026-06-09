@@ -910,10 +910,11 @@ export function AlbumDetailMobileSurface({
             const isFavorite = !!favoriteSongIds?.has(song.id);
             // Quiet "locked" row: an operator hid this track (preview hidden /
             // unreleased). Mirrors the desktop `locked` state — greyed title +
-            // lock, nothing actionable on the right, not tappable. A hidden
-            // track is locked for EVERYONE — even owners — matching Apple's
-            // pre-release pattern, and Play / Shuffle skip it.
-            const locked = song.isPreviewable === false;
+            // lock, nothing actionable on the right, not tappable. Locked for
+            // NON-OWNERS only — matching Apple's pre-release pattern, and Play
+            // / Shuffle skip it. Owners who bought the album get the full,
+            // playable row (the embargo only hides the pre-purchase preview).
+            const locked = !isOwned && song.isPreviewable === false;
             if (locked) {
               return (
                 <Fragment key={song.id}>
