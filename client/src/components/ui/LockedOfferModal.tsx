@@ -20,6 +20,7 @@ import { formatUsdCents } from "@shared/money";
 import { apiRequest } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
 import { getCampaignRelease, type ReleaseContent } from "@/pages/Hope";
+import type { OfferSelection } from "@/components/checkout/BuySheet";
 
 /**
  * Task #1734 / #1816 — the auto-opening "offer" modal that fronts the
@@ -70,7 +71,7 @@ export type LockedOfferModalProps = {
   salesBeginLabel?: string | null;
   /** Opens the real Buy sheet (live releases only). The optional signed-cert
    *  flag pre-selects the signed GoodDeed upgrade in the sheet. */
-  onBuy: (opts?: { signedCert?: boolean }) => void;
+  onBuy: (opts?: { signedCert?: boolean; selection?: OfferSelection }) => void;
   /** Prefill the notify field for a signed-in fan. */
   prefilledEmail?: string | null;
   /** Light attribution stamped on the signup row ("get" / "store"). */
@@ -742,7 +743,7 @@ export function LockedOfferModal({
 
   // Real prices from the buy-options endpoint, so the recap matches checkout.
   const { data: buyOptions } = useQuery<{
-    skus?: { priceCents: number }[];
+    skus?: { priceCents: number; format?: string; soldOut?: boolean }[];
     addons?: { kind: string; priceCents: number }[];
     customAddons?: { id: string; name: string; priceCents: number; orgName?: string }[];
   }>({
@@ -831,6 +832,9 @@ export function LockedOfferModal({
       ]),
     ).sort((a, b) => a - b);
     const effectiveGift = Math.max(giftCents, giftMinCents);
+    // The bundle SKU format the recap priced off, so the merged BuySheet
+    // charges the exact same edition rather than its own default pick.
+    const bundleFormat = (buyOptions?.skus ?? []).find((s) => !s.soldOut)?.format;
 
     const idx = ORDER.indexOf(step);
     const go = (s: Step) => setStep(s);
@@ -1028,7 +1032,17 @@ export function LockedOfferModal({
                     giftCents={effectiveGift}
                     onPay={() => {
                       onClose();
-                      onBuy({ signedCert: signedQty > 0 });
+                      onBuy({
+                        signedCert: signedQty > 0,
+                        selection: {
+                          skuFormat: bundleFormat,
+                          quantity: bundleQty,
+                          signedQty,
+                          giftAddonId: boxQty > 0 ? giftAddon?.id : undefined,
+                          giftBoxQty: boxQty,
+                          giftAmountCents: boxQty > 0 ? effectiveGift : undefined,
+                        },
+                      });
                     }}
                     accentMint={accentMint}
                   />

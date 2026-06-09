@@ -277,10 +277,54 @@ const OTHER_COUNTRIES = ALL_COUNTRIES
   .filter((c) => !PRICED_CODES.has(c.code))
   .sort((a, b) => a.name.localeCompare(b.name));
 
+/** Task #1816 — the campaign offer modal collects the full order up front
+ *  (edition + quantity, signed-cert count, Gift-of-Hope donation). When the fan
+ *  hands off to checkout we carry that exact selection so the Stripe charge
+ *  matches the modal total and the Cart re-selection step is skipped. */
+export type OfferSelection = {
+  /** SKU format to charge (the campaign bundle). Falls back to the sheet's
+   *  default first-available SKU when absent. */
+  skuFormat?: string;
+  quantity: number;
+  /** How many copies carry the signed GoodDeed certificate. */
+  signedQty: number;
+  /** Custom non-profit add-on (e.g. Gift of Hope) id + chosen qty/amount. */
+  giftAddonId?: string;
+  giftBoxQty?: number;
+  giftAmountCents?: number;
+};
+
+const SELECTION_STORAGE_KEY = (albumId: string) => `gt:buy-selection:${albumId}`;
+const SELECTION_MAX_AGE_MS = 30 * 60 * 1000;
+
+/** Resolve the binding selection: the prop when handed straight from the modal,
+ *  otherwise the one persisted across the sign-in bounce. Only honored when the
+ *  return URL carries `offer=1`, so a plain ?buy=1 direct-buy never inherits a
+ *  stale campaign selection. */
+function resolveActiveSelection(
+  albumId: string,
+  initialSelection?: OfferSelection,
+): OfferSelection | undefined {
+  if (initialSelection) return initialSelection;
+  if (typeof window === "undefined") return undefined;
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("offer") !== "1") return undefined;
+    const raw = sessionStorage.getItem(SELECTION_STORAGE_KEY(albumId));
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as OfferSelection & { ts?: number };
+    if (!parsed || Date.now() - (parsed.ts ?? 0) > SELECTION_MAX_AGE_MS) return undefined;
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
 export function BuySheet({
   albumId,
   onClose,
   signedCertDefault = false,
+  initialSelection,
 }: {
   albumId: string;
   onClose: () => void;
@@ -288,18 +332,32 @@ export function BuySheet({
    *  fan opted in via the hover-revealed chip on the album hero before
    *  opening the sheet. */
   signedCertDefault?: boolean;
+  /** Task #1816 — when launched from the campaign offer modal, seed the whole
+   *  order and skip the Cart step (open straight at Shipping). */
+  initialSelection?: OfferSelection;
 }) {
   const { user } = useAuth();
   const isCustomerSignedIn = !!user && user.kind === "customer";
   const [, navigate] = useLocation();
+  // Task #1816 — the binding selection (prop, or persisted across the login
+  // bounce). When present the sheet starts at Shipping and hides the Cart.
+  const activeSelection = resolveActiveSelection(albumId, initialSelection);
+  const merged = !!activeSelection;
 
   const [options, setOptions] = useState<BuyOptions | null>(null);
   const [format, setFormat] = useState<string | null>(null);
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState(activeSelection?.quantity ?? 1);
   // Task #549 — Per-copy signed-cert toggles. Length always tracks
   // `quantity`. First copy seeds from `signedCertDefault` so the
-  // hero-pill pre-toggle still flows through.
-  const [copyCerts, setCopyCerts] = useState<boolean[]>([signedCertDefault]);
+  // hero-pill pre-toggle still flows through. Task #1816 — when handed a
+  // campaign selection, seed the first `signedQty` copies as signed.
+  const [copyCerts, setCopyCerts] = useState<boolean[]>(() => {
+    if (activeSelection) {
+      const q = Math.max(1, activeSelection.quantity);
+      return Array.from({ length: q }, (_, i) => i < activeSelection.signedQty);
+    }
+    return [signedCertDefault];
+  });
   // Task #1822 — dedicated cert step. "main" = format/qty/addons/shipping,
   // "cert" = focused signed-certificate screen (only when addon active).
   const [step, setStep] = useState<"main" | "cert">("main");
@@ -316,14 +374,22 @@ export function BuySheet({
   // not selected); `customAddonMode` maps addon id → recipient choice
   // (defaults to "anonymous"). Independent of every other line; the
   // server re-validates eligibility + price on checkout.
-  const [customAddonQty, setCustomAddonQty] = useState<Record<string, number>>({});
+  const [customAddonQty, setCustomAddonQty] = useState<Record<string, number>>(() =>
+    activeSelection?.giftAddonId && activeSelection.giftBoxQty
+      ? { [activeSelection.giftAddonId]: activeSelection.giftBoxQty }
+      : {},
+  );
   const [customAddonMode, setCustomAddonMode] = useState<
     Record<string, "anonymous" | "specific">
   >({});
   // Task #1842 — for variable-amount add-ons: maps addon id → fan-chosen
   // amount in cents. Initialized from the add-on's priceCents when the fan
   // first expands the picker; preset chips snap-select here.
-  const [customAddonAmount, setCustomAddonAmount] = useState<Record<string, number>>({});
+  const [customAddonAmount, setCustomAddonAmount] = useState<Record<string, number>>(() =>
+    activeSelection?.giftAddonId && activeSelection.giftAmountCents != null
+      ? { [activeSelection.giftAddonId]: activeSelection.giftAmountCents }
+      : {},
+  );
   const MAX_CUSTOM_ADDON_QTY = 25;
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -337,7 +403,9 @@ export function BuySheet({
   const [postalCode, setPostalCode] = useState("");
   // Desktop checkout is a Cart → Shipping → Payment card wizard. This drives
   // the first two cards; the existing Stripe Embedded step is `inCheckout`.
-  const [desktopPhase, setDesktopPhase] = useState<"cart" | "shipping">("cart");
+  const [desktopPhase, setDesktopPhase] = useState<"cart" | "shipping">(
+    activeSelection ? "shipping" : "cart",
+  );
   const [shipping, setShipping] = useState<{
     shippable?: boolean;
     available?: boolean;
@@ -364,8 +432,13 @@ export function BuySheet({
         const r = await apiRequest("GET", `/api/albums/${albumId}/buy-options`);
         const j: BuyOptions = await r.json();
         setOptions(j);
-        const firstAvailable = j.skus.find((s) => !s.soldOut);
-        if (firstAvailable) setFormat(firstAvailable.format);
+        // Task #1816 — honor the campaign bundle SKU when handed off; else the
+        // first available format (the default direct-buy behavior).
+        const desired = activeSelection?.skuFormat
+          ? j.skus.find((s) => s.format === activeSelection.skuFormat && !s.soldOut)
+          : undefined;
+        const pick = desired ?? j.skus.find((s) => !s.soldOut);
+        if (pick) setFormat(pick.format);
         track("bundle_viewed", {
           albumId,
           skuCount: j.skus.length,
@@ -381,6 +454,19 @@ export function BuySheet({
     if (!clientSecret) return;
     getStripePromise().then(setStripe).catch((e) => setError(e?.message ?? "Stripe failed to load"));
   }, [clientSecret]);
+
+  // Task #1816 — persist the handed-off selection so it survives the sign-in
+  // bounce (the checkout CTA navigates to /login then back to ?buy=1&offer=1).
+  // Only written from the live prop; restored via resolveActiveSelection.
+  useEffect(() => {
+    if (!initialSelection || typeof window === "undefined") return;
+    try {
+      sessionStorage.setItem(
+        SELECTION_STORAGE_KEY(albumId),
+        JSON.stringify({ ...initialSelection, ts: Date.now() }),
+      );
+    } catch {}
+  }, [albumId, initialSelection]);
 
   const selectedSku = options?.skus.find((s) => s.format === format) ?? null;
   const addon = options?.addons.find((a) => a.kind === "signed_cert") ?? null;
@@ -663,6 +749,16 @@ export function BuySheet({
   };
 
   const inCheckout = !!clientSecret;
+
+  // Task #1816 — once the Stripe session opens the selection is consumed; clear
+  // it so a later direct-buy of the same album can't inherit a stale campaign.
+  useEffect(() => {
+    if (inCheckout && typeof window !== "undefined") {
+      try {
+        sessionStorage.removeItem(SELECTION_STORAGE_KEY(albumId));
+      } catch {}
+    }
+  }, [inCheckout, albumId]);
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -686,7 +782,7 @@ export function BuySheet({
             {step === "cert" && !inCheckout ? (
               <SheetBack onClick={() => setStep("main")} data-testid="button-cert-back" />
             ) : !inCheckout && step === "main" && desktopPhase === "shipping" ? (
-              <SheetBack onClick={() => setDesktopPhase("cart")} data-testid="button-shipping-back" />
+              <SheetBack onClick={() => (merged ? onClose() : setDesktopPhase("cart"))} data-testid="button-shipping-back" />
             ) : (
               <SheetClose onClick={onClose} data-testid="button-close-buy" />
             )}
@@ -1199,9 +1295,11 @@ export function BuySheet({
               <div className="max-w-[560px] mx-auto px-6 py-6 flex flex-col" data-testid="shipping-phase">
                 {selectedSku && !allSoldOut ? (
                   <>
-                    <div className="text-xs font-bold uppercase tracking-widest text-fan-faint mb-5">
-                      Your order
-                    </div>
+                    {!merged && (
+                      <div className="text-xs font-bold uppercase tracking-widest text-fan-faint mb-5">
+                        Your order
+                      </div>
+                    )}
 
                     {/* Ship-to country */}
                     <div className="mb-4">
@@ -1256,7 +1354,9 @@ export function BuySheet({
                       />
                     </div>
 
-                    {/* Live price breakdown */}
+                    {/* Live price breakdown — hidden in the merged campaign
+                        flow; the offer modal already recapped the order. */}
+                    {!merged && (
                     <div className="rounded-2xl bg-white/[0.05] p-4 mb-5 text-sm" data-testid="block-breakdown">
                       <div className="flex items-center justify-between">
                         <span className="text-fan-secondary">
@@ -1337,17 +1437,18 @@ export function BuySheet({
                         </span>
                       </div>
                     </div>
+                    )}
 
                     {/* Payment CTA — hands to the existing Stripe step */}
                     <button
                       type="button"
                       onClick={() => {
                         if (!isCustomerSignedIn) {
-                          const next = `/album/${albumId}?buy=1`;
+                          const next = `/album/${albumId}?buy=1${merged ? "&offer=1" : ""}`;
                           navigate(`/login?next=${encodeURIComponent(next)}`);
                           return;
                         }
-                        if (addon) {
+                        if (addon && !merged) {
                           setStep("cert");
                         } else {
                           beginCheckout();
@@ -1364,11 +1465,13 @@ export function BuySheet({
                         "Sign in to continue"
                       ) : shippingUnavailable ? (
                         "Choose a shippable destination"
-                      ) : addon ? (
+                      ) : addon && !merged ? (
                         <>
                           Continue
                           <ChevronRight className="w-4 h-4" strokeWidth={2.4} />
                         </>
+                      ) : merged ? (
+                        `Checkout — ${dollars(totalCents)}`
                       ) : (
                         <>
                           Payment
@@ -1591,7 +1694,7 @@ export function BuySheet({
               ? "Checkout"
               : step === "cert"
                 ? "Add a certificate?"
-                : "Buy this album"}
+                : merged ? "Shipping" : "Buy this album"}
           </div>
         </div>
 
@@ -1607,6 +1710,8 @@ export function BuySheet({
             )}
             {options && (
               <>
+                {!merged && (
+                <>
                 <div className="flex items-center gap-3.5 mb-6">
                   {options.artwork && (
                     <img
@@ -2073,6 +2178,8 @@ export function BuySheet({
                     </Group>
                   </div>
                 )}
+                </>
+                )}
 
                 {/* Cart + checkout chrome only renders once a buyable SKU is
                     selected. With no SKU (all formats sold out, or none
@@ -2145,6 +2252,7 @@ export function BuySheet({
 
                 {/* Live breakdown — separate lines so the fan can verify
                     the math before tapping checkout. */}
+                {!merged && (
                 <div className="px-1 mb-5 text-sm" data-testid="block-breakdown">
                   <div className="flex items-center justify-between">
                     <span className="text-fan-secondary">
@@ -2241,6 +2349,7 @@ export function BuySheet({
                     </span>
                   </div>
                 </div>
+                )}
 
                 {/* Task #1822 — when the album offers a signed cert, the
                     main-sheet "Continue" routes to the dedicated cert step
@@ -2251,11 +2360,11 @@ export function BuySheet({
                   type="button"
                   onClick={() => {
                     if (!isCustomerSignedIn) {
-                      const next = `/album/${albumId}?buy=1`;
+                      const next = `/album/${albumId}?buy=1${merged ? "&offer=1" : ""}`;
                       navigate(`/login?next=${encodeURIComponent(next)}`);
                       return;
                     }
-                    if (addon) {
+                    if (addon && !merged) {
                       setStep("cert");
                     } else {
                       beginCheckout();
@@ -2272,7 +2381,7 @@ export function BuySheet({
                       ? "Sign in to continue"
                       : shippingUnavailable
                         ? "Choose a shippable destination"
-                        : addon
+                        : addon && !merged
                           ? "Continue"
                           : `Checkout — ${dollars(totalCents)}`}
                 </button>

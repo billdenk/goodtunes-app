@@ -22,7 +22,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { CertPdfViewerSheet } from "@/components/ui/CertPdfViewerSheet";
-import { BuySheet } from "@/components/checkout/BuySheet";
+import { BuySheet, type OfferSelection } from "@/components/checkout/BuySheet";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { StreamServicePickerSheet } from "@/components/StreamServicePickerSheet";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -458,6 +458,10 @@ function AlbumDetailMobile({
   // before handing off to the Buy sheet. (Quantity/gift selections are
   // editorial only and are re-collected on the Stripe screen by design.)
   const [buySheetSignedDefault, setBuySheetSignedDefault] = useState(false);
+  // Task #1816 — the campaign offer modal's exact picks (qty / signed count /
+  // Gift of Hope donation / edition), carried into BuySheet so the merged
+  // flow lands on Shipping and charges the same total the modal recapped.
+  const [buySheetSelection, setBuySheetSelection] = useState<OfferSelection | undefined>(undefined);
   // Task #1766 — the offer modal is the on-demand "Get Notified" capture
   // (opened from the transport's Get Notified CTA). Task #1784 — on the public
   // preview surfaces (/hope, /staging) it auto-opens on arrival so the page
@@ -1234,9 +1238,11 @@ function AlbumDetailMobile({
           <BuySheet
             albumId={album.id}
             signedCertDefault={buySheetSignedDefault}
+            initialSelection={buySheetSelection}
             onClose={() => {
               setShowBuySheet(false);
               setBuySheetSignedDefault(false);
+              setBuySheetSelection(undefined);
               // Strip the ?buy=1 marker so a refresh doesn't keep
               // popping the sheet open after the fan closes it.
               try {
@@ -1269,6 +1275,7 @@ function AlbumDetailMobile({
             onBuy={(opts) => {
               setShowOfferModal(false);
               setBuySheetSignedDefault(!!opts?.signedCert);
+              setBuySheetSelection(opts?.selection);
               setShowBuySheet(true);
             }}
             prefilledEmail={user?.email ?? null}

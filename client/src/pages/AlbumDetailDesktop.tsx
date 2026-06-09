@@ -9,7 +9,7 @@ import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { usePlayer, PREVIEW_CAP_SECONDS } from "@/context/PlayerContext";
-import { BuySheet } from "@/components/checkout/BuySheet";
+import { BuySheet, type OfferSelection } from "@/components/checkout/BuySheet";
 import { buyEnabled } from "@/lib/platform";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -203,7 +203,10 @@ export function AlbumDetailDesktop({
   // When the fan ticked the signed-cert add-on chip on the hero before
   // clicking Buy, we hand the toggle into BuySheet so the checkout sheet
   // opens with it pre-checked. Cleared whenever the sheet closes.
-  const [buyAddons, setBuyAddons] = useState<{ signedCert: boolean }>({
+  const [buyAddons, setBuyAddons] = useState<{
+    signedCert: boolean;
+    selection?: OfferSelection;
+  }>({
     signedCert: false,
   });
 
@@ -503,12 +506,15 @@ export function AlbumDetailDesktop({
     setCreditsForSong({ id: song.id, title: song.title });
     if (album) track("credits_opened", { songId: song.id, albumId: album.id });
   };
-  const handleBuyBundle = (opts?: { signedCert?: boolean }) => {
+  const handleBuyBundle = (opts?: {
+    signedCert?: boolean;
+    selection?: OfferSelection;
+  }) => {
     // Task #1628 — read-only during a "Sales Begin" locked preview.
     // Task #1784 — EXCEPT the /staging dry-run, which intentionally walks the
     // BuySheet to the Stripe card screen even while the release is prepping.
     if (salesPending && publicPreview !== "buy") return;
-    setBuyAddons({ signedCert: !!opts?.signedCert });
+    setBuyAddons({ signedCert: !!opts?.signedCert, selection: opts?.selection });
     setShowBuySheet(true);
   };
   // Task #1850 — the Buy pill opens the "Get Hope" offer modal directly on the
@@ -1031,6 +1037,7 @@ export function AlbumDetailDesktop({
         <BuySheet
           albumId={album.id}
           signedCertDefault={buyAddons.signedCert}
+          initialSelection={buyAddons.selection}
           onClose={() => {
             setShowBuySheet(false);
             setBuyAddons({ signedCert: false });
