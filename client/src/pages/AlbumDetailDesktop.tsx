@@ -199,6 +199,7 @@ export function AlbumDetailDesktop({
   // preview surfaces (/hope, /staging) it auto-opens on arrival so the page
   // reads like the real player with the offer fronting it.
   const [showOfferModal, setShowOfferModal] = useState(!!publicPreview);
+  const [offerStartAtBundle, setOfferStartAtBundle] = useState(false);
   // When the fan ticked the signed-cert add-on chip on the hero before
   // clicking Buy, we hand the toggle into BuySheet so the checkout sheet
   // opens with it pre-checked. Cleared whenever the sheet closes.
@@ -510,12 +511,13 @@ export function AlbumDetailDesktop({
     setBuyAddons({ signedCert: !!opts?.signedCert });
     setShowBuySheet(true);
   };
-  // Task #1784 — on the staged preview surface (/staging) the Buy pill fronts
-  // the stepped "Get Hope" offer modal (which then hands off to the BuySheet
-  // checkout via its own onBuy), instead of jumping straight into the legacy
-  // BuySheet. Everywhere else the Buy pill opens the BuySheet directly.
+  // Task #1850 — the Buy pill opens the "Get Hope" offer modal directly on the
+  // bundle step whenever the offer sheet is rendered (lockedPreview or any
+  // publicPreview surface). The modal's own onBuy then hands off to BuySheet.
+  // Fallback to BuySheet directly on surfaces where the offer sheet is absent.
   const handleBuyClick = (opts?: { signedCert?: boolean }) => {
-    if (publicPreview === "buy") {
+    if (lockedPreview || publicPreview) {
+      setOfferStartAtBundle(true);
       setShowOfferModal(true);
       return;
     }
@@ -712,8 +714,8 @@ export function AlbumDetailDesktop({
             lockedPreview={lockedPreview}
             notifyOnly={notifyOnly}
             publicPreview={publicPreview}
-            onGetNotified={() => setShowOfferModal(true)}
-            onGetDetails={() => setShowOfferModal(true)}
+            onGetNotified={() => { setOfferStartAtBundle(false); setShowOfferModal(true); }}
+            onGetDetails={() => { setOfferStartAtBundle(false); setShowOfferModal(true); }}
             onPlayTrack={handlePlayTrack}
             onAddTrack={handleAddTrack}
             onPlayNextTrack={handlePlayNextTrack}
@@ -1051,6 +1053,7 @@ export function AlbumDetailDesktop({
           forceBuy={publicPreview === "buy"}
           accentMint={!!publicPreview}
           dismissLabel={publicPreview ? "Preview the Music" : undefined}
+          startAtBundle={offerStartAtBundle}
           onBuy={(opts) => {
             setShowOfferModal(false);
             handleBuyBundle(opts);

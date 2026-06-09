@@ -467,6 +467,7 @@ function AlbumDetailMobile({
   const [showOfferModal, setShowOfferModal] = useState(
     !!publicPreview && !isOwned && !fullPlaybackAccess,
   );
+  const [offerStartAtBundle, setOfferStartAtBundle] = useState(false);
   const [singleCertNum, setSingleCertNum] = useState<number | null>(null);
   const [provenanceCertNum, setProvenanceCertNum] = useState<number | null>(null);
   const [showOwnership, setShowOwnership] = useState(false);
@@ -1183,18 +1184,22 @@ function AlbumDetailMobile({
           }}
           onOpenBuy={
             buyEnabled
-              ? () =>
-                  publicPreview === "buy"
-                    ? setShowOfferModal(true)
-                    : setShowBuySheet(true)
+              ? () => {
+                  if (lockedPreview || publicPreview) {
+                    setOfferStartAtBundle(true);
+                    setShowOfferModal(true);
+                  } else {
+                    setShowBuySheet(true);
+                  }
+                }
               : undefined
           }
           salesBeginLabel={salesBeginLabel}
           lockedPreview={lockedPreview}
           notifyOnly={notifyOnly}
           publicPreview={publicPreview}
-          onGetNotified={() => setShowOfferModal(true)}
-          onGetDetails={() => setShowOfferModal(true)}
+          onGetNotified={() => { setOfferStartAtBundle(false); setShowOfferModal(true); }}
+          onGetDetails={() => { setOfferStartAtBundle(false); setShowOfferModal(true); }}
           onToggleAlbumDownload={handleToggleAlbumDownload}
           onToggleSongDownload={(id) => toggleSongDownload(id)}
           onOpenSongMenu={(s, rect) => {
@@ -1259,6 +1264,7 @@ function AlbumDetailMobile({
             forceBuy={publicPreview === "buy"}
             accentMint={!!publicPreview}
             dismissLabel={publicPreview ? "Preview the Music" : undefined}
+            startAtBundle={offerStartAtBundle}
             onBuy={(opts) => {
               setShowOfferModal(false);
               setBuySheetSignedDefault(!!opts?.signedCert);

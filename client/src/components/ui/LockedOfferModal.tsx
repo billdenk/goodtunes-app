@@ -83,6 +83,10 @@ export type LockedOfferModalProps = {
   accentMint?: boolean;
   /** Task #1784 — override the bottom dismiss label (e.g. "Preview the Music"). */
   dismissLabel?: string;
+  /** Task #1850 — open the modal directly on the "Get Hope" bundle step
+   *  (skipping the overview) when launched from the Buy CTA. At that entry
+   *  step the bottom-left Back button is hidden; the X closes the sheet. */
+  startAtBundle?: boolean;
 };
 
 const CARD_BG = "#0B1547";
@@ -704,6 +708,7 @@ export function LockedOfferModal({
   forceBuy,
   accentMint,
   dismissLabel,
+  startAtBundle,
 }: LockedOfferModalProps) {
   // Lead with the notify flow either pre-launch (sunrise pending) OR when the
   // campaign fan link forces notify-only on an otherwise-live release.
@@ -752,10 +757,12 @@ export function LockedOfferModal({
 
   // Reset to the first step whenever the modal is (re)opened, and seed the
   // email field from the signed-in fan when we have it.
+  // Task #1850 — when opened from the Buy CTA (startAtBundle), land directly
+  // on the "buy" (bundle) step instead of the overview.
   useEffect(() => {
     if (open) {
       setMode("offer");
-      setStep("overview");
+      setStep(startAtBundle ? "buy" : "overview");
       setBundleQty(1);
       setSignedQty(0);
       setBoxQty(0);
@@ -1065,7 +1072,7 @@ export function LockedOfferModal({
                   {dismissLabel ?? "Preview the Music"}
                 </button>
               )
-            ) : idx > 0 ? (
+            ) : idx > (startAtBundle ? 1 : 0) ? (
               <button
                 type="button"
                 onClick={() => go(ORDER[idx - 1])}
@@ -1075,7 +1082,7 @@ export function LockedOfferModal({
                 <ChevronLeft className="w-4 h-4" strokeWidth={2.4} />
                 Back
               </button>
-            ) : (
+            ) : startAtBundle ? null : (
               <button
                 type="button"
                 onClick={() => onClose()}
