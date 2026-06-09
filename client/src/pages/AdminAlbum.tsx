@@ -4039,7 +4039,7 @@ function TracksPanel({
               Upload multiple tracks
             </div>
             <div className="text-[11.5px] text-slate-500 mt-0.5">
-              Empty rows or a Dropbox folder of audio files.
+              Empty rows or a Dropbox / WeTransfer link.
             </div>
           </button>
         </div>
@@ -4143,7 +4143,7 @@ function TracksPanel({
                     Upload multiple tracks
                   </div>
                   <div className="text-[11px] text-slate-500">
-                    Empty rows or a Dropbox folder of audio files.
+                    Empty rows or a Dropbox / WeTransfer link.
                   </div>
                 </div>
               </DropdownMenuItem>
@@ -4159,7 +4159,7 @@ function TracksPanel({
                 <FileText className="w-4 h-4 text-slate-500" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900">
-                    Import lyrics from Dropbox
+                    Import lyrics from Dropbox or WeTransfer
                   </div>
                   <div className="text-[11px] text-slate-500">
                     PDF, Word, or text files — matched to tracks.
@@ -5790,7 +5790,7 @@ function AddMultipleTracksDialog({
       onOpenChange(false);
     } catch (e: any) {
       toast({
-        title: "Dropbox import failed",
+        title: "Import failed",
         description: e?.message || "Check the link and try again.",
         variant: "destructive",
       });
@@ -5830,21 +5830,21 @@ function AddMultipleTracksDialog({
                   track number. No audio or lyrics — that's still on you.
                 </p>
                 <p className="mt-2">
-                  <span className="font-medium text-slate-900">From Dropbox</span>{" "}
+                  <span className="font-medium text-slate-900">From Dropbox or WeTransfer</span>{" "}
                   pulls audio from a folder (whole album) or a single file (one
-                  track), shared as{" "}
+                  track). Dropbox: share as{" "}
                   <span className="font-medium text-slate-900">
                     Anyone with the link
                   </span>
-                  . Numbered alphabetically. Audio formats: .mp3, .wav, .flac,
-                  .m4a, .aac, .aif/.aiff, .ogg.
+                  . WeTransfer: paste the link from the download page.
+                  Audio formats: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg.
                 </p>
               </PopoverContent>
             </Popover>
           </DialogTitle>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
             Stamp out a batch of empty rows, or pull audio from a Dropbox
-            folder (or a single file) in one go.
+            or WeTransfer link in one go.
           </DialogDescription>
         </DialogHeader>
 
@@ -5852,7 +5852,7 @@ function AddMultipleTracksDialog({
             slate-900 active pill) to match the rest of admin chrome. */}
         <div className="inline-flex bg-slate-100 rounded-lg p-0.5 self-start" role="tablist">
           {([
-            { id: "dropbox", label: "From Dropbox" },
+            { id: "dropbox", label: "From Dropbox / WeTransfer" },
             { id: "empty", label: "Empty rows" },
           ] as const).map((opt) => (
             <button
@@ -5900,12 +5900,12 @@ function AddMultipleTracksDialog({
           <>
             <div className="space-y-1.5">
               <Label htmlFor="bulk-dropbox-url" className="text-[12.5px] font-medium text-slate-700">
-                Dropbox folder or file link
+                Dropbox or WeTransfer link
               </Label>
               <Input
                 id="bulk-dropbox-url"
                 type="url"
-                placeholder="https://www.dropbox.com/scl/fo/… or /scl/fi/…"
+                placeholder="https://www.dropbox.com/scl/fo/… or https://we.tl/t-…"
                 value={folderUrl}
                 onChange={(e) => setFolderUrl(e.target.value)}
                 disabled={running}
@@ -5934,14 +5934,14 @@ function AddMultipleTracksDialog({
             <div className="flex items-center justify-between text-[11.5px] text-slate-500">
               <span data-testid="text-bulk-dropbox-progress">
                 {!progress
-                  ? "Connecting to Dropbox…"
+                  ? "Connecting…"
                   : progress.phase === "process"
                     ? progress.step
                       ? `Track ${Math.min(progress.processed + 1, progress.total)} of ${progress.total} — ${IMPORT_STEP_LABEL[progress.step]}…`
                       : `Importing ${progress.processed} of ${progress.total}…`
                     : progress.phase === "extracting"
-                      ? "Unpacking files from Dropbox…"
-                      : "Downloading from Dropbox…"}
+                      ? "Unpacking files…"
+                      : "Downloading…"}
               </span>
               {progress && progress.total > 0 && (
                 <span className="tabular-nums">
@@ -6004,7 +6004,7 @@ function AddMultipleTracksDialog({
               data-testid="button-bulk-dropbox-confirm"
               className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-2"
             >
-              {running ? <>Importing…</> : <>Import from Dropbox</>}
+              {running ? <>Importing…</> : <>Import from Dropbox / WeTransfer</>}
             </button>
           )}
         </DialogFooter>
@@ -6013,7 +6013,7 @@ function AddMultipleTracksDialog({
   );
 }
 
-/* ─── Import lyrics from Dropbox ──────────────────────────────────────
+/* ─── Import lyrics from Dropbox or WeTransfer ──────────────────────────────────────
    Paste a Dropbox folder URL full of .pdf / .docx / .txt files; the
    server downloads the folder as a ZIP, extracts text from each
    document, and matches the filename to an existing track title (case-
@@ -6284,7 +6284,7 @@ function ImportLyricsFromDropboxDialog({
       <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
         <DialogHeader className="text-left space-y-1">
           <DialogTitle className="text-[17px] font-semibold text-slate-900 inline-flex items-center gap-2">
-            Import lyrics from Dropbox
+            Import lyrics from Dropbox or WeTransfer
             <Popover>
               <PopoverTrigger asChild>
                 <button
@@ -6323,20 +6323,20 @@ function ImportLyricsFromDropboxDialog({
             </Popover>
           </DialogTitle>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
-            Paste a Dropbox folder of lyric documents — or a single file
-            for one track. I'll match each file to a track by filename
-            and fill in the lyrics.
+            Paste a Dropbox or WeTransfer link containing lyric documents —
+            or a single file for one track. I'll match each file to a
+            track by filename and fill in the lyrics.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-1.5">
           <Label htmlFor="lyrics-dropbox-url" className="text-[12.5px] font-medium text-slate-700">
-            Dropbox folder or file link
+            Dropbox or WeTransfer link
           </Label>
           <Input
             id="lyrics-dropbox-url"
             type="url"
-            placeholder="https://www.dropbox.com/scl/fo/… or /scl/fi/…"
+            placeholder="https://www.dropbox.com/scl/fo/… or https://we.tl/t-…"
             value={folderUrl}
             onChange={(e) => setFolderUrl(e.target.value)}
             disabled={running || songCount === 0}
@@ -13996,7 +13996,7 @@ function BonusVideos({
               the header. */}
           <BulkBonusAdvancedMenu
             label="Upload multiple videos"
-            description="Dropbox folder of .mp4 / .mov / .webm files."
+            description="Dropbox or WeTransfer — .mp4 / .mov / .webm files."
             onPick={() => setBulkOpen(true)}
           />
         </div>
@@ -14167,7 +14167,7 @@ function BonusPhotos({
         </div>
         <BulkBonusAdvancedMenu
           label="Upload multiple photos"
-          description="Dropbox folder of .jpg / .png / .webp files."
+          description="Dropbox or WeTransfer — .jpg / .png / .webp files."
           onPick={() => setBulkOpen(true)}
         />
       </div>
@@ -14419,7 +14419,7 @@ function BulkBonusFromDropboxDialog({
       onOpenChange(false);
     } catch (e: any) {
       toast({
-        title: "Dropbox import failed",
+        title: "Import failed",
         description: e?.message || "Check the link and try again.",
         variant: "destructive",
       });
@@ -14435,18 +14435,17 @@ function BulkBonusFromDropboxDialog({
             Upload multiple {nounPlural}
           </DialogTitle>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
-            Pull every {noun} from a Dropbox folder (or a single file) in one go.
+            Pull every {noun} from a Dropbox or WeTransfer link in one go.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
           <Info className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
           <p className="text-[12.5px] leading-snug text-slate-600">
-            Share a Dropbox{" "}
+            Paste a Dropbox or WeTransfer link — a{" "}
             <span className="font-medium text-slate-700">folder</span> for many{" "}
             {nounPlural}, or a single{" "}
-            <span className="font-medium text-slate-700">file</span> for one — both as{" "}
-            <span className="font-medium text-slate-700">Anyone with the link</span>.{" "}
+            <span className="font-medium text-slate-700">file</span> for one.{" "}
             {kind === "video" ? "Video" : "Photo"} formats: {supportedHint}.
           </p>
         </div>
@@ -14455,12 +14454,12 @@ function BulkBonusFromDropboxDialog({
             htmlFor={`bulk-bonus-${kind}-url`}
             className="text-[12.5px] font-medium text-slate-700"
           >
-            Dropbox folder or file link
+            Dropbox or WeTransfer link
           </Label>
           <Input
             id={`bulk-bonus-${kind}-url`}
             type="url"
-            placeholder="https://www.dropbox.com/scl/fo/… or /scl/fi/…"
+            placeholder="https://www.dropbox.com/scl/fo/… or https://we.tl/t-…"
             value={folderUrl}
             onChange={(e) => setFolderUrl(e.target.value)}
             disabled={running}
@@ -14492,10 +14491,10 @@ function BulkBonusFromDropboxDialog({
             {running ? (
               <>
                 <Spinner className="w-3.5 h-3.5 animate-spin" />
-                Importing from Dropbox…
+                Importing…
               </>
             ) : (
-              <>Import from Dropbox</>
+              <>Import from Dropbox / WeTransfer</>
             )}
           </button>
         </DialogFooter>

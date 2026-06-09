@@ -107,6 +107,11 @@ export async function extractKeptZipEntries(
       idleFired = true;
       try { idleAc.abort(); } catch {}
     }, idleMs);
+    // unref: this watchdog must not prevent the process from exiting once all
+    // tests (or all requests) are done. A live import keeps the event loop
+    // alive through its own I/O; only a truly stalled upload has no other
+    // active handles, so the guard fires and we abort promptly.
+    idleTimer.unref();
   };
   const disarmIdle = () => {
     if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
@@ -200,4 +205,73 @@ export async function extractKeptZipEntries(
 
   disarmIdle();
   return { entries, skipped };
+}
+
+// ── WeTransfer URL detection helpers ────────────────────────────────────────
+// Pure functions — no HTTP, no SSRF validation (that lives in routes.ts with
+// `isPrivateIp`). Kept here so they're unit-testable without booting the
+// 21k-line routes.ts module (which opens DB/stripe handles).
+
+// Returns true for any wetransfer.com, we.tl, OR *.wetransfer.com URL.
+// The subdomain case captures account-specific pages like
+// <name>.wetransfer.com/previews/... so the dispatcher routes them into
+// the WeTransfer handling path instead of falling through to Dropbox
+// (which would produce a confusing "not a Dropbox link" error).
+// assertWeTransferShareHost then produces the accurate guidance message.
+export function isWeTransferUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:") return false;
+    const h = u.hostname.toLowerCase();
+    return (
+      h === "wetransfer.com" ||
+      h === "we.tl" ||
+      /^[a-z0-9-]+\.wetransfer\.com$/.test(h)
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Returns true specifically for preview-only links (the sender's view) that
+// require a logged-in WeTransfer session and can't be resolved anonymously.
+// Shape: wetransfer.com/previews/<id>/<hash>
+export function isWeTransferPreviewUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.hostname.toLowerCase() !== "wetransfer.com") return false;
+    return /^\/previews\//i.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+
+// Parse a canonical wetransfer.com/downloads/<transferId>/<securityHash> URL
+// into the two identifiers the WeTransfer download API needs. Two path shapes
+// are supported:
+//   2-segment: /downloads/<transferId>/<securityHash>
+//   3-segment: /downloads/<transferId>/<recipientId>/<securityHash>
+// Both accept an optional trailing /download suffix (as shown on some
+// WeTransfer share pages). Returns null for unsupported shapes (previews,
+// we.tl short links — caller must expand those first, account pages, etc.).
+export function parseWeTransferShareUrl(
+  u: URL,
+): { transferId: string; securityHash: string } | null {
+  if (u.hostname.toLowerCase() !== "wetransfer.com") return null;
+  // 3-segment: /downloads/<id>/<recipient>/<hash>(/download)?
+  // The negative lookahead (?!download\/?$) prevents misidentifying a
+  // 2-segment+/download URL as a 3-segment one by ensuring the optional
+  // middle segment is NOT the literal string "download".
+  const m3 = u.pathname.match(
+    /^\/downloads\/([^/]+)\/([^/]+)\/([^/]+?)(?:\/download)?\/?$/i,
+  );
+  if (m3 && m3[3].toLowerCase() !== "download") {
+    return { transferId: m3[1], securityHash: m3[3] };
+  }
+  // 2-segment: /downloads/<id>/<hash>(/download)?
+  const m2 = u.pathname.match(
+    /^\/downloads\/([^/]+)\/([^/]+?)(?:\/download)?\/?$/i,
+  );
+  if (m2) return { transferId: m2[1], securityHash: m2[2] };
+  return null;
 }

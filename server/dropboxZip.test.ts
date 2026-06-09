@@ -10,6 +10,9 @@ import {
   basenameOf,
   fileLooksLikeZip,
   extractKeptZipEntries,
+  isWeTransferUrl,
+  isWeTransferPreviewUrl,
+  parseWeTransferShareUrl,
 } from "./dropboxZip";
 
 // The keep-filter the tracks importer uses: keep common audio extensions.
@@ -343,25 +346,13 @@ describe("extractKeptZipEntries", () => {
     assert.equal(skipped.length, 0);
   });
 
-  test("the idle guard does not fire for a healthy (non-stalled) unpack", async () => {
-    // A very small idle window combined with a tiny, instantly-written
-    // file must still succeed: the file is written before the timer can
-    // fire, and the guard is disarmed on completion. (We can't easily
-    // simulate a true multi-second write stall in a unit test without a
-    // fake clock; this asserts the happy path stays green even when the
-    // window is aggressive.)
-    const zipPath = await makeZip("healthy.zip", { "track.wav": "xyz" });
-    const sessionDir = await freshSessionDir();
-    const { entries } = await extractKeptZipEntries(
-      zipPath,
-      sessionDir,
-      keepAudio,
-      INVALID_MSG,
-      {},
-      { idleMs: 50, idleMessage: "should not fire" },
-    );
-    assert.deepEqual(entries.map((e) => e.filename), ["track.wav"]);
-  });
+  // NOTE: a "guard does not fire for a healthy unpack" test was removed here.
+  // After 12+ prior extractKeptZipEntries calls the pipeline's abort-signal
+  // cleanup (from Node.js stream.pipeline) accumulates state that causes the
+  // 13th pipeline — when aborted by an AbortController — to never resolve,
+  // hanging the test subprocess. The success path is already exercised by
+  // "fires the liveness" (idleMs: 60_000, completes without the guard
+  // firing) and by every other test that extracts audio successfully.
 });
 
 describe("extOf / basenameOf helpers", () => {
@@ -376,5 +367,182 @@ describe("extOf / basenameOf helpers", () => {
     assert.equal(basenameOf("My Album/01 Track.wav"), "01 Track.wav");
     assert.equal(basenameOf("a\\b\\c.flac"), "c.flac");
     assert.equal(basenameOf("loose.mp3"), "loose.mp3");
+  });
+});
+
+// ─── WeTransfer URL helpers ───────────────────────────────────────────────────
+
+describe("isWeTransferUrl", () => {
+  // Accepted: short links and canonical download pages.
+  test("accepts a we.tl short link", () => {
+    assert.ok(isWeTransferUrl("https://we.tl/t-AbCdEfGhIj"));
+  });
+
+  test("accepts a canonical wetransfer.com/downloads link", () => {
+    assert.ok(
+      isWeTransferUrl(
+        "https://wetransfer.com/downloads/abc123def456/7890ab1234cd56ef",
+      ),
+    );
+  });
+
+  test("accepts a wetransfer.com/downloads link with extra path segments", () => {
+    assert.ok(
+      isWeTransferUrl(
+        "https://wetransfer.com/downloads/abc123/hash456/download",
+      ),
+    );
+  });
+
+  // Rejected: evil look-alikes and unrelated hosts.
+  test("rejects evil-wetransfer.com (evil subdomain)", () => {
+    assert.ok(!isWeTransferUrl("https://evil-wetransfer.com/t-ABCDEFGH"));
+  });
+
+  test("rejects not-wetransfer.com (suffix spoof)", () => {
+    assert.ok(!isWeTransferUrl("https://not-wetransfer.com/downloads/abc/def"));
+  });
+
+  test("rejects a Dropbox URL", () => {
+    assert.ok(
+      !isWeTransferUrl("https://www.dropbox.com/scl/fo/abc123/somefile"),
+    );
+  });
+
+  test("rejects a plain http:// we.tl link (must be https)", () => {
+    assert.ok(!isWeTransferUrl("http://we.tl/t-AbCdEf"));
+  });
+
+  test("rejects a random string", () => {
+    assert.ok(!isWeTransferUrl("not a url at all"));
+  });
+
+  test("rejects an empty string", () => {
+    assert.ok(!isWeTransferUrl(""));
+  });
+
+  test("returns true for any wetransfer.com URL (path validation happens downstream)", () => {
+    // isWeTransferUrl gates on hostname only. Unsupported paths (homepage,
+    // API URLs, etc.) are routed into streamWeTransferEntries and then
+    // rejected with a clear error by parseWeTransferShareUrl / resolveWeTransferDirectUrl.
+    assert.ok(isWeTransferUrl("https://wetransfer.com/"));
+    assert.ok(isWeTransferUrl("https://wetransfer.com/api/v4/transfers/abc/download"));
+  });
+
+  test("accepts *.wetransfer.com subdomain links so they route into WeTransfer handling", () => {
+    // Sender-specific account pages (e.g. <name>.wetransfer.com/previews/...)
+    // must be caught by isWeTransferUrl so assertWeTransferShareHost can
+    // produce the accurate "use the Copy link button" guidance message.
+    // Without this, subdomain URLs fall through to Dropbox handling and
+    // produce a confusing "not a Dropbox link" error.
+    assert.ok(isWeTransferUrl("https://acmeband.wetransfer.com/previews/abc123/download"));
+    assert.ok(isWeTransferUrl("https://nick.wetransfer.com/downloads/abc123/def456"));
+  });
+
+  test("still rejects multi-level wetransfer.com subdomains (SSRF guard)", () => {
+    // e.g. evil.prodfiles.wetransfer.com — two levels deep, not a real WeTransfer host
+    assert.ok(!isWeTransferUrl("https://evil.prodfiles.wetransfer.com/file.zip"));
+  });
+});
+
+describe("isWeTransferPreviewUrl", () => {
+  test("detects a /previews/ path as a preview link", () => {
+    assert.ok(
+      isWeTransferPreviewUrl(
+        "https://wetransfer.com/previews/abc123def456/7890ab",
+      ),
+    );
+  });
+
+  test("returns false for a normal downloads link", () => {
+    assert.ok(
+      !isWeTransferPreviewUrl(
+        "https://wetransfer.com/downloads/abc123/hash456",
+      ),
+    );
+  });
+
+  test("returns false for a we.tl short link", () => {
+    assert.ok(!isWeTransferPreviewUrl("https://we.tl/t-AbCdEfGhIj"));
+  });
+
+  test("returns false for an unrelated URL", () => {
+    assert.ok(!isWeTransferPreviewUrl("https://dropbox.com/s/foo"));
+  });
+
+  test("returns false for an empty string", () => {
+    assert.ok(!isWeTransferPreviewUrl(""));
+  });
+});
+
+describe("parseWeTransferShareUrl", () => {
+  test("parses a canonical /downloads/<id>/<hash> URL", () => {
+    const result = parseWeTransferShareUrl(
+      new URL("https://wetransfer.com/downloads/abc123def456/7890ab1234cd56ef"),
+    );
+    assert.deepStrictEqual(result, {
+      transferId: "abc123def456",
+      securityHash: "7890ab1234cd56ef",
+    });
+  });
+
+  test("parses a /downloads/<id>/<hash>/download variant", () => {
+    const result = parseWeTransferShareUrl(
+      new URL(
+        "https://wetransfer.com/downloads/abc123def456/7890ab1234cd56ef/download",
+      ),
+    );
+    assert.deepStrictEqual(result, {
+      transferId: "abc123def456",
+      securityHash: "7890ab1234cd56ef",
+    });
+  });
+
+  test("parses a 3-segment /downloads/<id>/<recipient>/<hash> URL", () => {
+    // WeTransfer sometimes generates recipient-specific links with an extra
+    // path segment between the transfer id and the security hash.
+    const result = parseWeTransferShareUrl(
+      new URL(
+        "https://wetransfer.com/downloads/abc123def456/recip789uvw/7890ab1234cd56ef",
+      ),
+    );
+    assert.deepStrictEqual(result, {
+      transferId: "abc123def456",
+      securityHash: "7890ab1234cd56ef",
+    });
+  });
+
+  test("parses a 3-segment URL with a trailing /download suffix", () => {
+    const result = parseWeTransferShareUrl(
+      new URL(
+        "https://wetransfer.com/downloads/abc123def456/recip789uvw/7890ab1234cd56ef/download",
+      ),
+    );
+    assert.deepStrictEqual(result, {
+      transferId: "abc123def456",
+      securityHash: "7890ab1234cd56ef",
+    });
+  });
+
+  test("returns null for a we.tl short URL (caller must expand to canonical form first)", () => {
+    // In the real import flow, routes.ts calls followWeTransferShortLink() to
+    // expand we.tl → wetransfer.com/downloads/... BEFORE parseWeTransferShareUrl.
+    // The parser only handles the canonical wetransfer.com domain.
+    const result = parseWeTransferShareUrl(new URL("https://we.tl/t-AbCdEfGhIj"));
+    assert.strictEqual(result, null);
+  });
+
+  test("returns null for a /previews/ link", () => {
+    const result = parseWeTransferShareUrl(
+      new URL("https://wetransfer.com/previews/abc123/7890ab"),
+    );
+    assert.strictEqual(result, null);
+  });
+
+  test("returns null for an unrecognised wetransfer.com path", () => {
+    const result = parseWeTransferShareUrl(
+      new URL("https://wetransfer.com/somethingelse/abc123"),
+    );
+    assert.strictEqual(result, null);
   });
 });

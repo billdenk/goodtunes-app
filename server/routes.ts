@@ -51,6 +51,9 @@ import {
   basenameOf,
   fileLooksLikeZip,
   extractKeptZipEntries,
+  isWeTransferUrl,
+  isWeTransferPreviewUrl,
+  parseWeTransferShareUrl,
 } from "./dropboxZip";
 import { promisify } from "util";
 import { z } from "zod";
@@ -9213,6 +9216,342 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return response;
   }
 
+  // ── WeTransfer SSRF host validators ─────────────────────────────────────
+  // Pure URL detection helpers live in ./dropboxZip.ts (testable without
+  // booting this module). SSRF validation that needs `isPrivateIp` stays here.
+
+  const WETRANSFER_SHARE_HOSTS = new Set(["wetransfer.com", "www.wetransfer.com", "we.tl"]);
+
+  function assertWeTransferShareHost(u: URL): void {
+    if (u.protocol !== "https:") throw new Error("WeTransfer links must use https://.");
+    const host = u.hostname.toLowerCase();
+    if (isPrivateIp(host)) throw new Error("Refusing to fetch from a private/internal address.");
+    if (WETRANSFER_SHARE_HOSTS.has(host)) return;
+    // Subdomain links (e.g. <name>.wetransfer.com/previews/...) are personal
+    // WeTransfer account pages only the sender can view, not public share links.
+    if (/^[a-z0-9-]+\.wetransfer\.com$/i.test(host)) {
+      throw new Error(
+        "That appears to be a personal WeTransfer page or preview link — " +
+        "only the sender can see it. On WeTransfer's download page, use the " +
+        "'Copy link' button to get the public shareable link (wetransfer.com/downloads/...) instead.",
+      );
+    }
+    throw new Error("That host isn't a WeTransfer link. Use a wetransfer.com or we.tl URL.");
+  }
+
+  // Known WeTransfer CDN hosts, confirmed from real transfer-resolution flow.
+  // prodfiles.wetransfer.com is the primary file-download CDN. The single-level
+  // subdomain pattern covers regional CDN shards that follow the same naming
+  // convention — identical approach to Dropbox's *.dl.dropboxusercontent.com.
+  // *.amazonaws.com and *.cloudfront.net are intentionally excluded; those broad
+  // patterns require verification of which specific WeTransfer buckets they
+  // apply to before we can safely allow them here.
+  const WETRANSFER_CDN_HOSTS = new Set([
+    "wetransfer.com",
+    "prodfiles.wetransfer.com",
+  ]);
+
+  function assertWeTransferCdnHost(u: URL): void {
+    if (u.protocol !== "https:") throw new Error("WeTransfer CDN links must use https://.");
+    const host = u.hostname.toLowerCase();
+    if (isPrivateIp(host)) throw new Error("Refusing to fetch from a private/internal address.");
+    if (WETRANSFER_CDN_HOSTS.has(host)) return;
+    // Single-level subdomain pattern for CDN shards (regional variants of
+    // prodfiles.wetransfer.com). evil-wetransfer.com is still rejected
+    // because the regex anchors both ends and requires exactly one label.
+    if (/^[a-z0-9-]+\.wetransfer\.com$/i.test(host)) return;
+    throw new Error(
+      "WeTransfer returned a download URL on an unexpected host. " +
+      "Contact support if this transfer should be importable.",
+    );
+  }
+
+  // Turn a caught WeTransfer failure into an accurate, operator-facing message.
+  function describeWeTransferFailure(err: any, stalled: boolean): string {
+    if (stalled) {
+      return `WeTransfer stopped responding — the transfer stalled (no progress for ${Math.round(DROPBOX_STALL_MS / 1000)}s). Check your connection and try the import again.`;
+    }
+    const msg = String(err?.message || "");
+    // Pass through our own operator-facing messages verbatim.
+    if (/WeTransfer|wetransfer|expired|deleted|password|login|preview|HTTP \d|redirect|URL|CDN|not supported|copy.*link/i.test(msg)) {
+      return msg;
+    }
+    const code = String(err?.code || err?.cause?.code || "");
+    if (code === "ECONNRESET" || /ECONNRESET|socket hang up|terminated/i.test(msg)) {
+      return "The connection to WeTransfer dropped mid-download. Try the import again.";
+    }
+    if (code === "UND_ERR_CONNECT_TIMEOUT" || code === "ETIMEDOUT" || /connect timeout/i.test(msg)) {
+      return "Couldn't connect to WeTransfer — the connection timed out. Check the link and try again.";
+    }
+    if (code === "ENOTFOUND" || code === "EAI_AGAIN") {
+      return "Couldn't resolve WeTransfer's servers. Check your connection and try again.";
+    }
+    if (err?.name === "AbortError") {
+      return "The WeTransfer download was interrupted before it finished. Try the import again.";
+    }
+    return msg || "WeTransfer download failed.";
+  }
+
+  // Follow a we.tl short link one hop to get the canonical
+  // wetransfer.com/downloads/<id>/<hash> URL. WeTransfer always redirects
+  // the short link to the canonical download page.
+  async function followWeTransferShortLink(u: URL): Promise<URL> {
+    const dispatcher = await getDropboxDispatcher();
+    const ac = new AbortController();
+    const stall = makeDropboxStallGuard(ac, DROPBOX_STALL_MS);
+    stall.arm();
+    try {
+      const r = await fetch(u.toString(), {
+        redirect: "manual",
+        signal: ac.signal,
+        dispatcher,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; GoodTunes/1.0)" },
+      } as any);
+      stall.disarm();
+      try { await r.body?.cancel(); } catch {}
+      if (r.status >= 300 && r.status < 400) {
+        const loc = r.headers.get("location");
+        if (!loc) throw new Error("WeTransfer short link had no redirect target.");
+        let next: URL;
+        try { next = new URL(loc); } catch { throw new Error("WeTransfer short link redirected to an invalid URL."); }
+        assertWeTransferShareHost(next);
+        return next;
+      }
+      if (!r.ok) throw new Error(`WeTransfer short link returned HTTP ${r.status}.`);
+      return u;
+    } catch (err: any) {
+      stall.disarm();
+      try { ac.abort(); } catch {}
+      throw new Error(describeWeTransferFailure(err, stall.fired));
+    }
+  }
+
+  // Resolve a WeTransfer share URL → direct CDN download URL by calling
+  // WeTransfer's transfer download API. Returns a validated https CDN URL
+  // that the caller can stream from.
+  async function resolveWeTransferDirectUrl(shareUrl: string): Promise<URL> {
+    let u: URL;
+    try { u = new URL(shareUrl); } catch { throw new Error("That doesn't look like a URL."); }
+    assertWeTransferShareHost(u);
+
+    // Expand we.tl short links to the canonical wetransfer.com/downloads/... form.
+    let canonicalUrl = u;
+    if (u.hostname.toLowerCase() === "we.tl") {
+      canonicalUrl = await followWeTransferShortLink(u);
+    }
+
+    // Detect preview links early — they're sender-only and require a
+    // WeTransfer account login that our server can't provide.
+    if (isWeTransferPreviewUrl(canonicalUrl.href)) {
+      throw new Error(
+        "That's a WeTransfer preview link — only the sender can see it. " +
+        "On WeTransfer's download page, use the 'Copy link' button to get the shareable link instead.",
+      );
+    }
+
+    const parsed = parseWeTransferShareUrl(canonicalUrl);
+    if (!parsed) {
+      throw new Error(
+        "That WeTransfer link isn't in a supported format. " +
+        "Paste the link from the 'Copy link' button on WeTransfer's download page. " +
+        "(Supported: wetransfer.com/downloads/<id>/<hash>, " +
+        "wetransfer.com/downloads/<id>/<recipient>/<hash>, and we.tl/t-... short links.)",
+      );
+    }
+
+    // Call WeTransfer's transfer download API to get the direct CDN URL.
+    const apiUrl = `https://wetransfer.com/api/v4/transfers/${encodeURIComponent(parsed.transferId)}/download`;
+    const dispatcher = await getDropboxDispatcher();
+    const ac = new AbortController();
+    const stall = makeDropboxStallGuard(ac, DROPBOX_STALL_MS);
+    stall.arm();
+    let apiRes: Awaited<ReturnType<typeof fetch>>;
+    try {
+      apiRes = await fetch(apiUrl, {
+        method: "POST",
+        redirect: "follow",
+        signal: ac.signal,
+        dispatcher,
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "Mozilla/5.0 (compatible; GoodTunes/1.0)",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify({ security_hash: parsed.securityHash }),
+      } as any);
+      stall.disarm();
+    } catch (err: any) {
+      stall.disarm();
+      try { ac.abort(); } catch {}
+      throw new Error(describeWeTransferFailure(err, stall.fired));
+    }
+
+    if (apiRes.status === 404) {
+      try { await apiRes.body?.cancel(); } catch {}
+      throw new Error("That WeTransfer transfer has expired or been deleted. Re-upload the files and share a new link.");
+    }
+    if (apiRes.status === 401 || apiRes.status === 403) {
+      try { await apiRes.body?.cancel(); } catch {}
+      throw new Error(
+        "WeTransfer rejected the download request — the transfer may be password-protected " +
+        "or require a WeTransfer account. Share a link that anyone can access without logging in.",
+      );
+    }
+    if (!apiRes.ok) {
+      try { await apiRes.body?.cancel(); } catch {}
+      throw new Error(`WeTransfer returned HTTP ${apiRes.status}. Check the link and try again.`);
+    }
+
+    let data: any;
+    try { data = await apiRes.json(); } catch {
+      throw new Error("WeTransfer returned an unexpected response. The transfer may have expired — try the import again.");
+    }
+
+    const directLink: unknown = data?.direct_link;
+    if (!directLink || typeof directLink !== "string") {
+      throw new Error(
+        "WeTransfer didn't return a download URL. The transfer may have expired or be password-protected.",
+      );
+    }
+
+    let cdnUrl: URL;
+    try { cdnUrl = new URL(directLink); } catch {
+      throw new Error("WeTransfer returned an invalid CDN URL. Try the import again.");
+    }
+    assertWeTransferCdnHost(cdnUrl);
+    return cdnUrl;
+  }
+
+  // Download a WeTransfer transfer as a ZIP + extract via central directory,
+  // reusing the same pipeline as the Dropbox folder path. WeTransfer always
+  // serves the full transfer as one ZIP file.
+  async function streamWeTransferEntries(
+    shareUrl: string,
+    shouldKeep: (filename: string) => boolean,
+    opts: {
+      onDownloadProgress?: (downloaded: number, total: number | null) => void;
+      onExtractProgress?: (info: { filename: string; entryBytes: number; totalBytes: number }) => void;
+    } = {},
+  ): Promise<{
+    entries: Array<{ filename: string; tmpPath: string; size: number }>;
+    skipped: string[];
+    cleanup: () => Promise<void>;
+  }> {
+    // Step 1: resolve share URL → direct CDN download URL.
+    const cdnUrl = await resolveWeTransferDirectUrl(shareUrl);
+
+    const fsp = await import("node:fs/promises");
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { Transform } = await import("node:stream");
+    const { pipeline } = await import("node:stream/promises");
+    const { Readable } = await import("node:stream");
+
+    const sessionDir = await fsp.mkdtemp(path.join(os.tmpdir(), "gt-wetransfer-"));
+    const zipPath = path.join(sessionDir, "transfer.zip");
+    const cleanup = async () => {
+      try { await fsp.rm(sessionDir, { recursive: true, force: true }); } catch {}
+    };
+
+    const dispatcher = await getDropboxDispatcher();
+    const ac = new AbortController();
+    const stall = makeDropboxStallGuard(ac, DROPBOX_STALL_MS);
+
+    // Step 2: download the transfer ZIP to a tempfile, SSRF-safe on each hop.
+    try {
+      // CDN may redirect (to S3 presigned URLs, etc.). Follow manually,
+      // validating protocol + non-private on every hop. The redirect chain
+      // comes from WeTransfer's trusted API response, so we allow any HTTPS
+      // public host on redirect hops past the initial CDN URL.
+      let currentUrl = cdnUrl;
+      let response: Awaited<ReturnType<typeof fetch>>;
+      stall.arm();
+      const maxHops = 5;
+      for (let hop = 0; hop <= maxHops; hop++) {
+        response = await fetch(currentUrl.toString(), {
+          redirect: "manual",
+          signal: ac.signal,
+          dispatcher,
+        } as any);
+        if (response.status >= 300 && response.status < 400) {
+          const loc = response.headers.get("location");
+          if (!loc) throw new Error("WeTransfer CDN redirect with no Location header.");
+          let nextUrl: URL;
+          try { nextUrl = new URL(loc, currentUrl); } catch { throw new Error("WeTransfer CDN sent an invalid redirect URL."); }
+          // Apply the same strict CDN allowlist on every hop — not just the
+          // first — so a compromised or unexpected redirect can't escape to
+          // arbitrary hosts.
+          assertWeTransferCdnHost(nextUrl);
+          try { await response.body?.cancel(); } catch {}
+          currentUrl = nextUrl;
+          stall.arm();
+          continue;
+        }
+        break;
+      }
+      const finalRes = response!;
+      if (!finalRes.ok) {
+        try { await finalRes.body?.cancel(); } catch {}
+        throw new Error(`WeTransfer CDN returned HTTP ${finalRes.status}. The transfer may have expired.`);
+      }
+      if (!finalRes.body) throw new Error("WeTransfer CDN sent an empty response.");
+
+      const clHeader = finalRes.headers.get("content-length");
+      const totalBytes = clHeader ? Number(clHeader) || null : null;
+      let downloaded = 0;
+      let lastReported = 0;
+      const cap = new Transform({
+        transform(chunk, _enc, cb) {
+          stall.arm();
+          downloaded += chunk.length;
+          if (downloaded > MAX_DROPBOX_UNCOMPRESSED_BYTES) {
+            cb(new Error(`That WeTransfer transfer is over ${Math.round(MAX_DROPBOX_UNCOMPRESSED_BYTES / (1024 * 1024 * 1024))} GB. Split it into smaller transfers.`));
+            return;
+          }
+          if (opts.onDownloadProgress && downloaded - lastReported >= 64 * 1024) {
+            lastReported = downloaded;
+            try { opts.onDownloadProgress(downloaded, totalBytes); } catch {}
+          }
+          cb(null, chunk);
+        },
+      });
+      await pipeline(Readable.fromWeb(finalRes.body as any), cap, fs.createWriteStream(zipPath));
+      stall.disarm();
+      try { opts.onDownloadProgress?.(downloaded, totalBytes ?? downloaded); } catch {}
+    } catch (err: any) {
+      const stalled = stall.fired;
+      try { ac.abort(); } catch {}
+      await cleanup();
+      throw new Error(describeWeTransferFailure(err, stalled));
+    }
+
+    // Step 3: extract via central directory — same pipeline as the Dropbox
+    // folder path. `extractKeptZipEntries` throws on truncated / non-zip
+    // bodies with the caller-supplied message.
+    let result: { entries: Array<{ filename: string; tmpPath: string; size: number }>; skipped: string[] };
+    try {
+      result = await extractKeptZipEntries(
+        zipPath,
+        sessionDir,
+        shouldKeep,
+        "Couldn't open the WeTransfer archive — it may be corrupted or incomplete. Try downloading again from WeTransfer.",
+        {},
+        {
+          onActivity: opts.onExtractProgress,
+          idleMs: DROPBOX_STALL_MS,
+          idleMessage: "Unpacking the WeTransfer archive stalled — it stopped writing files to disk. The download may be incomplete; try the import again.",
+        },
+      );
+    } catch (err) {
+      await cleanup();
+      throw err;
+    }
+
+    try { await fsp.unlink(zipPath); } catch {}
+    return { entries: result.entries, skipped: result.skipped, cleanup };
+  }
+
   // Turn a caught download failure into an accurate, operator-facing
   // message. `stalled` is the stall-guard's `fired` flag — true ONLY when
   // our idle timer actually fired. Anything else maps to its real cause
@@ -9432,17 +9771,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return { entries: [{ filename, tmpPath, size }], skipped: [], cleanup };
   }
 
-  // Folder-or-file dispatcher. Both `import-tracks-from-dropbox` and
-  // `import-lyrics-from-dropbox` go through this so admins can paste
-  // either kind of share link.
+  // Folder-or-file dispatcher. All four importers (tracks, lyrics, bonus
+  // video, bonus photo) go through this so admins can paste Dropbox OR
+  // WeTransfer share links interchangeably. WeTransfer detection is the
+  // first branch — additive, Dropbox paths are byte-for-byte unchanged.
   async function streamDropboxEntries(
     shareUrl: string,
     shouldKeep: (filename: string) => boolean,
     opts: {
       // Called during the download phase with running byte total + the
-      // expected total (null when Dropbox didn't send Content-Length).
-      // Lets the importer surface a left-to-right "Downloading from
-      // Dropbox… X%" fill instead of the indeterminate shimmer.
+      // expected total (null when the server didn't send Content-Length).
+      // Lets the importer surface a left-to-right progress fill instead of
+      // the indeterminate shimmer.
       onDownloadProgress?: (downloaded: number, total: number | null) => void;
       // Fires per chunk written while UNPACKING the zip to disk (after the
       // download hits 100%). Unpacking a big hi-res folder can outlast the
@@ -9456,6 +9796,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     skipped: string[];
     cleanup: () => Promise<void>;
   }> {
+    if (isWeTransferUrl(shareUrl)) {
+      return streamWeTransferEntries(shareUrl, shouldKeep, opts);
+    }
     if (isDropboxSingleFileUrl(shareUrl)) {
       return streamDropboxSingleFileEntry(shareUrl, shouldKeep, opts);
     }
@@ -10335,7 +10678,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       return res.status(202).json({ jobId });
     } catch (e: any) {
-      return res.status(400).json({ message: e?.message || "Dropbox import failed." });
+      return res.status(400).json({ message: e?.message || "Import failed." });
     }
   });
 
@@ -10481,7 +10824,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         await cleanup();
       }
     } catch (e: any) {
-      return res.status(400).json({ message: e?.message || "Dropbox import failed." });
+      return res.status(400).json({ message: e?.message || "Import failed." });
     }
   }
 
@@ -11001,11 +11344,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           songId: null,
           status: "failed",
           summary: null,
-          errorMessage: e?.message || "Dropbox import failed.",
+          errorMessage: e?.message || "Import failed.",
           startedAt,
         });
       } catch {}
-      return res.status(400).json({ message: e?.message || "Dropbox import failed." });
+      return res.status(400).json({ message: e?.message || "Import failed." });
     }
   });
 
