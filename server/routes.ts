@@ -18750,37 +18750,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       ...a,
       isExplicit: a.isExplicit || explicitAlbumIds.has(a.id),
     }));
-    // Task #859 — an `artist` partner sees ONLY their own releases in
-    // every listing. Operators and other roles get the full list.
+    // Task #1873 — fail-closed partner scoping.  Every partner-admin role
+    // is scoped to its own entity and returns nothing when unattached.
+    // Only operators (super_admin/admin) fall through to the full catalog.
+    // Fan/customer sessions never reach this branch (req.session?.userId is
+    // only populated for admin-side sessions; fans use the customer cookie).
     const userId = req.session?.userId;
     if (userId) {
       const { getUserRole } = await import("./auth/roles");
       const info = await getUserRole(userId);
-      if (info?.role === "artist") {
-        const scopeId = info.roleScopeId;
-        return res.json(
-          enriched.filter((a) => !!scopeId && a.primaryArtistId === scopeId),
-        );
-      }
-      // A `manager` partner sees ONLY the albums of artists on their roster
-      // (people.manager_id = the manager's scope). Catalog is always DERIVED
-      // through the roster — there is no albums.manager_id — so a manager who
-      // is assigned to nobody sees NOTHING, never the full catalog. Mirrors the
-      // per-album access gate in artistReports.resolveAlbumScope.
-      if (info?.role === "manager") {
-        const scopeId = info.roleScopeId;
-        if (!scopeId) return res.json([]);
-        const rosterRows = await db.execute<{ id: string }>(sql`
-          SELECT id FROM people WHERE manager_id = ${scopeId} AND deleted_at IS NULL
-        `);
-        const roster = new Set(
-          ((rosterRows as any).rows || []).map((r: any) => r.id as string),
-        );
-        return res.json(
-          enriched.filter(
-            (a) => !!a.primaryArtistId && roster.has(a.primaryArtistId),
-          ),
-        );
+      if (info) {
+        const { filterAlbumsForPartnerRole } = await import("./lib/albumCatalogScope");
+        // Manager needs an async roster lookup — resolve it before calling
+        // the pure filter helper.
+        let managerRoster: Set<string> | undefined;
+        if (info.role === "manager" && info.roleScopeId) {
+          const rosterRows = await db.execute<{ id: string }>(sql`
+            SELECT id FROM people WHERE manager_id = ${info.roleScopeId} AND deleted_at IS NULL
+          `);
+          managerRoster = new Set(
+            ((rosterRows as any).rows || []).map((r: any) => r.id as string),
+          );
+        }
+        const scoped = filterAlbumsForPartnerRole(enriched, info, managerRoster);
+        if (scoped !== null) return res.json(scoped);
+        // scoped===null means operator → fall through to full catalog below.
       }
     }
     return res.json(enriched);
@@ -21088,6 +21082,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       createdByUserId?: string | null;
       email?: string | null;
       id?: string | null;
+      // Task #1873 — write the real artist→manager / artist→label roster link
+      // when the invite names which artist this partner is assigned to.
+      targetPersonId?: string | null;
     },
     opts: { isNewAccount: boolean },
   ): Promise<void> {
@@ -21185,6 +21182,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ir === "press_staff" ? "staff" : "owner_admin",
         invite.createdByUserId ?? null,
       );
+    }
+    // Task #1873 — write the real roster link when this invite names the
+    // artist being assigned.  NULL-guarded so we never overwrite an
+    // existing assignment and never clobber an operator's manual choice.
+    const rosterTargetId = invite.targetPersonId ?? null;
+    if (rosterTargetId && invite.roleScopeId) {
+      try {
+        if (invite.role === "manager") {
+          await db.execute(sql`
+            UPDATE people SET manager_id = ${invite.roleScopeId}
+             WHERE id = ${rosterTargetId} AND manager_id IS NULL
+          `);
+        } else if (invite.role === "label") {
+          await db.execute(sql`
+            UPDATE people SET label_id = ${invite.roleScopeId}
+             WHERE id = ${rosterTargetId} AND label_id IS NULL
+          `);
+        }
+      } catch (e: any) {
+        console.warn(`[invite] roster link stamp failed: ${e?.message}`);
+      }
     }
   }
 
@@ -23274,6 +23292,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           defaultPressId: req.body?.defaultPressId ? String(req.body.defaultPressId) : null,
           createdByUserId: req.session.userId!,
           email,
+          // Task #1873 — pass through so the roster link is written on the
+          // fast-path (existing account, no review required) exactly as it
+          // is on the new-account + held-then-approved paths.
+          targetPersonId,
         },
         { isNewAccount: false },
       );

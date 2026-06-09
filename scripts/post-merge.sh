@@ -6051,4 +6051,41 @@ sync_github_build_mirror() {
     echo "post-merge: WARNING — GitHub mirror sync failed (continuing; Codemagic may build stale code until the next successful sync)"
   fi
 }
+
+# Task #1873 — ensure Nightbirde's manager_id link is set on every DB clone
+# (prod already carried this link; dev clones may not).  Idempotent +
+# marker-guarded so a future merge never clobbers an operator's manual choice.
+run_psql "$DATABASE_URL" <<'SQL'
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_nightbirde_id  constant text := '3ca615d6-7c04-422f-8dab-3f89607e648e';
+  v_mitch_mgr_id   constant text := '9e037216-d205-4439-b558-825e1cf257ce';
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills
+     WHERE name = 'task_1873_nightbirde_mitch_manager_link'
+  ) THEN
+    -- NULL-guarded: only stamp if both rows exist and the link is not yet set.
+    UPDATE people
+       SET manager_id = v_mitch_mgr_id
+     WHERE id = v_nightbirde_id
+       AND manager_id IS NULL
+       AND EXISTS (SELECT 1 FROM managers WHERE id = v_mitch_mgr_id)
+       AND deleted_at IS NULL;
+
+    INSERT INTO post_merge_data_backfills (name)
+    VALUES ('task_1873_nightbirde_mitch_manager_link');
+    RAISE NOTICE 'task_1873: Nightbirde manager link backfill applied (or skipped — already set)';
+  ELSE
+    RAISE NOTICE 'task_1873: Nightbirde manager link backfill already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+
 sync_github_build_mirror
