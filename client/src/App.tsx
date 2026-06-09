@@ -217,9 +217,14 @@ function ShareSlugTwo() {
     retry: false,
     staleTime: Infinity,
     queryFn: async () => {
+      // cache:"no-store" prevents the browser sending a conditional
+      // If-None-Match on revalidation. A 304 is !r.ok, which would throw
+      // and collapse the page to AlbumNotFound even though the album is live.
+      // TanStack Query (staleTime:Infinity) is the cache layer here; we don't
+      // need the browser HTTP cache for this request.
       const r = await fetch(
         `/api/public/album-by-slug/${encodeURIComponent(artistSlug)}/${encodeURIComponent(albumSlug)}`,
-        { credentials: "include", headers: previewPassHeaders() },
+        { credentials: "include", cache: "no-store", headers: previewPassHeaders() },
       );
       if (r.status === 404) return null;
       if (!r.ok) throw new Error(`Failed to load (${r.status})`);
@@ -263,9 +268,10 @@ function ShareSlugOne() {
     retry: false,
     staleTime: Infinity,
     queryFn: async () => {
+      // cache:"no-store" — see ShareSlugTwo for rationale (304 is !r.ok).
       const r = await fetch(
         `/api/public/album-by-slug/${encodeURIComponent(slug)}`,
-        { credentials: "include", headers: previewPassHeaders() },
+        { credentials: "include", cache: "no-store", headers: previewPassHeaders() },
       );
       if (r.status === 404) return null;
       if (!r.ok) throw new Error(`Failed to load (${r.status})`);
@@ -312,9 +318,10 @@ function ShareSlugStaging() {
     retry: false,
     staleTime: Infinity,
     queryFn: async () => {
+      // cache:"no-store" — see ShareSlugTwo for rationale (304 is !r.ok).
       const r = await fetch(
         `/api/public/album-by-slug/${encodeURIComponent(artistSlug)}/${encodeURIComponent(albumSlug)}`,
-        { credentials: "include", headers: previewPassHeaders() },
+        { credentials: "include", cache: "no-store", headers: previewPassHeaders() },
       );
       if (r.status === 404) return null;
       if (!r.ok) throw new Error(`Failed to load (${r.status})`);
@@ -355,9 +362,10 @@ function Testing() {
     retry: false,
     staleTime: Infinity,
     queryFn: async () => {
+      // cache:"no-store" — see ShareSlugTwo for rationale (304 is !r.ok).
       const r = await fetch(
         `/api/public/album-by-slug/${TESTING_ARTIST_SLUG}/${TESTING_ALBUM_SLUG}`,
-        { credentials: "include", headers: previewPassHeaders() },
+        { credentials: "include", cache: "no-store", headers: previewPassHeaders() },
       );
       if (r.status === 404) return null;
       if (!r.ok) throw new Error(`Failed to load (${r.status})`);
