@@ -1112,6 +1112,7 @@ export function AlbumDetailMobileSurface({
                     )}
                   </button>
                 )}
+                {!lockedPreview && !publicPreview && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1134,6 +1135,7 @@ export function AlbumDetailMobileSurface({
                     <circle cx="19" cy="12" r="1.6" />
                   </svg>
                 </button>
+                )}
               </div>
               </Fragment>
             );
