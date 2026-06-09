@@ -280,31 +280,33 @@ export function Welcome() {
           </p>
         </div>
 
-        {/* Task #549 — Show every minted GoodDeed number when this order
-            carries more than one signed copy; collapse to the single
-            hero number on a 1-copy order (or a multi-copy order with
-            just one signed cert) so the existing single-buy flow looks
-            unchanged. */}
+        {/* Task #1899 — Every paid copy now receives its own GoodDeed number
+            (signed or unsigned). Show all owned numbers:
+            • 1 copy → existing hero treatment (big mint number)
+            • N copies → multi treatment (row of numbered chips)
+            "Refundable up until shipping." removed — that claim was wrong. */}
         {(() => {
-          const certNumbers = (data.copies ?? []).filter((c) => c.goodDeedNumber != null).map((c) => c.goodDeedNumber!) as number[];
-          const showHero = certNumbers.length <= 1 && data.order!.goodDeedNumber !== null;
+          const ownedNumbers = (data.copies ?? [])
+            .filter((c) => c.goodDeedNumber != null)
+            .map((c) => c.goodDeedNumber!) as number[];
+          const showHero = ownedNumbers.length <= 1 && data.order!.goodDeedNumber !== null;
           if (showHero) {
             return (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5 text-center" data-testid="welcome-gooddeed">
+              <div className="rounded-2xl bg-white/[0.07] p-5 mb-5 text-center" data-testid="welcome-gooddeed">
                 <div className="text-fan-faint text-[11px] uppercase tracking-wider font-semibold">Your GoodDeed®</div>
                 <div className="text-[40px] font-bold mt-1 text-[#4AFFCA]" data-testid="text-gooddeed-number">
                   #{data.order!.goodDeedNumber}
                 </div>
-                <div className="text-fan-secondary text-[12px] mt-1">Numbered for life. Refundable up until shipping.</div>
+                <div className="text-fan-secondary text-[12px] mt-1">Numbered for life.</div>
               </div>
             );
           }
-          if (certNumbers.length >= 2) {
+          if (ownedNumbers.length >= 2) {
             return (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5 text-center" data-testid="welcome-gooddeed-multi">
+              <div className="rounded-2xl bg-white/[0.07] p-5 mb-5 text-center" data-testid="welcome-gooddeed-multi">
                 <div className="text-fan-faint text-[11px] uppercase tracking-wider font-semibold">Your GoodDeeds®</div>
                 <div className="mt-1.5 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[28px] font-bold text-[#4AFFCA]">
-                  {certNumbers.map((n) => (
+                  {ownedNumbers.map((n) => (
                     <span key={n} data-testid={`text-gooddeed-number-${n}`}>#{n}</span>
                   ))}
                 </div>
@@ -322,7 +324,7 @@ export function Welcome() {
             signed-cert copies keep their operator-driven confirm flow. */}
         <CertNameConfirmCard orderId={data.order.id} variant="card" />
 
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5">
+        <div className="rounded-2xl bg-white/[0.07] p-5 mb-5">
           <div className="text-fan-faint text-[11px] uppercase tracking-wider font-semibold mb-3">Order</div>
           {/* Task #201 — for each vinyl line item, render the colored
               <VinylPreview> the fan picked at checkout so the receipt
@@ -363,9 +365,14 @@ export function Welcome() {
                 >
                   <span className="text-fan-primary truncate pr-2">
                     Copy {c.position}
+                    {c.goodDeedNumber != null && (
+                      <span className="ml-2 text-[11px] text-fan-faint font-medium">
+                        #{c.goodDeedNumber}
+                      </span>
+                    )}
                     {c.signedCert && (
-                      <span className="ml-2 text-[11px] text-[#FF5470] font-medium">
-                        Signed{c.goodDeedNumber != null ? ` · #${c.goodDeedNumber}` : ""}
+                      <span className="ml-1.5 text-[11px] text-[#FF5470] font-medium">
+                        · Signed
                       </span>
                     )}
                   </span>
@@ -407,7 +414,7 @@ export function Welcome() {
         {/* Task #46 — Gift toggle. Show only before a share link has
             been minted; once we have the link, swap to the share panel. */}
         {!giftShareUrl ? (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-5" data-testid="welcome-gift-toggle">
+          <div className="rounded-2xl bg-white/[0.07] p-5 mb-5" data-testid="welcome-gift-toggle">
             <label className="flex items-center justify-between gap-3 cursor-pointer">
               <span className="flex items-center gap-2">
                 <span aria-hidden="true">🎁</span>

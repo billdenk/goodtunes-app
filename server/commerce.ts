@@ -3118,6 +3118,12 @@ export function registerCommerceRoutes(app: Express) {
           .update(orders)
           .set({ status: "refunded", refundedAt: new Date(), goodDeedNumber: null })
           .where(eq(orders.id, o.id));
+        // Task #1899 — void every per-copy number on Shopify refunds too,
+        // consistent with the handleRefund path below.
+        await db
+          .update(orderCopies)
+          .set({ goodDeedNumber: null })
+          .where(eq(orderCopies.orderId, o.id));
         // Task #533 — back the refunded sale's earmark out of the pool.
         if (o.albumId) {
           const { reversePressPoolForOrder } = await import("./earlyCut");
@@ -3523,8 +3529,12 @@ export async function materializeOrderFromSession(
         // unique index on insert and the retry loop re-runs us from
         // the top with a fresh MAX read.
         let nextNum = isPaid ? await assignNextGoodDeedNumber(albumId) : 0;
-        const copyNumbers: (number | null)[] = copyCertPattern.map((hasCert) => {
-          if (!isPaid || !hasCert) return null;
+        // Task #1899 — every paid copy gets its own GoodDeed number for life,
+        // regardless of whether it includes the signed-cert add-on. The signed-
+        // cert badge is still shown only on copies that bought the cert; the
+        // number is a separate digital provenance entitlement on every copy.
+        const copyNumbers: (number | null)[] = copyCertPattern.map((_hasCert) => {
+          if (!isPaid) return null;
           const n = nextNum;
           nextNum += 1;
           return n;
@@ -3596,8 +3606,10 @@ export async function materializeOrderFromSession(
         const existingCopies = await tx.select().from(orderCopies).where(eq(orderCopies.orderId, order!.id)).orderBy(asc(orderCopies.position));
         const needsCopies = existingCopies.length === 0;
         let nextNum = await assignNextGoodDeedNumber(albumId);
-        const copyNumbers: (number | null)[] = (needsCopies ? copyCertPattern : existingCopies.map((c) => c.signedCert)).map((hasCert, i) => {
-          if (!hasCert) return null;
+        // Task #1899 — every paid copy gets a number. For existing copies we
+        // reuse any number already assigned; only null slots are freshly minted.
+        const copyCount = needsCopies ? copyCertPattern.length : existingCopies.length;
+        const copyNumbers: (number | null)[] = Array.from({ length: copyCount }, (_, i) => {
           // Reuse a copy's existing number if it already had one
           // (idempotent re-runs of this branch).
           const prev = existingCopies[i]?.goodDeedNumber ?? null;
@@ -3660,9 +3672,11 @@ export async function materializeOrderFromSession(
             })),
           );
         } else {
+          // Task #1899 — update every copy that still lacks a number, not
+          // just signed ones. The signedCert gate was the old pre-#1899 guard.
           for (let i = 0; i < existingCopies.length; i++) {
             const c = existingCopies[i];
-            if (c.signedCert && c.goodDeedNumber == null && copyNumbers[i] != null) {
+            if (c.goodDeedNumber == null && copyNumbers[i] != null) {
               await tx
                 .update(orderCopies)
                 .set({ goodDeedNumber: copyNumbers[i] })

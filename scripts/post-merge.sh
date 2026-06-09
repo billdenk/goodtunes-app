@@ -6218,4 +6218,85 @@ SQL
 backfill_free_gogoods_handle dev  "${DATABASE_URL:-}"
 backfill_free_gogoods_handle prod "${PROD_DATABASE_URL:-}"
 
+# Task #1899 — Backfill GoodDeed numbers onto existing paid order_copies rows
+# that never got numbered (because before this task only signed-cert copies
+# were assigned a number). Assigns numbers deterministically above the current
+# per-album max, in order_id + position order, so already-assigned numbers are
+# never changed and no number is reused. Marker-guarded so it runs exactly once.
+backfill_task_1899_number_every_copy() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1899 number-every-copy backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count    integer := 0;
+  v_album_id text;
+  v_copy_id  text;
+  v_next     integer;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_1899_number_every_copy'
+  ) THEN
+    -- For each album that has any paid order_copies with a null good_deed_number,
+    -- assign sequential numbers above the current per-album max, walking copies
+    -- in a stable order (order creation time, then copy position within the order).
+    FOR v_album_id IN
+      SELECT DISTINCT oc.album_id
+        FROM order_copies oc
+        JOIN orders o ON o.id = oc.order_id
+       WHERE oc.good_deed_number IS NULL
+         AND o.status IN ('paid', 'shipped')
+    LOOP
+      -- Floor = max already in play across orders + order_copies + user_albums
+      SELECT GREATEST(
+        COALESCE((SELECT MAX(good_deed_number) FROM orders       WHERE album_id = v_album_id), 0),
+        COALESCE((SELECT MAX(good_deed_number) FROM order_copies WHERE album_id = v_album_id), 0),
+        COALESCE((SELECT MAX(certificate_number) FROM user_albums WHERE album_id = v_album_id), 0)
+      ) + 1 INTO v_next;
+
+      -- Walk every un-numbered paid copy for this album in a stable order
+      FOR v_copy_id IN
+        SELECT oc.id
+          FROM order_copies oc
+          JOIN orders o ON o.id = oc.order_id
+         WHERE oc.album_id = v_album_id
+           AND oc.good_deed_number IS NULL
+           AND o.status IN ('paid', 'shipped')
+         ORDER BY o.created_at, o.id, oc.position
+      LOOP
+        UPDATE order_copies SET good_deed_number = v_next WHERE id = v_copy_id;
+        v_next  := v_next + 1;
+        v_count := v_count + 1;
+      END LOOP;
+    END LOOP;
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_1899_number_every_copy');
+    RAISE NOTICE 'task_1899_number_every_copy applied: % rows numbered', v_count;
+  ELSE
+    RAISE NOTICE 'task_1899_number_every_copy already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1899 number-every-copy ok on $label"
+    echo "$out" | grep -i 'task_1899' || true
+  else
+    echo "post-merge: WARNING — task-1899 number-every-copy failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_1899_number_every_copy dev  "${DATABASE_URL:-}"
+backfill_task_1899_number_every_copy prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror

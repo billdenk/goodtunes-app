@@ -21172,11 +21172,6 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/pages/Player.tsx",
-    "snippet": "className=\"w-11 h-11 flex items-center justify-center text-white/55 active:text-white transition-colors\""
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/Player.tsx",
     "snippet": "<p className=\"text-white/65 text-[13px] leading-tight truncate\">{currentSong.album.artist}</p>"
   },
   {
@@ -21987,7 +21982,7 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Welcome.tsx",
-    "snippet": "<span className=\"ml-2 text-[11px] text-[#FF5470] font-medium\">"
+    "snippet": "<span className=\"ml-1.5 text-[11px] text-[#FF5470] font-medium\">"
   },
   {
     "rule": "brand-hex-literal",
@@ -22052,7 +22047,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Welcome.tsx",
-    "snippet": "<div className=\"text-fan-secondary text-[12px] mt-1\">Numbered for life. Refundable up until shipping.</div>"
+    "snippet": "<div className=\"text-fan-secondary text-[12px] mt-1\">Numbered for life.</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -22087,7 +22082,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Welcome.tsx",
-    "snippet": "<span className=\"ml-2 text-[11px] text-[#FF5470] font-medium\">"
+    "snippet": "<span className=\"ml-2 text-[11px] text-fan-faint font-medium\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/Welcome.tsx",
+    "snippet": "<span className=\"ml-1.5 text-[11px] text-[#FF5470] font-medium\">"
   },
   {
     "rule": "hardcoded-font-size",
