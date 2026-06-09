@@ -95,6 +95,12 @@ export interface Song {
   // chorus) instead of 0:00; null → fall back to the first 30 seconds.
   previewStartMs?: number | null;
   previewEndMs?: number | null;
+  // Fan-facing preview flag (`!previewHidden` on the server). When the
+  // operator embargoes a track, the album endpoint emits `isPreviewable:
+  // false` so NON-OWNER surfaces render it as a locked row and drop it
+  // from the playback queue. Undefined on the static seed (treated as
+  // previewable). Owners always get the full tracklist.
+  isPreviewable?: boolean | null;
   // Task #734 — stream-elsewhere tracks. When `streamOnly` is true,
   // GoodTunes does NOT host the master: the player must never attempt
   // Mux/raw playback and instead hands the fan off to their chosen

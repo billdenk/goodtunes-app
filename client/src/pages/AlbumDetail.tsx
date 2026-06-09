@@ -593,6 +593,12 @@ function AlbumDetailMobile({
       // plain-text `lyrics` field across `duration`.
       syncedLyrics: { timeMs: number; text: string }[] | null;
       isExplicit: boolean;
+      // Fan-facing preview flag (`!previewHidden`). When the operator embargoes
+      // a track, the server emits `isPreviewable: false` so NON-OWNER surfaces
+      // render it as a locked row and drop it from the playback queue. Must be
+      // carried through the `songs` useMemo below or the mobile gate reads
+      // `undefined` and the hidden track plays anyway.
+      isPreviewable: boolean | null;
       // Task #734 — stream-elsewhere track + handoff links.
       streamOnly: boolean;
       spotifyTrackUrl: string | null;
@@ -687,6 +693,7 @@ function AlbumDetailMobile({
           audioUrl: s.audioUrl ?? undefined,
           syncedLyrics: s.syncedLyrics ?? null,
           isExplicit: !!s.isExplicit,
+          isPreviewable: s.isPreviewable ?? null,
           streamOnly: !!s.streamOnly,
           spotifyTrackUrl: s.spotifyTrackUrl ?? null,
           appleMusicTrackUrl: s.appleMusicTrackUrl ?? null,
@@ -1008,14 +1015,14 @@ function AlbumDetailMobile({
   const albumSongs = songs.map((s) => ({ ...s, album }));
   // Preview-first surfaces only the songs the artist marked as
   // previewable; full-ownership playback walks the entire tracklist.
-  // A track the operator hid (isPreviewable === false) is a quiet "locked"
+  // A track the operator hid (`isPreviewable === false`) is a quiet "locked"
   // row for NON-OWNERS and never enters their playback queue, so Play /
   // Shuffle skip straight to the next released track (Apple's pre-release
   // pattern). Owners who bought the album get the full tracklist — embargoed
   // title track included. previewFirst still governs preview MODE (30-sec
   // auditions) via beginPlay, but no longer changes the track set.
   const playableAlbumSongs = albumSongs.filter(
-    (s) => isOwned || (s as any).isPreviewable !== false,
+    (s) => isOwned || s.isPreviewable !== false,
   );
 
   const beginPlay = (
@@ -1167,7 +1174,7 @@ function AlbumDetailMobile({
             streamOnly: s.streamOnly,
             spotifyTrackUrl: s.spotifyTrackUrl,
             appleMusicTrackUrl: s.appleMusicTrackUrl,
-            isPreviewable: (s as any).isPreviewable,
+            isPreviewable: s.isPreviewable,
           }))}
           label={apiAlbum?.label ?? null}
           ownedNums={ownedNums}
