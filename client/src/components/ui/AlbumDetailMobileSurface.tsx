@@ -21,7 +21,6 @@ import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { popBounce } from "@/lib/motion";
 import { formatReleaseDateLong } from "@shared/albumStage";
 import { streamingHandoffEnabled } from "@/lib/platform";
-import { AlbumCover } from "@/components/ui/AlbumCover";
 
 // Height (px) of the top ChromeScrim band. The scrim is rendered at this
 // height and the album-options menu is clamped to open strictly below it so

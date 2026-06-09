@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, forwardRef, useMemo, type Ref } from "react";
 import { Album } from "@/data/musicData";
-import { AlbumCover } from "@/components/ui/AlbumCover";
 import { useAuth } from "@/hooks/useAuth";
 import { AlbumCover, AlbumCoverPlaceholder } from "@/components/ui/AlbumCover";
 

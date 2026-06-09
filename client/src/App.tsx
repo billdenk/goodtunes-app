@@ -109,8 +109,6 @@ import { Redeem } from "@/pages/Redeem";
 import { AdminShopify } from "@/pages/AdminShopify";
 import { AdminAlbumEngagement } from "@/pages/AdminAlbumEngagement";
 import { AnalyticsDebugOverlay } from "@/components/admin/AnalyticsDebugOverlay";
-// Task #536 — "What's New" welcome-back sheet for returning fans.
-import { WhatsNewSheet } from "@/components/WhatsNewSheet";
 import { isAnalyticsDebugOverlayEnabled } from "@/lib/analytics";
 import { AdminReports } from "@/pages/AdminReports";
 import { AdminJobs } from "@/pages/AdminJobs";
@@ -974,10 +972,6 @@ function Router() {
           /account/edit route inside the Switch. */}
       {editOverlayActive && <EditAccount />}
       <PlayerOverlay />
-      {/* Task #536 — gates itself on /api/me/whats-new (recognized
-          customer + version behind current) so it's safe to mount
-          globally. Won't render on admin/auth/welcome/checkout routes. */}
-      <WhatsNewSheet />
       {/* Task #547 — desktop (≥1024px web) storefront sidebar.
           Self-gates on route (storefront paths only) + viewport +
           !native. Mobile/tablet keep the floating BottomNav. */}
