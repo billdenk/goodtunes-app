@@ -21466,7 +21466,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const artistPersonIdCA = callerRoleCA?.role === "artist" ? callerRoleCA.roleScopeId : null;
     const rows = await db.execute<any>(sql`
       SELECT ca.id, ca.organization_id, ca.name, ca.description, ca.image_url,
-             ca.price_cents, ca.fulfiller, ca.active, ca.applies_to_all_artists,
+             ca.price_cents, ca.shipping_cents, ca.fulfiller, ca.active, ca.applies_to_all_artists,
              ca.position, ca.created_at,
              ca.fan_chooses_amount, ca.min_amount_cents, ca.preset_amounts_cents,
              o.name AS org_name, o.logo_url AS org_logo_url,
@@ -21497,6 +21497,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       description: r.description,
       imageUrl: r.image_url,
       priceCents: r.price_cents,
+      shippingCents: r.shipping_cents ?? 0,
       fulfiller: r.fulfiller,
       active: r.active,
       appliesToAllArtists: r.applies_to_all_artists,
@@ -21518,7 +21519,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const artistPersonIdCAD = callerRoleCAD?.role === "artist" ? callerRoleCAD.roleScopeId : null;
     const rows = await db.execute<any>(sql`
       SELECT ca.id, ca.organization_id, ca.name, ca.description, ca.image_url,
-             ca.price_cents, ca.fulfiller, ca.active, ca.applies_to_all_artists,
+             ca.price_cents, ca.shipping_cents, ca.fulfiller, ca.active, ca.applies_to_all_artists,
              ca.position, ca.fan_chooses_amount, ca.min_amount_cents, ca.preset_amounts_cents,
              o.name AS org_name, o.logo_url AS org_logo_url,
              COALESCE(
@@ -21551,6 +21552,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       description: r.description,
       imageUrl: r.image_url,
       priceCents: r.price_cents,
+      shippingCents: r.shipping_cents ?? 0,
       fulfiller: r.fulfiller,
       active: r.active,
       appliesToAllArtists: r.applies_to_all_artists,
@@ -21575,6 +21577,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!Number.isFinite(priceCents) || priceCents < 0) {
       return res.status(400).json({ message: "Price must be zero or more" });
     }
+    // Task #1867 — per-box shipping the fan pays. Optional; defaults to 0.
+    const shippingCents = req.body?.shippingCents != null ? Math.round(Number(req.body.shippingCents)) : 0;
+    if (!Number.isFinite(shippingCents) || shippingCents < 0) {
+      return res.status(400).json({ message: "Shipping must be zero or more" });
+    }
     const org = await db.execute(sql`
       SELECT 1 FROM organizations WHERE id = ${organizationId} AND kind = 'non_profit' LIMIT 1
     `);
@@ -21597,8 +21604,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       : null;
     try {
       const ins = await db.execute<{ id: string }>(sql`
-        INSERT INTO custom_addons (organization_id, name, description, image_url, price_cents, fulfiller, applies_to_all_artists, position, fan_chooses_amount, min_amount_cents, preset_amounts_cents)
-        VALUES (${organizationId}, ${name}, ${description}, ${imageUrl}, ${priceCents}, ${fulfiller}, ${appliesToAllArtists}, ${position}, ${fanChoosesAmount}, ${minAmountCents}, ${presetAmountsCents ? JSON.stringify(presetAmountsCents) : null})
+        INSERT INTO custom_addons (organization_id, name, description, image_url, price_cents, shipping_cents, fulfiller, applies_to_all_artists, position, fan_chooses_amount, min_amount_cents, preset_amounts_cents)
+        VALUES (${organizationId}, ${name}, ${description}, ${imageUrl}, ${priceCents}, ${shippingCents}, ${fulfiller}, ${appliesToAllArtists}, ${position}, ${fanChoosesAmount}, ${minAmountCents}, ${presetAmountsCents ? JSON.stringify(presetAmountsCents) : null})
         RETURNING id
       `);
       res.status(201).json({ id: (ins as any).rows?.[0]?.id });
@@ -21666,6 +21673,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Price must be zero or more" });
       }
       sets.push(sql`price_cents = ${priceCents}`);
+    }
+    // Task #1867 — per-box shipping the fan pays.
+    if (b.shippingCents !== undefined) {
+      const shippingCents = Math.round(Number(b.shippingCents));
+      if (!Number.isFinite(shippingCents) || shippingCents < 0) {
+        return res.status(400).json({ message: "Shipping must be zero or more" });
+      }
+      sets.push(sql`shipping_cents = ${shippingCents}`);
     }
     if (b.description !== undefined) {
       const v = b.description == null || String(b.description).trim() === "" ? null : String(b.description).trim();

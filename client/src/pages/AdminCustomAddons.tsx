@@ -40,6 +40,8 @@ export type CustomAddon = {
   description: string | null;
   imageUrl: string | null;
   priceCents: number;
+  // Task #1867 — flat per-box shipping the fan pays (× quantity at checkout).
+  shippingCents: number;
   fulfiller: string | null;
   active: boolean;
   appliesToAllArtists: boolean;
@@ -399,6 +401,11 @@ function ReadOnlyAddonDialog({
             <dl className="rounded-lg border border-slate-200 divide-y divide-slate-100 overflow-hidden">
               <ReadOnlyRow label="Non-profit" value={addon.orgName} testId="text-view-custom-addon-npo" />
               <ReadOnlyRow label="Price" value={formatPrice(addon.priceCents)} testId="text-view-custom-addon-price-row" />
+              <ReadOnlyRow
+                label="Shipping/box"
+                value={addon.shippingCents ? formatPrice(addon.shippingCents) : "Free"}
+                testId="text-view-custom-addon-shipping-row"
+              />
               <ReadOnlyRow label="Who sees it" value={scopeLabel} testId="text-view-custom-addon-scope" />
               <ReadOnlyRow
                 label="Fulfiller"
@@ -500,6 +507,8 @@ export function AddonDialog({
   const [name, setName] = useState("");
   const [organizationId, setOrganizationId] = useState("");
   const [priceDollars, setPriceDollars] = useState("");
+  // Task #1867 — per-box shipping the fan pays.
+  const [shippingDollars, setShippingDollars] = useState("");
   const [fulfiller, setFulfiller] = useState("");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -528,6 +537,7 @@ export function AddonDialog({
       setName(addon.name);
       setOrganizationId(addon.organizationId);
       setPriceDollars((addon.priceCents / 100).toFixed(2));
+      setShippingDollars(addon.shippingCents ? (addon.shippingCents / 100).toFixed(2) : "");
       setFulfiller(addon.fulfiller ?? "");
       setDescription(addon.description ?? "");
       setImageUrl(addon.imageUrl);
@@ -545,6 +555,7 @@ export function AddonDialog({
       setName("");
       setOrganizationId("");
       setPriceDollars("");
+      setShippingDollars("");
       setFulfiller("");
       setDescription("");
       setImageUrl(null);
@@ -566,6 +577,8 @@ export function AddonDialog({
   const save = useMutation({
     mutationFn: async () => {
       const priceCents = Math.round(parseFloat(priceDollars) * 100);
+      // Task #1867 — per-box shipping the fan pays; blank → 0.
+      const shippingCents = Math.round(parseFloat(shippingDollars || "0") * 100) || 0;
       const positionNum = Math.round(parseFloat(position));
       const appliesToAllArtists = scope === "all";
       // Task #1842 — parse preset chips: comma-separated "$50, $100" or "50, 100"
@@ -584,6 +597,7 @@ export function AddonDialog({
         name: name.trim(),
         organizationId,
         priceCents,
+        shippingCents,
         fulfiller: fulfiller.trim() || null,
         description: description.trim() || null,
         imageUrl: imageUrl || null,
@@ -740,6 +754,22 @@ export function AddonDialog({
                 className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
                 data-testid="input-custom-addon-price"
               />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-600">Shipping per box (USD)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={shippingDollars}
+                onChange={(e) => setShippingDollars(e.target.value)}
+                placeholder="0.00"
+                className="w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm outline-none focus:border-[var(--brand-blue)] focus:ring-2 focus:ring-[var(--brand-blue)]/20"
+                data-testid="input-custom-addon-shipping"
+              />
+              <p className="text-xs text-slate-400">
+                Charged to the fan per box (× quantity), folded into checkout shipping. Leave blank for free shipping.
+              </p>
             </div>
           </div>
 

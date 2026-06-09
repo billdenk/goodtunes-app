@@ -1569,6 +1569,13 @@ export const customAddons = pgTable("custom_addons", {
   description: text("description"),
   imageUrl: text("image_url"),
   priceCents: integer("price_cents").notNull(),
+  // Task #1867 — flat per-box shipping & handling the fan pays for this
+  // add-on (e.g. the Nightbirde "Gift of Hope" box ships to its own
+  // recipient, so it carries shipping on TOP of the vinyl's shipping).
+  // Charged PER box (× quantity) and folded into the single Stripe
+  // shipping option so the fan sees one quiet "Shipping" line. Operator-
+  // editable in the custom-addon dialog. Default 0 = no box shipping.
+  shippingCents: integer("shipping_cents").notNull().default(0),
   // Free-text name of whoever fulfils / ships the add-on (the NPO, a
   // vendor, the artist, …). Snapshotted onto the order line at checkout
   // so fulfillment knows who handles it without a second lookup.

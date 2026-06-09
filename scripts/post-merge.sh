@@ -2107,12 +2107,17 @@ CREATE TABLE IF NOT EXISTS custom_addons (
   description              text,
   image_url                text,
   price_cents              integer NOT NULL,
+  shipping_cents           integer NOT NULL DEFAULT 0,
   fulfiller                text,
   active                   boolean NOT NULL DEFAULT true,
   applies_to_all_artists   boolean NOT NULL DEFAULT false,
   position                 integer NOT NULL DEFAULT 0,
   created_at               timestamp DEFAULT now()
 );
+-- Task #1867 — per-box shipping the fan pays. Additive on pre-existing
+-- tables (the CREATE above only seeds the column on fresh clones).
+ALTER TABLE IF EXISTS custom_addons
+  ADD COLUMN IF NOT EXISTS shipping_cents integer NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS custom_addon_artists (
   custom_addon_id varchar NOT NULL REFERENCES custom_addons(id) ON DELETE CASCADE,
   person_id       varchar NOT NULL REFERENCES people(id) ON DELETE CASCADE,
@@ -2128,6 +2133,59 @@ SQL
 }
 migrate_custom_addons_tables dev  "${DATABASE_URL:-}"
 migrate_custom_addons_tables prod "${PROD_DATABASE_URL:-}"
+
+# Task #1867 — ONE-TIME backfill: stamp the Gift of Hope add-on with Bill's
+# $7/box fan-paid shipping so the launch night ships with it set. Marker-
+# guarded in post_merge_data_backfills so a later operator edit (raising or
+# lowering the per-box rate in the admin) is never clobbered on a subsequent
+# merge. Only touches rows still at the 0 default whose name matches Gift of
+# Hope, so other charities' add-ons are untouched.
+backfill_task_1867_gift_of_hope_shipping() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1867 gift-of-hope shipping backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_1867_gift_of_hope_shipping'
+  ) THEN
+    UPDATE custom_addons
+       SET shipping_cents = 700
+     WHERE shipping_cents = 0
+       AND name ILIKE '%gift of hope%';
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_1867_gift_of_hope_shipping');
+
+    RAISE NOTICE 'task-1867 backfill applied: % gift-of-hope add-on(s) set to $7/box', v_count;
+  ELSE
+    RAISE NOTICE 'task-1867 backfill already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1867 gift-of-hope shipping backfill ok on $label"
+    echo "$out" | grep -i 'task-1867' || true
+  else
+    echo "post-merge: WARNING — task-1867 gift-of-hope shipping backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_1867_gift_of_hope_shipping dev  "${DATABASE_URL:-}"
+backfill_task_1867_gift_of_hope_shipping prod "${PROD_DATABASE_URL:-}"
 
 # Task #987 — custom add-on "all artists" scope. When true the add-on
 # applies to every eligible album regardless of the per-artist attach

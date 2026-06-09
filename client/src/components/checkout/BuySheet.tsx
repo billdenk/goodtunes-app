@@ -99,6 +99,9 @@ type CustomAddon = {
   description: string | null;
   imageUrl: string | null;
   priceCents: number;
+  // Task #1867 — flat per-box shipping the fan pays (× quantity), folded
+  // into the Buy sheet's single "Shipping" line + total.
+  shippingCents?: number;
   orgName: string;
   orgLogoUrl: string | null;
   // Task #1842 — variable / fan-chosen amount
@@ -605,8 +608,17 @@ export function BuySheet({
     };
   }, [selectedSku?.format, country, quantity, certCount, bookletCountForShip]);
 
-  const shippingCents =
+  // Task #1867 — flat per-box add-on shipping (e.g. the Gift of Hope box,
+  // which ships to its own recipient). Charged PER box and folded into the
+  // single "Shipping" line + total so the fan sees one quiet shipping figure,
+  // matching what the server charges through Stripe.
+  const customAddonShippingCents = selectedCustomAddons.reduce(
+    (sum, x) => sum + Math.max(0, x.addon.shippingCents ?? 0) * x.qty,
+    0,
+  );
+  const vinylShippingCents =
     shipping?.shippable && shipping?.available ? shipping.chargedCents ?? 0 : 0;
+  const shippingCents = vinylShippingCents + customAddonShippingCents;
   const shippingUnavailable = !!shipping?.shippable && shipping?.available === false;
 
   // Task #1636 — live tax estimate. Re-quotes whenever the cart, the
@@ -634,6 +646,9 @@ export function BuySheet({
             certCount: String(certCount),
             certPriceCents: String(addon?.priceCents ?? 0),
             booklet: bookletCountForShip > 0 ? "1" : "0",
+            // Task #1867 — fold per-box add-on shipping into the taxed
+            // shipping so the estimate matches the real checkout charge.
+            addonShipCents: String(customAddonShippingCents),
           });
           const r = await apiRequest("GET", `/api/checkout/tax-quote?${params.toString()}`);
           const j = await r.json();
@@ -658,6 +673,7 @@ export function BuySheet({
     certCount,
     addon?.priceCents,
     bookletCountForShip,
+    customAddonShippingCents,
     taxReady,
   ]);
 

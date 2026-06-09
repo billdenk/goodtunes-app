@@ -183,6 +183,8 @@ type CustomAddonForAlbum = {
   description: string | null;
   imageUrl: string | null;
   priceCents: number;
+  // Task #1867 — flat per-box shipping the fan pays (× quantity).
+  shippingCents: number;
   fulfiller: string | null;
   orgName: string;
   orgLogoUrl: string | null;
@@ -217,6 +219,7 @@ async function listCustomAddonsForAlbum(
       description: customAddons.description,
       imageUrl: customAddons.imageUrl,
       priceCents: customAddons.priceCents,
+      shippingCents: customAddons.shippingCents,
       fulfiller: customAddons.fulfiller,
       orgName: organizations.name,
       orgLogoUrl: organizations.logoUrl,
@@ -885,6 +888,9 @@ export function registerCommerceRoutes(app: Express) {
         description: c.description,
         imageUrl: c.imageUrl,
         priceCents: c.priceCents,
+        // Task #1867 — per-box shipping so the Buy sheet can fold it into
+        // the displayed shipping line + total before checkout.
+        shippingCents: c.shippingCents,
         orgName: c.orgName,
         orgLogoUrl: c.orgLogoUrl,
         // Task #1842 — variable amount fields so the Buy sheet can render
@@ -2414,12 +2420,25 @@ export function registerCommerceRoutes(app: Express) {
         });
       }
     }
+    // Task #1867 — flat per-box shipping for custom ("Gift of Hope") add-ons.
+    // Each box ships to its own recipient, so its shipping rides on TOP of
+    // the vinyl's shipping rather than being weight-pooled. Charged PER box
+    // (× the chosen quantity) and folded into the single shipping option so
+    // the fan sees one quiet "Shipping" line.
+    const customAddonShippingCents = selectedCustomAddons.reduce(
+      (sum, c) => sum + Math.max(0, c.addon.shippingCents ?? 0) * c.quantity,
+      0,
+    );
+    const vinylShipChargedCents = shippingQuote?.chargedCents ?? 0;
+    const shipCurrency = shippingQuote?.currency ?? "usd";
+    const totalShipChargedCents = vinylShipChargedCents + customAddonShippingCents;
+
     const shippingOptions: Stripe.Checkout.SessionCreateParams.ShippingOption[] | undefined =
-      shippingQuote
+      totalShipChargedCents > 0
         ? [{
             shipping_rate_data: {
               type: "fixed_amount",
-              fixed_amount: { amount: shippingQuote.chargedCents, currency: shippingQuote.currency },
+              fixed_amount: { amount: totalShipChargedCents, currency: shipCurrency },
               display_name: "Shipping & handling",
               // With `automatic_tax` enabled, Stripe rejects the session
               // unless every shipping option declares how tax applies to it.
@@ -2461,7 +2480,14 @@ export function registerCommerceRoutes(app: Express) {
       gt_ship_country: shippingQuote ? shippingQuote.country : "",
       gt_ship_base: shippingQuote ? String(shippingQuote.baseCents) : "",
       gt_ship_markup: shippingQuote ? String(shippingQuote.markupCents) : "",
-      gt_ship_charged: shippingQuote ? String(shippingQuote.chargedCents) : "",
+      // Task #1867 — charged shipping now includes any per-box add-on
+      // shipping. `gt_ship_custom_addon` breaks out the box portion so
+      // materialize/refunds can reconcile it; gt_ship_base/markup stay the
+      // vinyl rate-card split. Non-empty (even "0") whenever any shipping was
+      // charged so materialize records the box portion on digital+box orders.
+      gt_ship_charged:
+        totalShipChargedCents > 0 ? String(totalShipChargedCents) : "",
+      gt_ship_custom_addon: String(customAddonShippingCents),
       gt_ship_band: shippingQuote ? shippingQuote.band : "",
     };
     const returnUrl = `${absoluteOrigin(req)}/welcome?session_id={CHECKOUT_SESSION_ID}`;
@@ -2583,6 +2609,11 @@ export function registerCommerceRoutes(app: Express) {
     let certCount = Math.max(0, parseInt(String(req.query.certCount ?? "0"), 10) || 0);
     const certPriceCents = Math.max(0, parseInt(String(req.query.certPriceCents ?? "0"), 10) || 0);
     const booklet = req.query.booklet === "1" || req.query.booklet === "true";
+    // Task #1867 — per-box add-on shipping the Buy sheet folded into its
+    // shipping line. Included in the taxable shipping so the estimate lines
+    // up with the real embedded-checkout charge (which taxes the combined
+    // shipping option). Donation line itself stays non-taxable.
+    const addonShipCents = Math.max(0, parseInt(String(req.query.addonShipCents ?? "0"), 10) || 0);
 
     // Tax needs at minimum a destination country; for the US (and other
     // postal-driven jurisdictions) Stripe needs a postal code to resolve
@@ -2685,6 +2716,9 @@ export function registerCommerceRoutes(app: Express) {
         console.error("[tax-quote] shipping quote failed", e);
       }
     }
+    // Task #1867 — fold per-box add-on shipping into the taxable shipping so
+    // the preview matches the combined shipping option the real checkout taxes.
+    shippingCents += addonShipCents;
 
     try {
       const stripe = await getStripe();
@@ -3325,6 +3359,13 @@ export async function materializeOrderFromSession(
   const shipBaseCents = session.metadata?.gt_ship_base ? parseInt(session.metadata.gt_ship_base, 10) || 0 : null;
   const shipMarkupCents = session.metadata?.gt_ship_markup ? parseInt(session.metadata.gt_ship_markup, 10) || 0 : null;
   const shipBand = session.metadata?.gt_ship_band || null;
+  // Task #1867 — per-box custom add-on shipping (e.g. Gift of Hope). Stamped
+  // separately from the vinyl rate-card split because a DIGITAL purchase + box
+  // has no vinyl quote (shipBaseCents null) yet still charges shipping. We use
+  // it to know shipping applies even when there's no vinyl leg.
+  const shipCustomAddonCents = session.metadata?.gt_ship_custom_addon
+    ? parseInt(session.metadata.gt_ship_custom_addon, 10) || 0
+    : 0;
 
   const stripe = deps.stripe ?? (await getStripe());
   // Re-fetch with expansion so addresses/phone are populated even if the
@@ -3349,12 +3390,16 @@ export async function materializeOrderFromSession(
   // tax. Use the pre-tax shipping (`total_details.amount_shipping`, which equals
   // the rate we quoted) so items-subtotal + shipping + tax reconciles to the
   // order total without double-counting shipping tax.
-  const shipChargedCents =
-    shipBaseCents === null
-      ? null
-      : (full as any).total_details?.amount_shipping ??
-        (full as any).shipping_cost?.amount_subtotal ??
-        (session.metadata?.gt_ship_charged ? parseInt(session.metadata.gt_ship_charged, 10) || 0 : null);
+  // Task #1867 — shipping applies when there's a vinyl quote OR a per-box
+  // add-on charge. Gating only on shipBaseCents dropped the box shipping on
+  // digital-only + Gift-of-Hope orders (Stripe charged it but the order
+  // persisted NULL). Prefer Stripe's authoritative collected total either way.
+  const shippingApplies = shipBaseCents !== null || shipCustomAddonCents > 0;
+  const shipChargedCents = !shippingApplies
+    ? null
+    : (full as any).total_details?.amount_shipping ??
+      (full as any).shipping_cost?.amount_subtotal ??
+      (session.metadata?.gt_ship_charged ? parseInt(session.metadata.gt_ship_charged, 10) || 0 : null);
 
   const piId = typeof full.payment_intent === "string" ? full.payment_intent : full.payment_intent?.id ?? null;
   const stripeCustomerId = typeof full.customer === "string" ? full.customer : full.customer?.id ?? null;

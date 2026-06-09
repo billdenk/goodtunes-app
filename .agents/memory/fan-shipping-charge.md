@@ -33,7 +33,18 @@ catch-all band. Band comes from estimated record weight (7"→band1, single
 - **Persist the breakdown in BOTH materialize paths.** The base/markup/charged/band
   fields must be written on the insert path AND the pending→paid update path, same
   fan-out trap as other order fields.
+- **`shipping_charged_cents` must derive from Stripe's collected `amount_shipping`
+  whenever ANY shipping applies — vinyl rate-card quote OR a per-box custom add-on
+  charge — not gated on the vinyl quote alone.** Per-box add-on shipping (e.g.
+  "Gift of Hope", `customAddons.shipping_cents` × qty) folds into the SINGLE Stripe
+  shipping option, so a DIGITAL purchase + box has NO vinyl quote (`gt_ship_base`
+  empty) yet Stripe still charges shipping. Gating `shipChargedCents` on
+  `shipBaseCents !== null` dropped that to NULL on the order. Detect "shipping
+  applies" via `shipBaseCents !== null || shipCustomAddonCents > 0` (the box portion
+  is stamped in metadata as `gt_ship_custom_addon`), then prefer Stripe's
+  `total_details.amount_shipping`. Pure-digital (no box) stays NULL.
 
-**Why:** "real shipping" is a money-correctness promise; any silent $0 path or
-client-trusted amount is an undercharge. The architect flagged the $0-fallback and
-unconditional country-lock gaps during review — they're fixed, keep them fixed.
+**Why:** "real shipping" is a money-correctness promise; any silent $0/NULL path or
+client-trusted amount is an undercharge or a broken receipt/refund-reconcile. The
+architect flagged the $0-fallback, country-lock, and digital+box NULL-persist gaps
+during review — they're fixed, keep them fixed.
