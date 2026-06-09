@@ -1121,15 +1121,21 @@ export class DbStorage implements IStorage {
       // label's deletion, but the credit clears (mirrors what restoring
       // the label later would re-attach).
       .leftJoin(labels, and(eq(albums.labelId, labels.id), isNull(labels.deletedAt)))
+      // Resolve the primary artist's photo for the branded album-cover
+      // placeholder. leftJoin (not inner) so albums with no/deleted artist
+      // still return; deleted-person rows join as NULL.
+      .leftJoin(people, and(eq(albums.primaryArtistId, people.id), isNull(people.deletedAt)))
       .where(and(...conds))
       .orderBy(asc(sql`lower(${albums.title})`));
-    return rows.map((r) => ({ ...r.albums, label: r.labels ?? null }));
+    return rows.map((r) => ({ ...r.albums, label: r.labels ?? null, artistPhoto: r.people?.photoUrl ?? null }));
   }
   async getAlbumById(id: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean }): Promise<AlbumWithLabel | undefined> {
     const [row] = await db
       .select()
       .from(albums)
       .leftJoin(labels, and(eq(albums.labelId, labels.id), isNull(labels.deletedAt)))
+      // Primary-artist photo for the branded cover placeholder (see getAlbums).
+      .leftJoin(people, and(eq(albums.primaryArtistId, people.id), isNull(people.deletedAt)))
       .where(eq(albums.id, id));
     if (!row) return undefined;
     if (row.albums.deletedAt && !opts?.includeTrashed) return undefined;
@@ -1144,13 +1150,15 @@ export class DbStorage implements IStorage {
     ) {
       return undefined;
     }
-    return { ...row.albums, label: row.labels ?? null };
+    return { ...row.albums, label: row.labels ?? null, artistPhoto: row.people?.photoUrl ?? null };
   }
   async getAlbumBySlug(slug: string, opts?: { includeHidden?: boolean; includeTrashed?: boolean; includeSunrisePending?: boolean }): Promise<AlbumWithLabel | undefined> {
     const [row] = await db
       .select()
       .from(albums)
       .leftJoin(labels, and(eq(albums.labelId, labels.id), isNull(labels.deletedAt)))
+      // Primary-artist photo for the branded cover placeholder (see getAlbums).
+      .leftJoin(people, and(eq(albums.primaryArtistId, people.id), isNull(people.deletedAt)))
       .where(eq(albums.shareSlug, slug));
     if (!row) return undefined;
     if (row.albums.deletedAt && !opts?.includeTrashed) return undefined;
@@ -1168,7 +1176,7 @@ export class DbStorage implements IStorage {
     ) {
       return undefined;
     }
-    return { ...row.albums, label: row.labels ?? null };
+    return { ...row.albums, label: row.labels ?? null, artistPhoto: row.people?.photoUrl ?? null };
   }
   // Task #1310 — look up an artist person by their artist share slug (the
   // first segment of the two-part get.goodtunes.music/<artist>/<album> URL).
@@ -1186,6 +1194,8 @@ export class DbStorage implements IStorage {
       .select()
       .from(albums)
       .leftJoin(labels, and(eq(albums.labelId, labels.id), isNull(labels.deletedAt)))
+      // Primary-artist photo for the branded cover placeholder (see getAlbums).
+      .leftJoin(people, and(eq(albums.primaryArtistId, people.id), isNull(people.deletedAt)))
       .where(and(eq(albums.primaryArtistId, artistId), eq(albums.shareSlug, albumSlug)));
     if (!row) return undefined;
     if (row.albums.deletedAt && !opts?.includeTrashed) return undefined;
@@ -1199,7 +1209,7 @@ export class DbStorage implements IStorage {
     ) {
       return undefined;
     }
-    return { ...row.albums, label: row.labels ?? null };
+    return { ...row.albums, label: row.labels ?? null, artistPhoto: row.people?.photoUrl ?? null };
   }
   async getSongsByAlbum(albumId: string): Promise<Song[]> {
     const rows = await db.select().from(songs)

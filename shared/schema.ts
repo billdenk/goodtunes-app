@@ -3286,7 +3286,15 @@ export type ReleaseNotifySignup = typeof releaseNotifySignups.$inferSelect;
 // Album reads denormalize the joined label entity so the fan-facing UI can
 // render label name/logo without a second fetch. `label` is null when an
 // album has no labelId set or the label was deleted (FK SET NULL).
-export type AlbumWithLabel = Album & { label: Label | null };
+export type AlbumWithLabel = Album & {
+  label: Label | null;
+  // Branded-placeholder support: the primary artist's profile photo,
+  // resolved via `primaryArtistId` at read time. The fan/admin album-cover
+  // treatment uses it (ghosted, with the album name overlaid) when an album
+  // has no artwork or its stored art URL is dead. `null` = no artist photo
+  // to fall back to (cover degrades to a brand-toned tile instead).
+  artistPhoto?: string | null;
+};
 
 export const insertInstrumentVendorSchema = createInsertSchema(instrumentVendors).omit({ id: true, createdAt: true });
 export type InsertInstrumentVendor = z.infer<typeof insertInstrumentVendorSchema>;

@@ -34,6 +34,7 @@ import { useFullPlaybackAccess } from "@/hooks/useFullPlaybackAccess";
 import { buyEnabled } from "@/lib/platform";
 import { popBounce } from "@/lib/motion";
 import { IconButton } from "@/components/ui/IconButton";
+import { AlbumCover } from "@/components/ui/AlbumCover";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
 import { GoodDeedCertificate } from "@/components/GoodDeedCertificate";
 import { CertPdfViewerSheet } from "@/components/ui/CertPdfViewerSheet";
@@ -232,7 +233,7 @@ export function AlbumCard({
             className="absolute inset-0 rounded-lg overflow-hidden"
             style={{ transform: "rotate(-6deg) translate(-6px, -4px) scale(0.94)", boxShadow: "0 4px 16px rgba(0,0,0,0.45)", zIndex: 0 }}
           >
-            <img src={album.artwork} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover opacity-85" />
+            <AlbumCover artwork={album.artwork} artistPhoto={album.artistPhoto} title={album.title} decorative className="opacity-85" />
           </div>
           {ownedCount > 2 && (
             <div
@@ -240,7 +241,7 @@ export function AlbumCard({
               className="absolute inset-0 rounded-lg overflow-hidden"
               style={{ transform: "rotate(5deg) translate(6px, -3px) scale(0.96)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 1 }}
             >
-              <img src={album.artwork} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover opacity-90" />
+              <AlbumCover artwork={album.artwork} artistPhoto={album.artistPhoto} title={album.title} decorative className="opacity-90" />
             </div>
           )}
         </>
@@ -253,7 +254,7 @@ export function AlbumCard({
         style={{ boxShadow: playingShadow }}
         data-testid={`albumcard-art-${album.id}`}
       >
-        <img src={album.artwork} alt={album.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+        <AlbumCover artwork={album.artwork} artistPhoto={album.artistPhoto} title={album.title} showName={!compact} />
 
         {isCurrentlyPlaying && (
           <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,6,43,0.45)" }}>

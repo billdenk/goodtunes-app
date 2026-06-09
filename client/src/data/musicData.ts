@@ -57,6 +57,12 @@ export interface Album {
   // When present, the fan copy-link / share controls copy the clean URL
   // instead of the long /album/:id path. Comes from the API row only.
   shareSlug?: string | null;
+  // Primary artist's profile photo, resolved server-side from
+  // `primaryArtistId`. Used by the shared AlbumCover as the ghosted
+  // placeholder image when this album has no artwork (or its art URL is
+  // dead). Comes from the API row only; `null`/absent = no photo to fall
+  // back to, so the cover degrades to a brand-toned tile with the name.
+  artistPhoto?: string | null;
 }
 
 export interface Song {
