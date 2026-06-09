@@ -6145,4 +6145,77 @@ END
 $$;
 SQL
 
+# Free the "gogoods" username so the operator (Bill) can claim it as his fan
+# @handle. A legacy gogoods-imported fan (Nima Jalali, gogoods@jalali.net) got
+# his username auto-derived from his email local-part ("gogoods") but NEVER
+# claimed a public handle. customer_users.username is globally UNIQUE and the
+# complete-signup flow mirrors username = handle on write, so that squatted
+# username silently blocked the handle (picker said "available", save 500'd).
+# This renames ONLY that one legacy account's username to a clean, name-derived
+# value (his handle stays NULL, so nothing fan-facing changes for him — it only
+# changes the handle he'd be suggested if he ever finishes signup).
+#
+# Tightly guarded: matches the exact legacy account by id + email, and only
+# when username is still the auto-derived 'gogoods' AND no handle was ever
+# claimed AND the target value is free (no other row owns it as username or
+# handle). Marker-guarded + idempotent + self-idempotent via the WHERE clause;
+# a no-op on a fresh dev clone (Nima is prod-only).
+backfill_free_gogoods_handle() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping free-gogoods-handle on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+  v_nima  constant text := '520394de-5dee-49c4-9d0a-32cdc78572e4';
+  v_email constant text := 'gogoods@jalali.net';
+  v_new   constant text := 'nima.jalali';
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'free_gogoods_handle'
+  ) THEN
+    -- Only rename when the target value is free, so we never trade one
+    -- collision for another.
+    IF NOT EXISTS (
+      SELECT 1 FROM customer_users
+       WHERE (lower(username) = v_new OR lower(handle) = v_new)
+         AND id <> v_nima
+    ) THEN
+      UPDATE customer_users
+         SET username = v_new
+       WHERE id = v_nima
+         AND lower(email) = v_email
+         AND lower(username) = 'gogoods'
+         AND handle IS NULL;
+      GET DIAGNOSTICS v_count = ROW_COUNT;
+    END IF;
+    INSERT INTO post_merge_data_backfills (name) VALUES ('free_gogoods_handle');
+    RAISE NOTICE 'free_gogoods_handle applied: % rows', v_count;
+  ELSE
+    RAISE NOTICE 'free_gogoods_handle already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: free-gogoods-handle ok on $label"
+    echo "$out" | grep -i 'free_gogoods_handle' || true
+  else
+    echo "post-merge: WARNING — free-gogoods-handle failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_free_gogoods_handle dev  "${DATABASE_URL:-}"
+backfill_free_gogoods_handle prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror

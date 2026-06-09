@@ -5,7 +5,7 @@ description: Why picking a fan @handle can pass the availability check then 500 
 
 The post-OAuth "One last thing" screen (FinishSetup → POST /api/auth/complete-signup) mirrors `username = handle` on write to keep legacy surfaces (playlist URLs, welcome-back, admin search) working. `customer_users.username` is `.notNull().unique()` (global, case-sensitive) AND there's a newer partial unique index on `lower(handle)`.
 
-**The trap:** legacy gogoods-imported fans got a `username` auto-derived from their email local-part (e.g. gogoods@jalali.net → username "gogoods") but NEVER a `handle`. So the handle-availability check — which historically queried ONLY the `handle` column — reports the name free, then the mirrored `username` write collides on `customer_users_username_unique` → raw 500.
+**The trap:** legacy gogoods-imported fans got a `username` auto-derived from their email local-part (e.g. an email whose local-part is "gogoods" → username "gogoods") but NEVER a `handle`. So the handle-availability check — which historically queried ONLY the `handle` column — reports the name free, then the mirrored `username` write collides on `customer_users_username_unique` → raw 500.
 
 **Rule:** any handle availability/classify check MUST test BOTH `lower(handle)` AND `lower(username)` (self-excluded), because the write enforces uniqueness on both.
 
