@@ -2261,6 +2261,7 @@ export function registerCommerceRoutes(app: Express) {
     const TAX_CODE_TANGIBLE = "txcd_99999999"; // General - Tangible Goods
     const TAX_CODE_DIGITAL = "txcd_10401000"; // Digital Audio Works - streamed, non-subscription, limited rights
     const TAX_CODE_DONATION = "txcd_90000001"; // Cash Donation
+    const TAX_CODE_SHIPPING = "txcd_92010001"; // Shipping
     const TAX_BEHAVIOR = "exclusive" as const;
     const { classifySkuKind } = await import("./orderDesk");
     const skuKind = classifySkuKind(sku.format);
@@ -2420,6 +2421,12 @@ export function registerCommerceRoutes(app: Express) {
               type: "fixed_amount",
               fixed_amount: { amount: shippingQuote.chargedCents, currency: shippingQuote.currency },
               display_name: "Shipping & handling",
+              // With `automatic_tax` enabled, Stripe rejects the session
+              // unless every shipping option declares how tax applies to it.
+              // Mirror the line items: exclusive (sales tax added on top) and
+              // the Stripe "Shipping" tax code so the rate is taxed correctly.
+              tax_behavior: TAX_BEHAVIOR,
+              tax_code: TAX_CODE_SHIPPING,
             },
           }]
         : undefined;
