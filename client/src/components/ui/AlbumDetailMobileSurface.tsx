@@ -843,18 +843,11 @@ export function AlbumDetailMobileSurface({
                 Buy {formatUsdCents(album.priceCents)}
               </button>
             ))}
-          {/* Task #1784 — "Get Details" re-opens the offer modal; sits just to
-              the right of the non-Play action button on the preview surfaces. */}
-          {publicPreview && onGetDetails && (
-            <button
-              type="button"
-              onClick={onGetDetails}
-              className="h-12 px-2 inline-flex items-center text-sm font-medium text-fan-secondary active:opacity-70 transition-opacity flex-shrink-0 underline underline-offset-2"
-              data-testid="link-get-details"
-            >
-              Get Details
-            </button>
-          )}
+          {/* Task #1784 — "Get Details" re-opens the offer modal. It used to sit
+              inline to the right of the Buy button, which made the transport row
+              wide and visually unbalanced on mobile; it now lives on its own
+              centered line directly BELOW the Play + Buy buttons (rendered just
+              after this row's closing tag). */}
           {/* Task #1580 — the album-level credits "i" button is hidden; credits
               are now per-track only (opened from each track's row). The
               `hasAlbumCredits`/`onOpenAlbumCredits` wiring stays in place so it
@@ -901,6 +894,23 @@ export function AlbumDetailMobileSurface({
             </button>
           )}
         </div>
+
+        {/* "Get Details" — centered on its own line beneath the Play + Buy
+            buttons so the transport row stays a clean, balanced pair of pills.
+            Negative top margin tucks it just under the buttons; only renders on
+            the preview surfaces, so the owned/normal layout is untouched. */}
+        {publicPreview && onGetDetails && (
+          <div className="bg-[color:var(--brand-bg)] flex justify-center px-5 -mt-1">
+            <button
+              type="button"
+              onClick={onGetDetails}
+              className="inline-flex items-center justify-center min-h-[44px] px-4 text-sm font-medium text-fan-secondary active:opacity-70 transition-opacity underline underline-offset-2"
+              data-testid="link-get-details"
+            >
+              Get Details
+            </button>
+          </div>
+        )}
 
         {/* Tracks */}
         <div className="bg-[color:var(--brand-bg)] px-5 mt-5 flex flex-col">
