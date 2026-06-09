@@ -86,7 +86,6 @@ import { FinishSetup } from "@/pages/FinishSetup";
 import { AccountMerge } from "@/pages/AccountMerge";
 // Task #1496 — Public account-deletion page for the Play Store Data safety form.
 import DeleteAccount from "@/pages/DeleteAccount";
-import { isCampaignRelease } from "@/pages/Hope";
 import { AdminWelcomeBack } from "@/pages/AdminWelcomeBack";
 import { Orders } from "@/pages/Orders";
 import { AdminOrders } from "@/pages/AdminOrders";
@@ -235,12 +234,15 @@ function ShareSlugTwo() {
   if (isLoading) return <AlbumDetailMobileSkeleton />;
   // Hidden / trashed / unknown releases still 404 server-side → not found.
   if (!data) return <AlbumNotFound variant="mobile" />;
-  // Task #1778 — a PREPPING (pre-launch) release now resolves to the full rich
+  // Task #1778 — a PREPPING (pre-launch) release resolves to the full rich
   // page in notify-only "Get Early Access" mode (the primary CTA captures an
-  // email into the waitlist instead of opening checkout). Campaign releases
-  // (e.g. nightbirde/hope) stay notify-only on the bare fan link too. The
-  // family link (/:artist/:release/staging) follows the same prepping rule.
-  const notifyOnly = !!data.isPrepping || isCampaignRelease(artistSlug, albumSlug);
+  // email into the waitlist instead of opening checkout). Once a release is
+  // LIVE (is_prepping=false — sunrise/launch has fired), the bare campaign
+  // share link (e.g. nightbirde/hope) must open the normal album surface:
+  // 30s previews + Buy, exactly like the single-segment /hope route. Gating
+  // notify-only on isCampaignRelease pinned the launched campaign to email
+  // capture, which blocked the public from previewing or buying after launch.
+  const notifyOnly = !!data.isPrepping;
   return <AlbumDetail albumId={data.id} notifyOnly={notifyOnly} />;
 }
 

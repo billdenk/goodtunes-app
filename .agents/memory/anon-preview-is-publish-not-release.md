@@ -25,9 +25,18 @@ the anonymous-preview code → the fix is a republish, full stop. A 200 only wit
 means just the tokenless `publicPreview` branch is undeployed. Confirm the bundle is
 stale by diffing the live `assets/index-*.js` hash against a fresh local `npm run build`.
 
-**Link shapes (campaign + prepping album):** bare `/<artist>/<album>` = notify-only
-waitlist (ShareSlugTwo, notifyOnly because prepping+campaign); `/<artist>/<album>/staging`
-(prefix or suffix, equivalent) = ShareSlugStaging → forces the full buy/gift walkthrough
-even while prepping. The bare fan link auto-upgrades from waitlist → full album at launch,
-so it's the future-proof link to hand out; `/staging` is the internal pre-launch rehearsal
-link. Use the `get.` host (purchase funnel), never `my.` (owned-content player).
+**Link shapes (campaign album):** bare `/<artist>/<album>` (ShareSlugTwo) gates
+`notifyOnly` on **`data.isPrepping` ONLY** — prepping → notify-only waitlist, LIVE
+(is_prepping=false) → normal album surface (30s previews + Buy). Do NOT re-add an
+`|| isCampaignRelease(...)` clause: that pinned a launched campaign to the "Get Early
+Access" email-capture screen, silently blocking the public from previewing OR buying
+after launch while logged-in/owner accounts (different entry) worked. ShareSlugOne
+(`/<slug>`) already gated on isPrepping only — keep the two routes in parity.
+`/<artist>/<album>/staging` (prefix or suffix) = ShareSlugStaging → full buy/gift
+walkthrough even while prepping. Use the `get.` host (purchase funnel), never `my.`.
+
+**Embargoed title track (`previewHidden`) does NOT unlock for owners:** desktop
+`playableSongs` filters `isPreviewable !== false` for EVERYONE (server derives
+`isPreviewable = !previewHidden`), and the campaign gate comment says it "stays locked
+for everyone." So a buyer who purchased still can't play a previewHidden track — this is
+a deliberate product call, surface it to Bill rather than silently flipping it.
