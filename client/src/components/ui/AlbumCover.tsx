@@ -81,6 +81,7 @@ export function AlbumCover({
         src={artwork as string}
         alt={decorative ? "" : title}
         aria-hidden={decorative || undefined}
+        crossOrigin="anonymous"
         loading={loading}
         decoding="async"
         onError={() => setArtFailed(true)}
@@ -134,6 +135,7 @@ function PlaceholderInner({
           src={artistPhoto as string}
           alt=""
           aria-hidden
+          crossOrigin="anonymous"
           loading="lazy"
           decoding="async"
           onError={onPhotoError}

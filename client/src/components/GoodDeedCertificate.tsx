@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, forwardRef, useMemo, type Ref } from "react";
 import { Album } from "@/data/musicData";
-import { useAuth } from "@/hooks/useAuth";
 import { AlbumCover, AlbumCoverPlaceholder } from "@/components/ui/AlbumCover";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 export interface ShareIdentities {
   realName?: string | null;
@@ -54,6 +55,7 @@ export function GoodDeedCertificate({
   const captureRef = useRef<HTMLDivElement | null>(null);
 
   const { user, updateProfile } = useAuth();
+  const { toast } = useToast();
 
   const safeIdx = Math.min(Math.max(activeIdx, 0), certs.length - 1);
   // Track the active card without retriggering the resize-resync effect so a
@@ -220,11 +222,8 @@ export function GoodDeedCertificate({
       const fileName = isPreview
         ? `GoodDeed-${safeTitle}-Demo-${shape}.png`
         : `GoodDeed-${safeTitle}-No-${padded(certs[safeIdx])}-${shape}.png`;
-      const file = new File([blob], fileName, { type: "image/png" });
 
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: "My GoodDeed® Certificate" });
-      } else {
+      const downloadBlob = () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -233,11 +232,44 @@ export function GoodDeedCertificate({
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
+      };
+
+      // On touch devices (phones/tablets) the native share sheet is the
+      // expected "save to Photos / share" path. On desktop/pointer devices
+      // ALWAYS do a real file download — navigator.canShare reports true in
+      // desktop Chrome/Edge too, and routing there opens an OS share sheet
+      // (or silently no-ops on cancel), which reads as "nothing downloaded".
+      const isTouchDevice =
+        typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(pointer: coarse)").matches;
+      const file = new File([blob], fileName, { type: "image/png" });
+      const canShareFile = isTouchDevice && navigator.canShare?.({ files: [file] });
+
+      if (canShareFile) {
+        try {
+          await navigator.share({ files: [file], title: "My GoodDeed® Certificate" });
+        } catch (err) {
+          // User dismissed the share sheet — not an error, leave the card as-is.
+          if ((err as Error)?.name === "AbortError") return;
+          // Any other share failure → fall back to a direct file download so
+          // the user still gets their card.
+          downloadBlob();
+        }
+      } else {
+        downloadBlob();
       }
       setImageSaved(true);
       setTimeout(() => setImageSaved(false), 1800);
-    } catch {
-      // User cancelled the share sheet, or capture failed — leave the card as-is.
+    } catch (err) {
+      // Capture genuinely failed (tainted canvas, decode error, etc.) — surface
+      // it instead of swallowing so the user knows to retry.
+      console.error("[GoodDeedCertificate] image export failed", err);
+      toast({
+        title: "Couldn't save the card",
+        description: "Something went wrong creating the image. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setSavingImage(false);
     }
@@ -661,8 +693,8 @@ const SHAPE_RATIO: Record<CardShape, number> = {
     share one signature — orange (#FF7C06) edge-to-edge frame, the sharp album
     cover filling the whole card behind a translucent darker-navy scrim (the
     approved "D" treatment), owner avatar straddling the seam, then
-    certifies → name → [GoodTunes | #NN] pill → caption. Square + portrait use
-    SQUARE corners (radius 0); the story keeps the approved rounded curve. Every
+    certifies → name → [GoodTunes | #NN] pill → caption. All three formats use
+    SQUARE corners (radius 0). Every
     value is in 1080-base units and multiplied by `u = w / 1080`. `artBandU` is
     the height of the transparent top spacer that holds the avatar/text rhythm. */
 type CertShapeSpec = {
@@ -724,7 +756,7 @@ const CERT_SHAPE_SPECS: Record<CardShape, CertShapeSpec> = {
     padXU: 56, padBU: 64,
   },
   story: {
-    radiusU: 66,
+    radiusU: 0,
     artBandU: "square",
     avatarU: 248, avatarMtU: -178,
     certFsU: 38, certMtU: 51,
@@ -827,6 +859,7 @@ const CertCard = forwardRef(function CertCard(
           <img
             src={album.artwork}
             alt={album.title}
+            crossOrigin="anonymous"
             className="absolute inset-0 w-full h-full object-cover object-top block"
             style={{ zIndex: 0 }}
             onError={() => setArtFailed(true)}
@@ -836,6 +869,7 @@ const CertCard = forwardRef(function CertCard(
           <img
             src={album.artwork}
             alt={album.title}
+            crossOrigin="anonymous"
             className="absolute top-0 left-0 w-full block"
             style={{
               zIndex: 0,
@@ -879,6 +913,7 @@ const CertCard = forwardRef(function CertCard(
           <img
             src={ownerPhotoUrl}
             alt=""
+            crossOrigin="anonymous"
             className="rounded-full object-cover shrink-0"
             style={{
               width: spec.avatarU * u,
@@ -934,7 +969,7 @@ const CertCard = forwardRef(function CertCard(
             boxShadow: "0 4px 14px rgba(0,0,0,0.45)",
           }}
         >
-          <img src="/goodtunes-logo-white.png" alt="GoodTunes" style={{ height: spec.logoHU * u, width: "auto", display: "block" }} />
+          <img src="/goodtunes-logo-white.png" alt="GoodTunes" crossOrigin="anonymous" style={{ height: spec.logoHU * u, width: "auto", display: "block" }} />
           <span style={{ width: 1, height: spec.divHU * u, background: "rgba(255,255,255,0.3)" }} />
           <span className="font-bold text-white" style={{ fontSize: spec.numFsU * u, letterSpacing: 0.2 }} data-testid="text-cert-serial">
             {certNumStr}

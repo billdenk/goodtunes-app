@@ -2811,6 +2811,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.on("close", () => {
       console.log(`${reqTag} CLOSE status=${res.statusCode} headersSent=${res.headersSent} writable=${res.writable}`);
     });
+    // Allow cross-origin reads of these public assets. The fan share-card
+    // export (GoodDeedCertificate → html-to-image) draws the album art /
+    // owner avatar into a canvas; without an Access-Control-Allow-Origin
+    // header a `crossOrigin="anonymous"` <img> taints that canvas and the
+    // PNG export throws. These objects are already public-ACL only, so `*`
+    // exposes nothing that GET /objects/uploads/<id> didn't already.
+    res.setHeader("Access-Control-Allow-Origin", "*");
     try {
       const file = await objectStorage.getObjectEntityFile(`/objects/uploads/${id}`);
       const acl = await getObjectAclPolicy(file);
