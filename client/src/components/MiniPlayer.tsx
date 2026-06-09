@@ -239,7 +239,7 @@ function MobileMiniPlayer() {
               <PlayerNameLinks
                 artist={currentSong.album.artist}
                 albumId={currentSong.album.id}
-                albumTitle={currentSong.album.title}
+                title={currentSong.album.title}
                 className="leading-tight"
                 segmentClassName="text-fan-secondary text-xs"
                 separatorClassName="text-fan-secondary/60 text-xs"
@@ -291,7 +291,7 @@ function MobileMiniPlayer() {
               <PlayerNameLinks
                 artist={currentSong.album.artist}
                 albumId={currentSong.album.id}
-                albumTitle={currentSong.album.title}
+                title={currentSong.album.title}
                 className="leading-tight"
                 segmentClassName="text-fan-secondary text-xs"
                 separatorClassName="text-fan-secondary/60 text-xs"

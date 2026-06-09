@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, forwardRef, useMemo, type Ref } from "reac
 import { Album } from "@/data/musicData";
 import { AlbumCover } from "@/components/ui/AlbumCover";
 import { useAuth } from "@/hooks/useAuth";
+import { AlbumCover, AlbumCoverPlaceholder } from "@/components/ui/AlbumCover";
 
 export interface ShareIdentities {
   realName?: string | null;
@@ -740,6 +741,42 @@ function certNameFontU(name: string, bases: CertShapeSpec["nameBases"], u: numbe
   const n = name.trim().length;
   const i = n <= 12 ? 0 : n <= 15 ? 1 : n <= 18 ? 2 : n <= 22 ? 3 : n <= 26 ? 4 : 5;
   return bases[i] * u;
+}
+
+/** Portrait/Story cert artwork layer.
+ *  The real artwork sits at its natural square height with a bottom-dissolve mask
+ *  (height:auto + mask on the img itself — can't be expressed via AlbumCover's
+ *  inner img class). On error, falls back to the shared AlbumCoverPlaceholder. */
+function CertPortraitArt({ album }: { album: Album }) {
+  const [artFailed, setArtFailed] = useState(false);
+
+  if (album.artwork && !artFailed) {
+    return (
+      <img
+        src={album.artwork}
+        alt={album.title}
+        className="absolute top-0 left-0 w-full block"
+        style={{
+          zIndex: 0,
+          height: "auto",
+          WebkitMaskImage: COVER_BOTTOM_MASK,
+          maskImage: COVER_BOTTOM_MASK,
+        }}
+        data-testid="img-cert-art"
+        onError={() => setArtFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <AlbumCoverPlaceholder
+      artistPhotoUrl={(album as any).primaryArtistPhotoUrl ?? null}
+      albumTitle={album.title}
+      className="absolute inset-0 w-full h-full"
+      compact={false}
+      testId="img-cert-art"
+    />
+  );
 }
 
 const CertCard = forwardRef(function CertCard(

@@ -410,6 +410,38 @@ function normalizeAlbumType(value: unknown): "Single" | "Duo" | "EP" | "LP" {
   return "LP";
 }
 
+// Resolves the primary artist's profile photo URL for album cover
+// placeholder rendering. Returns null when there's no primaryArtistId, the
+// person doesn't exist, or the person has no photo. Best-effort: never throws.
+async function resolveArtistPhotoUrl(primaryArtistId: string | null | undefined): Promise<string | null> {
+  if (!primaryArtistId) return null;
+  try {
+    const person = await storage.getPersonById(primaryArtistId);
+    return (person as any)?.photoUrl ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Enriches a batch of albums with their primary artist photo URL in one
+// parallel pass, deduplicating person lookups so a shared artist only
+// fetches once. Used by the /api/albums list route.
+async function batchEnrichWithArtistPhotos<T extends { primaryArtistId?: string | null }>(
+  albums: T[],
+): Promise<Array<T & { artistPhoto: string | null }>> {
+  const ids = [...new Set(albums.map((a) => a.primaryArtistId).filter((id): id is string => !!id))];
+  const photoMap = new Map<string, string | null>();
+  await Promise.all(
+    ids.map(async (id) => {
+      photoMap.set(id, await resolveArtistPhotoUrl(id));
+    }),
+  );
+  return albums.map((a) => ({
+    ...a,
+    artistPhoto: a.primaryArtistId ? (photoMap.get(a.primaryArtistId) ?? null) : null,
+  }));
+}
+
 // Resolves a primaryArtistId payload: null / empty → null, otherwise looks
 // up the People row to confirm it exists. Unknown ids are silently dropped
 // to null so the admin save can't 500 on a stale picker selection.
@@ -18775,6 +18807,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       ...a,
       isExplicit: a.isExplicit || explicitAlbumIds.has(a.id),
     }));
+    // Resolve primary-artist photos in a single batched pass (deduped by id)
+    // so album-cover placeholders are available on every surface that reads
+    // from this list endpoint.
+    const enrichedWithPhotos = await batchEnrichWithArtistPhotos(enriched);
     // Task #1873 — fail-closed partner scoping.  Every partner-admin role
     // is scoped to its own entity and returns nothing when unattached.
     // Only operators (super_admin/admin) fall through to the full catalog.
@@ -18797,12 +18833,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             ((rosterRows as any).rows || []).map((r: any) => r.id as string),
           );
         }
-        const scoped = filterAlbumsForPartnerRole(enriched, info, managerRoster);
+        const scoped = filterAlbumsForPartnerRole(enrichedWithPhotos, info, managerRoster);
         if (scoped !== null) return res.json(scoped);
         // scoped===null means operator → fall through to full catalog below.
       }
     }
-    return res.json(enriched);
+    return res.json(enrichedWithPhotos);
   });
 
   // Task #965 — PUBLIC per-release resolver for clean share links
@@ -18875,7 +18911,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const songs = await storage.getSongsByAlbum(album.id);
     const derivedExplicit =
       album.isExplicit || songs.some((s) => (s as any).isExplicit === true);
-    return res.json({ ...album, isExplicit: derivedExplicit, songs });
+    const artistPhoto = await resolveArtistPhotoUrl((album as any).primaryArtistId);
+    return res.json({ ...album, isExplicit: derivedExplicit, artistPhoto, songs });
   });
 
   // Task #1310 — PUBLIC two-part share-link resolver
@@ -18938,7 +18975,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const songs = await storage.getSongsByAlbum(album.id);
     const derivedExplicit =
       album.isExplicit || songs.some((s) => (s as any).isExplicit === true);
-    return res.json({ ...album, isExplicit: derivedExplicit, songs });
+    const artistPhoto = await resolveArtistPhotoUrl((album as any).primaryArtistId);
+    return res.json({ ...album, isExplicit: derivedExplicit, artistPhoto, songs });
   });
 
   // Task #1778 — the standalone "Coming <date>" teaser endpoints were retired:
@@ -18992,7 +19030,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // album-level flag the consumer header reads.
     const derivedExplicit =
       album.isExplicit || songs.some((s) => (s as any).isExplicit === true);
-    return res.json({ ...album, isExplicit: derivedExplicit, songs });
+    const artistPhoto = await resolveArtistPhotoUrl((album as any).primaryArtistId);
+    return res.json({ ...album, isExplicit: derivedExplicit, artistPhoto, songs });
   });
 
   // Catalog-wide song list. PlayerContext fetches this once and builds an

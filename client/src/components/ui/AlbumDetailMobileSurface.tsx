@@ -13,6 +13,7 @@ import { ChevronLeft, Share, MoreHorizontal, Info, Lock } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { SiSpotify, SiApplemusic } from "react-icons/si";
 import { IconButton } from "@/components/ui/IconButton";
+import { AlbumCover } from "@/components/ui/AlbumCover";
 import { ChromeScrim } from "@/components/ui/ChromeScrim";
 import { FAN_TOP_CHROME_INSET } from "@/components/ui/SheetChrome";
 import { useTopChromeFrost } from "@/hooks/useTopChromeFrost";

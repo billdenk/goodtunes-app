@@ -48,6 +48,7 @@ import { useFavoriteSongs } from "@/hooks/useFavorites";
 import { toast } from "@/hooks/use-toast";
 import { IconButton } from "@/components/ui/IconButton";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
+import { AlbumCover } from "@/components/ui/AlbumCover";
 import { GearDetailBody, type GearArtist, type GearArtistNote } from "@/components/gear/GearDetailBody";
 import { ChevronLeft, Share, MoreHorizontal, Lock, ShieldCheck, Music2, ArrowRight, Eye } from "lucide-react";
 import { buyEnabled, nativeDownloadsEnabled, streamingHandoffEnabled } from "@/lib/platform";
@@ -1234,7 +1235,7 @@ function AlbumDetailMobile({
         {buyEnabled && salesBeginLabel && (
           <SalesBeginArrivalModal
             albumId={album.id}
-            albumTitle={album.title}
+            title={album.title}
             artist={album.artist}
             salesBeginLabel={salesBeginLabel}
           />
@@ -1455,7 +1456,7 @@ function AlbumDetailMobile({
             songId={creditsForSong.id}
             songTitle={creditsForSong.title}
             albumId={album.id}
-            albumTitle={album.title}
+            title={album.title}
             artist={album.artist}
             credits={songCreditsPayload(getCredits(creditsForSong.id), creditsForSong.id, peopleById)}
             rigs={apiAlbumCredits?.bySongId?.[creditsForSong.id]?.rigs}
@@ -1502,7 +1503,7 @@ function AlbumDetailMobile({
         {showAlbumCredits && albumCreditGroups.length > 0 && (
           <AlbumCreditsSheet
             albumId={album.id}
-            albumTitle={album.title}
+            title={album.title}
             artist={album.artist}
             credits={apiAlbumCredits ?? {}}
             album={album}
@@ -1567,7 +1568,13 @@ export function ProvenanceSheet({ album, ownerName, certNum, onClose, onViewGood
 
         <div className="px-5 mb-4 flex-shrink-0">
           <div className="flex items-center gap-3 p-3 rounded-2xl" style={{ background: "rgba(74,255,202,0.08)", border: "1px solid rgba(74,255,202,0.2)" }}>
-            <img src={album.artwork} alt={album.title} className="w-12 h-12 rounded-xl object-cover" />
+            <AlbumCover
+              artwork={album.artwork}
+              artistPhoto={album.artistPhoto}
+              title={album.title}
+              className="w-12 h-12 rounded-xl flex-shrink-0"
+              compact
+            />
             <div className="flex-1 min-w-0">
               <p className="text-fan-primary text-sm font-semibold truncate">Certificate #{certNum}</p>
               <p className="text-fan-secondary text-xs mt-0.5 truncate">Currently held by {ownerName}</p>

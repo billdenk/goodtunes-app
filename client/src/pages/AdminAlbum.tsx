@@ -88,6 +88,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
+import { AlbumCover } from "@/components/ui/AlbumCover";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { AlbumPreviewCard } from "@/components/admin/previews/AlbumPreviewCard";
@@ -1500,7 +1501,7 @@ export function AdminAlbum() {
               {safeTab === "sell" && allowed.has("sell") && (
                 <SellPanel
                   albumId={album.id}
-                  albumTitle={album.title}
+                  title={album.title}
                   artistName={album.artist}
                   primaryArtistId={album.primaryArtistId ?? null}
                   artworkUrl={album.artwork}

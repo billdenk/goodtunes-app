@@ -997,7 +997,7 @@ export function AlbumDetailDesktop({
       {buyEnabled && salesBeginLabel && album && (
         <SalesBeginArrivalModal
           albumId={album.id}
-          albumTitle={album.title}
+          title={album.title}
           artist={album.artist}
           salesBeginLabel={salesBeginLabel}
         />
@@ -1108,7 +1108,7 @@ export function AlbumDetailDesktop({
       {showAlbumCredits && effectiveOwned && hasAnyCredits && album ? (
         <AlbumCreditsPage
           album={album as unknown as PlayerAlbum}
-          albumTitle={album.title}
+          title={album.title}
           artist={album.artist}
           credits={albumCredits ?? {}}
           onClose={() => setShowAlbumCredits(false)}
@@ -1116,7 +1116,7 @@ export function AlbumDetailDesktop({
       ) : creditsForSong && effectiveOwned && album ? (
         <AlbumCreditsPage
           album={album as unknown as PlayerAlbum}
-          albumTitle={creditsForSong.title}
+          title={creditsForSong.title}
           artist={`${album.artist} · ${album.title}`}
           eyebrow="Song Credits"
           credits={scopedCreditsFor(creditsForSong.id)}

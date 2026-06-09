@@ -38,6 +38,11 @@ export interface AlbumCoverProps {
    * name overlay and empties the alt text.
    */
   decorative?: boolean;
+  /** Native img loading hint. Defaults to "lazy". Use "eager" for above-the-fold art. */
+  loading?: "lazy" | "eager";
+  /** Inline style applied to the real-artwork <img> element.
+   *  Used for cases that need non-standard img layout (e.g. cert portrait mask). */
+  imgStyle?: React.CSSProperties;
 }
 
 // Brand-toned fallback tile (no artist photo): navy base lit by faint blue
@@ -58,6 +63,8 @@ export function AlbumCover({
   showName = true,
   className = "",
   decorative = false,
+  loading = "lazy",
+  imgStyle,
 }: AlbumCoverProps) {
   // Track load failures so a dead artwork/photo URL falls through to the next
   // tier instead of showing the broken glyph. Reset when the URL changes so
@@ -74,25 +81,49 @@ export function AlbumCover({
         src={artwork as string}
         alt={decorative ? "" : title}
         aria-hidden={decorative || undefined}
-        loading="lazy"
+        loading={loading}
         decoding="async"
         onError={() => setArtFailed(true)}
         className={`w-full h-full object-cover ${className}`}
+        style={imgStyle}
         data-testid="album-cover-art"
       />
     );
   }
 
-  const hasPhoto = !!artistPhoto && !photoFailed;
-  const overlayName = showName && !decorative;
+  return (
+    <AlbumCoverPlaceholder
+      artistPhoto={artistPhoto ?? null}
+      title={title}
+      showName={showName && !decorative}
+      className={className}
+    />
+  );
+}
 
+interface PlaceholderInnerProps {
+  artistPhoto: string | null;
+  title: string;
+  showName: boolean;
+  photoFailed: boolean;
+  onPhotoError: () => void;
+  className?: string;
+}
+
+/** Internal placeholder renderer shared by AlbumCover and AlbumCoverPlaceholder. */
+function PlaceholderInner({
+  artistPhoto,
+  title,
+  showName,
+  photoFailed,
+  onPhotoError,
+  className = "",
+}: PlaceholderInnerProps) {
+  const hasPhoto = !!artistPhoto && !photoFailed;
   return (
     <div
       className={`relative w-full h-full overflow-hidden ${className}`}
       style={{
-        // Container-query context so the overlaid name scales with the
-        // cover's actual rendered size (large on the detail hero, hidden
-        // on tiny surfaces via showName=false).
         containerType: "size",
         background: hasPhoto ? "var(--brand-bg)" : BRAND_TILE_BACKGROUND,
       }}
@@ -105,10 +136,8 @@ export function AlbumCover({
           aria-hidden
           loading="lazy"
           decoding="async"
-          onError={() => setPhotoFailed(true)}
+          onError={onPhotoError}
           className="absolute inset-0 w-full h-full object-cover"
-          // Ghost the photo: desaturate + darken so it never reads as the
-          // album's real, chosen art.
           style={{ filter: "grayscale(0.35) brightness(0.5)" }}
         />
       )}
@@ -122,13 +151,11 @@ export function AlbumCover({
             : "radial-gradient(circle at 50% 50%, transparent 35%, rgba(var(--brand-bg-rgb), 0.45) 100%)",
         }}
       />
-      {overlayName && (
+      {showName && (
         <div className="absolute inset-0 flex items-center justify-center text-center px-[8%]">
           <span
             className="font-semibold text-white leading-tight line-clamp-4"
             style={{
-              // 12% of the cover's width, clamped so it stays readable on a
-              // small card yet doesn't dominate the large detail hero.
               fontSize: "clamp(11px, 12cqw, 34px)",
               textShadow: "0 1px 8px rgba(0,0,0,0.5)",
             }}
@@ -139,5 +166,39 @@ export function AlbumCover({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Standalone branded placeholder — the ghosted-artist-photo + album-name tile
+ * shown when no artwork is available.
+ *
+ * Exported for surfaces that render the real artwork themselves with custom
+ * layout (e.g. the GoodDeed cert portrait/story shape where the img needs
+ * `height:auto` + a bottom-dissolve mask that can't live inside AlbumCover).
+ */
+export function AlbumCoverPlaceholder({
+  artistPhoto,
+  title,
+  showName = true,
+  className = "",
+}: {
+  artistPhoto?: string | null;
+  title: string;
+  showName?: boolean;
+  className?: string;
+}) {
+  const [photoFailed, setPhotoFailed] = useState(false);
+  useEffect(() => setPhotoFailed(false), [artistPhoto]);
+
+  return (
+    <PlaceholderInner
+      artistPhoto={artistPhoto ?? null}
+      title={title}
+      showName={showName}
+      photoFailed={photoFailed}
+      onPhotoError={() => setPhotoFailed(true)}
+      className={className}
+    />
   );
 }

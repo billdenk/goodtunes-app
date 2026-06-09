@@ -6,6 +6,7 @@ import { formatDuration } from "@/data/musicData";
 import { useRailDrag } from "@/lib/useRailDrag";
 import { LyricsIcon } from "@/components/ui/LyricsIcon";
 import { IconButton } from "@/components/ui/IconButton";
+import { AlbumCover } from "@/components/ui/AlbumCover";
 import { SyncedLyrics } from "@/components/ui/SyncedLyrics";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { PlayerNameLinks } from "@/components/ui/PlayerNameLinks";
@@ -479,7 +480,13 @@ export function Player() {
                 transition: "transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)",
               }}
             >
-              <img src={currentSong.album.artwork} alt={currentSong.album.title} className="w-full h-full object-cover" />
+              <AlbumCover
+                artwork={currentSong.album.artwork}
+                artistPhoto={currentSong.album.artistPhoto}
+                title={currentSong.album.title}
+                className="w-full h-full"
+                loading="eager"
+              />
             </div>
 
             {/* Middle cluster — title + progress + transport, vertically centered
@@ -505,7 +512,7 @@ export function Player() {
                 <PlayerNameLinks
                   artist={currentSong.album.artist}
                   albumId={currentSong.album.id}
-                  albumTitle={currentSong.album.title}
+                  title={currentSong.album.title}
                   onNavigate={() => setShowPlayer(false)}
                   className="mt-0.5"
                   segmentClassName="text-white/55 text-sm"
