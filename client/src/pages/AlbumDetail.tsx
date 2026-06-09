@@ -907,8 +907,16 @@ function AlbumDetailMobile({
     if (queue.length === 0) return;
     if (currentIndex !== queue.length - 1) return;
     if (currentTime < previewEndSec - 0.5) return;
+    // On a campaign/offer surface, land the fan on the "Get Details" overview
+    // (the LockedOfferModal) rather than the bare Cart BuySheet. The modal's
+    // own onBuy hands off to BuySheet from there.
+    if (lockedPreview || publicPreview) {
+      setOfferStartAtBundle(false);
+      setShowOfferModal(true);
+      return;
+    }
     setShowBuySheet(true);
-  }, [isPlaying, previewMode, queue.length, currentIndex, currentTime, previewEndSec, isOwned, apiAlbum?.goodTunesReleaseDate]);
+  }, [isPlaying, previewMode, queue.length, currentIndex, currentTime, previewEndSec, isOwned, apiAlbum?.goodTunesReleaseDate, lockedPreview, publicPreview]);
 
   // Leaving the album shouldn't leave preview-mode armed on whatever
   // the fan plays next (a downloaded album from their library, a

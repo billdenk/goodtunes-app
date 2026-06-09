@@ -594,6 +594,14 @@ export function AlbumDetailDesktop({
     if (player.queue.length === 0) return;
     if (player.currentIndex !== player.queue.length - 1) return;
     if (player.currentTime < player.previewEndSec - 0.5) return;
+    // On a campaign/offer surface, land the fan on the "Get Details" overview
+    // (the LockedOfferModal) rather than the bare Cart BuySheet. The modal's
+    // own onBuy hands off to BuySheet from there.
+    if (lockedPreview || publicPreview) {
+      setOfferStartAtBundle(false);
+      setShowOfferModal(true);
+      return;
+    }
     setBuyAddons({ signedCert: false });
     setShowBuySheet(true);
   }, [
@@ -604,6 +612,8 @@ export function AlbumDetailDesktop({
     player.currentTime,
     effectiveOwned,
     salesPending,
+    lockedPreview,
+    publicPreview,
   ]);
 
   // Task #1628 — single source-of-truth lock: the Buy sheet must never stay
