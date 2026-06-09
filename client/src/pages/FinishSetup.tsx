@@ -32,6 +32,17 @@ import { useToast } from "@/hooks/use-toast";
 const HANDLE_RE = /^[a-z0-9._-]{3,30}$/;
 const HANDLE_STRIP = /[^a-z0-9._-]/g;
 
+// Build a few tasteful fallback handles from what the fan typed, so a
+// taken/reserved pick is never a dead end. Candidates are validated against
+// HANDLE_RE (which also caps length at 30) and probed for availability before
+// any are shown.
+function buildHandleCandidates(base: string): string[] {
+  const root = base.replace(HANDLE_STRIP, "").slice(0, 28);
+  if (root.length < 2) return [];
+  return [`${root}.1`, `${root}.2`, `${root}.3`, `${root}music`, `${root}.official`]
+    .filter((c) => HANDLE_RE.test(c));
+}
+
 type SetupState = {
   isComplete: boolean;
   suggestedHandle: string;
@@ -71,8 +82,10 @@ export function FinishSetup() {
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [handleStatus, setHandleStatus] = useState<HandleStatus>({ kind: "idle" });
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const checkTimer = useRef<number | null>(null);
+  const suggestSeq = useRef(0);
 
   // Load the pre-fill + private-relay flag. If the row already shows
   // `isComplete` (fan navigated here on purpose) bounce them home.
@@ -126,6 +139,41 @@ export function FinishSetup() {
     };
   }, [handle]);
 
+  // When the chosen handle is taken or reserved, surface a few available
+  // alternatives the fan can tap — so they're never stuck on a dead-end pick
+  // with no way forward. (The full artist-reclaim-with-temp-handle flow is
+  // tracked separately; this is the everyday "pick another" path.)
+  useEffect(() => {
+    // Bump the sequence on EVERY run so any in-flight probe from a previous
+    // handle/status is poisoned and can't commit stale chips later.
+    const seq = ++suggestSeq.current;
+    if (handleStatus.kind !== "taken" && handleStatus.kind !== "reserved") {
+      setSuggestions([]);
+      return;
+    }
+    // Drop old chips immediately so nothing stale shows while we re-probe.
+    setSuggestions([]);
+    const candidates = buildHandleCandidates(handle);
+    if (candidates.length === 0) {
+      return;
+    }
+    (async () => {
+      const checked = await Promise.all(
+        candidates.map(async (c) => {
+          try {
+            const r = await apiRequest("GET", `/api/auth/handle-available?u=${encodeURIComponent(c)}`);
+            const j: { ok: boolean } = await r.json();
+            return j.ok ? c : null;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      if (seq !== suggestSeq.current) return;
+      setSuggestions(checked.filter((c): c is string => c !== null).slice(0, 3));
+    })();
+  }, [handleStatus.kind, handle]);
+
   const handleHint = useMemo(() => {
     switch (handleStatus.kind) {
       case "ok":       return { text: `@${handle} is available`, tone: "ok" as const };
@@ -170,6 +218,20 @@ export function FinishSetup() {
     } finally {
       setSaving(false);
     }
+  }
+
+  // Escape hatch — the router gates every route to this screen until signup is
+  // complete, so without this a fan who can't get the handle they want (or who
+  // landed here signed in as the wrong account) would be trapped with no way
+  // back. Sign out and hard-reload to a clean login.
+  async function useDifferentAccount() {
+    try {
+      await apiRequest("POST", "/api/logout");
+    } catch {
+      /* ignore — we're leaving regardless */
+    }
+    queryClient.clear();
+    window.location.href = "/";
   }
 
   if (loadErr) {
@@ -225,6 +287,27 @@ export function FinishSetup() {
         <p className="mt-1 text-xs text-white/40">
           Handles that match a famous artist may be reclaimed by that artist's team later.
         </p>
+
+        {/* Never a dead end: when the pick is taken/reserved, offer a few
+            available alternatives the fan can tap to fill the field. */}
+        {(handleStatus.kind === "taken" || handleStatus.kind === "reserved") && suggestions.length > 0 && (
+          <div className="mt-3" data-testid="handle-suggestions">
+            <p className="text-xs text-fan-secondary">Available instead — tap to use:</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {suggestions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setHandle(s)}
+                  className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-white hover:border-[var(--brand-blue)] transition-colors"
+                  data-testid={`button-suggest-${s}`}
+                >
+                  @{s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Full name — drives the profile header + avatar initials. Apple
             "Hide My Email" withholds this, so it's pre-filled when the
@@ -295,6 +378,16 @@ export function FinishSetup() {
           data-testid="button-finish-setup"
         >
           {saving ? "Saving…" : "Continue"}
+        </button>
+
+        {/* Escape hatch so a fan can never get trapped on the gate. */}
+        <button
+          type="button"
+          onClick={useDifferentAccount}
+          className="mt-6 w-full text-center text-sm text-fan-secondary hover:text-fan-primary transition-colors"
+          data-testid="button-use-different-account"
+        >
+          Use a different account
         </button>
       </div>
     </main>
