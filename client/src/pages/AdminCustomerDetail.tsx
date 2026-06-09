@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { Link, useRoute } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Mail, Phone, MapPin, ShoppingBag, Disc3, ListMusic, CheckCircle2, Plus, X, Search } from "lucide-react";
+import { ArrowLeft, ExternalLink, Mail, Phone, MapPin, ShoppingBag, Disc3, ListMusic, CheckCircle2, Plus, X, Search, Link2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -152,6 +152,35 @@ export function AdminCustomerDetail() {
   const isSuperAdmin = meRole?.role === "super_admin";
   const [promoteOpen, setPromoteOpen] = useState(false);
 
+  // Operator escape hatch — when a fan can't get in (email landed in spam, a
+  // dead/typo'd address, an already-used welcome-back link) mint a fresh
+  // single-use sign-in link and hand it to them directly. super_admin only
+  // (account-takeover power); the server re-checks the role.
+  const [signInLink, setSignInLink] = useState<string | null>(null);
+  const signInLinkMutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/customers/${id}/signin-link`);
+      return (await r.json()) as { url: string; expiresAt: string };
+    },
+    onSuccess: async (res) => {
+      setSignInLink(res.url);
+      try {
+        await navigator.clipboard.writeText(res.url);
+        toast({
+          title: "Sign-in link copied",
+          description: "Paste it to the fan — it works once and expires in 30 days.",
+        });
+      } catch {
+        toast({
+          title: "Sign-in link ready",
+          description: "Copy it from the box below and send it to the fan.",
+        });
+      }
+    },
+    onError: (e: Error) =>
+      toast({ title: "Couldn't generate a sign-in link", description: e.message, variant: "destructive" }),
+  });
+
   if (authLoading) {
     return (
       <AdminFrame active="customers">
@@ -300,6 +329,18 @@ export function AdminCustomerDetail() {
           }
           actions={
             <div className="flex items-center gap-2">
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={() => signInLinkMutation.mutate()}
+                  disabled={signInLinkMutation.isPending}
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  data-testid="button-signin-link"
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                  {signInLinkMutation.isPending ? "Generating…" : "Sign-in link"}
+                </button>
+              )}
               {/* Task #1342 (#5) — quiet, super_admin-only promote action.
                   Light text, not a loud button, so it stays out of the way
                   for the common read-only case. */}
@@ -328,6 +369,42 @@ export function AdminCustomerDetail() {
             </div>
           }
         />
+
+        {signInLink && (
+          <div
+            className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2"
+            data-testid="panel-signin-link"
+          >
+            <p className="text-xs text-slate-600">
+              One-tap sign-in link for {name}. Send it directly to the fan — it works once and
+              expires in 30 days.
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={signInLink}
+                onFocus={(e) => e.currentTarget.select()}
+                className="flex-1 min-w-0 h-9 px-3 rounded-md border border-slate-200 bg-white text-sm text-slate-700"
+                data-testid="input-signin-link"
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(signInLink);
+                    toast({ title: "Copied" });
+                  } catch {
+                    /* clipboard blocked — the field is selectable as a fallback */
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors flex-shrink-0"
+                data-testid="button-copy-signin-link"
+              >
+                Copy
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Top stat strip — keeps the most-asked numbers visible without
             making the operator count rows in each section. */}

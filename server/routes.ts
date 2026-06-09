@@ -26016,6 +26016,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Operator escape hatch — mint a fresh single-use sign-in link for a fan
+  // when transactional email fails to reach them (Gmail spam-filtering, a
+  // dead/typo'd address, an already-consumed welcome-back link). It's the
+  // SAME 30-day single-use token the welcome-back email uses, so redeeming
+  // it signs the fan straight into their library regardless of whether they
+  // have a password or are already onboarded. The operator hands the link to
+  // the fan out-of-band (text/Signal). Account-takeover power, so it's gated
+  // to super_admin only — matching the sibling promote/grant-album routes
+  // (requireAdmin alone admits partner accounts).
+  app.post(
+    "/api/admin/customers/:id/signin-link",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      try {
+        const customerId = String(req.params.id);
+        const customer = await storage.getCustomer(customerId);
+        if (!customer) return res.status(404).json({ message: "Customer not found" });
+        if ((customer as any).mergedIntoId) {
+          return res
+            .status(409)
+            .json({ message: "This account was merged into another and can no longer sign in." });
+        }
+        const { mintWelcomeBackToken, customerOriginFromReq } = await import("./welcomeBack");
+        const raw = await mintWelcomeBackToken(customerId);
+        const origin = customerOriginFromReq(req);
+        const url = `${origin}/api/welcome-back/redeem/${raw}`;
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        console.log(
+          `[admin] sign-in link minted for customer ${customerId} by user ${req.session.userId}`,
+        );
+        res.json({ url, expiresAt });
+      } catch (err) {
+        console.error("[admin] signin-link mint failed:", err);
+        res.status(500).json({ message: "Couldn't generate a sign-in link, please try again" });
+      }
+    },
+  );
+
   // Demo-only: super_admin grants a fan a comp album so we can show the
   // player flow without standing up a real purchase. Lives next to the
   // customer profile route since the UI dock is on the same page. Uses

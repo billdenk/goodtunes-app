@@ -59,7 +59,7 @@ function hashToken(raw: string): string {
   return createHash("sha256").update(raw).digest("hex");
 }
 
-function customerOriginFromReq(req: Request): string {
+export function customerOriginFromReq(req: Request): string {
   // In production the welcome-back link MUST resolve to the canonical
   // customer host (`my.goodtunes.music`) regardless of the host the
   // request came in on. Admin-triggered sends originate from the admin
@@ -807,7 +807,7 @@ export function registerWelcomeBackRoutes(
 
 // ─── token-minting helper (also used by admin /send) ────────────
 
-async function mintWelcomeBackToken(customerId: string): Promise<string> {
+export async function mintWelcomeBackToken(customerId: string): Promise<string> {
   const raw = generateRawToken();
   const hash = hashToken(raw);
   await db.insert(welcomeBackTokens).values({
