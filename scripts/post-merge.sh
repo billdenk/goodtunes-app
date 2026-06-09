@@ -6055,7 +6055,7 @@ sync_github_build_mirror() {
 # Task #1873 — ensure Nightbirde's manager_id link is set on every DB clone
 # (prod already carried this link; dev clones may not).  Idempotent +
 # marker-guarded so a future merge never clobbers an operator's manual choice.
-run_psql "$DATABASE_URL" <<'SQL'
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
 CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
   name        text PRIMARY KEY,
   applied_at  timestamp NOT NULL DEFAULT now()
@@ -6085,7 +6085,6 @@ BEGIN
   END IF;
 END
 $$;
-COMMIT;
 SQL
 
 sync_github_build_mirror
