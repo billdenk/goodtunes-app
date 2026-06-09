@@ -486,6 +486,19 @@ describe("parseWeTransferShareUrl", () => {
     });
   });
 
+  test("parses a canonical URL on the www. host", () => {
+    // WeTransfer serves the same share links on both wetransfer.com and
+    // www.wetransfer.com; the www. variant must parse identically (the
+    // routes.ts host allow-list already accepts it).
+    const result = parseWeTransferShareUrl(
+      new URL("https://www.wetransfer.com/downloads/abc123def456/7890ab1234cd56ef"),
+    );
+    assert.deepStrictEqual(result, {
+      transferId: "abc123def456",
+      securityHash: "7890ab1234cd56ef",
+    });
+  });
+
   test("parses a /downloads/<id>/<hash>/download variant", () => {
     const result = parseWeTransferShareUrl(
       new URL(

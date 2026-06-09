@@ -212,6 +212,15 @@ export async function extractKeptZipEntries(
 // `isPrivateIp`). Kept here so they're unit-testable without booting the
 // 21k-line routes.ts module (which opens DB/stripe handles).
 
+// Canonical WeTransfer share links appear on both the bare apex
+// (wetransfer.com) and the www. host (www.wetransfer.com), so collapse a
+// leading www. before host comparisons. This keeps the apex/www variants in
+// lockstep with the routes.ts WETRANSFER_SHARE_HOSTS allow-list (which already
+// lists www.wetransfer.com).
+function normalizeWeTransferHost(u: URL): string {
+  return u.hostname.toLowerCase().replace(/^www\./, "");
+}
+
 // Returns true for any wetransfer.com, we.tl, OR *.wetransfer.com URL.
 // The subdomain case captures account-specific pages like
 // <name>.wetransfer.com/previews/... so the dispatcher routes them into
@@ -239,7 +248,7 @@ export function isWeTransferUrl(raw: string): boolean {
 export function isWeTransferPreviewUrl(raw: string): boolean {
   try {
     const u = new URL(raw);
-    if (u.hostname.toLowerCase() !== "wetransfer.com") return false;
+    if (normalizeWeTransferHost(u) !== "wetransfer.com") return false;
     return /^\/previews\//i.test(u.pathname);
   } catch {
     return false;
@@ -257,7 +266,7 @@ export function isWeTransferPreviewUrl(raw: string): boolean {
 export function parseWeTransferShareUrl(
   u: URL,
 ): { transferId: string; securityHash: string } | null {
-  if (u.hostname.toLowerCase() !== "wetransfer.com") return null;
+  if (normalizeWeTransferHost(u) !== "wetransfer.com") return null;
   // 3-segment: /downloads/<id>/<recipient>/<hash>(/download)?
   // The negative lookahead (?!download\/?$) prevents misidentifying a
   // 2-segment+/download URL as a 3-segment one by ensuring the optional
