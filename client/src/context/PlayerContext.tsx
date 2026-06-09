@@ -888,6 +888,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }
     };
     const onEnded = () => {
+      // The gesture-bless silent WAV (data:audio/wav src, 0 audio bytes) fires
+      // `ended` immediately after the in-gesture play() call in playSong on iOS
+      // web. If the song queue is already set at that moment, handleNext() would
+      // advance it past the track the user just tapped — producing no audio. Skip
+      // the advancement for the silent bless clip; only react to a real source.
+      if (a.src.startsWith("data:audio/wav")) return;
       milestonesRef.current.completed = true;
       handleNext(false);
     };
@@ -950,6 +956,27 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     // resolveStream issues is permitted on iOS/desktop Safari. No-ops once
     // unlocked, and harmless when called outside a gesture (autoplay/next).
     ensureAudioUnlocked();
+    // iOS-web extra bless: ensureAudioUnlocked() is idempotent — it no-ops
+    // once audioUnlockedRef.current is true (set after the first successful
+    // play() in a touchend listener fires before this click handler). On iOS
+    // WebKit the existing bless can be silently reset by the media-element
+    // load algorithm when attachSrc later assigns `a.src = muxUrl` (even
+    // without an explicit a.load()). Re-issuing play() HERE — inside the
+    // synchronous click/tap handler — gives a FRESH gesture-bound bless that
+    // is at most as old as this tap, not an earlier touchend. The deferred
+    // a.play() in attachSrc (after the async Mux URL fetch) then succeeds on
+    // the first tap. Only applies when no real Mux/offline source is already
+    // attached; the `hasRealSrc` branch of ensureAudioUnlocked already covers
+    // the resume case (real src present → play() called in-gesture above).
+    if (isWebIOS) {
+      const _a = audioRef.current;
+      if (_a && (!_a.src || _a.src.startsWith("data:audio/wav"))) {
+        const SILENT_WAV =
+          "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+        if (!_a.src) _a.src = SILENT_WAV;
+        try { _a.play().catch(() => {}); } catch { /* best-effort */ }
+      }
+    }
     // Hydrate every song in the incoming queue against the DB so GoodSync
     // cues + real audioUrl + canonical lyrics light up regardless of which
     // surface assembled the queue (album page, artist page, Songs tab,
