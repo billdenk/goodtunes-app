@@ -76,6 +76,13 @@ type ApiSong = {
   isPreviewable?: boolean | null;
   previewStartMs?: number | null;
   previewEndMs?: number | null;
+  // Mux streaming fields — the fan player resolves the signed HLS URL off
+  // muxPlaybackId + muxStatus === "ready". Omitting them here silently
+  // strips the master reference from the PlayerSong, so resolveStream bails
+  // before requesting a signed URL (phantom "playing", no sound).
+  muxPlaybackId?: string | null;
+  muxStatus?: string | null;
+  muxAssetId?: string | null;
 };
 type ApiAlbum = {
   id: string;
@@ -417,6 +424,11 @@ export function AlbumDetailDesktop({
         audioUrl: s.audioUrl ?? undefined,
         syncedLyrics: s.syncedLyrics ?? null,
         isExplicit: !!s.isExplicit,
+        // Carry the Mux master reference through to the player. Without these
+        // the fan player has no streamable source and never signs a URL.
+        muxPlaybackId: s.muxPlaybackId ?? null,
+        muxStatus: s.muxStatus ?? null,
+        muxAssetId: s.muxAssetId ?? null,
         album: albumForSong,
       })) as PlayerSong[];
   }, [album, songs, effectiveOwned]);
