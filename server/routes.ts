@@ -1126,12 +1126,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       .where(eq(reservedHandles.handle, handle))
       .limit(1);
     if (reserved) return { ok: false, reason: "reserved" };
+    // A handle isn't truly free unless claiming it can actually be written.
+    // complete-signup mirrors `username = handle` (to keep legacy surfaces —
+    // playlist URLs, welcome-back, admin search — working), and `username`
+    // carries its own global unique constraint. Legacy gogoods-imported fans
+    // got a `username` auto-derived from their email local-part but never a
+    // `handle`, so a candidate can look free on the `handle` column yet still
+    // collide on `username` at write time (→ a raw 500). Check BOTH columns so
+    // the picker reports "taken" honestly. Exclude the caller's own row so a
+    // fan re-submitting their current handle/username isn't self-blocked.
+    const selfId = selfCustomerId ?? "00000000-0000-0000-0000-000000000000";
     const [taken] = await db
       .select({ id: customerUsers.id })
       .from(customerUsers)
-      .where(sql`lower(${customerUsers.handle}) = ${handle}`)
+      .where(
+        sql`(lower(${customerUsers.handle}) = ${handle} OR lower(${customerUsers.username}) = ${handle}) AND ${customerUsers.id} <> ${selfId}`,
+      )
       .limit(1);
-    if (taken && taken.id !== selfCustomerId) {
+    if (taken) {
       return { ok: false, reason: "taken" };
     }
     return { ok: true, reason: null };
@@ -1259,8 +1271,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const photoUrl = await storage.getProfilePhoto(updated.id);
       return res.json(shapeCustomer(updated, photoUrl));
     } catch (err: any) {
-      if (String(err?.message ?? "").includes("customer_users_handle_lower_uniq") ||
-          String(err?.code) === "23505") {
+      // Drizzle wraps the driver error, so the real Postgres SQLSTATE lives on
+      // `err.cause.code` (not `err.code`) — see the cached-plan unwrap note.
+      // Either unique index can fire: the new partial `customer_users_handle_
+      // lower_uniq` OR the legacy `customer_users_username_unique` (mirrored
+      // write). Catch both + the bare 23505 so a race surfaces as a friendly
+      // "pick another" instead of a raw 500.
+      const code = String(err?.cause?.code ?? err?.code ?? "");
+      const blob = `${err?.message ?? ""} ${err?.cause?.message ?? ""}`;
+      if (
+        code === "23505" ||
+        blob.includes("customer_users_handle_lower_uniq") ||
+        blob.includes("customer_users_username_unique")
+      ) {
         return res.status(409).json({ field: "handle", reason: "taken", message: "That handle was just claimed — pick another." });
       }
       throw err;
