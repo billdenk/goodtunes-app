@@ -701,7 +701,10 @@ export function BuySheet({
   const beginCheckout = async (overrideCerts?: boolean[]) => {
     if (!selectedSku) return;
     if (!isCustomerSignedIn) {
-      const next = `/album/${albumId}?buy=1`;
+      // Task #1816 — preserve the campaign selection across the sign-in bounce.
+      // Without `&offer=1` the bounce-back lands at a fresh Cart and drops the
+      // handed-off donation/qty (resolveActiveSelection only restores on offer=1).
+      const next = `/album/${albumId}?buy=1${merged ? "&offer=1" : ""}`;
       navigate(`/login?next=${encodeURIComponent(next)}`);
       return;
     }
