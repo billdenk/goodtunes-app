@@ -8,7 +8,7 @@
 // is just a re-hit of the endpoint — useful when a row is unlocked or
 // the cover art changes.
 import type { Express, Request, Response } from "express";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, like, sql } from "drizzle-orm";
 import PDFDocument from "pdfkit";
 // qrcode ships no bundled types and we don't want to vendor a .d.ts just
 // for this single import — same pattern as server/auth/totp.ts.
@@ -334,23 +334,84 @@ export function registerCertificateRoutes(app: Express) {
   // distribution channel, and we never leak the buyer's address or
   // email — just the album, GoodDeed #, confirmed name, and issued date.
   app.get("/api/g/:shortId", async (req, res) => {
+    const shortId = req.params.shortId;
+    // Path 1 — a real `signed_cert_certificates` row (physical signed-cert
+    // add-on) stores a random shortId.
     const [row] = await db
       .select({ cert: signedCertCertificates, order: orders, album: albums })
       .from(signedCertCertificates)
       .innerJoin(orders, eq(orders.id, signedCertCertificates.orderId))
       .innerJoin(albums, eq(albums.id, orders.albumId))
-      .where(eq(signedCertCertificates.shortId, req.params.shortId));
-    if (!row) return res.status(404).json({ message: "Not found" });
-    res.json({
-      shortId: row.cert.shortId,
-      goodDeedNumber: row.order.goodDeedNumber,
-      issuedAt: row.order.createdAt,
-      albumTitle: row.album.title,
-      albumArtist: row.album.artist,
-      albumArtwork: row.album.artwork,
-      recipientName: row.cert.confirmedName,
-      nameStatus: row.cert.nameStatus,
-    });
+      .where(eq(signedCertCertificates.shortId, shortId));
+    if (row) {
+      return res.json({
+        shortId: row.cert.shortId,
+        goodDeedNumber: row.order.goodDeedNumber,
+        issuedAt: row.order.createdAt,
+        albumTitle: row.album.title,
+        albumArtist: row.album.artist,
+        albumArtwork: row.album.artwork,
+        recipientName: row.cert.confirmedName,
+        nameStatus: row.cert.nameStatus,
+      });
+    }
+
+    // Path 2 — synthetic / preview ids. Digital-only GoodDeed orders and
+    // legacy gogoods imports never mint a cert row; their PDF (and so its
+    // QR) carries a `synthetic<orderId>` / `preview<orderId>` shortId that
+    // Path 1 can never match → "Certificate not found." Resolve it back to
+    // the owned, finalized order and synthesize the same public payload.
+    //
+    // The id embeds the order UUID after the prefix. New certs embed the
+    // FULL id (exact match); already-issued certs embedded only the first 8
+    // chars, so those prefix-match. We strictly validate the id shape FIRST
+    // and never feed raw input to LIKE — an unvalidated tail could smuggle
+    // `%`/`_` LIKE wildcards and turn this into a record-discovery hole.
+    // (Verified: zero 8-char prefix collisions across finalized certs in
+    // prod, so the legacy prefix resolves uniquely.)
+    const full = /^(?:synthetic|preview)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.exec(shortId);
+    const legacy = /^(?:synthetic|preview)([0-9a-f]{8})$/.exec(shortId);
+    const idMatch = full
+      ? eq(orders.id, full[1])
+      : legacy
+        ? like(orders.id, legacy[1] + "%") // legacy[1] is validated hex — no wildcards
+        : null;
+    if (idMatch) {
+      const [o] = await db
+        .select({ order: orders, album: albums, customer: customerUsers })
+        .from(orders)
+        .innerJoin(albums, eq(albums.id, orders.albumId))
+        .innerJoin(customerUsers, eq(customerUsers.id, orders.customerId))
+        .where(
+          and(
+            idMatch,
+            isNotNull(orders.goodDeedNumber),
+            inArray(orders.status, Array.from(FINALIZED_CERT_ORDER_STATUSES)),
+          ),
+        )
+        .orderBy(asc(orders.goodDeedNumber), asc(orders.id))
+        .limit(1);
+      if (o) {
+        // Same recipient-name fallback the digital PDF renders with.
+        const recipientName =
+          o.order.certConfirmedName ||
+          o.customer.realName ||
+          o.customer.displayName ||
+          o.customer.username;
+        return res.json({
+          shortId,
+          goodDeedNumber: o.order.goodDeedNumber,
+          issuedAt: o.order.createdAt,
+          albumTitle: o.album.title,
+          albumArtist: o.album.artist,
+          albumArtwork: o.album.artwork,
+          recipientName,
+          nameStatus: "confirmed",
+        });
+      }
+    }
+
+    return res.status(404).json({ message: "Not found" });
   });
 
   // ─── Task #1514 — legacy gogoods.com QR provenance bridge ───────
@@ -877,7 +938,9 @@ export function registerCertificateRoutes(app: Express) {
       id: "synthetic",
       orderId: o.order.id,
       copyId: null,
-      shortId: "synthetic" + o.order.id.slice(0, 8),
+      // Full order id so the QR's /g/<id> resolves exactly back to this
+      // order (see the synthetic-id fallback in GET /api/g/:shortId).
+      shortId: "synthetic" + o.order.id,
       nameStatus: "confirmed",
       confirmedIdentityKind: "display",
       confirmedName,
@@ -999,7 +1062,7 @@ export function registerCertificateRoutes(app: Express) {
       id: "preview",
       orderId: row.order.id,
       copyId: null,
-      shortId: "preview" + row.order.id.slice(0, 8),
+      shortId: "preview" + row.order.id,
       nameStatus: "confirmed",
       confirmedIdentityKind: "display",
       confirmedName,
