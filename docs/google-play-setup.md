@@ -33,10 +33,16 @@ the operator/console work below.
 > (`Io.GoGoods.music`) — that's intentional, not a mistake. Everything below
 > uses the Android package name `com.gogoods_mobile`.
 
-> **Where Codemagic gets the code:** the GitHub mirror
+> **Where Codemagic gets the code, and when it builds:** the GitHub mirror
 > `github.com/billdenk/goodtunes-app` (branch `main`), which updates
-> automatically on every merge. You don't push anything by hand. (Same as the
-> iOS flow — see [`codemagic-builds.md`](./codemagic-builds.md).)
+> automatically on every merge. You don't push anything by hand. The
+> `android-internal` workflow **auto-triggers on every push to `main`** (the
+> `triggering:` block in `codemagic.yaml`), so merge → mirror push → Codemagic
+> build → upload to Play internal happens with **no button**. For that webhook to
+> fire, the Codemagic app must be **connected to the mirror repo** (one-time, in
+> Codemagic → app settings → repository). The two iOS workflows stay manual on
+> purpose. (Same mirror as the iOS flow — see
+> [`codemagic-builds.md`](./codemagic-builds.md).)
 
 ---
 
@@ -266,23 +272,31 @@ able to sign in and play something, since content is behind login.
 
 ---
 
-## Final action: the first build
+## First build & automatic builds after
 
 Once **both** credentials (`goodtunes_keystore` + the `google_play` group) are in
-Codemagic and the Play app + internal track exist:
+Codemagic, the Play app + internal track exist, and the Codemagic app is
+**connected to the GitHub mirror repo** (so its push webhook reaches Codemagic):
 
-1. In Codemagic → open the GoodTunes app → **Start new build**.
-2. Pick branch `main` and the **`Android → Play internal testing`**
-   (`android-internal`) workflow → **Start new build**.
-3. The build runs: lockfile check → `npm ci` → `npm run build` →
-   `cap sync android` → auto-increment `versionCode` from the latest internal
-   build → **source** icon guard → `./gradlew bundleRelease` → **built-`.aab`**
-   icon guard → upload the signed `.aab` to the Play **internal** track.
-4. After it finishes, the `.aab` appears in **Play Console → Test and release →
-   Internal testing**. Complete the listing + compliance forms (above) if you
-   haven't, then **Review release → Roll out to internal testing**.
-5. Testers on the internal list install via the Play Store app (after accepting
-   the opt-in link).
+- **Automatic — the normal path.** Every push to `main` (i.e. every merge, once
+  `scripts/post-merge.sh` force-pushes the mirror) auto-starts the
+  `android-internal` workflow. No button: it builds + signs + uploads a fresh
+  `.aab` to the Play **internal** track, `versionCode` auto-incremented past
+  whatever Play already has.
+- **Manual — to verify wiring or build on demand.** You can still start one by
+  hand: Codemagic → open the GoodTunes app → **Start new build** → branch `main`
+  + the **`Android → Play internal testing`** (`android-internal`) workflow →
+  **Start new build**. Do this once right after wiring the credentials to confirm
+  the build is green before leaning on the auto-trigger.
+
+Either way the build runs: lockfile check → `npm ci` → `npm run build` →
+`cap sync android` → auto-increment `versionCode` from the latest Play build →
+**source** icon guard → `./gradlew bundleRelease` → **built-`.aab`** icon guard →
+upload the signed `.aab` to the Play **internal** track. After it finishes, the
+`.aab` appears in **Play Console → Test and release → Internal testing**.
+Complete the listing + compliance forms (above) if you haven't, then **Review
+release → Roll out to internal testing**. Testers on the internal list install
+via the Play Store app (after accepting the opt-in link).
 
 `versionCode` auto-increments off whatever Play already has on the internal
 track, so duplicates are impossible — you never bump it by hand. `versionName`

@@ -7,12 +7,16 @@
 # Three workflows:
 #   ios-testflight      — day-to-day: build + sign + ship to TestFlight (auto build number).
 #   ios-appstore-submit — the "push the button" workflow: build + ship + SUBMIT to Apple review.
-#   android-internal    — optional/disabled: signed .aab → Play internal testing.
+#   android-internal    — AUTOMATIC: every push to `main` builds a signed .aab → Play internal testing.
 #
-# All three are MANUAL by default — they only run when started from the
-# Codemagic UI/API (no `triggering:` block), so nothing reaches Apple/Google
-# without a deliberate click. Optional auto-trigger examples are commented out
-# inside each workflow.
+# The two iOS workflows are MANUAL by design — they only run when started from
+# the Codemagic UI/API, so nothing reaches Apple review without a deliberate
+# click. android-internal AUTO-TRIGGERS on every push to `main`, uploading to
+# the Play *internal testing* track only (low-stakes — never the public Play
+# production track), so new code reaches internal testers with no button.
+# For that webhook to fire, the Codemagic app must be connected to the GitHub
+# build mirror repo (post-merge.sh force-pushes `main` there). See
+# docs/google-play-setup.md.
 #
 # No secrets are hardcoded here. iOS signing uses an App Store Connect API key
 # that Bill pastes into Codemagic once (referenced below as the
@@ -332,13 +336,13 @@ workflows:
     # release, and cancel_previous_submissions (so a double-click doesn't error).
 
   # ---------------------------------------------------------------------------
-  # Android → Play internal testing. OPTIONAL / DISABLED BY DEFAULT.
-  # It only runs if you start it manually in Codemagic. Leave it untouched
-  # until Bill wants Android builds; everything below is ready to go once the
-  # `google_play` + `keystore_reference` credentials are set in Codemagic.
+  # Android → Play internal testing. AUTOMATIC — auto-builds on every push to
+  # `main` and uploads a signed .aab to the Play *internal testing* track (never
+  # the public production track). Credentials (`google_play` service account +
+  # `goodtunes_keystore` upload key) are already set in Codemagic.
   # ---------------------------------------------------------------------------
   android-internal:
-    name: Android → Play internal testing (optional)
+    name: Android → Play internal testing (auto on push to main)
     instance_type: linux_x2
     max_build_duration: 60
     environment:
@@ -347,8 +351,19 @@ workflows:
       android_signing:
         - goodtunes_keystore # keystore reference uploaded in Codemagic
       node: 20
-    # Intentionally no `triggering:` block — manual only, so it stays dormant
-    # until you choose to run it.
+    # AUTO-TRIGGER: every push to `main` (the GitHub build mirror that
+    # post-merge.sh force-pushes to) builds + uploads to the internal track.
+    # Requires the Codemagic app to be connected to that repo so GitHub's
+    # webhook reaches Codemagic. cancel_previous_builds keeps a burst of merges
+    # from stacking redundant builds.
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+      cancel_previous_builds: true
     scripts:
       - name: Guard against firewall-poisoned lockfile URLs
         script: |

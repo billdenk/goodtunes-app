@@ -16,13 +16,13 @@ There are three "buttons" (workflows) in Codemagic:
 |---|---|---|
 | **iOS → TestFlight** | Builds the app on a cloud Mac, signs it, bumps the build number, and uploads it to **TestFlight** so testers can install it. Does **not** send anything to Apple review. | Day-to-day, whenever you want a fresh test build. |
 | **iOS → App Store (submit for review)** | Same build, but it also **submits the build to Apple for public App Store review**. This is the "push the button" one. | Only when a build is ready to go live to everyone. |
-| **Android → Play internal testing** | Builds a signed Android `.aab` and uploads it to Play internal testing. **Off by default** — ignore it until we want Android. | Later, if/when we ship Android. |
+| **Android → Play internal testing** | Builds a signed Android `.aab` and uploads it to Play internal testing. **Automatic** — auto-runs on every push to `main` once the Android credentials + repo connection are set in Codemagic. | Every merge (auto). |
 
 Each one:
 - Rebuilds the web app, packages it into the native shell, signs it with our Apple key, and **auto-increments the build number** so Apple never rejects a duplicate.
 - Runs entirely on Codemagic's cloud Macs. Your Mac is only a backup.
 
-Nothing reaches Apple or Google by accident: every button only runs when **you** start it. The App Store submit is a separate button from the TestFlight one, so you stay in control of what goes to review.
+Nothing reaches **Apple review** by accident: the two iOS workflows only run when **you** start them, and the App Store submit is a separate button from the TestFlight one, so you stay in control of what goes to public review. Android is the deliberate exception — it auto-builds on every merge and uploads **only to the Play internal testing track** (never the public Play production track), so testers always have the latest.
 
 ---
 
@@ -124,15 +124,15 @@ When a TestFlight build looks good and you're ready to go live:
 
 ---
 
-## Turning on Android later (optional)
+## Android builds (automatic)
 
-The Android button is in the config but **dormant** — it never runs unless you start it. When we want Android:
+The Android workflow **auto-triggers on every push to `main`** (the `triggering:` block in `codemagic.yaml`) and uploads to the Play **internal testing** track only — never the public production track. The chain is merge → `scripts/post-merge.sh` force-pushes the GitHub mirror → GitHub webhook → Codemagic builds. It needs three things in place, all one-time:
 
 1. In Codemagic, upload the GoodTunes **upload keystore** under **Code signing identities → Android keystores**, with reference name **`goodtunes_keystore`**.
 2. Create a Play **service-account JSON** (Google Play Console → Setup → API access), and add it to a Codemagic env-var group named **`google_play`** as **`GCLOUD_SERVICE_ACCOUNT_CREDENTIALS`**.
-3. Start the **`Android → Play internal testing`** workflow. It builds a signed `.aab`, **runs the same icon guards iOS gets** (source + built-binary — see *Publishing reliability* below), and uploads to the internal track.
+3. **Connect the Codemagic app to the GitHub mirror repo** so the push webhook reaches it (Codemagic → app settings → repository). Without this, the auto-trigger never fires.
 
-Until you do all three, just leave it alone — it costs nothing sitting idle.
+Once those are set, builds run on their own; you can also start one by hand anytime (**Start new build** → branch `main` → `Android → Play internal testing`). It **runs the same icon guards iOS gets** (source + built-binary — see *Publishing reliability* below). Full operator runbook: [`google-play-setup.md`](./google-play-setup.md).
 
 ---
 

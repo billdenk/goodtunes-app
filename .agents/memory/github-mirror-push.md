@@ -23,6 +23,15 @@ recipe below is the fallback for a one-time catch-up if the auto-sync ever WARNs
 happens once after a long stall; steady-state incremental pushes are a handful of commits and
 finish in seconds, which is why the foreground post-merge step is safe.
 
+**Silent-staleness coupling (matters now that Android auto-builds).** `codemagic.yaml`'s
+`android-internal` workflow auto-triggers on every push to `main` of this mirror (iOS stays
+manual). So a failing mirror push no longer just blocks a button you'd click — internal-track
+testers SILENTLY keep getting the old `.aab` with no failed-build signal. If Bill reports
+"Android testers are on an old build," check the post-merge `sync_github_build_mirror` WARNING
+first (the `timeout 90` on the ~2.4 GB repo is the usual culprit) before suspecting Codemagic.
+The push also swallows stderr (`>/dev/null 2>&1`), so the WARNING never says WHY — raising the
+timeout and un-silencing the error are the obvious reliability follow-ups.
+
 ## The two gotchas that make a naive `git push` fail
 
 1. **Password auth is dead.** `git push subrepl-8shaawlm ...` fails instantly with
