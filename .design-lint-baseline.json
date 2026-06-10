@@ -7716,6 +7716,71 @@
   },
   {
     "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-library/_shared.tsx",
+    "snippet": "export const BG = \"#00062B\"; // --brand-bg"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-library/_shared.tsx",
+    "snippet": "export const MINT = \"#4AFFCA\"; // --brand-mint (GoodDeed number / success)"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-library/_shared.tsx",
+    "snippet": "export const BLUE = \"#319ED8\"; // --brand-blue"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-library/_shared.tsx",
+    "snippet": "export const PURPLE = \"#7F10A7\"; // --brand-purple"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-library/_shared.tsx",
+    "snippet": "export const PINK = \"#FF5470\"; // --brand-pink / heart"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-library/_shared.tsx",
+    "snippet": "\"radial-gradient(circle at 50% -12%, rgba(49,158,216,0.14), transparent 58%), radial-gradient(circle at 85% 8%, rgba(127,16,167,0.16), transparent 60%), #00062B\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-library/_shared.tsx",
+    "snippet": "gradient: \"linear-gradient(150deg,#FF7C06 0%,#FF5470 48%,#7F10A7 100%)\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-library/_shared.tsx",
+    "snippet": "gradient: \"linear-gradient(160deg,#319ED8 0%,#7F10A7 60%,#050926 100%)\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-library/_shared.tsx",
+    "snippet": "gradient: \"linear-gradient(135deg,#4AFFCA 0%,#319ED8 55%,#0B1457 100%)\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-library/_shared.tsx",
+    "snippet": "gradient: \"linear-gradient(140deg,#FFD36E 0%,#FF7C06 52%,#FF5470 100%)\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-library/_shared.tsx",
+    "snippet": "gradient: \"linear-gradient(160deg,#7F10A7 0%,#319ED8 70%,#050926 100%)\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-library/_shared.tsx",
+    "snippet": "gradient: \"linear-gradient(135deg,#4AFFCA 0%,#1f7fb8 58%,#0B1457 100%)\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "artifacts/mockup-sandbox/src/components/mockups/gooddeed-library/_shared.tsx",
+    "snippet": "background: \"linear-gradient(135deg,#319ED8,#7F10A7)\","
+  },
+  {
+    "rule": "brand-hex-literal",
     "file": "artifacts/mockup-sandbox/src/components/mockups/hope-offer/Flow.tsx",
     "snippet": "const BG = \"#00062B\";"
   },
