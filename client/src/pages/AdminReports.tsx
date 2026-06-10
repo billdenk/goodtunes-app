@@ -885,6 +885,7 @@ function WorldMap({ points }: { points: Array<{ lat: number; lon: number; orders
         {geoData?.features?.map((f: any, i: number) => {
           const d = geoToPath(f.geometry, proj);
           if (!d) return null;
+          const name = f.properties?.name;
           return (
             <path
               key={i}
@@ -893,7 +894,9 @@ function WorldMap({ points }: { points: Array<{ lat: number; lon: number; orders
               stroke="#c4d0de"
               strokeWidth={0.4}
               strokeLinejoin="round"
-            />
+            >
+              {name ? <title>{name}</title> : null}
+            </path>
           );
         })}
         {/* Latitude/longitude graticule for orientation */}
