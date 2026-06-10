@@ -6053,18 +6053,23 @@ backfill_task_1710_strip_apple_bio prod "${PROD_DATABASE_URL:-}"
 #      GITHUB_TOKEN as an Authorization: Basic base64(x-access-token:TOKEN)
 #      header. Never echo the token or the base64 blob.
 #   2. The repo's LFS pre-push hook blocks on an SSH password prompt for the
-#      Replit lfsurl. Only two screen-recording files are LFS-tracked and they
-#      are irrelevant to the build, so push with --no-verify (skip the hook) +
-#      GIT_LFS_SKIP_PUSH=1 (GitHub gets the tiny pointer blobs, which is fine).
+#      Replit lfsurl, so the ref push uses --no-verify + GIT_LFS_SKIP_PUSH=1.
+#      But GitHub's GH008 hook then rejects any commit that references an LFS
+#      object GitHub's LFS store doesn't have yet, so STEP 2 first uploads —
+#      targeted by oid, no fat-history walk — any attached_assets/*.{mp4,mov,
+#      wav,zip,...} object the new commits added. The video files themselves
+#      stay irrelevant to the build; this just keeps GitHub's hook satisfied.
 #   3. The remote NAME differs per environment (and may be absent in a fresh
 #      post-merge clone), so we push to the URL directly instead of a remote
 #      name. We force-push (mirror semantics): GitHub main is disposable and
 #      must always equal project main even across history rewrites/rebases.
 #
 # Best-effort by design: a sync failure (offline, token missing, GitHub
-# hiccup) logs a WARNING and never fails the merge. Incremental pushes are a
-# handful of commits, so they finish in seconds; the timeout is a safety net
-# against a pathological hang, not the expected path.
+# hiccup) logs a WARNING — now WITH the real git stderr (the old code piped it
+# to /dev/null, which is how the mirror silently drifted ~2 days) — and never
+# fails the merge. STEP 1 fetches the remote tip first so a diverged history
+# can't balloon the push into a multi-GB pack that GitHub 500s on; steady-state
+# pushes are then a handful of commits that finish in seconds.
 GITHUB_MIRROR_URL="https://github.com/billdenk/goodtunes-app.git"
 # Best-effort: scrub Replit's internal npm proxy host out of package-lock.json
 # before we force-push the mirror. Those `resolved` URLs (package-firewall.replit.local)
@@ -6099,14 +6104,58 @@ sync_github_build_mirror() {
     return 0
   fi
   auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
+  local scrub='s#x-access-token:[^@]*@#x-access-token:***@#g'
   echo "post-merge: syncing GitHub build mirror (main -> github.com/billdenk/goodtunes-app)"
-  if GIT_LFS_SKIP_PUSH=1 GIT_TERMINAL_PROMPT=0 timeout 90 \
+
+  # STEP 1 — Fetch the remote tip FIRST. Without a common base git can't tell
+  # which objects GitHub already has, so a diverged history makes every push
+  # re-send the ENTIRE multi-GB closure -> GitHub returns HTTP 500 (pack too
+  # large) and the mirror falls permanently behind. Fetching collapses the push
+  # to the true (small) delta. Best-effort: if it fails we still try the push.
+  local have_remote=0
+  if GIT_TERMINAL_PROMPT=0 timeout 180 \
        git -c http.extraheader="Authorization: Basic $auth" \
-           push --no-verify --force "$GITHUB_MIRROR_URL" "HEAD:refs/heads/main" >/dev/null 2>&1
+           fetch --no-tags "$GITHUB_MIRROR_URL" "main:refs/remotes/ghmirror/main" >/dev/null 2>&1
   then
+    have_remote=1
+  else
+    echo "post-merge: NOTE — mirror fetch failed (still attempting push; pack may be large)"
+  fi
+
+  # STEP 2 — Proactively upload any LFS object the new commits reference that
+  # GitHub's LFS store lacks (gotcha #2). Targeted by oid so there is NO
+  # fat-history walk (`git lfs push --all` walks the whole ~4GB closure and
+  # effectively hangs). Skipped when the fetch above gave us no base to diff.
+  if [ "$have_remote" = 1 ]; then
+    local missing oid
+    missing=$(comm -23 \
+      <(git lfs ls-files -l HEAD 2>/dev/null | awk '{print $1}' | sort -u) \
+      <(git lfs ls-files -l refs/remotes/ghmirror/main 2>/dev/null | awk '{print $1}' | sort -u) \
+      2>/dev/null || true)
+    if [ -n "$missing" ]; then
+      echo "post-merge: uploading $(printf '%s\n' "$missing" | grep -c .) new LFS object(s) to GitHub LFS"
+      git remote remove ghlfs >/dev/null 2>&1 || true
+      git remote add ghlfs "https://x-access-token:${GITHUB_TOKEN}@github.com/billdenk/goodtunes-app.git" >/dev/null 2>&1 || true
+      for oid in $missing; do
+        GIT_TERMINAL_PROMPT=0 timeout 600 git lfs push --object-id ghlfs "$oid" 2>&1 | sed -E "$scrub"
+      done
+      git remote remove ghlfs >/dev/null 2>&1 || true
+    fi
+  fi
+
+  # STEP 3 — Force-push HEAD to main (mirror semantics: GitHub main is
+  # disposable and must always equal project main). Capture output so a failure
+  # is VISIBLE in the merge log instead of vanishing into /dev/null.
+  local out rc=0
+  out=$(GIT_LFS_SKIP_PUSH=1 GIT_TERMINAL_PROMPT=0 timeout 300 \
+          git -c http.extraheader="Authorization: Basic $auth" \
+              push --no-verify --force "$GITHUB_MIRROR_URL" "HEAD:refs/heads/main" 2>&1) || rc=$?
+  out=$(printf '%s' "$out" | sed -E "$scrub")
+  if [ "$rc" = 0 ]; then
     echo "post-merge: GitHub mirror sync ok ($head)"
   else
-    echo "post-merge: WARNING — GitHub mirror sync failed (continuing; Codemagic may build stale code until the next successful sync)"
+    echo "post-merge: WARNING — GitHub mirror sync failed rc=$rc (continuing; Codemagic may build stale code until the next successful sync)"
+    printf '%s\n' "$out" | tail -8 | sed 's/^/post-merge:   mirror> /'
   fi
 }
 

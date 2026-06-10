@@ -14,23 +14,28 @@ differs per environment and may be absent in a fresh post-merge clone, so always
 ## This is now automatic (post-merge), so you rarely push by hand
 
 `scripts/post-merge.sh` ends with `sync_github_build_mirror`, which force-pushes the merged
-HEAD to GitHub `main` on **every merge to project main**. It uses the same recipe below
-(token header + `--no-verify` + `GIT_LFS_SKIP_PUSH=1`), pushes to the URL directly, is
-best-effort (a failure only logs a WARNING, never fails the merge), and is `timeout 90`-bounded.
-So GitHub tracks project main within the post-merge window with no manual steps. The manual
-recipe below is the fallback for a one-time catch-up if the auto-sync ever WARNs repeatedly
-(e.g. token revoked, GitHub outage) and GitHub drifts behind. The big ~2.4 GB catch-up only
-happens once after a long stall; steady-state incremental pushes are a handful of commits and
-finish in seconds, which is why the foreground post-merge step is safe.
+HEAD to GitHub `main` on **every merge to project main**. It runs three steps, all
+best-effort (a failure only logs a WARNING, never fails the merge):
+
+1. **Fetch GitHub's tip first** into `refs/remotes/ghmirror/main`. Load-bearing, not
+   optional — see "Always fetch before you push" below.
+2. **Upload any new LFS objects** the merged commits added, targeted by `--object-id`
+   (never `git lfs push --all`) — see "GH008 / LFS" below.
+3. **Force-push** HEAD to `main` via the URL directly (token header + `--no-verify` +
+   `GIT_LFS_SKIP_PUSH=1`), capturing stderr so a WARNING prints the real git error.
+
+Steady-state pushes are a handful of commits and finish in seconds. The manual recipe below
+is the fallback for a one-time catch-up if the auto-sync ever WARNs repeatedly (e.g. token
+revoked, GitHub outage, LFS quota) and GitHub drifts behind.
 
 **Silent-staleness coupling (matters now that Android auto-builds).** `codemagic.yaml`'s
 `android-internal` workflow auto-triggers on every push to `main` of this mirror (iOS stays
 manual). So a failing mirror push no longer just blocks a button you'd click — internal-track
 testers SILENTLY keep getting the old `.aab` with no failed-build signal. If Bill reports
 "Android testers are on an old build," check the post-merge `sync_github_build_mirror` WARNING
-first (the `timeout 90` on the ~2.4 GB repo is the usual culprit) before suspecting Codemagic.
-The push also swallows stderr (`>/dev/null 2>&1`), so the WARNING never says WHY — raising the
-timeout and un-silencing the error are the obvious reliability follow-ups.
+first before suspecting Codemagic. The WARNING now prints the tail of the real git error
+(stderr is captured, not `>/dev/null`), so it should say WHY: HTTP 500 (fetch-before-push
+regressed → full pack), GH008 (a new LFS object wasn't uploaded), or auth/quota.
 
 ## The two gotchas that make a naive `git push` fail
 
@@ -43,15 +48,45 @@ timeout and un-silencing the error are the obvious reliability follow-ups.
 2. **LFS pre-push hook hangs.** The remote has
    `remote.subrepl-8shaawlm.lfsurl ssh://git@ssh.kirk.replit.dev/...` and a `pre-push`
    hook running `git lfs pre-push`, which tries to upload LFS objects to the Replit SSH
-   host and blocks on a `git@ssh.kirk.replit.dev's password:` prompt. Only TWO files are
-   LFS-tracked (screen recordings in `attached_assets/`, irrelevant to the build), so push
-   with `--no-verify` (skips the hook) + `GIT_LFS_SKIP_PUSH=1`. GitHub gets the tiny LFS
-   pointer blobs, which is fine for the build mirror. The real iOS assets (AppIcon PNGs)
-   are normal git blobs, not LFS.
+   host and blocks on a `git@ssh.kirk.replit.dev's password:` prompt. The LFS-tracked files
+   are screen recordings/audio/zips in `attached_assets/` (irrelevant to the build), so push
+   the *refs* with `--no-verify` (skips the hook) + `GIT_LFS_SKIP_PUSH=1`. But that alone is
+   NOT enough — the LFS *objects* must still reach GitHub or you hit GH008; see "GH008 / LFS"
+   below. The real iOS assets (AppIcon PNGs) are normal git blobs, not LFS.
+
+## Always fetch before you push (HTTP 500 = diverged history)
+
+If GitHub's `main` tip is NOT in local history (diverged — happens across rebases/rewrites or
+when a force-push from elsewhere lands), a plain push can't negotiate a common base and
+re-sends the **entire** ~2.8 GB closure (`pack-reused 0`), which exceeds GitHub's per-push
+limit → **HTTP 500 (`the remote end hung up`)** and the mirror falls permanently behind. Fix:
+`git -c http.extraheader=... fetch --no-tags <URL> main:refs/remotes/ghmirror/main` FIRST, then
+push — this collapses the upload to the true delta (~70 MiB / a few seconds). The post-merge
+sync does this automatically (STEP 1); any manual catch-up must too.
+
+## GH008 / LFS: upload the new object, don't skip it, don't `--all`
+
+`attached_assets/` video/audio/zip are LFS-tracked (`.gitattributes`). Because we push refs
+with `GIT_LFS_SKIP_PUSH=1` (the pre-push hook hangs on Replit's SSH lfsurl), the LFS *objects*
+don't ride along — and GitHub's **`GH008`** pre-receive hook then REJECTS any commit that
+references an LFS object GitHub's LFS store lacks (this is what broke every push the day a 99 MB
+recording landed). Fix: upload the missing object(s) to GitHub LFS **before** the ref push,
+**targeted by id**, against a temp token-URL remote:
+`git lfs push --object-id <remote> <oid>`. Compute the missing set as oids in HEAD not in the
+fetched remote tip: `comm -23 <(git lfs ls-files -l HEAD | awk '{print $1}' | sort -u) <(git lfs ls-files -l refs/remotes/ghmirror/main | awk '{print $1}' | sort -u)`.
+- **Never `git lfs push --all`** — it runs `rev-list --do-walk` over the whole fat history and
+  effectively HANGS (observed minutes with no progress, had to kill it).
+- **Residual GH008 case (rare):** GitHub validates EVERY pushed commit, not just HEAD. An LFS
+  object added in an intermediate commit and deleted before HEAD won't show in
+  `git lfs ls-files HEAD`, so the STEP-2 diff misses it → push still GH008s. Unlikely between
+  merges; the WARNING is now loud and the manual catch-up (upload that oid by id) is the fix.
+- LFS objects DO live on GitHub now (free tier: 1 GiB storage + 1 GiB/mo bandwidth; total
+  ~283 MB today). Each new screen recording is ~100 MB → headroom for only a handful more; the
+  real long-term fix is the operator history-shrink, which strips them from history entirely.
 
 ## Why it needs a workflow, not bash
 
-The delta is large (~2.4 GB / ~20k objects even though `.git/lfs` is only ~184 MB — many
+The delta is large (~2.4 GB / ~20k objects even though `.git/lfs` is only ~283 MB — many
 big non-LFS blobs live in history). It exceeds the 2-minute bash tool timeout, and
 backgrounded bash processes get REAPED when the tool's shell session ends (empty log,
 process gone). Run the push as a platform **workflow** (`configureWorkflow` console type,

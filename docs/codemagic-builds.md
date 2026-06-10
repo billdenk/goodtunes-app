@@ -4,7 +4,7 @@ This is the plain-English runbook for cutting GoodTunes iOS builds **without a M
 
 The pipeline itself lives in [`codemagic.yaml`](../codemagic.yaml) at the repo root. You don't have to read it — this doc covers everything you actually do. For the older Mac-in-Xcode way (the fallback if Codemagic is ever down), see [`native-builds.md`](./native-builds.md).
 
-> **Where Codemagic gets the code:** Codemagic builds from the GitHub mirror `github.com/billdenk/goodtunes-app` (branch `main`). Replit is the source of truth; GitHub is just a build mirror. That mirror now updates **automatically on every merge** to the project's main — `scripts/post-merge.sh` force-pushes the merged code to GitHub at the end of each merge, so a Codemagic build always picks up the latest. You don't push anything by hand. (If GitHub ever drifts behind — e.g. the push token was revoked — the manual catch-up recipe lives in `.agents/memory/github-mirror-push.md`.)
+> **Where Codemagic gets the code:** Codemagic builds from the GitHub mirror `github.com/billdenk/goodtunes-app` (branch `main`). Replit is the source of truth; GitHub is just a build mirror. That mirror now updates **automatically on every merge** to the project's main — `scripts/post-merge.sh` force-pushes the merged code to GitHub at the end of each merge, so a Codemagic build always picks up the latest. You don't push anything by hand. The sync now fetches GitHub's tip before pushing (so a diverged history can't balloon into a multi-GB pack that GitHub rejects with HTTP 500), uploads any new LFS objects so GitHub's `GH008` hook accepts the push, and — if it ever does fail — logs the **real git error** in the merge output instead of swallowing it. (If GitHub ever drifts behind anyway — e.g. the push token was revoked — the manual catch-up recipe lives in `.agents/memory/github-mirror-push.md`.)
 
 ---
 
@@ -149,10 +149,22 @@ Two layers keep this under control:
 
 1. **Going forward (already in the repo):** `.gitattributes` routes large *non-build*
    media in `attached_assets/` (video, screen recordings, audio, archives) to **Git
-   LFS** automatically, so future uploads of that kind don't fatten history. It does
-   **not** touch images — the build imports specific images, and the mirror carries no
-   LFS objects, so a build-imported file in LFS would break the Codemagic checkout.
-   The iOS AppIcon PNGs stay as normal files for the same reason.
+   LFS** automatically, so future uploads of that kind don't fatten the regular git
+   history. The post-merge mirror sync **uploads those LFS objects to GitHub's own LFS
+   store** (targeted by object id) before it pushes — otherwise GitHub's `GH008`
+   pre-receive hook rejects any commit that references an LFS object it doesn't have,
+   which is exactly what happened when a 99 MB screen recording landed and silently
+   broke every mirror push until it was uploaded. `.gitattributes` deliberately does
+   **not** track images: the build imports specific images via `@assets/...`, and
+   build-imported files (plus the iOS AppIcon PNGs) stay as **normal git blobs** so
+   they never depend on LFS resolution at checkout and never consume the LFS quota.
+
+   > **Heads-up on the LFS quota.** Total LFS is small today (~280 MB; GitHub's free
+   > tier is 1 GiB storage + 1 GiB/month bandwidth), but every new screen recording
+   > added to `attached_assets/` is ~100 MB and is uploaded to GitHub LFS on the next
+   > merge. That's headroom for only a handful more before pushes start failing on
+   > quota — at which point the one-time history shrink below becomes the real fix
+   > (it strips those recordings from history entirely, so they never reach GitHub).
 
 2. **One-time cleanup of the existing 2.4 GB of history (operator action, coordinated
    with Bill):** run [`scripts/shrink-git-history.sh`](../scripts/shrink-git-history.sh).
