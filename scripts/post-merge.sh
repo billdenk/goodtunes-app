@@ -6299,4 +6299,105 @@ SQL
 backfill_task_1899_number_every_copy dev  "${DATABASE_URL:-}"
 backfill_task_1899_number_every_copy prod "${PROD_DATABASE_URL:-}"
 
+# Task #1909 — ONE-TIME renumber of Hope 7" GoodDeed numbers by true
+# purchase order (Andrew Goeken = #1). Early plain-record buyers were
+# assigned numbers above the initial certificate buyers, and the
+# order-level number was never written for those early orders (hex
+# placeholder). This renumber:
+#   • Assigns 1..N to all paid order_copies by (o.created_at, o.id, oc.position).
+#   • Mirrors each order's good_deed_number to its first copy's new number.
+# Two-phase write avoids transient collisions on the partial unique indexes:
+# Phase 1 shifts all current numbers into a high temp range (+ 100000),
+# Phase 2 writes the final 1..N values.
+# Safe: production check confirms no cert has been confirmed/locked/printed.
+backfill_task_1909_renumber_hope_gooddeed() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1909 renumber-hope-gooddeed on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_album_id text    := 'b250a5a5-98cc-4673-9903-ab39e5278d8c';
+  v_offset   integer := 100000;
+  v_n        integer := 0;
+  v_rec      record;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_1909_renumber_hope_gooddeed'
+  ) THEN
+    -- Phase 1: shift all existing non-null Hope numbers into a high temp
+    -- range so the partial unique indexes on (album_id, good_deed_number)
+    -- have no conflicts when we write the final 1..N values below.
+    UPDATE order_copies
+       SET good_deed_number = good_deed_number + v_offset
+     WHERE album_id = v_album_id
+       AND good_deed_number IS NOT NULL
+       AND order_id IN (
+         SELECT id FROM orders
+          WHERE album_id = v_album_id
+            AND status IN ('paid', 'shipped')
+       );
+
+    UPDATE orders
+       SET good_deed_number = good_deed_number + v_offset
+     WHERE album_id = v_album_id
+       AND good_deed_number IS NOT NULL
+       AND status IN ('paid', 'shipped');
+
+    -- Phase 2: assign 1..N to every paid copy in true purchase order
+    -- (order created_at ASC, order id ASC for ties, copy position ASC
+    -- for multi-unit orders so the same order gets a contiguous block).
+    FOR v_rec IN
+      SELECT oc.id AS copy_id
+        FROM order_copies oc
+        JOIN orders o ON o.id = oc.order_id
+       WHERE oc.album_id = v_album_id
+         AND o.status IN ('paid', 'shipped')
+       ORDER BY o.created_at ASC, o.id ASC, oc.position ASC
+    LOOP
+      v_n := v_n + 1;
+      UPDATE order_copies SET good_deed_number = v_n WHERE id = v_rec.copy_id;
+    END LOOP;
+
+    -- Mirror the order-level good_deed_number to that order's first
+    -- copy's new number (the established order-level convention).
+    -- Also fills in the order-level field for early plain-record orders
+    -- that previously showed a hex placeholder (null order-level number).
+    UPDATE orders o
+       SET good_deed_number = (
+         SELECT MIN(oc.good_deed_number)
+           FROM order_copies oc
+          WHERE oc.order_id = o.id
+       )
+     WHERE o.album_id = v_album_id
+       AND o.status IN ('paid', 'shipped');
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_1909_renumber_hope_gooddeed');
+    RAISE NOTICE 'task_1909_renumber_hope_gooddeed applied: % copies renumbered', v_n;
+  ELSE
+    RAISE NOTICE 'task_1909_renumber_hope_gooddeed already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1909 renumber-hope-gooddeed ok on $label"
+    echo "$out" | grep -i 'task_1909' || true
+  else
+    echo "post-merge: WARNING — task-1909 renumber-hope-gooddeed failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_1909_renumber_hope_gooddeed dev  "${DATABASE_URL:-}"
+backfill_task_1909_renumber_hope_gooddeed prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror
