@@ -842,6 +842,37 @@ export function registerCommerceRoutes(app: Express) {
     // from the shared rule so the BuySheet, album-page CTA, and checkout
     // guard below all agree.
     const sunsetReached = hasReachedSunset(album.streamingReleaseDate);
+    // Task #1932 — always include a CD option in buy-options so fans see it
+    // as a format choice. When no real active CD SKU exists we inject a
+    // synthetic placeholder that looks selectable but is blocked from
+    // checkout both client- and server-side.
+    const hasCdSku = skus.some((s) => s.format === "cd");
+    const mappedSkus = skus.map((s) => ({
+      id: s.id,
+      format: s.format,
+      label: ALBUM_FORMAT_LABEL[s.format as AlbumFormat] ?? s.format,
+      priceCents: s.priceCents,
+      stock: s.stock,
+      soldOut: sunsetReached || (s.stock !== null && s.stock <= 0),
+      // Task #201 — fan-side BuySheet renders <VinylPreview> against
+      // these picks. Non-vinyl SKUs leave both fields null and the UI
+      // falls back to the format label only.
+      vinylColor: s.vinylColor ?? null,
+      jacketUpgrade: (s.jacketUpgrade as JacketUpgrade | null) ?? null,
+    }));
+    if (!hasCdSku) {
+      mappedSkus.push({
+        id: "placeholder:cd",
+        format: "cd",
+        label: ALBUM_FORMAT_LABEL["cd"] ?? "CD",
+        priceCents: 0,
+        stock: null,
+        soldOut: false,
+        vinylColor: null,
+        jacketUpgrade: null,
+        isPlaceholder: true,
+      } as typeof mappedSkus[number] & { isPlaceholder: boolean });
+    }
     res.json({
       albumId: album.id,
       title: album.title,
@@ -849,19 +880,7 @@ export function registerCommerceRoutes(app: Express) {
       artwork: album.artwork,
       currency: "usd",
       sunsetReached,
-      skus: skus.map((s) => ({
-        id: s.id,
-        format: s.format,
-        label: ALBUM_FORMAT_LABEL[s.format as AlbumFormat] ?? s.format,
-        priceCents: s.priceCents,
-        stock: s.stock,
-        soldOut: sunsetReached || (s.stock !== null && s.stock <= 0),
-        // Task #201 — fan-side BuySheet renders <VinylPreview> against
-        // these picks. Non-vinyl SKUs leave both fields null and the UI
-        // falls back to the format label only.
-        vinylColor: s.vinylColor ?? null,
-        jacketUpgrade: (s.jacketUpgrade as JacketUpgrade | null) ?? null,
-      })),
+      skus: mappedSkus,
       addons: visibleAddons.map((a) => ({
         id: a.id,
         kind: a.kind,

@@ -67,6 +67,16 @@ The sheet contents are built from these sections. Several are conditional.
 
 - Lists every format the artist has enabled for this album (e.g. 12″ vinyl, 7″
   vinyl, cassette), each with its price.
+- **CD is always shown.** Whether or not a real active CD SKU exists, a "CD" row
+  always appears in the picker. When a real CD SKU is active the row behaves
+  identically to vinyl/cassette rows — selectable, priced, and purchasable. When
+  no active CD SKU exists, the server injects a synthetic placeholder row:
+  it looks selectable (the fan can tap it), shows "Coming soon" in place of a
+  price, and selecting it reveals a "CD coming soon — pricing is on the way" message
+  where the cart chrome would normally be. The checkout button is disabled and
+  `beginCheckout` bails early; the server also rejects any checkout request that
+  references the placeholder SKU id (`placeholder:cd`), so the guard is redundant
+  but defence-in-depth.
 - The fan must pick one. It drives everything below it.
 - **Sold-out state:** a format whose stock has hit zero shows as **sold out and is
   disabled** — it can't be selected.

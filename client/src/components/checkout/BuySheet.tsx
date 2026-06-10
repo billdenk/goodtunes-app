@@ -48,6 +48,10 @@ type Sku = {
   // actual disc color the artist picked. Null on non-vinyl SKUs.
   vinylColor: string | null;
   jacketUpgrade: JacketUpgrade | null;
+  // Task #1932 — true when the server injected a synthetic CD teaser
+  // because no real active CD SKU exists yet. The row is shown so fans
+  // see CD is coming, but checkout is blocked client- and server-side.
+  isPlaceholder?: boolean;
 };
 type Addon = {
   id: string;
@@ -438,9 +442,14 @@ export function BuySheet({
         // Task #1816 — honor the campaign bundle SKU when handed off; else the
         // first available format (the default direct-buy behavior).
         const desired = activeSelection?.skuFormat
-          ? j.skus.find((s) => s.format === activeSelection.skuFormat && !s.soldOut)
+          ? j.skus.find((s) => s.format === activeSelection.skuFormat && !s.soldOut && !s.isPlaceholder)
           : undefined;
-        const pick = desired ?? j.skus.find((s) => !s.soldOut);
+        // Task #1932 — prefer a real non-placeholder SKU; only fall back to
+        // the CD placeholder when every real format is sold out.
+        const pick =
+          desired ??
+          j.skus.find((s) => !s.soldOut && !s.isPlaceholder) ??
+          j.skus.find((s) => !s.soldOut);
         if (pick) setFormat(pick.format);
         track("bundle_viewed", {
           albumId,
@@ -472,6 +481,13 @@ export function BuySheet({
   }, [albumId, initialSelection]);
 
   const selectedSku = options?.skus.find((s) => s.format === format) ?? null;
+  // Task #1932 — true when the fan has selected the CD teaser row (no
+  // active CD SKU yet). Checkout is silently blocked; the row is selectable
+  // but the cart/payment chrome hides behind a "coming soon" message.
+  const isCdPlaceholder = !!selectedSku?.isPlaceholder;
+  // Real (non-placeholder) SKUs — used for allSoldOut checks so a CD
+  // teaser never falsely suppresses the "all sold out" state.
+  const realSkus = options?.skus.filter((s) => !s.isPlaceholder) ?? [];
   const addon = options?.addons.find((a) => a.kind === "signed_cert") ?? null;
   // Task #579 — booklet add-on. Server already hides it on releases
   // without a booklet-eligible SKU; we additionally gate on the
@@ -494,9 +510,10 @@ export function BuySheet({
   // Every configured SKU is sold out — distinct from `options.skus.length === 0`
   // (no SKUs configured yet). Drives the "Sold out" empty state so the sheet
   // never renders an empty "You'll get" block + a $0.00 disabled checkout
-  // button when there's nothing left to buy.
-  const allSoldOut =
-    !!options && options.skus.length > 0 && options.skus.every((s) => s.soldOut);
+  // button when there's nothing left to buy. Task #1932 — exclude the CD
+  // placeholder from the sold-out check (it's never `soldOut`) so it never
+  // falsely clears the "Sold out" banner when real SKUs are exhausted.
+  const allSoldOut = realSkus.length > 0 && realSkus.every((s) => s.soldOut);
 
   // Cap quantity by the SKU stock (when metered).
   const maxQuantity = useMemo(() => {
@@ -578,8 +595,9 @@ export function BuySheet({
 
   // Live shipping estimate. Re-quotes whenever the format, destination,
   // quantity, or paper-weight inputs (signed certs / booklet) change.
+  // Task #1932 — skip for the CD teaser placeholder (no real SKU to ship).
   useEffect(() => {
-    if (!selectedSku) {
+    if (!selectedSku || selectedSku.isPlaceholder) {
       setShipping(null);
       return;
     }
@@ -626,7 +644,8 @@ export function BuySheet({
   // typed a postal code (Stripe needs it to resolve a US municipal/state
   // rate); the server computes the figure via Stripe Tax so it can't be
   // tampered with here.
-  const taxReady = !!selectedSku && !!country && postalCode.trim().length >= 3;
+  // Task #1932 — exclude the CD placeholder from tax quoting (no price to tax).
+  const taxReady = !!selectedSku && !selectedSku.isPlaceholder && !!country && postalCode.trim().length >= 3;
   useEffect(() => {
     if (!selectedSku || !taxReady) {
       setTax(null);
@@ -700,6 +719,9 @@ export function BuySheet({
   // zeroed-out cert picks without waiting for setCopyCerts to re-render.
   const beginCheckout = async (overrideCerts?: boolean[]) => {
     if (!selectedSku) return;
+    // Task #1932 — CD placeholder: looks clickable but cannot create an
+    // order. Bail silently; the server also rejects format-not-found.
+    if (selectedSku.isPlaceholder) return;
     if (!isCustomerSignedIn) {
       // Task #1816 — preserve the campaign selection across the sign-in bounce.
       // Without `&offer=1` the bounce-back lands at a fresh Cart and drops the
@@ -896,7 +918,7 @@ export function BuySheet({
 
                     {/* Format picker */}
                     <SectionLabel>Format</SectionLabel>
-                    {options.skus.length === 0 ? (
+                    {realSkus.length === 0 && options.skus.length === 0 ? (
                       <div className="text-fan-secondary text-sm py-6 text-center">
                         Not available for sale yet.
                       </div>
@@ -923,9 +945,12 @@ export function BuySheet({
                               <div className="flex flex-col">
                                 <span className="text-[14px] font-medium">{s.label}</span>
                                 {s.soldOut && <span className="text-[11px] text-rose-300">Sold out</span>}
+                                {s.isPlaceholder && <span className="text-xs text-fan-faint">Coming soon</span>}
                               </div>
                               <div className="flex items-center gap-2">
-                                <span className="text-[14px] font-semibold">{dollars(s.priceCents)}</span>
+                                {!s.isPlaceholder && (
+                                  <span className="text-[14px] font-semibold">{dollars(s.priceCents)}</span>
+                                )}
                                 {selected && (
                                   <Check
                                     className="w-[18px] h-[18px] text-[color:var(--brand-blue)]"
@@ -951,8 +976,19 @@ export function BuySheet({
                       </div>
                     )}
 
+                    {/* Task #1932 — CD coming-soon teaser: when the placeholder is
+                        selected hide all cart chrome and show a brief message. */}
+                    {isCdPlaceholder && (
+                      <div className="rounded-2xl bg-white/[0.05] px-4 py-5 text-center mb-6" data-testid="block-cd-coming-soon">
+                        <div className="text-base font-semibold text-fan-primary">CD coming soon</div>
+                        <p className="text-fan-secondary text-sm mt-1 leading-snug">
+                          CD pricing is on the way. Check back soon.
+                        </p>
+                      </div>
+                    )}
+
                     {/* Quantity */}
-                    {selectedSku && (
+                    {selectedSku && !isCdPlaceholder && (
                       <div className="mb-6">
                         <SectionLabel>Quantity</SectionLabel>
                         <div className="flex items-center justify-between rounded-2xl bg-white/[0.05] px-4 py-3">
@@ -990,7 +1026,7 @@ export function BuySheet({
                     )}
 
                     {/* Booklet 7" either/or variant */}
-                    {bookletAddon && bundleAvailable && selectedSku && (
+                    {bookletAddon && bundleAvailable && selectedSku && !isCdPlaceholder && (
                       <div className="mb-6">
                         <SectionLabel>Booklet</SectionLabel>
                         <Group>
@@ -1285,7 +1321,7 @@ export function BuySheet({
                 )}
 
                 {/* Subtotal + advance to Shipping */}
-                {selectedSku && !allSoldOut && (
+                {selectedSku && !allSoldOut && !isCdPlaceholder && (
                   <div className="mt-8 pt-5 border-t border-white/[0.08]">
                     <div className="flex items-center justify-between mb-5">
                       <span className="text-fan-secondary text-sm font-semibold">Subtotal</span>
@@ -1476,7 +1512,7 @@ export function BuySheet({
                           beginCheckout();
                         }
                       }}
-                      disabled={!selectedSku || busy || shippingUnavailable}
+                      disabled={!selectedSku || busy || shippingUnavailable || isCdPlaceholder}
                       className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 transition-all active:scale-[0.98] inline-flex items-center justify-center gap-2"
                       style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
                       data-testid="button-checkout"
@@ -1768,7 +1804,7 @@ export function BuySheet({
                 )}
 
                 <SectionLabel>Format</SectionLabel>
-                {options.skus.length === 0 ? (
+                {realSkus.length === 0 && options.skus.length === 0 ? (
                   <div className="text-fan-secondary text-sm py-6 text-center">
                     Not available for sale yet.
                   </div>
@@ -1795,9 +1831,12 @@ export function BuySheet({
                           <div className="flex flex-col">
                             <span className="text-[14px] font-medium">{s.label}</span>
                             {s.soldOut && <span className="text-[11px] text-rose-300">Sold out</span>}
+                            {s.isPlaceholder && <span className="text-xs text-fan-faint">Coming soon</span>}
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[14px] font-semibold">{dollars(s.priceCents)}</span>
+                            {!s.isPlaceholder && (
+                              <span className="text-[14px] font-semibold">{dollars(s.priceCents)}</span>
+                            )}
                             {selected && (
                               <Check
                                 className="w-[18px] h-[18px] text-[color:var(--brand-blue)]"
@@ -1809,6 +1848,16 @@ export function BuySheet({
                       );
                     })}
                   </Group>
+                )}
+
+                {/* Task #1932 — CD coming-soon teaser for mobile */}
+                {isCdPlaceholder && (
+                  <div className="px-4 py-5 text-center mb-5" data-testid="block-cd-coming-soon-mobile">
+                    <div className="text-base font-semibold text-fan-primary">CD coming soon</div>
+                    <p className="text-fan-secondary text-sm mt-1 leading-snug">
+                      CD pricing is on the way. Check back soon.
+                    </p>
+                  </div>
                 )}
 
                 {/* Every format sold out — a clear, honest empty state rather
@@ -1832,7 +1881,7 @@ export function BuySheet({
 
                 {/* Task #549 — Quantity stepper. Capped at the lesser of
                     MAX_COPIES_PER_CHECKOUT and remaining stock. */}
-                {selectedSku && (
+                {selectedSku && !isCdPlaceholder && (
                   <div className="mb-5">
                     <SectionLabel>Quantity</SectionLabel>
                     <div className="flex items-center justify-between px-1 py-1">
@@ -1875,7 +1924,7 @@ export function BuySheet({
                     price). Mutually exclusive; the chosen variant price
                     drives the format line. Cassette keeps the legacy
                     toggle (rendered in the branch below). */}
-                {bookletAddon && bundleAvailable && selectedSku && (
+                {bookletAddon && bundleAvailable && selectedSku && !isCdPlaceholder && (
                   <div className="mb-5">
                     <SectionLabel>Booklet</SectionLabel>
                     <Group>
@@ -2009,7 +2058,7 @@ export function BuySheet({
                     box). Each can be bought in quantity and carries an
                     anonymous/specific recipient choice. Shows the owning
                     non-profit so the fan knows where the money goes. */}
-                {selectedSku && customAddonsList.length > 0 && (
+                {selectedSku && customAddonsList.length > 0 && !isCdPlaceholder && (
                   <div className="mb-5">
                     <SectionLabel>Add a little extra</SectionLabel>
                     <Group>
@@ -2392,7 +2441,7 @@ export function BuySheet({
                       beginCheckout();
                     }
                   }}
-                  disabled={!selectedSku || busy || shippingUnavailable}
+                  disabled={!selectedSku || busy || shippingUnavailable || isCdPlaceholder}
                   className="w-full py-4 rounded-2xl font-semibold text-base text-white disabled:opacity-40 transition-all active:scale-[0.98]"
                   style={{ background: "linear-gradient(135deg, #1D5E8F, #319ED8)" }}
                   data-testid="button-checkout"
