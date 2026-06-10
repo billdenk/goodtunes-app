@@ -5506,7 +5506,16 @@ type SongCreditsLite = AlbumCreditsMap["bySongId"][string];
    Same numbering rule as the empty-rows path: we keep `nextTrackNumber`
    off the parent state (max(trackNumber)+1) so deletions that leave
    gaps don't collide with the tail of the existing tracklist. */
-type UploadMode = "empty" | "dropbox";
+type UploadMode = "empty" | "dropbox" | "upload";
+
+/* Per-file state for the direct-upload mode. Each file tracks its own
+   phase so one failure doesn't abort the rest. */
+type FileUploadItem = {
+  name: string;
+  status: "queued" | "uploading" | "saving" | "done" | "error";
+  pct: number; // 0-100 byte-level XHR upload progress
+  error?: string;
+};
 /* ─── Async import job polling ────────────────────────────────────────
    Long-running admin imports (Dropbox tracks today; lyrics/credits/etc.
    to follow) return a `{ jobId }` immediately instead of blocking the
@@ -5643,6 +5652,12 @@ function AddMultipleTracksDialog({
   const [running, setRunning] = useState(false);
   const [created, setCreated] = useState(0);
 
+  // Direct-upload mode state
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [uploadItems, setUploadItems] = useState<FileUploadItem[]>([]);
+  const [dragOverUpload, setDragOverUpload] = useState(false);
+  const uploadFileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (open) {
       setMode("dropbox");
@@ -5651,6 +5666,9 @@ function AddMultipleTracksDialog({
       setRunning(false);
       setCreated(0);
       setProgress(null);
+      setUploadFiles([]);
+      setUploadItems([]);
+      setDragOverUpload(false);
     }
   }, [open]);
 
@@ -5798,6 +5816,142 @@ function AddMultipleTracksDialog({
     }
   };
 
+  // Helper: accept dropped / picked audio files and populate the queue.
+  const handleUploadFilePick = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const AUDIO_ACCEPT_RE = /\.(mp3|m4a|aac|wav|flac|ogg|aif|aiff)$/i;
+    const audioFiles = Array.from(files).filter((f) => AUDIO_ACCEPT_RE.test(f.name));
+    if (audioFiles.length === 0) return;
+    setUploadFiles((prev) => {
+      const combined = [...prev, ...audioFiles];
+      setUploadItems(combined.map((f) => ({ name: f.name, status: "queued" as const, pct: 0 })));
+      return combined;
+    });
+  };
+
+  const handleConfirmUpload = async () => {
+    if (uploadFiles.length === 0 || running) return;
+    setRunning(true);
+
+    // Derive per-album track numbering server-side equivalent: we start
+    // from nextTrackNumber (already the max+1 computed by the parent).
+    let trackNum = nextTrackNumber;
+    const token = getAuthToken();
+    const authHeaders: Record<string, string> = token
+      ? { Authorization: `Bearer ${token}` }
+      : {};
+
+    const setItemStatus = (
+      idx: number,
+      patch: Partial<FileUploadItem>,
+    ) => {
+      setUploadItems((prev) => {
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...patch };
+        return next;
+      });
+    };
+
+    let okCount = 0;
+    let errCount = 0;
+
+    for (let i = 0; i < uploadFiles.length; i++) {
+      const file = uploadFiles[i];
+      try {
+        // 1. Sign — get a GCS upload URL.
+        setItemStatus(i, { status: "uploading", pct: 0 });
+        const contentType = file.type || "audio/mpeg";
+        const signRes = await fetch("/api/admin/upload-audio/sign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          credentials: "include",
+          body: JSON.stringify({ contentType }),
+        });
+        if (!signRes.ok) {
+          const errBody = await signRes.json().catch(() => ({}));
+          throw new Error(errBody.message || `Sign failed (${signRes.status})`);
+        }
+        const { uploadUrl, finalPath, contentType: signedType } =
+          (await signRes.json()) as { uploadUrl: string; finalPath: string; contentType: string };
+
+        // 2. PUT directly to GCS with XHR so we get byte-level progress.
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", uploadUrl, true);
+          xhr.setRequestHeader("Content-Type", signedType);
+          xhr.upload.onprogress = (ev) => {
+            if (ev.lengthComputable) {
+              setItemStatus(i, { pct: Math.round((ev.loaded / ev.total) * 100) });
+            }
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve();
+            else reject(new Error(`Upload failed (${xhr.status})`));
+          };
+          xhr.onerror = () => reject(new Error("Upload failed — network error"));
+          xhr.send(file);
+        });
+
+        // 3. Finalize — server transcodes if needed and returns URLs + specs.
+        setItemStatus(i, { status: "saving", pct: 100 });
+        const finRes = await fetch("/api/admin/upload-audio/finalize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          credentials: "include",
+          body: JSON.stringify({ finalPath, contentType: signedType }),
+        });
+        if (!finRes.ok) {
+          const errBody = await finRes.json().catch(() => ({}));
+          throw new Error(errBody.message || `Finalize failed (${finRes.status})`);
+        }
+        const audioResult = (await finRes.json()) as {
+          url: string;
+          sourceUrl: string | null;
+          transcoded: boolean;
+          duration?: number | null;
+          servedSpecs?: AudioSpecsPayload | null;
+          sourceSpecs?: AudioSpecsPayload | null;
+        };
+
+        // 4. Create the song row.
+        await apiRequest("POST", "/api/admin/songs", {
+          albumId,
+          title: clientDeriveTitleFromFilename(file.name),
+          trackNumber: trackNum,
+          duration: audioResult.duration ?? 0,
+          audioUrl: audioResult.url,
+          ...(audioResult.sourceUrl ? { audioSourceUrl: audioResult.sourceUrl } : {}),
+          ...(audioResult.servedSpecs ? { servedSpecs: audioResult.servedSpecs } : {}),
+          ...(audioResult.sourceSpecs ? { sourceSpecs: audioResult.sourceSpecs } : {}),
+        });
+
+        trackNum++;
+        okCount++;
+        setItemStatus(i, { status: "done" });
+      } catch (e: any) {
+        errCount++;
+        setItemStatus(i, { status: "error", error: e?.message || "Upload failed" });
+      }
+    }
+
+    await onSaved();
+
+    const parts: string[] = [];
+    if (errCount > 0) parts.push(`${errCount} file${errCount === 1 ? "" : "s"} failed`);
+
+    toast({
+      title:
+        okCount === 0 && errCount > 0
+          ? "No tracks were added"
+          : `${okCount} ${okCount === 1 ? "track" : "tracks"} added`,
+      description: parts.length > 0 ? parts.join(" · ") : undefined,
+      variant: okCount === 0 && errCount > 0 ? "destructive" : undefined,
+    });
+
+    setRunning(false);
+    if (okCount > 0) onOpenChange(false);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
@@ -5821,12 +5975,11 @@ function AddMultipleTracksDialog({
                 className="w-72 text-[12px] leading-relaxed bg-white border border-slate-200 shadow-lg text-slate-700"
               >
                 <p className="font-semibold text-slate-900 mb-1.5">
-                  Two ways to bulk-add
+                  Three ways to bulk-add
                 </p>
                 <p>
-                  <span className="font-medium text-slate-900">Empty rows</span>{" "}
-                  stamps out N placeholder rows, numbered starting from the next
-                  track number. No audio or lyrics — that's still on you.
+                  <span className="font-medium text-slate-900">Upload files</span>{" "}
+                  drag-and-drop or pick audio files from your computer — each file becomes a track.
                 </p>
                 <p className="mt-2">
                   <span className="font-medium text-slate-900">From Dropbox or WeTransfer</span>{" "}
@@ -5838,12 +5991,16 @@ function AddMultipleTracksDialog({
                   . WeTransfer: paste the link from the download page.
                   Audio formats: .mp3, .wav, .flac, .m4a, .aac, .aif/.aiff, .ogg.
                 </p>
+                <p className="mt-2">
+                  <span className="font-medium text-slate-900">Empty rows</span>{" "}
+                  stamps out N placeholder rows, numbered starting from the next
+                  track number. No audio or lyrics — that's still on you.
+                </p>
               </PopoverContent>
             </Popover>
           </DialogTitle>
           <DialogDescription className="text-[13px] font-normal text-slate-500">
-            Stamp out a batch of empty rows, or pull audio from a Dropbox
-            or WeTransfer link in one go.
+            Upload files from your computer, pull from a Dropbox / WeTransfer link, or stamp out empty rows.
           </DialogDescription>
         </DialogHeader>
 
@@ -5851,6 +6008,7 @@ function AddMultipleTracksDialog({
             slate-900 active pill) to match the rest of admin chrome. */}
         <div className="inline-flex bg-slate-100 rounded-lg p-0.5 self-start" role="tablist">
           {([
+            { id: "upload", label: "Upload files" },
             { id: "dropbox", label: "From Dropbox / WeTransfer" },
             { id: "empty", label: "Empty rows" },
           ] as const).map((opt) => (
@@ -5895,7 +6053,7 @@ function AddMultipleTracksDialog({
               <p className="text-[11.5px] text-slate-400">Up to 50 at a time.</p>
             </div>
           </>
-        ) : (
+        ) : mode === "dropbox" ? (
           <>
             <div className="space-y-1.5">
               <Label htmlFor="bulk-dropbox-url" className="text-[12.5px] font-medium text-slate-700">
@@ -5917,6 +6075,122 @@ function AddMultipleTracksDialog({
               </p>
             </div>
           </>
+        ) : (
+          /* ── Upload files tab ─────────────────────────────────────── */
+          <div className="space-y-2">
+            {/* Hidden multi-file picker */}
+            <input
+              ref={uploadFileInputRef}
+              type="file"
+              multiple
+              accept="audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.aif,.aiff"
+              className="hidden"
+              data-testid="input-bulk-upload-files"
+              onChange={(e) => {
+                handleUploadFilePick(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            {/* Drop zone — shown while idle or when files are queued but
+                not yet running (lets the operator add more before they
+                hit Upload). Hidden once the run starts so the list of
+                per-file states fills the space cleanly. */}
+            {!running && (
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label="Drop audio files here or click to browse"
+                data-testid="dropzone-bulk-upload"
+                onClick={() => uploadFileInputRef.current?.click()}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") uploadFileInputRef.current?.click(); }}
+                onDragOver={(e) => { e.preventDefault(); setDragOverUpload(true); }}
+                onDragLeave={() => setDragOverUpload(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOverUpload(false);
+                  handleUploadFilePick(e.dataTransfer.files);
+                }}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed py-6 cursor-pointer transition-colors select-none",
+                  dragOverUpload
+                    ? "border-[var(--brand-blue)] bg-blue-50"
+                    : "border-slate-200 hover:border-slate-300 bg-slate-50",
+                )}
+              >
+                <Upload className="w-5 h-5 text-slate-400" />
+                <p className="text-sm font-medium text-slate-600">
+                  Drop files here, or <span className="text-[var(--brand-blue)]">browse</span>
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  MP3, WAV, FLAC, M4A, AAC, OGG, AIFF — multiple files OK
+                </p>
+              </div>
+            )}
+            {/* Per-file status list */}
+            {uploadItems.length > 0 && (
+              <ul
+                className="space-y-1 max-h-44 overflow-y-auto pr-0.5"
+                data-testid="list-bulk-upload-items"
+              >
+                {uploadItems.map((item, idx) => (
+                  <li
+                    key={idx}
+                    className="flex items-center gap-2 text-[12px] text-slate-700"
+                    data-testid={`upload-item-${idx}`}
+                  >
+                    {/* Status icon */}
+                    {item.status === "done" && (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                    )}
+                    {item.status === "error" && (
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                    )}
+                    {(item.status === "uploading" || item.status === "saving") && (
+                      <Loader2 className="w-3.5 h-3.5 text-[var(--brand-blue)] animate-spin flex-shrink-0" />
+                    )}
+                    {item.status === "queued" && (
+                      <span className="w-3.5 h-3.5 rounded-full border border-slate-300 flex-shrink-0" />
+                    )}
+                    {/* Filename */}
+                    <span className="flex-1 truncate">
+                      {item.name}
+                    </span>
+                    {/* Inline progress / label */}
+                    {item.status === "uploading" && item.pct > 0 && (
+                      <span className="tabular-nums text-slate-400 flex-shrink-0">{item.pct}%</span>
+                    )}
+                    {item.status === "saving" && (
+                      <span className="text-slate-400 flex-shrink-0">saving…</span>
+                    )}
+                    {item.status === "error" && item.error && (
+                      <span className="text-red-400 truncate max-w-[120px] flex-shrink-0" title={item.error}>
+                        {item.error}
+                      </span>
+                    )}
+                    {/* Remove button — only when not running */}
+                    {!running && item.status === "queued" && (
+                      <button
+                        type="button"
+                        aria-label={`Remove ${item.name}`}
+                        data-testid={`button-remove-upload-item-${idx}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setUploadFiles((prev) => {
+                            const next = prev.filter((_, fi) => fi !== idx);
+                            setUploadItems(next.map((f) => ({ name: f.name, status: "queued" as const, pct: 0 })));
+                            return next;
+                          });
+                        }}
+                        className="w-4 h-4 rounded flex items-center justify-center text-slate-300 hover:text-red-400 flex-shrink-0"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
 
         {/* Live progress while the import runs. Lives ABOVE the footer so
@@ -5995,7 +6269,7 @@ function AddMultipleTracksDialog({
                 <>Create {n} {n === 1 ? "track" : "tracks"}</>
               )}
             </button>
-          ) : (
+          ) : mode === "dropbox" ? (
             <button
               type="button"
               onClick={handleConfirmDropbox}
@@ -6004,6 +6278,20 @@ function AddMultipleTracksDialog({
               className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-2"
             >
               {running ? <>Importing…</> : <>Import from Dropbox / WeTransfer</>}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleConfirmUpload}
+              disabled={running || uploadFiles.length === 0}
+              data-testid="button-bulk-upload-confirm"
+              className="px-3.5 py-1.5 rounded-md text-[13px] font-semibold bg-[#319ED8] text-white hover:bg-[#2890c8] disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              {running ? (
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" />Uploading…</>
+              ) : (
+                <>Upload {uploadFiles.length > 0 ? `${uploadFiles.length} ${uploadFiles.length === 1 ? "file" : "files"}` : "files"}</>
+              )}
             </button>
           )}
         </DialogFooter>

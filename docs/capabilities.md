@@ -123,6 +123,7 @@ The admin tooling and operational process that lets a tiny team run the whole bu
 ## Catalog Management
 
 - **One-click album import.** Paste an Apple Music link, and GoodTunes pulls the artwork, tracklist, credits, and streaming links.
+- **Direct audio file upload in the multi-track dialog.** Operators can drag-and-drop or tap-to-browse multiple audio files straight from their computer in the "Upload multiple tracks" dialog — no cloud link required. Each file uploads directly to Object Storage (bypassing the proxy cap), the server transcodes if needed, and a new track row is created per file with the correct title, duration, and audio specs. Per-file progress and independent error states mean one bad file never blocks the rest.
 - **Dropbox and WeTransfer zip import.** Operators paste a Dropbox or WeTransfer share link anywhere the importer accepts a zip — tracks, synced lyrics, bonus video, and bonus photos. The server resolves the share link server-side (SSRF-safe: private-IP and http:// links are blocked before any fetch), streams the zip directly into the same extraction pipeline, and rejects WeTransfer preview-only links with a plain-language error so the operator knows to use the public download URL instead.
 - **Bulk credit editing.** Edit credits across an entire album at once.
 - **Waveform-based preview editing.** Set the 30-second preview window visually against the waveform.

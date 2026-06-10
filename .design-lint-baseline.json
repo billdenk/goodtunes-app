@@ -14387,6 +14387,16 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<p className=\"text-[11px] text-slate-400\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "className=\"flex items-center gap-2 text-[12px] text-slate-700\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "<div className=\"flex items-center justify-between text-[11.5px] text-slate-500\">"
   },
   {
@@ -15143,11 +15153,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "<div className=\"mt-2 flex items-center gap-2 text-[11.5px] text-slate-500\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<p className=\"text-[11px] text-slate-400\">"
   },
   {
     "rule": "hardcoded-font-size",
