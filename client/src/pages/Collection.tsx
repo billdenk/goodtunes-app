@@ -555,7 +555,7 @@ export function Collection() {
 export function CollectionSongs() {
   const [, navigate] = useLocation();
   const { playSong, currentSong, setShowPlayer } = usePlayer();
-  const { myAlbumsLoading, allSongsWithAlbum } = useFanLibrary();
+  const { myAlbumsLoading, allSongsWithAlbum, previewAlbumIds } = useFanLibrary();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [sortBy, setSortBy] = useState("title");
