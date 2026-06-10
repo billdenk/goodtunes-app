@@ -871,6 +871,11 @@ function WorldMap({ points }: { points: Array<{ lat: number; lon: number; orders
   // Equirectangular projection — simple, good enough for a city-dot map.
   // Signature matches the GeoJSON coordinate order: proj(lon, lat) → [x, y].
   const W = 960, H = 480;
+  // Crop the empty polar bands (Arctic/Antarctic) so landmasses fill the card,
+  // matching the partner SalesMap's "0 14 800 312" crop scaled to this 1.2×
+  // canvas (14→16.8 top, 312→374.4 height). Projection math is unchanged — only
+  // the viewBox window shrinks, so dot positions stay correct.
+  const VIEWBOX = "0 16.8 960 374.4";
   function proj(lon: number, lat: number): [number, number] {
     const x = ((lon + 180) / 360) * W;
     const y = ((90 - lat) / 180) * H;
@@ -880,7 +885,7 @@ function WorldMap({ points }: { points: Array<{ lat: number; lon: number; orders
   const maxOrders = Math.max(1, ...points.map((p) => p.orders));
   return (
     <div className="relative w-full overflow-hidden rounded-md border border-slate-200 bg-[#eef2f7]">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" data-testid="svg-fan-map">
+      <svg viewBox={VIEWBOX} className="w-full h-auto" data-testid="svg-fan-map">
         {/* Country outlines — rendered first so dots sit on top */}
         {geoData?.features?.map((f: any, i: number) => {
           const d = geoToPath(f.geometry, proj);
