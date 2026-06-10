@@ -41,7 +41,7 @@ type GiftInfo = {
   createdAt: string;
 };
 
-type AdminOrderRow = {
+export type AdminOrderRow = {
   id: string;
   customerId: string;
   customerEmail: string;
@@ -155,8 +155,67 @@ function giftStatus(g: GiftInfo): { label: string; cls: string } {
 }
 
 const STATUSES = ["all", "paid", "shipped", "refunded"] as const;
-type StatusFilter = (typeof STATUSES)[number];
+export type StatusFilter = (typeof STATUSES)[number];
 const dollars = (c: number) => formatUsdCents(c);
+
+// Task #73 fulfillment lifecycle — physical SKUs are the only ones that
+// ever hand off to Order Desk, so they're the only rows that can carry a
+// push failure. Mirror the FulfillmentTimeline gate.
+function isPhysicalOrder(o: AdminOrderRow): boolean {
+  return o.skuKind === "vinyl" || o.skuKind === "cassette" || o.skuKind === "cd" || o.skuKind === "bundle";
+}
+
+// A paid physical order with a recorded `fulfillmentError` never reached
+// Order Desk — the push failed (or credentials weren't configured). We gate
+// on `status === "paid"` so a refunded order that still carries a stale
+// error doesn't read as a live fulfillment gap (refunds are nothing to push).
+// The error is cleared on the next successful push (server/orderDesk.ts), so
+// this flips back to false the moment the order is pushed, which is what
+// clears the "needs attention" badge.
+export function orderNeedsPush(o: AdminOrderRow): boolean {
+  return o.status === "paid" && isPhysicalOrder(o) && !!o.fulfillmentError;
+}
+
+// Count of orders that need a (re)push — drives the alert badge. The badge
+// only renders while this is > 0, so it clears itself the moment every error
+// resolves (the server nulls `fulfillmentError` on a successful push).
+export function countOrdersNeedingPush(orders: AdminOrderRow[]): number {
+  return orders.filter(orderNeedsPush).length;
+}
+
+// The active list scope. Pure so the order pipeline (and its interaction
+// with the needs-attention scope) is unit-testable without mounting the page.
+export type OrderScope = {
+  needsAttentionOnly: boolean;
+  statusFilter: StatusFilter;
+  fulfillerFilter: string;
+};
+
+export function applyOrderScope(orders: AdminOrderRow[], scope: OrderScope): AdminOrderRow[] {
+  return orders
+    .filter((o) => (scope.needsAttentionOnly ? orderNeedsPush(o) : true))
+    .filter((o) => (scope.statusFilter === "all" ? true : o.status === scope.statusFilter))
+    .filter((o) =>
+      scope.fulfillerFilter === "all"
+        ? true
+        : o.items.some((it) => it.kind === "custom_addon" && it.fulfiller === scope.fulfillerFilter),
+    );
+}
+
+// Toggling the alert badge. Enabling the needs-attention scope forces the
+// status filter back to "all" so the failed-push rows can never be hidden
+// behind an active paid/shipped/refunded filter; disabling leaves the
+// operator's status filter untouched.
+export function nextScopeOnNeedsAttentionToggle(current: {
+  needsAttentionOnly: boolean;
+  statusFilter: StatusFilter;
+}): { needsAttentionOnly: boolean; statusFilter: StatusFilter } {
+  const turningOn = !current.needsAttentionOnly;
+  return {
+    needsAttentionOnly: turningOn,
+    statusFilter: turningOn ? "all" : current.statusFilter,
+  };
+}
 
 export function AdminOrders() {
   return (
@@ -171,6 +230,9 @@ function AdminOrdersInner() {
   // Task #863 — filter the queue to orders carrying a custom add-on
   // fulfilled by the selected party. "all" = no fulfiller filter.
   const [fulfillerFilter, setFulfillerFilter] = useState<string>("all");
+  // Task #1919 — scope the list to physical orders whose Order Desk push
+  // failed (non-null fulfillmentError). Toggled by the alert badge.
+  const [needsAttentionOnly, setNeedsAttentionOnly] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const { toast } = useToast();
   const {
@@ -286,13 +348,20 @@ function AdminOrdersInner() {
     ),
   ).sort((a, b) => a.localeCompare(b));
 
-  const filtered = (orders ?? [])
-    .filter((o) => (filter === "all" ? true : o.status === filter))
-    .filter((o) =>
-      fulfillerFilter === "all"
-        ? true
-        : o.items.some((it) => it.kind === "custom_addon" && it.fulfiller === fulfillerFilter),
-    );
+  // Task #1919 — count of physical orders whose push to Order Desk failed.
+  // Drives the alert badge + clears itself the moment every error resolves.
+  const needsPushCount = countOrdersNeedingPush(orders ?? []);
+  // Once every push failure resolves the badge disappears; drop the scope
+  // too so the operator isn't left staring at an empty filtered list.
+  useEffect(() => {
+    if (needsAttentionOnly && needsPushCount === 0) setNeedsAttentionOnly(false);
+  }, [needsAttentionOnly, needsPushCount]);
+
+  const filtered = applyOrderScope(orders ?? [], {
+    needsAttentionOnly,
+    statusFilter: filter,
+    fulfillerFilter,
+  });
 
   // Task #131 — Deep-link focus. When AdminCustomerDetail (or any
   // other admin page) links here as `/admin/orders?orderId=<id>` we
@@ -312,7 +381,9 @@ function AdminOrdersInner() {
   const [didFocus, setDidFocus] = useState(false);
   useEffect(() => {
     if (focusOrderId && filter !== "all") setFilter("all");
-  }, [focusOrderId, filter]);
+    // A deep-linked order must never be hidden by the needs-attention scope.
+    if (focusOrderId && needsAttentionOnly) setNeedsAttentionOnly(false);
+  }, [focusOrderId, filter, needsAttentionOnly]);
   useEffect(() => {
     if (!focusOrderId || didFocus) return;
     if (!filtered.some((o) => o.id === focusOrderId)) return;
@@ -332,6 +403,30 @@ function AdminOrdersInner() {
             <p className="text-slate-500 text-[13px]">Physical fulfillment + refund tracking.</p>
           </div>
           <div className="flex items-center gap-2">
+            {needsPushCount > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = nextScopeOnNeedsAttentionToggle({
+                    needsAttentionOnly,
+                    statusFilter: filter,
+                  });
+                  setFilter(next.statusFilter);
+                  setNeedsAttentionOnly(next.needsAttentionOnly);
+                }}
+                aria-pressed={needsAttentionOnly}
+                className={`h-8 px-3 rounded-md text-xs font-semibold inline-flex items-center gap-1.5 transition-colors ${
+                  needsAttentionOnly
+                    ? "bg-rose-600 text-white hover:bg-rose-700"
+                    : "bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100"
+                }`}
+                data-testid="button-needs-attention"
+                title="These physical orders failed to push to Order Desk. Click to filter the list to just them."
+              >
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {needsPushCount} {needsPushCount === 1 ? "order needs" : "orders need"} push
+              </button>
+            )}
             <Link
               href="/admin/print-queue"
               className="h-8 px-3 rounded-md border border-slate-200 bg-white text-slate-700 text-[12px] font-medium hover:bg-slate-50 inline-flex items-center gap-1.5"
