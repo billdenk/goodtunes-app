@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import {
@@ -828,32 +828,88 @@ function FanMapTab({ qs }: { qs: string }) {
   );
 }
 
+// Lazy-load (and code-split) the vendored Natural Earth world geometry.
+function useWorldGeoData() {
+  const [fc, setFc] = useState<any>(null);
+  useEffect(() => {
+    let alive = true;
+    import("@/assets/geo/world-countries.geo.json")
+      .then((mod) => {
+        if (alive) setFc((mod as any).default ?? mod);
+      })
+      .catch(() => {
+        if (alive) setFc(null);
+      });
+    return () => { alive = false; };
+  }, []);
+  return fc;
+}
+
+// Convert a GeoJSON Polygon/MultiPolygon geometry to an SVG path string
+// using the supplied projection (lon, lat) → [x, y].
+function geoToPath(geometry: any, proj: (lon: number, lat: number) => [number, number]): string {
+  const polys: number[][][][] =
+    geometry.type === "Polygon"
+      ? [geometry.coordinates]
+      : geometry.type === "MultiPolygon"
+        ? geometry.coordinates
+        : [];
+  let d = "";
+  for (const poly of polys) {
+    for (const ring of poly) {
+      ring.forEach(([lon, lat]: number[], i: number) => {
+        const [x, y] = proj(lon, lat);
+        d += (i === 0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1);
+      });
+      d += "Z";
+    }
+  }
+  return d;
+}
+
 function WorldMap({ points }: { points: Array<{ lat: number; lon: number; orders: number; city: string | null; region: string | null; country: string | null; fans: number }> }) {
   // Equirectangular projection — simple, good enough for a city-dot map.
+  // Signature matches the GeoJSON coordinate order: proj(lon, lat) → [x, y].
   const W = 960, H = 480;
-  function proj(lat: number, lon: number): [number, number] {
+  function proj(lon: number, lat: number): [number, number] {
     const x = ((lon + 180) / 360) * W;
     const y = ((90 - lat) / 180) * H;
     return [x, y];
   }
+  const geoData = useWorldGeoData();
   const maxOrders = Math.max(1, ...points.map((p) => p.orders));
   return (
-    <div className="relative w-full overflow-hidden rounded-md border border-slate-200 bg-[#f8fafc]">
+    <div className="relative w-full overflow-hidden rounded-md border border-slate-200 bg-[#eef2f7]">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" data-testid="svg-fan-map">
+        {/* Country outlines — rendered first so dots sit on top */}
+        {geoData?.features?.map((f: any, i: number) => {
+          const d = geoToPath(f.geometry, proj);
+          if (!d) return null;
+          return (
+            <path
+              key={i}
+              d={d}
+              fill="#dce5ef"
+              stroke="#c4d0de"
+              strokeWidth={0.4}
+              strokeLinejoin="round"
+            />
+          );
+        })}
         {/* Latitude/longitude graticule for orientation */}
         {[-60, -30, 0, 30, 60].map((lat) => {
-          const [, y] = proj(lat, 0);
-          return <line key={`la${lat}`} x1={0} x2={W} y1={y} y2={y} stroke="#e2e8f0" strokeWidth={0.5} />;
+          const [, y] = proj(0, lat);
+          return <line key={`la${lat}`} x1={0} x2={W} y1={y} y2={y} stroke="#c8d4e0" strokeWidth={0.4} />;
         })}
         {[-120, -60, 0, 60, 120].map((lon) => {
-          const [x] = proj(0, lon);
-          return <line key={`lo${lon}`} x1={x} x2={x} y1={0} y2={H} stroke="#e2e8f0" strokeWidth={0.5} />;
+          const [x] = proj(lon, 0);
+          return <line key={`lo${lon}`} x1={x} x2={x} y1={0} y2={H} stroke="#c8d4e0" strokeWidth={0.4} />;
         })}
         {/* Equator highlight */}
-        <line x1={0} x2={W} y1={H / 2} y2={H / 2} stroke="#cbd5e1" strokeWidth={0.5} />
+        <line x1={0} x2={W} y1={H / 2} y2={H / 2} stroke="#b0c0d0" strokeWidth={0.5} />
         {/* Fan dots */}
         {points.map((p, i) => {
-          const [x, y] = proj(p.lat, p.lon);
+          const [x, y] = proj(p.lon, p.lat);
           const r = 3 + 8 * Math.sqrt(p.orders / maxOrders);
           return (
             <g key={i} data-testid={`map-dot-${i}`}>
