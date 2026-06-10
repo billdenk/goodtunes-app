@@ -838,6 +838,124 @@ export async function sendOrderReceiptEmail(
   return sendViaResend("order-receipt", toEmail, subject, html, text);
 }
 
+// Shipping confirmation. Fired once, best-effort, when the Order Desk
+// webhook transitions a physical order to `shipped` (see
+// server/orderDesk.ts). Carries the album, carrier + tracking link, and
+// the GoodDeed number(s) so the fan can follow the carton. Brand chrome
+// matches the dark fan-facing templates (#00062B field, #4AFFCA eyebrow,
+// #319ED8 primary CTA). The one-time guarantee lives at the call site
+// (only sent when the webhook is the one that stamps `shipped_at`).
+export type OrderShippedData = {
+  albumTitle: string;
+  albumArtist: string;
+  artworkUrl: string | null;
+  carrier: string | null;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  goodDeedNumbers: number[];
+  webPlayUrl: string;
+};
+
+export async function sendOrderShippedEmail(
+  toEmail: string,
+  data: OrderShippedData,
+): Promise<SendResult> {
+  const {
+    albumTitle,
+    albumArtist,
+    artworkUrl,
+    carrier,
+    trackingNumber,
+    trackingUrl,
+    goodDeedNumbers,
+    webPlayUrl,
+  } = data;
+
+  const subject = `Your record shipped — ${albumTitle}`;
+  const gdLabel = goodDeedNumbers.length === 1 ? "GoodDeed number" : "GoodDeed numbers";
+  const gdText = goodDeedNumbers.map((n) => `#${n}`).join(", ");
+  const carrierLine = carrier
+    ? `Carrier: ${carrier}${trackingNumber ? ` — ${trackingNumber}` : ""}`
+    : trackingNumber
+      ? `Tracking: ${trackingNumber}`
+      : null;
+
+  const text = [
+    `It's on the way. Your record just shipped.`,
+    ``,
+    `${albumTitle} — ${albumArtist}`,
+    ...(carrierLine ? [``, carrierLine] : []),
+    ...(trackingUrl ? [`Track it: ${trackingUrl}`] : []),
+    ...(goodDeedNumbers.length > 0 ? [``, `${gdLabel}: ${gdText}`] : []),
+    ``,
+    `Your album, ready to play: ${webPlayUrl}`,
+    ``,
+    `— The GoodTunes team`,
+  ].join("\n");
+
+  const artworkHtml = artworkUrl
+    ? `<img src="${escapeHtml(artworkUrl)}" alt="" width="56" height="56" style="width:56px;height:56px;border-radius:10px;object-fit:cover;display:block;" />`
+    : "";
+
+  const goodDeedHtml =
+    goodDeedNumbers.length > 0
+      ? `
+      <div style="margin: 24px 0; padding: 16px 18px; background: rgba(74,255,202,0.08); border: 1px solid rgba(74,255,202,0.25); border-radius: 12px;">
+        <div style="font-size: 12px; color: #4AFFCA; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 700;">${escapeHtml(gdLabel)}</div>
+        <div style="font-size: 24px; font-weight: 800; color: #ffffff; margin-top: 4px;">${escapeHtml(gdText)}</div>
+      </div>`
+      : "";
+
+  // Carrier / tracking block. Renders whenever we have any of carrier,
+  // tracking number, or tracking URL.
+  const trackingRows = [
+    carrier ? `<tr>
+          <td style="padding: 6px 0; font-size: 14px; color: rgba(255,255,255,0.6);">Carrier</td>
+          <td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">${escapeHtml(carrier)}</td>
+        </tr>` : "",
+    trackingNumber ? `<tr>
+          <td style="padding: 6px 0; font-size: 14px; color: rgba(255,255,255,0.6);">Tracking</td>
+          <td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right; word-break: break-all;">${escapeHtml(trackingNumber)}</td>
+        </tr>` : "",
+  ].join("");
+  const trackingHtml = trackingRows
+    ? `
+      <div style="font-size: 12px; color: rgba(255,255,255,0.5); letter-spacing: 0.5px; text-transform: uppercase; font-weight: 700; margin: 24px 0 6px;">Shipment</div>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+        ${trackingRows}
+      </table>`
+    : "";
+
+  const trackButtonHtml = trackingUrl
+    ? `<div style="margin: 28px 0 0;">
+        ${bulletproofButton(escapeHtml(trackingUrl), "Track your package", { bgColor: "#319ED8", paddingV: 13, paddingH: 26, borderRadius: 999 })}
+      </div>`
+    : "";
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #00062B; color: #ffffff; border-radius: 16px;">
+      ${emailLogoImg("white")}
+      <div style="font-size: 14px; color: #4AFFCA; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">Shipped</div>
+      <h1 style="font-size: 28px; margin: 12px 0 8px; font-weight: 700; color: #ffffff;">It's on the way.</h1>
+      <p style="font-size: 15px; line-height: 1.5; color: rgba(255,255,255,0.75); margin: 0 0 20px;">Your record just shipped${carrier ? ` with ${escapeHtml(carrier)}` : ""}.</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 0 0 4px;">
+        <tr>
+          <td style="width: 56px; vertical-align: middle;">${artworkHtml}</td>
+          <td style="vertical-align: middle; padding-left: ${artworkUrl ? "14px" : "0"};">
+            <div style="font-size: 16px; font-weight: 700; color: #ffffff;">${escapeHtml(albumTitle)}</div>
+            <div style="font-size: 14px; color: rgba(255,255,255,0.6);">${escapeHtml(albumArtist)}</div>
+          </td>
+        </tr>
+      </table>
+      ${goodDeedHtml}
+      ${trackingHtml}
+      ${trackButtonHtml}
+      <p style="font-size: 13px; color: rgba(255,255,255,0.45); margin-top: 28px;">Track this order anytime from "Your orders" in the player.</p>
+    </div>
+  `;
+  return sendViaResend("order-shipped", toEmail, subject, html, text);
+}
+
 // Task #284 — Tap-to-report error capture from the friendly error card.
 // The reporter's email (when we know who they are, OR what they typed
 // into the inline email field) is wired up as reply_to so a quick

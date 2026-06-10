@@ -23,6 +23,7 @@ import { eq, sql, isNull } from "drizzle-orm";
 import {
   orders,
   orderItems,
+  orderCopies,
   albums,
   customerUsers,
   fulfillmentPartners,
@@ -238,6 +239,75 @@ export async function pushOrderToOrderDesk(orderId: string): Promise<{
   }
 }
 
+// ─── Fan shipping-confirmation email ─────────────────────────────────
+// Mirrors commerce.ts fanOrigin(): APP_URL wins, else GOODTUNES_HOST,
+// else the default app subdomain. Used to build the "Your album" deep
+// link in the shipping email.
+function fanOrigin(): string {
+  const explicit = (process.env.APP_URL || "").trim();
+  if (explicit) return explicit.replace(/\/+$/, "");
+  const host = (process.env.GOODTUNES_HOST || "my.goodtunes.music").trim();
+  return `https://${host}`;
+}
+
+// Gather the recipient + payload and dispatch the single branded
+// shipping-confirmation email. Best-effort: resolves a recipient,
+// pulls the GoodDeed number(s), and hands off to the shared Resend
+// transport (synthetic-recipient guard + failure ring buffer +
+// never-throws). The one-time guarantee lives at the call site (only
+// invoked on the first transition to shipped). Physical orders only —
+// digital-only orders never ship a carton.
+async function dispatchShippingEmail(
+  order: Order,
+  tracking: { carrier: string | null; trackingNumber: string | null; trackingUrl: string | null },
+): Promise<void> {
+  if (!isPhysicalSkuKind(order.skuKind)) return; // digital — nothing ships
+
+  // Recipient: prefer the Stripe-collected buyer email, fall back to
+  // the customer row's account email (same posture as the receipt).
+  let toEmail = (order.buyerEmail || "").trim();
+  if (!toEmail) {
+    const [cust] = await db
+      .select({ email: customerUsers.email })
+      .from(customerUsers)
+      .where(eq(customerUsers.id, order.customerId));
+    toEmail = (cust?.email || "").trim();
+  }
+  if (!toEmail) {
+    console.warn(`[orderdesk-webhook] order ${order.id} has no email for shipping confirmation`);
+    return;
+  }
+
+  const [album] = await db.select().from(albums).where(eq(albums.id, order.albumId));
+
+  // GoodDeed number(s): prefer the per-copy ledger (multi-quantity
+  // orders fan out into order_copies), fall back to the order-level
+  // number for legacy single-copy rows.
+  const copies = await db
+    .select({ goodDeedNumber: orderCopies.goodDeedNumber })
+    .from(orderCopies)
+    .where(eq(orderCopies.orderId, order.id))
+    .orderBy(orderCopies.position);
+  let goodDeedNumbers = copies
+    .map((c) => c.goodDeedNumber)
+    .filter((n): n is number => n != null);
+  if (goodDeedNumbers.length === 0 && order.goodDeedNumber != null) {
+    goodDeedNumbers = [order.goodDeedNumber];
+  }
+
+  const { sendOrderShippedEmail } = await import("./mail");
+  await sendOrderShippedEmail(toEmail, {
+    albumTitle: album?.title ?? "Your GoodTunes album",
+    albumArtist: album?.artist ?? "",
+    artworkUrl: album?.artwork ?? null,
+    carrier: tracking.carrier,
+    trackingNumber: tracking.trackingNumber,
+    trackingUrl: tracking.trackingUrl,
+    goodDeedNumbers,
+    webPlayUrl: `${fanOrigin()}/album/${order.albumId}`,
+  });
+}
+
 // ─── Webhook handler ─────────────────────────────────────────────────
 // Mounted in server/routes.ts on POST /api/webhooks/orderdesk. Body is
 // raw bytes (express.raw in server/index.ts) so we can HMAC-verify the
@@ -376,6 +446,15 @@ export function registerOrderDeskRoutes(app: Express) {
       patch.status = "shipped";
     }
 
+    // Capture whether this webhook is the one that first stamps
+    // `shipped_at` — the idempotent guard for the fan shipping email.
+    // `order` was read before this update, so `!order.shippedAt` here
+    // means the row had no ship timestamp until this event; the patch
+    // above only sets shippedAt when it was previously null, so the two
+    // stay in lock-step. A replayed/duplicate shipped event sees a
+    // populated shippedAt and skips the send.
+    const isFirstShipTransition = mapped?.status === "shipped" && !order.shippedAt;
+
     await db.update(orders).set(patch).where(eq(orders.id, order.id));
 
     // Best-effort: when OD reports shipped, trigger the Connect payout
@@ -389,6 +468,22 @@ export function registerOrderDeskRoutes(app: Express) {
         await attemptTransferForOrder(refreshed);
       } catch (e: any) {
         console.error(`[orderdesk-webhook] payout attempt failed for ${order.id}`, e?.message);
+      }
+    }
+
+    // Best-effort: email the fan a shipping confirmation the first time
+    // an order transitions to shipped. Physical orders only; never blocks
+    // the webhook response. Carrier/tracking come from `patch` (this
+    // event) falling back to whatever was already on the row.
+    if (isFirstShipTransition) {
+      try {
+        await dispatchShippingEmail(order, {
+          carrier: (patch.carrier as string | null) ?? order.carrier ?? null,
+          trackingNumber: (patch.trackingNumber as string | null) ?? order.trackingNumber ?? null,
+          trackingUrl: (patch.trackingUrl as string | null) ?? order.trackingUrl ?? null,
+        });
+      } catch (e: any) {
+        console.error(`[orderdesk-webhook] shipping email failed for ${order.id}`, e?.message);
       }
     }
 
