@@ -499,7 +499,7 @@ function ChevronLeft() {
 }
 
 // ── The "tap a number" action menu (echoes the Player Go-to-Album popover). ─
-function NumberMenu({ n }: { n: number }) {
+export function NumberMenu({ n }: { n: number }) {
   const item: CSSProperties = {
     width: "100%",
     display: "flex",
@@ -688,7 +688,7 @@ export function AlbumNumbersScreen({ openMenuFor }: { openMenuFor?: number }) {
 // ===========================================================================
 
 // Filled "color box" panel — no outline, generous padding (Bill's direction).
-function FilledPanel({
+export function FilledPanel({
   children,
   style,
 }: {
@@ -710,7 +710,7 @@ function FilledPanel({
 }
 
 // Album cover with a vinyl disc peeking out to the right (Figma order card).
-function VinylPeekArt({ rec }: { rec: AlbumRec }) {
+export function VinylPeekArt({ rec }: { rec: AlbumRec }) {
   return (
     <div style={{ position: "relative", width: 104, height: 88, flexShrink: 0 }}>
       <div
@@ -767,7 +767,7 @@ function VinylPeekArt({ rec }: { rec: AlbumRec }) {
   );
 }
 
-function IconGift() {
+export function IconGift() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={ORANGE} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
       <rect x="3" y="8" width="18" height="13" rx="1.5" />
@@ -776,7 +776,7 @@ function IconGift() {
     </svg>
   );
 }
-function IconLink() {
+export function IconLink() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.secondary} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
       <path d="M10 13a5 5 0 007 0l3-3a5 5 0 00-7-7l-1 1" />
@@ -787,7 +787,7 @@ function IconLink() {
 
 export type OrderCopy = { number: number; signed?: boolean; priceCents: number };
 
-function money(cents: number) {
+export function money(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
