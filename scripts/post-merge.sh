@@ -6519,4 +6519,93 @@ SQL
 backfill_task_1909_renumber_hope_gooddeed dev  "${DATABASE_URL:-}"
 backfill_task_1909_renumber_hope_gooddeed prod "${PROD_DATABASE_URL:-}"
 
+# ─── Task #1931 — Viryl Technologies press catalog seed ──────────────────────
+# Onboards Viryl Technologies Corp. (Toronto, ON) as a vinyl press: manufacturer
+# record, 3 formats (12_lp / 12_double / 7_inch), 8 colour tiers per format
+# (Black · Opaque · Metallic/Specialty · Transparent · Premium · Multi-colour ·
+# Hand Pour · Splatter), all colours from the 2024 catalogue PDF with hex swatches
+# and Viryl colour codes, and real per-unit-cents ladders for 12_lp (record cost +
+# standard digitally-printed jacket + $0.13 insertion, qty breaks 50/100/200/300/
+# 500/1000). 7_inch and 12_double jacket costs are Custom Quote → TBD rungs.
+# Premium tier is Custom Quote across all formats. Marker-guarded
+# (viryl_catalog_seed_v1) so operator edits are never clobbered on subsequent merges.
+seed_viryl_catalog() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping viryl catalog seed on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/seed-viryl-catalog.ts 2>&1); then
+    echo "post-merge: viryl catalog seed ok on $label"
+    echo "$out" | tail -8
+  else
+    echo "post-merge: WARNING — viryl catalog seed failed on $label (continuing)"
+    echo "$out" | tail -10
+  fi
+}
+seed_viryl_catalog dev  "${DATABASE_URL:-}"
+seed_viryl_catalog prod "${PROD_DATABASE_URL:-}"
+
+# patch-viryl-pricing: adds confirmed 7" (record+sleeve) and 12_double
+# (2×record+2×sleeve, no gatefold) ladders. Marker-guarded (viryl_pricing_patch_v1).
+patch_viryl_pricing() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping viryl pricing patch on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/patch-viryl-pricing.ts 2>&1); then
+    echo "post-merge: viryl pricing patch ok on $label"
+    echo "$out" | tail -6
+  else
+    echo "post-merge: WARNING — viryl pricing patch failed on $label (continuing)"
+    echo "$out" | tail -10
+  fi
+}
+patch_viryl_pricing dev  "${DATABASE_URL:-}"
+patch_viryl_pricing prod "${PROD_DATABASE_URL:-}"
+
+# viryl-photos: extracts disc photos from the 2024 catalogue PDF, applies
+# disc masking, uploads to Object Storage, stamps swatch_image_url.
+# Marker-guarded (viryl_photos_v1). Requires attached_assets/Catalogue_2024_*.pdf.
+run_viryl_photos() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping viryl photos on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/viryl-photos.ts 2>&1); then
+    echo "post-merge: viryl photos ok on $label"
+    echo "$out" | tail -6
+  else
+    echo "post-merge: WARNING — viryl photos failed on $label (continuing)"
+    echo "$out" | tail -10
+  fi
+}
+run_viryl_photos dev  "${DATABASE_URL:-}"
+run_viryl_photos prod "${PROD_DATABASE_URL:-}"
+
+# patch-viryl-180g: adds 12" 180g jacket pricing + records-only (no jacket)
+# option for the standard 12_lp format. Marker-guarded (viryl_180g_patch_v1).
+run_viryl_180g() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping viryl 180g patch on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/patch-viryl-180g.ts 2>&1); then
+    echo "post-merge: viryl 180g patch ok on $label"
+    echo "$out" | tail -6
+  else
+    echo "post-merge: WARNING — viryl 180g patch failed on $label (continuing)"
+    echo "$out" | tail -10
+  fi
+}
+run_viryl_180g dev  "${DATABASE_URL:-}"
+run_viryl_180g prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror
