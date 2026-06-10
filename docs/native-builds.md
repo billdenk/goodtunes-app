@@ -41,7 +41,7 @@ npx cap sync
 
 ### Android — application id, signing, icons
 
-- Application id: `com.gogoods_mobile` (the immutable Google Play package for the kept listing). It's set directly in `android/app/build.gradle` (`defaultConfig.applicationId`) — NOT derived from `capacitor.config.ts` (whose `appId` is the iOS bundle id `Io.GoGoods.music`). The Gradle `namespace` stays `fm.goodtunes.player` (the Java package/`R` root), which is independent of `applicationId`.
+- Application id: `com.gogoods_mobile` (the immutable Google Play package for the kept listing). It's set directly in `android/app/build.gradle` (`defaultConfig.applicationId`) — NOT derived from `capacitor.config.ts` (whose `appId` is the iOS bundle id `Io.GoGoods.music`). The Gradle `namespace` stays `fm.goodtunes.player` (the Java package/`R` root), which is independent of `applicationId`. The matching upload/app-signing keystore must be used or Play will reject the upload.
 - Open `android/` in Android Studio.
 - Create or import the existing GoodTunes upload keystore (one-time). Store the keystore path + alias + passwords in `~/.gradle/gradle.properties` — **never** commit them.
 - App icon: replace `android/app/src/main/res/mipmap-*/ic_launcher*.png` (and the adaptive icon files) with the GoodTunes mark.
