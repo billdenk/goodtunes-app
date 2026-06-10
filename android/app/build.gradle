@@ -1,10 +1,18 @@
 apply plugin: 'com.android.application'
 
 android {
+    // namespace = the Java/Kotlin package + R class root; it stays
+    // `fm.goodtunes.player` so the existing source tree
+    // (java/fm/goodtunes/player/*, MainActivity, plugins, FCM) and resources
+    // don't have to move. It is INDEPENDENT of applicationId in Gradle.
     namespace "fm.goodtunes.player"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "fm.goodtunes.player"
+        // applicationId = the immutable Google Play package. We upload into the
+        // EXISTING `com.gogoods_mobile` listing (kept for its installs +
+        // reviews), so the build must carry that id. iOS keeps its own
+        // identity `Io.GoGoods.music` (capacitor.config.ts + pbxproj).
+        applicationId "com.gogoods_mobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

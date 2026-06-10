@@ -372,11 +372,17 @@ workflows:
       - name: Auto-increment versionCode from the latest Play build
         script: |
           # GCLOUD_SERVICE_ACCOUNT_CREDENTIALS is the Play service-account JSON
-          # (set in the google_play group). Take whatever Play already has on
-          # the internal track and add 1 so duplicates are impossible.
+          # (set in the google_play group). We upload into the EXISTING
+          # com.gogoods_mobile listing, which already has published builds on the
+          # PRODUCTION track (the ~100-install app) — almost certainly with a
+          # higher versionCode than anything on the internal track. So query the
+          # latest build number across ALL tracks (not just internal) and add 1.
+          # Querying internal-only would fall back to 0 here → versionCode 1,
+          # which Play rejects as already-used. More tracks can only RAISE the
+          # floor, never lower it.
           LATEST_BUILD_NUMBER=$(google-play get-latest-build-number \
-            --package-name "fm.goodtunes.player" \
-            --tracks internal || echo "0")
+            --package-name "com.gogoods_mobile" \
+            --tracks "internal" "alpha" "beta" "production" || echo "0")
           NEW_BUILD_NUMBER=$(($LATEST_BUILD_NUMBER + 1))
           # android/app/build.gradle hardcodes `versionCode 1`; patch it in
           # place for this build so the .aab carries the fresh number.

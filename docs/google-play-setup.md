@@ -24,10 +24,14 @@ the operator/console work below.
 > Billing or any in-app purchase to "fix" a review note — point the reviewer at
 > the web instead (the reviewer note below already does).
 
-> **App identity:** Android applicationId is **`fm.goodtunes.player`** (set in
-> `android/app/build.gradle`). This is a *different* identity from iOS
+> **App identity:** Android applicationId is **`com.gogoods_mobile`** (set in
+> `android/app/build.gradle` → `defaultConfig.applicationId`). This is the
+> **existing** Play listing (~100 installs + reviews) that we keep — Play
+> package names are immutable, so the build must carry it to upload into that
+> listing. The Gradle `namespace` stays `fm.goodtunes.player` (the Java
+> package, independent of `applicationId`). iOS is a *different* identity again
 > (`Io.GoGoods.music`) — that's intentional, not a mistake. Everything below
-> uses the Android package name.
+> uses the Android package name `com.gogoods_mobile`.
 
 > **Where Codemagic gets the code:** the GitHub mirror
 > `github.com/billdenk/goodtunes-app` (branch `main`), which updates
@@ -85,12 +89,13 @@ one for an app that's already published**, or Play will reject the upload
    fails the build at signing).
 
 > The SHA-256 fingerprint of the key that actually signs what users download is
-> what App Links verify against. With Play App Signing on, that's the **Play
-> app-signing key**, not your upload key — grab it from Play Console →
-> **Test and release → App integrity → App signing key certificate** and make
-> sure it matches the `ANDROID_RELEASE_SHA256` secret the deployment serves in
-> `assetlinks.json` (already set; see
-> [`app-store-submission.md`](./app-store-submission.md) → "Deep links").
+> what App Links verify against. With Play App Signing on for `com.gogoods_mobile`,
+> that's the **Play app-signing key**, not the upload key — it lives at Play
+> Console → **Test and release → App integrity → App signing key certificate**.
+> That fingerprint (`8B:F3:50:…:CF:4B`) is **public and committed directly into
+> `public/.well-known/assetlinks.json`**, so the deployment serves it without
+> any env var. (`ANDROID_RELEASE_SHA256` remains a dormant rotation override —
+> see [`app-store-submission.md`](./app-store-submission.md) → "Deep links".)
 
 ### B. The Play service-account JSON (`google_play` group)
 
@@ -131,10 +136,12 @@ Do this once, before the first build.
 
 1. **Create the app.** Play Console → **Create app**. App name **GoodTunes**,
    default language, type **App**, **Free**. Confirm the declarations.
-2. **Set the package name.** When you make the first release / app, the package
-   name is locked to whatever the `.aab` carries — it must be
-   **`fm.goodtunes.player`**. (You don't type it separately; it comes from the
-   uploaded bundle. Just don't upload a bundle with a different applicationId.)
+2. **Set the package name.** We are **keeping the existing `com.gogoods_mobile`
+   listing** (it already has installs + reviews), not creating a new app, so its
+   package is already locked to **`com.gogoods_mobile`**. The `.aab` you upload
+   must carry that same applicationId (it does — see `android/app/build.gradle`).
+   Just don't upload a bundle with a different applicationId, or Play will reject
+   it as a mismatched package.
 3. **Accept agreements & complete account setup.** Play Console → **Setup** and
    the dashboard "set up your app" task list: accept the Developer Distribution
    Agreement, and fill the app-content declarations (covered under Compliance
@@ -150,6 +157,20 @@ Do this once, before the first build.
 
 After this, the first Codemagic `android-internal` run will drop a signed `.aab`
 onto the internal track automatically.
+
+> **Three things that MUST line up with the kept `com.gogoods_mobile` listing,
+> or the upload is rejected — operator checks before the first build:**
+> - **Upload key.** The `goodtunes_keystore` reference uploaded to Codemagic must
+>   be the **upload key registered for `com.gogoods_mobile`** in Play App Signing.
+>   A different key is rejected at upload no matter how valid the build is.
+> - **Service-account access.** The `google_play` service account must be granted
+>   release access **on the `com.gogoods_mobile` app specifically**.
+> - **versionCode floor (already handled in CI).** This listing already has
+>   published production builds, so the new build's `versionCode` must exceed the
+>   highest one Play has ever accepted. The `android-internal` workflow reads the
+>   latest build number across **all** tracks (internal/alpha/beta/production) and
+>   adds 1, so it clears the production floor automatically — don't revert that to
+>   an internal-only query or the first build collides on versionCode 1.
 
 ---
 

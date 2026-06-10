@@ -1381,9 +1381,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         path.resolve(process.cwd(), "public/.well-known/assetlinks.json"),
         "utf8",
       );
-      // Same substitution pattern as AASA above. The operator runs
-      // `keytool -list -v -keystore <upload.keystore>` once and pastes
-      // the SHA-256 fingerprint into ANDROID_RELEASE_SHA256.
+      // The committed assetlinks.json carries the REAL app-signing-key
+      // SHA-256 for the `com.gogoods_mobile` Play listing. The fingerprint is
+      // public (it's served right here), so there's no reason to hide it in an
+      // env var. Play App Signing is ON for that listing, so the value App
+      // Links must verify against is Google's *app-signing* key (the one that
+      // signs what users download), not the upload key. The env-var
+      // substitution below is now a dormant rotation override: it only fires
+      // if a future edit re-introduces the sentinel, in which case
+      // ANDROID_RELEASE_SHA256 supplies the value.
       const sha = process.env.ANDROID_RELEASE_SHA256;
       if (body.includes("REPLACE_WITH_UPLOAD_KEYSTORE_SHA256_FINGERPRINT")) {
         if (!sha) {

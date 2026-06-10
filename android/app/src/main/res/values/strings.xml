@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">GoodTunes</string>
     <string name="title_activity_main">GoodTunes</string>
-    <string name="package_name">fm.goodtunes.player</string>
-    <string name="custom_url_scheme">fm.goodtunes.player</string>
+    <string name="package_name">com.gogoods_mobile</string>
+    <string name="custom_url_scheme">com.gogoods_mobile</string>
 </resources>

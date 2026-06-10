@@ -29,7 +29,7 @@ Each line names the technology, what it does here, and why it's a mainstream, de
 - **Tailwind CSS + shadcn/ui** — a conventional utility-first styling system on top of accessible, unstyled component primitives (Radix UI). Standard, not bespoke.
 - **TanStack Query** — the de-facto data-fetching/caching library for React, so the UI stays in sync with the server without hand-rolled state plumbing.
 - **Wouter** — a small, standard client-side router.
-- **Capacitor** — wraps the *same* web app as native iOS and Android apps, so there's one codebase, not three. The apps are real store builds (iOS bundle id `Io.GoGoods.music`, Android `fm.goodtunes.player`).
+- **Capacitor** — wraps the *same* web app as native iOS and Android apps, so there's one codebase, not three. The apps are real store builds (iOS bundle id `Io.GoGoods.music`, Android `com.gogoods_mobile`).
 
 ### Back end (the server)
 - **Node.js + Express (TypeScript)** — the most common server stack on the web. Express is a thin, battle-tested HTTP layer; the business logic sits on top of it in ordinary, readable TypeScript.

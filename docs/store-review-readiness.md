@@ -58,14 +58,17 @@ These existing claims were checked against code and hold:
   and "stream elsewhere" surfaces are gated by the platform capability flags; no
   iOS leak path found. (Matters for guideline 3.1.1 — no external-purchase pointers
   in the iOS build.)
-- **`.well-known` routes.** `apple-app-site-association` and `assetlinks.json`
-  substitute `APPLE_TEAM_ID` / `ANDROID_RELEASE_SHA256` at request time and return
-  `503` when the var is missing (no sentinel leak). `server/auth/host.ts` exempts
-  `/.well-known/*` from the apex→`my.` redirect.
+- **`.well-known` routes.** `apple-app-site-association` substitutes `APPLE_TEAM_ID`
+  at request time and returns `503` when it's missing (no sentinel leak).
+  `assetlinks.json` now serves a **committed, public app-signing-key SHA-256** plus
+  `package_name: com.gogoods_mobile` (no substitution in the normal path —
+  `ANDROID_RELEASE_SHA256` is a dormant rotation override). `server/auth/host.ts`
+  exempts `/.well-known/*` from the apex→`my.` redirect.
 - **Bundle ids are consistent.** iOS is `Io.GoGoods.music` (across `capacitor.config.ts`,
-  the iOS pbxproj, and the AASA `appIDs`); Android is `fm.goodtunes.player` (Android
-  `build.gradle` + `assetlinks.json`). The two stores use different identities by design —
-  see `app-store-submission.md § App identity`.
+  the iOS pbxproj, and the AASA `appIDs`); Android applicationId is `com.gogoods_mobile`
+  (Android `build.gradle` `defaultConfig.applicationId` + `assetlinks.json` + Codemagic
+  `--package-name`), while the Gradle `namespace` (Java package) stays `fm.goodtunes.player`.
+  The two stores use different identities by design — see `app-store-submission.md § App identity`.
 - **Permissions hygiene.** ATT / StoreKit / Camera / Mic / Location are *not*
   declared — correct, since declaring an unused capability is itself a rejection
   trigger. (Note: this is the *device-permission* surface. We still **collect**
@@ -265,9 +268,10 @@ console only (no code gap found, nothing changed):
   hides Chat too.
 - **App Links.** `AndroidManifest.xml` has the `autoVerify="true"` intent-filter for
   `https://my.goodtunes.music/*` (apex intentionally not claimed). `assetlinks.json`
-  served live with the **real** SHA-256 from `ANDROID_RELEASE_SHA256` (verified: no
-  sentinel, `package_name: fm.goodtunes.player`). AASA likewise serves the real
-  `APPLE_TEAM_ID`.
+  is served with the **real, committed** app-signing-key SHA-256 and
+  `package_name: com.gogoods_mobile` (the fingerprint is public, so it's baked into the
+  committed file; `ANDROID_RELEASE_SHA256` is a dormant rotation override). AASA still
+  serves the real `APPLE_TEAM_ID` via substitution.
 - **Account deletion.** `DELETE /api/customer/me` returns `401` unauthenticated
   (route exists, gated); the public deletion page resolves `200` at
   `/delete-account` for the Data safety form's deletion-URL field.

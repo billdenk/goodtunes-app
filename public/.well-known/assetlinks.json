@@ -5,9 +5,9 @@
     ],
     "target": {
       "namespace": "android_app",
-      "package_name": "fm.goodtunes.player",
+      "package_name": "com.gogoods_mobile",
       "sha256_cert_fingerprints": [
-        "REPLACE_WITH_UPLOAD_KEYSTORE_SHA256_FINGERPRINT"
+        "8B:F3:50:D3:8A:37:6B:7B:0C:2C:81:3B:E6:63:3E:45:F5:6A:1A:78:2C:A4:3E:4E:45:BD:0C:C0:80:68:CF:4B"
       ]
     }
   }
