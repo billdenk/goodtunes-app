@@ -270,8 +270,11 @@ export async function sendWelcomeBackEmail(toEmail: string, displayName: string 
       <p style="font-size: 15px; color: #333; line-height: 1.55; margin: 0 0 20px;">
         <strong>GoodTunes</strong> just got a major upgrade — enhanced features, GoodSync™ lyrics, and playlist capabilities — and the whole library you already own is right here waiting for you.
       </p>
-      <p style="margin: 28px 0;">
-        <a href="${signInUrl}" style="display: inline-block; background: linear-gradient(135deg, #1D5E8F, #319ED8); color: #fff; text-decoration: none; padding: 14px 24px; border-radius: 12px; font-weight: 600; font-size: 15px;">Open my GoodTunes player</a>
+      <div style="margin: 28px 0 8px;">
+        ${bulletproofButton(signInUrl, "Open my GoodTunes player", { bgColor: "#1D5E8F", gradient: "linear-gradient(135deg,#1D5E8F,#319ED8)", paddingV: 14, paddingH: 24, borderRadius: 12 })}
+      </div>
+      <p style="font-size: 13px; color: #888; line-height: 1.55; margin: 0 0 24px;">
+        Button not working? Open your library: <a href="${signInUrl}" style="color: #319ED8; word-break: break-all;">${signInUrl}</a>
       </p>
       <h2 style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600; margin: 32px 0 12px;">While you were away</h2>
       <ul style="list-style: disc; padding-left: 18px; margin: 0 0 24px; font-size: 14px;">
@@ -322,15 +325,81 @@ export async function sendEarlyAccessEmail(
       <p style="font-size: 15px; color: #333; line-height: 1.55; margin: 0 0 20px;">
         You asked us to let you know the moment it dropped — it's live now. Tap below to listen and make it yours.
       </p>
-      <p style="margin: 28px 0;">
-        <a href="${albumUrl}" style="display: inline-block; background: linear-gradient(135deg, #7F10A7, #319ED8); color: #fff; text-decoration: none; padding: 14px 24px; border-radius: 12px; font-weight: 600; font-size: 15px;">Get early access</a>
-      </p>
+      <div style="margin: 28px 0;">
+        ${bulletproofButton(albumUrl, "Get early access", { bgColor: "#7F10A7", gradient: "linear-gradient(135deg,#7F10A7,#319ED8)", paddingV: 14, paddingH: 24, borderRadius: 12 })}
+      </div>
       <p style="font-size: 13px; color: #888; line-height: 1.55; margin: 24px 0 0;">
         You're getting this because you signed up to be notified about <strong>${escapeHtml(albumTitle)}</strong> on GoodTunes.
       </p>
     </div>
   `;
   return sendViaResend("early-access", toEmail, subject, html, text);
+}
+
+// ---- Bulletproof email CTA button -------------------------------------------
+// Outlook on Windows renders email through the Word engine, which ignores CSS
+// `background` gradients, `border-radius`, and `padding` on <a> elements —
+// causing gradient/rounded buttons to collapse to invisible unstyled text.
+//
+// This helper emits a VML v:roundrect for Outlook/Word (solid fill, always
+// visible) wrapped in a <!--[if mso]> conditional comment, and a standard
+// CSS-styled <a> for Apple Mail, Gmail, Yahoo, Outlook.com, and Outlook Mac
+// wrapped in <!--[if !mso]><!-->. Both point to the same href.
+//
+// Progressive enhancement: pass `gradient` to add a CSS gradient on top of the
+// solid `bgColor` for clients that support it; Outlook always gets the flat
+// solid fill only.
+//
+// Usage: wrap the return value in a <div style="margin: Npx 0;"> — never in
+// a <p> because block-level VML inside <p> is invalid HTML.
+function bulletproofButton(
+  href: string,
+  label: string,
+  opts: {
+    bgColor: string;
+    gradient?: string;
+    textColor?: string;
+    paddingV?: number;
+    paddingH?: number;
+    borderRadius?: number;
+    fontSize?: number;
+  },
+): string {
+  const {
+    bgColor,
+    gradient,
+    textColor = "#ffffff",
+    paddingV = 12,
+    paddingH = 24,
+    borderRadius = 8,
+    fontSize = 15,
+  } = opts;
+  // VML requires fixed pixel height. Approximate: 1.2× font-size line-height + vertical padding.
+  const buttonHeight = Math.round(fontSize * 1.2) + paddingV * 2;
+  // VML arcsize: corner-radius / (height/2), expressed as %, capped at 50 for pill shapes.
+  const effectiveRadius = Math.min(borderRadius, buttonHeight / 2);
+  const arcPct = Math.min(50, Math.round((effectiveRadius / (buttonHeight / 2)) * 100));
+  // Estimated button width for VML: bold Arial ≈ 9.5 px/char + horizontal padding.
+  const autoWidth = Math.max(160, Math.round(label.length * 9.5) + paddingH * 2);
+  // Escape attribute-unsafe characters in the href.
+  const safeHref = href.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  // CSS background: solid color first (Outlook / fallback), gradient as enhancement layer.
+  const bgCss = gradient
+    ? `background-color:${bgColor};background:${gradient};`
+    : `background-color:${bgColor};`;
+  const borderRadiusCss = borderRadius >= 999 ? "9999px" : `${borderRadius}px`;
+  return (
+    `<!--[if mso]>` +
+    `<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" ` +
+    `href="${safeHref}" ` +
+    `style="height:${buttonHeight}px;v-text-anchor:middle;width:${autoWidth}px;" ` +
+    `arcsize="${arcPct}%" stroke="f" fillcolor="${bgColor}">` +
+    `<w:anchorlock/>` +
+    `<center style="color:${textColor};font-family:Arial,sans-serif;font-size:${fontSize}px;font-weight:700;">${label}</center>` +
+    `</v:roundrect>` +
+    `<![endif]-->` +
+    `<!--[if !mso]><!--><a href="${safeHref}" style="display:inline-block;${bgCss}color:${textColor};text-decoration:none;padding:${paddingV}px ${paddingH}px;border-radius:${borderRadiusCss};font-weight:600;font-size:${fontSize}px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">${label}</a><!--<![endif]-->`
+  );
 }
 
 function escapeHtml(s: string): string {
@@ -384,9 +453,9 @@ export async function sendAdminAccessRequestEmail(
       <p style="font-size: 15px; line-height: 1.5; color: #333;">
         <strong>${requester.displayName}</strong> &lt;${requester.email}&gt; tried to open the admin shell while signed in as a fan.
       </p>
-      <p style="margin: 24px 0;">
-        <a href="${linkUrl}" style="display: inline-block; background: #319ED8; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600; font-size: 14px;">Open their profile</a>
-      </p>
+      <div style="margin: 24px 0;">
+        ${bulletproofButton(linkUrl, "Open their profile", { bgColor: "#319ED8", paddingV: 12, paddingH: 20, borderRadius: 8, fontSize: 14 })}
+      </div>
       <p style="font-size: 13px; color: #888; line-height: 1.5;">If you want to grant access, use the &ldquo;Make admin&hellip;&rdquo; action on their row. Otherwise you can ignore this email — they cannot reach the admin shell without being promoted.</p>
     </div>
   `;
@@ -422,9 +491,9 @@ export async function sendAlbumDeleteRequestEmail(
         <strong>${escapeHtml(requester.displayName)}</strong> &lt;${escapeHtml(requester.email)}&gt; requested to delete the album <strong>${escapeHtml(album.title)}</strong>.
       </p>
       <p style="font-size: 14px; line-height: 1.5; color: #555;">Nothing has been removed yet — approve or deny the request from the review queue.</p>
-      <p style="margin: 24px 0;">
-        <a href="${reviewUrl}" style="display: inline-block; background: #319ED8; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600; font-size: 14px;">Open the review queue</a>
-      </p>
+      <div style="margin: 24px 0;">
+        ${bulletproofButton(reviewUrl, "Open the review queue", { bgColor: "#319ED8", paddingV: 12, paddingH: 20, borderRadius: 8, fontSize: 14 })}
+      </div>
       <p style="font-size: 13px; color: #888; line-height: 1.5;">Approving deletes the album; denying leaves it untouched.</p>
     </div>
   `;
@@ -459,9 +528,9 @@ export async function sendCustomAddonChangeRequestEmail(
       <p style="font-size: 15px; line-height: 1.5; color: #333;">
         <strong>${escapeHtml(requester.displayName)}</strong> &lt;${escapeHtml(requester.email)}&gt; asked for a change to the custom add-on <strong>${escapeHtml(addon.name)}</strong>.
       </p>
-      <p style="margin: 24px 0;">
-        <a href="${manageUrl}" style="display: inline-block; background: #319ED8; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600; font-size: 14px;">Open the add-on</a>
-      </p>
+      <div style="margin: 24px 0;">
+        ${bulletproofButton(manageUrl, "Open the add-on", { bgColor: "#319ED8", paddingV: 12, paddingH: 20, borderRadius: 8, fontSize: 14 })}
+      </div>
       <p style="font-size: 13px; color: #888; line-height: 1.5;">Custom add-ons can only be edited by a super-admin, so this request came to you.</p>
     </div>
   `;
@@ -494,9 +563,9 @@ export async function sendAdminPasswordResetEmail(
       <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Admin</div>
       <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700;">Reset your password</h1>
       <p style="font-size: 15px; line-height: 1.5; color: #333;">Someone (hopefully you) asked to reset the password for your GoodTunes admin account.</p>
-      <p style="margin: 28px 0;">
-        <a href="${resetUrl}" style="display: inline-block; background: #319ED8; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 15px;">Choose a new password</a>
-      </p>
+      <div style="margin: 28px 0;">
+        ${bulletproofButton(resetUrl, "Choose a new password", { bgColor: "#319ED8", paddingV: 12, paddingH: 24, borderRadius: 8 })}
+      </div>
       <p style="font-size: 13px; color: #888; line-height: 1.5;">Or paste this URL into your browser:<br /><span style="color: #319ED8; word-break: break-all;">${resetUrl}</span></p>
       <p style="font-size: 13px; color: #888; margin-top: 24px;">This link expires in <strong>${ttlMinutes} minutes</strong> and can only be used once. You'll still need your authenticator code (or email code) to sign in after resetting.</p>
       <p style="font-size: 13px; color: #888; margin-top: 16px;">If you didn't request this, you can ignore this email — your password is unchanged.</p>
@@ -571,9 +640,9 @@ export async function sendCustomerPasswordResetEmail(
       <div style="font-size: 14px; color: #4AFFCA; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">Account</div>
       <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700; color: #ffffff;">${heading}</h1>
       <p style="font-size: 15px; line-height: 1.5; color: rgba(255,255,255,0.75);">${lead}</p>
-      <p style="margin: 28px 0;">
-        <a href="${resetUrl}" style="display: inline-block; background: #319ED8; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 999px; font-weight: 600; font-size: 15px;">${cta}</a>
-      </p>
+      <div style="margin: 28px 0;">
+        ${bulletproofButton(resetUrl, cta, { bgColor: "#319ED8", paddingV: 12, paddingH: 24, borderRadius: 999 })}
+      </div>
       <p style="font-size: 13px; color: rgba(255,255,255,0.55); line-height: 1.5;">Or paste this URL into your browser:<br /><span style="color: #4AFFCA; word-break: break-all;">${resetUrl}</span></p>
       <p style="font-size: 13px; color: rgba(255,255,255,0.55); margin-top: 24px;">This link expires in <strong style="color: #ffffff;">${ttlMinutes} minutes</strong> and can only be used once.</p>
       <p style="font-size: 13px; color: rgba(255,255,255,0.45); margin-top: 16px;">If you didn't request this, you can ignore this email — your password is unchanged.</p>
@@ -694,17 +763,28 @@ export async function sendOrderReceiptEmail(
     )
     .join("");
 
-  const appButton = (href: string, label: string) => `
-    <a href="${escapeHtml(href)}" style="display: inline-block; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: #ffffff; text-decoration: none; padding: 11px 18px; border-radius: 999px; font-weight: 600; font-size: 14px; margin: 6px 8px 6px 0;">${escapeHtml(label)}</a>`;
+  // App Store / Play Store secondary buttons. VML can't render rgba(), so we
+  // use a solid dark-navy fill (#162b40) as the Outlook fallback — visible on
+  // the dark email background — with the rgba overlay only for modern clients.
+  const appButton = (href: string, label: string) =>
+    bulletproofButton(escapeHtml(href), escapeHtml(label), {
+      bgColor: "#162b40",
+      gradient: "rgba(255,255,255,0.08)",
+      textColor: "#ffffff",
+      paddingV: 11,
+      paddingH: 18,
+      borderRadius: 999,
+      fontSize: 14,
+    });
 
   const appButtonsHtml =
     appleUrl || googleUrl
       ? `
       <p style="font-size: 13px; color: rgba(255,255,255,0.55); margin: 28px 0 8px;">Or take it with you:</p>
-      <p style="margin: 0;">
+      <div style="margin: 0;">
         ${appleUrl ? appButton(appleUrl, "Download on the App Store") : ""}
-        ${googleUrl ? appButton(googleUrl, "Get it on Google Play") : ""}
-      </p>`
+        ${googleUrl ? `<span style="display:inline-block;margin-left:8px;">${appButton(googleUrl, "Get it on Google Play")}</span>` : ""}
+      </div>`
       : "";
 
   const html = `
@@ -748,9 +828,9 @@ export async function sendOrderReceiptEmail(
           <td style="padding: 8px 0 0; font-size: 15px; font-weight: 700; color: #ffffff; text-align: right;">${escapeHtml(formatMoney(totalCents, currency))}</td>
         </tr>
       </table>
-      <p style="margin: 28px 0 0;">
-        <a href="${escapeHtml(webPlayUrl)}" style="display: inline-block; background: #319ED8; color: #ffffff; text-decoration: none; padding: 13px 26px; border-radius: 999px; font-weight: 600; font-size: 15px;">Play on the web</a>
-      </p>
+      <div style="margin: 28px 0 0;">
+        ${bulletproofButton(escapeHtml(webPlayUrl), "Play on the web", { bgColor: "#319ED8", paddingV: 13, paddingH: 26, borderRadius: 999 })}
+      </div>
       ${appButtonsHtml}
       <p style="font-size: 13px; color: rgba(255,255,255,0.45); margin-top: 28px;">Manage your order and certificate anytime from "Your orders" in the player.</p>
     </div>
@@ -894,9 +974,9 @@ export function buildAdminInviteEmail(opts: {
         </tr>
       </table>
       <p style="font-size: 16px; line-height: 1.5; color: #333;">You've been invited to join GoodTunes as a <strong>${roleLabel}</strong>.</p>
-      <p style="margin: 28px 0;">
-        <a href="${acceptUrl}" style="display: inline-block; background: #319ED8; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 15px;">Accept invitation</a>
-      </p>
+      <div style="margin: 28px 0;">
+        ${bulletproofButton(acceptUrl, "Accept invitation", { bgColor: "#319ED8", paddingV: 12, paddingH: 24, borderRadius: 8 })}
+      </div>
       <p style="font-size: 13px; color: #888; line-height: 1.5;">Or paste this URL into your browser:<br /><span style="color: #319ED8; word-break: break-all;">${acceptUrl}</span></p>
       <p style="font-size: 13px; color: #888; margin-top: 24px;">This link expires in <strong>${ttlDays} days</strong>. If you weren't expecting this email, you can ignore it.</p>
     </div>
@@ -973,9 +1053,9 @@ export async function sendMastersReadyEmail(
       <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Press update</div>
       <h1 style="font-size: 28px; margin: 12px 0 16px; font-weight: 700;">Start cutting early?</h1>
       <p style="font-size: 16px; line-height: 1.5; color: #333;"><strong>${escapeHtml(pressName)}</strong> has earmarked enough revenue from <strong>${escapeHtml(albumTitle)}</strong> to cover the masters-prep cost. Approve to let them begin cutting now.</p>
-      <p style="margin: 28px 0;">
-        <a href="${approveUrl}" style="display: inline-block; background: #319ED8; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 15px;">Approve early start</a>
-      </p>
+      <div style="margin: 28px 0;">
+        ${bulletproofButton(approveUrl, "Approve early start", { bgColor: "#319ED8", paddingV: 12, paddingH: 24, borderRadius: 8 })}
+      </div>
       <p style="font-size: 13px; color: #888; line-height: 1.5;">If you'd rather wait for preorder close, you can ignore this email.</p>
     </div>
   `;
@@ -1028,7 +1108,7 @@ export async function sendFulfillmentHeadsUpEmail(
     ...(pipelineUrl ? [``, `View the pipeline: ${pipelineUrl}`] : []),
   ].join("\n");
   const ctaHtml = pipelineUrl
-    ? `<p style="margin: 20px 0 8px;"><a href="${escapeHtml(pipelineUrl)}" style="display: inline-block; background: #319ED8; color: #fff; text-decoration: none; font-size: 15px; font-weight: 600; padding: 11px 20px; border-radius: 8px;">View the pipeline</a></p>`
+    ? `<div style="margin: 20px 0 8px;">${bulletproofButton(escapeHtml(pipelineUrl), "View the pipeline", { bgColor: "#319ED8", paddingV: 11, paddingH: 20, borderRadius: 8 })}</div>`
     : "";
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
