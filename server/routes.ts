@@ -7474,6 +7474,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // fan-facing metadata, so it rides through the operational-bypass
       // path same as physicalFormat.
       "vinylFormat",
+      // Task #1918 — per-album fulfillment routing override. Operational
+      // routing config (which warehouse ships this album), not fan-facing
+      // metadata, so it stays editable after first sale like vendor pricing.
+      "fulfillmentPartnerId",
     ]);
     const bodyKeys = Object.keys(req.body ?? {}).filter((k) => k !== "__note");
     const operationalOnly =
@@ -7537,6 +7541,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Unknown labelId" });
       }
       updates.labelId = normalizedLabelId;
+    }
+    // Task #1918 — per-album fulfillment routing override. Empty/null clears
+    // it (album falls back to the platform default partner). Validate the id
+    // points at a live (non-trashed) fulfillment partner so we never store a
+    // dangling FK that would break routing.
+    if (req.body?.fulfillmentPartnerId !== undefined) {
+      const raw = req.body.fulfillmentPartnerId;
+      const normalized = raw ? String(raw) : null;
+      if (normalized) {
+        const fp = await storage.getFulfillmentPartnerById(normalized);
+        if (!fp) {
+          return res.status(400).json({ message: "Unknown fulfillmentPartnerId" });
+        }
+      }
+      updates.fulfillmentPartnerId = normalized;
     }
     if (req.body?.managerId !== undefined) {
       const normalizedManagerId = req.body.managerId ? String(req.body.managerId) : null;

@@ -197,6 +197,8 @@ interface AlbumFull {
   labelId?: string | null;
   // Server-joined label row from AlbumWithLabel (storage.getAlbumById).
   label?: { id: string; name: string } | null;
+  // Task #1918 — per-album fulfillment routing override (warehouse).
+  fulfillmentPartnerId?: string | null;
   goodTunesReleaseDate?: string | null;
   streamingReleaseDate?: string | null;
   // Task #1078 — Apple-style album footer fields.
@@ -3123,6 +3125,12 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
   const { data: labels = [] } = useQuery<LabelLite[]>({
     queryKey: ["/api/labels"],
   });
+  // Task #1918 — fulfillment partners for the per-album routing override.
+  const { data: fulfillmentPartners = [] } = useQuery<
+    { id: string; name: string; isDefault?: boolean }[]
+  >({
+    queryKey: ["/api/fulfillment-partners"],
+  });
   // Task #79 — surface per-field read-only state when the session can't
   // edit. Same query key as AlbumEditAccessChip so this is a cache hit.
   const { data: editAccess } = useQuery<{
@@ -3156,6 +3164,21 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
     ...[...labels]
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((l) => ({ value: l.id, label: l.name })),
+  ];
+  // Task #1918 — per-album fulfillment routing override options. The empty
+  // row falls back to the platform default partner; we tag which partner that
+  // is so the operator knows what "Platform default" actually means today.
+  const defaultPartner = fulfillmentPartners.find((p) => p.isDefault);
+  const fulfillmentOptions = [
+    {
+      value: "",
+      label: defaultPartner
+        ? `Platform default (${defaultPartner.name})`
+        : "Platform default",
+    },
+    ...[...fulfillmentPartners]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((p) => ({ value: p.id, label: p.name })),
   ];
   return (
     <div className="space-y-5">
@@ -3382,6 +3405,31 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           const c = resp?.artistLabelConflict as ArtistLabelConflict | undefined;
           if (c) setReassign(c);
         }}
+      />
+      {/* Task #1918 — per-album fulfillment routing override. Operational
+          config (which warehouse ships this release), not fan-facing
+          metadata, so it saves through the same PUT but rides the
+          operational-bypass path (stays editable after first sale). Empty =
+          platform default partner. */}
+      <EditablePanel
+        title="Fulfillment"
+        testId="panel-overview-fulfillment"
+        endpoint={endpoint}
+        disabled={disabled}
+        disabledReason={disabledReason}
+        values={{
+          fulfillmentPartnerId: album.fulfillmentPartnerId ?? "",
+        }}
+        invalidate={invalidate}
+        fields={[
+          {
+            key: "fulfillmentPartnerId",
+            label: "Fulfillment partner",
+            type: "select",
+            options: fulfillmentOptions,
+            placeholder: "Platform default",
+          },
+        ]}
       />
       {/* Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only
           legacy)" toggle. Self-contained block: when this flag is retired,

@@ -253,6 +253,17 @@ export const albums = pgTable("albums", {
   // mirrors the People name into `artist` on save, and the artist page can
   // surface this album under "GoodTunes Releases".
   primaryArtistId: varchar("primary_artist_id").references(() => people.id, { onDelete: "set null" }),
+  // Task #1918 — per-album fulfillment routing override. When set, every
+  // physical order for this album routes to this warehouse instead of the
+  // platform default (the first `fulfillment_partners.is_default` row). This
+  // is the third routing layer between the platform-wide default and the
+  // per-order override (`orders.fulfillment_partner_id`): per-order wins,
+  // then per-album, then platform default. SET NULL on partner delete so the
+  // album silently falls back to the default rather than breaking checkout.
+  fulfillmentPartnerId: varchar("fulfillment_partner_id").references(
+    (): any => fulfillmentPartners.id,
+    { onDelete: "set null" },
+  ),
   // Demo show/hide flag. When true the album is excluded from public catalog
   // reads (album list + detail) AND from the fan-facing credits surface,
   // effectively hiding the artist + all their songs/credits in one toggle.

@@ -3066,6 +3066,39 @@ SQL
 migrate_press_invoice_transfer dev  "${DATABASE_URL:-}"
 migrate_press_invoice_transfer prod "${PROD_DATABASE_URL:-}"
 
+# Task #1918 — per-album fulfillment routing override. Nullable FK on albums
+# pointing at fulfillment_partners; SET NULL on partner delete so trashing a
+# warehouse never strands a release (it falls back to the platform default).
+migrate_album_fulfillment_partner() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping album_fulfillment_partner migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS fulfillment_partner_id varchar;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_name = 'albums_fulfillment_partner_id_fulfillment_partners_id_fk'
+  ) THEN
+    ALTER TABLE albums
+      ADD CONSTRAINT albums_fulfillment_partner_id_fulfillment_partners_id_fk
+      FOREIGN KEY (fulfillment_partner_id)
+      REFERENCES fulfillment_partners(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+SQL
+  then
+    echo "post-merge: album_fulfillment_partner migration ok on $label"
+  else
+    echo "post-merge: WARNING — album_fulfillment_partner migration failed on $label (continuing)"
+  fi
+}
+migrate_album_fulfillment_partner dev  "${DATABASE_URL:-}"
+migrate_album_fulfillment_partner prod "${PROD_DATABASE_URL:-}"
+
 # Task #522 — Press portal schema. Default-press wiring on labels/people/
 # admin_invites, per-tier masters_prep_cost_cents, press_switch_history,
 # the press_invoice_* / masters_* / fulfillment_heads_up_* columns on

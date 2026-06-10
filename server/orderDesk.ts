@@ -63,12 +63,37 @@ export function orderDeskAutoPushEnabled(): boolean {
 // ─── Routing: SKU → fulfillment partner ──────────────────────────────
 // Routing rule (deterministic, in priority order):
 //   1. Per-order operator override (`fulfillment_partner_id` on the order).
-//   2. First fulfillment_partner with `is_default = true`.
-//   3. First fulfillment_partner row (fallback when no default is set yet).
+//   2. Task #1918 — per-album override (`albums.fulfillment_partner_id`) so
+//      operators can route a whole release (e.g. all Nightbirde orders) to a
+//      specific warehouse without touching every order.
+//   3. First fulfillment_partner with `is_default = true`.
+//   4. First fulfillment_partner row (fallback when no default is set yet).
 // This replaces the old "first row wins" ambiguity that made Spinney vs
 // PacPack a coin-flip as soon as both rows existed in the table.
 async function pickFulfillmentPartner(order: Order): Promise<string | null> {
   if (order.fulfillmentPartnerId) return order.fulfillmentPartnerId;
+  // Per-album override. Resolve the order's album, then honor its
+  // fulfillmentPartnerId only when it still points at a live (non-trashed)
+  // partner — otherwise fall through to the platform default so a deleted
+  // warehouse never strands the carton.
+  if (order.albumId) {
+    const albumRows = await db
+      .select({ fulfillmentPartnerId: albums.fulfillmentPartnerId })
+      .from(albums)
+      .where(eq(albums.id, order.albumId))
+      .limit(1);
+    const albumPartnerId = albumRows[0]?.fulfillmentPartnerId ?? null;
+    if (albumPartnerId) {
+      const live = await db
+        .select({ id: fulfillmentPartners.id })
+        .from(fulfillmentPartners)
+        .where(
+          sql`${fulfillmentPartners.id} = ${albumPartnerId} AND ${fulfillmentPartners.deletedAt} IS NULL`,
+        )
+        .limit(1);
+      if (live[0]?.id) return live[0].id;
+    }
+  }
   const rows = await db
     .select({ id: fulfillmentPartners.id, isDefault: fulfillmentPartners.isDefault })
     .from(fulfillmentPartners)
