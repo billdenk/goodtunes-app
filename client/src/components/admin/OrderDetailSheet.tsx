@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, RefreshCw, Loader2 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +49,7 @@ export type AdminOrderRow = {
   }[];
   skuKind?: string | null;
   fulfillmentStatus?: string | null;
+  orderDeskOrderId?: string | null;
   carrier?: string | null;
   trackingNumber?: string | null;
   trackingUrl?: string | null;
@@ -57,6 +58,7 @@ export type AdminOrderRow = {
   deliveredAt?: string | null;
   cancelledAt?: string | null;
   returnedAt?: string | null;
+  fulfillmentError?: string | null;
 };
 
 export type AdminOrderDetail = {
@@ -323,9 +325,22 @@ function OrderDetailBody({ detail }: { detail: AdminOrderDetail }) {
       </Section>
 
       <Section title="Fulfillment">
+        <FulfillmentRetryButton order={o as AdminOrderRow} />
         <dl className="grid grid-cols-[120px_1fr] gap-y-1 gap-x-3">
           <Row label="Kind" value={o.skuKind ?? "—"} />
-          <Row label="Status" value={o.fulfillmentStatus ?? "—"} />
+          <Row
+            label="Status"
+            value={
+              <span className="flex items-center gap-2">
+                {o.fulfillmentStatus ?? "—"}
+                {o.orderDeskOrderId && (
+                  <span className="text-slate-400 text-xs" data-testid="text-od-id">
+                    OD #{o.orderDeskOrderId}
+                  </span>
+                )}
+              </span>
+            }
+          />
           <Row
             label="Ship to"
             value={
@@ -419,6 +434,62 @@ function OrderDetailBody({ detail }: { detail: AdminOrderDetail }) {
           </ul>
         )}
       </Section>
+    </div>
+  );
+}
+
+// Fulfillment retry push button — surfaces for physical orders in "pending"
+// state with no OD id yet (i.e. the initial push failed or never ran). Shows
+// the last failure reason so the operator knows what to fix before retrying.
+function FulfillmentRetryButton({ order }: { order: AdminOrderRow }) {
+  const { toast } = useToast();
+  const isPhysical = order.skuKind === "vinyl" || order.skuKind === "cassette" || order.skuKind === "cd" || order.skuKind === "bundle";
+  const needsRetry = isPhysical && !order.orderDeskOrderId && (order.fulfillmentStatus === "pending" || !order.fulfillmentStatus);
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/orders/${order.id}/orderdesk-push`, {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `Push failed (${res.status})`);
+      }
+      return res.json();
+    },
+    onSuccess: (data: { orderDeskOrderId?: string }) => {
+      toast({ title: "Pushed to Order Desk", description: data.orderDeskOrderId ? `OD #${data.orderDeskOrderId}` : undefined });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders", order.id] });
+    },
+    onError: (e: any) => {
+      toast({ title: "Push failed", description: e?.message ?? "Unknown error", variant: "destructive" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders", order.id] });
+    },
+  });
+
+  if (!needsRetry) return null;
+
+  return (
+    <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 space-y-1.5" data-testid="fulfillment-retry-banner">
+      {order.fulfillmentError && (
+        <p className="text-xs text-amber-900">
+          <span className="font-semibold">Last push error:</span> {order.fulfillmentError}
+        </p>
+      )}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => mutation.mutate()}
+        disabled={mutation.isPending}
+        className="border-amber-400 bg-amber-100 hover:bg-amber-200 text-amber-900"
+        data-testid="button-push-to-orderdesk"
+      >
+        {mutation.isPending ? (
+          <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Pushing…</>
+        ) : (
+          <><RefreshCw className="w-3 h-3 mr-1.5" /> Push to Order Desk</>
+        )}
+      </Button>
     </div>
   );
 }

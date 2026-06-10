@@ -450,7 +450,7 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // Shopify bundles are overwhelmingly vinyl; classifySkuKind covers
   // cassette/cd via the matched mapping if the label sets a clear sku
   // code on their Shopify product (we use the line-item title fallback).
-  const { classifySkuKind, isPhysicalSkuKind, pushOrderToOrderDesk } = await import("./orderDesk");
+  const { classifySkuKind, isPhysicalSkuKind, pushOrderToOrderDesk, orderDeskAutoPushEnabled } = await import("./orderDesk");
   const [albumRow] = await db.select().from(albums).where(eq(albums.id, albumId));
   const skuKind = classifySkuKind(`shopify:${matchedLine.variant_id ?? matchedLine.product_id}`);
   const artistSnapshotId = albumRow?.primaryArtistId ?? null;
@@ -579,10 +579,15 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
 
   // Task #73 — physical bundles also flow through Order Desk so the
   // label's vinyl ships from the same warehouse pool as direct orders.
-  // Best-effort: failure leaves fulfillment_status="pending" for retry.
-  if (isPhysicalSkuKind(skuKind)) {
+  // Auto-push is OFF by default (see orderDeskAutoPushEnabled) — the operator
+  // pushes deliberately from the admin order row once the press-run quantity
+  // is confirmed, so the fulfillment partner isn't told to fulfill each order
+  // before anything is printed. pushOrderToOrderDesk is internally try/caught
+  // and records any error on the order row so the admin retry button surfaces
+  // the reason.
+  if (isPhysicalSkuKind(skuKind) && orderDeskAutoPushEnabled()) {
     await pushOrderToOrderDesk(order.id).catch((e) =>
-      console.error(`[shopify] OD handoff failed for ${order.id}`, e?.message),
+      console.error(`[shopify] OD handoff unexpected throw for ${order.id}`, e?.message),
     );
   }
 

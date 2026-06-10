@@ -3894,10 +3894,20 @@ export async function materializeOrderFromSession(
     // OD failure leaves `fulfillment_status = "pending"` so the admin
     // retry button surfaces; PI metadata failure is logged silently.
     if (!wasAlreadyPaid) {
-      const { pushOrderToOrderDesk, isPhysicalSkuKind } = await import("./orderDesk");
-      if (isPhysicalSkuKind(skuKind)) {
+      const { pushOrderToOrderDesk, isPhysicalSkuKind, orderDeskAutoPushEnabled } = await import("./orderDesk");
+      // Auto-push is OFF by default — see orderDeskAutoPushEnabled(). The real
+      // flow aggregates fan orders → artist confirms the press-run quantity →
+      // one order placed with the chosen press, and only then does fulfillment
+      // routing matter. Pushing each fan order now would make the fulfillment
+      // partner think they must fulfill it before anything is printed. The
+      // operator pushes deliberately from the admin order row instead.
+      if (isPhysicalSkuKind(skuKind) && orderDeskAutoPushEnabled()) {
+        // pushOrderToOrderDesk is internally try/caught and records any error
+        // on the order row so the admin retry button surfaces the reason.
+        // We still .catch here to guarantee the surrounding checkout path
+        // is never interrupted by an unexpected throw.
         await pushOrderToOrderDesk(order.id).catch((e) =>
-          console.error(`[commerce] OD handoff failed for ${order.id}`, e?.message),
+          console.error(`[commerce] OD handoff unexpected throw for ${order.id}`, e?.message),
         );
       }
       if (piId) {

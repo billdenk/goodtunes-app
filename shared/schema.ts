@@ -2595,6 +2595,9 @@ export const orders = pgTable("orders", {
   returnedAt: timestamp("returned_at"),
   // Last raw OD payload for admin debugging — small enough to inline.
   fulfillmentRaw: jsonb("fulfillment_raw"),
+  // Last OD push error message, cleared on a successful push so the admin
+  // retry button can surface "why did this fail?" without opening logs.
+  fulfillmentError: text("fulfillment_error"),
   // ─── Shipping & handling charged to the fan ────────────────────────
   // Snapshot of what we collected for shipping on this order. We store
   // the fulfillment partner's raw rate (`shipping_base_cents`, e.g.
@@ -3782,6 +3785,12 @@ export const fulfillmentPartners = pgTable("fulfillment_partners", {
   // carton labels.
   locationAddress: jsonb("location_address").$type<PartnerAddressSnapshot>(),
   shippingAddressStruct: jsonb("shipping_address_struct").$type<PartnerAddressSnapshot>(),
+  // When true this partner is the platform default for new orders that have
+  // no per-order operator override and no album-press default. At most ONE
+  // row should have this set — the routing logic picks the first isDefault
+  // row (or the first row overall if none are flagged) so the operator can
+  // change the default without a code deploy.
+  isDefault: boolean("is_default").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
   ...softDeleteCols,
 }, (table) => ({

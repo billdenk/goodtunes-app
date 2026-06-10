@@ -2941,6 +2941,8 @@ ALTER TABLE vendors               ADD COLUMN IF NOT EXISTS location_address     
 ALTER TABLE manufacturers         ADD COLUMN IF NOT EXISTS location_address         jsonb;
 ALTER TABLE fulfillment_partners  ADD COLUMN IF NOT EXISTS location_address         jsonb;
 ALTER TABLE fulfillment_partners  ADD COLUMN IF NOT EXISTS shipping_address_struct  jsonb;
+-- Task #1916 — deterministic default-partner routing.
+ALTER TABLE fulfillment_partners  ADD COLUMN IF NOT EXISTS is_default boolean NOT NULL DEFAULT false;
 -- Task #517 — Places-picked structured snapshot for the remaining two
 -- partner address surfaces: NPO mailing address and Person shipping
 -- address. Free-text columns above stay the display source of truth;
@@ -5043,6 +5045,74 @@ SQL
 }
 migrate_orders_payment_snapshot dev  "${DATABASE_URL:-}"
 migrate_orders_payment_snapshot prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #1916 — Order Desk fulfillment error column + default partner ───────
+# Adds orders.fulfillment_error so push failures surface to operators without
+# opening server logs, and sets Spinney as the is_default fulfillment partner
+# so routing is deterministic when both Spinney and PacPack rows exist.
+migrate_task_1916_fulfillment_flow() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1916 fulfillment-flow migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS fulfillment_error text;
+SQL
+  then
+    echo "post-merge: task-1916 fulfillment-flow migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-1916 fulfillment-flow migration failed on $label (continuing)"
+  fi
+}
+migrate_task_1916_fulfillment_flow dev  "${DATABASE_URL:-}"
+migrate_task_1916_fulfillment_flow prod "${PROD_DATABASE_URL:-}"
+
+# Set Spinney Media as the default fulfillment partner (is_default = true).
+# Idempotent: only updates the known Spinney row; leaves PacPack alone.
+# The is_default column was added above in the partner-address migration block.
+backfill_task_1916_spinney_default() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-1916 spinney-default backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_1916_spinney_default'
+  ) THEN
+    -- Mark Spinney Media as the platform default; all other partners get false.
+    UPDATE fulfillment_partners
+       SET is_default = (id = '389bd449-b548-4fee-8e3a-4a5be9191a6a')
+     WHERE deleted_at IS NULL;
+    INSERT INTO post_merge_data_backfills (name) VALUES ('task_1916_spinney_default');
+    RAISE NOTICE 'task_1916_spinney_default applied';
+  ELSE
+    RAISE NOTICE 'task_1916_spinney_default already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: task-1916 spinney-default backfill ok on $label"
+    echo "$out" | grep -i 'task_1916' || true
+  else
+    echo "post-merge: WARNING — task-1916 spinney-default backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_1916_spinney_default dev  "${DATABASE_URL:-}"
+backfill_task_1916_spinney_default prod "${PROD_DATABASE_URL:-}"
 
 # ─── Task #1310 — Two-part artist/album share links ──────────────────────────
 # Adds people.artist_share_slug (globally-unique per non-trashed person) and

@@ -19,7 +19,7 @@ import type { Express } from "express";
 import express from "express";
 import { createHmac, timingSafeEqual } from "crypto";
 import { db } from "./db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, isNull } from "drizzle-orm";
 import {
   orders,
   orderItems,
@@ -45,16 +45,36 @@ function odWebhookSecret(): string | null {
   return process.env.ORDERDESK_WEBHOOK_SECRET?.trim() || null;
 }
 
+// Whether a paid physical order should *automatically* hand off to Order
+// Desk the moment it's paid. Default OFF: the real GoodTunes flow aggregates
+// fan orders, asks the artist to confirm the press run quantity, places ONE
+// order with the chosen press, and only THEN does fulfillment routing matter.
+// Auto-pushing every individual fan order would make the fulfillment partner
+// (e.g. Spinney) think they must fulfill each order before anything is even
+// printed. With this off, the integration stays fully wired + credentialed
+// and the operator pushes deliberately via the admin retry button; flip
+// ORDERDESK_AUTO_PUSH on once the release-level fulfillment workflow exists.
+export function orderDeskAutoPushEnabled(): boolean {
+  const v = process.env.ORDERDESK_AUTO_PUSH?.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
 // ─── Routing: SKU → fulfillment partner ──────────────────────────────
-// Today's rule is simple: every physical SKU routes to the *first*
-// active fulfillment_partner unless the order already has an operator
-// override (admin set `fulfillment_partner_id` from the orders detail
-// view). When multiple partners exist we leave choosing the right one
-// to the operator — the foundation is here for an album→partner map.
+// Routing rule (deterministic, in priority order):
+//   1. Per-order operator override (`fulfillment_partner_id` on the order).
+//   2. First fulfillment_partner with `is_default = true`.
+//   3. First fulfillment_partner row (fallback when no default is set yet).
+// This replaces the old "first row wins" ambiguity that made Spinney vs
+// PacPack a coin-flip as soon as both rows existed in the table.
 async function pickFulfillmentPartner(order: Order): Promise<string | null> {
   if (order.fulfillmentPartnerId) return order.fulfillmentPartnerId;
-  const [first] = await db.select().from(fulfillmentPartners).limit(1);
-  return first?.id ?? null;
+  const rows = await db
+    .select({ id: fulfillmentPartners.id, isDefault: fulfillmentPartners.isDefault })
+    .from(fulfillmentPartners)
+    // Never route to a soft-deleted (trashed) partner — only live rows.
+    .where(isNull(fulfillmentPartners.deletedAt))
+    .orderBy(sql`is_default DESC, created_at ASC`);
+  return rows[0]?.id ?? null;
 }
 
 // ─── SKU classification ──────────────────────────────────────────────
@@ -164,8 +184,15 @@ export async function pushOrderToOrderDesk(orderId: string): Promise<{
   if (!isPhysicalSkuKind(order.skuKind)) return { ok: true }; // digital — no handoff
 
   if (!odCreds()) {
+    const errMsg = "Order Desk credentials not configured";
     console.warn(`[orderdesk] credentials not configured — skipping handoff for order ${orderId}`);
-    return { ok: false, error: "Order Desk credentials not configured" };
+    // Record the error so the most common failure mode (no credentials yet)
+    // is visible on the admin order row instead of failing silently.
+    await db
+      .update(orders)
+      .set({ fulfillmentStatus: "pending", fulfillmentError: errMsg })
+      .where(eq(orders.id, order.id));
+    return { ok: false, error: errMsg };
   }
 
   const [album] = await db.select().from(albums).where(eq(albums.id, order.albumId));
@@ -193,17 +220,21 @@ export async function pushOrderToOrderDesk(orderId: string): Promise<{
         fulfillmentPartnerId: partnerId,
         fulfillmentStatus: "submitted",
         submittedToFulfillmentAt: new Date(),
+        fulfillmentError: null, // clear any previous error on success
       })
       .where(eq(orders.id, order.id));
     return { ok: true, orderDeskOrderId: odId };
   } catch (e: any) {
-    console.error(`[orderdesk] push failed for order ${orderId}`, e?.message);
-    // Leave the order in "pending" so the admin retry button surfaces.
+    const errMsg: string = e?.message ?? String(e);
+    console.error(`[orderdesk] push failed for order ${orderId}`, errMsg);
+    // Leave the order in "pending" and record the error so the operator
+    // can see exactly why without opening logs (cleared on the next
+    // successful push).
     await db
       .update(orders)
-      .set({ fulfillmentStatus: "pending" })
+      .set({ fulfillmentStatus: "pending", fulfillmentError: errMsg })
       .where(eq(orders.id, order.id));
-    return { ok: false, error: e?.message ?? String(e) };
+    return { ok: false, error: errMsg };
   }
 }
 

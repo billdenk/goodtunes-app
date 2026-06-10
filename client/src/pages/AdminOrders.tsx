@@ -95,6 +95,7 @@ type AdminOrderRow = {
   deliveredAt?: string | null;
   cancelledAt?: string | null;
   returnedAt?: string | null;
+  fulfillmentError?: string | null;
 };
 
 // Small operator-facing badge surfacing where a row came from. Direct
@@ -692,6 +693,7 @@ function AdminOrdersInner() {
 // returned) progression with the inbound tracking link when OD has
 // emitted it.
 function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
+  const { toast } = useToast();
   const isPhysical = o.skuKind === "vinyl" || o.skuKind === "cassette" || o.skuKind === "cd" || o.skuKind === "bundle";
   if (!isPhysical) return null;
   const stages: { key: string; label: string; at: string | null | undefined }[] = [
@@ -708,6 +710,25 @@ function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
     status === "submitted" ? "bg-violet-50 text-violet-700" :
     status === "cancelled" || status === "returned" ? "bg-rose-50 text-rose-700" :
     "bg-amber-50 text-amber-700";
+
+  // Show a retry push button when the order hasn't reached OD yet.
+  const needsPush = isPhysical && !o.orderDeskOrderId && (status === "pending" || !o.fulfillmentStatus);
+  const retryPush = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/orders/${o.id}/orderdesk-push`, {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `Push failed (${res.status})`);
+      }
+      return res.json();
+    },
+    onSuccess: (data: { orderDeskOrderId?: string }) => {
+      toast({ title: "Pushed to Order Desk", description: data.orderDeskOrderId ? `OD #${data.orderDeskOrderId}` : undefined });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+    },
+    onError: (e: any) => toast({ title: "Push failed", description: e?.message, variant: "destructive" }),
+  });
+
   return (
     <div className="mt-2 rounded-md bg-slate-50 border border-slate-200 px-2.5 py-2" data-testid={`fulfillment-timeline-${o.id}`}>
       <div className="flex items-center gap-2 text-[11px] flex-wrap">
@@ -729,7 +750,24 @@ function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
             )}
           </span>
         )}
+        {needsPush && (
+          <button
+            type="button"
+            onClick={() => retryPush.mutate()}
+            disabled={retryPush.isPending}
+            className="ml-auto px-2 py-0.5 rounded-md bg-amber-500 text-white text-[10.5px] font-semibold hover:bg-amber-600 disabled:opacity-60 inline-flex items-center gap-1"
+            data-testid={`button-push-od-${o.id}`}
+          >
+            {retryPush.isPending ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
+            Push to OD
+          </button>
+        )}
       </div>
+      {o.fulfillmentError && needsPush && (
+        <div className="mt-1 text-[10.5px] text-amber-700" data-testid={`text-push-error-${o.id}`}>
+          Error: {o.fulfillmentError}
+        </div>
+      )}
       <div className="flex items-center gap-3 mt-1.5 text-[10.5px] text-slate-500 flex-wrap">
         {stages.map((s) => (
           <span key={s.key} className={s.at ? "text-slate-700 font-medium" : "text-slate-400"}>
