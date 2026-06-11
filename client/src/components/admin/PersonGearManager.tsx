@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { X as XIcon } from "lucide-react";
+import { X as XIcon, Plus as PlusIcon } from "lucide-react";
+import { accessoryTypesFor } from "@shared/categories";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
@@ -105,6 +106,16 @@ export type GearContextAlbum = {
       role: string;
       tuningNotes: string | null;
     }>;
+    // Per-track attached rigs (base instrument + accessory lines). Only the
+    // default (non-search) gear-context payload populates this; the "search
+    // all releases" path omits it (that picker doesn't render accessories).
+    rigs?: Array<{
+      trackRigId: string;
+      rigId: string | null;
+      name: string;
+      instrumentId: string | null;
+      accessories: Array<{ type: string; value: string }>;
+    }>;
   }>;
 };
 
@@ -128,11 +139,19 @@ export function PersonGearManager({
   // one entry per distinct instrumentId this person has credits on, with
   // the list of (performerId, songId, song title, track number, album)
   // attached so we can render per-track delete affordances.
+  type GearRowRig = {
+    rigId: string;
+    name: string;
+    accessories: Array<{ type: string; value: string }>;
+  };
   type GearRow = {
     instrumentId: string;
     instrumentName: string;
     instrumentPhotoUrl: string | null;
     instrumentCategory: string | null;
+    // Closed shortCategory bucket only (drives accessory-type suggestions);
+    // null when the instrument has only a free-text category.
+    instrumentShortCategory: string | null;
     tracks: Array<{
       performerId: string;
       songId: string;
@@ -141,12 +160,31 @@ export function PersonGearManager({
       albumId: string;
       albumTitle: string;
       role: string;
+      // The matching rig's track-attachment id on this song (if any), so
+      // removing the performer credit also detaches its rig from the track.
+      trackRigId: string | null;
     }>;
+    // Distinct rigs (deduped by rigId) whose base instrument is THIS gear
+    // row's instrument, gathered across the row's tracks — carries the
+    // accessory lines the editor shows and edits.
+    matchingRigs: GearRowRig[];
   };
+  // songId → attached rigs, from the enriched gear-context payload.
+  const rigsBySong = new Map<
+    string,
+    NonNullable<GearContextAlbum["tracks"][number]["rigs"]>
+  >();
+  for (const a of context) {
+    for (const t of a.tracks) {
+      if (t.rigs && t.rigs.length) rigsBySong.set(t.songId, t.rigs);
+    }
+  }
   const gearRows: GearRow[] = (() => {
     const byInst = new Map<string, GearRow>();
+    const seenRigByInst = new Map<string, Set<string>>();
     for (const a of context) {
       for (const t of a.tracks) {
+        const songRigs = rigsBySong.get(t.songId) ?? [];
         for (const p of t.performers) {
           if (!p.instrumentId) continue; // role-only credits hidden here
           const inst = instruments.find((i) => i.id === p.instrumentId);
@@ -158,8 +196,15 @@ export function PersonGearManager({
               instrumentName: p.instrumentName ?? inst?.name ?? "Instrument",
               instrumentPhotoUrl: p.instrumentPhotoUrl ?? inst?.photoUrl ?? null,
               instrumentCategory: inst?.shortCategory ?? inst?.category ?? null,
+              instrumentShortCategory: inst?.shortCategory ?? null,
               tracks: [],
+              matchingRigs: [],
             } satisfies GearRow);
+          // A rig matches this gear row when its base instrument is the
+          // same instrument the person plays here.
+          const matchOnSong = songRigs.find(
+            (r) => r.instrumentId === key && !!r.rigId,
+          );
           row.tracks.push({
             performerId: p.id,
             songId: t.songId,
@@ -168,7 +213,22 @@ export function PersonGearManager({
             albumId: a.albumId,
             albumTitle: a.albumTitle,
             role: p.role,
+            trackRigId: matchOnSong?.trackRigId ?? null,
           });
+          // Gather the distinct matching rigs (one rig can ride several
+          // tracks) so the editor shows a single accessory set per rig.
+          const seen = seenRigByInst.get(key) ?? new Set<string>();
+          for (const r of songRigs) {
+            if (r.instrumentId === key && r.rigId && !seen.has(r.rigId)) {
+              seen.add(r.rigId);
+              row.matchingRigs.push({
+                rigId: r.rigId,
+                name: r.name,
+                accessories: r.accessories,
+              });
+            }
+          }
+          seenRigByInst.set(key, seen);
           byInst.set(key, row);
         }
       }
@@ -196,21 +256,38 @@ export function PersonGearManager({
     // Instrument editor's Tracks + Artists tabs (which queries
     // /api/instruments/:id/profile). Predicate-match so we hit any
     // currently-mounted instrument profile, whichever instrument it is.
+    // Rig catalog (the album RigPanel reads ["/api/rigs"]).
+    queryClient.invalidateQueries({ queryKey: ["/api/rigs"] });
     queryClient.invalidateQueries({
       predicate: (q) => {
         const k = q.queryKey;
-        return (
-          Array.isArray(k) &&
-          k[0] === "/api/instruments" &&
-          k[2] === "profile"
-        );
+        if (!Array.isArray(k)) return false;
+        // Adding/removing a performer row flips the counts on the
+        // Instrument editor's Tracks + Artists tabs.
+        if (k[0] === "/api/instruments" && k[2] === "profile") return true;
+        // Album credits surface rigs via getAlbumCredits().bySongId[id].rigs.
+        if (k[0] === "/api/albums" && k[2] === "credits") return true;
+        // Per-song rig lists (the album RigPanel).
+        if (k[0] === "/api/songs" && k[2] === "rigs") return true;
+        return false;
       },
     });
   };
 
   const deletePerformer = useMutation({
-    mutationFn: async (performerId: string) => {
+    mutationFn: async ({
+      performerId,
+      trackRigId,
+    }: {
+      performerId: string;
+      trackRigId?: string | null;
+    }) => {
       await apiRequest("DELETE", `/api/admin/performers/${performerId}`);
+      // If this credit also carried an accessory rig on the same track,
+      // detach it too — the person no longer plays this instrument here.
+      if (trackRigId) {
+        await apiRequest("DELETE", `/api/admin/track-rigs/${trackRigId}`);
+      }
     },
     onSuccess: invalidate,
   });
@@ -281,40 +358,54 @@ export function PersonGearManager({
                   <span className="text-slate-300 text-[11px]">{isOpen ? "▾" : "▸"}</span>
                 </button>
                 {isOpen && (
-                  <ul className="bg-slate-50/60 border-t border-slate-100">
-                    {g.tracks.map((t) => (
-                      <li
-                        key={t.performerId}
-                        className="flex items-center gap-3 pl-16 pr-3 py-1.5"
-                        data-testid={`row-gear-track-${t.performerId}`}
-                      >
-                        <span className="text-slate-400 text-[11px] w-6 text-right tabular-nums">
-                          {t.trackNumber}
-                        </span>
-                        <span className="flex-1 min-w-0 text-slate-700 text-[12px] truncate">
-                          {t.songTitle}
-                          <span className="text-slate-400"> · {t.albumTitle}</span>
-                          {t.role && t.role.toLowerCase() !== (g.instrumentCategory ?? "").toLowerCase() ? (
-                            <span className="text-slate-400"> · {t.role}</span>
-                          ) : null}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (confirm(`Remove "${g.instrumentName}" from "${t.songTitle}"?`)) {
-                              deletePerformer.mutate(t.performerId);
-                            }
-                          }}
-                          disabled={deletePerformer.isPending}
-                          className="text-slate-400 hover:text-red-600 disabled:opacity-40 p-1"
-                          data-testid={`button-remove-gear-track-${t.performerId}`}
-                          aria-label="Remove credit"
+                  <div className="bg-slate-50/60 border-t border-slate-100">
+                    <ul>
+                      {g.tracks.map((t) => (
+                        <li
+                          key={t.performerId}
+                          className="flex items-center gap-3 pl-16 pr-3 py-1.5"
+                          data-testid={`row-gear-track-${t.performerId}`}
                         >
-                          <XIcon className="w-3.5 h-3.5" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                          <span className="text-slate-400 text-[11px] w-6 text-right tabular-nums">
+                            {t.trackNumber}
+                          </span>
+                          <span className="flex-1 min-w-0 text-slate-700 text-[12px] truncate">
+                            {t.songTitle}
+                            <span className="text-slate-400"> · {t.albumTitle}</span>
+                            {t.role && t.role.toLowerCase() !== (g.instrumentCategory ?? "").toLowerCase() ? (
+                              <span className="text-slate-400"> · {t.role}</span>
+                            ) : null}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Remove "${g.instrumentName}" from "${t.songTitle}"?`)) {
+                                deletePerformer.mutate({
+                                  performerId: t.performerId,
+                                  trackRigId: t.trackRigId,
+                                });
+                              }
+                            }}
+                            disabled={deletePerformer.isPending}
+                            className="text-slate-400 hover:text-red-600 disabled:opacity-40 p-1"
+                            data-testid={`button-remove-gear-track-${t.performerId}`}
+                            aria-label="Remove credit"
+                          >
+                            <XIcon className="w-3.5 h-3.5" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <GearRowAccessories
+                      personName={personName}
+                      instrumentId={g.instrumentId}
+                      instrumentName={g.instrumentName}
+                      instrumentShortCategory={g.instrumentShortCategory}
+                      songIds={g.tracks.map((t) => t.songId)}
+                      matchingRigs={g.matchingRigs}
+                      onChanged={invalidate}
+                    />
+                  </div>
                 )}
               </li>
             );
@@ -324,6 +415,331 @@ export function PersonGearManager({
 
       {isLoading && gearRows.length === 0 && (
         <p className="text-slate-400 text-sm">Loading gear…</p>
+      )}
+    </div>
+  );
+}
+
+// ---------- Accessory editor (under an expanded gear row) ----------
+// Lets the operator attach accessory gear (strings, picks, capo, etc.) to
+// the instrument this person plays. Backed by the SAME Rig model the album
+// Credits panel uses: a "rig" is the base instrument + its accessory lines.
+//   - No matching rig yet → "+ Add accessories" builds one rig
+//     (`${person}'s ${instrument}`, base = this instrument) and attaches it
+//     to every track this gear row covers, so the accessories ride along.
+//   - Matching rig(s) exist → show each rig's accessory chips with an Edit
+//     button that PUTs the full accessory set (it replaces, not appends).
+// Explicit Save (no autosave) is the sanctioned design-system exception for
+// multi-field editors.
+type AccessoryDraft = { type: string; value: string };
+
+function AccessoryDraftEditor({
+  draft,
+  setDraft,
+  shortCategory,
+  idBase,
+  onSave,
+  onCancel,
+  saving,
+  saveLabel,
+}: {
+  draft: AccessoryDraft[];
+  setDraft: (next: AccessoryDraft[]) => void;
+  shortCategory: string | null;
+  idBase: string;
+  onSave: () => void;
+  onCancel: () => void;
+  saving: boolean;
+  saveLabel: string;
+}) {
+  const typeSuggestions = accessoryTypesFor(shortCategory);
+  const canSave =
+    !saving && draft.some((a) => a.type.trim() && a.value.trim());
+  return (
+    <div className="mt-2 space-y-2">
+      <datalist id={`accessory-types-${idBase}`}>
+        {typeSuggestions.map((t) => (
+          <option key={t} value={t} />
+        ))}
+      </datalist>
+      {draft.length === 0 ? (
+        <p className="text-slate-400 text-xs">
+          No accessories yet — add strings, picks, capo, etc.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {draft.map((a, idx) => (
+            <li key={idx} className="flex items-center gap-2">
+              <input
+                value={a.type}
+                onChange={(e) =>
+                  setDraft(
+                    draft.map((x, i) =>
+                      i === idx ? { ...x, type: e.target.value } : x,
+                    ),
+                  )
+                }
+                list={`accessory-types-${idBase}`}
+                placeholder="Type (e.g. Strings)"
+                className={`${inputCls} sm:w-44`}
+                data-testid={`input-accessory-type-${idBase}-${idx}`}
+              />
+              <input
+                value={a.value}
+                onChange={(e) =>
+                  setDraft(
+                    draft.map((x, i) =>
+                      i === idx ? { ...x, value: e.target.value } : x,
+                    ),
+                  )
+                }
+                placeholder="Value (e.g. Ernie Ball .010s)"
+                className={`${inputCls} flex-1`}
+                data-testid={`input-accessory-value-${idBase}-${idx}`}
+              />
+              <button
+                type="button"
+                onClick={() => setDraft(draft.filter((_, i) => i !== idx))}
+                className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50"
+                data-testid={`button-remove-accessory-${idBase}-${idx}`}
+                aria-label="Remove accessory"
+              >
+                <XIcon className="w-3.5 h-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex items-center gap-2 pt-0.5">
+        <button
+          type="button"
+          onClick={() => setDraft([...draft, { type: "", value: "" }])}
+          className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand-blue)] hover:underline"
+          data-testid={`button-add-accessory-row-${idBase}`}
+        >
+          <PlusIcon className="w-3.5 h-3.5" /> Add accessory
+        </button>
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="text-xs text-slate-500 hover:text-slate-700 disabled:opacity-40 px-2 py-1"
+          data-testid={`button-cancel-accessories-${idBase}`}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={!canSave}
+          className="text-xs font-semibold text-white bg-[var(--brand-blue)] hover:opacity-90 disabled:opacity-40 rounded-md px-3 py-1.5"
+          data-testid={`button-save-accessories-${idBase}`}
+        >
+          {saving ? "Saving…" : saveLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GearRowAccessories({
+  personName,
+  instrumentId,
+  instrumentName,
+  instrumentShortCategory,
+  songIds,
+  matchingRigs,
+  onChanged,
+}: {
+  personName: string;
+  instrumentId: string;
+  instrumentName: string;
+  instrumentShortCategory: string | null;
+  songIds: string[];
+  matchingRigs: Array<{
+    rigId: string;
+    name: string;
+    accessories: Array<{ type: string; value: string }>;
+  }>;
+  onChanged: () => void;
+}) {
+  const { toast } = useToast();
+  // Which editor is open: a rigId (editing that rig) or "new" (building one).
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState<AccessoryDraft[]>([]);
+
+  const clean = (d: AccessoryDraft[]) =>
+    d
+      .map((a) => ({ type: a.type.trim(), value: a.value.trim() }))
+      .filter((a) => a.type && a.value);
+
+  const createMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/rigs", {
+        name: `${personName}'s ${instrumentName}`,
+        instrumentId,
+        accessories: clean(draft),
+      });
+      const rig = await res.json();
+      // Attach to every (distinct) track this gear row covers so the
+      // accessories show up on each of the person's performances of this
+      // instrument. Dedupe songIds so two credits on the same song don't
+      // create duplicate track-rig rows. allSettled (not all) so one FK fail
+      // doesn't strand the rest — we surface the failure count instead.
+      const uniqueSongIds = Array.from(new Set(songIds));
+      const results = await Promise.allSettled(
+        uniqueSongIds.map((songId) =>
+          apiRequest("POST", `/api/admin/songs/${songId}/rigs`, {
+            rigId: rig.id,
+          }),
+        ),
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      return { failed, total: uniqueSongIds.length };
+    },
+    onSuccess: ({ failed, total }) => {
+      setEditing(null);
+      setDraft([]);
+      onChanged();
+      if (failed > 0) {
+        toast({
+          variant: "destructive",
+          title: "Saved with errors",
+          description: `Accessories added but ${failed} of ${total} track${total === 1 ? "" : "s"} didn't link.`,
+        });
+      } else {
+        toast({ title: "Accessories added", description: "Saved to this gear." });
+      }
+    },
+    onError: (e) =>
+      toast({
+        variant: "destructive",
+        description: e instanceof Error ? e.message : "Could not save accessories",
+      }),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: async (rigId: string) => {
+      await apiRequest("PUT", `/api/admin/rigs/${rigId}`, {
+        accessories: clean(draft),
+      });
+    },
+    onSuccess: () => {
+      setEditing(null);
+      setDraft([]);
+      onChanged();
+      toast({ title: "Accessories updated" });
+    },
+    onError: (e) =>
+      toast({
+        variant: "destructive",
+        description: e instanceof Error ? e.message : "Could not update accessories",
+      }),
+  });
+
+  const saving = createMut.isPending || updateMut.isPending;
+
+  return (
+    <div
+      className="border-t border-slate-100 px-3 py-2.5"
+      data-testid={`accessories-${instrumentId}`}
+    >
+      <p className="text-slate-400 text-xs uppercase tracking-wider mb-1.5">
+        Accessories
+      </p>
+
+      {matchingRigs.length === 0 ? (
+        editing === "new" ? (
+          <AccessoryDraftEditor
+            draft={draft}
+            setDraft={setDraft}
+            shortCategory={instrumentShortCategory}
+            idBase={`new-${instrumentId}`}
+            onSave={() => createMut.mutate()}
+            onCancel={() => {
+              setEditing(null);
+              setDraft([]);
+            }}
+            saving={saving}
+            saveLabel="Save accessories"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setEditing("new");
+              setDraft([{ type: "", value: "" }]);
+            }}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand-blue)] hover:underline"
+            data-testid={`button-add-accessories-${instrumentId}`}
+          >
+            <PlusIcon className="w-3.5 h-3.5" /> Add accessories
+          </button>
+        )
+      ) : (
+        <ul className="space-y-2.5">
+          {matchingRigs.map((rig) => (
+            <li key={rig.rigId} data-testid={`rig-accessories-${rig.rigId}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  {rig.accessories.length === 0 ? (
+                    <span className="text-slate-400 text-xs">
+                      No accessories yet.
+                    </span>
+                  ) : (
+                    <ul className="flex flex-wrap gap-1.5">
+                      {rig.accessories.map((a, idx) => (
+                        <li
+                          key={idx}
+                          className="inline-flex items-center gap-1 rounded-full bg-white ring-1 ring-slate-200 px-2 py-0.5 text-xs text-slate-600"
+                          data-testid={`chip-accessory-${rig.rigId}-${idx}`}
+                        >
+                          <span className="font-semibold text-slate-500">
+                            {a.type}
+                          </span>
+                          <span>{a.value}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                {editing !== rig.rigId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditing(rig.rigId);
+                      setDraft(
+                        rig.accessories.length
+                          ? rig.accessories.map((a) => ({ ...a }))
+                          : [{ type: "", value: "" }],
+                      );
+                    }}
+                    className="flex-shrink-0 text-xs font-semibold text-[var(--brand-blue)] hover:underline"
+                    data-testid={`button-edit-accessories-${rig.rigId}`}
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+              {editing === rig.rigId && (
+                <AccessoryDraftEditor
+                  draft={draft}
+                  setDraft={setDraft}
+                  shortCategory={instrumentShortCategory}
+                  idBase={rig.rigId}
+                  onSave={() => updateMut.mutate(rig.rigId)}
+                  onCancel={() => {
+                    setEditing(null);
+                    setDraft([]);
+                  }}
+                  saving={saving}
+                  saveLabel="Save"
+                />
+              )}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -389,16 +805,16 @@ export function AddGearPanel({
   // so a searched-for own-album track doesn't render twice.
   const ownAlbumIds = new Set(context.map((a) => a.albumId));
   const searchAlbums = searchResults.filter((a) => !ownAlbumIds.has(a.albumId));
-  // When the user picks an instrument, default the role to the
-  // instrument's short category ("Guitar" / "Bass" / "Drums"). They can
-  // overwrite it before saving — e.g. "Acoustic guitar (capo 3)".
+  // When the user picks an instrument, default the role ONLY from the
+  // closed short-category bucket ("Guitar" / "Bass" / "Drums"). The
+  // free-text `category` ("Hollow and Semi-Hollow Body", "Solid Body…")
+  // is a body/build descriptor, NOT a performance role — never drop it
+  // into Role. When there's no shortCategory we leave Role blank and let
+  // the placeholder ("Guitar / Bass / Lead vocals…") guide the operator;
+  // canSave already requires a non-empty role so nothing saves blank.
   useEffect(() => {
     if (selectedInstrument && !role) {
-      setRole(
-        selectedInstrument.shortCategory ||
-          selectedInstrument.category ||
-          "",
-      );
+      setRole(selectedInstrument.shortCategory || "");
     }
   }, [selectedInstrument?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 

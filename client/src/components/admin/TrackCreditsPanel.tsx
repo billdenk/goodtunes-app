@@ -78,6 +78,10 @@ type AdminInstrumentLite = {
   id: string;
   name: string;
   category?: string | null;
+  // Closed bucket ("Guitar"/"Bass"/…); drives accessory-type suggestions.
+  // `category` can be a free-text body/build descriptor that the suggestion
+  // map doesn't key on, so prefer shortCategory when present.
+  shortCategory?: string | null;
 };
 
 type Bucket = "song" | "performance" | "production";
@@ -1665,7 +1669,9 @@ function RigPanel({
 
   const pickedInstrument =
     instruments.find((i) => i.id === instrumentId) ?? null;
-  const typeSuggestions = accessoryTypesFor(pickedInstrument?.category ?? null);
+  const typeSuggestions = accessoryTypesFor(
+    pickedInstrument?.shortCategory ?? pickedInstrument?.category ?? null,
+  );
 
   const resetBuilder = () => {
     setName("");

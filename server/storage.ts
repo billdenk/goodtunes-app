@@ -504,6 +504,15 @@ export interface IStorage {
         role: string;
         tuningNotes: string | null;
       }>;
+      // Per-track attached rigs (base instrument + accessory lines) so the
+      // Person Gear editor can show/add/edit accessories on a gear row.
+      rigs: Array<{
+        trackRigId: string;
+        rigId: string | null;
+        name: string;
+        instrumentId: string | null;
+        accessories: Array<{ type: string; value: string }>;
+      }>;
     }>;
   }>>;
 
@@ -2803,15 +2812,69 @@ export class DbStorage implements IStorage {
       bucket.tracks.set(r.s.id, existing);
     }
 
+    // Per-track attached rigs (base instrument + accessory lines) so the
+    // Person Gear editor can show/add/edit accessories on an existing gear
+    // row without a second round trip. Read-only here; the rig routes
+    // (POST/PUT/DELETE /api/admin/rigs, .../songs/:id/rigs) do the writes.
+    // Batched across every song in one query (mirrors getSongRigs).
+    const allSongIds = Array.from(
+      new Set(
+        Array.from(byAlbum.values()).flatMap((b) =>
+          Array.from(b.tracks.keys()),
+        ),
+      ),
+    );
+    const rigsBySong = new Map<
+      string,
+      Array<{
+        trackRigId: string;
+        rigId: string | null;
+        name: string;
+        instrumentId: string | null;
+        accessories: Array<{ type: string; value: string }>;
+      }>
+    >();
+    if (allSongIds.length > 0) {
+      const trackRigRows = await db
+        .select()
+        .from(trackRigs)
+        .where(
+          and(inArray(trackRigs.songId, allSongIds), isNull(trackRigs.deletedAt)),
+        )
+        .orderBy(asc(trackRigs.position));
+      const rigDetail = await this.loadRigDetail(
+        Array.from(
+          new Set(
+            trackRigRows.map((r) => r.rigId).filter((v): v is string => !!v),
+          ),
+        ),
+      );
+      for (const tr of trackRigRows) {
+        const detail = tr.rigId ? rigDetail.get(tr.rigId) ?? null : null;
+        const list = rigsBySong.get(tr.songId) ?? [];
+        list.push({
+          trackRigId: tr.id,
+          rigId: tr.rigId,
+          name: detail?.name ?? tr.rigName,
+          instrumentId: detail?.instrumentId ?? null,
+          accessories: (detail?.accessories ?? []).map((a) => ({
+            type: a.type,
+            value: a.value,
+          })),
+        });
+        rigsBySong.set(tr.songId, list);
+      }
+    }
+
     return Array.from(byAlbum.values())
       .map((b) => ({
         albumId: b.albumId,
         albumTitle: b.albumTitle,
         albumArtwork: b.albumArtwork,
         albumYear: b.albumYear,
-        tracks: Array.from(b.tracks.values()).sort(
-          (x, y) => x.trackNumber - y.trackNumber,
-        ),
+        tracks: Array.from(b.tracks.values())
+          .sort((x, y) => x.trackNumber - y.trackNumber)
+          .map((t) => ({ ...t, rigs: rigsBySong.get(t.songId) ?? [] })),
       }))
       .sort(
         (a, b) =>
