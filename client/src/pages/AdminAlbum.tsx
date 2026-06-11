@@ -6002,7 +6002,7 @@ function AddMultipleTracksDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4">
+      <DialogContent className="max-w-md bg-white rounded-xl border-slate-200 shadow-xl p-6 gap-4 max-h-[85vh] overflow-y-auto [&>*]:min-w-0">
         <DialogHeader className="text-left space-y-1">
           <DialogTitle className="text-[17px] font-semibold text-slate-900 inline-flex items-center gap-2">
             Upload multiple tracks
@@ -6252,8 +6252,8 @@ function AddMultipleTracksDialog({
         {running && mode === "dropbox" && (
           <div className="space-y-1.5 pt-1" data-testid="bulk-dropbox-progress">
             <ProgressStrip progress={progress} />
-            <div className="flex items-center justify-between text-[11.5px] text-slate-500">
-              <span data-testid="text-bulk-dropbox-progress">
+            <div className="flex items-center justify-between gap-2 text-[11.5px] text-slate-500">
+              <span className="min-w-0 truncate" data-testid="text-bulk-dropbox-progress">
                 {!progress
                   ? "Connecting…"
                   : progress.phase === "process"
@@ -6265,7 +6265,7 @@ function AddMultipleTracksDialog({
                       : "Downloading…"}
               </span>
               {progress && progress.total > 0 && (
-                <span className="tabular-nums">
+                <span className="tabular-nums flex-shrink-0">
                   {Math.min(100, Math.round((progress.processed / progress.total) * 100))}%
                 </span>
               )}

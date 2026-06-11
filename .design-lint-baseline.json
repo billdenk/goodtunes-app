@@ -9782,11 +9782,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/InvitedByPressPanel.tsx",
-    "snippet": "<div className=\"flex-1 min-w-0 text-[13.5px] font-medium text-slate-900 truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/InvitedByPressPanel.tsx",
     "snippet": "<p className=\"text-[12.5px] text-slate-500\" data-testid=\"text-no-invited-press\">"
   },
   {
@@ -14397,6 +14392,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"flex items-center justify-between gap-2 text-[11.5px] text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "<div className=\"flex items-center justify-between text-[11.5px] text-slate-500\">"
   },
   {
@@ -18887,16 +18887,6 @@
   {
     "rule": "fan-text-tone",
     "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "{albums.isLoading && <tr><td colSpan={7} className=\"py-6 text-center text-white/45\">Loading…</td></tr>}"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/ArtistDashboard.tsx",
-    "snippet": "{!albums.isLoading && (albums.data?.albums.length ?? 0) === 0 && <tr><td colSpan={7} className=\"py-6 text-center text-white/45\">No albums in scope.</td></tr>}"
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/pages/ArtistDashboard.tsx",
     "snippet": "<p className=\"truncate text-white/45 text-[11px]\">{a.artist}</p>"
   },
   {
@@ -22067,11 +22057,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Welcome.tsx",
-    "snippet": "className=\"w-5 h-5 accent-[#319ED8]\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Welcome.tsx",
     "snippet": "className=\"border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]\""
   },
   {
@@ -22088,11 +22073,6 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/Welcome.tsx",
     "snippet": "<div className=\"rounded-2xl border border-[#7F10A7]/40 bg-[#7F10A7]/10 p-5 mb-5\" data-testid=\"welcome-gift-share\">"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/Welcome.tsx",
-    "snippet": "<div className=\"text-[#FF5470] text-[11px] uppercase tracking-wider font-semibold mb-2\">🎁 Your gift is ready</div>"
   },
   {
     "rule": "brand-hex-literal",
@@ -22127,22 +22107,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Welcome.tsx",
-    "snippet": "<div className=\"text-fan-secondary text-[12px] mt-1\">Numbered for life.</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Welcome.tsx",
     "snippet": "<div className=\"text-fan-faint text-[11px] uppercase tracking-wider font-semibold\">Your GoodDeeds®</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Welcome.tsx",
     "snippet": "<div className=\"mt-1.5 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[28px] font-bold text-[#4AFFCA]\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Welcome.tsx",
-    "snippet": "<div className=\"text-fan-secondary text-[12px] mt-2\">Numbered for life. Each copy is its own entitlement.</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -22192,11 +22162,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Welcome.tsx",
-    "snippet": "<span className=\"text-[14px] font-medium\">This is a gift</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Welcome.tsx",
     "snippet": "className={`flex-1 py-1.5 rounded-lg text-[12px] font-medium capitalize ${"
   },
   {
@@ -22207,17 +22172,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/Welcome.tsx",
-    "snippet": "<div className=\"text-[#FF5470] text-[11px] uppercase tracking-wider font-semibold mb-2\">🎁 Your gift is ready</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Welcome.tsx",
     "snippet": "<div className=\"text-[13px] text-fan-primary mb-3 leading-snug\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/Welcome.tsx",
-    "snippet": "<code className=\"text-[11px] text-fan-primary truncate flex-1\" data-testid=\"text-gift-share-url\">{giftShareUrl}</code>"
   },
   {
     "rule": "hardcoded-font-size",
