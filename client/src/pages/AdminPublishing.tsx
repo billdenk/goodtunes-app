@@ -1,8 +1,9 @@
 // Publishing — mechanical-settlement section.
 //
-// Two surfaces, branched by route:
+// Three surfaces, branched by route:
 //   /admin/publishing                       catalog-wide roll-up (this list)
 //   /admin/publishing/albums/:albumId       per-payee breakdown for one album
+//   /admin/publishing/payee?key=<payeeKey>  track-by-track statement for one payee
 //
 // The mechanical settlement pays each publisher/writer on the basis Bill
 // confirmed: statutoryRate ($0.127/unit) × unitsPressed × split%. This
@@ -13,7 +14,7 @@
 // Engine: server/publishingSettlement.ts. API: server/publishingSettlementRoutes.ts.
 import { useMemo, useState } from "react";
 import { formatUsdCents } from "@shared/money";
-import { Link, useRoute } from "wouter";
+import { Link, useRoute, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -81,6 +82,35 @@ type AlbumSettlement = {
   songsMissingSplits: { songId: string; title: string }[];
 };
 
+type PayeeStatement = {
+  payeeKey: string;
+  displayName: string;
+  payToName: string | null;
+  ownerKind: "organization" | "person" | null;
+  ownerId: string | null;
+  hasPayoutAccount: boolean;
+  payoutsEnabled: boolean;
+  rateMicros: number;
+  totalMicros: number;
+  totalCents: number;
+  lineCount: number;
+  albums: {
+    albumId: string;
+    title: string;
+    artist: string | null;
+    artwork: string | null;
+    unitsPressed: number;
+    albumMicros: number;
+    lines: {
+      lineId: string;
+      songId: string;
+      songTitle: string;
+      splitBp: number;
+      owedMicros: number;
+    }[];
+  }[];
+};
+
 function rateLabel(rateMicros: number) {
   return `$${(rateMicros / 1_000_000).toFixed(3)}/unit`;
 }
@@ -117,6 +147,11 @@ function Flag({ icon: Icon, count, label }: { icon: typeof AlertTriangle; count:
       <Icon className="h-3 w-3" /> {count} {label}
     </span>
   );
+}
+
+/** Link href to the payee detail page for a given key. */
+function payeeHref(payeeKey: string) {
+  return `/admin/publishing/payee?key=${encodeURIComponent(payeeKey)}`;
 }
 
 function CatalogList() {
@@ -205,14 +240,16 @@ function CatalogList() {
                     {data?.payees.map((p) => (
                       <tr
                         key={p.payeeKey}
-                        className="border-b border-slate-100 last:border-0"
+                        className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
                         data-testid={`row-catalog-payee-${p.payeeKey}`}
                       >
                         <td className="px-4 py-3">
-                          <div className="font-medium text-slate-900">{p.displayName}</div>
-                          {p.payToName && (
-                            <div className="text-xs text-slate-500">administered by {p.payToName}</div>
-                          )}
+                          <Link href={payeeHref(p.payeeKey)} className="block transition-colors hover:text-[color:var(--brand-blue)]" data-testid={`link-catalog-payee-${p.payeeKey}`}>
+                            <div className="font-medium text-slate-900">{p.displayName}</div>
+                            {p.payToName && (
+                              <div className="text-xs text-slate-500">administered by {p.payToName}</div>
+                            )}
+                          </Link>
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums text-slate-700">{p.lineCount}</td>
                         <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-900">
@@ -443,14 +480,16 @@ function AlbumDetail({ albumId }: { albumId: string }) {
                   {data?.payees.map((p) => (
                     <tr
                       key={p.payeeKey}
-                      className="border-b border-slate-100 last:border-0"
+                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
                       data-testid={`row-payee-${p.payeeKey}`}
                     >
                       <td className="px-4 py-3">
-                        <div className="font-medium text-slate-900">{p.displayName}</div>
-                        {p.payToName && (
-                          <div className="text-xs text-slate-500">administered by {p.payToName}</div>
-                        )}
+                        <Link href={payeeHref(p.payeeKey)} className="block transition-colors hover:text-[color:var(--brand-blue)]" data-testid={`link-album-payee-${p.payeeKey}`}>
+                          <div className="font-medium text-slate-900">{p.displayName}</div>
+                          {p.payToName && (
+                            <div className="text-xs text-slate-500">administered by {p.payToName}</div>
+                          )}
+                        </Link>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-700">{p.lineCount}</td>
                       <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-900">
@@ -471,8 +510,225 @@ function AlbumDetail({ albumId }: { albumId: string }) {
   );
 }
 
+/**
+ * Distribute totalCents across lines using the largest-remainder method so
+ * the displayed per-line cents sum exactly to the catalog total. This keeps
+ * the "round once per payee" settlement basis intact while giving each row a
+ * whole-cent value that adds up correctly.
+ *
+ * Keyed by `lineId` (split-row UUID) — never `songId` — so a song with
+ * multiple split lines routing to the same payee is handled correctly.
+ */
+function buildReconciledCentsMap(
+  albums: PayeeStatement["albums"],
+  totalCents: number,
+): Map<string, number> {
+  const allLines: { lineId: string; owedMicros: number }[] = [];
+  for (const album of albums) {
+    for (const line of album.lines) {
+      allLines.push({ lineId: line.lineId, owedMicros: line.owedMicros });
+    }
+  }
+  if (allLines.length === 0) return new Map();
+
+  const floors = allLines.map((l) => Math.floor(l.owedMicros / 10_000));
+  const fracs = allLines.map((l, i) => ({
+    i,
+    frac: l.owedMicros / 10_000 - floors[i],
+  }));
+  const floorSum = floors.reduce((s, c) => s + c, 0);
+  const remainder = totalCents - floorSum;
+  const sorted = [...fracs].sort((a, b) => b.frac - a.frac);
+  const result = [...floors];
+  for (let j = 0; j < remainder && j < sorted.length; j++) {
+    result[sorted[j].i] += 1;
+  }
+
+  const map = new Map<string, number>();
+  allLines.forEach((l, i) => map.set(l.lineId, result[i]));
+  return map;
+}
+
+function PayeeDetail({ payeeKey }: { payeeKey: string }) {
+  const { data, isLoading, isError, error, refetch } = useQuery<PayeeStatement>({
+    queryKey: ["/api/admin/publishing/payee/statement", payeeKey],
+    queryFn: () =>
+      fetch(`/api/admin/publishing/payee/statement?payeeKey=${encodeURIComponent(payeeKey)}`, {
+        credentials: "include",
+      }).then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      }),
+    retry: false,
+  });
+
+  // Apply largest-remainder so per-line display cents sum exactly to totalCents.
+  const reconciledCents = useMemo(
+    () => (data ? buildReconciledCentsMap(data.albums, data.totalCents) : new Map<string, number>()),
+    [data],
+  );
+
+  return (
+    <AdminFrame active="publishing">
+      <div className="space-y-5">
+        <Link href="/admin/publishing" className="inline-flex items-center gap-1.5 text-sm text-slate-500 transition-colors hover:text-[color:var(--brand-blue)]" data-testid="link-back-publishing">
+          <ArrowLeft className="h-4 w-4" /> Publishing
+        </Link>
+
+        {isError && (
+          <ErrorState
+            error={error}
+            onRetry={() => refetch()}
+            title="Couldn't load this payee's statement"
+          />
+        )}
+
+        {!isError && (
+          <>
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h1
+                  className="truncate text-xl font-semibold text-slate-900"
+                  data-testid="text-payee-name"
+                >
+                  {data?.displayName ?? "…"}
+                </h1>
+                {data?.payToName && (
+                  <p className="mt-0.5 text-sm text-slate-500">
+                    administered by {data.payToName}
+                  </p>
+                )}
+              </div>
+              {data && (
+                <PayoutStatusPill has={data.hasPayoutAccount} enabled={data.payoutsEnabled} />
+              )}
+            </div>
+
+            {/* Summary stats */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">Total owed</div>
+                <div
+                  className="mt-1 text-2xl font-semibold text-slate-900"
+                  data-testid="text-payee-total"
+                >
+                  {data ? dollars(data.totalCents) : "—"}
+                </div>
+                <div className="mt-1 text-xs text-slate-400">rounded once across catalog</div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">Track lines</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">
+                  {data ? data.lineCount : "—"}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">Releases</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">
+                  {data ? data.albums.length : "—"}
+                </div>
+              </div>
+            </div>
+
+            {/* Album → track breakdown */}
+            <div className="space-y-4">
+              {isLoading && (
+                <div className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-sm text-slate-400">
+                  Loading…
+                </div>
+              )}
+              {data?.albums.map((album) => {
+                const albumLineCents = album.lines.reduce(
+                  (s, l) => s + (reconciledCents.get(l.songId) ?? 0),
+                  0,
+                );
+                return (
+                  <div
+                    key={album.albumId}
+                    className="overflow-hidden rounded-lg border border-slate-200 bg-white"
+                    data-testid={`section-album-${album.albumId}`}
+                  >
+                    {/* Album header row */}
+                    <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
+                      {album.artwork ? (
+                        <img
+                          src={album.artwork}
+                          alt=""
+                          className="h-9 w-9 flex-none rounded object-cover"
+                        />
+                      ) : (
+                        <div className="h-9 w-9 flex-none rounded bg-slate-100" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <Link href={`/admin/publishing/albums/${album.albumId}`} className="block truncate font-medium text-slate-900 transition-colors hover:text-[color:var(--brand-blue)]" data-testid={`link-payee-album-${album.albumId}`}>
+                          {album.title}
+                        </Link>
+                        {album.artist && (
+                          <div className="truncate text-xs text-slate-500">{album.artist}</div>
+                        )}
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-sm font-semibold tabular-nums text-slate-900">
+                          {dollars(albumLineCents)}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {album.unitsPressed.toLocaleString()} units
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Per-track lines: units × split % = owed */}
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
+                          <th className="px-4 py-2 font-medium">Track</th>
+                          <th className="px-4 py-2 text-right font-medium">Units</th>
+                          <th className="px-4 py-2 text-right font-medium">Split</th>
+                          <th className="px-4 py-2 text-right font-medium">Owed</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {album.lines.map((line) => (
+                          <tr
+                            key={line.lineId}
+                            className="border-b border-slate-100 last:border-0"
+                            data-testid={`row-payee-line-${line.lineId}`}
+                          >
+                            <td className="px-4 py-2.5 text-slate-700">{line.songTitle}</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">
+                              {album.unitsPressed.toLocaleString()}
+                            </td>
+                            <td className="px-4 py-2.5 text-right tabular-nums text-slate-500">
+                              {(line.splitBp / 100).toFixed(2)}%
+                            </td>
+                            <td className="px-4 py-2.5 text-right tabular-nums text-slate-900">
+                              {dollars(reconciledCents.get(line.lineId) ?? 0)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    </AdminFrame>
+  );
+}
+
 export function AdminPublishing() {
+  const [matchPayee] = useRoute("/admin/publishing/payee");
   const [matchDetail, params] = useRoute("/admin/publishing/albums/:albumId");
+  const search = useSearch();
+
+  if (matchPayee) {
+    const key = new URLSearchParams(search).get("key") ?? "";
+    if (key) return <PayeeDetail payeeKey={key} />;
+  }
   if (matchDetail && params?.albumId) {
     return <AlbumDetail albumId={params.albumId} />;
   }

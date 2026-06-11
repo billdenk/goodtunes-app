@@ -21,6 +21,7 @@ import { db } from "./db";
 import { albums, pressingOrderRequests, songs, trackPublishingSplits } from "@shared/schema";
 import {
   computeAlbumPublishingSettlement,
+  computePayeeStatement,
   getMechanicalRateMicros,
 } from "./publishingSettlement";
 
@@ -219,6 +220,52 @@ export function registerPublishingSettlementRoutes(app: Express, requireAdmin: A
     } catch (err) {
       console.error("[publishing-settlement]", err);
       return res.status(500).json({ message: "Failed to compute publishing settlement" });
+    }
+  });
+
+  // Cross-catalog statement for one payee.
+  // payeeKey contains a colon (org:/person:/name:) so it is accepted as a
+  // query param rather than a path segment.
+  app.get("/api/admin/publishing/payee/statement", requireAdmin, async (req, res) => {
+    try {
+      const payeeKey = String(req.query.payeeKey ?? "").trim();
+      if (!payeeKey) {
+        return res.status(400).json({ message: "payeeKey query param is required" });
+      }
+      const rateMicros = await getMechanicalRateMicros();
+      const albumIds = await albumIdsWithPublishingSplits();
+      if (albumIds.length === 0) {
+        return res.status(404).json({ message: "Payee not found" });
+      }
+
+      const albumRows = await db
+        .select({ id: albums.id, title: albums.title, artist: albums.artist, artwork: albums.artwork })
+        .from(albums)
+        .where(inArray(albums.id, albumIds));
+      const metaById = new Map(albumRows.map((a) => [a.id, a]));
+
+      const entries = await Promise.all(
+        albumIds.map(async (albumId) => {
+          const meta = metaById.get(albumId);
+          const unitsPressed = await resolveUnitsPressed(albumId);
+          return {
+            albumId,
+            unitsPressed,
+            title: meta?.title ?? albumId,
+            artist: meta?.artist ?? null,
+            artwork: meta?.artwork ?? null,
+          };
+        }),
+      );
+
+      const statement = await computePayeeStatement(payeeKey, entries, rateMicros);
+      if (!statement) {
+        return res.status(404).json({ message: "Payee not found" });
+      }
+      return res.json(statement);
+    } catch (err) {
+      console.error("[publishing-payee-statement]", err);
+      return res.status(500).json({ message: "Failed to compute payee statement" });
     }
   });
 

@@ -902,8 +902,12 @@ function Router() {
           <ProtectedRoute component={AdminPlatformPricing} />
         </Route>
         {/* Publishing — mechanical-settlement section (list + per-album
-            breakdown). Readable by any admin role; the transparency
-            surface for publishers + the operator's data-quality check. */}
+            breakdown + per-payee statement). Readable by any admin role;
+            the transparency surface for publishers + the operator's
+            data-quality check. */}
+        <Route path="/admin/publishing/payee">
+          <ProtectedRoute component={AdminPublishing} />
+        </Route>
         <Route path="/admin/publishing/albums/:albumId">
           <ProtectedRoute component={AdminPublishing} />
         </Route>
