@@ -80,6 +80,7 @@ import { resolveStreamingLinksFromAppleCollectionId, resolveStreamingLinksForCol
 import { adminLoginPasswordOk, isLinkableEmail } from "./auth/identityLink";
 import { applyAppleFirstAuthName } from "./auth/appleName";
 import { getUserRole } from "./auth/roles";
+import { resolveInviterBranding } from "./inviteBranding";
 
 const scryptAsync = promisify(scrypt);
 
@@ -536,50 +537,6 @@ async function syncPrimaryArtistLabel(album: {
     toLabelId: newLabelId,
     toLabelName: toLabel?.name ?? "the new label",
   };
-}
-
-// Resolve the avatar + "on behalf of" line for a branded invite email from
-// the *inviter's* own role/scope: artist → their Person photo, label → the
-// label logo, non_profit → the org logo + name. Operators (admin /
-// super_admin) get no photo so their invites stay wordmark-only.
-// Best-effort: any failure falls back to a plain, name-only invite.
-async function resolveInviterBranding(
-  userId: string,
-): Promise<{ photoUrl: string | null; onBehalfOf: string | null }> {
-  try {
-    const { getUserRole } = await import("./auth/roles");
-    const role = await getUserRole(userId);
-    if (!role || !role.roleScopeId) return { photoUrl: null, onBehalfOf: null };
-    if (role.role === "artist") {
-      const r = await db.execute<any>(
-        sql`SELECT photo_url FROM people WHERE id = ${role.roleScopeId} LIMIT 1`,
-      );
-      return { photoUrl: (r as any).rows?.[0]?.photo_url ?? null, onBehalfOf: null };
-    }
-    if (role.role === "label") {
-      const r = await db.execute<any>(
-        sql`SELECT logo_url FROM labels WHERE id = ${role.roleScopeId} LIMIT 1`,
-      );
-      return { photoUrl: (r as any).rows?.[0]?.logo_url ?? null, onBehalfOf: null };
-    }
-    if (role.role === "manager") {
-      const r = await db.execute<any>(
-        sql`SELECT logo_url FROM managers WHERE id = ${role.roleScopeId} LIMIT 1`,
-      );
-      return { photoUrl: (r as any).rows?.[0]?.logo_url ?? null, onBehalfOf: null };
-    }
-    if (role.role === "non_profit") {
-      const r = await db.execute<any>(
-        sql`SELECT name, logo_url FROM organizations WHERE id = ${role.roleScopeId} LIMIT 1`,
-      );
-      const row = (r as any).rows?.[0];
-      return { photoUrl: row?.logo_url ?? null, onBehalfOf: row?.name ?? null };
-    }
-    return { photoUrl: null, onBehalfOf: null };
-  } catch (e: any) {
-    console.warn(`[invite] inviter branding lookup failed: ${e?.message}`);
-    return { photoUrl: null, onBehalfOf: null };
-  }
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {

@@ -24,6 +24,7 @@ import {
   computePayeeStatement,
   getMechanicalRateMicros,
 } from "./publishingSettlement";
+import { resolveInviterBranding } from "./inviteBranding";
 
 type AdminGuard = (req: Request, res: Response, next: Function) => unknown;
 
@@ -361,12 +362,51 @@ export function registerPublishingSettlementRoutes(app: Express, requireAdmin: A
         VALUES (${email}, 'publisher', ${payeeKey}, ${token}, ${expiresAt}, ${userId ?? null})
       `);
 
-      // Send branded invite email (best-effort — invite row is already written).
+      // Send branded invite email (best-effort — invite row is already
+      // written). Mirrors every other partner invite: resolve the inviting
+      // operator's display name + avatar/logo (resolveInviterBranding) and
+      // name the publisher entity they're being invited to manage, so the
+      // email reads like the artist/label invites instead of an anonymous
+      // "GoodTunes invited you".
       try {
         const { sendAdminInviteEmail } = await import("./mail");
+        const { storage } = await import("./storage");
+        const inviter = await storage.getUser(userId);
+        const inviterName =
+          inviter?.displayName || inviter?.email || "A GoodTunes admin";
+        const branding = await resolveInviterBranding(userId);
+
+        // Name the publisher entity (org or person) so the invite makes
+        // clear which catalog the recipient will see.
+        let publisherName = "";
+        if (kindRaw === "organization") {
+          const [org] = await db
+            .select({ name: organizations.name })
+            .from(organizations)
+            .where(eq(organizations.id, entityId))
+            .limit(1);
+          publisherName = org?.name ?? "";
+        } else {
+          const r = await db.execute<{ name: string }>(
+            sql`SELECT name FROM people WHERE id = ${entityId} LIMIT 1`,
+          );
+          publisherName = ((r as any).rows ?? [])[0]?.name ?? "";
+        }
+        const roleLabel = publisherName
+          ? `Publisher for ${publisherName}`
+          : "Publisher";
+
         const baseUrl = `${req.protocol}://${req.get("host")}`;
         const acceptUrl = `${baseUrl}/invite/${token}`;
-        await sendAdminInviteEmail(email, acceptUrl, "GoodTunes", "Publisher", INVITE_TTL_DAYS, null, null);
+        await sendAdminInviteEmail(
+          email,
+          acceptUrl,
+          inviterName,
+          roleLabel,
+          INVITE_TTL_DAYS,
+          branding.photoUrl,
+          branding.onBehalfOf,
+        );
       } catch (mailErr) {
         console.warn("[publisher-invite] email send failed (invite row committed):", mailErr);
       }
