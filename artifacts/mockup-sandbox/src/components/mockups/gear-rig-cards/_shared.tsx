@@ -381,6 +381,167 @@ export function RigCard({
   );
 }
 
+// Maker brand-nod badge — a small, restrained co-brand chip standing in for the
+// real maker wordmark. Bill is securing each maker's blessing, so this reads as
+// a sanctioned "official maker" nod (mint verified tick), never decoration:
+// tiny logo tile + name. Keep it near the gear, never over album artwork.
+export function MakerBadge({
+  maker,
+  mono,
+  floating = false,
+}: {
+  maker: string;
+  mono?: string;
+  floating?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "5px 11px 5px 5px",
+        borderRadius: 999,
+        background: floating ? "rgba(0,0,0,0.45)" : "rgba(255,255,255,0.07)",
+        border: `1px solid ${FAN.hairline}`,
+        backdropFilter: floating ? "blur(16px)" : undefined,
+        WebkitBackdropFilter: floating ? "blur(16px)" : undefined,
+      }}
+    >
+      <div
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: 7,
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background:
+            "linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0.06))",
+          border: `1px solid ${FAN.hairline}`,
+          fontFamily: "'Georgia', 'Times New Roman', serif",
+          fontWeight: 700,
+          fontSize: 12,
+          color: "#fff",
+        }}
+      >
+        {mono ?? maker.slice(0, 1)}
+      </div>
+      <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: -0.2, color: "#fff" }}>
+        {maker}
+      </span>
+      <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden style={{ marginLeft: -1 }}>
+        <circle cx="12" cy="12" r="10" fill={FAN.mint} />
+        <path
+          d="M8 12.5 L11 15.5 L16.5 9"
+          fill="none"
+          stroke="#02030f"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  );
+}
+
+// Streaming popularity cue — the catalog-scale signal we rank discovery by
+// (Spotify/Deezer expose a 0–100 popularity score; our own play counts layer on
+// as the platform grows). A tiny mint meter + a human-readable label.
+export function PopularityCue({
+  score,
+  label,
+}: {
+  score: number; // 0–100
+  label: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-end",
+        gap: 5,
+        flexShrink: 0,
+      }}
+    >
+      <span style={{ fontSize: 12.5, fontWeight: 600, color: FAN.textSecondary }}>
+        {label}
+      </span>
+      <div
+        style={{
+          width: 54,
+          height: 4,
+          borderRadius: 2,
+          background: "rgba(255,255,255,0.12)",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            width: `${Math.max(0, Math.min(100, score))}%`,
+            height: "100%",
+            borderRadius: 2,
+            background: FAN.mint,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Circular avatar — real photo when we have one, else a glassy monogram (same
+// material as ResellerLogo) so placeholder artists read as clearly stand-in.
+export function Avatar({
+  src,
+  mono,
+  size = 46,
+}: {
+  src?: string;
+  mono?: string;
+  size?: number;
+}) {
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt=""
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 999,
+          objectFit: "cover",
+          flexShrink: 0,
+          background: "#070b22",
+        }}
+      />
+    );
+  }
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 999,
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background:
+          "linear-gradient(135deg, rgba(255,255,255,0.16), rgba(255,255,255,0.05))",
+        border: `1px solid ${FAN.hairline}`,
+        color: "#fff",
+        fontFamily: "'Georgia', 'Times New Roman', serif",
+        fontWeight: 700,
+        fontSize: size * 0.36,
+      }}
+    >
+      {mono}
+    </div>
+  );
+}
+
 export function pressFx(): CSSProperties {
   return { transition: "transform 0.15s ease, background 0.15s ease" };
 }
