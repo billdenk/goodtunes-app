@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Lock, X } from "lucide-react";
+import { Factory, Lock, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -90,6 +90,12 @@ export function InvitedByPressPanel({
       const partnerKey = kind === "people" ? "/api/people" : "/api/labels";
       qc.invalidateQueries({ queryKey: [partnerKey, id] });
       qc.invalidateQueries({ queryKey: [partnerKey] });
+      // Task #1959 — the admin Person page reads from the admin query key
+      // (not the public one), so the assigned plant only appears live when
+      // we invalidate the admin key too — matching what the press-mode
+      // toggle above already does. Labels read from the public key above,
+      // but invalidate the admin key for parity.
+      qc.invalidateQueries({ queryKey: [`/api/admin/${kind}`, id] });
       qc.invalidateQueries({ queryKey: ["/api/admin/albums"] });
       setSelecting(false);
       setQuery("");
@@ -132,12 +138,25 @@ export function InvitedByPressPanel({
       {current ? (
         <div className="flex items-center gap-3" data-testid="row-current-invited-press">
           {current.logoUrl ? (
-            <img src={current.logoUrl} alt="" className="w-8 h-8 rounded-md object-cover border border-slate-200" />
+            <img src={current.logoUrl} alt="" className="w-9 h-9 rounded-md object-cover border border-slate-200" />
           ) : (
-            <div className="w-8 h-8 rounded-md bg-slate-100 border border-slate-200" />
+            <div
+              className="w-9 h-9 rounded-md bg-slate-100 border border-slate-200 flex items-center justify-center"
+              aria-hidden
+            >
+              <Factory className="w-4 h-4 text-slate-400" />
+            </div>
           )}
-          <div className="flex-1 min-w-0 text-[13.5px] font-medium text-slate-900 truncate">
-            {current.name}
+          <div className="flex-1 min-w-0">
+            <div
+              className="text-xs font-medium uppercase tracking-wide text-slate-400"
+              data-testid="text-invited-press-mode"
+            >
+              {effectiveMode === "all" ? "All Presses" : "Dedicated press"}
+            </div>
+            <div className="text-sm font-semibold text-slate-900 truncate" data-testid="text-invited-press-name">
+              {current.name}
+            </div>
           </div>
         </div>
       ) : (
