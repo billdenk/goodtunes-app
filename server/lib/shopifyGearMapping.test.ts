@@ -19,6 +19,8 @@ import {
   extractErnieBallProduct,
   normalizePicksCategory,
   extractMicrodataPrice,
+  extractElixirProduct,
+  parseGaugeFromName,
   type KnownHosts,
   type ShopifyProduct,
 } from "./shopifyGearMapping";
@@ -509,4 +511,192 @@ test("extractMicrodataPrice honors priceCurrency and content-first attr order", 
 
 test("extractMicrodataPrice returns null when no microdata price is present", () => {
   assert.equal(extractMicrodataPrice(`<meta property="og:title" content="A Pick">`), null);
+});
+
+// ——— parseGaugeFromName ———————————————————————————————————————————————————
+
+test("parseGaugeFromName — pulls a standard gauge from a string title", () => {
+  assert.equal(
+    parseGaugeFromName("XL Nickel Wound Electric Guitar Strings, Regular Light, 10-46"),
+    "10-46",
+  );
+});
+
+test("parseGaugeFromName — handles a 3-digit bass low end", () => {
+  assert.equal(parseGaugeFromName("EXL170 Nickel Wound Bass, Light, 45-100"), "45-100");
+});
+
+test("parseGaugeFromName — handles a half-step gauge (10.5-48)", () => {
+  assert.equal(parseGaugeFromName("Balanced Tension 10.5-48"), "10.5-48");
+});
+
+test("parseGaugeFromName — model numbers like 'D-35' do NOT match", () => {
+  assert.equal(parseGaugeFromName("Martin D-35 Acoustic"), null);
+});
+
+test("parseGaugeFromName — a year like 1974 does NOT match", () => {
+  assert.equal(parseGaugeFromName("1974 Stratocaster"), null);
+});
+
+test("parseGaugeFromName — '12pc' pick-pack count does NOT match", () => {
+  assert.equal(parseGaugeFromName("Delrin 12pc Pick Pack"), null);
+});
+
+// ——— D'Addario (maker-owned Shopify store) ————————————————————————————————
+//
+// D'Addario's Shopify vendor field equals the shop name (so brand → null and
+// the route's maker-owned fallback stamps daddario.com), and product_type
+// echoes the brand ("D'Addario") rather than a real category. mapShopifyProduct
+// must drop that junk category, infer "Strings" from the title, lift the SKU
+// off the first variant, and parse the gauge from the title.
+const DADDARIO_FIXTURE: ShopifyProduct = {
+  title: "EXL110 Nickel Wound Electric Guitar Strings, Regular Light, 10-46",
+  vendor: "D'Addario",
+  product_type: "D'Addario",
+  body_html: "<p>The best-selling electric guitar strings in the world.</p>",
+  tags: "Gauge Group: Light, Instrument: Electric Guitar",
+  variants: [{ price: "8.49", sku: "EXL110" }],
+  images: [
+    { src: "https://cdn.shopify.com/s/files/1/daddario/exl110-front.jpg" },
+    { src: "https://cdn.shopify.com/s/files/1/daddario/exl110-back.jpg" },
+  ],
+};
+
+test("D'Addario — vendor equal to shop name collapses brand to null", () => {
+  const m = mapShopifyProduct(DADDARIO_FIXTURE, "D'Addario");
+  assert.equal(m.brand, null, "brand must be null when vendor === shop name");
+});
+
+test("D'Addario — product_type echoing the vendor is dropped and category inferred as Strings", () => {
+  const m = mapShopifyProduct(DADDARIO_FIXTURE, "D'Addario");
+  assert.equal(m.category, "Strings");
+});
+
+test("D'Addario — name, price, and description map correctly", () => {
+  const m = mapShopifyProduct(DADDARIO_FIXTURE, "D'Addario");
+  assert.equal(
+    m.name,
+    "EXL110 Nickel Wound Electric Guitar Strings, Regular Light, 10-46",
+  );
+  assert.equal(m.price, "USD 8.49");
+  assert.ok(m.description?.includes("best-selling electric guitar strings"));
+});
+
+test("D'Addario — SKU lifted from the first variant", () => {
+  const m = mapShopifyProduct(DADDARIO_FIXTURE, "D'Addario");
+  assert.equal(m.specs.SKU, "EXL110");
+});
+
+test("D'Addario — gauge parsed from the title", () => {
+  const m = mapShopifyProduct(DADDARIO_FIXTURE, "D'Addario");
+  assert.equal(m.specs.Gauge, "10-46");
+});
+
+test("D'Addario — first image surfaced as the raw image", () => {
+  const m = mapShopifyProduct(DADDARIO_FIXTURE, "D'Addario");
+  assert.equal(
+    m.rawImage,
+    "https://cdn.shopify.com/s/files/1/daddario/exl110-front.jpg",
+  );
+});
+
+// A maker product that is NOT strings (e.g. a pedal accessory) keeps a real
+// product_type and is never relabeled "Strings".
+const DADDARIO_NON_STRING: ShopifyProduct = {
+  title: "Auto-Lock Guitar Strap, Black",
+  vendor: "D'Addario",
+  product_type: "Straps",
+  variants: [{ price: "29.99", sku: "50BAL06" }],
+  images: [{ src: "https://cdn.shopify.com/s/files/1/daddario/strap.jpg" }],
+};
+
+test("D'Addario — a real product_type (Straps) is preserved, not forced to Strings", () => {
+  const m = mapShopifyProduct(DADDARIO_NON_STRING, "D'Addario");
+  assert.equal(m.category, "Straps");
+});
+
+test("D'Addario — a non-string title yields no spurious Gauge spec", () => {
+  const m = mapShopifyProduct(DADDARIO_NON_STRING, "D'Addario");
+  assert.equal(m.specs.Gauge, undefined);
+});
+
+// ——— Elixir (BigCommerce, JSON-LD) ————————————————————————————————————————
+//
+// Elixir runs on BigCommerce: each product page ships a JSON-LD Product node
+// plus OG tags. The JSON-LD `description` is a URL-encoded HTML blob, so the
+// extractor must prefer the clean og:description (and decode its double-encoded
+// &amp;#174; → ®). Category is always "Strings".
+const ELIXIR_HTML = `<!DOCTYPE html>
+<html><head>
+<meta property="og:title" content="Electric Guitar Strings, NANOWEB Coating, Light" />
+<meta property="og:image" content="//cdn11.bigcommerce.com/elixir/16052.jpg" />
+<meta property="og:description" content="Elixir&amp;#174; Strings Light gauge, with NANOWEB&amp;#174; Coating for a smooth feel." />
+<meta property="product:price:amount" content="16.99" />
+<meta property="product:price:currency" content="USD" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  "name": "Electric Guitar Strings, NANOWEB Coating, Light 10-46",
+  "sku": "16052",
+  "image": "//cdn11.bigcommerce.com/elixir/16052.jpg",
+  "description": "Elixir%C2%AE%20Strings%20with%20NANOWEB%C2%AE%20Coating",
+  "offers": { "@type": "Offer", "price": "16.99", "priceCurrency": "USD" }
+}
+</script>
+</head><body><h1>Elixir Strings</h1></body></html>`;
+
+test("Elixir — name comes from the JSON-LD Product node", () => {
+  const out = extractElixirProduct(ELIXIR_HTML);
+  assert.ok(out);
+  assert.equal(out!.name, "Electric Guitar Strings, NANOWEB Coating, Light 10-46");
+});
+
+test("Elixir — price formatted from JSON-LD offers", () => {
+  const out = extractElixirProduct(ELIXIR_HTML);
+  assert.equal(out!.price, "USD 16.99");
+});
+
+test("Elixir — protocol-relative image is upgraded to https", () => {
+  const out = extractElixirProduct(ELIXIR_HTML);
+  assert.equal(out!.rawImage, "https://cdn11.bigcommerce.com/elixir/16052.jpg");
+});
+
+test("Elixir — prefers the clean og:description and decodes &amp;#174; → ®", () => {
+  const out = extractElixirProduct(ELIXIR_HTML);
+  assert.ok(out!.description?.includes("Elixir® Strings"));
+  assert.ok(
+    !out!.description?.includes("%20"),
+    "must not surface the URL-encoded JSON-LD description",
+  );
+});
+
+test("Elixir — SKU and gauge lifted from the JSON-LD node / name", () => {
+  const out = extractElixirProduct(ELIXIR_HTML);
+  assert.equal(out!.sku, "16052");
+  assert.equal(out!.gauge, "10-46");
+});
+
+test("Elixir — category is always Strings", () => {
+  const out = extractElixirProduct(ELIXIR_HTML);
+  assert.equal(out!.category, "Strings");
+});
+
+test("Elixir — falls back to og:title + og:image when JSON-LD is absent", () => {
+  const html = `<html><head>
+    <meta property="og:title" content="Acoustic Phosphor Bronze, Light 12-53" />
+    <meta property="og:image" content="https://cdn11.bigcommerce.com/elixir/16027.jpg" />
+    <meta property="product:price:amount" content="19.99" />
+  </head><body></body></html>`;
+  const out = extractElixirProduct(html);
+  assert.ok(out);
+  assert.equal(out!.name, "Acoustic Phosphor Bronze, Light 12-53");
+  assert.equal(out!.price, "USD 19.99");
+  assert.equal(out!.gauge, "12-53");
+  assert.equal(out!.rawImage, "https://cdn11.bigcommerce.com/elixir/16027.jpg");
+});
+
+test("Elixir — no name anywhere → null (fail loud)", () => {
+  const out = extractElixirProduct("<html><head></head><body></body></html>");
+  assert.equal(out, null);
 });

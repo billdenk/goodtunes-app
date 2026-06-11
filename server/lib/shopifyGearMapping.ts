@@ -196,6 +196,40 @@ function decodeEntities(s: string): string {
     .replace(/&#x27;/gi, "'");
 }
 
+// Decode numeric HTML entities (&#174; → ®, &#x27; → '). Kept separate
+// from decodeEntities so existing callers keep their narrow behavior;
+// the string-maker description path runs both (BigCommerce double-encodes
+// the registered-trademark mark as &amp;#174;).
+function decodeNumericEntities(s: string): string {
+  return s
+    .replace(/&#x([0-9a-f]+);/gi, (_m, h) => {
+      try {
+        return String.fromCodePoint(parseInt(h, 16));
+      } catch {
+        return _m;
+      }
+    })
+    .replace(/&#(\d+);/g, (_m, d) => {
+      try {
+        return String.fromCodePoint(parseInt(d, 10));
+      } catch {
+        return _m;
+      }
+    });
+}
+
+// Pull a guitar/bass string gauge out of a product name. Matches the
+// "10-46", "10.5-48", "9-42", "45-105" forms string makers print in
+// their titles. First token is 1–2 digits (optionally `.5`), the second
+// 2–3 digits, so model numbers like "D-35" (no leading digit) and years
+// like "1974" (no trailing dash) never false-match. Returns the gauge
+// string (e.g. "10-46") or null.
+export function parseGaugeFromName(name: string): string | null {
+  if (!name) return null;
+  const m = name.match(/\b(\d{1,2}(?:\.\d)?-\d{2,3})\b/);
+  return m ? m[1] : null;
+}
+
 // Shape of the relevant fields from Shopify's `/products/<handle>.json`.
 export type ShopifyProduct = {
   title?: unknown;
@@ -290,6 +324,20 @@ export function mapShopifyProduct(
   // navigation tags like "Level 1: Instruments" and overlong junk).
   const specs: Record<string, string> = {};
   if (year) specs.Year = year;
+
+  // SKU — string makers (D'Addario) carry the catalog code on the first
+  // variant ("EXL110"). Harmless for the vintage shops whose variants
+  // omit it. Task #1943.
+  const variantSku = variants.length ? (variants[0] as any)?.sku : null;
+  if (typeof variantSku === "string" && variantSku.trim()) {
+    specs.SKU = variantSku.trim();
+  }
+
+  // Gauge — pulled from the title ("…Regular Light 10-46" → "10-46").
+  // Only matches a real string-gauge form, so instrument titles never
+  // get a spurious Gauge row. Task #1943.
+  const gauge = parseGaugeFromName(rawTitle);
+  if (gauge) specs.Gauge = gauge;
   const tags: string[] = Array.isArray(product.tags)
     ? product.tags.map((t: any) => String(t))
     : typeof product.tags === "string"
@@ -313,7 +361,22 @@ export function mapShopifyProduct(
     ptype && !/^(instruments?|otherdefault|default)$/i.test(ptype)
       ? ptype
       : null;
-  const category = normalizePicksCategory(rawCategory);
+  let category = normalizePicksCategory(rawCategory);
+  // Some maker-owned Shopify stores set product_type to their own brand
+  // name (D'Addario lists product_type:"D'Addario") — that's not a real
+  // category, so drop it when it just echoes the vendor or shop name.
+  // Task #1943.
+  if (
+    category &&
+    (category.toLowerCase() === vendorRaw.toLowerCase() ||
+      category.toLowerCase() === shopName.toLowerCase())
+  ) {
+    category = null;
+  }
+  // Infer a "Strings" category from the product name when none resolved
+  // ("…Electric Guitar Strings"). Name-gated so a maker's non-string
+  // products (picks, capos) are never mislabeled. Task #1943.
+  if (!category && /\bstrings?\b/i.test(rawTitle)) category = "Strings";
 
   return { name, brand, year, description, price, rawImage, gallery, specs, category };
 }
@@ -475,4 +538,165 @@ export function extractErnieBallProduct(
 /** RegExp-safe escape for Ernie Ball SKU strings used inside new RegExp(). */
 function ebEscape(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// ─── Elixir (elixirstrings.com) string-set extractor ──────────────────────
+//
+// Elixir runs on BigCommerce, not Shopify, so there's no `/products/<h>.json`
+// endpoint. Each product page ships a JSON-LD `Product` node (name, image,
+// offers.price) plus standard OG tags. The catch: BigCommerce's JSON-LD
+// `description` is a URL-encoded HTML blob (`Packaging%20may%20vary…`), so we
+// prefer the clean `og:description` and only fall back to a decoded JSON-LD
+// description. Category is always "Strings" (elixirstrings.com is a
+// strings-only catalog). Pure: no network, no DB, no image rehosting (the
+// route rehosts `rawImage` afterwards). Task #1943.
+
+export type StringMakerProduct = {
+  name: string;
+  description: string | null;
+  price: string | null;
+  sku: string | null;
+  gauge: string | null;
+  rawImage: string | null;
+  category: "Strings";
+};
+
+// Read the first matching <meta property|name="key" content="…"> value
+// (either attribute order), HTML-entity decoded. Pure regex over the raw
+// HTML — mirrors the route's own meta harvest.
+function readMetaContent(html: string, key: string): string | null {
+  const esc = ebEscape(key);
+  const re1 = new RegExp(
+    `<meta[^>]+(?:property|name)=["']${esc}["'][^>]+content=["']([^"']*)["']`,
+    "i",
+  );
+  const re2 = new RegExp(
+    `<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']${esc}["']`,
+    "i",
+  );
+  const m = re1.exec(html) || re2.exec(html);
+  if (!m) return null;
+  const v = decodeEntities(m[1]).trim();
+  return v || null;
+}
+
+// Collect every JSON-LD node in the document, flattening `@graph` arrays
+// and top-level arrays. Parse failures are skipped (best-effort).
+function collectJsonLdNodes(html: string): any[] {
+  const out: any[] = [];
+  const re =
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    let parsed: any;
+    try {
+      parsed = JSON.parse(m[1].trim());
+    } catch {
+      continue;
+    }
+    const nodes = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.["@graph"])
+        ? parsed["@graph"]
+        : [parsed];
+    for (const n of nodes) if (n && typeof n === "object") out.push(n);
+  }
+  return out;
+}
+
+function isProductNode(n: any): boolean {
+  const t = n?.["@type"];
+  return t === "Product" || (Array.isArray(t) && t.includes("Product"));
+}
+
+// JSON-LD image can be a bare URL, an array, or an { url|contentUrl }
+// object — pick the first usable string.
+function pickJsonLdImage(img: any): string | null {
+  if (!img) return null;
+  if (typeof img === "string") return img.trim() || null;
+  if (Array.isArray(img)) {
+    for (const x of img) {
+      const v = pickJsonLdImage(x);
+      if (v) return v;
+    }
+    return null;
+  }
+  if (typeof img === "object")
+    return (img.url || img.contentUrl || null)?.trim() || null;
+  return null;
+}
+
+export function extractElixirProduct(html: string): StringMakerProduct | null {
+  const product = collectJsonLdNodes(html).find(isProductNode) ?? null;
+
+  const name =
+    (typeof product?.name === "string" && product.name.trim()) ||
+    readMetaContent(html, "og:title") ||
+    readMetaContent(html, "twitter:title");
+  if (!name) return null;
+
+  // Image — JSON-LD first, then OG.
+  let rawImage =
+    pickJsonLdImage(product?.image) ||
+    readMetaContent(html, "og:image:secure_url") ||
+    readMetaContent(html, "og:image") ||
+    readMetaContent(html, "twitter:image");
+  if (rawImage?.startsWith("//")) rawImage = `https:${rawImage}`;
+  if (rawImage?.startsWith("http://")) {
+    rawImage = "https://" + rawImage.slice("http://".length);
+  }
+
+  // Price — JSON-LD offers (Offer or AggregateOffer), then the
+  // product:price:amount OG tag.
+  let price: string | null = null;
+  const offers =
+    product?.offers &&
+    (Array.isArray(product.offers) ? product.offers[0] : product.offers);
+  const offerPrice = offers?.price ?? offers?.lowPrice;
+  const currency =
+    (typeof offers?.priceCurrency === "string" && offers.priceCurrency) || "USD";
+  if (
+    offerPrice != null &&
+    offerPrice !== "" &&
+    !isNaN(parseFloat(String(offerPrice)))
+  ) {
+    price = `${currency} ${parseFloat(String(offerPrice)).toFixed(2)}`;
+  } else {
+    const amt = readMetaContent(html, "product:price:amount");
+    const cur = readMetaContent(html, "product:price:currency") || "USD";
+    if (amt && !isNaN(parseFloat(amt))) {
+      price = `${cur} ${parseFloat(amt).toFixed(2)}`;
+    }
+  }
+
+  // Description — the BigCommerce JSON-LD `description` is a URL-encoded
+  // HTML blob, so prefer the clean OG description; only fall back to a
+  // decoded + tag-stripped JSON-LD description.
+  let description: string | null = readMetaContent(html, "og:description");
+  if (description) {
+    description = decodeNumericEntities(description).trim() || null;
+  }
+  if (!description && typeof product?.description === "string" && product.description) {
+    let d = product.description;
+    // URL-decode if it looks percent-encoded (BigCommerce does this).
+    if (/%[0-9a-f]{2}/i.test(d)) {
+      try {
+        d = decodeURIComponent(d.replace(/\+/g, " "));
+      } catch {
+        /* leave as-is */
+      }
+    }
+    d = decodeNumericEntities(decodeEntities(d))
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    description = d || null;
+  }
+
+  const skuRaw = product?.sku ?? product?.mpn;
+  const sku =
+    skuRaw != null && String(skuRaw).trim() ? String(skuRaw).trim() : null;
+  const gauge = parseGaugeFromName(name);
+
+  return { name, description, price, sku, gauge, rawImage, category: "Strings" };
 }

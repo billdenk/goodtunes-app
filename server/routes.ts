@@ -43,6 +43,7 @@ import {
   extractErnieBallProduct,
   normalizePicksCategory,
   extractMicrodataPrice,
+  extractElixirProduct,
 } from "./lib/shopifyGearMapping";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -5446,6 +5447,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // scraper finds nothing useful — fail loud via the curated `.json` path.
     "shop.fender.com",
     "dandreausa.com",
+    // Task #1943 — D'Addario runs on Shopify; their `.json` endpoint
+    // returns clean structured data (title carries the gauge, variant
+    // carries the SKU, vendor matches the shop name so the maker slot
+    // falls back to daddario.com). Generic HTML scraping lost the SKU,
+    // gauge, and accurate category.
+    "daddario.com",
   ]);
 
   // Task #1944 — maker-owned Shopify storefronts that live on a *subdomain*
@@ -6207,6 +6214,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           reseller: null,
           maker: ebMaker,
           vendor: ebMaker,
+        });
+      }
+      // ————————————————————————————————————————————————————————————————
+
+      // — Elixir (elixirstrings.com) ———————————————————————————————————
+      // Elixir runs on BigCommerce (no Shopify `.json`); each product page
+      // ships a JSON-LD Product node + OG tags. The generic scraper would
+      // import the name/price/image but pick up the URL-encoded JSON-LD
+      // description and miss the category. The curated extractor prefers
+      // the clean og:description, forces category=Strings, and lifts the
+      // gauge/SKU when present. Fail loud — no silent half-import. (#1943)
+      if (host === "elixirstrings.com") {
+        const extracted = extractElixirProduct(html);
+        if (!extracted) {
+          return res.status(422).json({
+            message:
+              "Couldn't read product details from this Elixir page. Paste a link to a specific string set's product page and try again.",
+          });
+        }
+        let elixPhotoUrl: string | null = null;
+        if (extracted.rawImage) {
+          try { elixPhotoUrl = await rehostRemoteImage(extracted.rawImage); }
+          catch { elixPhotoUrl = extracted.rawImage; }
+        }
+        const elixMaker = buildHostSlot("elixirstrings.com", "Elixir", null);
+        const elixSpecs: Record<string, string> = {};
+        if (extracted.sku) elixSpecs.SKU = extracted.sku;
+        if (extracted.gauge) elixSpecs.Gauge = extracted.gauge;
+        return res.json({
+          name: extracted.name,
+          brand: "Elixir",
+          category: extracted.category,
+          description: extracted.description,
+          specs: elixSpecs,
+          price: extracted.price,
+          photoUrl: elixPhotoUrl,
+          sourceImage: extracted.rawImage,
+          sourceImages: extracted.rawImage ? [extracted.rawImage] : [],
+          reseller: null,
+          maker: elixMaker,
+          vendor: elixMaker,
         });
       }
       // ————————————————————————————————————————————————————————————————
