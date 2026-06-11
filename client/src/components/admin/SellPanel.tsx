@@ -23,6 +23,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatUsdCents } from "@shared/money";
+import { MECH_RATE_CENTS_PER_TRACK as SHARED_MECH_RATE_CENTS_PER_TRACK } from "@shared/breakEven";
+import { BreakEvenBar } from "@/components/BreakEvenBar";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
@@ -108,10 +110,11 @@ const parseDollars = (v: string): number | null => {
 // Task #423 — single source of truth for the mechanicals rate used by
 // the Publishing line in the SellPanel breakdown. $0.127/track × 2
 // covers vinyl + digital mechanicals (industry standard), i.e. 25.4¢
-// per track. Centralised so the snapshot path and the live-preview
-// path can't drift the way they used to (the comment said 0.254 but
-// the literal was 25.7).
-const MECH_RATE_CENTS_PER_TRACK = 25.4;
+// per track. Centralised in shared/breakEven.ts (Task #1963) so the
+// snapshot path, the live-preview path, and the break-even calculator
+// can't drift the way they used to (the comment said 0.254 but the
+// literal was 25.7).
+const MECH_RATE_CENTS_PER_TRACK = SHARED_MECH_RATE_CENTS_PER_TRACK;
 
 type SellResponse = { skus: AlbumSku[]; addons: AlbumAddon[] };
 
@@ -1252,6 +1255,11 @@ export function SellPanel({
 
         {/* Task #533 — Gate #2 artist opt-in for pool-funded early cut. */}
         <EarlyCutOptIn albumId={albumId} />
+
+        {/* Task #1963 — derived "how many to sell to break even" readout. */}
+        <Card className="rounded-2xl shadow-sm px-5 py-4 mb-8" data-testid="panel-break-even">
+          <BreakEvenBar albumId={albumId} tone="light" variant="full" />
+        </Card>
 
         {/* SKUs */}
         <Card

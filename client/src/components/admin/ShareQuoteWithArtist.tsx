@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { IconButton } from "@/components/ui/IconButton";
+import { BreakEvenBar } from "@/components/BreakEvenBar";
 
 type InviteResult = {
   id: string;
@@ -233,6 +234,11 @@ export function ShareQuoteWithArtist({
           ) : (
             // ── Pre-mint: collect the recipient email + optional note ──
             <div className="space-y-4">
+              {/* Task #1963 — same derived break-even readout the artist
+                  will see, so the quote and the dashboard agree. */}
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-3">
+                <BreakEvenBar albumId={albumId} tone="light" variant="full" />
+              </div>
               <div>
                 <Label
                   htmlFor="share-quote-email"

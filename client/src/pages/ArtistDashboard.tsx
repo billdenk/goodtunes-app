@@ -12,6 +12,7 @@ import { useMemo, useState } from "react";
 import { formatUsd, formatUsdCents } from "@shared/money";
 import { Link } from "wouter";
 import { SalesMap, type SalesGeoPayload } from "@/components/partner/SalesMap";
+import { BreakEvenBar } from "@/components/BreakEvenBar";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -367,6 +368,7 @@ function CatalogTab({ qs }: { qs: string }) {
             <thead className="text-white/45 text-[11px] uppercase tracking-wider">
               <tr>
                 <th className="text-left font-medium py-2 pr-3">Album</th>
+                <th className="text-left font-medium px-2 w-36">Break-even</th>
                 <th className="text-right font-medium px-2">Revenue</th>
                 <th className="text-right font-medium px-2">Artist share</th>
                 <th className="text-right font-medium px-2">Units</th>
@@ -376,8 +378,8 @@ function CatalogTab({ qs }: { qs: string }) {
               </tr>
             </thead>
             <tbody>
-              {albums.isLoading && <tr><td colSpan={7} className="py-6 text-center text-white/45">Loading…</td></tr>}
-              {!albums.isLoading && (albums.data?.albums.length ?? 0) === 0 && <tr><td colSpan={7} className="py-6 text-center text-white/45">No albums in scope.</td></tr>}
+              {albums.isLoading && <tr><td colSpan={8} className="py-6 text-center text-fan-faint">Loading…</td></tr>}
+              {!albums.isLoading && (albums.data?.albums.length ?? 0) === 0 && <tr><td colSpan={8} className="py-6 text-center text-fan-faint">No albums in scope.</td></tr>}
               {albums.data?.albums.map((a) => (
                 <tr key={a.albumId} className="border-t border-white/5" data-testid={`row-album-${a.albumId}`}>
                   <td className="py-2 pr-3">
@@ -388,6 +390,9 @@ function CatalogTab({ qs }: { qs: string }) {
                         <p className="truncate text-white/45 text-[11px]">{a.artist}</p>
                       </div>
                     </div>
+                  </td>
+                  <td className="px-2 align-middle">
+                    <BreakEvenBar albumId={a.albumId} tone="dark" variant="compact" />
                   </td>
                   <td className="px-2 text-right tabular-nums font-semibold">{dollars(a.revenueCents)}</td>
                   <td className="px-2 text-right tabular-nums text-[color:var(--brand-mint)]">{dollars(a.artistShareCents)}</td>

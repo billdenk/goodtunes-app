@@ -1158,6 +1158,19 @@ export async function ensureArtistReportingIndexes(): Promise<void> {
   }
 }
 
+// Task #1963 — per-album break-even readout for the artist dashboard.
+// Reuses resolveAlbumScope so an artist/label/manager only ever reads
+// their OWN album's numbers (operators read any). The math itself lives
+// in server/breakEven.ts and is identical to the operator SellPanel
+// endpoint — the bar can never disagree across surfaces.
+async function albumBreakEvenHandler(req: Request, res: Response) {
+  const resolved = await resolveAlbumScope(req, String(req.params.id));
+  if ("error" in resolved) return res.status(resolved.status).json({ message: resolved.error });
+  const { computeAlbumBreakEven } = await import("./breakEven");
+  const be = await computeAlbumBreakEven(String(req.params.id));
+  res.json(be);
+}
+
 // ─── Registration ─────────────────────────────────────────────────────
 export async function registerArtistReportRoutes(app: Express): Promise<void> {
   const { requireRole } = await import("./auth/roles");
@@ -1186,6 +1199,9 @@ export async function registerArtistReportRoutes(app: Express): Promise<void> {
   // ownership check in resolveAlbumScope does the real authorization.
   const albumGate = requireRole("artist", "label", "manager", "super_admin", "admin");
   app.get("/api/admin/albums/:id/dashboard", albumGate, albumDashboardHandler);
+  // Task #1963 — derived break-even readout (operators for any album,
+  // artist/label/manager for their own via resolveAlbumScope).
+  app.get("/api/admin/albums/:id/break-even", albumGate, albumBreakEvenHandler);
   app.get("/api/admin/albums/:id/dashboard/addon-buyers", albumGate, albumAddonBuyersHandler);
   // Task #1528 — CSV downloads for the dashboard tables (addon-buyers|top-songs|cities).
   app.get("/api/admin/albums/:id/dashboard/export", albumGate, albumExportHandler);
