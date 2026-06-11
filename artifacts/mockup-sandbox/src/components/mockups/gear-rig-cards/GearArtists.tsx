@@ -30,7 +30,7 @@ type ArtistRow = {
 
 const ARTISTS: ArtistRow[] = [
   { name: "Fernando Perdomo", rig: "’66 Telecaster Rig", label: "1.2M", score: 92, photo: IMG("artist-fernando-live.jpg") },
-  { name: "June Avila", rig: "Nylon & Neon Rig", label: "540K", score: 64, mono: "JA" },
+  { name: "June Avila", rig: "Neon Strat Rig", label: "540K", score: 64, mono: "JA" },
   { name: "The Wilder Sons", rig: "Front Porch Rig", label: "410K", score: 57, mono: "WS" },
   { name: "Marco Reyes", rig: "Desert Tele Rig", label: "260K", score: 41, mono: "MR" },
   { name: "Sam Okafor", rig: "Lo-Fi Loop Rig", label: "120K", score: 28, mono: "SO" },
