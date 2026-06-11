@@ -367,12 +367,22 @@ webhook may land a beat after the redirect). The fan sees a spinner with
    matches what they bought; then a per-copy breakdown (Copy 1, Copy 2… with a
    **"Signed · #NNNN"** tag on signed copies) or, for older orders, a line-item
    list; and a **Total**.
-4. **Gift toggle — *optional*.** A **"This is a gift"** checkbox. **Only when**
-   ticked, it expands to: recipient first/last name (required to send),
-   email-or-phone contact (required), an optional message, and an optional
-   **"Deliver on"** date. Submitting mints a **shareable one-time claim link** the
-   buyer copies and sends; when the recipient claims it, the album + GoodDeed move
-   to their account.
+4. **Post-purchase gift hub — *optional*.** Instead of a simple toggle, the
+   Welcome screen presents three explicit tiles after every purchase:
+   - **Gift this** — opens a recipient form (name, email, optional personal note)
+     and mints a **shareable one-time claim link** the buyer copies and sends. When
+     the recipient taps the link and claims it the album + GoodDeed move to their
+     account. The buyer can also cancel an un-claimed gift from their Orders page.
+   - **Keep it** — confirms the album stays with the buyer; no action taken.
+   - **Decide later** — stamps a 7-day `pendingGiftDecision` flag on the order. A
+     scheduled job emails the buyer a reminder before the window closes; they can
+     still gift or keep from Orders at any time.
+
+   For **vinyl orders**, the Buy sheet itself offers a **"Ship to someone else"**
+   toggle (vinyl-only, in the cart phase after the quantity picker) that collects
+   a separate shipping address for the recipient. The physical record routes there;
+   downloads and the GoodDeed stay with the buyer so they can gift or keep those
+   independently after checkout.
 5. **"Pick your handle" — *optional*.** A `@username` field pre-filled from the
    fan's email local-part. They can change it or leave it; it's saved when they tap
    the final button.
@@ -443,4 +453,7 @@ card receipt, if enabled, is a separate email.
 | "Sign in to continue" button | Fan isn't signed in |
 | Apple Pay / Google Pay | Fan's device/browser supports it |
 | Multiple GoodDeed numbers on `/welcome` | Order has 2+ signed copies |
-| Gift fields | Fan ticks "This is a gift" |
+| Gift hub tiles (Gift / Keep / Decide later) | Always shown on Welcome after purchase |
+| "Ship to someone else" toggle in Buy sheet | Selected format is vinyl; cart phase |
+| Recipient address form in Buy sheet | Fan ticks "Ship to someone else" |
+| "Cancel gift" on Orders | Gift exists, not yet claimed, not in fulfillment |

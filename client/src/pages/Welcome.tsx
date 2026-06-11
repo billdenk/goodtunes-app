@@ -80,12 +80,14 @@ export function Welcome() {
   const [suggestedUsername, setSuggestedUsername] = useState("");
   const [usernameInput, setUsernameInput] = useState("");
   const [savingUsername, setSavingUsername] = useState(false);
-  // Task #46 — gift flow on the post-checkout screen. The buyer can flip
-  // a single toggle to convert this order into a gift, fill out the
-  // recipient, and walk away with a shareable link. We deliberately keep
-  // this on the same page (no extra step) so the moment of purchase
-  // becomes the moment of gifting.
-  const [giftMode, setGiftMode] = useState(false);
+  // Task #1938 — post-purchase gift hub. The single "This is a gift"
+  // toggle is replaced by a 3-option decision screen: gift now (shows
+  // recipient form), keep for myself, or decide later (stamps a 7-day
+  // pending reminder on the order). Buyer-initiated revoke lives on the
+  // Orders page; the hub here is the happy-path entry point.
+  type GiftHubChoice = "gift" | "mine" | "later" | null;
+  const [giftHubChoice, setGiftHubChoice] = useState<GiftHubChoice>(null);
+  const [pendingSubmitting, setPendingSubmitting] = useState(false);
   const [giftFirst, setGiftFirst] = useState("");
   const [giftLast, setGiftLast] = useState("");
   const [giftContactKind, setGiftContactKind] = useState<"email" | "phone">("email");
@@ -178,6 +180,19 @@ export function Welcome() {
       toast({ title: "Couldn't create gift", description: e?.message, variant: "destructive" });
     } finally {
       setGiftSubmitting(false);
+    }
+  };
+
+  const submitPending = async () => {
+    if (!data?.order) return;
+    setPendingSubmitting(true);
+    try {
+      await apiRequest("POST", `/api/orders/${data.order.id}/gift/pending`, {});
+    } catch {
+      // Non-fatal — we still stamp "later" locally so the UI moves forward.
+    } finally {
+      setPendingSubmitting(false);
+      setGiftHubChoice("later");
     }
   };
 
@@ -411,115 +426,171 @@ export function Welcome() {
           </div>
         </div>
 
-        {/* Task #46 — Gift toggle. Show only before a share link has
-            been minted; once we have the link, swap to the share panel. */}
+        {/* Task #1938 — post-purchase gift hub. Replaces the simple
+            "This is a gift" toggle with a 3-option decision screen:
+            Gift now | Keep for myself | Decide later.
+            Once a share link is minted, the panel flips to the share card. */}
         {!giftShareUrl ? (
-          <div className="rounded-2xl bg-white/[0.07] p-5 mb-5" data-testid="welcome-gift-toggle">
-            <label className="flex items-center justify-between gap-3 cursor-pointer">
-              <span className="flex items-center gap-2">
-                <span aria-hidden="true">🎁</span>
-                <span className="text-[14px] font-medium">This is a gift</span>
-              </span>
-              <input
-                type="checkbox"
-                checked={giftMode}
-                onChange={(e) => setGiftMode(e.target.checked)}
-                className="w-5 h-5 accent-[#319ED8]"
-                data-testid="checkbox-gift-mode"
-              />
-            </label>
-            {giftMode && (
-              <div className="mt-4 space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    value={giftFirst}
-                    onChange={(e) => setGiftFirst(e.target.value)}
-                    placeholder="First name"
-                    className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]"
-                    data-testid="input-gift-first"
-                  />
-                  <input
-                    type="text"
-                    value={giftLast}
-                    onChange={(e) => setGiftLast(e.target.value)}
-                    placeholder="Last name"
-                    className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]"
-                    data-testid="input-gift-last"
-                  />
+          <div className="rounded-2xl bg-white/[0.07] p-5 mb-5" data-testid="welcome-gift-hub">
+
+            {/* ── Choice tiles ── shown while no gift has been initiated */}
+            {giftHubChoice !== "gift" && (
+              <>
+                <div className="text-fan-faint text-xs uppercase tracking-wider font-semibold mb-3">
+                  What would you like to do?
                 </div>
-                <div className="flex p-0.5 rounded-xl bg-white/[0.06] border border-white/10">
-                  {(["email", "phone"] as const).map((k) => (
+                <div className="grid grid-cols-3 gap-2 mb-1">
+                  {(
+                    [
+                      { key: "gift",  emoji: "🎁", label: "Gift this" },
+                      { key: "mine",  emoji: "♫",  label: "Keep it" },
+                      { key: "later", emoji: "🕐", label: "Decide later" },
+                    ] as const
+                  ).map(({ key, emoji, label }) => (
                     <button
-                      key={k}
+                      key={key}
                       type="button"
-                      onClick={() => { setGiftContactKind(k); setGiftContact(""); }}
-                      className={`flex-1 py-1.5 rounded-lg text-[12px] font-medium capitalize ${
-                        giftContactKind === k ? "bg-white/15 text-white" : "text-fan-secondary"
+                      disabled={pendingSubmitting}
+                      onClick={async () => {
+                        if (key === "later") {
+                          await submitPending();
+                        } else {
+                          setGiftHubChoice(key);
+                        }
+                      }}
+                      className={`flex flex-col items-center gap-1.5 rounded-2xl py-3 px-2 text-center text-xs font-medium transition-colors ${
+                        giftHubChoice === key
+                          ? "bg-[color:var(--brand-blue)]/15 text-[color:var(--brand-blue)]"
+                          : "bg-white/[0.05] text-fan-secondary hover:bg-white/[0.07]"
                       }`}
-                      data-testid={`toggle-gift-${k}`}
+                      data-testid={`button-hub-${key}`}
                     >
-                      {k}
+                      <span className="text-lg" aria-hidden="true">{emoji}</span>
+                      <span>
+                        {pendingSubmitting && key === "later" ? "One sec…" : label}
+                      </span>
                     </button>
                   ))}
                 </div>
-                <input
-                  type={giftContactKind === "email" ? "email" : "tel"}
-                  value={giftContact}
-                  onChange={(e) => setGiftContact(e.target.value)}
-                  placeholder={giftContactKind === "email" ? "their@email.com" : "+1 555 555 5555"}
-                  className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]"
-                  data-testid="input-gift-contact"
-                />
-                <textarea
-                  value={giftMessage}
-                  onChange={(e) => setGiftMessage(e.target.value.slice(0, 500))}
-                  placeholder="Optional message (500 chars)"
-                  rows={2}
-                  className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none resize-none"
-                  style={{ borderColor: undefined }}
-                  onFocus={(e) => { (e.currentTarget.style as any).borderColor = "var(--brand-blue)"; }}
-                  onBlur={(e) => { (e.currentTarget.style as any).borderColor = ""; }}
-                  data-testid="input-gift-message"
-                />
-                <div>
-                  <label className="text-fan-secondary text-xs uppercase tracking-wider font-semibold block mb-1.5">
-                    Deliver on (optional)
-                  </label>
-                  <input
-                    type="date"
-                    value={giftDeliverOn}
-                    onChange={(e) => setGiftDeliverOn(e.target.value)}
-                    min={new Date().toISOString().slice(0, 10)}
-                    className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm bg-white/[0.06] focus:outline-none"
-                    onFocus={(e) => { (e.currentTarget.style as any).borderColor = "var(--brand-blue)"; }}
-                    onBlur={(e) => { (e.currentTarget.style as any).borderColor = ""; }}
-                    data-testid="input-gift-deliver-on"
-                  />
+                {giftHubChoice === "mine" && (
+                  <p className="text-fan-faint text-xs mt-3 text-center">
+                    It's yours — enjoy it.
+                  </p>
+                )}
+                {giftHubChoice === "later" && (
+                  <p className="text-xs mt-3 text-center font-medium" style={{ color: "var(--brand-mint)" }}>
+                    We'll send you a reminder in 7 days. You can also gift from your Orders page any time.
+                  </p>
+                )}
+              </>
+            )}
+
+            {/* ── Recipient form ── expanded when "Gift this" is chosen */}
+            {giftHubChoice === "gift" && (
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setGiftHubChoice(null)}
+                    className="text-fan-faint text-sm hover:text-fan-secondary"
+                    data-testid="button-hub-back"
+                  >
+                    ← Back
+                  </button>
+                  <span className="text-sm font-semibold">🎁 Gift this album</span>
                 </div>
-                <p className="text-fan-faint text-[11px] leading-snug">
-                  We'll generate a one-time claim link. {giftDeliverOn ? `It unlocks on ${giftDeliverOn}.` : "You can share it right away."}
-                </p>
-                <button
-                  type="button"
-                  onClick={submitGift}
-                  disabled={giftSubmitting}
-                  className="w-full py-2.5 rounded-xl bg-[#7F10A7] text-white text-sm font-semibold disabled:opacity-50"
-                  data-testid="button-gift-create"
-                >
-                  {giftSubmitting ? "Creating…" : "Create gift link"}
-                </button>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={giftFirst}
+                      onChange={(e) => setGiftFirst(e.target.value)}
+                      placeholder="First name"
+                      className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]"
+                      data-testid="input-gift-first"
+                    />
+                    <input
+                      type="text"
+                      value={giftLast}
+                      onChange={(e) => setGiftLast(e.target.value)}
+                      placeholder="Last name"
+                      className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]"
+                      data-testid="input-gift-last"
+                    />
+                  </div>
+                  <div className="flex p-0.5 rounded-xl bg-white/[0.06] border border-white/10">
+                    {(["email", "phone"] as const).map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => { setGiftContactKind(k); setGiftContact(""); }}
+                        className={`flex-1 py-1.5 rounded-lg text-[12px] font-medium capitalize ${
+                          giftContactKind === k ? "bg-white/15 text-white" : "text-fan-secondary"
+                        }`}
+                        data-testid={`toggle-gift-${k}`}
+                      >
+                        {k}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type={giftContactKind === "email" ? "email" : "tel"}
+                    value={giftContact}
+                    onChange={(e) => setGiftContact(e.target.value)}
+                    placeholder={giftContactKind === "email" ? "their@email.com" : "+1 555 555 5555"}
+                    className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none focus:border-[#319ED8]"
+                    data-testid="input-gift-contact"
+                  />
+                  <textarea
+                    value={giftMessage}
+                    onChange={(e) => setGiftMessage(e.target.value.slice(0, 500))}
+                    placeholder="Optional message (500 chars)"
+                    rows={2}
+                    className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none resize-none"
+                    data-testid="input-gift-message"
+                  />
+                  <div>
+                    <label className="text-fan-secondary text-xs uppercase tracking-wider font-semibold block mb-1.5">
+                      Deliver on (optional)
+                    </label>
+                    <input
+                      type="date"
+                      value={giftDeliverOn}
+                      onChange={(e) => setGiftDeliverOn(e.target.value)}
+                      min={new Date().toISOString().slice(0, 10)}
+                      className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm bg-white/[0.06] focus:outline-none"
+                      data-testid="input-gift-deliver-on"
+                    />
+                  </div>
+                  <p className="text-fan-faint text-[11px] leading-snug">
+                    We'll generate a one-time claim link.{" "}
+                    {giftDeliverOn ? `It unlocks on ${giftDeliverOn}.` : "You can share it right away."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={submitGift}
+                    disabled={giftSubmitting}
+                    className="w-full py-2.5 rounded-xl bg-[#7F10A7] text-white text-sm font-semibold disabled:opacity-50"
+                    data-testid="button-gift-create"
+                  >
+                    {giftSubmitting ? "Creating…" : "Create gift link"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
         ) : (
           <div className="rounded-2xl border border-[#7F10A7]/40 bg-[#7F10A7]/10 p-5 mb-5" data-testid="welcome-gift-share">
-            <div className="text-[#FF5470] text-[11px] uppercase tracking-wider font-semibold mb-2">🎁 Your gift is ready</div>
+            <div className="text-xs uppercase tracking-wider font-semibold mb-2" style={{ color: "var(--brand-pink)" }}>
+              🎁 Your gift is ready
+            </div>
             <div className="text-[13px] text-fan-primary mb-3 leading-snug">
               Send this link to {giftFirst} — when they open it and claim, the album + GoodDeed move to their account.
             </div>
             <div className="flex items-center gap-2 bg-white/[0.06] border border-white/10 rounded-xl px-3 py-2">
-              <code className="text-[11px] text-fan-primary truncate flex-1" data-testid="text-gift-share-url">{giftShareUrl}</code>
+              <code className="text-xs text-fan-primary truncate flex-1" data-testid="text-gift-share-url">
+                {giftShareUrl}
+              </code>
               <button
                 type="button"
                 onClick={copyShareUrl}

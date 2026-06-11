@@ -51,6 +51,8 @@ type GiftInfo = {
   createdAt: string;
   resendCount: number;
   isBuyer: boolean;
+  // Task #1938 — buyer can revoke a pending gift before it is claimed.
+  revokedAt: string | null;
 };
 
 type CertInfo = {
@@ -245,6 +247,21 @@ export function Orders() {
     onError: (e: any) => toast({ title: "Couldn't update", description: e?.message, variant: "destructive" }),
   });
 
+  // Task #1938 — buyer-initiated revoke. Invalidates the claim link and
+  // leaves the album in the buyer's collection. Blocked server-side once
+  // the gift is claimed or the vinyl is in fulfillment / shipped / delivered.
+  const revokeGift = useMutation({
+    mutationFn: async (orderId: string) => {
+      const r = await apiRequest("POST", `/api/orders/${orderId}/gift/revoke`, {});
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({ title: "Gift cancelled", description: "The claim link is invalid. The album stays in your collection." });
+    },
+    onError: (e: any) => toast({ title: "Couldn't cancel gift", description: e?.message, variant: "destructive" }),
+  });
+
   async function copyLink(g: GiftInfo) {
     if (!g.claimToken) return;
     const url = `${window.location.origin}/gift/${g.claimToken}`;
@@ -312,6 +329,8 @@ export function Orders() {
             const gEditable = g ? Date.now() - new Date(g.createdAt).getTime() < RECIPIENT_EDIT_WINDOW_MS : false;
             const giftPill: { label: string; cls: string } | null = !g
               ? null
+              : g.revokedAt
+              ? { label: "Gift · Cancelled", cls: "bg-rose-500/15 text-rose-300" }
               : g.claimed
               ? { label: "Gift · Claimed", cls: "bg-violet-500/20 text-violet-300" }
               : gExpired
@@ -448,7 +467,11 @@ export function Orders() {
                       {g.recipientEmail && <> · <span className="text-fan-secondary">{g.recipientEmail}</span></>}
                       {g.recipientPhone && <> · <span className="text-fan-secondary">{g.recipientPhone}</span></>}
                     </div>
-                    {!g.claimed && (
+                    {g.revokedAt ? (
+                      <div className="mt-1.5 text-xs text-rose-300">
+                        Gift cancelled {new Date(g.revokedAt).toLocaleDateString()} — the album stays with you.
+                      </div>
+                    ) : !g.claimed ? (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {g.claimToken && !gExpired && (
                           <button
@@ -480,13 +503,33 @@ export function Orders() {
                             Change recipient
                           </button>
                         )}
+                        {/* Task #1938 — buyer-initiated cancel. Blocked once
+                            vinyl enters fulfillment / shipped / delivered. */}
+                        {(() => {
+                          const LOCKED = new Set(["in_fulfillment", "shipped", "delivered"]);
+                          const fulfillmentLocked = !!o.fulfillmentStatus && LOCKED.has(o.fulfillmentStatus);
+                          return !fulfillmentLocked ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm("Cancel this gift? The claim link will stop working and the album stays in your collection.")) {
+                                  revokeGift.mutate(o.id);
+                                }
+                              }}
+                              disabled={revokeGift.isPending}
+                              className="px-3 py-1 rounded-full text-xs font-medium bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 disabled:opacity-50"
+                              data-testid={`button-revoke-gift-${o.id}`}
+                            >
+                              Cancel gift
+                            </button>
+                          ) : null;
+                        })()}
                       </div>
-                    )}
-                    {g.claimed && g.claimedAt && (
+                    ) : g.claimed && g.claimedAt ? (
                       <div className="mt-1.5 text-[11.5px] text-[#4AFFCA]">
                         Claimed {new Date(g.claimedAt).toLocaleDateString()}
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 )}
               </div>

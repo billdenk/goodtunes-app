@@ -181,6 +181,8 @@ function publicGift(
     claimedAt: g.claimedAt,
     expired,
     reverted: !!g.revertedAt,
+    // Task #1938 — buyer-initiated revoke (distinct from refund revert).
+    revoked: !!g.buyerRevokedAt,
     expiresAt: g.expiresAt,
   };
 }
@@ -448,6 +450,60 @@ export function registerGiftRoutes(app: Express) {
     res.json({ gift: updated, shareUrl: url });
   });
 
+  // ─── Buyer-initiated revoke (pre-claim, pre-fulfillment only) ────────
+  // Distinct from revertedAt (system-stamped on refund). The buyer can
+  // cancel a pending gift at any time before the recipient has claimed,
+  // provided the vinyl hasn't entered the fulfillment pipeline yet.
+  // The entitlement stays with the buyer; no order transfer is needed.
+  app.post("/api/orders/:id/gift/revoke", async (req, res) => {
+    const me = await requireCustomer(req, res);
+    if (!me) return;
+    const orderId = String(req.params.id);
+    const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+    if (!order || !order.giftId) return res.status(404).json({ message: "No gift on this order" });
+    const [gift] = await db.select().from(gifts).where(eq(gifts.id, order.giftId));
+    if (!gift) return res.status(404).json({ message: "Gift not found" });
+    if (gift.buyerUserId !== me.userId) return res.status(403).json({ message: "Not your gift" });
+    if (gift.claimedAt) return res.status(400).json({ message: "Already claimed — can't revoke" });
+    if (gift.buyerRevokedAt) return res.status(400).json({ message: "Already revoked" });
+    // Block once physical fulfillment is underway (vinyl can't be re-routed).
+    const LOCKED_STATUSES = new Set(["in_fulfillment", "shipped", "delivered"]);
+    if (order.fulfillmentStatus && LOCKED_STATUSES.has(order.fulfillmentStatus)) {
+      return res.status(400).json({
+        message: "Can't revoke — fulfillment of the physical record has already started.",
+      });
+    }
+    const [updated] = await db
+      .update(gifts)
+      .set({ buyerRevokedAt: new Date() })
+      .where(eq(gifts.id, gift.id))
+      .returning();
+    console.log(`[gift revoke] buyer=${me.userId} gift=${gift.id} order=${orderId}`);
+    res.json({ gift: updated });
+  });
+
+  // ─── Mark order as "decide later" (7-day reminder window) ──────────
+  // Stamped immediately after the post-checkout hub so the scheduler can
+  // send a reminder email/SMS before the gifting window closes.
+  app.post("/api/orders/:id/gift/pending", async (req, res) => {
+    const me = await requireCustomer(req, res);
+    if (!me) return;
+    const orderId = String(req.params.id);
+    const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.customerId !== me.userId) return res.status(403).json({ message: "Not your order" });
+    if (order.status !== "paid") {
+      return res.status(400).json({ message: "Only paid orders can be flagged as pending" });
+    }
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await db
+      .update(orders)
+      .set({ pendingGiftDecision: true, pendingGiftDecisionExpiresAt: expiresAt })
+      .where(eq(orders.id, orderId));
+    console.log(`[gift pending] buyer=${me.userId} order=${orderId} expires=${expiresAt.toISOString()}`);
+    res.json({ ok: true, expiresAt });
+  });
+
   // ─── Resend (rotate token + push expiry, bump counter) ─────────────
   app.post("/api/orders/:id/gift/resend", async (req, res) => {
     const me = await requireCustomer(req, res);
@@ -501,6 +557,7 @@ export function registerGiftRoutes(app: Express) {
     const [gift] = await db.select().from(gifts).where(eq(gifts.claimToken, token));
     if (!gift) return res.status(404).json({ message: "This gift link is invalid or has been replaced." });
     if (gift.revertedAt) return res.status(400).json({ message: "This gift was cancelled because the order was refunded." });
+    if (gift.buyerRevokedAt) return res.status(400).json({ message: "The buyer cancelled this gift." });
     if (gift.claimedAt) return res.status(400).json({ message: "This gift has already been claimed." });
     if (gift.expiresAt.getTime() < Date.now()) {
       return res.status(400).json({ message: "This gift link has expired. Ask the buyer to resend." });
@@ -645,7 +702,7 @@ export async function revertGiftsForRefundedOrder(orderId: string): Promise<numb
   const rows = await db
     .update(gifts)
     .set({ revertedAt: new Date() })
-    .where(and(eq(gifts.orderId, orderId), isNull(gifts.claimedAt), isNull(gifts.revertedAt)))
+    .where(and(eq(gifts.orderId, orderId), isNull(gifts.claimedAt), isNull(gifts.revertedAt), isNull(gifts.buyerRevokedAt)))
     .returning({ id: gifts.id });
   if (rows.length > 0) {
     console.log(`[gift revert] order=${orderId} reverted ${rows.length} unclaimed gift(s)`);

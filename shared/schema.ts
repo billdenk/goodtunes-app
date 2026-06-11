@@ -2652,6 +2652,14 @@ export const orders = pgTable("orders", {
   // digital owner can flip US Letter ↔ A4 from the cert viewer; the
   // physical signed-cert path stores its own size on the cert row instead.
   certPaperSize: text("cert_paper_size"),
+  // Task #1938 — "decide later" gift decision. When a buyer taps
+  // "Decide later" on the post-checkout hub we stamp this flag and a
+  // 7-day deadline so the scheduler can send a reminder email/SMS.
+  // Cleared by the frontend when the buyer subsequently creates a gift
+  // (the gift row's existence is the source of truth for an active gift;
+  // this flag only drives the reminder window before one is created).
+  pendingGiftDecision: boolean("pending_gift_decision"),
+  pendingGiftDecisionExpiresAt: timestamp("pending_gift_decision_expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
   legacyGogoodsId: text("legacy_gogoods_id"),
 }, (t) => ({
@@ -2819,6 +2827,14 @@ export const gifts = pgTable("gifts", {
   // link stops working and the entitlement stays with the sender (or
   // is removed entirely as part of the standard refund unwind).
   revertedAt: timestamp("reverted_at"),
+  // Task #1938 — buyer-initiated revoke (separate from revertedAt which
+  // is system-stamped on refund). Buyer can revoke before claim AND
+  // before vinyl has entered fulfillment. The claim link stops working;
+  // the entitlement stays with the buyer (no order transfer needed).
+  buyerRevokedAt: timestamp("buyer_revoked_at"),
+  // Optional tag distinguishing album-entitlement gifts from Gift-of-Hope
+  // box gifts. Drives the hub copy on Welcome ("albums" | "box").
+  giftType: text("gift_type"),
   expiresAt: timestamp("expires_at").notNull(),
   // Bookkeeping for "Sent / Resent" admin pill — increments each resend.
   resendCount: integer("resend_count").notNull().default(0),

@@ -432,6 +432,18 @@ export function BuySheet({
   // at materialization so the digital cert PDF prints it without a
   // second post-checkout step.
   const [certName, setCertName] = useState("");
+  // Task #1938 — ship-to-recipient. Vinyl-only toggle that lets the
+  // buyer route the physical record to someone else's address at checkout
+  // time. Downloads + GoodDeed stay with the buyer; the vinyl goes to the
+  // recipient. The buyer can also gift digitally from Welcome after purchase.
+  const [giftShip, setGiftShip] = useState(false);
+  const [giftShipName, setGiftShipName] = useState("");
+  const [giftShipLine1, setGiftShipLine1] = useState("");
+  const [giftShipLine2, setGiftShipLine2] = useState("");
+  const [giftShipCity, setGiftShipCity] = useState("");
+  const [giftShipState, setGiftShipState] = useState("");
+  const [giftShipZip, setGiftShipZip] = useState("");
+  const [giftShipCountry, setGiftShipCountry] = useState("US");
 
   useEffect(() => {
     (async () => {
@@ -770,14 +782,29 @@ export function BuySheet({
             ? { chosenAmountCents: customAddonAmount[x.addon.id] }
             : {}),
         })),
-        // Destination drives the server-side shipping quote that becomes
-        // the Stripe shipping_option; allowed_countries is locked to it.
-        shippingCountry: country,
         // Task #1484 — optional name for the digital GoodDeed cert. Only
         // honored server-side when no physical signed-cert copy is in the
         // order; trimmed empty → server falls back to the synthesized name.
         certName:
           showCertNameField && certName.trim() ? certName.trim() : undefined,
+        // Task #1938 — ship-to-recipient. Only sent when the toggle is on
+        // and the minimum fields are filled; server re-validates the format
+        // is vinyl before using it. shippingCountry follows the gift address.
+        giftRecipientAddress:
+          giftShip && giftShipLine1.trim() && giftShipCity.trim()
+            ? {
+                name: giftShipName.trim() || undefined,
+                address: {
+                  line1: giftShipLine1.trim(),
+                  line2: giftShipLine2.trim() || undefined,
+                  city: giftShipCity.trim(),
+                  state: giftShipState.trim() || undefined,
+                  postal_code: giftShipZip.trim() || undefined,
+                  country: giftShipCountry || country,
+                },
+              }
+            : undefined,
+        shippingCountry: (giftShip && giftShipCountry) ? giftShipCountry : country,
       });
       const j = await r.json();
       if (!j.clientSecret) throw new Error(j?.message ?? "Checkout failed to start");
@@ -1022,6 +1049,49 @@ export function BuySheet({
                             That's all we have in stock for this format.
                           </p>
                         )}
+                      </div>
+                    )}
+
+                    {/* Task #1938 — ship-to-recipient (vinyl only). Lets the buyer
+                        send the physical record to a different address at checkout
+                        time. Downloads + GoodDeed stay with the buyer. */}
+                    {selectedSku && isVinylFormat(selectedSku.format as AlbumFormat) && !isCdPlaceholder && (
+                      <div className="mb-6">
+                        <SectionLabel>Gift shipping</SectionLabel>
+                        <div className="rounded-2xl bg-white/[0.05] overflow-hidden">
+                          <label className="flex items-center justify-between px-4 py-3.5 cursor-pointer gap-3" data-testid="label-gift-ship">
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-sm font-medium">Ship to someone else</span>
+                              <span className="text-fan-faint text-xs leading-snug">Route the record to a recipient's address</span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={giftShip}
+                              onChange={(e) => setGiftShip(e.target.checked)}
+                              className="w-5 h-5 rounded flex-shrink-0"
+                              style={{ accentColor: "var(--brand-blue)" }}
+                              data-testid="checkbox-gift-ship"
+                            />
+                          </label>
+                          {giftShip && (
+                            <div className="border-t border-white/10 px-4 pb-4 pt-3 space-y-2.5">
+                              <p className="text-fan-faint text-xs leading-snug">
+                                The physical record ships here. Downloads + GoodDeed stay with you — you can gift them after checkout.
+                              </p>
+                              <input type="text" value={giftShipName} onChange={(e) => setGiftShipName(e.target.value)} placeholder="Recipient full name" className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-name" />
+                              <input type="text" value={giftShipLine1} onChange={(e) => setGiftShipLine1(e.target.value)} placeholder="Address line 1" className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-line1" />
+                              <input type="text" value={giftShipLine2} onChange={(e) => setGiftShipLine2(e.target.value)} placeholder="Apt, suite, floor (optional)" className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-line2" />
+                              <div className="grid grid-cols-2 gap-2">
+                                <input type="text" value={giftShipCity} onChange={(e) => setGiftShipCity(e.target.value)} placeholder="City" className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-city" />
+                                <input type="text" value={giftShipState} onChange={(e) => setGiftShipState(e.target.value)} placeholder="State / Province" className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-state" />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <input type="text" value={giftShipZip} onChange={(e) => setGiftShipZip(e.target.value)} placeholder="ZIP / Postal code" className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-zip" />
+                                <input type="text" value={giftShipCountry} onChange={(e) => setGiftShipCountry(e.target.value.toUpperCase().slice(0, 2))} placeholder="Country (US, GB…)" maxLength={2} className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-country" />
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -1915,6 +1985,47 @@ export function BuySheet({
                         That's all we have in stock for this format.
                       </p>
                     )}
+                  </div>
+                )}
+
+                {/* Task #1938 — ship-to-recipient (vinyl only, mobile) */}
+                {selectedSku && isVinylFormat(selectedSku.format as AlbumFormat) && !isCdPlaceholder && (
+                  <div className="mb-5">
+                    <SectionLabel>Gift shipping</SectionLabel>
+                    <div className="rounded-2xl bg-white/[0.05] overflow-hidden">
+                      <label className="flex items-center justify-between px-4 py-3.5 cursor-pointer gap-3" data-testid="label-gift-ship-mobile">
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-sm font-medium">Ship to someone else</span>
+                          <span className="text-fan-faint text-xs leading-snug">Route the record to a recipient's address</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={giftShip}
+                          onChange={(e) => setGiftShip(e.target.checked)}
+                          className="w-5 h-5 rounded flex-shrink-0"
+                          style={{ accentColor: "var(--brand-blue)" }}
+                          data-testid="checkbox-gift-ship"
+                        />
+                      </label>
+                      {giftShip && (
+                        <div className="border-t border-white/10 px-4 pb-4 pt-3 space-y-2.5">
+                          <p className="text-fan-faint text-xs leading-snug">
+                            The physical record ships here. Downloads + GoodDeed stay with you — you can gift them after checkout.
+                          </p>
+                          <input type="text" value={giftShipName} onChange={(e) => setGiftShipName(e.target.value)} placeholder="Recipient full name" className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-name-m" />
+                          <input type="text" value={giftShipLine1} onChange={(e) => setGiftShipLine1(e.target.value)} placeholder="Address line 1" className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-line1-m" />
+                          <input type="text" value={giftShipLine2} onChange={(e) => setGiftShipLine2(e.target.value)} placeholder="Apt, suite, floor (optional)" className="w-full border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-line2-m" />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input type="text" value={giftShipCity} onChange={(e) => setGiftShipCity(e.target.value)} placeholder="City" className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-city-m" />
+                            <input type="text" value={giftShipState} onChange={(e) => setGiftShipState(e.target.value)} placeholder="State / Province" className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-state-m" />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <input type="text" value={giftShipZip} onChange={(e) => setGiftShipZip(e.target.value)} placeholder="ZIP / Postal code" className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-zip-m" />
+                            <input type="text" value={giftShipCountry} onChange={(e) => setGiftShipCountry(e.target.value.toUpperCase().slice(0, 2))} placeholder="Country (US, GB…)" maxLength={2} className="border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-white/30 text-sm bg-white/[0.06] focus:outline-none" data-testid="input-gift-ship-country-m" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 

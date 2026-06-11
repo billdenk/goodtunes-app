@@ -6641,4 +6641,32 @@ run_viryl_180g() {
 run_viryl_180g dev  "${DATABASE_URL:-}"
 run_viryl_180g prod "${PROD_DATABASE_URL:-}"
 
+# Task #1938 — Gifting hub schema. Add new columns needed for the
+# post-purchase gift hub: buyer-initiated revoke + gift type on gifts,
+# decide-later decision tracking on orders. Idempotent ADD COLUMN IF NOT EXISTS.
+migrate_gifting_hub_columns() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping gifting hub migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE gifts
+  ADD COLUMN IF NOT EXISTS buyer_revoked_at  timestamptz,
+  ADD COLUMN IF NOT EXISTS gift_type         text;
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS pending_gift_decision            boolean,
+  ADD COLUMN IF NOT EXISTS pending_gift_decision_expires_at timestamptz;
+COMMIT;
+SQL
+  then
+    echo "post-merge: gifting hub columns ok on $label"
+  else
+    echo "post-merge: WARNING — gifting hub column migration failed on $label (continuing)"
+  fi
+}
+migrate_gifting_hub_columns dev  "${DATABASE_URL:-}"
+migrate_gifting_hub_columns prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror
