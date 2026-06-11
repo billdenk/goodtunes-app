@@ -83,6 +83,40 @@ See [`docs/migrations/gogoods-welcome-back.md`](./migrations/gogoods-welcome-bac
 for the whole welcome-back flow (single-use email-link sign-in,
 3-screen onboarding, admin wave-1 campaign, fan-initiated merge).
 
+### Self-serve sign-in recovery for any fan
+
+The welcome-back single-use email-link mechanism is the **one** sign-in
+recovery rail for fans — there is no separate customer password-reset
+token system. Two entry points feed it, and neither dead-ends:
+
+- **`POST /api/welcome-back/start`** backs the login screen's
+  **"Can't sign in?"** pill (`WelcomeBackPill` in `Login.tsx`). It used
+  to gate on `isEligible(customer)` (the admin wave-1 batch), which left
+  every fan outside that batch — OAuth-only fans, passwordless fans, new
+  fans who forgot their password — with no working recovery. It now
+  mints a link for **any** existing non-merged fan (`customer &&
+  !customer.mergedIntoId`); `isEligible` still scopes the admin campaign
+  only. The fan lands on `GET /api/welcome-back/redeem/:token`.
+- **`POST /api/auth/forgot-password`** keeps sending the admin-style
+  `customer_password_reset_tokens` reset to a fan **with** a password,
+  but a fan **without** one (OAuth-only / passwordless) now gets the same
+  welcome-back sign-in link instead of silently getting nothing.
+
+Both paths stay **non-enumerating**: identical neutral response, a
+constant-time floor, and the existing rate limits, whether or not the
+email matches a fan. Customer-host links always point at
+`my.goodtunes.music` (`customerOriginFromReq`).
+
+**New-signup code durability.** A fan creating an account with the
+emailed 6-digit code must always have somewhere to enter it. `Login.tsx`
+stashes the pending email in `sessionStorage` (`gt:pendingVerify`) when
+the code is requested and rehydrates the verify step on mount, so a
+refresh or a trip to the inbox doesn't drop them on a blank sign-in form
+holding "a number and nowhere to put it." An **"Already have a code?"**
+link on the sign-in screen routes a typed email straight to the verify
+step. The key is cleared on successful signup, on backing out of verify,
+and on switching auth mode.
+
 ### Finish-signup for OAuth-minted fans (Task #537)
 
 OAuth (Google/Apple) creates a `customer_users` row with whatever the

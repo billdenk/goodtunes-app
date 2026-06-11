@@ -115,7 +115,16 @@ export function registerWelcomeBackRoutes(
     const valid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(raw);
     if (valid) {
       const customer = await storage.getCustomerByEmail(raw);
-      if (customer && isEligible(customer as any)) {
+      // Self-service recovery is intentionally broader than the admin
+      // wave-1 campaign (`isEligible`): ANY existing, non-merged customer
+      // can ask us to email them a one-tap sign-in link, regardless of
+      // whether they have a password, an OAuth identity, or have already
+      // onboarded. The redeem flow already routes onboarded fans straight
+      // to their library and treats the link click as proof-of-email-
+      // control, so this is the honest recovery path for a fan who can't
+      // get in any other way. A merged row can never sign in, so it's the
+      // one exclusion.
+      if (customer && !customer.mergedIntoId) {
         const token = await mintWelcomeBackToken(customer.id);
         const origin = customerOriginFromReq(req);
         const signInUrl = `${origin}/api/welcome-back/redeem/${token}`;

@@ -2581,7 +2581,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (okRate && looksLikeEmail) {
       try {
         const c = await storage.getCustomerByEmail(emailRaw);
-        // Skip OAuth-only fans — no password to reset, would be confusing.
         if (c && c.password) {
           const raw = randomBytes(32).toString("hex");
           const hash = hashResetToken(raw);
@@ -2596,6 +2595,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           // unreachable or unconfigured.
           if (process.env.NODE_ENV !== "production") {
             console.log(`[forgot-password] customer dev link: ${resetUrl}`);
+          }
+        } else if (c && !c.mergedIntoId) {
+          // Passwordless fan (legacy/magic-link only or OAuth-only): there
+          // is no password to reset, but "Forgot password" must never be a
+          // silent dead end. Send the same one-tap welcome-back sign-in
+          // link the self-service recovery flow uses — clicking it mints a
+          // session and drops them straight into their library, where they
+          // can set a password if they want one.
+          const { mintWelcomeBackToken, customerOriginFromReq } = await import("./welcomeBack");
+          const { sendWelcomeBackEmail } = await import("./mail");
+          const token = await mintWelcomeBackToken(c.id);
+          const signInUrl = `${customerOriginFromReq(req)}/api/welcome-back/redeem/${token}`;
+          await sendWelcomeBackEmail(c.email, c.displayName ?? null, signInUrl);
+          if (process.env.NODE_ENV !== "production") {
+            console.log(`[forgot-password] customer passwordless sign-in link: ${signInUrl}`);
           }
         }
       } catch (e: any) {

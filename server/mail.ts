@@ -247,7 +247,7 @@ export async function sendWelcomeBackEmail(toEmail: string, displayName: string 
     ``,
     `On your first tap-in we'll ask you to pick a @handle, confirm the name to show on your profile, and then drop you straight into your library.`,
     ``,
-    `The link is good for 30 days and works once. After that, sign in at https://my.goodtunes.fm with this email and tap "Email me a sign-in code".`,
+    `The link is good for 30 days and works once. After that, sign in at https://my.goodtunes.music with this email and tap "Email me a sign-in link".`,
     ``,
     `— The GoodTunes team`,
   ].join("\n");
@@ -287,7 +287,7 @@ export async function sendWelcomeBackEmail(toEmail: string, displayName: string 
         This link signs you in — no password needed. It's good for 30 days and works once.
       </p>
       <p style="font-size: 13px; color: #888; line-height: 1.55; margin: 24px 0 0;">
-        After that, sign in at <a href="https://my.goodtunes.fm" style="color: #319ED8;">my.goodtunes.fm</a> with this email and tap "Email me a sign-in code".
+        After that, sign in at <a href="https://my.goodtunes.music" style="color: #319ED8;">my.goodtunes.music</a> with this email and tap "Email me a sign-in link".
       </p>
     </div>
   `;

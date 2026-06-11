@@ -118,6 +118,8 @@ Buy direct from the artist, get a numbered GoodDeed collectible, share or gift i
 
 - **Delete your account from inside the app.** Every fan can permanently delete their GoodTunes account from **Account → Privacy → Delete My Account** (behind a plain-language confirm). Deleting removes their profile and personal data — favorites, playlists, library, and sign-in (password and any Google/Apple links) — and signs them out everywhere; past orders are retained for legal and accounting records. This satisfies Apple's and Google's requirement that an app offering account creation also lets users delete their account in-app.
 
+- **Any fan can self-serve a working sign-in link.** A fan who can't get into their account — forgot their password, never set one, signed in with Google/Apple originally, or carried over from the pre-June-2026 catalog — can tap **"Can't sign in?"** on the login screen, enter their email, and get a one-tap sign-in link emailed to them with no password required. The same link is sent from the **Forgot password?** path for any fan without a password, so neither entry point dead-ends. (To avoid leaking who has an account, the on-screen response is always the same neutral confirmation whether or not the email matches a fan.) New fans signing up with an emailed 6-digit code never lose their place either: the code-entry screen survives a refresh or a trip to the inbox, and an **"Already have a code?"** link on the sign-in screen always gives an emailed code somewhere to be entered.
+
 ---
 
 # For the operator / investor

@@ -35,6 +35,35 @@ type Step = 1 | 2 | "verify";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const isValidEmail = (v: string) => EMAIL_RE.test(v.trim());
+
+// A new fan who has requested a 6-digit signup code must always have
+// somewhere to enter it — even after a refresh or navigating away while
+// waiting for the email. We stash the pending email in sessionStorage so
+// the code-entry step can be rehydrated on mount instead of dumping the
+// fan back on a blank sign-in screen with "a number and nowhere to put
+// it." Cleared the moment the account is created or the fan backs out.
+const PENDING_VERIFY_KEY = "gt:pendingVerify";
+function readPendingVerify(): string | null {
+  try {
+    const raw = sessionStorage.getItem(PENDING_VERIFY_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const email = typeof parsed?.email === "string" ? parsed.email.trim() : "";
+    return EMAIL_RE.test(email) ? email : null;
+  } catch {
+    return null;
+  }
+}
+function writePendingVerify(email: string): void {
+  try {
+    sessionStorage.setItem(PENDING_VERIFY_KEY, JSON.stringify({ email: email.trim() }));
+  } catch {}
+}
+function clearPendingVerify(): void {
+  try {
+    sessionStorage.removeItem(PENDING_VERIFY_KEY);
+  } catch {}
+}
 const isValidPassword = (v: string) => v.length >= 8 && /[a-zA-Z]/.test(v) && /\d/.test(v);
 
 function suggestUsername(realName: string, email: string): string {
@@ -96,10 +125,10 @@ function WelcomeBackPill() {
     const params = new URL(window.location.href).searchParams;
     const reason = params.get("welcomeback");
     if (reason === "expired") {
-      toast({ title: "That sign-in link has expired", description: "Tap “Customer prior to June 2026?” to send a fresh one.", variant: "destructive" });
+      toast({ title: "That sign-in link has expired", description: "Confirm your email below and we'll send a fresh one.", variant: "destructive" });
       setOpen(true);
     } else if (reason === "used") {
-      toast({ title: "That sign-in link was already used", description: "Tap “Customer prior to June 2026?” to send a fresh one.", variant: "destructive" });
+      toast({ title: "That sign-in link was already used", description: "Confirm your email below and we'll send a fresh one.", variant: "destructive" });
       setOpen(true);
     }
   }, [toast]);
@@ -146,8 +175,8 @@ function WelcomeBackPill() {
             data-testid="button-welcomeback-pill"
           >
             <span className="flex flex-col min-w-0">
-              <span className="text-fan-primary text-sm font-semibold leading-tight">Customer prior to June 2026?</span>
-              <span className="text-fan-secondary text-xs leading-tight mt-0.5">This refresh goes to twelve.</span>
+              <span className="text-fan-primary text-sm font-semibold leading-tight">Can't sign in?</span>
+              <span className="text-fan-secondary text-xs leading-tight mt-0.5">Email me a one-tap sign-in link — no password needed.</span>
             </span>
             <svg
               width="20"
@@ -194,7 +223,7 @@ function WelcomeBackPill() {
               style={CUSTOMER_CHROME.primaryBtnStyle}
               data-testid="button-welcomeback-sheet-send"
             >
-              {submitting ? "Sending…" : "Send my Magic Link"}
+              {submitting ? "Sending…" : "Email me a sign-in link"}
             </button>
             {/* Quiet OAuth nudge — fans who originally used Google/Apple
                 won't have a password, so the magic link isn't their path.
@@ -225,9 +254,9 @@ function WelcomeBackPill() {
               >
                 <div className="mx-auto w-full max-w-[440px] px-5 pb-8">
                   <DrawerHeader className="px-0 text-left">
-                    <DrawerTitle className="text-fan-primary text-2xl font-bold tracking-tight">This refresh goes to twelve.</DrawerTitle>
+                    <DrawerTitle className="text-fan-primary text-2xl font-bold tracking-tight">Email me a sign-in link</DrawerTitle>
                     <DrawerDescription className="text-fan-secondary text-sm leading-relaxed">
-                      Create an account prior to June 2026? Enter the email you used and we'll send a one-tap sign-in link — no password required.
+                      Forgot your password, never set one, or signed up before June 2026? Enter your email and we'll send a one-tap link to sign you in — no password required.
                     </DrawerDescription>
                   </DrawerHeader>
                   {formBody}
@@ -247,9 +276,9 @@ function WelcomeBackPill() {
               }}
             >
               <DialogHeader className="text-left space-y-1.5">
-                <DialogTitle className="text-fan-primary text-2xl font-bold tracking-tight">This refresh goes to twelve.</DialogTitle>
+                <DialogTitle className="text-fan-primary text-2xl font-bold tracking-tight">Email me a sign-in link</DialogTitle>
                 <DialogDescription className="text-fan-secondary text-sm leading-relaxed">
-                  Create an account prior to June 2026? Enter the email you used and we'll send a one-tap sign-in link — no password required.
+                  Forgot your password, never set one, or signed up before June 2026? Enter your email and we'll send a one-tap link to sign you in — no password required.
                 </DialogDescription>
               </DialogHeader>
               {formBody}
@@ -456,7 +485,38 @@ export function Login() {
   const finalDisplayLive = (displayTouched ? displayName : suggestedDisplay).trim();
   const step2Valid = finalUsernameLive.length >= 3 && finalDisplayLive.length > 0;
 
-  const switchMode = (m: Mode) => { setMode(m); setStep(1); setVerifyCode(""); setVerifyError(null); setVerifyToken(null); };
+  const switchMode = (m: Mode) => { setMode(m); setStep(1); setVerifyCode(""); setVerifyError(null); setVerifyToken(null); clearPendingVerify(); };
+
+  // Rehydrate a pending signup-code step on mount. A new fan who asked
+  // for a 6-digit code and then refreshed (or wandered off to their
+  // inbox) should land right back on the code-entry screen, not a blank
+  // sign-in form. Customer shell only — admins never see this step.
+  useEffect(() => {
+    if (isAdmin) return;
+    const pending = readPendingVerify();
+    if (pending) {
+      setEmail(pending);
+      setMode("register");
+      setStep("verify");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Explicit "I already have a code" entry from the sign-in screen so an
+  // emailed code always has somewhere to be entered, even if the fan
+  // never reached the verify step this session. Uses whatever email they
+  // typed in the sign-in field (the same address the code was sent to).
+  const goToEnterCode = () => {
+    const ident = loginIdent.trim().toLowerCase();
+    if (!isValidEmail(ident)) {
+      toast({ title: "Enter your email first", description: "Type the email you signed up with, then tap “I already have a code.”" });
+      return;
+    }
+    setEmail(ident);
+    setMode("register");
+    setStep("verify");
+    writePendingVerify(ident);
+  };
 
   // Customer-side email verification state. The 6-digit code is sent to
   // the email entered on step 1; on confirm we trade it for a short-
@@ -474,6 +534,7 @@ export function Login() {
       const res = await apiRequest("POST", "/api/email-verifications/start", { email: email.trim() });
       const j = await res.json();
       if (j.devCode) setDevCode(String(j.devCode));
+      writePendingVerify(email.trim());
       setStep("verify");
     } catch (e: any) {
       setVerifyError(e?.message ?? "Couldn't send a code — check the email and try again");
@@ -494,6 +555,7 @@ export function Login() {
       });
       const j2 = await r2.json();
       if (j2.token) setAuthToken(j2.token);
+      clearPendingVerify();
       queryClient.invalidateQueries();
       // Land in the player at the next URL if one was set (Buy flow
       // sets ?next=/album/<id>), otherwise the standard /home landing.
@@ -1025,6 +1087,21 @@ export function Login() {
           </form>
         )}
 
+        {/* Any fan who already has an emailed signup code needs somewhere
+            to enter it — even if they never reached the verify step this
+            session (or refreshed away from it). Customer sign-in only. */}
+        {!isAdmin && mode === "login" && (
+          <button
+            type="button"
+            onClick={goToEnterCode}
+            className="mt-3 w-full text-center text-xs leading-relaxed text-fan-faint transition-colors hover:text-fan-secondary"
+            data-testid="button-have-code"
+          >
+            Already have a code?{" "}
+            <span className="text-fan-secondary">Enter it here.</span>
+          </button>
+        )}
+
         {mode === "register" && step === 1 && (
           <form onSubmit={goToStep2} className="flex flex-col gap-3">
             {/* Customer signup skips the Name field — Stripe collects
@@ -1126,7 +1203,7 @@ export function Login() {
             <div className="flex items-center gap-3 mt-2">
               <button
                 type="button"
-                onClick={() => { setStep(1); setVerifyError(null); }}
+                onClick={() => { setStep(1); setVerifyError(null); clearPendingVerify(); }}
                 aria-label="Back"
                 className={s.backChip}
                 style={isAdmin ? undefined : { background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.10)" }}
