@@ -37,10 +37,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 const dollars = (cents: number) => formatUsdCents(cents);
+
+type PayeeInviteStatus = "not_invited" | "invite_sent" | "portal_active" | "payout_ready";
 
 type SettlementsList = {
   rateMicros: number;
@@ -59,6 +61,7 @@ type SettlementsList = {
     lineCount: number;
     hasPayoutAccount: boolean;
     payoutsEnabled: boolean;
+    inviteStatus: PayeeInviteStatus;
   }[];
   albums: {
     albumId: string;
@@ -150,6 +153,35 @@ function PayoutStatusPill({ has, enabled }: { has: boolean; enabled: boolean }) 
   );
 }
 
+function InviteStatusBadge({ status }: { status: PayeeInviteStatus }) {
+  if (status === "payout_ready") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+        <CheckCircle2 className="h-3 w-3" /> Payout ready
+      </span>
+    );
+  }
+  if (status === "portal_active") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+        <CheckCircle2 className="h-3 w-3" /> Portal active
+      </span>
+    );
+  }
+  if (status === "invite_sent") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+        <Clock className="h-3 w-3" /> Invite sent
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+      Not invited
+    </span>
+  );
+}
+
 function Flag({ icon: Icon, count, label }: { icon: typeof AlertTriangle; count: number; label: string }) {
   if (count <= 0) return null;
   return (
@@ -172,6 +204,8 @@ function CatalogList() {
     queryKey: ["/api/admin/publishing/settlements"],
     retry: false,
   });
+
+  const [invitePayee, setInvitePayee] = useState<{ key: string; name: string } | null>(null);
 
   return (
     <AdminFrame active="publishing">
@@ -233,19 +267,20 @@ function CatalogList() {
                       <th className="px-4 py-2.5 text-right font-medium">Lines</th>
                       <th className="px-4 py-2.5 text-right font-medium">Owed</th>
                       <th className="px-4 py-2.5 font-medium">Payout</th>
+                      <th className="px-4 py-2.5 font-medium">Invite status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {isLoading && (
                       <tr>
-                        <td className="px-4 py-6 text-slate-400" colSpan={4}>
+                        <td className="px-4 py-6 text-slate-400" colSpan={5}>
                           Loading…
                         </td>
                       </tr>
                     )}
                     {!isLoading && data && data.payees.length === 0 && (
                       <tr>
-                        <td className="px-4 py-6 text-slate-500" colSpan={4}>
+                        <td className="px-4 py-6 text-slate-500" colSpan={5}>
                           No payees yet. Add publishing splits with non-zero shares to settle the catalog.
                         </td>
                       </tr>
@@ -271,12 +306,42 @@ function CatalogList() {
                         <td className="px-4 py-3">
                           <PayoutStatusPill has={p.hasPayoutAccount} enabled={p.payoutsEnabled} />
                         </td>
+                        <td className="px-4 py-3" data-testid={`cell-invite-status-${p.payeeKey}`}>
+                          <div className="flex items-center gap-2">
+                            <InviteStatusBadge status={p.inviteStatus} />
+                            {p.inviteStatus === "not_invited" && p.ownerKind !== null && (
+                              <button
+                                type="button"
+                                onClick={() => setInvitePayee({ key: p.payeeKey, name: p.displayName })}
+                                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                                data-testid={`button-invite-catalog-payee-${p.payeeKey}`}
+                              >
+                                <UserPlus className="h-3.5 w-3.5" /> Invite
+                              </button>
+                            )}
+                            {p.inviteStatus === "not_invited" && p.ownerKind === null && (
+                              <span
+                                className="text-xs text-slate-400"
+                                title="Link this payee to a person or organization to enable invites"
+                              >
+                                no linked entity
+                              </span>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             </div>
+
+            <InvitePublisherDialog
+              open={invitePayee !== null}
+              onClose={() => setInvitePayee(null)}
+              payeeKey={invitePayee?.key ?? ""}
+              displayName={invitePayee?.name ?? "this payee"}
+            />
 
             <h2 className="text-sm font-semibold text-slate-900">Releases</h2>
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -583,6 +648,9 @@ function InvitePublisherDialog({
       toast({ title: "Invite sent", description: `An invite has been sent to ${email}.` });
       setEmail("");
       onClose();
+      // Refresh the catalog list so the payee's invite-status column flips to
+      // "Invite sent" without a manual reload.
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/publishing/settlements"] });
     },
     onError: (err: any) => {
       toast({

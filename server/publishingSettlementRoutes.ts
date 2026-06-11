@@ -16,9 +16,9 @@
 // operator can model a run before it's been approved.
 
 import type { Express, Request, Response, NextFunction } from "express";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "./db";
-import { albums, organizations, payoutAccounts, pressingOrderRequests, songs, trackPublishingSplits } from "@shared/schema";
+import { adminInvites, albums, memberships, organizations, payoutAccounts, pressingOrderRequests, songs, trackPublishingSplits } from "@shared/schema";
 import {
   computeAlbumPublishingSettlement,
   computePayeeStatement,
@@ -57,6 +57,85 @@ async function resolveUnitsPressed(albumId: string): Promise<number> {
     .where(eq(albums.id, albumId))
     .limit(1);
   return Math.max(0, Number(albumRow?.units ?? 0));
+}
+
+/**
+ * Onboarding lifecycle status for a catalog payee, in increasing order of
+ * progress:
+ *   not_invited   — no pending invite, no portal account, no payout account
+ *   invite_sent   — an unused, unrevoked, unexpired publisher invite exists
+ *   portal_active — the payee has accepted (a publisher membership exists, or
+ *                   a payout account has been started but isn't enabled yet)
+ *   payout_ready  — the payout account is fully enabled (can be paid)
+ */
+export type PayeeInviteStatus =
+  | "not_invited"
+  | "invite_sent"
+  | "portal_active"
+  | "payout_ready";
+
+/**
+ * Resolve which linked payees have a pending publisher invite and/or an
+ * accepted publisher membership. Keyed by payeeKey (the same
+ * "organization:<id>"/"person:<id>" string the invite row stores in
+ * role_scope_id and the membership row stores in scope_id). Name-only payees
+ * can't be invited, so they're skipped.
+ *
+ * Both lookups degrade to "absent" if their table is missing (dev clones
+ * before post-merge applies the memberships DDL) rather than 500-ing the
+ * whole settlements page.
+ */
+async function resolvePayeeOnboardingState(
+  payeeKeys: string[],
+): Promise<Map<string, { hasMembership: boolean; hasPendingInvite: boolean }>> {
+  const out = new Map<string, { hasMembership: boolean; hasPendingInvite: boolean }>();
+  const linkedKeys = payeeKeys.filter(
+    (k) => k.startsWith("organization:") || k.startsWith("person:"),
+  );
+  if (linkedKeys.length === 0) return out;
+
+  const mark = (key: string, patch: Partial<{ hasMembership: boolean; hasPendingInvite: boolean }>) => {
+    const e = out.get(key) ?? { hasMembership: false, hasPendingInvite: false };
+    Object.assign(e, patch);
+    out.set(key, e);
+  };
+
+  // Accepted publisher portal accounts: a membership whose scope_id is the
+  // payeeKey.
+  try {
+    const memberRows = await db
+      .select({ scopeId: memberships.scopeId })
+      .from(memberships)
+      .where(and(eq(memberships.role, "publisher"), inArray(memberships.scopeId, linkedKeys)));
+    for (const m of memberRows) {
+      if (m.scopeId) mark(m.scopeId, { hasMembership: true });
+    }
+  } catch (err) {
+    console.warn("[publishing-settlements] memberships lookup skipped:", err);
+  }
+
+  // Outstanding invites: unused, unrevoked, unexpired publisher invites.
+  try {
+    const inviteRows = await db
+      .select({ scopeId: adminInvites.roleScopeId })
+      .from(adminInvites)
+      .where(
+        and(
+          eq(adminInvites.role, "publisher"),
+          inArray(adminInvites.roleScopeId, linkedKeys),
+          isNull(adminInvites.usedAt),
+          isNull(adminInvites.revokedAt),
+          gt(adminInvites.expiresAt, new Date()),
+        ),
+      );
+    for (const i of inviteRows) {
+      if (i.scopeId) mark(i.scopeId, { hasPendingInvite: true });
+    }
+  } catch (err) {
+    console.warn("[publishing-settlements] invites lookup skipped:", err);
+  }
+
+  return out;
 }
 
 /** Album ids that carry at least one non-deleted publishing split. */
@@ -169,19 +248,34 @@ export function registerPublishingSettlementRoutes(app: Express, requireAdmin: A
         }))
         .sort((a, b) => b.amountCents - a.amountCents);
 
+      // Stamp each payee's onboarding-lifecycle status from the memberships +
+      // admin_invites tables (joined here, not in the settlement engine, since
+      // it's only needed for the catalog list's at-a-glance column).
+      const onboarding = await resolvePayeeOnboardingState(payees.map((p) => p.payeeKey));
+      const payeesWithStatus = payees.map((p) => {
+        const st = onboarding.get(p.payeeKey);
+        let inviteStatus: PayeeInviteStatus;
+        if (p.payoutsEnabled) inviteStatus = "payout_ready";
+        else if (st?.hasMembership) inviteStatus = "portal_active";
+        else if (st?.hasPendingInvite) inviteStatus = "invite_sent";
+        else if (p.hasPayoutAccount) inviteStatus = "portal_active";
+        else inviteStatus = "not_invited";
+        return { ...p, inviteStatus };
+      });
+
       // The catalog payout total is the sum of the per-payee rounded amounts —
       // what actually leaves the bank. It can differ from the sum of per-album
       // subtotals by a cent or two purely from rounding granularity; this
       // per-payee figure is the authoritative one.
-      const totalCents = payees.reduce((s, p) => s + p.amountCents, 0);
-      const unpaidPayees = payees.filter((p) => !p.payoutsEnabled).length;
+      const totalCents = payeesWithStatus.reduce((s, p) => s + p.amountCents, 0);
+      const unpaidPayees = payeesWithStatus.filter((p) => !p.payoutsEnabled).length;
 
       items.sort((a, b) => b.totalCents - a.totalCents);
       return res.json({
         rateMicros,
         totalCents,
-        payees,
-        payeeCount: payees.length,
+        payees: payeesWithStatus,
+        payeeCount: payeesWithStatus.length,
         unpaidPayees,
         allocationIssueCount: allocationIssueTotal,
         missingSplitCount: missingSplitTotal,
