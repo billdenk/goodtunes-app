@@ -45,6 +45,7 @@ import { ArtistDashboard } from "@/pages/ArtistDashboard";
 import { NonProfitDashboard } from "@/pages/NonProfitDashboard";
 import { LabelDashboard } from "@/pages/LabelDashboard";
 import { ManagerDashboard } from "@/pages/ManagerDashboard";
+import { PublisherPortal } from "@/pages/PublisherPortal";
 import { FanLabel } from "@/pages/FanLabel";
 import { Chat, ChatThreadPage } from "@/pages/Chat";
 import { SearchPage } from "@/pages/Search";
@@ -757,6 +758,11 @@ function Router() {
             Admin/dev hosts only, same as /label. */}
         <Route path="/manager">
           <ProtectedRoute component={ManagerDashboard} />
+        </Route>
+        {/* Task #1953 — Publisher portal. Read-only mechanical-royalty
+            statement for invited publisher/writer accounts. */}
+        <Route path="/publisher">
+          <ProtectedRoute component={PublisherPortal} />
         </Route>
         {/* Task #661 — Fan-facing label page. Order matters: the
             literal `/label` route above must stay first so the

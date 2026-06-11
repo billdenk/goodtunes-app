@@ -4060,7 +4060,7 @@ export type RfqReply = typeof rfqReplies.$inferSelect;
 // organizations table rather than minting a parallel scope table).
 // `org` is kept as a historical alias used in reports code; resolved
 // to `non_profit` by getUserRole().
-export const ADMIN_ROLES = ["super_admin", "admin", "label", "artist", "manufacturer", "fulfillment", "non_profit", "vendor", "manager"] as const;
+export const ADMIN_ROLES = ["super_admin", "admin", "label", "artist", "manufacturer", "fulfillment", "non_profit", "vendor", "manager", "publisher"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
 // ─── Admin invitations ───────────────────────────────────────────────
@@ -4554,6 +4554,10 @@ export const MEMBERSHIP_SCOPE_KINDS = [
   // "manager" (memberships.sub_role); this is the partner-role scope kind,
   // its scopeId is a managers.id.
   "manager",
+  // Task #1953 — Publisher/writer portal scope. scopeId = payeeKey
+  // ("organization:<uuid>" or "person:<uuid>") so the portal endpoint can
+  // derive the entity kind + id directly from the membership row.
+  "publisher",
 ] as const;
 export type MembershipScopeKind = (typeof MEMBERSHIP_SCOPE_KINDS)[number];
 

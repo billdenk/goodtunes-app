@@ -3,7 +3,7 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
-import { registerPublishingSettlementRoutes } from "./publishingSettlementRoutes";
+import { registerPublishingSettlementRoutes, registerPublisherPortalRoutes } from "./publishingSettlementRoutes";
 import { sql, and, eq, or, ilike, isNull, isNotNull, desc, inArray } from "drizzle-orm";
 import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, TERMS_VERSION } from "@shared/schema";
 import {
@@ -79,6 +79,7 @@ import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistFor
 import { resolveStreamingLinksFromAppleCollectionId, resolveStreamingLinksForCollections, hasAnyResolvedLink, appleCollectionIdFromUrl, appleCountryFromUrl } from "./lib/streamingLinks";
 import { adminLoginPasswordOk, isLinkableEmail } from "./auth/identityLink";
 import { applyAppleFirstAuthName } from "./auth/appleName";
+import { getUserRole } from "./auth/roles";
 
 const scryptAsync = promisify(scrypt);
 
@@ -270,6 +271,10 @@ async function requireAdmin(req: Request, res: Response, next: Function) {
   if (!a || a.kind !== "admin") return res.status(401).json({ message: "Unauthorized" });
   const user = await storage.getUser(a.userId);
   if (!user?.isAdmin) return res.status(403).json({ message: "Admin only" });
+  // Publisher accounts carry is_admin=true so they pass the check above, but
+  // must never reach any /api/admin/* surface — they have a dedicated portal.
+  const roleInfo = await getUserRole(a.userId);
+  if (roleInfo?.role === "publisher") return res.status(403).json({ message: "Admin access required" });
   req.session.userId = a.userId;
   req.session.kind = "admin";
   next();
@@ -696,6 +701,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // the GoodDeed Services tab for non-vendor supply-chain roles
       // since the per-leg pricing endpoints are vendor-only.
       if (role === "vendor" || role === "manufacturer" || role === "fulfillment") return "/vendor";
+      if (role === "publisher") return "/publisher";
       return "/admin";
     } catch {
       return "/admin";
@@ -2719,6 +2725,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ─── Admin super-admin grant/revoke ───────────────────────────────
   registerPlacesRoutes(app, requireAdmin);
   registerPublishingSettlementRoutes(app, requireAdmin);
+  registerPublisherPortalRoutes(app);
 
   app.get("/api/admin/admins", requireAdminBearer, async (_req, res) => {
     const list = await storage.listAdmins();
@@ -21523,6 +21530,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Task #245 — vendor scope (printer / holographer / press quoting
     // their own GoodDeed pricing). One row in `vendors` is the scope id.
     vendor: "Vendor",
+    // Task #1953 — publisher/writer portal (read-only statement + payout
+    // onboarding). scopeId = payeeKey ("organization:<uuid>" or "person:<uuid>").
+    publisher: "Publisher",
   };
 
   // Task #78 — Non-profits are stored in the existing `organizations`
@@ -22872,6 +22882,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         else if (role === "non_profit") {
           const r = await db.execute<{ name: string }>(sql`SELECT name FROM organizations WHERE id = ${roleScopeId} LIMIT 1`);
           scopeName = ((r as any).rows ?? [])[0]?.name ?? null;
+        } else if (role === "publisher") {
+          // roleScopeId is a payeeKey: "organization:<uuid>" or "person:<uuid>"
+          const [pk, pid] = roleScopeId.split(":");
+          if (pid) {
+            if (pk === "organization") {
+              const r = await db.execute<{ name: string }>(sql`SELECT name FROM organizations WHERE id = ${pid} LIMIT 1`);
+              scopeName = ((r as any).rows ?? [])[0]?.name ?? null;
+            } else if (pk === "person") {
+              scopeName = (await storage.getPersonById(pid))?.name ?? null;
+            }
+          }
         }
       } catch {}
     }
@@ -24843,6 +24864,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         manufacturer: () => storage.getManufacturerById(invite.roleScopeId!),
         fulfillment: () => storage.getFulfillmentPartnerById(invite.roleScopeId!),
         non_profit: () => orgExistsForAccept(invite.roleScopeId!),
+        publisher: async () => {
+          // roleScopeId is a payeeKey: "organization:<uuid>" or "person:<uuid>"
+          const pk = invite.roleScopeId ?? "";
+          const [kind, id] = pk.split(":") as [string, string];
+          if (!id) return null;
+          if (kind === "organization") {
+            const r = await db.execute<{ id: string }>(sql`SELECT id FROM organizations WHERE id = ${id} LIMIT 1`);
+            return ((r as any).rows ?? [])[0] ?? null;
+          }
+          if (kind === "person") return storage.getPersonById(id);
+          return null;
+        },
       };
       const checker = stillExists[invite.role];
       if (checker) {
@@ -24980,6 +25013,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         : invite.role === "artist" ? "/artist"
         : invite.role === "label" ? "/label"
         : invite.role === "manager" ? "/manager"
+        : invite.role === "publisher" ? "/publisher"
         : "/admin/albums";
     }
 

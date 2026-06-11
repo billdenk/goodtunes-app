@@ -15,7 +15,7 @@
 import { useMemo, useState } from "react";
 import { formatUsdCents } from "@shared/money";
 import { Link, useRoute, useSearch } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
@@ -25,7 +25,20 @@ import {
   CheckCircle2,
   Clock,
   FileWarning,
+  UserPlus,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 const dollars = (cents: number) => formatUsdCents(cents);
 
@@ -549,7 +562,78 @@ function buildReconciledCentsMap(
   return map;
 }
 
+function InvitePublisherDialog({
+  open,
+  onClose,
+  payeeKey,
+  displayName,
+}: {
+  open: boolean;
+  onClose: () => void;
+  payeeKey: string;
+  displayName: string;
+}) {
+  const { toast } = useToast();
+  const [email, setEmail] = useState("");
+
+  const invite = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", "/api/admin/publishing/payee/invite", { payeeKey, email }),
+    onSuccess: () => {
+      toast({ title: "Invite sent", description: `An invite has been sent to ${email}.` });
+      setEmail("");
+      onClose();
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Couldn't send invite",
+        description: err?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent data-testid="dialog-invite-publisher">
+        <DialogHeader>
+          <DialogTitle>Invite publisher portal access</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-slate-500">
+          Send an invite link to <span className="font-medium text-slate-700">{displayName}</span>.
+          They'll create an account and see only their own mechanical-royalty statement.
+        </p>
+        <div className="space-y-1.5 pt-1">
+          <Label htmlFor="invite-email">Email address</Label>
+          <Input
+            id="invite-email"
+            type="email"
+            placeholder="publisher@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            data-testid="input-invite-email"
+            disabled={invite.isPending}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={invite.isPending}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => invite.mutate()}
+            disabled={invite.isPending || !email.trim()}
+            data-testid="button-send-invite"
+          >
+            {invite.isPending ? "Sending…" : "Send invite"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function PayeeDetail({ payeeKey }: { payeeKey: string }) {
+  const [inviteOpen, setInviteOpen] = useState(false);
   const { data, isLoading, isError, error, refetch } = useQuery<PayeeStatement>({
     queryKey: ["/api/admin/publishing/payee/statement", payeeKey],
     queryFn: () =>
@@ -600,10 +684,33 @@ function PayeeDetail({ payeeKey }: { payeeKey: string }) {
                   </p>
                 )}
               </div>
-              {data && (
-                <PayoutStatusPill has={data.hasPayoutAccount} enabled={data.payoutsEnabled} />
-              )}
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                {data && (
+                  <PayoutStatusPill has={data.hasPayoutAccount} enabled={data.payoutsEnabled} />
+                )}
+                {data && data.ownerKind !== null && (
+                  <button
+                    type="button"
+                    onClick={() => setInviteOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                    data-testid="button-invite-publisher"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" /> Invite publisher
+                  </button>
+                )}
+                {data && data.ownerKind === null && (
+                  <span className="text-xs text-slate-400" title="Link this payee to a person or organization to enable invites">
+                    No linked entity — can't invite
+                  </span>
+                )}
+              </div>
             </div>
+            <InvitePublisherDialog
+              open={inviteOpen}
+              onClose={() => setInviteOpen(false)}
+              payeeKey={payeeKey}
+              displayName={data?.displayName ?? "this payee"}
+            />
 
             {/* Summary stats */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

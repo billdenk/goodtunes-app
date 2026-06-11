@@ -77,6 +77,8 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "manufacturers",
   "fulfillment",
   "manager",
+  // Task #1953 — publisher portal route.
+  "publisher",
   "press",
   "presses",
   // /staging/:artist/:release — operator-only locked preview of a release

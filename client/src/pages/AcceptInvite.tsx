@@ -14,7 +14,7 @@ type InviteInfo = {
   email: string;
   role: string;
   roleLabel: string;
-  inviteRole?: "identity" | "manager" | "team" | "label" | "npo_ambassador" | "npo_staff" | null;
+  inviteRole?: "identity" | "manager" | "team" | "label" | "npo_ambassador" | "npo_staff" | "publisher" | null;
   targetPersonName?: string | null;
   preFlightedAlbumTitle?: string | null;
 };
@@ -75,7 +75,11 @@ export default function AcceptInvite() {
       // right after sign-up). Skip it only when a specific album draft
       // is waiting, in which case we drop them straight into the editor.
       const landing = j.landingPath || "/admin/albums";
-      navigate(landing.startsWith("/admin/albums/") ? landing : "/welcome-invitee");
+      // Drop straight into the album editor when a specific draft is waiting,
+      // or into the publisher portal for publisher invites.
+      // All other partners see the welcome screen first (shown once on sign-up).
+      const goDirectly = landing.startsWith("/admin/albums/") || landing.startsWith("/publisher");
+      navigate(goDirectly ? landing : "/welcome-invitee");
     } catch (e: any) {
       setErrMsg(e.message || "Something went wrong");
       setSubmitting(false);
@@ -120,6 +124,7 @@ export default function AcceptInvite() {
             : data.inviteRole === "label" ? "You're the record label"
             : data.inviteRole === "npo_ambassador" ? "You're an ambassador"
             : data.inviteRole === "npo_staff" ? "You're on the non-profit team"
+            : data.inviteRole === "publisher" ? "You're a publisher"
             : "You're invited"}
         </h1>
         <p className="text-sm text-slate-600 mb-6">

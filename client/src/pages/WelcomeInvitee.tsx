@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Factory, HeartHandshake, Star, Building2, ArrowRight } from "lucide-react";
+import { Factory, HeartHandshake, Star, Building2, Music2, ArrowRight } from "lucide-react";
 
 type RoleInfo = {
   role: string | null;
@@ -57,6 +57,14 @@ const VARIANTS: Record<string, WelcomeVariant> = {
     secondary: { href: "/admin/reports", label: "See your reports" },
     footnote:
       "Releases across your roster roll up here so you can see everything in one place.",
+  },
+  publisher: {
+    Icon: Music2,
+    blurb: (s) =>
+      `You're set up as a publishing account for ${s}. Your mechanical-royalty statement and payout onboarding live in your publisher portal.`,
+    primary: { href: "/publisher", label: "Open your publisher portal" },
+    footnote:
+      "Your statement shows per-track royalties based on units pressed. You can set up direct payouts from the portal.",
   },
 };
 

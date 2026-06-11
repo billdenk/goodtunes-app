@@ -15,10 +15,10 @@
 // quantities for the album, and can be overridden with ?unitsPressed=N so an
 // operator can model a run before it's been approved.
 
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "./db";
-import { albums, pressingOrderRequests, songs, trackPublishingSplits } from "@shared/schema";
+import { albums, organizations, payoutAccounts, pressingOrderRequests, songs, trackPublishingSplits } from "@shared/schema";
 import {
   computeAlbumPublishingSettlement,
   computePayeeStatement,
@@ -69,6 +69,8 @@ async function albumIdsWithPublishingSplits(): Promise<string[]> {
 }
 
 export function registerPublishingSettlementRoutes(app: Express, requireAdmin: AdminGuard): void {
+  // requireAdmin (server/routes.ts) already blocks publisher role globally.
+
   // Catalog-wide roll-up across every album with publishing splits.
   app.get("/api/admin/publishing/settlements", requireAdmin, async (_req, res) => {
     try {
@@ -269,6 +271,113 @@ export function registerPublishingSettlementRoutes(app: Express, requireAdmin: A
     }
   });
 
+  // POST /api/admin/publishing/payee/invite — invite a publisher/writer to
+  // log in and see their own statement. Validates that the payeeKey refers
+  // to a real organization or person (name-only payees can't be invited), then
+  // delegates to the standard admin-invite pipeline so the branded invite
+  // email + accept flow works identically to every other partner invite.
+  //
+  // Operator-only (super_admin / admin). requireAdmin admits partner roles
+  // too, so we add an explicit role check here matching the pattern already
+  // used by move-publishing-data.
+  app.post("/api/admin/publishing/payee/invite", requireAdmin, async (req, res) => {
+    try {
+      const userId = (req.session as { userId?: string } | undefined)?.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      // Only operators may create publisher invites.
+      const { getUserRole } = await import("./auth/roles");
+      const roleInfo = userId ? await getUserRole(userId) : null;
+      if (!(roleInfo?.role === "super_admin" || roleInfo?.role === "admin")) {
+        return res.status(403).json({ message: "Only GoodTunes operators can invite publishers." });
+      }
+
+      const payeeKey = String(req.body?.payeeKey ?? "").trim();
+      const email = String(req.body?.email ?? "").trim().toLowerCase();
+
+      if (!payeeKey) return res.status(400).json({ message: "payeeKey is required" });
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+        return res.status(400).json({ message: "A valid email address is required" });
+      }
+
+      // Only linked payees (org: or person:) can be invited.
+      // Name-only payees (name:…) have no identity record to scope to.
+      const colonIdx = payeeKey.indexOf(":");
+      const kindRaw = colonIdx >= 0 ? payeeKey.slice(0, colonIdx) : "";
+      const entityId = colonIdx >= 0 ? payeeKey.slice(colonIdx + 1) : "";
+      if (kindRaw !== "organization" && kindRaw !== "person") {
+        return res.status(422).json({
+          message:
+            "This payee is name-only and has no linked organization or person record. " +
+            "Link them to an entity in the publishing splits editor first.",
+        });
+      }
+      if (!entityId) {
+        return res.status(422).json({ message: "Invalid payeeKey format" });
+      }
+
+      // Verify the entity exists.
+      if (kindRaw === "organization") {
+        const [org] = await db
+          .select({ id: organizations.id })
+          .from(organizations)
+          .where(eq(organizations.id, entityId))
+          .limit(1);
+        if (!org) return res.status(404).json({ message: "Organization not found" });
+      } else {
+        const r = await db.execute<{ id: string }>(
+          sql`SELECT id FROM people WHERE id = ${entityId} LIMIT 1`,
+        );
+        if (((r as any).rows ?? []).length === 0) {
+          return res.status(404).json({ message: "Person not found" });
+        }
+      }
+
+      // Check for a pending invite already in flight for this email+role+scope.
+      // Schema uses used_at / revoked_at (not accepted_at).
+      const existing = await db.execute<{ id: string }>(sql`
+        SELECT id FROM admin_invites
+        WHERE email = ${email}
+          AND role = 'publisher'
+          AND role_scope_id = ${payeeKey}
+          AND used_at IS NULL
+          AND revoked_at IS NULL
+          AND expires_at > NOW()
+        LIMIT 1
+      `);
+      if (((existing as any).rows ?? []).length > 0) {
+        return res.status(409).json({ message: "An active invite already exists for this email and publisher." });
+      }
+
+      // Inline invite creation — avoids circular dependency on routes.ts while
+      // preserving the same token + email flow every other partner invite uses.
+      const { randomBytes } = await import("crypto");
+      const token = randomBytes(32).toString("hex");
+      const INVITE_TTL_DAYS = 14;
+      const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 3600 * 1000);
+
+      await db.execute(sql`
+        INSERT INTO admin_invites (email, role, role_scope_id, token, expires_at, created_by_user_id)
+        VALUES (${email}, 'publisher', ${payeeKey}, ${token}, ${expiresAt}, ${userId ?? null})
+      `);
+
+      // Send branded invite email (best-effort — invite row is already written).
+      try {
+        const { sendAdminInviteEmail } = await import("./mail");
+        const baseUrl = `${req.protocol}://${req.get("host")}`;
+        const acceptUrl = `${baseUrl}/invite/${token}`;
+        await sendAdminInviteEmail(email, acceptUrl, "GoodTunes", "Publisher", INVITE_TTL_DAYS, null, null);
+      } catch (mailErr) {
+        console.warn("[publisher-invite] email send failed (invite row committed):", mailErr);
+      }
+
+      return res.status(201).json({ invited: true, email });
+    } catch (err) {
+      console.error("[publisher-invite]", err);
+      return res.status(500).json({ message: "Failed to create publisher invite" });
+    }
+  });
+
   // Pre-delete impact probe. Surfaces the publishing data that the album's
   // soft-delete cascade would silently take down with it — the
   // mechanical-settlement splits (which ride on the album's songs) and the
@@ -425,6 +534,241 @@ export function registerPublishingSettlementRoutes(app: Express, requireAdmin: A
     } catch (err) {
       console.error("[move-publishing-data]", err);
       return res.status(500).json({ message: "Failed to move publishing data" });
+    }
+  });
+}
+
+// ─── Publisher portal routes ─────────────────────────────────────────────────
+//
+// Task #1953 — Read-only mechanical-royalty statement for invited
+// publisher/writer accounts. Auth is a standalone `requirePublisher`
+// middleware (checks role === "publisher" + extracts payeeKey from
+// roleScopeId) so this function takes only `app`, no `requireAdmin`.
+
+export function registerPublisherPortalRoutes(app: Express): void {
+  /**
+   * Verify the caller is a publisher account and attach their payeeKey to
+   * the request as `(req as any).publisherPayeeKey`.
+   */
+  async function requirePublisher(req: Request, res: Response, next: NextFunction): Promise<unknown> {
+    const session = (req as any).session as { userId?: string } | undefined;
+    const userId = session?.userId;
+    if (!userId) return res.status(401).json({ message: "Not authenticated" });
+    try {
+      const { getUserRole } = await import("./auth/roles");
+      const info = await getUserRole(userId);
+      if (info?.role !== "publisher") {
+        return res.status(403).json({ message: "Publisher account required" });
+      }
+      const payeeKey = info.roleScopeId;
+      if (!payeeKey) {
+        return res.status(403).json({ message: "Publisher account has no entity linked" });
+      }
+      (req as any).publisherPayeeKey = payeeKey;
+      return next();
+    } catch (err) {
+      console.error("[publisher-auth]", err);
+      return res.status(500).json({ message: "Auth check failed" });
+    }
+  }
+
+  // POST /api/publisher/payout-onboard — self-service Stripe Connect
+  // onboarding for a publisher. Creates a Stripe Express account for the
+  // publisher's linked entity if one doesn't exist yet, then returns a
+  // short-lived account_onboarding link the browser navigates to directly.
+  // On return/refresh Stripe redirects back to /publisher.
+  app.post("/api/publisher/payout-onboard", requirePublisher, async (req, res) => {
+    try {
+      const payeeKey = (req as any).publisherPayeeKey as string;
+      const colonIdx = payeeKey.indexOf(":");
+      const kindRaw = colonIdx >= 0 ? payeeKey.slice(0, colonIdx) : "";
+      const ownerId = colonIdx >= 0 ? payeeKey.slice(colonIdx + 1) : null;
+
+      if ((kindRaw !== "organization" && kindRaw !== "person") || !ownerId) {
+        return res.status(422).json({ message: "Only linked payees can set up a payout account." });
+      }
+      const ownerKind = kindRaw as "organization" | "person";
+
+      const { getStripe } = await import("./stripe");
+      const stripe = await getStripe();
+
+      // Resolve (or create) the payout account row.
+      let account = await db
+        .select()
+        .from(payoutAccounts)
+        .where(and(eq(payoutAccounts.ownerKind, ownerKind), eq(payoutAccounts.ownerId, ownerId)))
+        .then(([r]) => r ?? null);
+
+      if (!account) {
+        // Resolve a display name for the Stripe account.
+        let email: string | undefined;
+        if (ownerKind === "organization") {
+          const [org] = await db
+            .select({ email: organizations.email })
+            .from(organizations)
+            .where(eq(organizations.id, ownerId))
+            .limit(1);
+          email = (org as any)?.email ?? undefined;
+        } else {
+          const r = await db.execute<{ contact_email: string }>(
+            sql`SELECT contact_email FROM people WHERE id = ${ownerId} LIMIT 1`,
+          );
+          const row = (r as any).rows?.[0];
+          email = row?.contact_email ?? undefined;
+        }
+
+        const acct = await stripe.accounts.create({
+          type: "express",
+          country: "US",
+          ...(email ? { email } : {}),
+          capabilities: { transfers: { requested: true }, card_payments: { requested: true } },
+          metadata: { gt_owner_kind: ownerKind, gt_owner_id: ownerId },
+        });
+        const requirementsDue = [
+          ...(acct.requirements?.currently_due ?? []),
+          ...(acct.requirements?.past_due ?? []),
+        ];
+        const [row] = await db
+          .insert(payoutAccounts)
+          .values({
+            ownerKind,
+            ownerId,
+            stripeAccountId: acct.id,
+            country: "US",
+            email: email ?? null,
+            payoutsEnabled: !!acct.payouts_enabled,
+            chargesEnabled: !!acct.charges_enabled,
+            detailsSubmitted: !!acct.details_submitted,
+            requirementsDue: Array.from(new Set(requirementsDue)),
+            disabledReason: acct.requirements?.disabled_reason ?? null,
+            lastSyncedAt: new Date(),
+          })
+          .returning();
+        account = row;
+      }
+
+      // Generate the short-lived onboarding link.
+      const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0] ?? req.protocol ?? "https";
+      const host = req.headers["x-forwarded-host"] || req.headers.host || "";
+      const origin = `${proto}://${host}`;
+      const link = await stripe.accountLinks.create({
+        account: account.stripeAccountId,
+        refresh_url: `${origin}/publisher?payout=refresh`,
+        return_url: `${origin}/publisher?payout=return`,
+        type: "account_onboarding",
+      });
+
+      return res.json({ url: link.url });
+    } catch (err: any) {
+      console.error("[publisher-payout-onboard]", err);
+      return res
+        .status(502)
+        .json({ message: `Stripe error: ${err?.message ?? "onboarding link failed"}` });
+    }
+  });
+
+  // Publisher entity info + payout account status.
+  app.get("/api/publisher/me", requirePublisher, async (req, res) => {
+    try {
+      const payeeKey = (req as any).publisherPayeeKey as string;
+      const colonIdx = payeeKey.indexOf(":");
+      const kindRaw = colonIdx >= 0 ? payeeKey.slice(0, colonIdx) : "";
+      const ownerId = colonIdx >= 0 ? payeeKey.slice(colonIdx + 1) : null;
+
+      let displayName = "Publisher";
+      let ownerKind: "organization" | "person" | null = null;
+
+      if (kindRaw === "organization" && ownerId) {
+        ownerKind = "organization";
+        const [org] = await db
+          .select({ name: organizations.name })
+          .from(organizations)
+          .where(eq(organizations.id, ownerId))
+          .limit(1);
+        if (org) displayName = org.name;
+      } else if (kindRaw === "person" && ownerId) {
+        ownerKind = "person";
+        const rows = await db.execute<{ name: string }>(
+          sql`SELECT name FROM people WHERE id = ${ownerId} LIMIT 1`,
+        );
+        const row = (rows as any).rows?.[0];
+        if (row) displayName = row.name;
+      }
+
+      let hasPayoutAccount = false;
+      let payoutsEnabled = false;
+      if (ownerId && ownerKind) {
+        const [acct] = await db
+          .select({ payoutsEnabled: payoutAccounts.payoutsEnabled })
+          .from(payoutAccounts)
+          .where(
+            and(
+              eq(payoutAccounts.ownerKind, ownerKind),
+              eq(payoutAccounts.ownerId, ownerId),
+            ),
+          )
+          .limit(1);
+        if (acct) {
+          hasPayoutAccount = true;
+          payoutsEnabled = !!acct.payoutsEnabled;
+        }
+      }
+
+      return res.json({
+        payeeKey,
+        displayName,
+        ownerKind,
+        ownerId,
+        hasPayoutAccount,
+        payoutsEnabled,
+      });
+    } catch (err) {
+      console.error("[publisher-me]", err);
+      return res.status(500).json({ message: "Failed to load publisher info" });
+    }
+  });
+
+  // Cross-catalog payee statement — same data the admin endpoint returns but
+  // hard-scoped to the logged-in publisher's own payeeKey. Other payees are
+  // never accessible from this endpoint.
+  app.get("/api/publisher/statement", requirePublisher, async (req, res) => {
+    try {
+      const payeeKey = (req as any).publisherPayeeKey as string;
+      const rateMicros = await getMechanicalRateMicros();
+      const albumIds = await albumIdsWithPublishingSplits();
+
+      if (albumIds.length === 0) {
+        return res.status(404).json({ message: "No publishing data found" });
+      }
+
+      const albumRows = await db
+        .select({ id: albums.id, title: albums.title, artist: albums.artist, artwork: albums.artwork })
+        .from(albums)
+        .where(inArray(albums.id, albumIds));
+      const metaById = new Map(albumRows.map((a) => [a.id, a]));
+
+      const entries = await Promise.all(
+        albumIds.map(async (albumId) => {
+          const meta = metaById.get(albumId);
+          const unitsPressed = await resolveUnitsPressed(albumId);
+          return {
+            albumId,
+            unitsPressed,
+            title: meta?.title ?? albumId,
+            artist: meta?.artist ?? null,
+            artwork: meta?.artwork ?? null,
+          };
+        }),
+      );
+
+      const statement = await computePayeeStatement(payeeKey, entries, rateMicros);
+      if (!statement) {
+        return res.status(404).json({ message: "No publishing credits found for your account" });
+      }
+      return res.json(statement);
+    } catch (err) {
+      console.error("[publisher-statement]", err);
+      return res.status(500).json({ message: "Failed to load statement" });
     }
   });
 }
