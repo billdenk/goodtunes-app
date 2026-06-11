@@ -749,7 +749,7 @@ export async function sendOrderReceiptEmail(
       <div style="margin: 24px 0; padding: 16px 18px; background: rgba(74,255,202,0.08); border: 1px solid rgba(74,255,202,0.25); border-radius: 12px;">
         <div style="font-size: 12px; color: #4AFFCA; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 700;">${escapeHtml(gdLabel)}</div>
         <div style="font-size: 24px; font-weight: 800; color: #ffffff; margin-top: 4px;">${escapeHtml(gdText)}</div>
-        <div style="font-size: 12px; color: rgba(255,255,255,0.55); margin-top: 6px;">Numbered for life. Refundable up until shipping.</div>
+        <div style="font-size: 12px; color: rgba(255,255,255,0.55); margin-top: 6px;">Numbered for life.</div>
       </div>`
       : "";
 
