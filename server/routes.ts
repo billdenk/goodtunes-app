@@ -40,6 +40,7 @@ import {
   makerSlotFromBrand as makerSlotFromBrandShared,
   mapShopifyProduct,
   classifyShopifyApiResult,
+  extractErnieBallProduct,
 } from "./lib/shopifyGearMapping";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -5381,6 +5382,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "daddario.com": { name: "D'Addario", role: "maker" },
     "ernieball.com": { name: "Ernie Ball", role: "maker" },
     "elixirstrings.com": { name: "Elixir", role: "maker" },
+    "pickworld.com": { name: "PickWorld", role: "maker" },
     "rotosound.com": { name: "Rotosound", role: "maker" },
     "strymon.net": { name: "Strymon", role: "maker" },
     "chasebliss.com": { name: "Chase Bliss Audio", role: "maker" },
@@ -5420,6 +5422,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const SHOPIFY_JSON_HOSTS: Set<string> = new Set([
     "retrofret.com",
     "gryphonstrings.com",
+    // Task #1942 — PickWorld is a maker-owned Shopify store; their product
+    // pages carry clean .json data but the `vendor` field matches the shop
+    // name so the generic HTML scraper finds nothing useful. Fail loud like
+    // the other curated shops; maker slot falls back to the host (see
+    // tryShopifyJsonImport maker-owned fallback below).
+    "pickworld.com",
   ]);
 
   const resolveMakerHostFromBrand = (brand: string): string | null =>
@@ -5880,6 +5888,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ? await makerSlotFromBrand(mapped.brand)
         : null;
 
+      // Task #1942 — maker-owned Shopify stores (e.g. pickworld.com) set
+      // Shopify `vendor` to their own shop name, which mapShopifyProduct
+      // collapses to null brand. Fall back to the host slot as the maker
+      // and clear the reseller slot — the host IS the maker, not a shop.
+      let effectiveMaker = shopifyMaker;
+      let effectiveReseller: VendorSlot | null = shopifyReseller;
+      if (!effectiveMaker && hostInfo?.role === "maker") {
+        effectiveMaker = buildHostSlot(host, shopName, null);
+        effectiveReseller = null;
+      } else if (!effectiveMaker && hostInfo?.role === "both") {
+        effectiveMaker = shopifyReseller;
+      }
+
       return {
         kind: "ok",
         payload: {
@@ -5897,9 +5918,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           sourceImages: dedupeImageUrls(
             mapped.gallery.map((s) => normalizeImageUrl(s)),
           ),
-          reseller: shopifyReseller,
-          maker: shopifyMaker,
-          vendor: shopifyReseller,
+          reseller: effectiveReseller,
+          maker: effectiveMaker,
+          vendor: effectiveReseller ?? effectiveMaker ?? null,
         },
       };
     };
@@ -6101,6 +6122,50 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           .json({ message: `Vendor page returned ${fetchRes.status}` });
       }
       const html = await fetchRes.text();
+
+      // — Ernie Ball (ernieball.com) ———————————————————————————————————
+      // Ernie Ball's string-set comparison pages list ~32 products with no
+      // JSON-LD Product and no OG tags for the active item. The active SKU
+      // lives in the URL hash (e.g. #P02217). We extract the active product
+      // by finding the data-sku element in the HTML and pulling its name,
+      // price, description, and the gallery image whose filename contains
+      // the SKU. Fails loud — no silent brand-card / "Compare" import.
+      if (host === "ernieball.com") {
+        const sku = parsed.hash.replace(/^#/, "").trim().toUpperCase();
+        if (!sku) {
+          return res.status(400).json({
+            message:
+              "Paste the Ernie Ball URL with the specific string set selected — the URL should end with #P02217 or similar. Open the strings page, click the set you want, then copy the address bar URL.",
+          });
+        }
+        const extracted = extractErnieBallProduct(html, sku);
+        if (!extracted) {
+          return res.status(422).json({
+            message: `Couldn't find string set ${sku} on this Ernie Ball page. Make sure the URL ends with the product code (e.g. #P02217) and try again.`,
+          });
+        }
+        let ebPhotoUrl: string | null = null;
+        if (extracted.rawImage) {
+          try { ebPhotoUrl = await rehostRemoteImage(extracted.rawImage); }
+          catch { ebPhotoUrl = extracted.rawImage; }
+        }
+        const ebMaker = buildHostSlot("ernieball.com", "Ernie Ball", null);
+        return res.json({
+          name: extracted.name,
+          brand: "Ernie Ball",
+          category: "Strings",
+          description: extracted.description,
+          specs: { SKU: extracted.sku },
+          price: extracted.price,
+          photoUrl: ebPhotoUrl,
+          sourceImage: extracted.rawImage,
+          sourceImages: extracted.rawImage ? [extracted.rawImage] : [],
+          reseller: null,
+          maker: ebMaker,
+          vendor: ebMaker,
+        });
+      }
+      // ————————————————————————————————————————————————————————————————
 
       // Collect every meta tag. Two regexes because property/name can come
       // before or after content depending on the shop's template.

@@ -304,3 +304,121 @@ export function mapShopifyProduct(
 
   return { name, brand, year, description, price, rawImage, gallery, specs, category };
 }
+
+// ─── Ernie Ball active-product extractor ──────────────────────────────────
+
+export type ErnieBallProduct = {
+  name: string;
+  description: string | null;
+  price: string | null;
+  sku: string;
+  rawImage: string | null;
+};
+
+/**
+ * Extract the active product from an Ernie Ball comparison-style page.
+ *
+ * `sku` comes from the URL hash (e.g. `#P02217` → `P02217`). Returns
+ * `null` when the active product cannot be found — the route must fail
+ * loud in that case (no silent brand-card / "Compare" import).
+ *
+ * Pure: no network, no DB, no image rehosting. The route rehosts
+ * `rawImage` afterwards.
+ */
+export function extractErnieBallProduct(
+  html: string,
+  sku: string,
+): ErnieBallProduct | null {
+  if (!sku) return null;
+
+  // Locate the first occurrence of data-sku="<sku>" (case-insensitive).
+  const skuRe = new RegExp(`data-sku=["']${ebEscape(sku)}["']`, "i");
+  const skuIdx = html.search(skuRe);
+  if (skuIdx === -1) return null;
+
+  // Walk back to the start of the opening tag that carries the attribute.
+  const tagStart = html.lastIndexOf("<", skuIdx);
+  if (tagStart === -1) return null;
+
+  // Grab a window of HTML from that tag forward so we extract sibling
+  // fields without accidentally consuming the next product item.
+  const win = html.slice(tagStart, tagStart + 6000);
+
+  // ── Name ──────────────────────────────────────────────────────────────
+  // Prefer data-product-name on the SAME opening tag only (Ernie Ball
+  // sets this directly). Scope to the opening tag's text (before the
+  // first ">") so we never accidentally pick up the *next* sibling
+  // item's attribute when the current one lacks data-product-name.
+  // Fall back to the first <h2>/<h3> inside the window —
+  // but NOT <h1> which reads "Compare" on comparison pages.
+  let name: string | null = null;
+
+  const tagClose = win.indexOf(">");
+  const openTag = tagClose !== -1 ? win.slice(0, tagClose + 1) : win.slice(0, 500);
+  const dnM = /data-product-name=["']([^"']{3,300})["']/i.exec(openTag);
+  if (dnM) name = decodeEntities(dnM[1].trim());
+
+  if (!name) {
+    const hM = /<h[23][^>]*>([\s\S]{1,300}?)<\/h[23]>/i.exec(win);
+    if (hM) {
+      name =
+        hM[1]
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim() || null;
+    }
+  }
+  if (!name) return null;
+
+  // ── Price ──────────────────────────────────────────────────────────────
+  // Look for a class containing "product-price" in the window.
+  let price: string | null = null;
+  const priceTagM =
+    /class=["'][^"']*product-price[^"']*["'][^>]*>\s*\$?\s*([\d.,]+)/i.exec(
+      win,
+    );
+  if (priceTagM) {
+    const num = parseFloat(priceTagM[1].replace(/,/g, ""));
+    if (!isNaN(num)) price = `USD ${num.toFixed(2)}`;
+  }
+
+  // ── Description ────────────────────────────────────────────────────────
+  let description: string | null = null;
+  const descM =
+    /class=["'][^"']*product-description[^"']*["'][^>]*>([\s\S]{1,2000}?)<\/(?:p|div|span)/i.exec(
+      win,
+    );
+  if (descM) {
+    description =
+      descM[1]
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim() || null;
+  }
+
+  // ── Image ──────────────────────────────────────────────────────────────
+  // Find the first <img> whose src path contains the SKU (e.g.
+  // "…P02217_w.jpg"). Search the entire document because the gallery
+  // is typically rendered outside the per-product block.
+  let rawImage: string | null = null;
+  const imgRe = new RegExp(
+    `<img[^>]+src=["']([^"']*${ebEscape(sku)}[^"']*)["']`,
+    "gi",
+  );
+  let imgM: RegExpExecArray | null;
+  while ((imgM = imgRe.exec(html))) {
+    const src = imgM[1];
+    // Skip SVG/GIF icons and UI chrome.
+    if (!/\.(svg|gif)$/i.test(src) && !src.includes("icon")) {
+      rawImage = src.startsWith("//") ? `https:${src}` : src;
+      break;
+    }
+  }
+
+  return { name, description, price, sku, rawImage };
+}
+
+/** RegExp-safe escape for Ernie Ball SKU strings used inside new RegExp(). */
+function ebEscape(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
