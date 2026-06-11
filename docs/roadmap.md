@@ -66,6 +66,38 @@ This is post-launch work. For now the link is a toast placeholder, but the row i
 
 (MUSO_API_KEY is already listed in expected env vars.)
 
+## GoodGear — discovery-by-gear app (feasibility brief)
+
+Bill is considering a separate **"GoodGear"** app: discover music by the gear used
+on it (by instrument, by song, by brand), partly as a defensibility play. The full
+feasibility + strategy brief — written for Bill to read and share — lives in
+**[goodgear-feasibility.md](./goodgear-feasibility.md)**. Read that for the
+details; the headline conclusions:
+
+- **No streaming API carries gear-per-track data.** Spotify/Deezer/Apple give
+  catalog, metadata, popularity, previews, and deep-links — never "which guitar
+  played this track." The gear graph is GoodTunes' own SuperCredits™/rig data, and
+  **that proprietary dataset is the moat**, not the app UI (which is trivially
+  copyable).
+- **Tap-to-listen handoff is allowed and partly built.** Deep-linking out to
+  Deezer/Spotify (they play + pay royalties) is the standard song.link/Odesli
+  pattern, already wired in `server/lib/streamingLinks.ts` at album level
+  (track-level is the extension). Deezer is the recommended primary partner given
+  Bill's relationship and Spotify's tightening API.
+- **Cap results with a popularity threshold** — lean on the streaming popularity
+  score now (own play analytics are small in year one), layer GoodTunes' own play
+  data on top as it grows.
+- **Recommended architecture: one shared gear/credit data layer, two front-ends**
+  (GoodTunes + GoodGear), not a separate app with its own data — keeping the moat
+  unified and the SuperCredits flywheel feeding both.
+- **The three discovery shapes** (instrument→songs, song→instruments/rig→artist,
+  gear→artists→rig) are one graph queried three ways; all three already have
+  working storage queries today.
+
+Out of scope for the brief (and still): building GoodGear, any Spotify/Deezer
+integration, new endpoints, the mockups (separate task), and procuring API keys or
+partner deals.
+
 ## Search in the nav bar (Apple-Music pattern, parked)
 
 Apple Music doesn't give Search its own tab — it lives **inside the nav bar** as a tappable field that pushes a full search screen on tap. When the mini-player is active, the whole bar collapses into a single pill that contains:
