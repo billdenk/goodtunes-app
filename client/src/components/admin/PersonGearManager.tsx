@@ -17,17 +17,25 @@ export const inputCls =
 export function Field({
   label,
   children,
+  as = "label",
 }: {
   label: string;
   children: ReactNode;
+  // Default `<label>` is right for a single plain input. Pass `as="div"` when
+  // the field hosts interactive content with its own focusable controls (e.g.
+  // the InstrumentPicker combobox): nesting labelable/interactive descendants
+  // inside a <label> is invalid HTML, and Safari forwards the click to the
+  // label's labeled control — which swallowed gear-picker selections (#1954).
+  as?: "label" | "div";
 }) {
+  const Wrapper = as;
   return (
-    <label className="block">
+    <Wrapper className="block">
       <span className="block text-slate-400 text-[11px] uppercase tracking-wider mb-1">
         {label}
       </span>
       {children}
-    </label>
+    </Wrapper>
   );
 }
 
@@ -1000,7 +1008,7 @@ export function AddGearPanel({
         </button>
       </div>
 
-      <Field label="Instrument">
+      <Field label="Instrument" as="div">
         <InstrumentPicker
           instruments={instruments}
           value={selectedInstrument}
