@@ -41,6 +41,8 @@ import {
   mapShopifyProduct,
   classifyShopifyApiResult,
   extractErnieBallProduct,
+  normalizePicksCategory,
+  extractMicrodataPrice,
 } from "./lib/shopifyGearMapping";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -5383,6 +5385,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "ernieball.com": { name: "Ernie Ball", role: "maker" },
     "elixirstrings.com": { name: "Elixir", role: "maker" },
     "pickworld.com": { name: "PickWorld", role: "maker" },
+    // Task #1944 — picks / accessories makers. Dunlop's manufacturer site
+    // is jimdunlop.com (BigCommerce; OG tags only, no JSON-LD — handled by
+    // the generic HTML scraper). D'Andrea's store is dandreausa.com (Shopify;
+    // maker-owned, see SHOPIFY_JSON_HOSTS below).
+    "jimdunlop.com": { name: "Dunlop", role: "maker" },
+    "dandreausa.com": { name: "D'Andrea USA", role: "maker" },
     "rotosound.com": { name: "Rotosound", role: "maker" },
     "strymon.net": { name: "Strymon", role: "maker" },
     "chasebliss.com": { name: "Chase Bliss Audio", role: "maker" },
@@ -5428,7 +5436,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // the other curated shops; maker slot falls back to the host (see
     // tryShopifyJsonImport maker-owned fallback below).
     "pickworld.com",
+    // Task #1944 — Fender's accessories store (picks, straps, cables) is a
+    // Shopify storefront on the `shop.` subdomain; the bare fender.com is
+    // Salesforce Commerce Cloud, so we hit shop.fender.com's `.json`
+    // endpoint instead. It's a maker-owned store on a subdomain of the
+    // maker host (fender.com) — see SHOPIFY_STORE_MAKER_HOSTS. D'Andrea's
+    // dandreausa.com is a maker-owned Shopify store on its own domain whose
+    // `vendor` ("D'Andrea USA") matches the host name, so the generic HTML
+    // scraper finds nothing useful — fail loud via the curated `.json` path.
+    "shop.fender.com",
+    "dandreausa.com",
   ]);
+
+  // Task #1944 — maker-owned Shopify storefronts that live on a *subdomain*
+  // of the maker's primary host. `host` here is the storefront subdomain;
+  // the value is the canonical maker host in KNOWN_HOSTS. Without this the
+  // subdomain has no KNOWN_HOSTS entry, so the maker-owned fallback in
+  // tryShopifyJsonImport can't fire and the maker slot would resolve to the
+  // ugly `shop.fender.com` slug instead of the existing `fender.com` vendor.
+  const SHOPIFY_STORE_MAKER_HOSTS: Record<string, string> = {
+    "shop.fender.com": "fender.com",
+  };
 
   const resolveMakerHostFromBrand = (brand: string): string | null =>
     resolveMakerHostFromBrandShared(brand, KNOWN_HOSTS);
@@ -5803,8 +5831,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     ): Promise<ShopifyImportResult> => {
       // Curated hosts carry a friendly display name; unknown hosts get a
       // title-cased domain so the reseller chip isn't a bare "shop.com".
+      // Task #1944 — maker-owned stores on a subdomain (shop.fender.com)
+      // borrow the canonical maker's name so error copy and the
+      // mapShopifyProduct vendor→brand collapse both read "Fender".
+      const makerOwnedHost = SHOPIFY_STORE_MAKER_HOSTS[host] ?? null;
       const shopName =
         hostInfo?.name ??
+        (makerOwnedHost ? KNOWN_HOSTS[makerOwnedHost]?.name : undefined) ??
         host
           .split(".")
           .slice(0, -1)
@@ -5899,6 +5932,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         effectiveReseller = null;
       } else if (!effectiveMaker && hostInfo?.role === "both") {
         effectiveMaker = shopifyReseller;
+      }
+
+      // Task #1944 — maker-owned store on a subdomain (shop.fender.com): the
+      // storefront subdomain isn't a KNOWN_HOSTS key, so the fallback above
+      // can't fire. Pin the maker to the canonical maker host (fender.com)
+      // so the find-or-create-by-domain attach path matches the existing
+      // vendor row, and clear the reseller — the maker IS the seller here.
+      if (makerOwnedHost) {
+        const mi = KNOWN_HOSTS[makerOwnedHost];
+        effectiveMaker = buildHostSlot(makerOwnedHost, mi?.name ?? shopName, null);
+        effectiveReseller = null;
       }
 
       return {
@@ -6194,12 +6238,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       let category: string | null = product?.category || null;
       // Description: prefer Product.description (richer/longer) over OG.
       // Strip HTML tags — Shopify often embeds <p> / <br> in description.
+      // Task #1944 — jimdunlop.com (Dunlop) ships the SAME site-wide brand
+      // boilerplate ("From picks to pedals…") as og:description on every
+      // product page, so importing it just gives the operator fluff to
+      // delete. Drop the meta-description fallback for that host and let the
+      // operator write a real one.
+      const skipMetaDescription = host === "jimdunlop.com";
       let descriptionRaw: string | null =
         product?.description ||
-        meta["og:description"] ||
-        meta["twitter:description"] ||
-        meta["description"] ||
-        null;
+        (skipMetaDescription
+          ? null
+          : meta["og:description"] ||
+            meta["twitter:description"] ||
+            meta["description"] ||
+            null);
       if (descriptionRaw) {
         descriptionRaw = descriptionRaw
           .replace(/<br\s*\/?>/gi, "\n")
@@ -6211,7 +6263,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Offer price (useful context for the admin even though we don't
       // store it yet — keeps the door open for "from $X" in the future).
       const offer = product?.offers && (Array.isArray(product.offers) ? product.offers[0] : product.offers);
-      const price = offer?.price ? `${offer.priceCurrency || "USD"} ${offer.price}` : null;
+      let price = offer?.price ? `${offer.priceCurrency || "USD"} ${offer.price}` : null;
+      // Task #1944 — BigCommerce stores (Dunlop / jimdunlop.com) emit no
+      // JSON-LD offer but do carry a schema.org microdata price
+      // (`<meta itemprop="price" content="5.76">`). Fall back to it so picks
+      // import with a price instead of forcing the operator to type it in.
+      if (!price) price = extractMicrodataPrice(html);
 
       // Spec table extraction — the part that actually matters for guitar
       // shops. Carter Vintage, Reverb, Norman's etc. put 20+ rows of real
@@ -6275,6 +6332,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
       if (!brand) brand = lookupSpec("Brand", "Manufacturer", "Maker", "Make");
       if (!category) category = lookupSpec("Instrument", "Category", "Type", "Body Style", "Instrument Type");
+      // Task #1944 — collapse any "picks" signal into the single "Picks"
+      // category. Dunlop's pick pages carry no JSON-LD/spec category, so
+      // fall back to the product name (".88mm Tortex Standard Pick") — the
+      // whole-word match keeps "Pickups"/"Pickguards" out.
+      category = normalizePicksCategory(category);
+      if (!category && name && /\bpicks?\b/i.test(name)) category = "Picks";
 
       // When the host is a known reseller, strip the reseller-name prefix
       // that vintage shops bake into their HTML <title> ("Carter Vintage

@@ -45,3 +45,27 @@ themes is inconsistent. It also dodges the SPA problem and bot walls.
   so `safeFetchWithUaFallback` SSRF guard is fine.
 - Vintage Guitar magazine (vintageguitar.com) is WordPress/WooCommerce magazine,
   NOT a per-instrument storefront — nothing to import, deliberately skipped.
+
+# Picks/accessories brands (Dunlop, Fender, D'Andrea)
+
+- **Dunlop = BigCommerce, NOT Shopify** (jimdunlop.com): no JSON-LD `Product`,
+  price lives in schema.org microdata `<meta itemprop="price">` (+ `priceCurrency`),
+  gauge/material only in the title text, and `og:description` is site-wide
+  boilerplate. So Dunlop goes through the **generic** scraper with two helpers in
+  `shopifyGearMapping.ts`: `extractMicrodataPrice(html)` (price fallback) and a
+  per-host `skipMetaDescription` to drop the boilerplate. Maker resolves via
+  `KNOWN_HOSTS["jimdunlop.com"]` + BRAND_ALIASES (dunlop/jim dunlop).
+- **shop.fender.com** is real Shopify (confirmed via `_shopify_essential` cookie)
+  but Cloudflare bot-walls it — added to `SHOPIFY_JSON_HOSTS` for the clean
+  `.json` path, with `SHOPIFY_STORE_MAKER_HOSTS["shop.fender.com"]="fender.com"`
+  so the maker slot points at the brand domain (the store host isn't the maker
+  identity). May 502 at runtime if Cloudflare blocks Replit egress — acceptable
+  fail-loud.
+- **D'Andrea** (dandreausa.com): Shopify, `vendor="D'Andrea USA"`, but
+  `product_type` is **empty for the whole catalog** → picks can't auto-categorize
+  there; only maker resolution matters (vendor==name collapses brand→null, host
+  maker fallback attaches dandreausa.com). BRAND_ALIASES: d'andrea/dandrea(+ usa).
+- `normalizePicksCategory(cat)` collapses any `\bpicks?\b` signal to "Picks" but
+  leaves Pickups/Pickguards untouched — wired into `mapShopifyProduct` category
+  AND the generic-path category (+ name-based inference). Used for category
+  auto-set on picks `product_type`s.

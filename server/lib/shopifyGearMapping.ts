@@ -54,6 +54,18 @@ export const BRAND_ALIASES: Record<string, string> = {
   "daddario": "daddario.com",
   "earthquaker": "earthquakerdevices.com",
   "chase bliss": "chasebliss.com",
+  // Task #1944 — picks / accessories makers. Dunlop's manufacturer site is
+  // jimdunlop.com (the bare dunlop.com is a near-empty landing page); their
+  // Shopify `vendor` and reseller listings use "Dunlop" / "Jim Dunlop".
+  // D'Andrea's store is dandreausa.com and its Shopify `vendor` is
+  // "D'Andrea USA" — map both the short and full forms back to the host.
+  "dunlop": "jimdunlop.com",
+  "jim dunlop": "jimdunlop.com",
+  "jim dunlop manufacturing": "jimdunlop.com",
+  "d'andrea": "dandreausa.com",
+  "dandrea": "dandreausa.com",
+  "d'andrea usa": "dandreausa.com",
+  "dandrea usa": "dandreausa.com",
 };
 
 export function resolveMakerHostFromBrand(
@@ -297,12 +309,54 @@ export function mapShopifyProduct(
 
   const ptype =
     typeof product.product_type === "string" ? product.product_type.trim() : "";
-  const category =
+  const rawCategory =
     ptype && !/^(instruments?|otherdefault|default)$/i.test(ptype)
       ? ptype
       : null;
+  const category = normalizePicksCategory(rawCategory);
 
   return { name, brand, year, description, price, rawImage, gallery, specs, category };
+}
+
+// Task #1944 — normalize any "picks" product_type / category into the
+// single "Picks" label so picks from Fender's Shopify store, D'Andrea,
+// Dunlop, PickWorld, etc. all land in one category. Matches the whole
+// word `pick`/`picks` so "Pickups" / "Pickguards" stay untouched.
+export function normalizePicksCategory(
+  category: string | null,
+): string | null {
+  if (!category) return category;
+  return /\bpicks?\b/i.test(category) ? "Picks" : category;
+}
+
+// Task #1944 — extract a price from schema.org microdata
+// (`<meta itemprop="price" content="5.76">`) for stores that emit it but
+// no JSON-LD `offers` block. Dunlop (BigCommerce) is the motivating case;
+// the generic HTML scrape path uses this as a price fallback. Returns a
+// `"<CUR> <amount>"` string (matching the JSON-LD offer formatting) or
+// null when no usable price is present. Pure: no network.
+export function extractMicrodataPrice(html: string): string | null {
+  const findContent = (prop: string): string | null => {
+    const re1 = new RegExp(
+      `<meta[^>]+itemprop=["']${prop}["'][^>]*content=["']([^"']+)["']`,
+      "i",
+    );
+    const re2 = new RegExp(
+      `<meta[^>]+content=["']([^"']+)["'][^>]*itemprop=["']${prop}["']`,
+      "i",
+    );
+    const m = re1.exec(html) || re2.exec(html);
+    return m ? m[1].trim() : null;
+  };
+  const raw = findContent("price");
+  if (!raw) return null;
+  const num = parseFloat(raw.replace(/[^0-9.]/g, ""));
+  if (isNaN(num)) return null;
+  const cur = (findContent("priceCurrency") || "USD")
+    .replace(/[^A-Za-z]/g, "")
+    .toUpperCase()
+    .slice(0, 8) || "USD";
+  return `${cur} ${num.toFixed(2)}`;
 }
 
 // ─── Ernie Ball active-product extractor ──────────────────────────────────

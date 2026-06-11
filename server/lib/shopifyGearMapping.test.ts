@@ -17,6 +17,8 @@ import {
   makerSlotFromBrand,
   classifyShopifyApiResult,
   extractErnieBallProduct,
+  normalizePicksCategory,
+  extractMicrodataPrice,
   type KnownHosts,
   type ShopifyProduct,
 } from "./shopifyGearMapping";
@@ -29,6 +31,8 @@ const KNOWN_HOSTS: KnownHosts = {
   "martinguitar.com": { name: "Martin Guitar", role: "maker" },
   "gibson.com": { name: "Gibson", role: "both" },
   "fender.com": { name: "Fender", role: "maker" },
+  "jimdunlop.com": { name: "Dunlop", role: "maker" },
+  "dandreausa.com": { name: "D'Andrea USA", role: "maker" },
 };
 
 // — Saved fixture payloads ————————————————————————————————————————————
@@ -428,4 +432,81 @@ test("Pickworld — resolveMakerHostFromBrand('PickWorld') resolves to pickworld
     resolveMakerHostFromBrand("PickWorld", KNOWN_HOSTS_WITH_PICKWORLD),
     "pickworld.com",
   );
+});
+
+// ——— Task #1944: Dunlop / Fender / D'Andrea picks & accessories ————————————
+
+// D'Andrea's Shopify store: vendor is "D'Andrea USA" (the same as its
+// KNOWN_HOSTS name), so the brand collapses to null and the route-level
+// maker-owned fallback attaches dandreausa.com as the maker. product_type
+// is empty across their whole catalog, so picks don't auto-categorize.
+const DANDREA_FIXTURE: ShopifyProduct = {
+  title: "Pro Plec 351 Shape - 1.5mm (12 pack)",
+  vendor: "D'Andrea USA",
+  product_type: "",
+  body_html: "<p>The original celluloid-style tortoise shell pick.</p>",
+  tags: "",
+  variants: [{ price: "9.95" }],
+  images: [{ src: "https://cdn.shopify.com/s/files/1/dandrea/proplec.jpg" }],
+};
+
+test("D'Andrea — vendor equal to its KNOWN_HOSTS name collapses brand to null", () => {
+  const m = mapShopifyProduct(DANDREA_FIXTURE, "D'Andrea USA");
+  assert.equal(m.brand, null);
+});
+
+test("D'Andrea — empty product_type yields a null category (no auto-pick)", () => {
+  const m = mapShopifyProduct(DANDREA_FIXTURE, "D'Andrea USA");
+  assert.equal(m.category, null);
+});
+
+test("resolveMakerHostFromBrand maps Dunlop aliases → jimdunlop.com", () => {
+  assert.equal(resolveMakerHostFromBrand("Dunlop", KNOWN_HOSTS), "jimdunlop.com");
+  assert.equal(resolveMakerHostFromBrand("Jim Dunlop", KNOWN_HOSTS), "jimdunlop.com");
+  assert.equal(resolveMakerHostFromBrand("JIM DUNLOP", KNOWN_HOSTS), "jimdunlop.com");
+});
+
+test("resolveMakerHostFromBrand maps D'Andrea aliases → dandreausa.com", () => {
+  assert.equal(resolveMakerHostFromBrand("D'Andrea", KNOWN_HOSTS), "dandreausa.com");
+  assert.equal(resolveMakerHostFromBrand("D'Andrea USA", KNOWN_HOSTS), "dandreausa.com");
+  assert.equal(resolveMakerHostFromBrand("dandrea", KNOWN_HOSTS), "dandreausa.com");
+});
+
+// ——— normalizePicksCategory —————————————————————————————————————————————
+
+test("normalizePicksCategory collapses any picks signal to 'Picks'", () => {
+  assert.equal(normalizePicksCategory("Picks"), "Picks");
+  assert.equal(normalizePicksCategory("Guitar Picks"), "Picks");
+  assert.equal(normalizePicksCategory("Pick Accessories"), "Picks");
+});
+
+test("normalizePicksCategory leaves non-pick categories untouched (incl. Pickups)", () => {
+  assert.equal(normalizePicksCategory("Pickups"), "Pickups");
+  assert.equal(normalizePicksCategory("Pickguards"), "Pickguards");
+  assert.equal(normalizePicksCategory("Straps"), "Straps");
+  assert.equal(normalizePicksCategory(null), null);
+});
+
+test("mapShopifyProduct normalizes a 'Guitar Picks' product_type to 'Picks'", () => {
+  const m = mapShopifyProduct(
+    { title: "Fender 351 Classic Celluloid Picks", vendor: "Fender", product_type: "Guitar Picks" },
+    "Fender",
+  );
+  assert.equal(m.category, "Picks");
+});
+
+// ——— extractMicrodataPrice (Dunlop / BigCommerce price fallback) ——————————
+
+test("extractMicrodataPrice reads schema.org microdata price (Dunlop case)", () => {
+  const html = `<meta itemprop="price" content="5.76"><meta itemprop="availability" content="InStock">`;
+  assert.equal(extractMicrodataPrice(html), "USD 5.76");
+});
+
+test("extractMicrodataPrice honors priceCurrency and content-first attr order", () => {
+  const html = `<meta content="12.50" itemprop="price"><meta itemprop="priceCurrency" content="GBP">`;
+  assert.equal(extractMicrodataPrice(html), "GBP 12.50");
+});
+
+test("extractMicrodataPrice returns null when no microdata price is present", () => {
+  assert.equal(extractMicrodataPrice(`<meta property="og:title" content="A Pick">`), null);
 });
