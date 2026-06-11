@@ -70,7 +70,7 @@ export function orderDeskAutoPushEnabled(): boolean {
 //   4. First fulfillment_partner row (fallback when no default is set yet).
 // This replaces the old "first row wins" ambiguity that made Spinney vs
 // PacPack a coin-flip as soon as both rows existed in the table.
-async function pickFulfillmentPartner(order: Order): Promise<string | null> {
+export async function pickFulfillmentPartner(order: Order): Promise<string | null> {
   if (order.fulfillmentPartnerId) return order.fulfillmentPartnerId;
   // Per-album override. Resolve the order's album, then honor its
   // fulfillmentPartnerId only when it still points at a live (non-trashed)
@@ -282,7 +282,7 @@ function fanOrigin(): string {
 // never-throws). The one-time guarantee lives at the call site (only
 // invoked on the first transition to shipped). Physical orders only —
 // digital-only orders never ship a carton.
-async function dispatchShippingEmail(
+export async function dispatchShippingEmail(
   order: Order,
   tracking: { carrier: string | null; trackingNumber: string | null; trackingUrl: string | null },
 ): Promise<void> {

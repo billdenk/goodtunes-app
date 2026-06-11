@@ -50,6 +50,8 @@ export type AdminOrderRow = {
   skuKind?: string | null;
   fulfillmentStatus?: string | null;
   orderDeskOrderId?: string | null;
+  odooOrderId?: string | null;
+  odooLastSyncedAt?: string | null;
   carrier?: string | null;
   trackingNumber?: string | null;
   trackingUrl?: string | null;
@@ -326,6 +328,7 @@ function OrderDetailBody({ detail }: { detail: AdminOrderDetail }) {
 
       <Section title="Fulfillment">
         <FulfillmentRetryButton order={o as AdminOrderRow} />
+        <OdooPushButton order={o as AdminOrderRow} />
         <dl className="grid grid-cols-[120px_1fr] gap-y-1 gap-x-3">
           <Row label="Kind" value={o.skuKind ?? "—"} />
           <Row
@@ -338,9 +341,20 @@ function OrderDetailBody({ detail }: { detail: AdminOrderDetail }) {
                     OD #{o.orderDeskOrderId}
                   </span>
                 )}
+                {o.odooOrderId && (
+                  <span className="text-slate-400 text-xs" data-testid="text-odoo-id">
+                    Odoo #{o.odooOrderId}
+                  </span>
+                )}
               </span>
             }
           />
+          {o.odooOrderId && (
+            <Row
+              label="Odoo synced"
+              value={o.odooLastSyncedAt ? new Date(o.odooLastSyncedAt).toLocaleString() : "—"}
+            />
+          )}
           <Row
             label="Ship to"
             value={
@@ -488,6 +502,59 @@ function FulfillmentRetryButton({ order }: { order: AdminOrderRow }) {
           <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Pushing…</>
         ) : (
           <><RefreshCw className="w-3 h-3 mr-1.5" /> Push to Order Desk</>
+        )}
+      </Button>
+    </div>
+  );
+}
+
+// Task #1976 — deliberate "Push to Odoo" operator action (parallel to the
+// Order Desk retry above; there is no auto-push). Surfaces for physical
+// orders that haven't been handed to Odoo yet. Once an order has an Odoo id
+// the button hides — the poll scheduler owns it from there. Shows the last
+// push error so the operator knows what to fix before retrying.
+function OdooPushButton({ order }: { order: AdminOrderRow }) {
+  const { toast } = useToast();
+  const isPhysical = order.skuKind === "vinyl" || order.skuKind === "cassette" || order.skuKind === "cd" || order.skuKind === "bundle";
+  const canPush = isPhysical && !order.odooOrderId;
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/orders/${order.id}/odoo-push`, {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `Push failed (${res.status})`);
+      }
+      return res.json();
+    },
+    onSuccess: (data: { odooOrderId?: string }) => {
+      toast({ title: "Pushed to Odoo", description: data.odooOrderId ? `Odoo #${data.odooOrderId}` : undefined });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders", order.id] });
+    },
+    onError: (e: any) => {
+      toast({ title: "Push to Odoo failed", description: e?.message ?? "Unknown error", variant: "destructive" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders", order.id] });
+    },
+  });
+
+  if (!canPush) return null;
+
+  return (
+    <div className="mb-3 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2.5 space-y-1.5" data-testid="odoo-push-banner">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => mutation.mutate()}
+        disabled={mutation.isPending}
+        className="border-indigo-400 bg-indigo-100 hover:bg-indigo-200 text-indigo-900"
+        data-testid="button-push-to-odoo"
+      >
+        {mutation.isPending ? (
+          <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Pushing…</>
+        ) : (
+          <><RefreshCw className="w-3 h-3 mr-1.5" /> Push to Odoo</>
         )}
       </Button>
     </div>

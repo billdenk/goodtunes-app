@@ -458,6 +458,18 @@ async function bootstrapAccessGuard() {
     log(`gift scheduler init failed: ${e?.message ?? e}`, "gift-scheduler");
   }
 
+  // Task #1976 — Odoo printer integration. In-process poll scheduler that
+  // pulls production/shipping status out of Odoo and reconciles it onto our
+  // fulfillment_status (Odoo's webhook story is uneven, so we pull instead
+  // of receiving). Arms unconditionally; every tick is a clean no-op while
+  // the ODOO_* credentials are unset.
+  try {
+    const { armOdooPollScheduler } = await import("./odoo");
+    armOdooPollScheduler();
+  } catch (e: any) {
+    log(`odoo poll scheduler init failed: ${e?.message ?? e}`, "odoo-poll");
+  }
+
   // Task #364 — Loud one-line warning at boot when Mux isn't fully
   // configured. The pipeline degrades to "raw audio only" without these
   // keys, so the operator needs to see the gap on the next deploy log

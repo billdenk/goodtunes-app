@@ -4,8 +4,8 @@ import { storage } from "./storage";
 import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
 import { registerPublishingSettlementRoutes, registerPublisherPortalRoutes } from "./publishingSettlementRoutes";
-import { sql, and, eq, or, ilike, isNull, isNotNull, desc, inArray } from "drizzle-orm";
-import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, TERMS_VERSION } from "@shared/schema";
+import { sql, and, eq, ne, or, ilike, isNull, isNotNull, desc, inArray } from "drizzle-orm";
+import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, fulfillmentPartners, TERMS_VERSION } from "@shared/schema";
 import {
   MRP_DOMAIN,
   HELLBENDER_DOMAIN,
@@ -17023,6 +17023,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (b.contactPhone !== undefined) u.contactPhone = strOrNull(b.contactPhone);
     if (b.shippingAddress !== undefined) u.shippingAddress = strOrNull(b.shippingAddress);
     if (b.shippingAddressStruct !== undefined) u.shippingAddressStruct = b.shippingAddressStruct ?? null;
+    // Task #1976 — "the Odoo printer" designation. Single-instance, like
+    // isDefault: when an operator flips one partner on, clear it from every
+    // other live row first so at most one partner is wired to Odoo. This is
+    // operational routing (not fan-facing metadata) so it stays editable
+    // after the first sale.
+    if (b.isOdooPrinter !== undefined) {
+      u.isOdooPrinter = !!b.isOdooPrinter;
+      if (u.isOdooPrinter) {
+        await db
+          .update(fulfillmentPartners)
+          .set({ isOdooPrinter: false })
+          .where(
+            and(
+              eq(fulfillmentPartners.isOdooPrinter, true),
+              ne(fulfillmentPartners.id, String(req.params.id)),
+            ),
+          );
+      }
+    }
     const f = await storage.updateFulfillmentPartner(String(req.params.id), u);
     if (!f) return res.status(404).json({ message: "Fulfillment partner not found" });
     return res.json(f);
@@ -21200,6 +21219,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // the admin order-detail endpoint, partner override, and retry-push.
   const { registerOrderDeskRoutes } = await import("./orderDesk");
   registerOrderDeskRoutes(app);
+
+  // Task #1976 — Odoo printer integration. Deliberate "Push to Odoo"
+  // operator action (parallel to OD's retry-push) + a debug poll flush.
+  // The pull-based status poll scheduler is armed in server/index.ts.
+  const { registerOdooRoutes } = await import("./odoo");
+  registerOdooRoutes(app);
 
   // Task #46 — Gifting flow (claim links, recipient transfer).
   const { registerGiftRoutes } = await import("./gifts");

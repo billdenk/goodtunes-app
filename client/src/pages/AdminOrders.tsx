@@ -87,6 +87,8 @@ export type AdminOrderRow = {
   fulfillmentStatus?: string | null;
   fulfillmentPartnerId?: string | null;
   orderDeskOrderId?: string | null;
+  odooOrderId?: string | null;
+  odooLastSyncedAt?: string | null;
   carrier?: string | null;
   trackingNumber?: string | null;
   trackingUrl?: string | null;
@@ -824,6 +826,25 @@ function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
     onError: (e: any) => toast({ title: "Push failed", description: e?.message, variant: "destructive" }),
   });
 
+  // Task #1976 — deliberate "Push to Odoo" action, parallel to "Push to OD".
+  // No auto-push: an order only reaches Odoo when the operator clicks this.
+  const needsOdooPush = isPhysical && !o.odooOrderId;
+  const odooPush = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/orders/${o.id}/odoo-push`, {});
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `Push failed (${res.status})`);
+      }
+      return res.json();
+    },
+    onSuccess: (data: { odooOrderId?: string }) => {
+      toast({ title: "Pushed to Odoo", description: data.odooOrderId ? `Odoo #${data.odooOrderId}` : undefined });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/orders"] });
+    },
+    onError: (e: any) => toast({ title: "Push to Odoo failed", description: e?.message, variant: "destructive" }),
+  });
+
   return (
     <div className="mt-2 rounded-md bg-slate-50 border border-slate-200 px-2.5 py-2" data-testid={`fulfillment-timeline-${o.id}`}>
       <div className="flex items-center gap-2 text-[11px] flex-wrap">
@@ -832,6 +853,9 @@ function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
         </span>
         {o.orderDeskOrderId && (
           <span className="text-slate-400" data-testid={`text-od-id-${o.id}`}>OD #{o.orderDeskOrderId}</span>
+        )}
+        {o.odooOrderId && (
+          <span className="text-slate-400" data-testid={`text-odoo-id-${o.id}`}>Odoo #{o.odooOrderId}</span>
         )}
         {(o.carrier || o.trackingNumber) && (
           <span className="text-slate-500">
@@ -855,6 +879,18 @@ function FulfillmentTimeline({ order: o }: { order: AdminOrderRow }) {
           >
             {retryPush.isPending ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
             Push to OD
+          </button>
+        )}
+        {needsOdooPush && (
+          <button
+            type="button"
+            onClick={() => odooPush.mutate()}
+            disabled={odooPush.isPending}
+            className={`${needsPush ? "" : "ml-auto "}px-2 py-0.5 rounded-md bg-indigo-500 text-white text-xs font-semibold hover:bg-indigo-600 disabled:opacity-60 inline-flex items-center gap-1`}
+            data-testid={`button-push-odoo-${o.id}`}
+          >
+            {odooPush.isPending ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <RefreshCw className="w-2.5 h-2.5" />}
+            Push to Odoo
           </button>
         )}
       </div>

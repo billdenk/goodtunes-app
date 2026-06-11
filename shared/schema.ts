@@ -2609,6 +2609,13 @@ export const orders = pgTable("orders", {
   // Last OD push error message, cleared on a successful push so the admin
   // retry button can surface "why did this fail?" without opening logs.
   fulfillmentError: text("fulfillment_error"),
+  // Task #1976 — Odoo printer integration. The Odoo `sale.order` id this
+  // order was pushed to (parallel to orderDeskOrderId). Unique → a replayed
+  // push can't double-create. The Odoo poll scheduler keys off this column.
+  odooOrderId: text("odoo_order_id").unique(),
+  // Last time the Odoo poll scheduler successfully read this order's status
+  // back from Odoo. Null until the first poll after a push.
+  odooLastSyncedAt: timestamp("odoo_last_synced_at"),
   // ─── Shipping & handling charged to the fan ────────────────────────
   // Snapshot of what we collected for shipping on this order. We store
   // the fulfillment partner's raw rate (`shipping_base_cents`, e.g.
@@ -3818,6 +3825,13 @@ export const fulfillmentPartners = pgTable("fulfillment_partners", {
   // row (or the first row overall if none are flagged) so the operator can
   // change the default without a code deploy.
   isDefault: boolean("is_default").notNull().default(false),
+  // Task #1976 — when true, this partner is wired to the Odoo instance
+  // (ODOO_URL/ODOO_DB/ODOO_LOGIN/ODOO_API_KEY). The "Push to Odoo" operator
+  // action creates an Odoo sale.order for orders routed here, and the Odoo
+  // poll scheduler pulls production/shipping status back. At most ONE live
+  // row carries this flag (the PUT endpoint clears it from every other row),
+  // mirroring the single-default convention above.
+  isOdooPrinter: boolean("is_odoo_printer").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
   ...softDeleteCols,
 }, (table) => ({

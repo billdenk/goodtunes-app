@@ -293,6 +293,11 @@ export function AdminFulfillmentPartner() {
         {tab === "overview" && (
           <>
             <FpForm initial={f} onSave={(p) => save.mutate(p)} saving={save.isPending} />
+            <OdooPrinterCard
+              partner={f}
+              onToggle={(next) => save.mutate({ isOdooPrinter: next } as Partial<FulfillmentPartner>)}
+              saving={save.isPending}
+            />
             <NotificationsCard partnerKind="fulfillment" partnerId={f.id} partnerName={f.name} />
           </>
         )}
@@ -502,6 +507,59 @@ function FpForm({
         />
       </div>
     </form>
+  );
+}
+
+// Task #1976 — "the Odoo printer" designation. A single-instance toggle
+// (the PUT endpoint clears the flag from every other partner) that wires
+// this fulfillment partner to the Odoo instance: the operator's "Push to
+// Odoo" action routes orders here and the poll scheduler pulls their
+// production/shipping status back. Auto-saves on toggle, mirroring the
+// PressCapabilitiesCard pattern. Operational routing, so it stays editable
+// after the first sale.
+function OdooPrinterCard({
+  partner,
+  onToggle,
+  saving,
+}: {
+  partner: FulfillmentPartner;
+  onToggle: (next: boolean) => void;
+  saving: boolean;
+}) {
+  const on = !!(partner as any).isOdooPrinter;
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-sm font-semibold text-slate-800">Odoo printer</div>
+          <p className="mt-1 text-xs text-slate-500 max-w-md">
+            When on, this partner is the one wired to the Odoo instance. The
+            “Push to Odoo” action on a paid physical order hands it off as an
+            Odoo sale order, and the status poller pulls production and shipping
+            updates back. Only one partner can be the Odoo printer.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          disabled={saving}
+          onClick={() => onToggle(!on)}
+          className={
+            "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-60 " +
+            (on ? "bg-[color:var(--brand-blue)]" : "bg-slate-300")
+          }
+          data-testid="switch-odoo-printer"
+        >
+          <span
+            className={
+              "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform " +
+              (on ? "translate-x-5" : "translate-x-0.5")
+            }
+          />
+        </button>
+      </div>
+    </div>
   );
 }
 
