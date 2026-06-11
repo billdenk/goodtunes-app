@@ -312,7 +312,6 @@ export function Welcome() {
                 <div className="text-[40px] font-bold mt-1 text-[#4AFFCA]" data-testid="text-gooddeed-number">
                   #{data.order!.goodDeedNumber}
                 </div>
-                <div className="text-fan-secondary text-[12px] mt-1">Numbered for life.</div>
               </div>
             );
           }
@@ -325,7 +324,7 @@ export function Welcome() {
                     <span key={n} data-testid={`text-gooddeed-number-${n}`}>#{n}</span>
                   ))}
                 </div>
-                <div className="text-fan-secondary text-[12px] mt-2">Numbered for life. Each copy is its own entitlement.</div>
+                <div className="text-fan-secondary text-xs mt-2">Each copy is its own entitlement.</div>
               </div>
             );
           }
