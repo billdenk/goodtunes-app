@@ -1004,6 +1004,26 @@ export function AddGearPanel({
     );
   };
 
+  // Master "Select all" for the artist's own-catalog Tracks box — flips
+  // every track across ALL releases at once. The per-release Select-all
+  // only toggles a single release, which left no one-tap way to grab the
+  // whole catalog; this sits above the box so "select all tracks" works.
+  const allContextSongIds: string[] = [];
+  for (const a of context) for (const t of a.tracks) allContextSongIds.push(t.songId);
+  const allContextSelected =
+    allContextSongIds.length > 0 && allContextSongIds.every((id) => selectedSongIds.has(id));
+  const toggleAllContext = () => {
+    setSelectedSongIds((prev) => {
+      const next = new Set(prev);
+      if (allContextSelected) {
+        for (const id of allContextSongIds) next.delete(id);
+      } else {
+        for (const id of allContextSongIds) next.add(id);
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-3" data-testid="panel-add-gear">
       <div className="flex items-center justify-between">
@@ -1113,9 +1133,21 @@ export function AddGearPanel({
       </Field>
 
       <div>
-        <span className="block text-slate-400 text-[11px] uppercase tracking-wider mb-1">
-          Tracks ({selectedSongIds.size} selected)
-        </span>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-slate-400 text-[11px] uppercase tracking-wider">
+            Tracks ({selectedSongIds.size} selected)
+          </span>
+          {allContextSongIds.length > 0 && (
+            <button
+              type="button"
+              onClick={toggleAllContext}
+              className="text-[11px] text-[var(--brand-blue)] hover:underline"
+              data-testid="button-toggle-all-tracks"
+            >
+              {allContextSelected ? "Clear all" : `Select all ${allContextSongIds.length} tracks`}
+            </button>
+          )}
+        </div>
         {context.length === 0 ? (
           <p className="text-slate-400 text-[12px] py-2">
             No tracks from {personName}'s own catalog yet — search all releases below to credit gear on any track.

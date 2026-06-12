@@ -10302,6 +10302,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PersonGearManager.tsx",
+    "snippet": "<span className=\"text-slate-400 text-[11px] uppercase tracking-wider\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PersonGearManager.tsx",
     "snippet": "<p className=\"text-slate-400 text-[12px] py-2\">"
   },
   {
