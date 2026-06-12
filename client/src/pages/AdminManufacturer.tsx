@@ -1016,12 +1016,16 @@ type CatalogFormat = {
   format: AlbumFormat;
   position: number;
   tiers: CatalogTier[];
+  // Task #1998 — format-specific default jacket resolved by the server.
+  defaultJacketId: string | null;
 };
 type CatalogJacket = {
   id: string;
   name: string;
   position: number;
   isDefault: boolean;
+  // Task #1998 — null = applies to all formats (back-compat).
+  applicableFormats: string[] | null;
 };
 type Catalog = {
   formats: CatalogFormat[];
@@ -2163,7 +2167,8 @@ function PressCatalogPanel({ pressId, pressDomain }: { pressId: string; pressDom
                     formatLabel={ALBUM_FORMAT_LABEL[fmt]}
                     tiers={fmtRow.tiers}
                     jackets={data.jackets}
-                    defaultJacketId={data.defaultJacketId}
+                    allFormats={Array.from(offered) as AlbumFormat[]}
+                    defaultJacketId={fmtRow.defaultJacketId ?? data.defaultJacketId}
                     onChanged={invalidate}
                     onRemoveFormat={() => toggleFormat.mutate({ format: fmt, enabled: false })}
                     removeBusy={toggleFormat.isPending}
@@ -2237,6 +2242,7 @@ function CatalogFormatBody({
   formatLabel,
   tiers,
   jackets,
+  allFormats,
   defaultJacketId,
   onChanged,
   onRemoveFormat,
@@ -2247,11 +2253,17 @@ function CatalogFormatBody({
   formatLabel: string;
   tiers: CatalogTier[];
   jackets: CatalogJacket[];
+  // Task #1998 — all formats this press has configured, for "Available for" picker.
+  allFormats: AlbumFormat[];
   defaultJacketId: string | null;
   onChanged: () => void;
   onRemoveFormat: () => void;
   removeBusy: boolean;
 }) {
+  // Task #1998 — filter to jackets that apply to this format (null = all).
+  const applicableJackets = jackets.filter(
+    (j) => !j.applicableFormats || j.applicableFormats.includes(fmt),
+  );
   const { toast } = useToast();
   // Read-only by default; the pencil in the format header flips the
   // whole card (tier · jacket · swatches · ladder) into edit mode,
@@ -2300,17 +2312,19 @@ function CatalogFormatBody({
       setSelectedTierId(tiers[0].id);
     }
   }, [tiers, selectedTierId]);
+  // Task #1998 — validate selectedJacketId against the format-filtered list.
   useEffect(() => {
-    if (jackets.length === 0) {
+    if (applicableJackets.length === 0) {
       if (selectedJacketId !== null) setSelectedJacketId(null);
       return;
     }
-    if (!jackets.some((j) => j.id === selectedJacketId)) {
-      setSelectedJacketId(defaultJacketId ?? jackets[0].id);
+    if (!applicableJackets.some((j) => j.id === selectedJacketId)) {
+      setSelectedJacketId(defaultJacketId ?? applicableJackets[0].id);
     }
-  }, [jackets, selectedJacketId, defaultJacketId]);
+  }, [applicableJackets, selectedJacketId, defaultJacketId]);
 
   const selectedTier = tiers.find((t) => t.id === selectedTierId) ?? null;
+  // selectedJacket reads from full list so applicableFormats is accessible.
   const selectedJacket = jackets.find((j) => j.id === selectedJacketId) ?? null;
   const comboKey = selectedTier && selectedJacket ? `${selectedTier.id}:${selectedJacket.id}` : null;
   const savedLadder = comboKey && selectedTier ? selectedTier.laddersByJacket[selectedJacket!.id] ?? [] : [];
@@ -2476,7 +2490,7 @@ function CatalogFormatBody({
     onError: (e: any) => toast({ title: "Couldn't add jacket", description: e?.message, variant: "destructive" }),
   });
   const updateJacket = useMutation({
-    mutationFn: async (args: { id: string; patch: { name?: string; isDefault?: boolean } }) => {
+    mutationFn: async (args: { id: string; patch: { name?: string; isDefault?: boolean; applicableFormats?: string[] | null } }) => {
       const r = await apiRequest("PATCH", `/api/admin/manufacturers/${pressId}/catalog/jackets/${args.id}`, args.patch);
       return r.json();
     },
@@ -2709,7 +2723,7 @@ function CatalogFormatBody({
         </div>
       )}
 
-      {/* Jacket dropdown row */}
+      {/* Jacket dropdown row — Task #1998: filtered to applicable jackets */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Jacket</span>
         {editing ? (
@@ -2717,22 +2731,22 @@ function CatalogFormatBody({
             value={selectedJacketId ?? ""}
             onChange={(e) => setSelectedJacketId(e.target.value || null)}
             className={INPUT + " w-auto min-w-[16rem]"}
-            disabled={jackets.length === 0}
+            disabled={applicableJackets.length === 0}
             data-testid={`select-jacket-${fmt}`}
           >
-            {jackets.length === 0 && <option value="">— No jackets —</option>}
-            {jackets.map((j) => (
+            {applicableJackets.length === 0 && <option value="">— No jackets —</option>}
+            {applicableJackets.map((j) => (
               <option key={j.id} value={j.id}>
                 {j.name}
                 {j.isDefault ? " (default)" : ""}
               </option>
             ))}
           </select>
-        ) : jackets.length === 0 ? (
+        ) : applicableJackets.length === 0 ? (
           <span className="text-xs text-slate-400">— No jackets —</span>
         ) : (
           <div className="flex flex-wrap items-center gap-1.5">
-            {jackets.map((j) => (
+            {applicableJackets.map((j) => (
               <button
                 key={j.id}
                 type="button"
@@ -2762,7 +2776,7 @@ function CatalogFormatBody({
             Set as default
           </button>
         )}
-        {editing && selectedJacket && jackets.length > 1 && (
+        {editing && selectedJacket && applicableJackets.length > 1 && (
           <DeleteJacketButton
             jacket={selectedJacket}
             onConfirm={() => deleteJacket.mutate(selectedJacket.id)}
@@ -2818,6 +2832,57 @@ function CatalogFormatBody({
             </div>
           ))}
       </div>
+
+      {/* Task #1998 — "Available for" format scope row (edit mode only).
+          Shows which of this press's formats the selected jacket applies to.
+          Toggling a format updates applicable_formats on the jacket row so
+          other format panels immediately hide/show it accordingly. */}
+      {editing && selectedJacket && allFormats.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 pt-0.5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 shrink-0">
+            Available for
+          </span>
+          {allFormats.map((f) => {
+            const checked =
+              !selectedJacket.applicableFormats || selectedJacket.applicableFormats.includes(f);
+            // Prevent unchecking the only remaining applicable format.
+            const checkedCount = selectedJacket.applicableFormats
+              ? selectedJacket.applicableFormats.length
+              : allFormats.length;
+            const isLast = checked && checkedCount === 1;
+            return (
+              <button
+                key={f}
+                type="button"
+                disabled={isLast || updateJacket.isPending}
+                onClick={() => {
+                  const curFormats: string[] =
+                    selectedJacket.applicableFormats ?? allFormats;
+                  let next: string[] | null;
+                  if (checked) {
+                    const filtered = curFormats.filter((x) => x !== f);
+                    next = filtered.length === allFormats.length ? null : filtered;
+                  } else {
+                    const added = [...curFormats, f];
+                    next = added.length === allFormats.length ? null : added;
+                  }
+                  updateJacket.mutate({ id: selectedJacket.id, patch: { applicableFormats: next } });
+                }}
+                className={[
+                  "px-2 h-6 rounded text-xs font-medium transition-colors border",
+                  checked
+                    ? "bg-[color:var(--brand-blue-soft)] text-[color:var(--brand-blue)] border-[color:var(--brand-blue-soft)]"
+                    : "text-slate-400 border-slate-200 hover:border-slate-300",
+                  isLast ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+                ].join(" ")}
+                data-testid={`toggle-jacket-format-${selectedJacket.id}-${f}`}
+              >
+                {ALBUM_FORMAT_LABEL[f]}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Quantity ladder table */}
       {selectedTier && selectedJacket && (

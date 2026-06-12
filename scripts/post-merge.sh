@@ -6829,4 +6829,85 @@ SQL
 backfill_gear_role_normalization dev  "${DATABASE_URL:-}"
 backfill_gear_role_normalization prod "${PROD_DATABASE_URL:-}"
 
+# Task #1998 — format-aware jackets: add applicable_formats column to
+# press_jackets (NULL = applies to all formats, back-compat default).
+migrate_press_jacket_applicable_formats() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press_jackets.applicable_formats migration on $label (no URL)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+ALTER TABLE press_jackets
+  ADD COLUMN IF NOT EXISTS applicable_formats jsonb;
+SQL
+  ); then
+    echo "post-merge: press_jackets.applicable_formats migration ok on $label"
+  else
+    echo "post-merge: WARNING — press_jackets.applicable_formats migration failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+migrate_press_jacket_applicable_formats dev  "${DATABASE_URL:-}"
+migrate_press_jacket_applicable_formats prod "${PROD_DATABASE_URL:-}"
+
+# Task #1998 — one-time backfill: set applicable_formats from jacket name
+# using the smart-default rule (gatefold→12s only, wide-spine→2LP only).
+# Marker-guarded so operator edits are never clobbered on re-run.
+backfill_press_jacket_applicable_formats() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press_jacket applicable_formats backfill on $label (no URL)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'press_jacket_applicable_formats_v1'
+  ) THEN
+    -- Gatefolds apply to 12" formats only (not 7" — no gatefold 7" sleeve).
+    -- Exclude negated names like "Records…(No Gatefold)" or "…without gatefold".
+    UPDATE press_jackets
+       SET applicable_formats = '["12_lp","12_double"]'::jsonb
+     WHERE lower(name) LIKE '%gatefold%'
+       AND lower(name) NOT LIKE '%no gatefold%'
+       AND lower(name) NOT LIKE '%without gatefold%'
+       AND applicable_formats IS NULL;
+
+    -- Wide-spine is a 2LP-only physical product.
+    UPDATE press_jackets
+       SET applicable_formats = '["12_double"]'::jsonb
+     WHERE (
+           lower(name) LIKE '%widespine%'
+        OR lower(name) LIKE '%wide-spine%'
+        OR lower(name) LIKE '%wide spine%'
+     )
+       AND applicable_formats IS NULL;
+
+    -- Standard jackets keep NULL (applies to all formats).
+
+    INSERT INTO post_merge_data_backfills (name)
+    VALUES ('press_jacket_applicable_formats_v1');
+
+    RAISE NOTICE 'task-1998 press_jacket applicable_formats backfill applied';
+  ELSE
+    RAISE NOTICE 'task-1998 press_jacket applicable_formats backfill already applied — skipping';
+  END IF;
+END
+$$;
+SQL
+  ); then
+    echo "post-merge: press_jacket applicable_formats backfill ok on $label"
+    echo "$out" | grep -i 'task-1998' || true
+  else
+    echo "post-merge: WARNING — press_jacket applicable_formats backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_press_jacket_applicable_formats dev  "${DATABASE_URL:-}"
+backfill_press_jacket_applicable_formats prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror

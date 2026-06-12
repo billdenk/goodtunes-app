@@ -2280,6 +2280,10 @@ export const pressJackets = pgTable(
     name: text("name").notNull(),
     position: integer("position").notNull().default(0),
     isDefault: boolean("is_default").notNull().default(false),
+    // Task #1998 — format-aware jackets. null = applies to all formats
+    // (back-compat default). A non-null array lists the AlbumFormat keys
+    // this jacket is valid for; admin UI filters jacket pickers per-format.
+    applicableFormats: jsonb("applicable_formats").$type<string[]>(),
   },
   (t) => ({
     pressJacketNameUniq: unique("press_jackets_press_name_uniq").on(t.pressId, t.name),

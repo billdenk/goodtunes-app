@@ -107,12 +107,17 @@ export type CatalogFormat = {
   format: AlbumFormat;
   position: number;
   tiers: CatalogTier[];
+  // Task #1998 — the jacket that is the default for this specific format
+  // (i.e. the first applicable jacket with isDefault, else first applicable).
+  defaultJacketId: string | null;
 };
 export type CatalogJacket = {
   id: string;
   name: string;
   position: number;
   isDefault: boolean;
+  // Task #1998 — null = applies to all formats (back-compat).
+  applicableFormats: string[] | null;
 };
 export type Catalog = {
   formats: CatalogFormat[];
@@ -121,6 +126,42 @@ export type Catalog = {
 };
 
 // ─── Storage helpers ─────────────────────────────────────────────────
+
+// Task #1998 — smart default: derive applicable formats from a jacket
+// name so freshly-created jackets and newly-seeded presses get sensible
+// scoping without operator intervention. null = applies to all formats.
+export function getJacketDefaultFormats(name: string): AlbumFormat[] | null {
+  const n = name.toLowerCase();
+  // Wide-spine is a 2LP-only physical product.
+  if (n.includes("widespine") || n.includes("wide-spine") || n.includes("wide spine")) {
+    return ["12_double"];
+  }
+  // Gatefolds (any pocket count / tip-on variant) don't fit a 7" sleeve.
+  // Exclude negated names like "Records…(No Gatefold)" or "…without gatefold".
+  if (
+    n.includes("gatefold") &&
+    !n.includes("no gatefold") &&
+    !n.includes("without gatefold") &&
+    !n.includes("(no gatefold")
+  ) {
+    return ["12_lp", "12_double"];
+  }
+  return null;
+}
+
+// Task #1998 — resolve the default jacket for a specific format from
+// the press's jacket list. Prefers the isDefault jacket if it applies
+// to that format; otherwise falls back to the lowest-position applicable
+// jacket. Returns null only when no jacket applies (empty press).
+function getFormatDefaultJacketId(
+  jRows: { id: string; isDefault: boolean; applicableFormats: string[] | null }[],
+  format: string,
+): string | null {
+  const applicable = jRows.filter(
+    (j) => !j.applicableFormats || j.applicableFormats.includes(format),
+  );
+  return (applicable.find((j) => j.isDefault) ?? applicable[0])?.id ?? null;
+}
 
 export async function getPressCatalog(pressId: string): Promise<Catalog> {
   const [fRows, jRows, tRows] = await Promise.all([
@@ -181,8 +222,11 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
   for (const t of tRows) {
     const arr = tiersByFormat.get(t.format) ?? [];
     const ladders = laddersByTier.get(t.id) ?? {};
+    // Task #1998 — use the format-specific default jacket for the back-compat
+    // priceLadder field so a 7" tier's priceLadder never comes from a gatefold.
+    const fmtDefaultJacketId = getFormatDefaultJacketId(jRows, t.format);
     const defaultLadder =
-      (defaultJacketId && ladders[defaultJacketId]) ||
+      (fmtDefaultJacketId && ladders[fmtDefaultJacketId]) ||
       // Fallback to the legacy tier-level ladder so a press that
       // hasn't been rehomed yet still answers /invited-press.
       ((t.priceLadder ?? []) as { qty: number; unitCents: number }[]);
@@ -201,12 +245,14 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
       format: f.format as AlbumFormat,
       position: f.position,
       tiers: tiersByFormat.get(f.format) ?? [],
+      defaultJacketId: getFormatDefaultJacketId(jRows, f.format),
     })),
     jackets: jRows.map((j) => ({
       id: j.id,
       name: j.name,
       position: j.position,
       isDefault: j.isDefault,
+      applicableFormats: (j.applicableFormats as string[] | null) ?? null,
     })),
     defaultJacketId,
   };
@@ -302,14 +348,20 @@ export async function lookupCatalogUnitCents(args: {
     );
   if (!tier) return null;
 
-  // Resolve jacket: explicit > press default > legacy tier ladder.
+  // Task #1998 — resolve jacket: explicit > format-aware press default >
+  // legacy tier ladder. Use the first jacket applicable to this format
+  // (preferring isDefault) so a 7" never resolves to a gatefold-only jacket.
   let jacketId = args.jacketId ?? null;
   if (!jacketId) {
-    const [defJacket] = await db
+    const jRows = await db
       .select()
       .from(pressJackets)
-      .where(and(eq(pressJackets.pressId, args.pressId), eq(pressJackets.isDefault, true)));
-    jacketId = defJacket?.id ?? null;
+      .where(eq(pressJackets.pressId, args.pressId))
+      .orderBy(asc(pressJackets.position));
+    jacketId = getFormatDefaultJacketId(
+      jRows.map((j) => ({ id: j.id, isDefault: j.isDefault, applicableFormats: (j.applicableFormats as string[] | null) ?? null })),
+      args.format,
+    );
   }
   let ladder: { qty: number; unitCents: number }[] = [];
   if (jacketId) {
@@ -415,7 +467,9 @@ async function ensureJacket(
   pressId: string,
   name: string,
   position: number,
-  opts: { isDefault?: boolean } = {},
+  // Task #1998 — added applicableFormats so seed functions can scope jackets
+  // on INSERT. Only written at creation time; never overwrites operator edits.
+  opts: { isDefault?: boolean; applicableFormats?: string[] | null } = {},
 ) {
   let [j] = await db
     .select()
@@ -424,7 +478,13 @@ async function ensureJacket(
   if (!j) {
     [j] = await db
       .insert(pressJackets)
-      .values({ pressId, name, position, isDefault: opts.isDefault ?? false })
+      .values({
+        pressId,
+        name,
+        position,
+        isDefault: opts.isDefault ?? false,
+        ...(opts.applicableFormats !== undefined ? { applicableFormats: opts.applicableFormats as any } : {}),
+      })
       .returning();
   }
   if (opts.isDefault && !j.isDefault) {
@@ -1077,14 +1137,16 @@ const HELLBENDER_SITE_LADDERS: Record<
 };
 
 // Task #631 — additional Hellbender jacket SKUs published on their
-// templates page. Wide-spine is 2×LP-only; the two gatefolds apply to
-// every format Hellbender presses (7"/1LP/2LP).
+// templates page. Wide-spine is 2×LP-only; gatefolds apply to 12"
+// formats only (not 7"). `formats` drives pricing-combo seeding;
+// `applicableFormats` (Task #1998) drives admin-UI visibility — kept
+// in sync by getJacketDefaultFormats so they always agree.
 const HELLBENDER_EXTRA_JACKETS: ReadonlyArray<{
   name: string;
   formats: AlbumFormat[];
 }> = [
-  { name: "Gatefold Jacket (1 pocket)", formats: ["7_inch", "12_lp", "12_double"] },
-  { name: "Gatefold Jacket (2 pocket)", formats: ["7_inch", "12_lp", "12_double"] },
+  { name: "Gatefold Jacket (1 pocket)", formats: ["12_lp", "12_double"] },
+  { name: "Gatefold Jacket (2 pocket)", formats: ["12_lp", "12_double"] },
   { name: "Single Pocket Wide-Spine Jacket", formats: ["12_double"] },
 ];
 
@@ -1124,7 +1186,9 @@ export async function seedHellbenderCatalog() {
     const extraJackets: Record<string, { id: string; formats: AlbumFormat[] }> = {};
     for (let i = 0; i < HELLBENDER_EXTRA_JACKETS.length; i++) {
       const spec = HELLBENDER_EXTRA_JACKETS[i];
-      const j = await ensureJacket(press.id, spec.name, i + 1);
+      const j = await ensureJacket(press.id, spec.name, i + 1, {
+        applicableFormats: getJacketDefaultFormats(spec.name),
+      });
       extraJackets[spec.name] = { id: j.id, formats: spec.formats };
     }
 
@@ -1661,7 +1725,9 @@ export async function seedMrpCatalog() {
     const extraJacketRows: Record<string, { id: string; formats: AlbumFormat[] }> = {};
     for (let i = 0; i < MRP_EXTRA_JACKETS.length; i++) {
       const spec = MRP_EXTRA_JACKETS[i];
-      const j = await ensureJacket(press.id, spec.name, i + 1);
+      const j = await ensureJacket(press.id, spec.name, i + 1, {
+        applicableFormats: getJacketDefaultFormats(spec.name),
+      });
       extraJacketRows[spec.name] = { id: j.id, formats: spec.formats };
     }
 
@@ -2057,6 +2123,8 @@ const jacketBodySchema = z.object({
   name: z.string().min(1).max(80),
   position: z.number().int().min(0).optional(),
   isDefault: z.boolean().optional(),
+  // Task #1998 — null = applies to all formats.
+  applicableFormats: z.array(z.string()).nullable().optional(),
 });
 const ladderBodySchema = z.object({
   priceLadder: z.array(
@@ -2235,9 +2303,24 @@ export function registerPressCatalogRoutes(
     if (isDefault && siblings.some((j) => j.isDefault)) {
       await db.update(pressJackets).set({ isDefault: false }).where(eq(pressJackets.pressId, pressId));
     }
+    // Task #1998 — auto-fill applicable_formats from the name when the
+    // client doesn't send an explicit value. The smart-default rule
+    // (gatefold→12s, wide-spine→2LP, otherwise null=all) keeps new
+    // jackets sensibly scoped without any operator action.
+    const trimmedName = parsed.data.name.trim();
+    const autoFormats =
+      parsed.data.applicableFormats !== undefined
+        ? parsed.data.applicableFormats
+        : getJacketDefaultFormats(trimmedName);
     const [row] = await db
       .insert(pressJackets)
-      .values({ pressId, name: parsed.data.name.trim(), position, isDefault })
+      .values({
+        pressId,
+        name: trimmedName,
+        position,
+        isDefault,
+        ...(autoFormats !== null ? { applicableFormats: autoFormats as any } : {}),
+      })
       .returning();
     res.json(row);
   });
@@ -2256,6 +2339,11 @@ export function registerPressCatalogRoutes(
     if (parsed.data.name !== undefined) patch.name = parsed.data.name.trim();
     if (parsed.data.position !== undefined) patch.position = parsed.data.position;
     if (parsed.data.isDefault !== undefined) patch.isDefault = parsed.data.isDefault;
+    // Task #1998 — allow the operator to override applicable formats.
+    // Passing `null` means "all formats" (back-compat default).
+    if ("applicableFormats" in parsed.data) {
+      patch.applicableFormats = parsed.data.applicableFormats ?? null;
+    }
     if (Object.keys(patch).length === 0) return res.json(existing);
     const [row] = await db.update(pressJackets).set(patch).where(eq(pressJackets.id, jacketId)).returning();
     res.json(row);
