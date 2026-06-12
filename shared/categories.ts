@@ -64,6 +64,43 @@ export const ACCESSORY_TYPES_BY_CATEGORY: Record<ShortCategory, string[]> = {
 // unknown one. Keeps the builder usable for any gear.
 export const ACCESSORY_TYPES_GENERIC = ["Strings", "Accessory", "Setting", "Other"];
 
+/**
+ * Task #1983 — Common performance roles for the admin "Add gear" panel.
+ *
+ * "Role on these tracks" used to be a free-text box, so operators mistyped or
+ * wrote the same role inconsistently ("Guitar" vs "guitars" vs "Gtr"). This is
+ * the curated, mostly-fixed vocabulary the panel surfaces as one-tap pills.
+ *
+ * It deliberately includes every musical `SHORT_CATEGORIES` value (so picking
+ * an instrument can pre-select its short-category pill) plus the common
+ * vocal/production roles implied by the old "Guitar / Bass / Lead vocals…"
+ * placeholder. The gear-only short categories (Amp / Pedal / Mic) are left out
+ * — they're equipment, not performance roles.
+ *
+ * Like `ACCESSORY_TYPES_*`, this is a convenience list only: the chosen value
+ * is stored as free text on the performer row, so the data survives any edit to
+ * this list and a "Custom…" escape hatch keeps off-list roles possible. If the
+ * vocabulary later grows long, switch the picker to a type-ahead combobox.
+ */
+export const GEAR_ROLES = [
+  "Guitar",
+  "Bass",
+  "Keys",
+  "Drums",
+  "Percussion",
+  "Strings",
+  "Violin",
+  "Viola",
+  "Cello",
+  "Brass",
+  "Woodwind",
+  "Lead vocals",
+  "Backing vocals",
+  "Production",
+] as const;
+
+export type GearRole = (typeof GEAR_ROLES)[number];
+
 export function accessoryTypesFor(
   shortCategory: string | null | undefined,
 ): string[] {

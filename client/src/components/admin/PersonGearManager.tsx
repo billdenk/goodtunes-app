@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { X as XIcon, Plus as PlusIcon } from "lucide-react";
-import { accessoryTypesFor } from "@shared/categories";
+import { accessoryTypesFor, GEAR_ROLES } from "@shared/categories";
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
@@ -778,6 +778,12 @@ export function AddGearPanel({
   const [selectedInstrument, setSelectedInstrument] = useState<AdminInstrument | null>(null);
   const [selectedSongIds, setSelectedSongIds] = useState<Set<string>>(new Set());
   const [role, setRole] = useState("");
+  // Task #1983 — "Role on these tracks" is a single-select pill group drawn
+  // from the canonical GEAR_ROLES list, with a "Custom…" escape hatch that
+  // reveals a free-text input for off-list roles. `customMode` forces the
+  // custom input open even before anything is typed (so the empty-input case
+  // works); a non-empty role that isn't in GEAR_ROLES also reads as custom.
+  const [customMode, setCustomMode] = useState(false);
   const [tuningNotes, setTuningNotes] = useState("");
   const [saving, setSaving] = useState(false);
   // Task #1667 — additive search across ALL GoodTunes-release tracks so
@@ -822,7 +828,11 @@ export function AddGearPanel({
   // canSave already requires a non-empty role so nothing saves blank.
   useEffect(() => {
     if (selectedInstrument && !role) {
-      setRole(selectedInstrument.shortCategory || "");
+      const pre = selectedInstrument.shortCategory || "";
+      setRole(pre);
+      // A known short-category pre-selects its pill; an off-list value
+      // (e.g. Amp/Pedal/Mic) reads as custom on its own, no flag needed.
+      if ((GEAR_ROLES as readonly string[]).includes(pre)) setCustomMode(false);
     }
   }, [selectedInstrument?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1023,14 +1033,73 @@ export function AddGearPanel({
         />
       </Field>
 
-      <Field label="Role on these tracks">
-        <input
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-          placeholder="Guitar / Bass / Lead vocals…"
-          className={inputCls}
-          data-testid="input-add-gear-role"
-        />
+      <Field label="Role on these tracks" as="div">
+        {(() => {
+          // The custom input is shown when "Custom…" is tapped OR when the
+          // current role is a non-empty value that isn't one of the pills
+          // (e.g. an instrument pre-fill from an off-list short category).
+          const roleIsKnown = (GEAR_ROLES as readonly string[]).includes(role);
+          const customActive = customMode || (!!role && !roleIsKnown);
+          return (
+            <>
+              <div className="flex flex-wrap gap-1.5">
+                {GEAR_ROLES.map((r) => {
+                  const selected = !customActive && role === r;
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => {
+                        setRole(r);
+                        setCustomMode(false);
+                      }}
+                      aria-pressed={selected}
+                      className={[
+                        "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                        selected
+                          ? "bg-slate-900 text-white ring-1 ring-slate-900"
+                          : "bg-white text-slate-600 ring-1 ring-slate-200 hover:text-slate-900 hover:ring-slate-300",
+                      ].join(" ")}
+                      data-testid={`button-role-pill-${r.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      {r}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomMode(true);
+                    // Drop a known pill value so the custom input starts empty
+                    // for a genuinely off-list role; keep an existing custom
+                    // value so re-opening doesn't wipe what was typed.
+                    if (roleIsKnown) setRole("");
+                  }}
+                  aria-pressed={customActive}
+                  className={[
+                    "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                    customActive
+                      ? "bg-slate-900 text-white ring-1 ring-slate-900"
+                      : "bg-white text-slate-600 ring-1 ring-slate-200 hover:text-slate-900 hover:ring-slate-300",
+                  ].join(" ")}
+                  data-testid="button-role-pill-custom"
+                >
+                  Custom…
+                </button>
+              </div>
+              {customActive && (
+                <input
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  placeholder="Type a role…"
+                  className={`${inputCls} mt-2`}
+                  data-testid="input-add-gear-role"
+                  autoFocus
+                />
+              )}
+            </>
+          );
+        })()}
       </Field>
 
       <Field label="Tuning / setup notes (optional)">
