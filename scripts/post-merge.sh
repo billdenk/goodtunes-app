@@ -6702,4 +6702,103 @@ SQL
 migrate_gifting_hub_columns dev  "${DATABASE_URL:-}"
 migrate_gifting_hub_columns prod "${PROD_DATABASE_URL:-}"
 
+# Task #1984 — Normalize legacy gear-credit role text. Before the Add-gear
+# panel got its canonical pill picker (Task #1983), "Role on these tracks"
+# was free text, so existing track_performers.role values are inconsistent
+# ("guitars", "Gtr", "lead vox", …). This one-time pass maps those onto the
+# canonical GEAR_ROLES vocabulary where there's an UNAMBIGUOUS match
+# (case-insensitive exact + a curated synonym table). Genuinely off-list or
+# compound roles ("Composer · Violin", custom escape-hatch values) don't
+# match any synonym key, so they're left untouched. Marker-guarded
+# (post_merge_data_backfills / gear_role_normalization_v1) so a later
+# operator re-type isn't clobbered on the next merge; the WHERE clause only
+# rewrites rows that actually differ, so it's also naturally idempotent.
+backfill_gear_role_normalization() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping gear-role normalization on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'gear_role_normalization_v1'
+  ) THEN
+    WITH synonyms(src, canonical) AS (VALUES
+      -- Guitar
+      ('guitar','Guitar'),('guitars','Guitar'),('gtr','Guitar'),('gtrs','Guitar'),
+      ('electric guitar','Guitar'),('acoustic guitar','Guitar'),
+      ('rhythm guitar','Guitar'),('lead guitar','Guitar'),
+      -- Bass
+      ('bass','Bass'),('basses','Bass'),('bass guitar','Bass'),('electric bass','Bass'),
+      -- Keys
+      ('keys','Keys'),('key','Keys'),('keyboard','Keys'),('keyboards','Keys'),
+      ('piano','Keys'),('pianos','Keys'),
+      -- Drums
+      ('drum','Drums'),('drums','Drums'),('drum kit','Drums'),('drumkit','Drums'),
+      ('drum set','Drums'),
+      -- Percussion
+      ('percussion','Percussion'),('percussions','Percussion'),('perc','Percussion'),
+      -- Strings
+      ('strings','Strings'),('string','Strings'),
+      -- Violin
+      ('violin','Violin'),('violins','Violin'),('fiddle','Violin'),
+      -- Viola
+      ('viola','Viola'),('violas','Viola'),
+      -- Cello
+      ('cello','Cello'),('cellos','Cello'),('violoncello','Cello'),
+      -- Brass
+      ('brass','Brass'),
+      -- Woodwind
+      ('woodwind','Woodwind'),('woodwinds','Woodwind'),('wood wind','Woodwind'),
+      -- Lead vocals
+      ('lead vocals','Lead vocals'),('lead vocal','Lead vocals'),('lead vox','Lead vocals'),
+      ('lead voc','Lead vocals'),('vocals','Lead vocals'),('vocal','Lead vocals'),
+      ('vox','Lead vocals'),('voice','Lead vocals'),
+      -- Backing vocals
+      ('backing vocals','Backing vocals'),('backing vocal','Backing vocals'),
+      ('background vocals','Backing vocals'),('background vocal','Backing vocals'),
+      ('backup vocals','Backing vocals'),('harmony vocals','Backing vocals'),
+      ('bgv','Backing vocals'),('bgvs','Backing vocals'),('bvs','Backing vocals'),
+      -- Production
+      ('production','Production'),('producer','Production'),
+      ('produced by','Production'),('produced','Production')
+    )
+    UPDATE track_performers tp
+       SET role = s.canonical
+      FROM synonyms s
+     WHERE lower(btrim(tp.role)) = s.src
+       AND tp.role <> s.canonical;
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+
+    INSERT INTO post_merge_data_backfills (name) VALUES ('gear_role_normalization_v1');
+
+    RAISE NOTICE 'task-1984 gear-role normalization applied: % rows rewritten', v_count;
+  ELSE
+    RAISE NOTICE 'task-1984 gear-role normalization already applied — skipping';
+  END IF;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: gear-role normalization ok on $label"
+    echo "$out" | grep -i 'task-1984' || true
+  else
+    echo "post-merge: WARNING — gear-role normalization failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_gear_role_normalization dev  "${DATABASE_URL:-}"
+backfill_gear_role_normalization prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror
