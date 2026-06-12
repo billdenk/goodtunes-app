@@ -33,7 +33,7 @@ function absoluteUrl(base: string, raw: string | null | undefined): string | nul
   return `${base}/${s}`;
 }
 
-const DEFAULT_IMAGE_PATH = "/goodtunes-logo-color.png";
+const DEFAULT_IMAGE_PATH = "/og-card.png";
 
 type OgInput = {
   title: string;
