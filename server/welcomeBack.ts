@@ -59,6 +59,126 @@ function hashToken(raw: string): string {
   return createHash("sha256").update(raw).digest("hex");
 }
 
+// ─── shared account-merge core ─────────────────────────────────────
+//
+// One human, one account. When a fan ends up with two customer_users
+// rows (the classic case: a legacy fan re-auths via Sign in with Apple
+// after a forced update and lands on a fresh, empty OAuth row while
+// their library lives on the original row), we fold the *losing* row
+// into the *surviving* one: reparent owned albums / orders / playlists,
+// soft-delete the loser via `mergedIntoId`, revoke its tokens, and write
+// a `customer_merges` audit row so the admin undo can reverse exactly
+// the rows that moved.
+//
+// This is the single transaction shared by BOTH merge entry points —
+// the fan-facing "These two accounts are me" confirm and the admin
+// "Combine accounts" tool — so the two paths run byte-identical
+// reparenting + audit, and `POST /api/admin/customers/:id/merges/:id/undo`
+// reverses either the same way.
+//
+// IMPORTANT: this helper does NOT move `customer_identities` (OAuth
+// links). The admin undo has no concept of identities, so moving them
+// would break the undo invariant. The contract instead is that the
+// SURVIVING row must be the one holding the OAuth identity the fan
+// actually signs in with — the admin tool enforces/recommends that.
+export class AccountMergeError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "AccountMergeError";
+    this.status = status;
+  }
+}
+
+export async function performAccountMerge(opts: {
+  survivingId: string;
+  losingId: string;
+  triggeredBy: string;
+}): Promise<{ albums: number; orders: number; playlists: number }> {
+  const { survivingId, losingId, triggeredBy } = opts;
+  // Wrapped in a transaction so a uniqueness collision on user_albums
+  // can't leave us half-merged.
+  return await db.transaction(async (tx) => {
+    // Atomic claim — soft-delete the losing row FIRST, conditioned on it
+    // not already being merged. The mergedIntoId pointer is what
+    // requireAuth/requireCustomer consult to refuse a sign-in even if a
+    // stale session cookie or bearer token is still floating around. Doing
+    // it first also makes it the race guard: the fan path consumes a
+    // single-use token before calling us, but the admin path has no token,
+    // so two parallel "Combine" clicks would otherwise both run. 0 rows
+    // back → someone already claimed it; bail and roll the tx back.
+    const claimed = await tx
+      .update(customerUsers)
+      .set({ mergedIntoId: survivingId })
+      .where(and(eq(customerUsers.id, losingId), isNull(customerUsers.mergedIntoId)))
+      .returning({ id: customerUsers.id, email: customerUsers.email });
+    if (claimed.length === 0) {
+      throw new AccountMergeError("That account was already merged", 409);
+    }
+    const losingEmail = claimed[0].email;
+
+    // user_albums has a UNIQUE(user_id, album_id) — if the surviving
+    // account already owns the same album, we can't reparent the losing
+    // row (would violate the index). Skip those collisions: surviving
+    // keeps the album, the losing row stays put and is dropped together
+    // with the soft-deleted losing customer. (Acquired-at on the surviving
+    // row is preserved, which is the semantically right answer — fan's
+    // earliest acquisition wins.)
+    const survivingAlbums = await tx
+      .select({ albumId: userAlbums.albumId })
+      .from(userAlbums)
+      .where(eq(userAlbums.userId, survivingId));
+    const survivingAlbumIds = new Set(survivingAlbums.map((r) => r.albumId));
+    const losingAlbums = await tx
+      .select({ id: userAlbums.id, albumId: userAlbums.albumId })
+      .from(userAlbums)
+      .where(eq(userAlbums.userId, losingId));
+    const reparentAlbumIds = losingAlbums
+      .filter((r) => !survivingAlbumIds.has(r.albumId))
+      .map((r) => r.id);
+    const movedAlbums = reparentAlbumIds.length === 0
+      ? []
+      : await tx
+          .update(userAlbums)
+          .set({ userId: survivingId })
+          .where(inArray(userAlbums.id, reparentAlbumIds))
+          .returning({ id: userAlbums.id });
+
+    const movedOrders = await tx
+      .update(orders)
+      .set({ customerId: survivingId })
+      .where(eq(orders.customerId, losingId))
+      .returning({ id: orders.id });
+    const movedPlaylists = await tx
+      .update(playlists)
+      .set({ userId: survivingId })
+      .where(eq(playlists.userId, losingId))
+      .returning({ id: playlists.id });
+
+    // Revoke every outstanding bearer token on the losing account.
+    await tx.delete(authTokens).where(eq(authTokens.customerUserId, losingId));
+
+    await tx.insert(customerMerges).values({
+      survivingId,
+      losingId,
+      losingEmail,
+      movedOrderCount: movedOrders.length,
+      movedAlbumCount: movedAlbums.length,
+      movedPlaylistCount: movedPlaylists.length,
+      movedOrderIds: movedOrders.map((r) => r.id),
+      movedAlbumIds: movedAlbums.map((r) => r.id),
+      movedPlaylistIds: movedPlaylists.map((r) => r.id),
+      triggeredBy,
+    });
+
+    return {
+      albums: movedAlbums.length,
+      orders: movedOrders.length,
+      playlists: movedPlaylists.length,
+    };
+  });
+}
+
 export function customerOriginFromReq(req: Request): string {
   // In production the welcome-back link MUST resolve to the canonical
   // customer host (`my.goodtunes.music`) regardless of the host the
@@ -529,76 +649,15 @@ export function registerWelcomeBackRoutes(
       .returning({ id: welcomeBackTokens.id });
     if (consumed.length === 0) return res.status(400).json({ message: "Link already used" });
 
-    // Move owned content. Wrapped in a transaction so a uniqueness
-    // collision on user_albums can't leave us half-merged.
-    const moved = await db.transaction(async (tx) => {
-      // user_albums has a UNIQUE(user_id, album_id) — if the surviving
-      // account already owns the same album, we can't reparent the
-      // losing row (would violate the index). Skip those collisions:
-      // surviving keeps the album, losing row stays put and will be
-      // dropped together with the soft-deleted losing customer.
-      // (Acquired-at on the surviving row is preserved, which is the
-      // semantically right answer — fan's earliest acquisition wins.)
-      const survivingAlbums = await tx
-        .select({ albumId: userAlbums.albumId })
-        .from(userAlbums)
-        .where(eq(userAlbums.userId, surviving.id));
-      const survivingAlbumIds = new Set(survivingAlbums.map((r) => r.albumId));
-      const losingAlbums = await tx
-        .select({ id: userAlbums.id, albumId: userAlbums.albumId })
-        .from(userAlbums)
-        .where(eq(userAlbums.userId, losing.id));
-      const reparentAlbumIds = losingAlbums
-        .filter((r) => !survivingAlbumIds.has(r.albumId))
-        .map((r) => r.id);
-      const movedAlbums = reparentAlbumIds.length === 0
-        ? []
-        : await tx
-            .update(userAlbums)
-            .set({ userId: surviving.id })
-            .where(inArray(userAlbums.id, reparentAlbumIds))
-            .returning({ id: userAlbums.id });
-
-      const movedOrders = await tx
-        .update(orders)
-        .set({ customerId: surviving.id })
-        .where(eq(orders.customerId, losing.id))
-        .returning({ id: orders.id });
-      const movedPlaylists = await tx
-        .update(playlists)
-        .set({ userId: surviving.id })
-        .where(eq(playlists.userId, losing.id))
-        .returning({ id: playlists.id });
-
-      // Soft-delete the losing row. The mergedIntoId pointer is what
-      // requireAuth/requireCustomer consult to refuse a sign-in even if
-      // a stale session cookie or bearer token is still floating around.
-      await tx
-        .update(customerUsers)
-        .set({ mergedIntoId: surviving.id })
-        .where(eq(customerUsers.id, losing.id));
-
-      // Revoke every outstanding bearer token on the losing account.
-      await tx.delete(authTokens).where(eq(authTokens.customerUserId, losing.id));
-
-      await tx.insert(customerMerges).values({
-        survivingId: surviving.id,
-        losingId: losing.id,
-        losingEmail: losing.email,
-        movedOrderCount: movedOrders.length,
-        movedAlbumCount: movedAlbums.length,
-        movedPlaylistCount: movedPlaylists.length,
-        movedOrderIds: movedOrders.map((r) => r.id),
-        movedAlbumIds: movedAlbums.map((r) => r.id),
-        movedPlaylistIds: movedPlaylists.map((r) => r.id),
-        triggeredBy: "customer",
-      });
-
-      return {
-        albums: movedAlbums.length,
-        orders: movedOrders.length,
-        playlists: movedPlaylists.length,
-      };
+    // Move owned content via the shared merge core (also used by the admin
+    // "Combine accounts" tool) so both paths reparent + audit identically
+    // and the admin undo reverses either the same way. The token consume
+    // above is this path's race guard; the helper's atomic claim is a
+    // belt-and-suspenders second guard.
+    const moved = await performAccountMerge({
+      survivingId: surviving.id,
+      losingId: losing.id,
+      triggeredBy: "customer",
     });
 
     return res.json({ ok: true, moved });

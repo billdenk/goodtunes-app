@@ -26293,6 +26293,276 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   );
 
+  // ─── Combine accounts (admin) ──────────────────────────────────────
+  //
+  // Operator tool for the recurring "two rows, one human" problem: a
+  // legacy fan re-auths via Sign in with Apple after a forced update and
+  // lands on a fresh, EMPTY OAuth row while their library lives on their
+  // original row. OAuth deliberately never auto-merges by real email (the
+  // takeover guard), so the operator folds one account into the other from
+  // the admin customer page. Shares the EXACT merge transaction the fan
+  // self-service "These two accounts are me" flow uses
+  // (performAccountMerge in welcomeBack.ts), so the existing admin undo
+  // (POST .../merges/:mergeId/undo) reverses an admin merge the same way.
+  //
+  // KEY RULE: the merge does NOT move customer_identities (OAuth links).
+  // So the SURVIVING account must be the one holding the OAuth identity the
+  // fan actually signs in with, or their next Apple/Google sign-in lands on
+  // the soft-deleted loser ("Account merged"). The candidates + preview
+  // endpoints surface each account's sign-in methods so the UI recommends
+  // the survivor and warns before anything that would break a working
+  // sign-in. Account-takeover power → super_admin only.
+
+  // A customer's sign-in methods: OAuth providers + whether they have a
+  // password + whether they're a legacy gogoods import.
+  async function customerSignInMethods(customerId: string): Promise<{
+    providers: string[];
+    hasPassword: boolean;
+    isLegacy: boolean;
+  }> {
+    const idRows = await db.execute<{ provider: string }>(sql`
+      SELECT DISTINCT provider FROM customer_identities WHERE user_id = ${customerId}
+    `);
+    const providers = ((idRows as any).rows ?? []).map((r: any) => r.provider as string);
+    const cust = await storage.getCustomer(customerId);
+    return {
+      providers,
+      hasPassword: !!(cust as any)?.password,
+      isLegacy: !!(cust as any)?.legacyGogoodsId,
+    };
+  }
+
+  // GET accounts to combine WITH the one at :id — typeahead search across
+  // email / contact_email / display_name / username / legacy id (the real
+  // email often lives in contact_email on an Apple-relay row, so a plain
+  // customer search misses it). Excludes self + already-merged rows.
+  // Annotates each with sign-in methods + content counts so the operator
+  // can tell the empty new row from the one holding the library.
+  app.get(
+    "/api/admin/customers/:id/merge-candidates",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const anchorId = String(req.params.id);
+      const q = String(req.query.q ?? "").trim().toLowerCase();
+      if (q.length < 2) return res.json({ candidates: [] });
+      const like = `%${q}%`;
+      const rows = await db.execute<any>(sql`
+        SELECT
+          cu.id,
+          cu.display_name AS "displayName",
+          cu.email,
+          cu.contact_email AS "contactEmail",
+          (cu.password IS NOT NULL) AS "hasPassword",
+          (cu.legacy_gogoods_id IS NOT NULL) AS "isLegacy",
+          COALESCE(
+            array_agg(DISTINCT ci.provider) FILTER (WHERE ci.provider IS NOT NULL),
+            '{}'
+          ) AS "providers",
+          (SELECT COUNT(*)::int FROM user_albums ua
+             WHERE ua.user_id = cu.id AND ua.is_preview = false) AS "albumCount",
+          (SELECT COUNT(*)::int FROM orders o WHERE o.customer_id = cu.id) AS "orderCount",
+          (SELECT COUNT(*)::int FROM playlists p WHERE p.user_id = cu.id) AS "playlistCount"
+        FROM customer_users cu
+        LEFT JOIN customer_identities ci ON ci.user_id = cu.id
+        WHERE cu.id <> ${anchorId}
+          AND cu.merged_into_id IS NULL
+          AND (
+            lower(cu.email) LIKE ${like}
+            OR lower(cu.contact_email) LIKE ${like}
+            OR lower(cu.display_name) LIKE ${like}
+            OR lower(cu.username) LIKE ${like}
+            OR lower(cu.legacy_gogoods_id) LIKE ${like}
+          )
+        GROUP BY cu.id
+        ORDER BY cu.display_name ASC NULLS LAST
+        LIMIT 12
+      `);
+      res.json({ candidates: (rows as any).rows ?? [] });
+    },
+  );
+
+  // GET a merge preview: given the page account :id and ?otherId=, decide
+  // the recommended survivor (the OAuth holder) and report exactly what
+  // would move + which sign-in methods the loser loses + whether the loser
+  // is wired to an admin sign-in (a hard blocker). The operator can flip
+  // the direction with ?surviving=<id>.
+  app.get(
+    "/api/admin/customers/:id/merge-preview",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const aId = String(req.params.id);
+      const bId = String(req.query.otherId ?? "");
+      if (!bId || aId === bId) return res.status(400).json({ message: "Pick a different account" });
+      const a = await storage.getCustomer(aId);
+      const b = await storage.getCustomer(bId);
+      if (!a || !b) return res.status(404).json({ message: "Account not found" });
+      if ((a as any).mergedIntoId || (b as any).mergedIntoId) {
+        return res.status(409).json({ message: "One of these accounts is already merged" });
+      }
+      const aMethods = await customerSignInMethods(aId);
+      const bMethods = await customerSignInMethods(bId);
+
+      // Recommend the survivor: keep the OAuth holder so the fan's social
+      // sign-in keeps working. If both or neither hold OAuth, prefer more
+      // providers, then a password, then the page account.
+      const pickSurvivor = (): string => {
+        const aO = aMethods.providers.length;
+        const bO = bMethods.providers.length;
+        if (aO > 0 && bO === 0) return aId;
+        if (bO > 0 && aO === 0) return bId;
+        if (aO !== bO) return aO > bO ? aId : bId;
+        if (aMethods.hasPassword !== bMethods.hasPassword) return aMethods.hasPassword ? aId : bId;
+        return aId;
+      };
+      const recommendedSurvivingId = pickSurvivor();
+      const override = req.query.surviving ? String(req.query.surviving) : "";
+      const survivingId = override === aId || override === bId ? override : recommendedSurvivingId;
+      const losingId = survivingId === aId ? bId : aId;
+      const losingMethods = survivingId === aId ? bMethods : aMethods;
+
+      // What would actually move (mirrors performAccountMerge: albums skip
+      // UNIQUE(user_id, album_id) collisions with the survivor; orders +
+      // playlists all move).
+      const survAlbums = await db.execute<{ album_id: string }>(sql`
+        SELECT album_id FROM user_albums WHERE user_id = ${survivingId}
+      `);
+      const survSet = new Set(((survAlbums as any).rows ?? []).map((r: any) => r.album_id));
+      const loseAlbums = await db.execute<{ album_id: string }>(sql`
+        SELECT album_id FROM user_albums WHERE user_id = ${losingId}
+      `);
+      const albumsToMove = ((loseAlbums as any).rows ?? []).filter(
+        (r: any) => !survSet.has(r.album_id),
+      ).length;
+      const orderCount = await db.execute<{ count: number }>(sql`
+        SELECT COUNT(*)::int AS count FROM orders WHERE customer_id = ${losingId}
+      `);
+      const playlistCount = await db.execute<{ count: number }>(sql`
+        SELECT COUNT(*)::int AS count FROM playlists WHERE user_id = ${losingId}
+      `);
+
+      // Hard blocker: the loser is linked to an admin/unified sign-in.
+      // Folding it would orphan that admin's customer link (admin OAuth
+      // resolves through users.customer_user_id). Operator must unlink first.
+      const adminLink = await db.execute(sql`
+        SELECT 1 FROM users WHERE customer_user_id = ${losingId} LIMIT 1
+      `);
+      const losingHasAdminLink = ((adminLink as any).rows ?? []).length > 0;
+
+      const pub = (id: string, c: any, m: any) => ({
+        id,
+        displayName: c.displayName,
+        email: c.email,
+        contactEmail: c.contactEmail ?? null,
+        providers: m.providers,
+        hasPassword: m.hasPassword,
+        isLegacy: m.isLegacy,
+      });
+      res.json({
+        a: pub(aId, a, aMethods),
+        b: pub(bId, b, bMethods),
+        recommendedSurvivingId,
+        survivingId,
+        losingId,
+        willMove: {
+          albums: albumsToMove,
+          orders: Number((orderCount as any).rows?.[0]?.count ?? 0),
+          playlists: Number((playlistCount as any).rows?.[0]?.count ?? 0),
+        },
+        losingSignInMethods: {
+          providers: losingMethods.providers,
+          hasPassword: losingMethods.hasPassword,
+        },
+        losingHasAdminLink,
+      });
+    },
+  );
+
+  // POST the merge: fold losingId into :survivingId. Mirrors the fan
+  // confirm guards (same-id, exists, already-merged idempotency) and adds
+  // the admin-link blocker + the lost-sign-in acknowledgement.
+  app.post(
+    "/api/admin/customers/:survivingId/merge",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const survivingId = String(req.params.survivingId);
+      const losingId = String(req.body?.losingId ?? "");
+      const acknowledgeLostSignInMethods = req.body?.acknowledgeLostSignInMethods === true;
+      if (!losingId || losingId === survivingId) {
+        return res.status(400).json({ message: "Pick a different account to combine" });
+      }
+      const surviving = await storage.getCustomer(survivingId);
+      const losing = await storage.getCustomer(losingId);
+      if (!surviving || !losing) return res.status(404).json({ message: "Account not found" });
+
+      // Idempotency: this exact merge already happened → return prior counts.
+      if ((losing as any).mergedIntoId === survivingId) {
+        const prior = await db.execute<any>(sql`
+          SELECT moved_album_count AS "albums", moved_order_count AS "orders",
+                 moved_playlist_count AS "playlists"
+          FROM customer_merges
+          WHERE surviving_id = ${survivingId} AND losing_id = ${losingId}
+          ORDER BY created_at DESC LIMIT 1
+        `);
+        const row = (prior as any).rows?.[0];
+        if (row) return res.json({ ok: true, moved: row });
+      }
+      if ((surviving as any).mergedIntoId) {
+        return res
+          .status(409)
+          .json({ message: "The surviving account is itself merged into another." });
+      }
+      if ((losing as any).mergedIntoId) {
+        return res.status(409).json({ message: "That account was already merged into another." });
+      }
+
+      // Hard blocker: loser linked to an admin sign-in.
+      const adminLink = await db.execute(sql`
+        SELECT 1 FROM users WHERE customer_user_id = ${losingId} LIMIT 1
+      `);
+      if (((adminLink as any).rows ?? []).length > 0) {
+        return res.status(409).json({
+          message:
+            "This account is linked to an admin sign-in. Unlink it from the admin account before combining.",
+        });
+      }
+
+      // Require explicit ack if the loser holds OAuth identities that will
+      // stop working once it's soft-deleted.
+      const losingMethods = await customerSignInMethods(losingId);
+      if (losingMethods.providers.length > 0 && !acknowledgeLostSignInMethods) {
+        return res.status(409).json({
+          requiresAck: true,
+          message:
+            "The account you're absorbing signs in with " +
+            losingMethods.providers.join(" and ") +
+            ". That sign-in will stop working after combining. Confirm to proceed.",
+          losingSignInMethods: {
+            providers: losingMethods.providers,
+            hasPassword: losingMethods.hasPassword,
+          },
+        });
+      }
+
+      try {
+        const { performAccountMerge } = await import("./welcomeBack");
+        const moved = await performAccountMerge({ survivingId, losingId, triggeredBy: "admin" });
+        console.log(
+          `[admin] merged customer ${losingId} into ${survivingId} by user ${req.session.userId} (albums=${moved.albums} orders=${moved.orders} playlists=${moved.playlists})`,
+        );
+        res.json({ ok: true, moved });
+      } catch (err: any) {
+        if (err && err.name === "AccountMergeError") {
+          return res.status(err.status ?? 409).json({ message: err.message });
+        }
+        console.error("[admin] merge failed:", err);
+        res.status(500).json({ message: "Couldn't combine the accounts, please try again" });
+      }
+    },
+  );
+
   // Demo-only: super_admin grants a fan a comp album so we can show the
   // player flow without standing up a real purchase. Lives next to the
   // customer profile route since the UI dock is on the same page. Uses

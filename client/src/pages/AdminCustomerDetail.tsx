@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
-import { Link, useRoute } from "wouter";
+import { Link, useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, ExternalLink, Mail, Phone, MapPin, ShoppingBag, Disc3, ListMusic, CheckCircle2, Plus, X, Search, Link2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, Mail, Phone, MapPin, ShoppingBag, Disc3, ListMusic, CheckCircle2, Plus, X, Search, Link2, AlertTriangle, ArrowLeftRight, Users } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -531,6 +531,12 @@ export function AdminCustomerDetail() {
           )}
         </Section>
 
+        {/* Operator "Combine accounts" tool (super_admin only). Folds a
+            duplicate fan account into this one — the classic case being a
+            legacy fan who re-authed via Sign in with Apple and landed on a
+            fresh, empty row. */}
+        {isSuperAdmin && <CombineAccountsPanel anchorId={c.id} anchorName={name} />}
+
         {/* Task #400 — Account-merge audit. Only renders rows for fans
             who absorbed another account via the customer-side merge
             flow ("These two accounts are me"). */}
@@ -724,6 +730,410 @@ function MergeRow({
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Combine accounts (super_admin) ────────────────────────────────
+//
+// One human, one account. When a fan ends up with two customer rows
+// (classic case: a legacy fan re-auths via Sign in with Apple after a
+// forced update and lands on a fresh, empty OAuth row while their library
+// lives on the original row), the operator folds one into the other from
+// here. The merge does NOT move OAuth links, so the SURVIVING account must
+// be the one the fan signs in with — the server recommends that survivor
+// and this panel surfaces sign-in methods + warns before anything that
+// would break a working sign-in. Reversible from the merge history below.
+
+type MergeCandidate = {
+  id: string;
+  displayName: string | null;
+  email: string | null;
+  contactEmail: string | null;
+  hasPassword: boolean;
+  isLegacy: boolean;
+  providers: string[];
+  albumCount: number;
+  orderCount: number;
+  playlistCount: number;
+};
+type MergePreviewAccount = {
+  id: string;
+  displayName: string | null;
+  email: string | null;
+  contactEmail: string | null;
+  providers: string[];
+  hasPassword: boolean;
+  isLegacy: boolean;
+};
+type MergePreview = {
+  a: MergePreviewAccount;
+  b: MergePreviewAccount;
+  recommendedSurvivingId: string;
+  survivingId: string;
+  losingId: string;
+  willMove: { albums: number; orders: number; playlists: number };
+  losingSignInMethods: { providers: string[]; hasPassword: boolean };
+  losingHasAdminLink: boolean;
+};
+
+function providerLabel(p: string): string {
+  const x = p.toLowerCase();
+  if (x === "apple") return "Apple";
+  if (x === "google") return "Google";
+  return p.charAt(0).toUpperCase() + p.slice(1);
+}
+function signInSummary(providers: string[]): string {
+  const labels = providers.map(providerLabel);
+  if (labels.length === 0) return "";
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
+}
+function SignInChips({ providers, hasPassword, isLegacy }: { providers: string[]; hasPassword: boolean; isLegacy: boolean }) {
+  const chips: string[] = providers.map(providerLabel);
+  if (hasPassword) chips.push("Password");
+  if (isLegacy) chips.push("goGoods");
+  if (chips.length === 0) {
+    return <span className="text-xs text-slate-400">No sign-in method</span>;
+  }
+  return (
+    <span className="flex flex-wrap gap-1">
+      {chips.map((cc) => (
+        <span key={cc} className="text-xs font-medium text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+          {cc}
+        </span>
+      ))}
+    </span>
+  );
+}
+function accountTitle(a: { displayName: string | null; email: string | null; contactEmail: string | null }): string {
+  return a.displayName?.trim() || a.email || a.contactEmail || "Unnamed account";
+}
+function accountSub(a: { displayName: string | null; email: string | null; contactEmail: string | null }): string | null {
+  const title = accountTitle(a);
+  const sub = a.email || a.contactEmail || null;
+  return sub && sub !== title ? sub : null;
+}
+
+function CombineAccountsPanel({ anchorId, anchorName }: { anchorId: string; anchorName: string }) {
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const [override, setOverride] = useState<string | null>(null);
+  const [ack, setAck] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(q.trim()), 250);
+    return () => clearTimeout(t);
+  }, [q]);
+  // Reset the downstream confirm + acknowledgement whenever the pick or
+  // direction changes, so a stale ack can't carry into a different merge.
+  useEffect(() => {
+    setAck(false);
+    setConfirming(false);
+  }, [pickedId, override]);
+
+  const candidatesQuery = useQuery<{ candidates: MergeCandidate[] }>({
+    queryKey: ["/api/admin/customers", anchorId, "merge-candidates", debouncedQ],
+    queryFn: async () => {
+      const r = await apiRequest(
+        "GET",
+        `/api/admin/customers/${anchorId}/merge-candidates?q=${encodeURIComponent(debouncedQ)}`,
+      );
+      return r.json();
+    },
+    enabled: open && debouncedQ.length >= 2 && !pickedId,
+  });
+
+  const previewQuery = useQuery<MergePreview>({
+    queryKey: ["/api/admin/customers", anchorId, "merge-preview", pickedId ?? "", override ?? "auto"],
+    queryFn: async () => {
+      const params = new URLSearchParams({ otherId: pickedId! });
+      if (override) params.set("surviving", override);
+      const r = await apiRequest(
+        "GET",
+        `/api/admin/customers/${anchorId}/merge-preview?${params.toString()}`,
+      );
+      return r.json();
+    },
+    enabled: open && !!pickedId,
+  });
+  const preview = previewQuery.data;
+
+  const mergeMutation = useMutation({
+    mutationFn: async () => {
+      const p = preview!;
+      const r = await apiRequest("POST", `/api/admin/customers/${p.survivingId}/merge`, {
+        losingId: p.losingId,
+        acknowledgeLostSignInMethods: ack,
+      });
+      return (await r.json()) as { ok: boolean; moved: { albums: number; orders: number; playlists: number } };
+    },
+    onSuccess: (res) => {
+      const p = preview!;
+      const m = res.moved;
+      toast({
+        title: "Accounts combined",
+        description: `Moved ${m.albums} album${m.albums === 1 ? "" : "s"} · ${m.orders} order${m.orders === 1 ? "" : "s"} · ${m.playlists} playlist${m.playlists === 1 ? "" : "s"}.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/customers", anchorId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/customers", anchorId, "merges"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/customers", p.survivingId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/customers", p.survivingId, "merges"] });
+      const survivor = p.survivingId;
+      setConfirming(false);
+      setAck(false);
+      setPickedId(null);
+      setOverride(null);
+      setQ("");
+      setDebouncedQ("");
+      setOpen(false);
+      // If the account on THIS page was the one absorbed, it's now soft-
+      // deleted — hop to the survivor's page so the operator lands on a
+      // live account.
+      if (survivor !== anchorId) setLocation(`/admin/customers/${survivor}`);
+    },
+    onError: (e: Error) => {
+      toast({ title: "Couldn't combine the accounts", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const resetPick = () => {
+    setPickedId(null);
+    setOverride(null);
+    setAck(false);
+    setConfirming(false);
+  };
+
+  const surv = preview ? (preview.survivingId === preview.a.id ? preview.a : preview.b) : null;
+  const lose = preview ? (preview.losingId === preview.a.id ? preview.a : preview.b) : null;
+  const losesSignIn = !!preview && preview.losingSignInMethods.providers.length > 0;
+  const blocked = !!preview?.losingHasAdminLink;
+  const confirmDisabled = !preview || blocked || (losesSignIn && !ack) || mergeMutation.isPending;
+
+  return (
+    <Section title="Combine accounts">
+      {!open ? (
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <p className="text-sm text-slate-600 leading-relaxed">
+            Folds a duplicate fan account into {anchorName}. Use this when someone ended up with two
+            accounts — for example a returning fan who signed in with Apple and landed on a fresh,
+            empty account. Their orders, albums, and playlists move to the account that keeps their
+            sign-in.
+          </p>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="mt-3 inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            data-testid="button-combine-open"
+          >
+            <Users className="w-3.5 h-3.5" />
+            Find an account to combine…
+          </button>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3" data-testid="panel-combine-accounts">
+          {!pickedId ? (
+            <>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 min-w-0">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    placeholder="Search by name, email, or goGoods ID…"
+                    autoFocus
+                    className="w-full h-9 pl-8 pr-3 rounded-md border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:border-[var(--brand-blue)]"
+                    data-testid="input-merge-search"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    setQ("");
+                    setDebouncedQ("");
+                  }}
+                  className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 transition-colors flex-shrink-0"
+                  data-testid="button-combine-close"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {debouncedQ.length < 2 ? (
+                <p className="text-xs text-slate-400">Type at least 2 characters to search.</p>
+              ) : candidatesQuery.isLoading ? (
+                <p className="text-xs text-slate-400">Searching…</p>
+              ) : (candidatesQuery.data?.candidates.length ?? 0) === 0 ? (
+                <p className="text-xs text-slate-400">No other accounts match “{debouncedQ}”.</p>
+              ) : (
+                <div className="rounded-md border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                  {candidatesQuery.data!.candidates.map((cand) => (
+                    <button
+                      key={cand.id}
+                      type="button"
+                      onClick={() => setPickedId(cand.id)}
+                      className="w-full text-left px-3 py-2.5 hover:bg-slate-50 transition-colors flex items-start justify-between gap-3"
+                      data-testid={`button-merge-candidate-${cand.id}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-slate-900 truncate">{accountTitle(cand)}</div>
+                        {accountSub(cand) && (
+                          <div className="text-xs text-slate-500 truncate">{accountSub(cand)}</div>
+                        )}
+                        <div className="mt-1">
+                          <SignInChips providers={cand.providers} hasPassword={cand.hasPassword} isLegacy={cand.isLegacy} />
+                        </div>
+                      </div>
+                      <div className="text-xs text-slate-400 text-right flex-shrink-0 tabular-nums">
+                        {cand.albumCount} album{cand.albumCount === 1 ? "" : "s"}
+                        <br />
+                        {cand.orderCount} order{cand.orderCount === 1 ? "" : "s"}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : previewQuery.isLoading || !preview || !surv || !lose ? (
+            <p className="text-xs text-slate-400">Building merge preview…</p>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={resetPick}
+                className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-[var(--brand-blue)] transition-colors"
+                data-testid="button-merge-back"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Choose a different account
+              </button>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="rounded-md border border-emerald-200 bg-emerald-50/60 p-3" data-testid="card-merge-survivor">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Keep
+                    {preview.survivingId === preview.recommendedSurvivingId && (
+                      <span className="font-medium normal-case tracking-normal text-emerald-600">· recommended</span>
+                    )}
+                  </div>
+                  <div className="mt-1 text-sm font-medium text-slate-900 truncate">{accountTitle(surv)}</div>
+                  {accountSub(surv) && <div className="text-xs text-slate-500 truncate">{accountSub(surv)}</div>}
+                  <div className="mt-1.5">
+                    <SignInChips providers={surv.providers} hasPassword={surv.hasPassword} isLegacy={surv.isLegacy} />
+                  </div>
+                </div>
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="card-merge-loser">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Close & absorb</div>
+                  <div className="mt-1 text-sm font-medium text-slate-900 truncate">{accountTitle(lose)}</div>
+                  {accountSub(lose) && <div className="text-xs text-slate-500 truncate">{accountSub(lose)}</div>}
+                  <div className="mt-1.5">
+                    <SignInChips providers={lose.providers} hasPassword={lose.hasPassword} isLegacy={lose.isLegacy} />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setOverride(preview.losingId)}
+                className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-[var(--brand-blue)] transition-colors"
+                data-testid="button-merge-swap"
+              >
+                <ArrowLeftRight className="w-3.5 h-3.5" /> Swap — keep {accountTitle(lose)} instead
+              </button>
+
+              <p className="text-sm text-slate-600">
+                Moves{" "}
+                <strong className="text-slate-900 tabular-nums">{preview.willMove.albums}</strong> album
+                {preview.willMove.albums === 1 ? "" : "s"} ·{" "}
+                <strong className="text-slate-900 tabular-nums">{preview.willMove.orders}</strong> order
+                {preview.willMove.orders === 1 ? "" : "s"} ·{" "}
+                <strong className="text-slate-900 tabular-nums">{preview.willMove.playlists}</strong> playlist
+                {preview.willMove.playlists === 1 ? "" : "s"} into <strong>{accountTitle(surv)}</strong>.
+              </p>
+
+              {blocked ? (
+                <div className="rounded-md border border-rose-200 bg-rose-50 p-3 flex items-start gap-2" data-testid="warn-merge-admin-link">
+                  <AlertTriangle className="w-4 h-4 text-rose-700 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-rose-900 leading-relaxed">
+                    The account you’re absorbing is linked to an admin sign-in. Unlink it from the
+                    admin account before combining, or pick a different direction.
+                  </p>
+                </div>
+              ) : losesSignIn ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 space-y-2" data-testid="warn-merge-lost-signin">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-900 leading-relaxed">
+                      {accountTitle(lose)} can sign in with{" "}
+                      <strong>{signInSummary(preview.losingSignInMethods.providers)}</strong>. That sign-in
+                      will stop working after combining — make sure {accountTitle(surv)} is the account they
+                      use going forward.
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-amber-900 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={ack}
+                      onChange={(e) => setAck(e.target.checked)}
+                      className="rounded border-amber-300"
+                      data-testid="checkbox-merge-ack"
+                    />
+                    I understand that sign-in will stop working.
+                  </label>
+                </div>
+              ) : null}
+
+              {!confirming ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirming(true)}
+                  disabled={confirmDisabled}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-rose-700 px-3 h-9 text-sm font-medium text-white hover:bg-rose-800 disabled:opacity-40 transition-colors"
+                  data-testid="button-combine-accounts"
+                >
+                  Combine accounts
+                </button>
+              ) : (
+                <div className="rounded-md border border-rose-200 bg-rose-50 p-3 space-y-2" data-testid="merge-combine-confirm">
+                  <p className="text-xs text-rose-900 leading-relaxed">
+                    Combine <strong>{accountTitle(lose)}</strong> into <strong>{accountTitle(surv)}</strong>?{" "}
+                    {accountTitle(surv)} keeps everything; {accountTitle(lose)} is closed. You can undo this
+                    from the merge history below.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => mergeMutation.mutate()}
+                      disabled={confirmDisabled}
+                      className="rounded-md bg-rose-700 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-rose-800 disabled:opacity-40 transition-colors"
+                      data-testid="button-combine-confirm"
+                    >
+                      {mergeMutation.isPending ? "Combining…" : "Yes, combine"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirming(false)}
+                      disabled={mergeMutation.isPending}
+                      className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                      data-testid="button-combine-cancel"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </Section>
   );
 }
 
