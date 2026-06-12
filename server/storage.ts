@@ -320,12 +320,12 @@ export interface IStorage {
   getRigById(id: string): Promise<RigWithDetail | undefined>;
   createRig(
     data: InsertRig,
-    accessories: Array<Pick<InsertRigAccessory, "type" | "value">>,
+    accessories: Array<Pick<InsertRigAccessory, "type" | "value" | "instrumentId">>,
   ): Promise<RigWithDetail>;
   updateRig(
     id: string,
     data: Partial<Pick<Rig, "name" | "instrumentId" | "notes">>,
-    accessories?: Array<Pick<InsertRigAccessory, "type" | "value">>,
+    accessories?: Array<Pick<InsertRigAccessory, "type" | "value" | "instrumentId">>,
   ): Promise<RigWithDetail | undefined>;
   deleteRig(id: string, userId?: string | null): Promise<void>;
   // Track ↔ rig attachment with an optional per-track tweak note.
@@ -511,7 +511,7 @@ export interface IStorage {
         rigId: string | null;
         name: string;
         instrumentId: string | null;
-        accessories: Array<{ type: string; value: string }>;
+        accessories: Array<{ type: string; value: string; instrumentId: string | null }>;
       }>;
     }>;
   }>>;
@@ -2208,13 +2208,13 @@ export class DbStorage implements IStorage {
 
   async createRig(
     data: InsertRig,
-    accessories: Array<Pick<InsertRigAccessory, "type" | "value">>,
+    accessories: Array<Pick<InsertRigAccessory, "type" | "value" | "instrumentId">>,
   ): Promise<RigWithDetail> {
     const created = await db.transaction(async (tx) => {
       const [rig] = await tx.insert(rigs).values(data as any).returning();
       if (accessories.length) {
         await tx.insert(rigAccessories).values(
-          accessories.map((a, i) => ({ rigId: rig.id, type: a.type, value: a.value, position: i })),
+          accessories.map((a, i) => ({ rigId: rig.id, type: a.type, value: a.value, instrumentId: a.instrumentId ?? null, position: i })),
         );
       }
       return rig;
@@ -2225,7 +2225,7 @@ export class DbStorage implements IStorage {
   async updateRig(
     id: string,
     data: Partial<Pick<Rig, "name" | "instrumentId" | "notes">>,
-    accessories?: Array<Pick<InsertRigAccessory, "type" | "value">>,
+    accessories?: Array<Pick<InsertRigAccessory, "type" | "value" | "instrumentId">>,
   ): Promise<RigWithDetail | undefined> {
     await db.transaction(async (tx) => {
       if (Object.keys(data).length > 0) {
@@ -2236,7 +2236,7 @@ export class DbStorage implements IStorage {
         await tx.delete(rigAccessories).where(eq(rigAccessories.rigId, id));
         if (accessories.length) {
           await tx.insert(rigAccessories).values(
-            accessories.map((a, i) => ({ rigId: id, type: a.type, value: a.value, position: i })),
+            accessories.map((a, i) => ({ rigId: id, type: a.type, value: a.value, instrumentId: a.instrumentId ?? null, position: i })),
           );
         }
       }
@@ -2831,7 +2831,7 @@ export class DbStorage implements IStorage {
         rigId: string | null;
         name: string;
         instrumentId: string | null;
-        accessories: Array<{ type: string; value: string }>;
+        accessories: Array<{ type: string; value: string; instrumentId: string | null }>;
       }>
     >();
     if (allSongIds.length > 0) {
@@ -2860,6 +2860,7 @@ export class DbStorage implements IStorage {
           accessories: (detail?.accessories ?? []).map((a) => ({
             type: a.type,
             value: a.value,
+            instrumentId: a.instrumentId ?? null,
           })),
         });
         rigsBySong.set(tr.songId, list);

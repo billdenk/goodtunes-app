@@ -346,6 +346,34 @@ SQL
 migrate_odoo_printer dev  "${DATABASE_URL:-}"
 migrate_odoo_printer prod "${PROD_DATABASE_URL:-}"
 
+# Rig accessory inventory link. rig_accessories.instrument_id optionally links
+# an accessory line to a catalog instrument so the Rig accessory editor works
+# "the same as all other gear" (type-to-search the inventory + paste-a-URL
+# import). Nullable + ON DELETE SET NULL (the `value` text snapshot keeps a
+# deleted-instrument accessory renderable); legacy free-text accessories leave
+# it null. Declared in shared/schema.ts; hand-apply the additive DDL on BOTH
+# dev and prod so the schema-drift guard stays green on a freshly-cloned dev
+# and the publish dev→prod diff stays empty. Idempotent (IF NOT EXISTS).
+migrate_rig_accessory_instrument() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping rig_accessory_instrument migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE IF EXISTS rig_accessories
+  ADD COLUMN IF NOT EXISTS instrument_id varchar
+  REFERENCES instruments(id) ON DELETE SET NULL;
+SQL
+  then
+    echo "post-merge: rig_accessory_instrument migration ok on $label"
+  else
+    echo "post-merge: WARNING — rig_accessory_instrument migration failed on $label (continuing)"
+  fi
+}
+migrate_rig_accessory_instrument dev  "${DATABASE_URL:-}"
+migrate_rig_accessory_instrument prod "${PROD_DATABASE_URL:-}"
+
 # Task #1514 — legacy gogoods.com QR provenance bridge.
 # user_albums.legacy_gogoods_collectible_id stamps the gogoods `collectible`
 # bigserial id onto the owned copy so the resolver (GET /legacy/g/:code) can

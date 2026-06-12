@@ -9,7 +9,7 @@ but the `InstrumentPicker` combobox renders a stack of `<button>` options. A
 `<button>` is a *labelable* element, so nesting it inside a `<label>` is invalid
 HTML.
 
-**Symptom (#1954):** typing a partial instrument name showed the match, but
+**Symptom:** typing a partial instrument name showed the match, but
 clicking it reverted to an empty search box — the selection never stuck, so no
 gear could be credited. Prod/Safari-only.
 

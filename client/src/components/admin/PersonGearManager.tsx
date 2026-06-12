@@ -122,7 +122,7 @@ export type GearContextAlbum = {
       rigId: string | null;
       name: string;
       instrumentId: string | null;
-      accessories: Array<{ type: string; value: string }>;
+      accessories: Array<{ type: string; value: string; instrumentId: string | null }>;
     }>;
   }>;
 };
@@ -150,7 +150,7 @@ export function PersonGearManager({
   type GearRowRig = {
     rigId: string;
     name: string;
-    accessories: Array<{ type: string; value: string }>;
+    accessories: Array<{ type: string; value: string; instrumentId: string | null }>;
   };
   type GearRow = {
     instrumentId: string;
@@ -280,6 +280,12 @@ export function PersonGearManager({
         return false;
       },
     });
+  };
+
+  // After a GearPicker scrapes + creates a new catalog row, refresh the
+  // shared instrument list so the new row is immediately pickable.
+  const onInstrumentCreated = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/instruments"] });
   };
 
   const deletePerformer = useMutation({
@@ -412,6 +418,8 @@ export function PersonGearManager({
                       songIds={g.tracks.map((t) => t.songId)}
                       matchingRigs={g.matchingRigs}
                       onChanged={invalidate}
+                      instruments={instruments}
+                      onInstrumentCreated={onInstrumentCreated}
                     />
                   </div>
                 )}
@@ -439,7 +447,10 @@ export function PersonGearManager({
 //     button that PUTs the full accessory set (it replaces, not appends).
 // Explicit Save (no autosave) is the sanctioned design-system exception for
 // multi-field editors.
-type AccessoryDraft = { type: string; value: string };
+// `instrumentId` links this accessory line to a row in the gear catalog
+// (picked or scraped). `null` = legacy free-text value (e.g. typed
+// "Ernie Ball .010s") with no catalog row — fully back-compatible.
+type AccessoryDraft = { type: string; value: string; instrumentId: string | null };
 
 function AccessoryDraftEditor({
   draft,
@@ -450,6 +461,8 @@ function AccessoryDraftEditor({
   onCancel,
   saving,
   saveLabel,
+  instruments,
+  onInstrumentCreated,
 }: {
   draft: AccessoryDraft[];
   setDraft: (next: AccessoryDraft[]) => void;
@@ -459,6 +472,8 @@ function AccessoryDraftEditor({
   onCancel: () => void;
   saving: boolean;
   saveLabel: string;
+  instruments: AdminInstrument[];
+  onInstrumentCreated: () => void;
 }) {
   const typeSuggestions = accessoryTypesFor(shortCategory);
   const canSave =
@@ -477,7 +492,7 @@ function AccessoryDraftEditor({
       ) : (
         <ul className="space-y-2">
           {draft.map((a, idx) => (
-            <li key={idx} className="flex items-center gap-2">
+            <li key={idx} className="flex items-start gap-2">
               <input
                 value={a.type}
                 onChange={(e) =>
@@ -492,23 +507,28 @@ function AccessoryDraftEditor({
                 className={`${inputCls} sm:w-44`}
                 data-testid={`input-accessory-type-${idBase}-${idx}`}
               />
-              <input
-                value={a.value}
-                onChange={(e) =>
-                  setDraft(
-                    draft.map((x, i) =>
-                      i === idx ? { ...x, value: e.target.value } : x,
-                    ),
-                  )
-                }
-                placeholder="Value (e.g. Ernie Ball .010s)"
-                className={`${inputCls} flex-1`}
-                data-testid={`input-accessory-value-${idBase}-${idx}`}
-              />
+              <div className="flex-1 min-w-0">
+                <GearPicker
+                  instruments={instruments}
+                  value={{ instrumentId: a.instrumentId, text: a.value }}
+                  onChange={(next) =>
+                    setDraft(
+                      draft.map((x, i) =>
+                        i === idx
+                          ? { ...x, value: next.text, instrumentId: next.instrumentId }
+                          : x,
+                      ),
+                    )
+                  }
+                  onCreated={onInstrumentCreated}
+                  categoryHint={a.type}
+                  idBase={`${idBase}-${idx}`}
+                />
+              </div>
               <button
                 type="button"
                 onClick={() => setDraft(draft.filter((_, i) => i !== idx))}
-                className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50"
+                className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 mt-1 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50"
                 data-testid={`button-remove-accessory-${idBase}-${idx}`}
                 aria-label="Remove accessory"
               >
@@ -521,7 +541,9 @@ function AccessoryDraftEditor({
       <div className="flex items-center gap-2 pt-0.5">
         <button
           type="button"
-          onClick={() => setDraft([...draft, { type: "", value: "" }])}
+          onClick={() =>
+            setDraft([...draft, { type: "", value: "", instrumentId: null }])
+          }
           className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand-blue)] hover:underline"
           data-testid={`button-add-accessory-row-${idBase}`}
         >
@@ -559,6 +581,8 @@ function GearRowAccessories({
   songIds,
   matchingRigs,
   onChanged,
+  instruments,
+  onInstrumentCreated,
 }: {
   personName: string;
   instrumentId: string;
@@ -568,9 +592,11 @@ function GearRowAccessories({
   matchingRigs: Array<{
     rigId: string;
     name: string;
-    accessories: Array<{ type: string; value: string }>;
+    accessories: Array<{ type: string; value: string; instrumentId: string | null }>;
   }>;
   onChanged: () => void;
+  instruments: AdminInstrument[];
+  onInstrumentCreated: () => void;
 }) {
   const { toast } = useToast();
   // Which editor is open: a rigId (editing that rig) or "new" (building one).
@@ -579,7 +605,13 @@ function GearRowAccessories({
 
   const clean = (d: AccessoryDraft[]) =>
     d
-      .map((a) => ({ type: a.type.trim(), value: a.value.trim() }))
+      .map((a) => ({
+        type: a.type.trim(),
+        value: a.value.trim(),
+        // Keep the catalog link — omitting it here silently strips the
+        // inventory backing on every save (the legacy free-text bug).
+        instrumentId: a.instrumentId ?? null,
+      }))
       .filter((a) => a.type && a.value);
 
   const createMut = useMutation({
@@ -671,13 +703,15 @@ function GearRowAccessories({
             }}
             saving={saving}
             saveLabel="Save accessories"
+            instruments={instruments}
+            onInstrumentCreated={onInstrumentCreated}
           />
         ) : (
           <button
             type="button"
             onClick={() => {
               setEditing("new");
-              setDraft([{ type: "", value: "" }]);
+              setDraft([{ type: "", value: "", instrumentId: null }]);
             }}
             className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand-blue)] hover:underline"
             data-testid={`button-add-accessories-${instrumentId}`}
@@ -720,7 +754,7 @@ function GearRowAccessories({
                       setDraft(
                         rig.accessories.length
                           ? rig.accessories.map((a) => ({ ...a }))
-                          : [{ type: "", value: "" }],
+                          : [{ type: "", value: "", instrumentId: null }],
                       );
                     }}
                     className="flex-shrink-0 text-xs font-semibold text-[var(--brand-blue)] hover:underline"
@@ -743,6 +777,8 @@ function GearRowAccessories({
                   }}
                   saving={saving}
                   saveLabel="Save"
+                  instruments={instruments}
+                  onInstrumentCreated={onInstrumentCreated}
                 />
               )}
             </li>
@@ -1217,6 +1253,315 @@ export function AddGearPanel({
             : `Save${selectedSongIds.size > 0 ? ` (${selectedSongIds.size})` : ""}`}
         </button>
       </div>
+    </div>
+  );
+}
+
+// Strip apiRequest's "502: {json}" envelope down to a readable sentence
+// for inline picker errors (AdminInstruments' humanizeApiError isn't
+// exported, and this surface is slimmer).
+function gearPickerError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  const m = raw.match(/^\d{3}:\s*(.*)$/);
+  const body = m ? m[1] : raw;
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed && typeof parsed.message === "string" && parsed.message.trim()) {
+      return parsed.message;
+    }
+  } catch {
+    /* not JSON — fall through */
+  }
+  return body.trim() || "Couldn't read that link. Check it and try again.";
+}
+
+type ScrapedGear = {
+  name: string | null;
+  category: string | null;
+  description: string | null;
+  photoUrl: string | null;
+};
+
+// Accessory gear picker — mirrors the main "Add gear" flow in one slim
+// inline control. The operator can:
+//   (a) type a value and pick a matching catalog row from the dropdown
+//       (links the line to inventory via instrumentId), or
+//   (b) paste a product URL → scrape → preview → "Add to gear", which
+//       creates a catalog row tagged shortCategory "Accessory" and links
+//       it, or
+//   (c) leave it as free text (no match, no URL) — instrumentId stays
+//       null, exactly the legacy behavior, so old accessory lines and
+//       quick one-offs like "Ernie Ball .010s" still read fine for fans.
+// Minimal shape the picker needs — both AdminInstrument (Person editor)
+// and AdminInstrumentLite (TrackCreditsPanel) satisfy it, so the one
+// component serves both surfaces.
+export type GearPickerInstrument = {
+  id: string;
+  name: string;
+  category?: string | null;
+  shortCategory?: string | null;
+  photoUrl?: string | null;
+};
+
+export function GearPicker({
+  instruments,
+  value,
+  onChange,
+  onCreated,
+  categoryHint,
+  idBase,
+}: {
+  instruments: GearPickerInstrument[];
+  value: { instrumentId: string | null; text: string };
+  onChange: (next: { instrumentId: string | null; text: string }) => void;
+  onCreated: (i: GearPickerInstrument) => void;
+  categoryHint?: string | null;
+  idBase: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [scraping, setScraping] = useState(false);
+  const [scraped, setScraped] = useState<ScrapedGear | null>(null);
+  const [pendingSourceUrl, setPendingSourceUrl] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const linked = value.instrumentId
+    ? instruments.find((i) => i.id === value.instrumentId) ?? null
+    : null;
+
+  const text = value.text;
+  const isUrl = /^https?:\/\/\S+$/i.test(text.trim());
+  const matches = (() => {
+    const q = text.trim().toLowerCase();
+    if (!q || isUrl) return [];
+    return instruments
+      .filter((i) => {
+        const hay =
+          `${i.name} ${i.category ?? ""} ${i.shortCategory ?? ""}`.toLowerCase();
+        return hay.includes(q);
+      })
+      .slice(0, 12);
+  })();
+
+  async function handleScrape() {
+    const url = text.trim();
+    if (!url) return;
+    setScraping(true);
+    setErr(null);
+    setScraped(null);
+    try {
+      const r = await apiRequest("POST", "/api/admin/instruments/scrape", {
+        url,
+      });
+      const data = (await r.json()) as ScrapedGear;
+      setScraped(data);
+      setPendingSourceUrl(url);
+      setOpen(false);
+    } catch (e) {
+      setErr(gearPickerError(e));
+    } finally {
+      setScraping(false);
+    }
+  }
+
+  async function handleCreate() {
+    if (!scraped) return;
+    const name = (scraped.name ?? text).trim() || "New accessory";
+    const category =
+      (scraped.category ?? categoryHint ?? "Accessory").trim() || "Accessory";
+    setCreating(true);
+    setErr(null);
+    try {
+      const res = await apiRequest("POST", "/api/admin/instruments", {
+        name,
+        category,
+        shortCategory: "Accessory",
+        ...(scraped.photoUrl ? { photoUrl: scraped.photoUrl } : {}),
+        ...(scraped.description ? { about: scraped.description } : {}),
+        ...(pendingSourceUrl ? { sourceUrl: pendingSourceUrl } : {}),
+      });
+      const created = (await res.json()) as AdminInstrument;
+      onCreated(created);
+      onChange({ instrumentId: created.id, text: created.name });
+      setScraped(null);
+      setPendingSourceUrl(null);
+    } catch (e) {
+      setErr(gearPickerError(e));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  // Linked to a catalog row — show the gear chip with a Change affordance.
+  if (value.instrumentId) {
+    return (
+      <div
+        className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5"
+        data-testid={`gear-linked-${idBase}`}
+      >
+        <div className="w-7 h-7 rounded overflow-hidden bg-slate-200 flex-shrink-0">
+          {linked?.photoUrl ? (
+            <img
+              src={linked.photoUrl}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+          ) : null}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-slate-900 text-[13px] font-medium truncate">
+            {linked?.name ?? value.text ?? "Linked gear"}
+          </p>
+          {linked ? (
+            <p className="text-slate-400 text-[11px] truncate">
+              {linked.shortCategory ?? linked.category}
+            </p>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange({ instrumentId: null, text: "" })}
+          className="text-[11px] text-slate-500 hover:text-slate-800"
+          data-testid={`button-change-gear-${idBase}`}
+        >
+          Change
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative" data-testid={`gear-picker-${idBase}`}>
+      <input
+        value={text}
+        onChange={(e) => {
+          onChange({ instrumentId: null, text: e.target.value });
+          setOpen(true);
+          setErr(null);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && isUrl) {
+            e.preventDefault();
+            handleScrape();
+          }
+        }}
+        placeholder="Value (e.g. Ernie Ball .010s) — or paste a link"
+        className={inputCls}
+        data-testid={`input-accessory-value-${idBase}`}
+      />
+      {open && text.trim().length > 0 && (
+        <div className="absolute z-10 left-0 right-0 mt-1 rounded-md border border-slate-200 bg-white shadow-lg max-h-64 overflow-y-auto">
+          {isUrl ? (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleScrape}
+              disabled={scraping}
+              className="w-full text-left px-3 py-2 text-xs text-[var(--brand-blue)] hover:bg-slate-50 disabled:opacity-50"
+              data-testid={`button-import-gear-${idBase}`}
+            >
+              {scraping ? "Reading link…" : "Import gear from this link"}
+            </button>
+          ) : (
+            <>
+              {matches.length === 0 && (
+                <p className="px-3 py-2 text-slate-400 text-xs">
+                  No matching gear — paste a product link to import it.
+                </p>
+              )}
+              {matches.map((i) => (
+                <button
+                  key={i.id}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onChange({ instrumentId: i.id, text: i.name });
+                    setOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 text-left"
+                  data-testid={`option-gear-${idBase}-${i.id}`}
+                >
+                  <div className="w-7 h-7 rounded overflow-hidden bg-slate-200 flex-shrink-0">
+                    {i.photoUrl ? (
+                      <img
+                        src={i.photoUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : null}
+                  </div>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-slate-900 text-xs truncate">
+                      {i.name}
+                    </span>
+                    <span className="block text-slate-400 text-[10px] truncate">
+                      {i.shortCategory ?? i.category}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+      {err && (
+        <p
+          className="mt-1 text-red-600 text-xs"
+          data-testid={`gear-error-${idBase}`}
+        >
+          {err}
+        </p>
+      )}
+      {scraped && (
+        <div
+          className="mt-2 rounded-md border border-slate-200 bg-white p-2"
+          data-testid={`gear-scrape-preview-${idBase}`}
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded overflow-hidden bg-slate-200 flex-shrink-0">
+              {scraped.photoUrl ? (
+                <img
+                  src={scraped.photoUrl}
+                  alt=""
+                  className="w-full h-full object-cover"
+                />
+              ) : null}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-slate-900 text-[13px] font-medium truncate">
+                {scraped.name ?? "New accessory"}
+              </p>
+              <p className="text-slate-400 text-[11px] truncate">
+                {scraped.category ?? categoryHint ?? "Accessory"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setScraped(null);
+                setPendingSourceUrl(null);
+              }}
+              className="text-[11px] text-slate-500 hover:text-slate-800 px-2 py-1"
+              data-testid={`button-discard-scrape-${idBase}`}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={creating}
+              onClick={handleCreate}
+              className="px-2.5 py-1 text-[11px] rounded bg-[var(--brand-blue)] text-white font-medium disabled:opacity-40"
+              data-testid={`button-add-scraped-gear-${idBase}`}
+            >
+              {creating ? "Adding…" : "Add to gear"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

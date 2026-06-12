@@ -26,6 +26,12 @@ export const SHORT_CATEGORIES = [
   "Amp",
   "Pedal",
   "Mic",
+  // Catch-all bucket for gear imported through the Rig accessory picker
+  // (strings, picks, capos, reeds, …). Admin-only ripple: it shows in the
+  // gear category dropdown and passes create/update validation. No fan filter
+  // chip is derived from this list, and accessories aren't sourced into the
+  // fan gear list, so adding it doesn't change the fan-facing gear surface.
+  "Accessory",
 ] as const;
 
 export type ShortCategory = (typeof SHORT_CATEGORIES)[number];
@@ -58,6 +64,7 @@ export const ACCESSORY_TYPES_BY_CATEGORY: Record<ShortCategory, string[]> = {
   Amp: ["Tubes", "Cabinet", "Settings"],
   Pedal: ["Settings", "Power"],
   Mic: ["Capsule", "Pad", "Pop Filter"],
+  Accessory: ["Strings", "Pick", "Capo", "Setting", "Other"],
 };
 
 // Generic fallback used when the base instrument has no shortCategory or an

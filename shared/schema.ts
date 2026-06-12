@@ -1471,6 +1471,15 @@ export const rigAccessories = pgTable("rig_accessories", {
   rigId: varchar("rig_id").notNull().references(() => rigs.id, { onDelete: "cascade" }),
   type: text("type").notNull(), // "Strings" / "Pick" / "Capo" / "Reeds" …
   value: text("value").notNull(), // "D'Addario EJ16 Phosphor Bronze"
+  // Optional link to a catalog instrument when the accessory was picked from
+  // (or imported into) the gear inventory — mirrors rigs.instrumentId so an
+  // accessory works "the same as all other gear" (searchable + paste-a-URL
+  // import). SET NULL so deleting the instrument keeps the accessory line:
+  // the `value` text is a name snapshot that keeps it renderable. Legacy
+  // free-text accessories (no inventory link) leave this null.
+  instrumentId: varchar("instrument_id").references(() => instruments.id, {
+    onDelete: "set null",
+  }),
   position: integer("position").notNull().default(0),
 });
 

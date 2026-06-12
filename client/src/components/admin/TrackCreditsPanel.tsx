@@ -36,6 +36,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/Spinner";
+import { GearPicker } from "@/components/admin/PersonGearManager";
 import { accessoryTypesFor } from "@shared/categories";
 
 // Per-track Credits panel.
@@ -1612,13 +1613,15 @@ function ImportMenu({
 
 /* ─── Rig builder + attach ────────────────────────────────────────── */
 
-type RigAccessoryDraft = { type: string; value: string };
+// `instrumentId` links an accessory line to a row in the gear catalog
+// (picked or scraped via GearPicker). `null` = legacy free-text value.
+type RigAccessoryDraft = { type: string; value: string; instrumentId: string | null };
 type RigDetailLite = {
   id: string;
   name: string;
   instrumentId: string | null;
   notes: string | null;
-  accessories: { id?: string; type: string; value: string }[];
+  accessories: { id?: string; type: string; value: string; instrumentId?: string | null }[];
   instrument: { id: string; name: string; photoUrl?: string | null } | null;
 };
 type TrackRigRow = {
@@ -1683,9 +1686,14 @@ function RigPanel({
 
   const createMut = useMutation({
     mutationFn: async () => {
-      const cleanAcc = accessories.filter(
-        (a) => a.type.trim() && a.value.trim(),
-      );
+      const cleanAcc = accessories
+        .filter((a) => a.type.trim() && a.value.trim())
+        .map((a) => ({
+          type: a.type.trim(),
+          value: a.value.trim(),
+          // Keep the catalog link or it's silently stripped on save.
+          instrumentId: a.instrumentId ?? null,
+        }));
       const res = await apiRequest("POST", "/api/admin/rigs", {
         name: name.trim(),
         instrumentId: instrumentId || null,
@@ -1943,7 +1951,10 @@ function RigPanel({
                 <button
                   type="button"
                   onClick={() =>
-                    setAccessories((a) => [...a, { type: "", value: "" }])
+                    setAccessories((a) => [
+                      ...a,
+                      { type: "", value: "", instrumentId: null },
+                    ])
                   }
                   className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand-blue)] hover:underline"
                   data-testid="button-add-accessory"
@@ -1978,19 +1989,39 @@ function RigPanel({
                         className="h-9 text-sm sm:w-40"
                         data-testid={`input-accessory-type-${idx}`}
                       />
-                      <Input
-                        value={a.value}
-                        onChange={(e) =>
-                          setAccessories((arr) =>
-                            arr.map((x, i) =>
-                              i === idx ? { ...x, value: e.target.value } : x,
-                            ),
-                          )
-                        }
-                        placeholder="Value (e.g. D'Addario .012s)"
-                        className="h-9 text-sm flex-1"
-                        data-testid={`input-accessory-value-${idx}`}
-                      />
+                      <div className="flex-1">
+                        <GearPicker
+                          instruments={instruments}
+                          value={{
+                            instrumentId: a.instrumentId,
+                            text: a.value,
+                          }}
+                          onChange={(next) =>
+                            setAccessories((arr) =>
+                              arr.map((x, i) =>
+                                i === idx
+                                  ? {
+                                      ...x,
+                                      value: next.text,
+                                      instrumentId: next.instrumentId,
+                                    }
+                                  : x,
+                              ),
+                            )
+                          }
+                          onCreated={() =>
+                            qc.invalidateQueries({
+                              queryKey: ["/api/instruments"],
+                            })
+                          }
+                          categoryHint={
+                            pickedInstrument?.shortCategory ??
+                            pickedInstrument?.category ??
+                            null
+                          }
+                          idBase={`rig-${idx}`}
+                        />
+                      </div>
                       <button
                         type="button"
                         onClick={() =>

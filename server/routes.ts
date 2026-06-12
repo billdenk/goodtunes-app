@@ -17456,7 +17456,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     instrumentId: z.string().min(1).nullable().optional(),
     notes: z.string().nullable().optional(),
     accessories: z
-      .array(z.object({ type: z.string().min(1), value: z.string().min(1) }))
+      .array(
+        z.object({
+          type: z.string().min(1),
+          value: z.string().min(1),
+          // Optional link to a catalog instrument when the accessory was
+          // picked from / imported into the gear inventory. Null/absent for
+          // legacy free-text accessories.
+          instrumentId: z.string().min(1).nullable().optional(),
+        }),
+      )
       .default([]),
   });
   app.post("/api/admin/rigs", requireAdmin, async (req, res) => {
