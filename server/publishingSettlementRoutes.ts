@@ -833,7 +833,10 @@ export function registerPublisherPortalRoutes(app: Express): void {
       let payoutsEnabled = false;
       if (ownerId && ownerKind) {
         const [acct] = await db
-          .select({ payoutsEnabled: payoutAccounts.payoutsEnabled })
+          .select({
+            stripeAccountId: payoutAccounts.stripeAccountId,
+            payoutsEnabled: payoutAccounts.payoutsEnabled,
+          })
           .from(payoutAccounts)
           .where(
             and(
@@ -845,6 +848,27 @@ export function registerPublisherPortalRoutes(app: Express): void {
         if (acct) {
           hasPayoutAccount = true;
           payoutsEnabled = !!acct.payoutsEnabled;
+
+          // The persisted `payoutsEnabled` flag only advances when Stripe's
+          // `account.updated` Connect webhook is delivered to the platform —
+          // which is fragile (delivery lag, or the Connect webhook simply
+          // isn't configured). So while the account is still pending, pull the
+          // live state straight from Stripe and sync it. This is bounded: once
+          // an account is enabled we never hit Stripe again. Best-effort —
+          // a Stripe hiccup falls back to the stored value.
+          if (!payoutsEnabled && acct.stripeAccountId) {
+            try {
+              const { getStripe } = await import("./stripe");
+              const { syncAccountFromStripe } = await import("./payouts");
+              const stripe = await getStripe();
+              const live = await stripe.accounts.retrieve(acct.stripeAccountId);
+              const updated = await syncAccountFromStripe(live);
+              if (updated) payoutsEnabled = !!updated.payoutsEnabled;
+              else payoutsEnabled = !!live.payouts_enabled;
+            } catch (syncErr) {
+              console.warn("[publisher-me] live payout sync failed (using stored state):", syncErr);
+            }
+          }
         }
       }
 
