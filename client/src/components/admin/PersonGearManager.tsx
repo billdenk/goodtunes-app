@@ -1020,6 +1020,11 @@ export function AddGearPanel({
   // (artwork header, Select-all, checkbox rows, already-credited / other-
   // credits chips) stays identical across both surfaces.
   const renderAlbumGroup = (a: GearContextAlbum) => {
+    // Task #1993 — defensive guard: never render a release that arrives with
+    // zero tracks. The server now drops empty releases, but this ensures a
+    // header + dead "Select all" can't appear even if an empty group slips
+    // through (e.g. a stale cache).
+    if (a.tracks.length === 0) return null;
     const allSelected =
       a.tracks.length > 0 && a.tracks.every((t) => selectedSongIds.has(t.songId));
     const toggleAll = () => {

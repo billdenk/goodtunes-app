@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiErrorBody, apiErrorStatus } from "@/lib/queryClient";
 import { Search, X, Guitar, Store, Loader2, Factory, ShoppingBag, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -225,28 +225,36 @@ export function AdminInstruments() {
       const r = await apiRequest("POST", "/api/admin/vendors", basePayload);
       return (await r.json()) as { id: string; name: string };
     } catch (err) {
-      const raw = err instanceof Error ? err.message : "";
-      const m = raw.match(/^409:\s*(.*)$/);
-      if (m) {
-        try {
-          const body = JSON.parse(m[1]);
+      // Recover from a duplicate-domain 409 (the maker/reseller already
+      // exists in the catalog). The shared API client attaches the parsed
+      // response body as `err.body` ({ message, vendor, parentCandidate });
+      // read that structured field rather than JSON-parsing it back out of
+      // `err.message`, which is intentionally kept clean (only the human
+      // `message` string) and would throw here — silently dropping the
+      // maker/reseller on every re-add of gear from an already-known brand.
+      if (apiErrorStatus(err) === 409) {
+        const body = apiErrorBody<{
+          vendor?: { id: string; name: string };
+          parentCandidate?: { id: string };
+        }>(err);
+        if (body) {
           // Task #603 — when 409 carries a `parentCandidate` and the
           // existing top-level vendor is a *different* brand than what
           // we asked for (Gibson vs requested Epiphone), re-POST as a
           // sub-brand of the parent candidate instead of mistakenly
           // returning the parent row and clobbering the maker.
-          const existingName = String(body?.vendor?.name ?? "").toLowerCase();
+          const existingName = String(body.vendor?.name ?? "").toLowerCase();
           const requestedName = slot.name.trim().toLowerCase();
           const sameName = existingName && existingName === requestedName;
-          if (!sameName && body?.parentCandidate?.id) {
+          if (!sameName && body.parentCandidate?.id) {
             const r2 = await apiRequest("POST", "/api/admin/vendors", {
               ...basePayload,
               parentVendorId: body.parentCandidate.id,
             });
             return (await r2.json()) as { id: string; name: string };
           }
-          if (body?.vendor?.id) return body.vendor as { id: string; name: string };
-        } catch { /* fall through */ }
+          if (body.vendor?.id) return body.vendor as { id: string; name: string };
+        }
       }
       throw err;
     }
@@ -358,9 +366,9 @@ export function AdminInstruments() {
           console.error("[add-gear] reseller attach failed", err);
         }
       }
-      return { instrument, scraped: s, makerVendor, resellerVendor, resellerAttached };
+      return { instrument, scraped: s, makerVendor, resellerVendor, resellerAttached, vendorError };
     },
-    onSuccess: ({ instrument, scraped, makerVendor, resellerVendor, resellerAttached }) => {
+    onSuccess: ({ instrument, scraped, makerVendor, resellerVendor, resellerAttached, vendorError }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/instruments"] });
       // A brand-new maker (or reseller) may have been minted via the
       // findOrCreateVendor upsert above. Invalidate the vendor caches so
@@ -377,26 +385,36 @@ export function AdminInstruments() {
       setPasteError(null);
       setScraped(null);
       setSelectedExtras(new Set());
-      if (scraped?.name || makerVendor || resellerVendor) {
+      if (scraped?.name || makerVendor || resellerVendor || vendorError) {
         const headline = scraped?.name ?? "Created blank gear";
         const parts: string[] = [];
+        // A slot that had a domain but came back null means its upsert threw
+        // (findOrCreateVendor only returns null when there's no domain), so
+        // say so plainly instead of dropping it silently.
+        const resellerFailed = !resellerVendor && !!scraped?.reseller?.domain;
+        const makerFailed = !makerVendor && !!scraped?.maker?.domain;
         if (resellerVendor) {
           parts.push(
             resellerAttached
               ? `Reseller: ${resellerVendor.name}`
               : `Reseller: ${resellerVendor.name} (attach failed — re-link on detail page)`,
           );
+        } else if (resellerFailed) {
+          parts.push(`Reseller: ${scraped!.reseller!.name} (couldn't save — add on detail page)`);
         } else if (scraped?.reseller && !scraped.reseller.domain) {
           parts.push("Reseller skipped — no domain");
         }
         if (makerVendor) parts.push(`Maker: ${makerVendor.name}`);
+        else if (makerFailed) parts.push(`Maker: ${scraped!.maker!.name} (couldn't save — add on detail page)`);
         else if (scraped?.maker && !scraped.maker.domain) parts.push(`Maker: ${scraped.maker.name} (no domain — set by hand)`);
+        const hadFailure =
+          !!vendorError || (!!resellerVendor && !resellerAttached) || resellerFailed || makerFailed;
         toast({
           title: `Pulled "${headline}"`,
           description: parts.length
             ? `${parts.join(" · ")}. Review and edit on the detail page.`
             : "Review and edit on the detail page.",
-          ...(resellerVendor && !resellerAttached ? { variant: "destructive" as const } : {}),
+          ...(hadFailure ? { variant: "destructive" as const } : {}),
         });
       }
       navigate(`/admin/instruments/${instrument.id}`);

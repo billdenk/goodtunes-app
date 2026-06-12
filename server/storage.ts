@@ -2775,7 +2775,15 @@ export class DbStorage implements IStorage {
       const songRows = await db
         .select()
         .from(songs)
-        .where(inArray(songs.albumId, albumIds))
+        .where(and(
+          inArray(songs.albumId, albumIds),
+          // Task #1993 — exclude soft-deleted songs so deleted "files" never
+          // appear as selectable rows in the Add-gear picker. The performer-
+          // rows path already filters this (isNull(songs.deletedAt) above);
+          // the own-catalog song lookup was the one out of sync. Mirrors the
+          // filter searchPersonGearTracks already applies.
+          isNull(songs.deletedAt),
+        ))
         .orderBy(asc(songs.trackNumber));
       for (const s of songRows) {
         const bucket = byAlbum.get(s.albumId);
@@ -2877,6 +2885,12 @@ export class DbStorage implements IStorage {
           .sort((x, y) => x.trackNumber - y.trackNumber)
           .map((t) => ({ ...t, rigs: rigsBySong.get(t.songId) ?? [] })),
       }))
+      // Task #1993 — drop releases with zero live tracks. Streaming-catalog
+      // shells where the person is the primary artist but no real songs
+      // exist would otherwise render a header + dead "Select all" with
+      // nothing beneath it. Buckets seeded from performer rows always carry
+      // ≥1 live track, so this only removes empty own-catalog releases.
+      .filter((b) => b.tracks.length > 0)
       .sort(
         (a, b) =>
           (a.albumYear ?? 0) - (b.albumYear ?? 0) ||
@@ -2992,7 +3006,11 @@ export class DbStorage implements IStorage {
       });
       byAlbum.set(r.a.id, bucket);
     }
-    return Array.from(byAlbum.values());
+    // Task #1993 — only return releases with ≥1 live track. Buckets are
+    // built solely from non-deleted matched songs above, so this is a no-op
+    // in practice, but it keeps the "must have at least one live track" rule
+    // explicit and symmetric with getPersonGearContext.
+    return Array.from(byAlbum.values()).filter((b) => b.tracks.length > 0);
   }
 
   async getVendorSuperCreditArtists(vendorId: string): Promise<Array<Person & { trackCount: number }>> {

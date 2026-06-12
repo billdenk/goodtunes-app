@@ -28,6 +28,34 @@ function authHeaders(): Record<string, string> {
   return headers;
 }
 
+// Error thrown by `apiRequest` / the default query fetcher on a non-OK
+// response. `message` stays clean/non-leaky (`${status}: ${message}` — never
+// a raw HTML/edge-proxy body); the parsed JSON body and status are attached
+// as structured fields so callers can recover a typed payload (e.g. a 409's
+// `{ vendor, parentCandidate }`) without re-parsing the message string.
+export interface ApiError extends Error {
+  status?: number;
+  body?: unknown;
+}
+
+// Read the structured JSON body the API client attached to a thrown error
+// (undefined when the response had no JSON body). Prefer this over parsing
+// `err.message`, which only carries the human-readable `message` field.
+export function apiErrorBody<T = unknown>(err: unknown): T | undefined {
+  if (err && typeof err === "object" && "body" in err) {
+    return (err as ApiError).body as T | undefined;
+  }
+  return undefined;
+}
+
+// Read the HTTP status the API client attached to a thrown error.
+export function apiErrorStatus(err: unknown): number | undefined {
+  if (err && typeof err === "object" && "status" in err) {
+    return (err as ApiError).status;
+  }
+  return undefined;
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     // Never let a raw response body (notably an edge-proxy HTML 403/5xx page)
@@ -35,12 +63,17 @@ async function throwIfResNotOk(res: Response) {
     // a clean status-based message. The `${status}: ${message}` shape is kept
     // for backward compatibility with callers that key off the leading code.
     let message = res.statusText || "Request failed";
+    let parsedBody: unknown;
     try {
       const text = await res.text();
       const trimmed = (text || "").trim();
       if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
         try {
           const j = JSON.parse(trimmed);
+          // Keep the full parsed body so callers can recover structured
+          // payloads (e.g. a duplicate-domain 409's `vendor` / `parentCandidate`)
+          // without JSON-parsing it back out of the message string.
+          parsedBody = j;
           if (j && typeof j.message === "string" && j.message.trim()) {
             message = j.message.trim();
           }
@@ -53,7 +86,10 @@ async function throwIfResNotOk(res: Response) {
     } catch {
       // Body already consumed / unreadable — keep the generic status message.
     }
-    throw new Error(`${res.status}: ${message}`);
+    const err = new Error(`${res.status}: ${message}`) as ApiError;
+    err.status = res.status;
+    if (parsedBody !== undefined) err.body = parsedBody;
+    throw err;
   }
 }
 
