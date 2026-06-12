@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ShoppingBag,
@@ -321,51 +321,133 @@ function AddonRow({ albumId, addon }: { albumId: string; addon: Addon }) {
   );
 }
 
-// Light-chrome equirectangular city-dot map. Mirrors the partner BuyerReport
-// WorldMap but tuned for the white admin surface.
+// ── Real geographic base layer for the "Where fans live" card ───────────
+// Draws country (+ US-state) outlines from the vendored Natural Earth
+// GeoJSON behind the order dots, styled for the white admin surface (light
+// region fills, subtle slate outlines — NOT the dark partner SalesMap
+// palette). Reuses the equirectangular world projection and the cos(lat)-
+// corrected continental-US window proven in partner/SalesMap.tsx.
+type GeoFeature = {
+  properties: { id: string | null; name: string };
+  geometry: { type: string; coordinates: any };
+};
+type FeatureCollection = { features: GeoFeature[] };
+
+// Lazy-load (and code-split) the vendored geometry; only the active view's
+// set is fetched.
+function useGeoData(kind: "world" | "us"): FeatureCollection | null {
+  const [fc, setFc] = useState<FeatureCollection | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const p =
+      kind === "world"
+        ? import("@/assets/geo/world-countries.geo.json")
+        : import("@/assets/geo/us-states.geo.json");
+    p.then((mod) => {
+      if (alive) setFc(((mod as any).default ?? mod) as FeatureCollection);
+    }).catch(() => {
+      if (alive) setFc(null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [kind]);
+  return fc;
+}
+
+type Projection = (lon: number, lat: number) => [number, number];
+
+function geometryToPath(geometry: GeoFeature["geometry"], proj: Projection): string {
+  const polys =
+    geometry.type === "Polygon"
+      ? [geometry.coordinates]
+      : geometry.type === "MultiPolygon"
+        ? geometry.coordinates
+        : [];
+  let d = "";
+  for (const poly of polys as number[][][][]) {
+    for (const ring of poly) {
+      ring.forEach(([lon, lat], i) => {
+        const [x, y] = proj(lon, lat);
+        d += (i === 0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1);
+      });
+      d += "Z";
+    }
+  }
+  return d;
+}
+
+// Equirectangular world projection on an 800×400 canvas; the viewBox crops
+// the empty polar bands.
+const WORLD_W = 800;
+const WORLD_H = 400;
+const worldProj: Projection = (lon, lat) => [
+  ((lon + 180) / 360) * WORLD_W,
+  ((90 - lat) / 180) * WORLD_H,
+];
+const WORLD_VIEWBOX = "0 14 800 312";
+
+// Continental-US window with a cos(lat) longitude correction so the map
+// isn't vertically stretched. AK / HI / territories fall outside this
+// window and are clipped from the map (they remain in the city list).
+const US_BOUNDS = { minLon: -125, maxLon: -66, minLat: 24, maxLat: 50 };
+const US_LAT_MID = (US_BOUNDS.minLat + US_BOUNDS.maxLat) / 2;
+const US_LON_SCALE = Math.cos((US_LAT_MID * Math.PI) / 180);
+const US_GEO_W = (US_BOUNDS.maxLon - US_BOUNDS.minLon) * US_LON_SCALE;
+const US_GEO_H = US_BOUNDS.maxLat - US_BOUNDS.minLat;
+const US_VB_H = 420;
+const US_VB_W = Math.round((US_VB_H * US_GEO_W) / US_GEO_H);
+const usProj: Projection = (lon, lat) => [
+  (((lon - US_BOUNDS.minLon) * US_LON_SCALE) / US_GEO_W) * US_VB_W,
+  ((US_BOUNDS.maxLat - lat) / US_GEO_H) * US_VB_H,
+];
+
+// Loose continental-US test for the auto-focus decision and dot clipping.
+function pointInUs(p: GeoPoint): boolean {
+  const c = (p.country ?? "").toUpperCase();
+  const countryOk =
+    c === "" || c === "US" || c === "USA" || c.startsWith("UNITED STATES");
+  return (
+    countryOk && p.lon >= -130 && p.lon <= -60 && p.lat >= 20 && p.lat <= 55
+  );
+}
+
+// Light-chrome geographic city-dot map. Mirrors the partner SalesMap base
+// layer but tuned for the white admin surface, and auto-focuses the
+// continental US when (nearly) all geocoded points fall inside it.
 function FanMap({ points }: { points: GeoPoint[] }) {
-  const W = 960;
-  const H = 480;
-  const proj = (lat: number, lon: number): [number, number] => [
-    ((lon + 180) / 360) * W,
-    ((90 - lat) / 180) * H,
-  ];
+  const useUs = useMemo(() => {
+    if (points.length === 0) return false;
+    const inUs = points.filter(pointInUs).length;
+    return inUs / points.length >= 0.9;
+  }, [points]);
+
+  const geo = useGeoData(useUs ? "us" : "world");
+
+  const proj = useUs ? usProj : worldProj;
+  const viewBox = useUs ? `0 0 ${US_VB_W} ${US_VB_H}` : WORLD_VIEWBOX;
   const maxOrders = Math.max(1, ...points.map((p) => p.orders));
+
+  // In the US view, clip the few outliers off the map (they stay in the
+  // city list below). The world view shows every point.
+  const dots = useUs ? points.filter(pointInUs) : points;
+
   return (
     <div className="relative w-full overflow-hidden rounded-lg ring-1 ring-slate-200 bg-slate-50">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" data-testid="svg-fan-map">
-        {[-60, -30, 0, 30, 60].map((lat) => {
-          const [, y] = proj(lat, 0);
-          return (
-            <line
-              key={`la${lat}`}
-              x1={0}
-              x2={W}
-              y1={y}
-              y2={y}
-              stroke="rgba(15,23,42,0.06)"
-              strokeWidth={0.5}
-            />
-          );
-        })}
-        {[-120, -60, 0, 60, 120].map((lon) => {
-          const [x] = proj(0, lon);
-          return (
-            <line
-              key={`lo${lon}`}
-              x1={x}
-              x2={x}
-              y1={0}
-              y2={H}
-              stroke="rgba(15,23,42,0.06)"
-              strokeWidth={0.5}
-            />
-          );
-        })}
-        <line x1={0} x2={W} y1={H / 2} y2={H / 2} stroke="rgba(15,23,42,0.1)" strokeWidth={0.5} />
-        {points.map((p, i) => {
-          const [x, y] = proj(p.lat, p.lon);
-          const r = 3 + 8 * Math.sqrt(p.orders / maxOrders);
+      <svg viewBox={viewBox} className="w-full h-auto" data-testid="svg-fan-map">
+        {geo?.features.map((f, i) => (
+          <path
+            key={f.properties.id ?? i}
+            d={geometryToPath(f.geometry, proj)}
+            fill="rgba(15,23,42,0.05)"
+            stroke="rgba(15,23,42,0.18)"
+            strokeWidth={0.5}
+            strokeLinejoin="round"
+          />
+        ))}
+        {dots.map((p, i) => {
+          const [x, y] = proj(p.lon, p.lat);
+          const r = 2 + 6 * Math.sqrt(p.orders / maxOrders);
           return (
             <g key={i} data-testid={`map-dot-${i}`}>
               <circle
