@@ -36,8 +36,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/Spinner";
-import { GearPicker } from "@/components/admin/PersonGearManager";
-import { accessoryTypesFor } from "@shared/categories";
+import { GearPicker, AccessoryTypeField } from "@/components/admin/PersonGearManager";
 
 // Per-track Credits panel.
 //
@@ -1672,9 +1671,8 @@ function RigPanel({
 
   const pickedInstrument =
     instruments.find((i) => i.id === instrumentId) ?? null;
-  const typeSuggestions = accessoryTypesFor(
-    pickedInstrument?.shortCategory ?? pickedInstrument?.category ?? null,
-  );
+  const accessoryCategory =
+    pickedInstrument?.shortCategory ?? pickedInstrument?.category ?? null;
 
   const resetBuilder = () => {
     setName("");
@@ -1962,11 +1960,6 @@ function RigPanel({
                   <Plus className="w-3.5 h-3.5" /> Add
                 </button>
               </div>
-              <datalist id={`accessory-types-${songId}`}>
-                {typeSuggestions.map((t) => (
-                  <option key={t} value={t} />
-                ))}
-              </datalist>
               {accessories.length === 0 ? (
                 <p className="mt-1 text-xs text-slate-400">
                   No accessories — add strings, picks, settings, etc.
@@ -1974,20 +1967,19 @@ function RigPanel({
               ) : (
                 <ul className="mt-2 space-y-2">
                   {accessories.map((a, idx) => (
-                    <li key={idx} className="flex items-center gap-2">
-                      <Input
+                    <li key={idx} className="flex items-start gap-2">
+                      <AccessoryTypeField
                         value={a.type}
-                        onChange={(e) =>
+                        onChange={(next) =>
                           setAccessories((arr) =>
                             arr.map((x, i) =>
-                              i === idx ? { ...x, type: e.target.value } : x,
+                              i === idx ? { ...x, type: next } : x,
                             ),
                           )
                         }
-                        list={`accessory-types-${songId}`}
-                        placeholder="Type"
-                        className="h-9 text-sm sm:w-40"
-                        data-testid={`input-accessory-type-${idx}`}
+                        shortCategory={accessoryCategory}
+                        idBase={`${idx}`}
+                        className="sm:w-40"
                       />
                       <div className="flex-1">
                         <GearPicker

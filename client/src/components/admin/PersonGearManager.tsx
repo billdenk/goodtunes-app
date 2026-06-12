@@ -452,6 +452,74 @@ export function PersonGearManager({
 // "Ernie Ball .010s") with no catalog row — fully back-compatible.
 type AccessoryDraft = { type: string; value: string; instrumentId: string | null };
 
+const ACCESSORY_TYPE_OTHER = "__other__";
+
+// Prefilled accessory-type picker. Shows a dropdown of the accessory types that
+// make sense for the base instrument's category (Pick / Strings / Strap / Capo
+// / … for a guitar), plus an "Other…" choice that reveals a free-text box. The
+// chosen type is stored as plain text on the accessory line, so legacy/custom
+// values keep working — a stored value that isn't one of the prefilled options
+// simply opens in "Other…" mode with its text editable.
+export function AccessoryTypeField({
+  value,
+  onChange,
+  shortCategory,
+  idBase,
+  className,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  shortCategory: string | null | undefined;
+  idBase: string;
+  className?: string;
+}) {
+  const options = accessoryTypesFor(shortCategory);
+  const inList = value !== "" && options.includes(value);
+  const [other, setOther] = useState(value !== "" && !inList);
+
+  // A stored/custom value that isn't one of the prefilled options drops into
+  // "Other…" mode so the free text stays visible and editable.
+  useEffect(() => {
+    if (value !== "" && !options.includes(value)) setOther(true);
+  }, [value, options]);
+
+  return (
+    <div className={`space-y-1 ${className ?? ""}`}>
+      <select
+        value={other ? ACCESSORY_TYPE_OTHER : inList ? value : ""}
+        onChange={(e) => {
+          const next = e.target.value;
+          if (next === ACCESSORY_TYPE_OTHER) {
+            setOther(true);
+          } else {
+            setOther(false);
+            onChange(next);
+          }
+        }}
+        className={inputCls}
+        data-testid={`select-accessory-type-${idBase}`}
+      >
+        <option value="">Type…</option>
+        {options.map((t) => (
+          <option key={t} value={t}>
+            {t}
+          </option>
+        ))}
+        <option value={ACCESSORY_TYPE_OTHER}>Other…</option>
+      </select>
+      {other && (
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Custom type"
+          className={inputCls}
+          data-testid={`input-accessory-type-${idBase}`}
+        />
+      )}
+    </div>
+  );
+}
+
 function AccessoryDraftEditor({
   draft,
   setDraft,
@@ -475,16 +543,10 @@ function AccessoryDraftEditor({
   instruments: AdminInstrument[];
   onInstrumentCreated: () => void;
 }) {
-  const typeSuggestions = accessoryTypesFor(shortCategory);
   const canSave =
     !saving && draft.some((a) => a.type.trim() && a.value.trim());
   return (
     <div className="mt-2 space-y-2">
-      <datalist id={`accessory-types-${idBase}`}>
-        {typeSuggestions.map((t) => (
-          <option key={t} value={t} />
-        ))}
-      </datalist>
       {draft.length === 0 ? (
         <p className="text-slate-400 text-xs">
           No accessories yet — add strings, picks, capo, etc.
@@ -493,19 +555,18 @@ function AccessoryDraftEditor({
         <ul className="space-y-2">
           {draft.map((a, idx) => (
             <li key={idx} className="flex items-start gap-2">
-              <input
+              <AccessoryTypeField
                 value={a.type}
-                onChange={(e) =>
+                onChange={(next) =>
                   setDraft(
                     draft.map((x, i) =>
-                      i === idx ? { ...x, type: e.target.value } : x,
+                      i === idx ? { ...x, type: next } : x,
                     ),
                   )
                 }
-                list={`accessory-types-${idBase}`}
-                placeholder="Type (e.g. Strings)"
-                className={`${inputCls} sm:w-44`}
-                data-testid={`input-accessory-type-${idBase}-${idx}`}
+                shortCategory={shortCategory}
+                idBase={`${idBase}-${idx}`}
+                className="sm:w-44"
               />
               <div className="flex-1 min-w-0">
                 <GearPicker

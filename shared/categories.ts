@@ -42,16 +42,21 @@ export type ShortCategory = (typeof SHORT_CATEGORIES)[number];
  * A "Rig" bundles a base instrument with accessory lines (strings, pick,
  * reeds, …). The *type* of accessory that makes sense depends on the base
  * instrument's category — strings/pick/capo for a guitar, reeds/mouthpiece
- * for a woodwind, heads/sticks for drums. This map drives the suggested
- * type chips in the admin Rig builder.
+ * for a woodwind, heads/sticks for drums. This map drives the accessory-type
+ * dropdown in the admin Rig builder (and the per-gear Accessories editor):
+ * pick the instrument and the relevant accessory types are pre-filled.
+ *
+ * Do NOT add an "Other" entry to any list here — the editor automatically
+ * appends an "Other…" choice that reveals a free-text box, so every category
+ * already has an escape hatch and a literal "Other" would just duplicate it.
  *
  * It is a convenience list only: the chosen type is stored as free text on
  * `rig_accessories.type`, so the data survives any edit to this list and the
- * operator can always type a custom type. Use `accessoryTypesFor()` to read
- * it with a sensible generic fallback.
+ * operator can always type a custom type via "Other…". Use
+ * `accessoryTypesFor()` to read it with a sensible generic fallback.
  */
 export const ACCESSORY_TYPES_BY_CATEGORY: Record<ShortCategory, string[]> = {
-  Guitar: ["Strings", "Pick", "Capo", "Strap", "Slide", "Tuning"],
+  Guitar: ["Pick", "Strings", "Strap", "Capo", "Slide", "Tuner"],
   Bass: ["Strings", "Pick", "Strap", "Tuning"],
   Drums: ["Heads", "Sticks", "Cymbals", "Hardware", "Tuning"],
   Percussion: ["Mallets", "Heads", "Beaters"],
@@ -64,12 +69,13 @@ export const ACCESSORY_TYPES_BY_CATEGORY: Record<ShortCategory, string[]> = {
   Amp: ["Tubes", "Cabinet", "Settings"],
   Pedal: ["Settings", "Power"],
   Mic: ["Capsule", "Pad", "Pop Filter"],
-  Accessory: ["Strings", "Pick", "Capo", "Setting", "Other"],
+  Accessory: ["Strings", "Pick", "Capo", "Setting"],
 };
 
 // Generic fallback used when the base instrument has no shortCategory or an
-// unknown one. Keeps the builder usable for any gear.
-export const ACCESSORY_TYPES_GENERIC = ["Strings", "Accessory", "Setting", "Other"];
+// unknown one. Keeps the builder usable for any gear. (No "Other" — the editor
+// appends an "Other…" escape hatch itself.)
+export const ACCESSORY_TYPES_GENERIC = ["Strings", "Accessory", "Setting"];
 
 /**
  * Task #1983 — Common performance roles for the admin "Add gear" panel.
