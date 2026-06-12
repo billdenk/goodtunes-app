@@ -26219,8 +26219,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const segment = (["all", "buyers", "no_sales", "unclaimed"] as const).includes(segmentRaw as any)
       ? (segmentRaw as "all" | "buyers" | "no_sales" | "unclaimed")
       : "all";
-    const result = await storage.listAdminCustomers({ q, limit, offset, artistAlbumIds, segment });
+    const city = typeof req.query.city === "string" ? req.query.city : undefined;
+    const region = typeof req.query.region === "string" ? req.query.region : undefined;
+    const country = typeof req.query.country === "string" ? req.query.country : undefined;
+    const result = await storage.listAdminCustomers({ q, limit, offset, artistAlbumIds, segment, city, region, country });
     res.json(result);
+  });
+  // GET /api/admin/customers/geo — city-level customer locations powering the
+  // Customers-page map. Reuses salesGeography(): super-admins / admins see
+  // every order globally; artist partners stay scoped to their own albums
+  // (mirrors the list endpoint above). Only city / region / country leave the
+  // server; each point carries a distinct-customer count used to size + rank
+  // the map and drive the "tap a city → see those customers" hand-off.
+  // MUST stay registered before "/api/admin/customers/:id" so "geo" isn't
+  // captured as an :id.
+  app.get("/api/admin/customers/geo", requireAdmin, async (req, res) => {
+    const { salesGeography } = await import("./reports/buyers");
+    const emptyGeo = {
+      regions: [], states: [], points: [],
+      totals: { units: 0, revenueCents: 0, customers: 0 },
+      sources: [], referred: { units: 0, revenueCents: 0, customers: 0 },
+      meta: { totalCities: 0, geocoded: 0 },
+    };
+    let scopeFilter = sql`TRUE`;
+    const callerRole = await getUserRole(req.session.userId!);
+    if (callerRole?.role === "artist") {
+      const personId = callerRole.roleScopeId;
+      if (!personId) return res.json(emptyGeo);
+      const albumRows = await db.execute<{ id: string }>(sql`
+        SELECT id FROM albums
+        WHERE (primary_artist_id = ${personId}
+               OR (payout_owner_kind = 'person' AND payout_owner_id = ${personId}))
+          AND deleted_at IS NULL
+      `);
+      const ids = (albumRows as any).rows?.map((r: any) => r.id) ?? [];
+      if (!ids.length) return res.json(emptyGeo);
+      scopeFilter = sql`o.album_id = ANY(${pgArray(ids)}::text[])`;
+    }
+    const from = new Date(0);
+    const to = new Date(Date.now() + 86_400_000);
+    const geo = await salesGeography(scopeFilter, from, to);
+    res.json(geo);
   });
   app.get("/api/admin/customers/:id", requireAdmin, async (req, res) => {
     // Artist partners can only view profiles of customers who bought their albums.

@@ -1632,6 +1632,197 @@ type TrackRigRow = {
   rig: RigDetailLite | null;
 };
 
+/* Reusable rig editor — backs both "Build a new rig" (create) and the
+   per-row "Edit" affordance. The create POST and edit PUT take the same
+   shape, so the form body is shared; callers wire the mutation, submit
+   label, and a testid suffix (so a build form + an edit form open at once
+   never collide on ids). */
+function RigForm({
+  instruments,
+  initial,
+  submitLabel,
+  submitting,
+  onSubmit,
+  onCancel,
+  testIdSuffix = "",
+}: {
+  instruments: AdminInstrumentLite[];
+  initial: { name: string; instrumentId: string; notes: string; accessories: RigAccessoryDraft[] };
+  submitLabel: string;
+  submitting: boolean;
+  onSubmit: (vals: {
+    name: string;
+    instrumentId: string | null;
+    notes: string | null;
+    accessories: RigAccessoryDraft[];
+  }) => void;
+  onCancel: () => void;
+  testIdSuffix?: string;
+}) {
+  const qc = useQueryClient();
+  const [name, setName] = useState(initial.name);
+  const [instrumentId, setInstrumentId] = useState(initial.instrumentId);
+  const [notes, setNotes] = useState(initial.notes);
+  const [accessories, setAccessories] = useState<RigAccessoryDraft[]>(initial.accessories);
+
+  const pickedInstrument = instruments.find((i) => i.id === instrumentId) ?? null;
+  const accessoryCategory =
+    pickedInstrument?.shortCategory ?? pickedInstrument?.category ?? null;
+
+  const selectCls =
+    "h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40";
+
+  const submit = () => {
+    const cleanAcc = accessories
+      .filter((a) => a.type.trim() && a.value.trim())
+      .map((a) => ({
+        type: a.type.trim(),
+        value: a.value.trim(),
+        // Keep the catalog link or it's silently stripped on save.
+        instrumentId: a.instrumentId ?? null,
+      }));
+    onSubmit({
+      name: name.trim(),
+      instrumentId: instrumentId || null,
+      notes: notes.trim() || null,
+      accessories: cleanAcc,
+    });
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-200 p-3 space-y-3">
+      <div>
+        <Label className="text-xs font-semibold text-slate-600">Rig name</Label>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Fernando's Folk Rig"
+          className="mt-1 h-9 text-sm"
+          data-testid={`input-rig-name${testIdSuffix}`}
+        />
+      </div>
+      <div>
+        <Label className="text-xs font-semibold text-slate-600">Base instrument</Label>
+        <select
+          value={instrumentId}
+          onChange={(e) => setInstrumentId(e.target.value)}
+          className={`${selectCls} mt-1`}
+          data-testid={`select-rig-instrument${testIdSuffix}`}
+        >
+          <option value="">None</option>
+          {instruments.map((i) => (
+            <option key={i.id} value={i.id}>
+              {i.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <div className="flex items-center justify-between">
+          <Label className="text-xs font-semibold text-slate-600">Accessories</Label>
+          <button
+            type="button"
+            onClick={() =>
+              setAccessories((a) => [...a, { type: "", value: "", instrumentId: null }])
+            }
+            className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand-blue)] hover:underline"
+            data-testid={`button-add-accessory${testIdSuffix}`}
+          >
+            <Plus className="w-3.5 h-3.5" /> Add
+          </button>
+        </div>
+        {accessories.length === 0 ? (
+          <p className="mt-1 text-xs text-slate-400">
+            No accessories — add strings, picks, settings, etc.
+          </p>
+        ) : (
+          <ul className="mt-2 space-y-2">
+            {accessories.map((a, idx) => (
+              <li key={idx} className="flex items-start gap-2">
+                <AccessoryTypeField
+                  value={a.type}
+                  onChange={(next) =>
+                    setAccessories((arr) =>
+                      arr.map((x, i) => (i === idx ? { ...x, type: next } : x)),
+                    )
+                  }
+                  shortCategory={accessoryCategory}
+                  idBase={`${testIdSuffix}${idx}`}
+                  className="sm:w-40"
+                />
+                <div className="flex-1">
+                  <GearPicker
+                    instruments={instruments}
+                    value={{ instrumentId: a.instrumentId, text: a.value }}
+                    onChange={(next) =>
+                      setAccessories((arr) =>
+                        arr.map((x, i) =>
+                          i === idx
+                            ? { ...x, value: next.text, instrumentId: next.instrumentId }
+                            : x,
+                        ),
+                      )
+                    }
+                    onCreated={() =>
+                      qc.invalidateQueries({ queryKey: ["/api/instruments"] })
+                    }
+                    categoryHint={
+                      pickedInstrument?.shortCategory ?? pickedInstrument?.category ?? null
+                    }
+                    idBase={`rig${testIdSuffix}-${idx}`}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAccessories((arr) => arr.filter((_, i) => i !== idx))
+                  }
+                  className="flex-shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                  data-testid={`button-remove-accessory${testIdSuffix}-${idx}`}
+                  aria-label="Remove accessory"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div>
+        <Label className="text-xs font-semibold text-slate-600">Notes</Label>
+        <Input
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Optional — how this rig is set up"
+          className="mt-1 h-9 text-sm"
+          data-testid={`input-rig-notes${testIdSuffix}`}
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          onClick={submit}
+          disabled={!name.trim() || submitting}
+          data-testid={`button-save-rig${testIdSuffix}`}
+        >
+          {submitting ? <Spinner className="h-4 w-4" /> : submitLabel}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={onCancel}
+          disabled={submitting}
+          data-testid={`button-cancel-rig${testIdSuffix}`}
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function RigPanel({
   songId,
   albumId,
@@ -1662,42 +1853,22 @@ function RigPanel({
     qc.invalidateQueries({ queryKey: ["/api/albums", albumId, "credits"] });
   };
 
-  // Build-a-rig form state.
+  // Which inline form is open: the "build new" form (building) or a per-rig
+  // edit form (editingRigId). Only one is open at a time so the shared
+  // RigForm testids never collide.
   const [building, setBuilding] = useState(false);
-  const [name, setName] = useState("");
-  const [instrumentId, setInstrumentId] = useState("");
-  const [notes, setNotes] = useState("");
-  const [accessories, setAccessories] = useState<RigAccessoryDraft[]>([]);
+  const [editingRigId, setEditingRigId] = useState<string | null>(null);
 
-  const pickedInstrument =
-    instruments.find((i) => i.id === instrumentId) ?? null;
-  const accessoryCategory =
-    pickedInstrument?.shortCategory ?? pickedInstrument?.category ?? null;
-
-  const resetBuilder = () => {
-    setName("");
-    setInstrumentId("");
-    setNotes("");
-    setAccessories([]);
-    setBuilding(false);
+  type RigFormVals = {
+    name: string;
+    instrumentId: string | null;
+    notes: string | null;
+    accessories: RigAccessoryDraft[];
   };
 
   const createMut = useMutation({
-    mutationFn: async () => {
-      const cleanAcc = accessories
-        .filter((a) => a.type.trim() && a.value.trim())
-        .map((a) => ({
-          type: a.type.trim(),
-          value: a.value.trim(),
-          // Keep the catalog link or it's silently stripped on save.
-          instrumentId: a.instrumentId ?? null,
-        }));
-      const res = await apiRequest("POST", "/api/admin/rigs", {
-        name: name.trim(),
-        instrumentId: instrumentId || null,
-        notes: notes.trim() || null,
-        accessories: cleanAcc,
-      });
+    mutationFn: async (vals: RigFormVals) => {
+      const res = await apiRequest("POST", "/api/admin/rigs", vals);
       const rig = await res.json();
       await apiRequest("POST", `/api/admin/songs/${songId}/rigs`, {
         rigId: rig.id,
@@ -1706,13 +1877,34 @@ function RigPanel({
     },
     onSuccess: () => {
       invalidate();
-      resetBuilder();
+      setBuilding(false);
       toast({ description: "Rig built and attached to this track." });
     },
     onError: (e) =>
       toast({
         variant: "destructive",
         description: e instanceof Error ? e.message : "Could not build rig",
+      }),
+  });
+
+  // Edit an existing rig (name / base instrument / accessories / notes). The
+  // PUT replaces accessories wholesale, so RigForm seeds from the current rig
+  // and submits the full set. Edits apply to the underlying rig wherever it's
+  // attached, not just this track.
+  const updateMut = useMutation({
+    mutationFn: async ({ id, vals }: { id: string; vals: RigFormVals }) => {
+      const res = await apiRequest("PUT", `/api/admin/rigs/${id}`, vals);
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidate();
+      setEditingRigId(null);
+      toast({ description: "Rig updated." });
+    },
+    onError: (e) =>
+      toast({
+        variant: "destructive",
+        description: e instanceof Error ? e.message : "Could not update rig",
       }),
   });
 
@@ -1837,17 +2029,60 @@ function RigPanel({
                     </p>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => detachMut.mutate(tr.id)}
-                  disabled={detachMut.isPending}
-                  className="flex-shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-40"
-                  data-testid={`button-detach-rig-${tr.id}`}
-                  aria-label="Remove rig from track"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex-shrink-0 flex items-center gap-1">
+                  {tr.rigId && tr.rig && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingRigId((cur) => {
+                          const next = cur === tr.rigId ? null : tr.rigId;
+                          if (next) setBuilding(false);
+                          return next;
+                        })
+                      }
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10"
+                      data-testid={`button-edit-rig-${tr.id}`}
+                      aria-label="Edit rig"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => detachMut.mutate(tr.id)}
+                    disabled={detachMut.isPending}
+                    className="inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-40"
+                    data-testid={`button-detach-rig-${tr.id}`}
+                    aria-label="Remove rig from track"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
+              {editingRigId === tr.rigId && tr.rig && (
+                <div className="mt-3">
+                  <RigForm
+                    instruments={instruments}
+                    initial={{
+                      name: tr.rig.name,
+                      instrumentId: tr.rig.instrumentId ?? "",
+                      notes: tr.rig.notes ?? "",
+                      accessories: tr.rig.accessories.map((a) => ({
+                        type: a.type,
+                        value: a.value,
+                        instrumentId: a.instrumentId ?? null,
+                      })),
+                    }}
+                    submitLabel="Save changes"
+                    submitting={updateMut.isPending}
+                    onSubmit={(vals) =>
+                      updateMut.mutate({ id: tr.rigId as string, vals })
+                    }
+                    onCancel={() => setEditingRigId(null)}
+                    testIdSuffix={`-${tr.rigId}`}
+                  />
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -1903,173 +2138,24 @@ function RigPanel({
         {!building ? (
           <button
             type="button"
-            onClick={() => setBuilding(true)}
+            onClick={() => {
+              setBuilding(true);
+              setEditingRigId(null);
+            }}
             className="inline-flex items-center gap-1.5 rounded-md text-sm font-semibold text-[var(--brand-blue)] hover:underline"
             data-testid="button-build-rig"
           >
             <Plus className="w-4 h-4" /> Build a new rig
           </button>
         ) : (
-          <div className="rounded-lg border border-slate-200 p-3 space-y-3">
-            <div>
-              <Label className="text-xs font-semibold text-slate-600">
-                Rig name
-              </Label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Fernando's Folk Rig"
-                className="mt-1 h-9 text-sm"
-                data-testid="input-rig-name"
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-semibold text-slate-600">
-                Base instrument
-              </Label>
-              <select
-                value={instrumentId}
-                onChange={(e) => setInstrumentId(e.target.value)}
-                className={`${selectCls} mt-1`}
-                data-testid="select-rig-instrument"
-              >
-                <option value="">None</option>
-                {instruments.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-semibold text-slate-600">
-                  Accessories
-                </Label>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setAccessories((a) => [
-                      ...a,
-                      { type: "", value: "", instrumentId: null },
-                    ])
-                  }
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand-blue)] hover:underline"
-                  data-testid="button-add-accessory"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add
-                </button>
-              </div>
-              {accessories.length === 0 ? (
-                <p className="mt-1 text-xs text-slate-400">
-                  No accessories — add strings, picks, settings, etc.
-                </p>
-              ) : (
-                <ul className="mt-2 space-y-2">
-                  {accessories.map((a, idx) => (
-                    <li key={idx} className="flex items-start gap-2">
-                      <AccessoryTypeField
-                        value={a.type}
-                        onChange={(next) =>
-                          setAccessories((arr) =>
-                            arr.map((x, i) =>
-                              i === idx ? { ...x, type: next } : x,
-                            ),
-                          )
-                        }
-                        shortCategory={accessoryCategory}
-                        idBase={`${idx}`}
-                        className="sm:w-40"
-                      />
-                      <div className="flex-1">
-                        <GearPicker
-                          instruments={instruments}
-                          value={{
-                            instrumentId: a.instrumentId,
-                            text: a.value,
-                          }}
-                          onChange={(next) =>
-                            setAccessories((arr) =>
-                              arr.map((x, i) =>
-                                i === idx
-                                  ? {
-                                      ...x,
-                                      value: next.text,
-                                      instrumentId: next.instrumentId,
-                                    }
-                                  : x,
-                              ),
-                            )
-                          }
-                          onCreated={() =>
-                            qc.invalidateQueries({
-                              queryKey: ["/api/instruments"],
-                            })
-                          }
-                          categoryHint={
-                            pickedInstrument?.shortCategory ??
-                            pickedInstrument?.category ??
-                            null
-                          }
-                          idBase={`rig-${idx}`}
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setAccessories((arr) =>
-                            arr.filter((_, i) => i !== idx),
-                          )
-                        }
-                        className="flex-shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                        data-testid={`button-remove-accessory-${idx}`}
-                        aria-label="Remove accessory"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div>
-              <Label className="text-xs font-semibold text-slate-600">
-                Notes
-              </Label>
-              <Input
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Optional — how this rig is set up"
-                className="mt-1 h-9 text-sm"
-                data-testid="input-rig-notes"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => createMut.mutate()}
-                disabled={!name.trim() || createMut.isPending}
-                data-testid="button-save-rig"
-              >
-                {createMut.isPending ? (
-                  <Spinner className="h-4 w-4" />
-                ) : (
-                  "Build & attach"
-                )}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={resetBuilder}
-                disabled={createMut.isPending}
-                data-testid="button-cancel-rig"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
+          <RigForm
+            instruments={instruments}
+            initial={{ name: "", instrumentId: "", notes: "", accessories: [] }}
+            submitLabel="Build & attach"
+            submitting={createMut.isPending}
+            onSubmit={(vals) => createMut.mutate(vals)}
+            onCancel={() => setBuilding(false)}
+          />
         )}
       </div>
     </section>

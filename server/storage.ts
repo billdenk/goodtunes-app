@@ -697,7 +697,7 @@ export interface IStorage {
   // List returns each customer's row plus a roll-up (order count + lifetime
   // spend on paid/shipped orders + last activity timestamp). Profile
   // returns the customer + orders + collection items + playlist summaries.
-  listAdminCustomers(opts?: { q?: string; limit?: number; offset?: number; artistAlbumIds?: string[]; segment?: "all" | "buyers" | "no_sales" | "unclaimed" }): Promise<{
+  listAdminCustomers(opts?: { q?: string; limit?: number; offset?: number; artistAlbumIds?: string[]; segment?: "all" | "buyers" | "no_sales" | "unclaimed"; city?: string; region?: string; country?: string }): Promise<{
     rows: Array<Omit<CustomerUser, "password"> & { password?: string; orderCount: number; lifetimeSpendCents: number; lastActivityAt: Date | null; firstOrderAt: Date | null }>;
     total: number;
     counts: { all: number; buyers: number; no_sales: number; unclaimed: number };
@@ -4109,12 +4109,15 @@ export class DbStorage implements IStorage {
   }
 
   // ---- Admin customers directory (Task #131) -------------------------
-  async listAdminCustomers(opts?: { q?: string; limit?: number; offset?: number; artistAlbumIds?: string[]; segment?: "all" | "buyers" | "no_sales" | "unclaimed" }) {
+  async listAdminCustomers(opts?: { q?: string; limit?: number; offset?: number; artistAlbumIds?: string[]; segment?: "all" | "buyers" | "no_sales" | "unclaimed"; city?: string; region?: string; country?: string }) {
     const q = (opts?.q ?? "").trim().toLowerCase();
     const limit = Math.min(Math.max(opts?.limit ?? 200, 1), 500);
     const offset = Math.max(opts?.offset ?? 0, 0);
     const segment = opts?.segment ?? "all";
     const artistAlbumIds = opts?.artistAlbumIds;
+    const city = (opts?.city ?? "").trim().toLowerCase();
+    const region = (opts?.region ?? "").trim().toLowerCase();
+    const country = (opts?.country ?? "").trim().toLowerCase();
     const like = `%${q}%`;
     // Per-customer roll-up: order count + lifetime spend on paid/shipped
     // orders (refunded orders are excluded from spend but still counted
@@ -4149,12 +4152,28 @@ export class DbStorage implements IStorage {
         : segment === "unclaimed"
         ? sql`(${customerUsers.legacyGogoodsId} IS NOT NULL AND ${customerUsers.password} IS NULL)`
         : sql`true`;
+    // City filter (drives the Customers-page map → list hand-off): keep only
+    // customers who placed an order whose shipping (or billing) city matches
+    // the picked map point. Region/country are matched too when supplied so
+    // same-named cities in different states stay distinct — reconstructing
+    // exactly the map's (city, region, country) aggregation group. Because a
+    // location only exists on an order, a city filter inherently contains
+    // buyers only.
+    const cityExpr = city
+      ? sql`EXISTS (
+          SELECT 1 FROM orders
+          WHERE orders.customer_id = customer_users.id
+            AND lower(coalesce(nullif(orders.shipping_address->>'city',''), nullif(orders.billing_address->>'city',''))) = ${city}
+            AND ${region ? sql`lower(coalesce(nullif(orders.shipping_address->>'state',''), nullif(orders.billing_address->>'state',''))) = ${region}` : sql`true`}
+            AND ${country ? sql`lower(coalesce(nullif(orders.shipping_address->>'country',''), nullif(orders.billing_address->>'country',''))) = ${country}` : sql`true`}
+        )`
+      : sql`true`;
     // When scoping to an artist's albums, restrict to customers who have
     // at least one order for one of those albums.
     const baseExpr = artistAlbumIds?.length
       ? and(notMergedExpr, textExpr, sql`customer_users.id IN (SELECT customer_id FROM orders WHERE album_id = ANY(${pgArray(artistAlbumIds)}::text[]))`)
       : and(notMergedExpr, textExpr);
-    const whereExpr = and(baseExpr, segmentExpr);
+    const whereExpr = and(baseExpr, segmentExpr, cityExpr);
 
     const rows = await db
       .select({
@@ -4177,13 +4196,14 @@ export class DbStorage implements IStorage {
       .from(customerUsers)
       .where(whereExpr);
 
-    // Per-segment counts against the full dataset (no search, no segment
-    // filter) so the tab badges stay stable as the operator types a query.
+    // Per-segment counts ignore search + segment filter so the tab badges stay
+    // stable as the operator types a query, BUT they DO respect the city filter
+    // (cityExpr) so the badges match the city-scoped list the map drills into.
     // artistAlbumIds scope still applies so artist-partner views stay bounded.
     // mergedIntoId IS NULL is always required so merged stubs never inflate counts.
     const countsBaseExpr = artistAlbumIds?.length
-      ? and(notMergedExpr, sql`customer_users.id IN (SELECT customer_id FROM orders WHERE album_id = ANY(${pgArray(artistAlbumIds)}::text[]))`)
-      : notMergedExpr;
+      ? and(notMergedExpr, sql`customer_users.id IN (SELECT customer_id FROM orders WHERE album_id = ANY(${pgArray(artistAlbumIds)}::text[]))`, cityExpr)
+      : and(notMergedExpr, cityExpr);
     const [countsRow] = await db
       .select({
         all: sql<number>`count(*)::int`,

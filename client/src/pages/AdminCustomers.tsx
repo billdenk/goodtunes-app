@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Users, ArrowUp, ArrowDown, X } from "lucide-react";
+import { Search, Users, ArrowUp, ArrowDown, X, MapPin } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
+import { CustomerMap, type CitySelection } from "@/components/admin/CustomerMap";
 import type { CustomerUser } from "@shared/schema";
 
 /**
@@ -122,13 +123,15 @@ export function AdminCustomers() {
 
   // Parse initial state from URL on mount only.
   const initial = useMemo(() => {
-    const out: { tab: SegmentKey; search: string } = { tab: "all", search: "" };
+    const out: { tab: SegmentKey; search: string; city: CitySelection | null } = { tab: "all", search: "", city: null };
     try {
       const p = new URLSearchParams(urlSearch);
       const t = p.get("tab");
       if (t && (SEGMENT_KEYS as string[]).includes(t)) out.tab = t as SegmentKey;
       const q = p.get("q");
       if (q) out.search = q;
+      const cityName = p.get("city");
+      if (cityName) out.city = { city: cityName, region: p.get("region"), country: p.get("country") };
     } catch { /* malformed — fall through */ }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -137,21 +140,36 @@ export function AdminCustomers() {
   const [tab, setTabState] = useState<SegmentKey>(initial.tab);
   const [search, setSearch] = useState(initial.search);
   const [searchOpen, setSearchOpen] = useState(initial.search !== "");
+  const [city, setCityState] = useState<CitySelection | null>(initial.city);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useViewMode("customers", "list");
 
-  // Mirror tab + search into the URL so the view is bookmarkable.
+  // Mirror tab + search + city into the URL so the view is bookmarkable.
   useEffect(() => {
     const p = new URLSearchParams();
     if (tab !== "all") p.set("tab", tab);
     if (search.trim()) p.set("q", search.trim());
+    if (city?.city) {
+      p.set("city", city.city);
+      if (city.region) p.set("region", city.region);
+      if (city.country) p.set("country", city.country);
+    }
     const qs = p.toString();
     navigate(qs ? `?${qs}` : "?", { replace: true });
-  }, [tab, search, navigate]);
+  }, [tab, search, city, navigate]);
 
   function setTab(next: SegmentKey) {
     setTabState(next);
     // Reset pagination when switching tabs.
+    setPages([]);
+    setTotal(0);
+    setOffset(0);
+  }
+
+  // Tap a map point or city row → filter the list to that city. Passing an
+  // empty city clears the filter. Resets pagination either way.
+  function setCity(next: CitySelection | null) {
+    setCityState(next && next.city ? next : null);
     setPages([]);
     setTotal(0);
     setOffset(0);
@@ -200,7 +218,7 @@ export function AdminCustomers() {
     error: customersErrorObj,
     refetch: refetchCustomers,
   } = useQuery<CustomerListResponse>({
-    queryKey: ["/api/admin/customers", { q: debounced, offset, segment: tab }],
+    queryKey: ["/api/admin/customers", { q: debounced, offset, segment: tab, city: city?.city ?? "", region: city?.region ?? "", country: city?.country ?? "" }],
     enabled: !!user?.isAdmin,
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -208,6 +226,11 @@ export function AdminCustomers() {
       params.set("limit", String(PAGE));
       params.set("offset", String(offset));
       params.set("segment", tab);
+      if (city?.city) {
+        params.set("city", city.city);
+        if (city.region) params.set("region", city.region);
+        if (city.country) params.set("country", city.country);
+      }
       const res = await apiRequest("GET", `/api/admin/customers?${params}`);
       return (await res.json()) as CustomerListResponse;
     },
@@ -365,6 +388,47 @@ export function AdminCustomers() {
             </div>
           )}
         />
+
+        {/* Customer locations map — tap a point or city to filter the list. */}
+        <CustomerMap
+          activeCity={city}
+          onSelectCity={(sel) => {
+            setCity(sel.city ? sel : null);
+            if (typeof window !== "undefined") {
+              window.requestAnimationFrame(() => {
+                document
+                  .getElementById("customers-list-anchor")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+              });
+            }
+          }}
+        />
+
+        {city?.city && (
+          <div
+            className="flex items-center gap-2 rounded-md border border-[var(--brand-blue)]/30 bg-[var(--brand-blue)]/5 px-3 py-2 text-sm"
+            data-testid="active-city-filter"
+          >
+            <MapPin className="w-4 h-4 text-[var(--brand-blue)] flex-shrink-0" />
+            <span className="text-slate-700">
+              Showing customers in{" "}
+              <span className="font-semibold text-slate-900" data-testid="text-active-city">
+                {[city.city, city.region].filter(Boolean).join(", ")}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setCity(null)}
+              className="ml-auto inline-flex items-center gap-1 text-slate-500 hover:text-slate-900 transition-colors"
+              data-testid="button-clear-city"
+            >
+              <X className="w-3.5 h-3.5" />
+              Clear
+            </button>
+          </div>
+        )}
+
+        <div id="customers-list-anchor" />
 
         {isLoading ? (
           <div className="py-10 text-slate-500 text-sm">Loading…</div>
