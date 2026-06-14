@@ -6311,6 +6311,16 @@ sync_github_build_mirror() {
   local scrub='s#x-access-token:[^@]*@#x-access-token:***@#g'
   echo "post-merge: syncing GitHub build mirror (main -> github.com/billdenk/goodtunes-app)"
 
+  # TIME BUDGET (load-bearing): this whole function is the LAST, best-effort step
+  # of post-merge, and the platform kills the ENTIRE script at its configured
+  # timeout. The idempotent dual-DB migration suite above already burns ~120s, so
+  # every per-step `timeout` below MUST stay small enough that a slow/diverged
+  # GitHub degrades to a WARNING (Codemagic catches up next merge) instead of
+  # blowing the platform budget and failing the merge's post-merge. Keep the sum
+  # of these well under (platform_timeout - migration_time). Never raise them to
+  # match a manual full-push; a real full push is the rare diverged case that the
+  # fetch-first collapses anyway (see .agents/memory/github-mirror-push.md).
+
   # STEP 1 — Fetch the remote tip FIRST. Without a common base git can't tell
   # which objects GitHub already has, so a diverged history makes every push
   # re-send the ENTIRE multi-GB closure -> GitHub returns HTTP 500 (pack too
@@ -6322,7 +6332,7 @@ sync_github_build_mirror() {
   # fetch fail "non-fast-forward" -> have_remote stays 0 -> STEP 2 (LFS upload)
   # is skipped -> every new LFS object GH008-rejects the push forever. The '+'
   # resets the tracking ref to GitHub's actual tip so the delta/LFS diff is real.
-  if GIT_TERMINAL_PROMPT=0 timeout 180 \
+  if GIT_TERMINAL_PROMPT=0 timeout 60 \
        git -c http.extraheader="Authorization: Basic $auth" \
            fetch --no-tags "$GITHUB_MIRROR_URL" "+main:refs/remotes/ghmirror/main" >/dev/null 2>&1
   then
@@ -6346,7 +6356,7 @@ sync_github_build_mirror() {
       git remote remove ghlfs >/dev/null 2>&1 || true
       git remote add ghlfs "https://x-access-token:${GITHUB_TOKEN}@github.com/billdenk/goodtunes-app.git" >/dev/null 2>&1 || true
       for oid in $missing; do
-        GIT_TERMINAL_PROMPT=0 timeout 600 git lfs push --object-id ghlfs "$oid" 2>&1 | sed -E "$scrub"
+        GIT_TERMINAL_PROMPT=0 timeout 180 git lfs push --object-id ghlfs "$oid" 2>&1 | sed -E "$scrub"
       done
       git remote remove ghlfs >/dev/null 2>&1 || true
     fi
@@ -6356,7 +6366,7 @@ sync_github_build_mirror() {
   # disposable and must always equal project main). Capture output so a failure
   # is VISIBLE in the merge log instead of vanishing into /dev/null.
   local out rc=0
-  out=$(GIT_LFS_SKIP_PUSH=1 GIT_TERMINAL_PROMPT=0 timeout 300 \
+  out=$(GIT_LFS_SKIP_PUSH=1 GIT_TERMINAL_PROMPT=0 timeout 90 \
           git -c http.extraheader="Authorization: Basic $auth" \
               push --no-verify --force "$GITHUB_MIRROR_URL" "HEAD:refs/heads/main" 2>&1) || rc=$?
   out=$(printf '%s' "$out" | sed -E "$scrub")
