@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, Filter, EyeOff, X, Plus, Disc3, Clock, AlertTriangle, MoreVertical, Copy } from "lucide-react";
+import { useMutation, useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { Search, Filter, EyeOff, X, Plus, Disc3, Clock, AlertTriangle, MoreVertical, Copy, CheckCircle2 } from "lucide-react";
 import {
   Popover,
   PopoverArrow,
@@ -84,9 +84,35 @@ interface AlbumLite {
   createdAt: string | null;
 }
 
-type TabKey = "prepping" | "staged" | "live" | "sunset";
+// Task #1967 — "attention" is the cross-stage incomplete-albums audit. It's
+// not a lifecycle stage like the other four (which slice the grid by
+// `albumStage`); it's a separate scannable table fed by its own server
+// aggregate. It rides in the same tab row + URL so an operator can deep-link
+// / refresh into it, but it renders a dedicated table instead of the grid.
+type TabKey = "prepping" | "staged" | "live" | "sunset" | "attention";
 
-const TAB_KEYS: TabKey[] = ["prepping", "staged", "live", "sunset"];
+const TAB_KEYS: TabKey[] = ["prepping", "staged", "live", "sunset", "attention"];
+
+// Per-track completeness counts for one incomplete GoodTunes release, all
+// aggregated server-side (GET /api/admin/reports/incomplete-albums). The
+// rules mirror the album-editor Tracks tab: a master is ready when Mux says
+// `ready`, lyrics are satisfied when present OR the track is instrumental,
+// and credits are complete when the track has BOTH a writer and a performer.
+interface IncompleteAlbumRow {
+  id: string;
+  title: string;
+  artist: string;
+  artwork: string;
+  primaryArtistId: string | null;
+  isPrepping: boolean;
+  isHidden: boolean;
+  goodTunesReleaseDate: string | null;
+  streamingReleaseDate: string | null;
+  trackCount: number;
+  mastersReady: number;
+  lyricsSatisfied: number;
+  creditsComplete: number;
+}
 
 // Task #1007 / #1008 — build the link into an album, carrying the entire
 // originating list query (tab + view + search + filters) so the album page's
@@ -359,6 +385,17 @@ export function AdminAlbums() {
   });
   const albums = albumsData ?? [];
 
+  // Task #1967 — the cross-stage incomplete-albums audit. Operator-only
+  // (the route is `requireRole(super_admin, admin)`), so don't even fetch
+  // for partner admins — the "Needs attention" tab is hidden for them. The
+  // table component below reads the same queryKey so React Query dedupes to
+  // a single request; this parent copy just drives the tab's count badge.
+  const incompleteQuery = useQuery<{ rows: IncompleteAlbumRow[] }>({
+    queryKey: ["/api/admin/reports/incomplete-albums"],
+    enabled: !!user?.isAdmin && isOperator,
+  });
+  const incompleteRows = incompleteQuery.data?.rows ?? [];
+
   const counts = useMemo(
     () => ({
       // Task #440 — Prepping is now a real lifecycle gate (`isPrepping`).
@@ -380,8 +417,11 @@ export function AdminAlbums() {
       sunset: albums.filter(
         (a) => a.isGoodTunesRelease && albumStage(a) === "sunset",
       ).length,
+      // Task #1967 — count of GoodTunes releases short of complete in at
+      // least one dimension, straight off the server aggregate.
+      attention: incompleteRows.length,
     }),
-    [albums],
+    [albums, incompleteRows.length],
   );
 
   // Imported streaming catalog (`!isGoodTunesRelease`) is intentionally
@@ -406,6 +446,10 @@ export function AdminAlbums() {
         return albums.filter(
           (a) => a.isGoodTunesRelease && albumStage(a) === "sunset",
         );
+      case "attention":
+        // The audit table fetches its own server aggregate; the grid path
+        // is never rendered on this tab, so there's nothing to slice here.
+        return [];
     }
   }, [albums, tab]);
 
@@ -534,6 +578,10 @@ export function AdminAlbums() {
         return "No released albums yet. Tap + to create one.";
       case "sunset":
         return "No sunset releases. Pulled-from-sale albums show up here.";
+      case "attention":
+        // Unused — the attention tab renders NeedsAttentionTable, which has
+        // its own loading / empty / error states, never this grid empty copy.
+        return "";
     }
   })();
 
@@ -549,6 +597,10 @@ export function AdminAlbums() {
           subtitle="Manage everything that shows up in the GoodTunes® player."
           testId="heading-admin-albums"
           actions={(<>
+            {/* Task #1967 — search / filter / view controls slice the grid by
+                stage; they don't apply to the cross-stage audit table, so
+                they're hidden while the "Needs attention" tab is active. */}
+            {tab !== "attention" && (<>
             {searchOpen ? (
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-white border border-slate-200 shadow-sm">
                 <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
@@ -779,6 +831,7 @@ export function AdminAlbums() {
                 testIdPrefix="view-mode-albums"
               />
             </div>
+            </>)}
             {/* Task #445 — "+ Add Album" opens the "Who's the artist?"
                 dialog first. After the artist is picked (or skipped),
                 the mutation creates the album with primaryArtistId set
@@ -866,6 +919,14 @@ export function AdminAlbums() {
               <TabBtn active={tab === "sunset"} onClick={() => setTab("sunset")} count={counts.sunset} testId="tab-sunset">
                 Sunset
               </TabBtn>
+              {/* Task #1967 — cross-stage incomplete-albums audit. Operator-
+                  only (the report route is super_admin/admin); hidden for
+                  partner admins, who'd 403 on the endpoint. */}
+              {isOperator && (
+                <TabBtn active={tab === "attention"} onClick={() => setTab("attention")} count={counts.attention} testId="tab-attention">
+                  Needs attention
+                </TabBtn>
+              )}
             </div>
           )}
         />
@@ -874,8 +935,20 @@ export function AdminAlbums() {
             share slug is set but whose primary artist never got an artist
             slug, so their two-part link is dead until the artist URL is set.
             Each links straight to the album where the one-tap fix lives. */}
-        <IncompleteShareLinksBanner listQuery={listQueryString} />
+        {tab !== "attention" && (
+          <IncompleteShareLinksBanner listQuery={listQueryString} />
+        )}
 
+        {/* Task #1967 — cross-stage incomplete-albums audit table. Renders in
+            place of the grid on the "Needs attention" tab; has its own
+            loading / empty / error states off a dedicated server aggregate. */}
+        {tab === "attention" ? (
+          <NeedsAttentionTable
+            query={incompleteQuery}
+            listQuery={listQueryString}
+          />
+        ) : (
+        <>
         {/* GRID */}
         {isLoading ? (
           <div className="py-20 flex items-center justify-center">
@@ -923,6 +996,8 @@ export function AdminAlbums() {
               />
             ))}
           </div>
+        )}
+        </>
         )}
 
       </div>
@@ -998,6 +1073,212 @@ function IncompleteShareLinksBanner({ listQuery }: { listQuery: string }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Task #1967 — small stage pill for the audit table. Uses the SAME
+// `albumStage` rule as the four lifecycle tabs so the badge can never
+// disagree with where the album actually sits. Stage is shown here as a
+// column (not a filter) because the audit spans every stage at once.
+const STAGE_BADGE: Record<
+  ReturnType<typeof albumStage>,
+  { label: string; className: string }
+> = {
+  prepping: { label: "Prepping", className: "bg-slate-100 text-slate-600" },
+  staged: { label: "Staged", className: "bg-[color:var(--brand-blue)]/10 text-[color:var(--brand-blue)]" },
+  released: { label: "Released", className: "bg-emerald-100 text-emerald-700" },
+  sunset: { label: "Sunset", className: "bg-slate-200 text-slate-700" },
+};
+
+function StageBadge({ stage }: { stage: ReturnType<typeof albumStage> }) {
+  const s = STAGE_BADGE[stage];
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${s.className}`}
+      data-testid={`badge-stage-${stage}`}
+    >
+      {s.label}
+    </span>
+  );
+}
+
+// One completeness cell: shows `value/total` (or a bare count for Tracks).
+// Short of complete → amber-flagged; complete → neutral slate. A zero total
+// (album with no tracks) is treated as incomplete for the per-dimension
+// cells so an empty release reads as needing work, matching the Tracks tab.
+function CountCell({
+  value,
+  total,
+  testId,
+  showTotal = true,
+}: {
+  value: number;
+  total: number;
+  testId: string;
+  showTotal?: boolean;
+}) {
+  const complete = showTotal ? total > 0 && value >= total : value > 0;
+  return (
+    <td className="px-3 py-2.5 text-right">
+      <span
+        className={`inline-flex items-center justify-end gap-1 px-1.5 py-0.5 rounded text-xs font-semibold tabular-nums ${
+          complete ? "text-slate-600" : "bg-amber-100 text-amber-800"
+        }`}
+        data-testid={testId}
+      >
+        {!complete && <AlertTriangle className="w-3 h-3 flex-shrink-0" />}
+        {showTotal ? `${value}/${total}` : value}
+      </span>
+    </td>
+  );
+}
+
+// Task #1967 — the "Needs attention" cross-stage incomplete-albums audit.
+// One scannable table of every GoodTunes release short of complete in at
+// least one dimension (tracks / masters / lyrics / credits), aggregated
+// server-side. Each row deep-links into the album editor carrying the list
+// query so "Back to albums" returns here. Has its own loading / empty /
+// error states; the friendly empty state means everything is complete.
+function NeedsAttentionTable({
+  query,
+  listQuery,
+}: {
+  query: UseQueryResult<{ rows: IncompleteAlbumRow[] }, Error>;
+  listQuery: string;
+}) {
+  const [, navigate] = useLocation();
+  const rows = query.data?.rows ?? [];
+
+  if (query.isLoading) {
+    return (
+      <div
+        className="rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100"
+        data-testid="loading-needs-attention"
+      >
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 px-3 py-3">
+            <div className="w-10 h-10 rounded bg-slate-100 animate-pulse flex-shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <div className="h-3 w-40 rounded bg-slate-100 animate-pulse" />
+              <div className="h-2.5 w-24 rounded bg-slate-100 animate-pulse" />
+            </div>
+            <div className="h-3 w-32 rounded bg-slate-100 animate-pulse" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (query.isError) {
+    return (
+      <ErrorState
+        error={query.error}
+        onRetry={() => query.refetch()}
+        title="Couldn't load the audit"
+        testId="needs-attention-error"
+      />
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div
+        className="py-20 text-center max-w-md mx-auto"
+        data-testid="empty-needs-attention"
+      >
+        <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
+        <p className="text-slate-900 text-sm font-semibold">Everything's complete</p>
+        <p className="text-slate-500 text-sm mt-1 leading-snug">
+          Every GoodTunes release has all its tracks, masters, lyrics, and
+          credits in place. Nothing needs attention right now.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="rounded-lg border border-slate-200 bg-white overflow-x-auto"
+      data-testid="table-needs-attention"
+    >
+      <table className="w-full text-left border-collapse">
+        <thead>
+          <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <th className="px-3 py-2 font-semibold">Album</th>
+            <th className="px-3 py-2 font-semibold hidden sm:table-cell">Artist</th>
+            <th className="px-3 py-2 font-semibold">Stage</th>
+            <th className="px-3 py-2 font-semibold text-right">Tracks</th>
+            <th className="px-3 py-2 font-semibold text-right">Masters</th>
+            <th className="px-3 py-2 font-semibold text-right">Lyrics</th>
+            <th className="px-3 py-2 font-semibold text-right">Credits</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {rows.map((r) => {
+            const href = albumHref(r.id, listQuery);
+            return (
+              <tr
+                key={r.id}
+                onClick={() => navigate(href)}
+                className="hover:bg-slate-50 cursor-pointer transition-colors"
+                data-testid={`row-attention-${r.id}`}
+              >
+                <td className="px-3 py-2.5">
+                  <Link
+                    href={href}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-2.5 min-w-0 group"
+                    data-testid={`link-attention-${r.id}`}
+                  >
+                    <img
+                      src={r.artwork}
+                      alt=""
+                      loading="lazy"
+                      className="w-10 h-10 rounded object-cover bg-slate-100 ring-1 ring-slate-200/60 flex-shrink-0"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-slate-900 truncate group-hover:text-[var(--brand-blue)] transition-colors">
+                        {r.title}
+                      </span>
+                      <span className="block text-xs text-slate-500 truncate sm:hidden">
+                        {r.artist}
+                      </span>
+                    </span>
+                  </Link>
+                </td>
+                <td className="px-3 py-2.5 text-xs text-slate-600 truncate hidden sm:table-cell">
+                  {r.artist}
+                </td>
+                <td className="px-3 py-2.5">
+                  <StageBadge stage={albumStage(r)} />
+                </td>
+                <CountCell
+                  value={r.trackCount}
+                  total={0}
+                  showTotal={false}
+                  testId={`cell-tracks-${r.id}`}
+                />
+                <CountCell
+                  value={r.mastersReady}
+                  total={r.trackCount}
+                  testId={`cell-masters-${r.id}`}
+                />
+                <CountCell
+                  value={r.lyricsSatisfied}
+                  total={r.trackCount}
+                  testId={`cell-lyrics-${r.id}`}
+                />
+                <CountCell
+                  value={r.creditsComplete}
+                  total={r.trackCount}
+                  testId={`cell-credits-${r.id}`}
+                />
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

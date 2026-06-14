@@ -12,6 +12,7 @@ import {
   payoutReconciliation,
   rawEvents,
   posthogEmbeds,
+  incompleteAlbums,
   type AdminReportContext,
 } from "./admin";
 import { toCsv, dollarsFromCents } from "./csv";
@@ -156,6 +157,14 @@ export function registerAdminReportRoutes(app: Express) {
       })),
       ["orderId", "buyerEmail", "amountDollars", "albumId", "createdAt"],
     ));
+  }));
+
+  // ─── Incomplete-albums audit ("Needs attention") ─────────────────
+  // Task #1967 — operator-reachable (adminGuard) audit of GoodTunes
+  // releases short of complete in at least one production dimension.
+  app.get("/api/admin/reports/incomplete-albums", adminGuard, wrap(async (_req, res) => {
+    const data = await incompleteAlbums();
+    res.json(data);
   }));
 
   // ─── Payout reconciliation (super-admin) ─────────────────────────

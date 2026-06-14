@@ -601,6 +601,134 @@ export async function payoutReconciliation(ctx: AdminReportContext) {
   return { rows: out };
 }
 
+// ─── Incomplete-albums audit ("Needs attention") ───────────────────────
+// Task #1967 — operator audit of every GoodTunes-release album that's
+// short of complete in at least one production dimension, across ALL
+// lifecycle stages (prepping/staged/released/sunset — stage is a column,
+// not a filter). Aggregated entirely in SQL so the client just renders.
+//
+// The per-track completeness rules MUST mirror the album-editor Tracks
+// tab so the two never drift:
+//   - Masters ready  → `songs.mux_status = 'ready'`
+//                      (client/src/lib/sectionCompleteness.ts).
+//   - Lyrics satisfied → plain `lyrics` OR `synced_lyrics` present, with
+//                      instrumentals counting as satisfied by design
+//                      (AdminAlbum trackSectionStatuses + the task's
+//                      instrumental exemption).
+//   - Credits complete → the song has BOTH a writer (track_writers) AND a
+//                      performer (track_performers) row, soft-deletes
+//                      excluded (AdminAlbum trackSectionStatuses).
+//
+// "Incomplete" (the row qualifies for the audit) = zero tracks OR any
+// track missing a ready master OR any non-instrumental track missing
+// lyrics OR any track missing credits. Soft-deleted albums, songs, and
+// credit rows are all filtered out so the counts match what the editor
+// shows.
+export interface IncompleteAlbumRow {
+  id: string;
+  title: string;
+  artist: string;
+  artwork: string;
+  primaryArtistId: string | null;
+  // Raw lifecycle inputs so the client can reuse the shared `albumStage`
+  // helper rather than re-deriving the bucket server-side.
+  isPrepping: boolean;
+  isHidden: boolean;
+  goodTunesReleaseDate: string | null;
+  streamingReleaseDate: string | null;
+  trackCount: number;
+  mastersReady: number;
+  lyricsSatisfied: number;
+  creditsComplete: number;
+}
+
+export async function incompleteAlbums(): Promise<{ rows: IncompleteAlbumRow[] }> {
+  const result = await db.execute<{
+    id: string;
+    title: string;
+    artist: string;
+    artwork: string;
+    primary_artist_id: string | null;
+    is_prepping: boolean;
+    is_hidden: boolean;
+    good_tunes_release_date: string | null;
+    streaming_release_date: string | null;
+    track_count: string;
+    masters_ready: string;
+    lyrics_satisfied: string;
+    credits_complete: string;
+  }>(sql`
+    SELECT
+      a.id,
+      a.title,
+      a.artist,
+      a.artwork,
+      a.primary_artist_id,
+      a.is_prepping,
+      a.is_hidden,
+      a.good_tunes_release_date,
+      a.streaming_release_date,
+      COUNT(s.id) AS track_count,
+      COUNT(s.id) FILTER (WHERE s.mux_status = 'ready') AS masters_ready,
+      COUNT(s.id) FILTER (
+        WHERE s.instrumental = true
+          OR (s.lyrics IS NOT NULL AND s.lyrics <> '')
+          OR s.synced_lyrics IS NOT NULL
+      ) AS lyrics_satisfied,
+      COUNT(s.id) FILTER (
+        WHERE EXISTS (
+            SELECT 1 FROM track_writers tw
+            WHERE tw.song_id = s.id AND tw.deleted_at IS NULL
+          )
+          AND EXISTS (
+            SELECT 1 FROM track_performers tp
+            WHERE tp.song_id = s.id AND tp.deleted_at IS NULL
+          )
+      ) AS credits_complete
+    FROM albums a
+    LEFT JOIN songs s ON s.album_id = a.id AND s.deleted_at IS NULL
+    WHERE a.is_goodtunes_release = true AND a.deleted_at IS NULL
+    GROUP BY a.id
+    HAVING
+      COUNT(s.id) = 0
+      OR COUNT(s.id) FILTER (WHERE s.mux_status = 'ready') < COUNT(s.id)
+      OR COUNT(s.id) FILTER (
+           WHERE s.instrumental = true
+             OR (s.lyrics IS NOT NULL AND s.lyrics <> '')
+             OR s.synced_lyrics IS NOT NULL
+         ) < COUNT(s.id)
+      OR COUNT(s.id) FILTER (
+           WHERE EXISTS (
+               SELECT 1 FROM track_writers tw
+               WHERE tw.song_id = s.id AND tw.deleted_at IS NULL
+             )
+             AND EXISTS (
+               SELECT 1 FROM track_performers tp
+               WHERE tp.song_id = s.id AND tp.deleted_at IS NULL
+             )
+         ) < COUNT(s.id)
+    ORDER BY lower(a.artist), lower(a.title)
+  `);
+
+  const rows: IncompleteAlbumRow[] = (result.rows as any[]).map((r) => ({
+    id: r.id,
+    title: r.title,
+    artist: r.artist,
+    artwork: r.artwork,
+    primaryArtistId: r.primary_artist_id ?? null,
+    isPrepping: r.is_prepping === true,
+    isHidden: r.is_hidden === true,
+    goodTunesReleaseDate: r.good_tunes_release_date ?? null,
+    streamingReleaseDate: r.streaming_release_date ?? null,
+    trackCount: safeNum(r.track_count),
+    mastersReady: safeNum(r.masters_ready),
+    lyricsSatisfied: safeNum(r.lyrics_satisfied),
+    creditsComplete: safeNum(r.credits_complete),
+  }));
+
+  return { rows };
+}
+
 // ─── Raw event explorer (super-admin only) ─────────────────────────────
 export async function rawEvents(ctx: AdminReportContext, opts: { name?: string; userId?: string; sessionId?: string; limit?: number }) {
   const filters: any[] = [gte(analyticsEvents.ts, ctx.from), lte(analyticsEvents.ts, ctx.to)];
