@@ -64,6 +64,16 @@ limit → **HTTP 500 (`the remote end hung up`)** and the mirror falls permanent
 push — this collapses the upload to the true delta (~70 MiB / a few seconds). The post-merge
 sync does this automatically (STEP 1); any manual catch-up must too.
 
+**Use a FORCE refspec (`+main:...`) for that fetch.** Across prior failed syncs the local
+tracking ref `refs/remotes/ghmirror/main` can drift AHEAD of GitHub's real tip (e.g. a manual
+catch-up advanced GitHub but a plain `main:...` fetch left the tracking ref stale, or vice
+versa). A non-force fetch then fails **`non-fast-forward`**, which silently sets
+`have_remote=0` → STEP 2 (LFS upload) is skipped entirely → every NEW LFS object GH008-rejects
+the push forever, even though the object exists locally. The symptom is deceptive: the failure
+looks like a missing object, but the actual cause is the gated fetch. Fix is a one-char
+refspec change — leading `+` forces the tracking ref to reset to GitHub's actual tip so the
+LFS diff is real. This is already applied in `sync_github_build_mirror`; never drop the `+`.
+
 ## GH008 / LFS: upload the new object, don't skip it, don't `--all`
 
 `attached_assets/` video/audio/zip are LFS-tracked (`.gitattributes`). Because we push refs

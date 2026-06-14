@@ -6277,9 +6277,14 @@ sync_github_build_mirror() {
   # large) and the mirror falls permanently behind. Fetching collapses the push
   # to the true (small) delta. Best-effort: if it fails we still try the push.
   local have_remote=0
+  # Force refspec (leading '+'): across prior failed syncs the local tracking
+  # ref ghmirror/main can drift AHEAD of GitHub's real tip, which makes a plain
+  # fetch fail "non-fast-forward" -> have_remote stays 0 -> STEP 2 (LFS upload)
+  # is skipped -> every new LFS object GH008-rejects the push forever. The '+'
+  # resets the tracking ref to GitHub's actual tip so the delta/LFS diff is real.
   if GIT_TERMINAL_PROMPT=0 timeout 180 \
        git -c http.extraheader="Authorization: Basic $auth" \
-           fetch --no-tags "$GITHUB_MIRROR_URL" "main:refs/remotes/ghmirror/main" >/dev/null 2>&1
+           fetch --no-tags "$GITHUB_MIRROR_URL" "+main:refs/remotes/ghmirror/main" >/dev/null 2>&1
   then
     have_remote=1
   else
