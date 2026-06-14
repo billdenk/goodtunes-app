@@ -26232,7 +26232,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           kind: "fanOrder", id: o.id, title: label,
           subtitle: subtitleBits.join(" · ") || null,
           badge: "Fan order",
-          href: `/admin/fan-orders`,
+          // Deep-link to the matching order so the Fan orders page opens
+          // its detail sheet for this exact order instead of dumping the
+          // operator on the bare list (Task #1981).
+          href: `/admin/fan-orders?orderId=${o.id}`,
         };
       }),
       pressingOrders: ordersRows.pressing.map((o) => {
@@ -26242,7 +26245,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           kind: "pressingOrder", id: o.id, title: `Pressing ${idShort}`,
           subtitle: subtitleBits.join(" · ") || null,
           badge: "Pressing order",
-          href: `/admin/pressing-orders`,
+          // Deep-link to the matching pressing order so its card opens
+          // expanded instead of landing on the bare list (Task #1981).
+          href: `/admin/pressing-orders?orderId=${o.id}`,
         };
       }),
     };

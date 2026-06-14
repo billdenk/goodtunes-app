@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -260,11 +261,39 @@ function downloadOrdersCsv(rows: AdminOrderRow[], tab: Tab) {
   URL.revokeObjectURL(url);
 }
 
+// Global admin search deep-links into a specific order via ?orderId=…
+// (see /api/admin/search href builder). Parse it off the reactive wouter
+// search string so it works on a fresh navigation *and* when an operator
+// already on this page uses global search to jump to another order (a
+// query-only change that wouldn't remount the component).
+function deepLinkOrderId(searchStr: string): string | null {
+  try {
+    return new URLSearchParams(searchStr).get("orderId");
+  } catch {
+    return null;
+  }
+}
+
+function stripDeepLinkOrderId() {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("orderId")) return;
+  url.searchParams.delete("orderId");
+  window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+}
+
 function AdminFanOrdersInner() {
+  const urlSearch = useSearch();
+  const linkedOrderId = deepLinkOrderId(urlSearch);
   const [tab, setTab] = useState<Tab>("all");
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [openOrderId, setOpenOrderId] = useState<string | null>(null);
+  const [openOrderId, setOpenOrderId] = useState<string | null>(linkedOrderId);
+  // The deep-linked order also gets its list row scrolled into view and
+  // ring-highlighted, mirroring the physical Orders page focus pattern.
+  const [focusOrderId, setFocusOrderId] = useState<string | null>(linkedOrderId);
+  const focusedRef = useRef<HTMLButtonElement | null>(null);
+  const [didFocus, setDidFocus] = useState(false);
   const [search, setSearch] = useState("");
   const [datePreset, setDatePreset] = useState<DateRangePreset>("all");
   const [customFrom, setCustomFrom] = useState("");
@@ -334,6 +363,38 @@ function AdminFanOrdersInner() {
   }, [searchAndDateFiltered, tab, sortKey, sortDir]);
 
   const active = TABS.find((t) => t.key === tab)!;
+
+  // Scroll the deep-linked order's row into view + flash it once the
+  // list has rendered and the row is present in the current tab.
+  useEffect(() => {
+    if (!focusOrderId || didFocus) return;
+    if (!filtered.some((o) => o.id === focusOrderId)) return;
+    const t = setTimeout(() => {
+      focusedRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setDidFocus(true);
+    }, 50);
+    return () => clearTimeout(t);
+  }, [filtered, focusOrderId, didFocus]);
+
+  // React to the deep-link param appearing or changing *after* mount.
+  // Global admin search navigates via wouter (client-side), so jumping
+  // from this page to another order is a query-only change that leaves
+  // the component mounted; without this the newly-picked order would
+  // never open. Reset the tab to "all" so the target row isn't filtered
+  // out of the highlight pass.
+  useEffect(() => {
+    if (!linkedOrderId) return;
+    setOpenOrderId(linkedOrderId);
+    setFocusOrderId(linkedOrderId);
+    setDidFocus(false);
+    setTab("all");
+  }, [linkedOrderId]);
+
+  function closeOrderDetail() {
+    setOpenOrderId(null);
+    setFocusOrderId(null);
+    stripDeepLinkOrderId();
+  }
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
@@ -546,13 +607,20 @@ function AdminFanOrdersInner() {
                 );
               })}
             </div>
-            {filtered.map((o) => (
+            {filtered.map((o) => {
+              const isFocus = focusOrderId === o.id;
+              return (
               <button
                 key={o.id}
                 type="button"
+                ref={isFocus ? focusedRef : undefined}
                 onClick={() => setOpenOrderId(o.id)}
                 data-testid={`row-fan-order-${o.id}`}
-                className="w-full grid grid-cols-[1.1fr_1.6fr_2fr_0.9fr_0.9fr_1fr] gap-3 px-4 py-3 border-b border-slate-100 last:border-b-0 text-left hover:bg-slate-50 transition-colors"
+                data-focused={isFocus ? "true" : undefined}
+                className={[
+                  "w-full grid grid-cols-[1.1fr_1.6fr_2fr_0.9fr_0.9fr_1fr] gap-3 px-4 py-3 border-b border-slate-100 last:border-b-0 text-left hover:bg-slate-50 transition-colors",
+                  isFocus ? "bg-[var(--brand-blue)]/5 ring-2 ring-inset ring-[var(--brand-blue)]/40" : "",
+                ].join(" ")}
               >
                 <div className="text-[13px] text-slate-900 font-medium flex items-center gap-2 min-w-0">
                   <span className="truncate">{orderShort(o)}</span>
@@ -574,14 +642,15 @@ function AdminFanOrdersInner() {
                   {new Date(o.createdAt).toLocaleDateString()}
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
       <OrderDetailSheet
         orderId={openOrderId}
-        onClose={() => setOpenOrderId(null)}
+        onClose={closeOrderDetail}
       />
     </AdminFrame>
   );

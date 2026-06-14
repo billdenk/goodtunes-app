@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatUsdCents } from "@shared/money";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { CheckCircle2, XCircle, Clock, Factory, ChevronDown } from "lucide-react";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { Card } from "@/components/ui/card";
@@ -29,14 +29,36 @@ type Row = PressingOrderRequest & {
 
 const dollars = (c: number) => formatUsdCents(c);
 
+// Global admin search deep-links into a specific pressing order via
+// ?orderId=… (see /api/admin/search href builder). Parse it off the
+// reactive wouter search string so it works on a fresh navigation *and*
+// when an operator already on this page uses global search to jump to
+// another order (a query-only change that wouldn't remount the page).
+function deepLinkOrderId(searchStr: string): string | null {
+  try {
+    return new URLSearchParams(searchStr).get("orderId");
+  } catch {
+    return null;
+  }
+}
+
 export function AdminPressingOrders() {
   const { toast } = useToast();
-  const [status, setStatus] = useState<Status>("pending");
+  const urlSearch = useSearch();
+  const linkedOrderId = deepLinkOrderId(urlSearch);
+  // When deep-linked from search the target order can be in any status,
+  // so default to "all" instead of "pending" or it would be filtered out.
+  const [status, setStatus] = useState<Status>(linkedOrderId ? "all" : "pending");
   const [notes, setNotes] = useState<Record<string, string>>({});
   // Exclusive-disclosure controller — at most one order row open at a
   // time so the inbox doesn't turn into a wall of expanded blocks.
   // See docs/design-system.md ("Expandable row lists").
   const disclosure = useExclusiveDisclosure<string>();
+  const { setOpen: setDisclosureOpen } = disclosure;
+
+  const [focusOrderId, setFocusOrderId] = useState<string | null>(linkedOrderId);
+  const focusedRef = useRef<HTMLDivElement | null>(null);
+  const [didFocus, setDidFocus] = useState(false);
 
   const { data: rows, isLoading } = useQuery<Row[]>({
     queryKey: ["/api/admin/pressing-orders", { status }],
@@ -48,6 +70,31 @@ export function AdminPressingOrders() {
       return r.json();
     },
   });
+
+  // Expand the deep-linked pressing order's card + scroll it into view
+  // once the rows have loaded and contain it.
+  useEffect(() => {
+    if (!focusOrderId || didFocus || !rows) return;
+    if (!rows.some((r) => r.id === focusOrderId)) return;
+    setDisclosureOpen(focusOrderId, true);
+    const t = setTimeout(() => {
+      focusedRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setDidFocus(true);
+    }, 50);
+    return () => clearTimeout(t);
+  }, [rows, focusOrderId, didFocus, setDisclosureOpen]);
+
+  // React to the deep-link param appearing or changing *after* mount.
+  // Global admin search navigates client-side (wouter), so jumping from
+  // this page to another pressing order is a query-only change that
+  // leaves the page mounted; flip back to "all" and re-arm the focus so
+  // the newly-picked card expands and scrolls into view.
+  useEffect(() => {
+    if (!linkedOrderId) return;
+    setStatus("all");
+    setFocusOrderId(linkedOrderId);
+    setDidFocus(false);
+  }, [linkedOrderId]);
 
   const decide = useMutation({
     mutationFn: async (input: { id: string; decision: "approve" | "reject"; note?: string }) => {
@@ -126,8 +173,18 @@ export function AdminPressingOrders() {
               const noteText = notes[row.id] ?? "";
               const canReject = noteText.trim().length >= 8;
               const expanded = disclosure.isOpen(row.id);
+              const isFocus = focusOrderId === row.id;
               return (
-                <Card key={row.id} className="p-5" data-testid={`card-pressing-order-${row.id}`}>
+                <Card
+                  key={row.id}
+                  ref={isFocus ? focusedRef : undefined}
+                  className={[
+                    "p-5",
+                    isFocus ? "ring-2 ring-inset ring-[var(--brand-blue)]/40 bg-[var(--brand-blue)]/5" : "",
+                  ].join(" ")}
+                  data-testid={`card-pressing-order-${row.id}`}
+                  data-focused={isFocus ? "true" : undefined}
+                >
                   <div
                     role="button"
                     tabIndex={0}
