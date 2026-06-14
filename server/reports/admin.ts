@@ -15,7 +15,7 @@ import {
   songs,
   payoutAccounts,
 } from "@shared/schema";
-import { and, eq, gte, lte, inArray, sql, desc, isNull, isNotNull, or, not } from "drizzle-orm";
+import { and, eq, ne, gte, lte, inArray, sql, desc, isNull, isNotNull, or, not } from "drizzle-orm";
 
 export interface AdminReportContext {
   from: Date;
@@ -405,15 +405,27 @@ export async function topContent(ctx: AdminReportContext) {
 
 // ─── Ops health ────────────────────────────────────────────────────────
 export async function opsHealth(ctx: AdminReportContext) {
-  // Stuck OD fulfillments — sitting in submitted/in_fulfillment for >N days.
-  const thresholdDays = 3;
-  const thresholdMs = thresholdDays * 86400_000;
-  const cutoff = new Date(Date.now() - thresholdMs);
+  // Failed fulfillment pushes — a paid physical order whose last hand-off to
+  // the press/printer (Order Desk or the Odoo printer) actually errored and
+  // hasn't recovered. Both push paths write the failure message to
+  // `orders.fulfillment_error` and clear it back to null on a successful push
+  // (server/orderDesk.ts, server/odoo.ts), so a non-null error == an
+  // unresolved push failure that needs a retry.
+  //
+  // This deliberately does NOT use a "days since purchase" heuristic: in
+  // GoodTunes' pre-order model vinyl isn't pressed until the sales window
+  // sunsets (~2 weeks out) and nothing ships until manufacturing finishes, so
+  // every healthy pre-order would otherwise trip a time-based alarm. We gate
+  // on a real recorded error instead, scoped to paid physical orders that
+  // haven't reached a terminal fulfillment state.
+  const PHYSICAL_SKU_KINDS = ["vinyl", "cassette", "cd", "bundle"];
+  const TERMINAL_FULFILLMENT = ["shipped", "delivered", "cancelled", "returned"];
   const stuckRows = await db
     .select({
       id: orders.id,
       albumId: orders.albumId,
       fulfillmentStatus: orders.fulfillmentStatus,
+      fulfillmentError: orders.fulfillmentError,
       submittedToFulfillmentAt: orders.submittedToFulfillmentAt,
       inFulfillmentAt: orders.inFulfillmentAt,
       createdAt: orders.createdAt,
@@ -424,9 +436,14 @@ export async function opsHealth(ctx: AdminReportContext) {
     })
     .from(orders)
     .where(and(
-      inArray(orders.fulfillmentStatus, ["pending", "submitted", "in_fulfillment"]),
       eq(orders.status, "paid"),
-      lte(orders.createdAt, cutoff),
+      inArray(orders.skuKind, PHYSICAL_SKU_KINDS),
+      isNotNull(orders.fulfillmentError),
+      ne(orders.fulfillmentError, ""),
+      or(
+        isNull(orders.fulfillmentStatus),
+        not(inArray(orders.fulfillmentStatus, TERMINAL_FULFILLMENT)),
+      ),
     ))
     .orderBy(desc(orders.createdAt));
 
@@ -481,7 +498,10 @@ export async function opsHealth(ctx: AdminReportContext) {
 
   return {
     stuckFulfillments: {
-      threshold: `${thresholdDays}d`,
+      // Kept the key name for back-compat with existing consumers, but the
+      // meaning is now "failed fulfillment pushes" (unresolved
+      // fulfillment_error), not a time-based "stuck" heuristic.
+      threshold: "failed push",
       count: stuckRows.length,
       rows: stuckRows.slice(0, 100),
     },

@@ -1203,7 +1203,7 @@ function OpsTab({ qs }: { qs: string }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        <Card><Stat label="Stuck fulfillments" value={data.stuckFulfillments.count.toLocaleString()} sub={`older than ${data.stuckFulfillments.threshold}`} /></Card>
+        <Card><Stat label="Failed pushes" value={data.stuckFulfillments.count.toLocaleString()} sub="push to fulfillment failed" /></Card>
         <Card><Stat label="Failed checkouts · 24h" value={(data.failedCheckouts.last24hCount ?? 0).toLocaleString()} sub="abandoned / never paid" /></Card>
         <Card><Stat label="Failed checkouts · 7d" value={(data.failedCheckouts.last7dCount ?? 0).toLocaleString()} sub="abandoned / never paid" /></Card>
         <Card><Stat label="Refund rate" value={fmtPct(data.refunds.rate)} sub={`${data.refunds.refundedInRange} of ${data.refunds.paidInRange}`} /></Card>
@@ -1212,11 +1212,11 @@ function OpsTab({ qs }: { qs: string }) {
       </div>
       <Card>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-slate-700">Stuck OD fulfillments</h3>
+          <h3 className="text-sm font-semibold text-slate-700">Failed fulfillment pushes</h3>
           <ExportLink href={`/api/admin/reports/ops/stuck.csv?${qs}`} label="CSV" />
         </div>
         {data.stuckFulfillments.rows.length === 0 ? (
-          <EmptyState message="No stuck fulfillments — Order Desk is keeping up." />
+          <EmptyState message="No failed pushes — every order reached fulfillment." />
         ) : (
           <table className="w-full text-sm" data-testid="table-stuck-fulfillments">
             <thead>

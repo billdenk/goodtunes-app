@@ -132,15 +132,16 @@ export function registerAdminReportRoutes(app: Express) {
   // own download so an operator can pipe just the rows they need.
   app.get("/api/admin/reports/ops/stuck.csv", adminGuard, wrap(async (req, res) => {
     const data = await opsHealth(ctxFromReq(req));
-    sendCsv(res, "stuck-fulfillments.csv", toCsv(
+    sendCsv(res, "failed-fulfillment-pushes.csv", toCsv(
       data.stuckFulfillments.rows.map((r: any) => ({
         orderId: r.id,
         buyer: r.buyerName || r.buyerEmail || "",
         fulfillmentStatus: r.fulfillmentStatus ?? "",
+        fulfillmentError: r.fulfillmentError ?? "",
         orderDeskOrderId: r.orderDeskOrderId ?? "",
         createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : "",
       })),
-      ["orderId", "buyer", "fulfillmentStatus", "orderDeskOrderId", "createdAt"],
+      ["orderId", "buyer", "fulfillmentStatus", "fulfillmentError", "orderDeskOrderId", "createdAt"],
     ));
   }));
   app.get("/api/admin/reports/ops/failed.csv", adminGuard, wrap(async (req, res) => {

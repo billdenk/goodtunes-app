@@ -233,8 +233,17 @@ function AdminOrdersInner() {
   // fulfilled by the selected party. "all" = no fulfiller filter.
   const [fulfillerFilter, setFulfillerFilter] = useState<string>("all");
   // Task #1919 — scope the list to physical orders whose Order Desk push
-  // failed (non-null fulfillmentError). Toggled by the alert badge.
-  const [needsAttentionOnly, setNeedsAttentionOnly] = useState(false);
+  // failed (non-null fulfillmentError). Toggled by the alert badge, or
+  // deep-linked from the Dashboard "failed to reach fulfillment" chip via
+  // `/admin/orders?needsPush=1`.
+  const [needsAttentionOnly, setNeedsAttentionOnly] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return new URLSearchParams(window.location.search).get("needsPush") === "1";
+    } catch {
+      return false;
+    }
+  });
   const [showSettings, setShowSettings] = useState(false);
   const { toast } = useToast();
   const {

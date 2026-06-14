@@ -786,9 +786,9 @@ function OpsHealthStrip({ ops }: { ops: OpsData }) {
   const items: Array<{ label: string; count: number; href: string; testId: string }> = [];
   if (ops.stuckFulfillments.count > 0) {
     items.push({
-      label: `${ops.stuckFulfillments.count} stuck fulfillment${ops.stuckFulfillments.count === 1 ? "" : "s"}`,
+      label: `${ops.stuckFulfillments.count} order${ops.stuckFulfillments.count === 1 ? "" : "s"} failed to reach fulfillment`,
       count: ops.stuckFulfillments.count,
-      href: "/admin/orders",
+      href: "/admin/orders?needsPush=1",
       testId: "ops-chip-stuck-fulfillments",
     });
   }
