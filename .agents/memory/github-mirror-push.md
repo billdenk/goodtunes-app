@@ -28,6 +28,28 @@ Steady-state pushes are a handful of commits and finish in seconds. The manual r
 is the fallback for a one-time catch-up if the auto-sync ever WARNs repeatedly (e.g. token
 revoked, GitHub outage, LFS quota) and GitHub drifts behind.
 
+## Time-budget coupling: keep the mirror's per-step timeouts UNDER the platform budget
+
+`sync_github_build_mirror` is the LAST, best-effort step of `scripts/post-merge.sh`, but the
+platform kills the **entire** post-merge script at its configured timeout (`[postMerge]` in
+`.replit`, set via `setPostMergeConfig`). The idempotent dual-DB migration suite ahead of it
+already burns ~110-120s every merge. So if the mirror step's own per-step `timeout`s are
+bigger than the remaining budget, a slow/diverged GitHub makes the platform kill the whole
+script **mid-push** → the merge's post-merge reports SETUP_FAILED even though all DB work
+already finished. (Symptom seen once: post-merge timed out at 180000ms, stdout's last line was
+"syncing GitHub build mirror" with no "sync ok" after — i.e. the push, not a migration, ate
+the budget.)
+
+**Two-part fix, both load-bearing:**
+1. Platform budget bumped to **300000ms** so the ~120s migration suite + bounded mirror fit
+   with headroom. Don't drop it back to 180000.
+2. The mirror step's internal timeouts are deliberately small (fetch 60s, per-object LFS 180s,
+   push 90s) so a slow GitHub degrades to a WARNING (Codemagic catches up next merge) instead
+   of blowing the budget. **Never raise them to match a manual full-push time** — a real full
+   push is the rare diverged case the fetch-first already collapses. Keep their sum well under
+   (platform_timeout − migration_time). A bounded-out mirror is harmless (self-heals next
+   merge); a budget-blown post-merge is a scary false failure.
+
 **Silent-staleness coupling (matters now that Android auto-builds).** `codemagic.yaml`'s
 `android-internal` workflow auto-triggers on every push to `main` of this mirror (iOS stays
 manual). So a failing mirror push no longer just blocks a button you'd click — internal-track

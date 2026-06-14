@@ -6313,26 +6313,36 @@ sync_github_build_mirror() {
 
   # TIME BUDGET (load-bearing): this whole function is the LAST, best-effort step
   # of post-merge, and the platform kills the ENTIRE script at its configured
-  # timeout. The idempotent dual-DB migration suite above already burns ~120s, so
-  # every per-step `timeout` below MUST stay small enough that a slow/diverged
-  # GitHub degrades to a WARNING (Codemagic catches up next merge) instead of
-  # blowing the platform budget and failing the merge's post-merge. Keep the sum
-  # of these well under (platform_timeout - migration_time). Never raise them to
-  # match a manual full-push; a real full push is the rare diverged case that the
-  # fetch-first collapses anyway (see .agents/memory/github-mirror-push.md).
+  # timeout (300000ms). The idempotent dual-DB migration suite above already
+  # burns ~110-120s every merge, so the mirror sync gets a HARD wall-clock
+  # deadline (MIRROR_BUDGET seconds from here) and EVERY step below is clamped to
+  # the time that actually remains. If the budget runs out we WARN and return 0:
+  # a slow/diverged GitHub OR a big new LFS object degrades to "Codemagic catches
+  # up next merge" instead of blowing the platform budget and failing the whole
+  # post-merge. NEVER let a step run longer than the remaining budget, and never
+  # raise MIRROR_BUDGET so high that migrations + mirror can exceed the platform
+  # timeout (see .agents/memory/github-mirror-push.md "Time-budget coupling").
+  local MIRROR_BUDGET=150
+  local mirror_deadline=$((SECONDS + MIRROR_BUDGET))
+  local have_remote=0 remain
 
   # STEP 1 — Fetch the remote tip FIRST. Without a common base git can't tell
   # which objects GitHub already has, so a diverged history makes every push
   # re-send the ENTIRE multi-GB closure -> GitHub returns HTTP 500 (pack too
   # large) and the mirror falls permanently behind. Fetching collapses the push
   # to the true (small) delta. Best-effort: if it fails we still try the push.
-  local have_remote=0
+  remain=$((mirror_deadline - SECONDS))
+  if [ "$remain" -gt 60 ]; then remain=60; fi
+  if [ "$remain" -lt 5 ]; then
+    echo "post-merge: WARNING — GitHub mirror sync out of time before fetch (skipping; next merge catches up)"
+    return 0
+  fi
   # Force refspec (leading '+'): across prior failed syncs the local tracking
   # ref ghmirror/main can drift AHEAD of GitHub's real tip, which makes a plain
   # fetch fail "non-fast-forward" -> have_remote stays 0 -> STEP 2 (LFS upload)
   # is skipped -> every new LFS object GH008-rejects the push forever. The '+'
   # resets the tracking ref to GitHub's actual tip so the delta/LFS diff is real.
-  if GIT_TERMINAL_PROMPT=0 timeout 60 \
+  if GIT_TERMINAL_PROMPT=0 timeout "$remain" \
        git -c http.extraheader="Authorization: Basic $auth" \
            fetch --no-tags "$GITHUB_MIRROR_URL" "+main:refs/remotes/ghmirror/main" >/dev/null 2>&1
   then
@@ -6345,6 +6355,11 @@ sync_github_build_mirror() {
   # GitHub's LFS store lacks (gotcha #2). Targeted by oid so there is NO
   # fat-history walk (`git lfs push --all` walks the whole ~4GB closure and
   # effectively hangs). Skipped when the fetch above gave us no base to diff.
+  # The token-bearing temp remote (ghlfs) is added only for this block; a RETURN
+  # trap guarantees it's removed on EVERY exit path so the token can't linger in
+  # .git/config. Each object is clamped to the remaining budget and we stop early
+  # (WARN) rather than overrun — a still-missing object just GH008s the push,
+  # which WARNs and self-heals on a later merge.
   if [ "$have_remote" = 1 ]; then
     local missing oid
     missing=$(comm -23 \
@@ -6353,12 +6368,20 @@ sync_github_build_mirror() {
       2>/dev/null || true)
     if [ -n "$missing" ]; then
       echo "post-merge: uploading $(printf '%s\n' "$missing" | grep -c .) new LFS object(s) to GitHub LFS"
+      trap 'git remote remove ghlfs >/dev/null 2>&1 || true' RETURN
       git remote remove ghlfs >/dev/null 2>&1 || true
       git remote add ghlfs "https://x-access-token:${GITHUB_TOKEN}@github.com/billdenk/goodtunes-app.git" >/dev/null 2>&1 || true
       for oid in $missing; do
-        GIT_TERMINAL_PROMPT=0 timeout 180 git lfs push --object-id ghlfs "$oid" 2>&1 | sed -E "$scrub"
+        remain=$((mirror_deadline - SECONDS))
+        if [ "$remain" -lt 15 ]; then
+          echo "post-merge: WARNING — out of time; skipping remaining LFS upload(s) (next merge catches up)"
+          break
+        fi
+        if [ "$remain" -gt 120 ]; then remain=120; fi
+        GIT_TERMINAL_PROMPT=0 timeout "$remain" git lfs push --object-id ghlfs "$oid" 2>&1 | sed -E "$scrub" || true
       done
       git remote remove ghlfs >/dev/null 2>&1 || true
+      trap - RETURN
     fi
   fi
 
@@ -6366,7 +6389,13 @@ sync_github_build_mirror() {
   # disposable and must always equal project main). Capture output so a failure
   # is VISIBLE in the merge log instead of vanishing into /dev/null.
   local out rc=0
-  out=$(GIT_LFS_SKIP_PUSH=1 GIT_TERMINAL_PROMPT=0 timeout 90 \
+  remain=$((mirror_deadline - SECONDS))
+  if [ "$remain" -lt 5 ]; then
+    echo "post-merge: WARNING — GitHub mirror sync out of time before push (skipping; next merge catches up)"
+    return 0
+  fi
+  if [ "$remain" -gt 90 ]; then remain=90; fi
+  out=$(GIT_LFS_SKIP_PUSH=1 GIT_TERMINAL_PROMPT=0 timeout "$remain" \
           git -c http.extraheader="Authorization: Basic $auth" \
               push --no-verify --force "$GITHUB_MIRROR_URL" "HEAD:refs/heads/main" 2>&1) || rc=$?
   out=$(printf '%s' "$out" | sed -E "$scrub")
