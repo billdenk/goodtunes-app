@@ -537,6 +537,62 @@ export async function sendCustomAddonChangeRequestEmail(
   return sendViaResend("custom-addon-change-request", toEmail, subject, html, text);
 }
 
+// Task #1994 — Fan tapped "Request this rig" on a rig-detail sheet. Notify the
+// operators so they can connect the fan with the reseller(s). Best-effort (the
+// caller swallows failures so the fan's request never errors). The email
+// carries the fan's contact details so the operator can act without any
+// in-app page.
+export async function sendRigQuoteRequestEmail(
+  toEmail: string,
+  requester: { name: string | null; email: string; phone: string | null },
+  rig: { rigName: string; stockState: string | null; message: string | null },
+  reviewUrl: string,
+): Promise<SendResult> {
+  const who = requester.name || requester.email;
+  const subject = `${who} wants "${rig.rigName}"`;
+  const stockLabel =
+    rig.stockState === "partial" ? "Pieced together across shops"
+      : rig.stockState === "none" ? "Not in stock — hunt requested"
+        : rig.stockState === "full" ? "Available as a complete rig"
+          : null;
+  const text = [
+    `${who} requested the rig "${rig.rigName}".`,
+    ``,
+    `Email: ${requester.email}`,
+    requester.phone ? `Phone: ${requester.phone}` : null,
+    stockLabel ? `Availability: ${stockLabel}` : null,
+    rig.message ? `\nNote: ${rig.message}` : null,
+    ``,
+    `Reach out with a quote — open the GoodTunes admin to follow up:`,
+    reviewUrl,
+  ]
+    .filter((l): l is string => l !== null)
+    .join("\n");
+  const detailRows = [
+    `Email: <a href="mailto:${escapeHtml(requester.email)}" style="color:#319ED8;">${escapeHtml(requester.email)}</a>`,
+    requester.phone ? `Phone: ${escapeHtml(requester.phone)}` : null,
+    stockLabel ? `Availability: ${escapeHtml(stockLabel)}` : null,
+  ]
+    .filter((l): l is string => l !== null)
+    .join("<br/>");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      ${emailLogoImg("color")}
+      <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Request</div>
+      <h1 style="font-size: 22px; margin: 12px 0 12px; font-weight: 700;">Someone wants this rig</h1>
+      <p style="font-size: 15px; line-height: 1.5; color: #333;">
+        <strong>${escapeHtml(who)}</strong> requested the rig <strong>${escapeHtml(rig.rigName)}</strong>.
+      </p>
+      <p style="font-size: 14px; line-height: 1.6; color: #555;">${detailRows}</p>
+      ${rig.message ? `<p style="font-size: 14px; line-height: 1.5; color: #555; border-left: 3px solid #eee; padding-left: 12px; margin: 12px 0;">${escapeHtml(rig.message)}</p>` : ""}
+      <div style="margin: 24px 0;">
+        ${bulletproofButton(reviewUrl, "Open the GoodTunes admin", { bgColor: "#319ED8", paddingV: 12, paddingH: 20, borderRadius: 8, fontSize: 14 })}
+      </div>
+    </div>
+  `;
+  return sendViaResend("rig-quote-request", toEmail, subject, html, text);
+}
+
 // Task #269 — Admin "Forgot password?" reset link. Always called from
 // a neutral 200 endpoint, so the caller can't use mail-send failure to
 // probe account existence. Mirror the OTP template visually so the

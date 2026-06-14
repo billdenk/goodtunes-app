@@ -61,7 +61,7 @@ import {
 } from "./dropboxZip";
 import { promisify } from "util";
 import { z } from "zod";
-import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema, insertTrackPublishingSplitSchema, insertTrackMechanicalSplitSchema, insertOrganizationSchema, insertReleaseNotifySignupSchema } from "@shared/schema";
+import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCreditRoleSchema, insertTrackPublishingSplitSchema, insertTrackMechanicalSplitSchema, insertOrganizationSchema, insertReleaseNotifySignupSchema, insertRigQuoteRequestSchema } from "@shared/schema";
 import { ALBUM_FORMATS, type AlbumFormat } from "@shared/schema";
 import { SHORT_CATEGORIES } from "@shared/categories";
 import { SHARE_LINK_HOST } from "@shared/shareSlug";
@@ -17524,6 +17524,115 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/admin/track-rigs/:id", requireAdmin, async (req, res) => {
     await storage.detachTrackRig(String(req.params.id), (req as any).userId ?? null);
     return res.json({ ok: true });
+  });
+
+  // Task #1994 — Fan "Request this rig". Public capture (logged-out fans can
+  // ask); we link + prefill from the signed-in customer when present. Persist
+  // first, respond 201, then fire a best-effort email to the operators — a
+  // mail failure never fails the fan's request (the row is already written).
+  app.post("/api/rigs/:id/request-quote", async (req, res) => {
+    const rigId = String(req.params.id);
+    const rig = await storage.getRigById(rigId);
+    if (!rig) return res.status(404).json({ message: "Rig not found" });
+
+    // Link + prefill the signed-in fan when present (the request still works
+    // logged-out, so this is best-effort).
+    let customerUserId: string | null = null;
+    let signedIn: { email: string | null; name: string | null; phone: string | null } = {
+      email: null,
+      name: null,
+      phone: null,
+    };
+    const auth = await getAuthFromRequest(req);
+    if (auth?.kind === "customer") {
+      const c = await storage.getCustomer(auth.userId);
+      if (c && !c.mergedIntoId) {
+        customerUserId = c.id;
+        signedIn = {
+          email: c.email ?? null,
+          name: c.realName || c.displayName || null,
+          phone: c.phone ?? null,
+        };
+      }
+    }
+
+    const body = req.body ?? {};
+    const pick = (v: unknown, fallback: string | null) =>
+      typeof v === "string" && v.trim() ? v.trim() : fallback;
+
+    // Optional song context (which track the fan was on) — validate it resolves.
+    let songId: string | null = null;
+    if (typeof body.songId === "string" && body.songId.trim()) {
+      const song = await storage.getSongById(body.songId.trim());
+      if (song) songId = song.id;
+    }
+
+    const parsed = insertRigQuoteRequestSchema.safeParse({
+      rigId,
+      rigName: rig.name,
+      songId,
+      stockState: typeof body.stockState === "string" ? body.stockState : null,
+      name: pick(body.name, signedIn.name),
+      email: pick(body.email, signedIn.email) ?? "",
+      phone: pick(body.phone, signedIn.phone),
+      message: pick(body.message, null),
+      customerUserId,
+      source: typeof body.source === "string" ? body.source.slice(0, 32) : "rig-sheet",
+    });
+    if (!parsed.success) {
+      return res.status(400).json({ message: "A valid email is required." });
+    }
+
+    let saved;
+    try {
+      saved = await storage.addRigQuoteRequest(parsed.data);
+    } catch (err) {
+      console.error("[rig-quote] save failed", err);
+      return res.status(500).json({ message: "Could not save your request." });
+    }
+    // Respond immediately; the operator email below is best-effort.
+    res.status(201).json({ ok: true });
+
+    try {
+      const { listSuperAdminEmails } = await import("./auth/roles");
+      const superEmails = await listSuperAdminEmails();
+      if (superEmails.length) {
+        const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+        const host = req.headers["x-forwarded-host"] || req.headers.host || "admin.goodtunes.music";
+        const reviewUrl = `${proto}://${host}/admin`;
+        const { sendRigQuoteRequestEmail } = await import("./mail");
+        for (const email of superEmails) {
+          try {
+            await sendRigQuoteRequestEmail(
+              email,
+              { name: saved.name ?? null, email: saved.email, phone: saved.phone ?? null },
+              { rigName: saved.rigName, stockState: saved.stockState ?? null, message: saved.message ?? null },
+              reviewUrl,
+            );
+          } catch (e) {
+            console.warn("[rig-quote] notify failed", email, e);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[rig-quote] notify lookup failed", e);
+    }
+  });
+
+  // Operator view of rig requests. requireAdmin admits partner accounts, but
+  // these rows are fan PII (emails/phones), so re-check for a real
+  // super_admin/admin — matching the notify-signups gate above.
+  app.get("/api/admin/rig-quote-requests", requireAdmin, async (req, res) => {
+    const auth = await getAuthFromRequest(req);
+    if (!auth || auth.kind !== "admin") {
+      return res.status(403).json({ message: "Operators only." });
+    }
+    const role = (await getUserRole(auth.userId))?.role;
+    if (role !== "super_admin" && role !== "admin") {
+      return res.status(403).json({ message: "Operators only." });
+    }
+    const rows = await storage.listRigQuoteRequests();
+    return res.json({ count: rows.length, requests: rows });
   });
 
   app.get("/api/vendors/:id/profile", async (req, res) => {

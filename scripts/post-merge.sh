@@ -154,6 +154,46 @@ SQL
 migrate_release_notify_signups dev  "${DATABASE_URL:-}"
 migrate_release_notify_signups prod "${PROD_DATABASE_URL:-}"
 
+# Task #1994 — fan "Request this rig" capture. shared/schema.ts declares
+# rig_quote_requests; hand-apply the canonical CREATE TABLE on BOTH dev and
+# prod to keep the schema-drift guard green and the publish dev→prod diff
+# empty. Idempotent.
+migrate_rig_quote_requests() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping rig_quote_requests migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS rig_quote_requests (
+  id               varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  rig_id           varchar REFERENCES rigs(id) ON DELETE SET NULL,
+  rig_name         text    NOT NULL,
+  song_id          varchar REFERENCES songs(id) ON DELETE SET NULL,
+  stock_state      text,
+  name             text,
+  email            text    NOT NULL,
+  phone            text,
+  message          text,
+  customer_user_id varchar,
+  source           text,
+  created_at       timestamp NOT NULL DEFAULT now(),
+  handled_at       timestamp
+);
+CREATE INDEX IF NOT EXISTS rig_quote_requests_rig_idx ON rig_quote_requests (rig_id);
+CREATE INDEX IF NOT EXISTS rig_quote_requests_created_idx ON rig_quote_requests (created_at);
+COMMIT;
+SQL
+  then
+    echo "post-merge: rig_quote_requests migration ok on $label"
+  else
+    echo "post-merge: WARNING — rig_quote_requests migration failed on $label (continuing)"
+  fi
+}
+migrate_rig_quote_requests dev  "${DATABASE_URL:-}"
+migrate_rig_quote_requests prod "${PROD_DATABASE_URL:-}"
+
 # Task #1036 — TRUE ONE-TIME backfill: give every existing account exactly
 # ONE membership reproducing its current users.role / role_scope_id +
 # folded partner_permission_overrides. Marker-guarded in

@@ -1496,6 +1496,37 @@ export const trackRigs = pgTable("track_rigs", {
   ...softDeleteCols,
 });
 
+// Task #1994 — Fan "Request this rig" capture. When a fan taps the
+// availability CTA on a rig-detail sheet, we persist their interest so an
+// operator can follow up (and a best-effort email goes out). Public capture
+// (logged-out fans can request); we link the customer when one is signed in.
+// No FK on customerUserId — mirrors the loose customer-id pattern
+// (auth_tokens / release_notify_signups). rigId/songId SET NULL so deleting a
+// rig or song keeps the historical request; `rigName` is a snapshot so the
+// admin list stays renderable after a rig is gone.
+export const rigQuoteRequests = pgTable("rig_quote_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  rigId: varchar("rig_id").references(() => rigs.id, { onDelete: "set null" }),
+  rigName: text("rig_name").notNull(),
+  // The track the fan was viewing when they asked (optional context).
+  songId: varchar("song_id").references(() => songs.id, { onDelete: "set null" }),
+  // Availability shown at request time: "full" | "partial" | "none".
+  stockState: text("stock_state"),
+  name: text("name"),
+  email: text("email").notNull(),
+  phone: text("phone"),
+  message: text("message"),
+  customerUserId: varchar("customer_user_id"),
+  // Where the request came from (e.g. "rig-sheet") for light attribution.
+  source: text("source"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  // Stamped once an operator has followed up.
+  handledAt: timestamp("handled_at"),
+}, (t) => ({
+  rigIdx: index("rig_quote_requests_rig_idx").on(t.rigId),
+  createdIdx: index("rig_quote_requests_created_idx").on(t.createdAt),
+}));
+
 // ----- Organizations (labels-publishers as legal entities) --------------
 // A muso-style "Organizations" credit (Record Label, Publisher, PRO, etc.)
 // is a *legal entity*, not a person. We already have a richer `labels` table
@@ -3415,6 +3446,30 @@ export type RigWithDetail = Rig & {
 export type TrackRigWithDetail = TrackRig & {
   rig: RigWithDetail | null;
 };
+
+// Task #1994 — fan "Request this rig" capture. Public POST validates this
+// shape; the GET (operator-only) reads the raw rows.
+export const insertRigQuoteRequestSchema = createInsertSchema(rigQuoteRequests, {
+  email: z.string().trim().email().max(254),
+  rigName: z.string().trim().min(1).max(200),
+  name: z.string().trim().max(120).nullable().optional(),
+  phone: z.string().trim().max(40).nullable().optional(),
+  message: z.string().trim().max(2000).nullable().optional(),
+  stockState: z.enum(["full", "partial", "none"]).nullable().optional(),
+}).pick({
+  rigId: true,
+  rigName: true,
+  songId: true,
+  stockState: true,
+  name: true,
+  email: true,
+  phone: true,
+  message: true,
+  customerUserId: true,
+  source: true,
+});
+export type InsertRigQuoteRequest = z.infer<typeof insertRigQuoteRequestSchema>;
+export type RigQuoteRequest = typeof rigQuoteRequests.$inferSelect;
 
 export const insertPersonAliasSchema = createInsertSchema(personAliases).omit({ id: true });
 export type InsertPersonAlias = z.infer<typeof insertPersonAliasSchema>;

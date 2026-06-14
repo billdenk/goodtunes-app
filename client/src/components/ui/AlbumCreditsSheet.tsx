@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -7,6 +7,7 @@ import {
   usePersonGearDrilldown,
   resolveStaticInstrument,
   personProfileIsRich,
+  type RigDetailView,
 } from "@/pages/AlbumDetail";
 import { SheetClose, SheetBack, SHEET_TOP_FADE } from "@/components/ui/SheetChrome";
 import { scrimFade } from "@/lib/motion";
@@ -46,7 +47,14 @@ export type SongRig = {
     name: string;
     notes?: string | null;
     instrument?: Instrument | null;
-    accessories?: Array<{ id: string; type: string; value: string }>;
+    accessories?: Array<{
+      id: string;
+      type: string;
+      value: string;
+      /* When set, the accessory is itself a catalog instrument the fan can
+         open (its own gear sheet); free-text accessories leave it null. */
+      instrumentId?: string | null;
+    }>;
   } | null;
 };
 
@@ -56,6 +64,11 @@ export type AlbumCreditsRow = {
   name: string;
   role: string;
   person: AlbumCreditsPerson | null;
+  /* Performer rows carry the instrument they played so the per-song "On this
+     track" doors can link a performer to their matching rig (rig↔performer
+     join is purely instrumentId; trackRigs have no personId). Writer /
+     production rows leave it undefined. */
+  instrumentId?: string | null;
 };
 
 /* Full credits payload as returned by GET /api/albums/:id/credits — the
@@ -460,6 +473,365 @@ function CreditsList({
   );
 }
 
+/* ── "On this track" gear doors ──────────────────────────────────────────
+   The per-song credits surface leads with the performers as *gear doors*
+   (mockup gear-rig-cards/SongInstruments): a small instrument-family glyph,
+   the player's name, a "{role} · {gear}" subtitle, and — when their
+   instrument matches a named rig — a "Rig ›" affordance that opens the full
+   rig. Performers with no rig but a rich profile open their person page; the
+   rest are plain rows. Writers + album production follow as quiet grouped
+   rows (CreditsList) so "who played" stays the headline. */
+
+/* Map an instrument family to the small line glyph shown in the gear-door
+   tile (guitar / bass / drums / keys / vocals), falling back to a generic
+   gear glyph for anything unrecognized. Mirrors the canvas mockup icons. */
+function gearIconFor(category?: string | null): ReactNode {
+  const c = (category ?? "").toLowerCase();
+  const svg = {
+    width: 20,
+    height: 20,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.6,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+  if (/\bbass\b/.test(c)) {
+    return (
+      <svg {...svg}>
+        <path d="M9 17 V6 l9 -2 V15" />
+        <circle cx="6.5" cy="17.5" r="2.5" />
+        <circle cx="15.5" cy="15.5" r="2.5" />
+      </svg>
+    );
+  }
+  if (/guitar|string|banjo|mandolin|ukulele/.test(c)) {
+    return (
+      <svg {...svg}>
+        <path d="M14 4 l6 6 -8 8 a3 3 0 1 1 -4 -4 z M4 20 l4 -4" />
+      </svg>
+    );
+  }
+  if (/drum|perc|cymbal/.test(c)) {
+    return (
+      <svg {...svg}>
+        <ellipse cx="12" cy="7" rx="8" ry="3" />
+        <path d="M4 7 V15 a8 3 0 0 0 16 0 V7" />
+      </svg>
+    );
+  }
+  if (/key|piano|synth|organ|wurli|rhodes|mellotron|clav/.test(c)) {
+    return (
+      <svg {...svg}>
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <path d="M8 5 V19 M13 5 V19 M18 5 V19" strokeWidth={1.2} />
+      </svg>
+    );
+  }
+  if (/vocal|voice|sing|mic|choir/.test(c)) {
+    return (
+      <svg {...svg}>
+        <rect x="9" y="3" width="6" height="11" rx="3" />
+        <path d="M6 11 a6 6 0 0 0 12 0 M12 17 v4 M9 21 h6" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...svg}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="9" cy="12" r="3" />
+      <path d="M16 8 h2 M16 12 h2 M16 16 h2" />
+    </svg>
+  );
+}
+
+/* The per-song "On this track" view fed into CreditsSlider: the raw performer
+   rows (so two performers sharing one instrument BOTH appear — no person
+   dedupe), the track's named rigs, the quiet writers/production groups, and
+   the callback that resolves + opens a rig at tap time. */
+export type CreditsSongView = {
+  performers: AlbumCreditsRow[];
+  rigs: SongRig[];
+  textGroups: CreditGroup[];
+  onOpenRig: (
+    rig: SongRig,
+    ctx: { performerName?: string; performerPhotoUrl?: string | null },
+  ) => void;
+};
+
+/* Shared gear-door chrome: a 40×40 glyph tile (mint on the first/highlighted
+   row, brand-blue otherwise), a name + subtitle block, and an optional
+   trailing affordance. Rendered as a button when tappable, a plain div
+   otherwise. */
+function GearDoorShell({
+  icon,
+  highlight,
+  name,
+  subtitle,
+  trailing,
+  onClick,
+  testId,
+}: {
+  icon: ReactNode;
+  highlight: boolean;
+  name: string;
+  subtitle?: string;
+  trailing?: ReactNode;
+  onClick?: () => void;
+  testId: string;
+}) {
+  const Tag: any = onClick ? "button" : "div";
+  return (
+    <Tag
+      {...(onClick ? { type: "button", onClick } : {})}
+      className={`w-full flex items-center gap-3.5 rounded-2xl p-[13px] text-left border border-white/10 ${
+        onClick ? "active:opacity-80 transition-opacity" : ""
+      }`}
+      style={{
+        background: highlight
+          ? "linear-gradient(135deg, rgba(49,158,216,0.16), rgba(127,16,167,0.16))"
+          : "rgba(255,255,255,0.06)",
+      }}
+      data-testid={testId}
+    >
+      <span
+        className="w-10 h-10 rounded-[10px] flex-shrink-0 inline-flex items-center justify-center"
+        style={{
+          background: "rgba(255,255,255,0.06)",
+          color: highlight ? "var(--brand-mint)" : "var(--brand-blue)",
+        }}
+      >
+        {icon}
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="block truncate text-[15.5px] font-bold tracking-[-0.01em] text-fan-primary leading-tight">
+          {name}
+        </span>
+        {subtitle && (
+          <span className="block truncate text-[13px] text-fan-secondary mt-0.5">
+            {subtitle}
+          </span>
+        )}
+      </span>
+      {trailing}
+    </Tag>
+  );
+}
+
+/* The "Rig ›" trailing affordance (brand-blue label + chevron). */
+function RigTrailing() {
+  return (
+    <span
+      className="inline-flex items-center gap-[3px] text-[13px] font-semibold flex-shrink-0"
+      style={{ color: "var(--brand-blue)" }}
+    >
+      Rig
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M9 6l6 6-6 6" />
+      </svg>
+    </span>
+  );
+}
+
+/* One performer's gear door. Whole-row tap opens: the matched RIG when this
+   performer's instrument links to a named rig ("Rig ›"); else the PERSON
+   profile when they have a rich profile (person chevron); else nothing
+   (plain, non-tappable row). The rich-profile probe only runs on the
+   person-fallback path (a rig-having row never needs it). */
+function SongPerformerDoor({
+  perf,
+  rig,
+  highlight,
+  currentAlbumId,
+  resolveInstrument,
+  onOpenRig,
+  onOpenPerson,
+}: {
+  perf: AlbumCreditsRow;
+  rig?: SongRig;
+  highlight: boolean;
+  currentAlbumId?: string;
+  resolveInstrument: (instrumentId?: string) => Instrument | undefined;
+  onOpenRig: CreditsSongView["onOpenRig"];
+  onOpenPerson: (personId: string, role: string) => void;
+}) {
+  const inst = perf.instrumentId ? resolveInstrument(perf.instrumentId) : undefined;
+  const gearName = rig?.rig?.instrument?.name ?? inst?.name;
+  const category = inst?.shortCategory ?? inst?.category ?? rig?.rig?.instrument?.category;
+  const subtitle = gearName ? `${perf.role} · ${gearName}` : perf.role;
+  const icon = gearIconFor(category);
+
+  // Only probe the profile on the person-fallback path — a rig-having row
+  // opens the rig regardless of how rich the person is.
+  const { data } = useQuery<PersonProfileLite>({
+    queryKey: ["/api/people", perf.personId, "profile"],
+    enabled: !rig && !!perf.personId,
+  });
+  const personRich = !rig && !!perf.personId && personProfileIsRich(data, currentAlbumId);
+
+  if (rig) {
+    return (
+      <GearDoorShell
+        icon={icon}
+        highlight={highlight}
+        name={perf.name}
+        subtitle={subtitle}
+        trailing={<RigTrailing />}
+        onClick={() =>
+          onOpenRig(rig, {
+            performerName: perf.name,
+            performerPhotoUrl: perf.person?.photoUrl ?? null,
+          })
+        }
+        testId={`door-rig-${rig.id}`}
+      />
+    );
+  }
+  if (personRich) {
+    return (
+      <GearDoorShell
+        icon={icon}
+        highlight={highlight}
+        name={perf.name}
+        subtitle={subtitle}
+        trailing={<RowChevron />}
+        onClick={() => onOpenPerson(perf.personId!, perf.role)}
+        testId={`door-performer-${perf.personId}`}
+      />
+    );
+  }
+  return (
+    <GearDoorShell
+      icon={icon}
+      highlight={highlight}
+      name={perf.name}
+      subtitle={subtitle}
+      testId={`row-performer-${perf.id}`}
+    />
+  );
+}
+
+/* An orphan rig — a named rig whose base instrument matches no performer on
+   the track. Rendered as a personless door at the END of "On this track"
+   (title = rig name, subtitle = the base instrument). */
+function SongOrphanRigDoor({
+  tr,
+  resolveInstrument,
+  onOpenRig,
+}: {
+  tr: SongRig;
+  resolveInstrument: (instrumentId?: string) => Instrument | undefined;
+  onOpenRig: CreditsSongView["onOpenRig"];
+}) {
+  const baseId = tr.rig?.instrument?.id;
+  const base = baseId ? resolveInstrument(baseId) ?? tr.rig?.instrument : tr.rig?.instrument;
+  const category = base?.shortCategory ?? base?.category;
+  return (
+    <GearDoorShell
+      icon={gearIconFor(category)}
+      highlight={false}
+      name={tr.rigName || tr.rig?.name || "Rig"}
+      subtitle={base?.name ?? undefined}
+      trailing={<RigTrailing />}
+      onClick={() => onOpenRig(tr, {})}
+      testId={`door-rig-${tr.rig?.id ?? tr.id}`}
+    />
+  );
+}
+
+/* The full per-song credits body: the "On this track" gear doors (performers
+   then orphan rigs) + helper line, then the quiet writers / production
+   groups. Replaces the album-style flat CreditsList for per-track surfaces. */
+function SongTrackCredits({
+  songView,
+  currentAlbumId,
+  resolveInstrument,
+  onOpenPerson,
+  multiColumn,
+}: {
+  songView: CreditsSongView;
+  currentAlbumId?: string;
+  resolveInstrument: (instrumentId?: string) => Instrument | undefined;
+  onOpenPerson: (personId: string, role: string) => void;
+  multiColumn?: boolean;
+}) {
+  const { performers, rigs, textGroups, onOpenRig } = songView;
+  // A performer matches a rig purely by instrumentId (rigs carry no personId).
+  // Two performers sharing an instrument both match the same rig → "Rig ›" on
+  // both (no dedupe). A rig matching no performer is an orphan, shown last.
+  const rigFor = (perf: AlbumCreditsRow): SongRig | undefined =>
+    perf.instrumentId
+      ? rigs.find((tr) => !!tr.rig && tr.rig.instrument?.id === perf.instrumentId)
+      : undefined;
+  const matchedRigIds = new Set<string>();
+  for (const perf of performers) {
+    const r = rigFor(perf);
+    if (r?.rig) matchedRigIds.add(r.rig.id);
+  }
+  const orphanRigs = rigs.filter((tr) => tr.rig && !matchedRigIds.has(tr.rig.id));
+  const hasTrackSection = performers.length > 0 || orphanRigs.length > 0;
+
+  return (
+    <>
+      {hasTrackSection && (
+        <section data-testid="section-on-this-track">
+          <h3 className="px-5 mb-3 text-fan-primary text-[22px] font-extrabold tracking-tight">
+            On this track
+          </h3>
+          <div className="px-5 flex flex-col gap-2.5">
+            {performers.map((perf, i) => (
+              <SongPerformerDoor
+                key={perf.id}
+                perf={perf}
+                rig={rigFor(perf)}
+                highlight={i === 0}
+                currentAlbumId={currentAlbumId}
+                resolveInstrument={resolveInstrument}
+                onOpenRig={onOpenRig}
+                onOpenPerson={onOpenPerson}
+              />
+            ))}
+            {orphanRigs.map((tr) => (
+              <SongOrphanRigDoor
+                key={tr.id}
+                tr={tr}
+                resolveInstrument={resolveInstrument}
+                onOpenRig={onOpenRig}
+              />
+            ))}
+          </div>
+          <p className="px-5 mt-3.5 text-[13px] text-fan-secondary leading-snug">
+            Tap a player to open their full rig — every instrument, amp and pedal,
+            shoppable from one place.
+          </p>
+        </section>
+      )}
+      {textGroups.length > 0 && (
+        <div className={hasTrackSection ? "mt-8" : ""}>
+          <CreditsList
+            groups={textGroups}
+            onOpenPerson={onOpenPerson}
+            currentAlbumId={currentAlbumId}
+            multiColumn={multiColumn}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
 const SLIDE_SPRING = { type: "spring", stiffness: 420, damping: 44, mass: 0.9 } as const;
 
 /* The shared list ↔ person slider. Holds no state of its own — both the mobile
@@ -470,7 +842,7 @@ const SLIDE_SPRING = { type: "spring", stiffness: 420, damping: 44, mass: 0.9 } 
    The container never resizes between the two views. */
 function CreditsSlider({
   groups,
-  rigs,
+  songView,
   eyebrow,
   title,
   subtitle,
@@ -488,7 +860,9 @@ function CreditsSlider({
   multiColumn,
 }: {
   groups: CreditGroup[];
-  rigs?: SongRig[];
+  /* When set (per-song surface), the list view leads with the "On this track"
+     gear doors + writers/production groups instead of the flat CreditsList. */
+  songView?: CreditsSongView;
   eyebrow: string;
   title: string;
   subtitle: string;
@@ -601,104 +975,27 @@ function CreditsSlider({
                 </div>
               )}
               <div className={songHeader ? "mt-7" : "mt-4"}>
-                <CreditsList
-                  groups={groups}
-                  onOpenPerson={onOpenPerson}
-                  currentAlbumId={currentAlbumId}
-                  multiColumn={multiColumn}
-                />
-                {rigs && rigs.length > 0 && (
-                  <RigSection rigs={rigs} onOpenInstrument={onOpenInstrument} />
+                {songView ? (
+                  <SongTrackCredits
+                    songView={songView}
+                    currentAlbumId={currentAlbumId}
+                    resolveInstrument={resolveInstrument}
+                    onOpenPerson={onOpenPerson}
+                    multiColumn={multiColumn}
+                  />
+                ) : (
+                  <CreditsList
+                    groups={groups}
+                    onOpenPerson={onOpenPerson}
+                    currentAlbumId={currentAlbumId}
+                    multiColumn={multiColumn}
+                  />
                 )}
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
-
-/* ── Rig section ─────────────────────────────────────────────────────────
-   The artist's named gear setup for this track: a base instrument (tappable
-   into the gear sheet) plus accessory entries (Strings / Pick / Capo …) and
-   an optional per-take tweak note. Renders under the credit groups so the
-   "who played" list stays the headline; the "what they played it with" reads
-   as supporting detail. */
-function RigSection({
-  rigs,
-  onOpenInstrument,
-}: {
-  rigs: SongRig[];
-  onOpenInstrument: (instrument: Instrument, tuningNotes?: string) => void;
-}) {
-  return (
-    <div className="px-5 mt-8" data-testid="section-track-rigs">
-      <p className="text-[color:var(--brand-blue)] text-xs font-semibold uppercase tracking-wider mb-3">
-        Rig
-      </p>
-      <div className="space-y-3">
-        {rigs.map((tr) => {
-          const base = tr.rig?.instrument ?? null;
-          const accessories = tr.rig?.accessories ?? [];
-          return (
-            <div
-              key={tr.id}
-              className="rounded-2xl bg-white/[0.04] border border-white/10 p-4"
-              data-testid={`rig-${tr.id}`}
-            >
-              <p className="text-fan-primary text-base font-semibold leading-tight" data-testid={`text-rig-name-${tr.id}`}>
-                {tr.rigName}
-              </p>
-              {base && (
-                <button
-                  type="button"
-                  onClick={() => onOpenInstrument(base, tr.tweakNote ?? undefined)}
-                  className="mt-3 flex items-center gap-3 w-full text-left active:opacity-70"
-                  data-testid={`button-rig-base-${tr.id}`}
-                >
-                  {base.photoUrl ? (
-                    <img
-                      src={base.photoUrl}
-                      alt={base.name}
-                      className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
-                    />
-                  ) : (
-                    <span className="w-12 h-12 rounded-lg bg-white/10 flex-shrink-0" />
-                  )}
-                  <span className="min-w-0">
-                    <span className="block text-fan-primary text-sm font-medium truncate">
-                      {base.name}
-                    </span>
-                    {base.category && (
-                      <span className="block text-fan-faint text-xs truncate">{base.category}</span>
-                    )}
-                  </span>
-                </button>
-              )}
-              {accessories.length > 0 && (
-                <div className="mt-3 space-y-1.5">
-                  {accessories.map((a) => (
-                    <div
-                      key={a.id}
-                      className="flex items-baseline justify-between gap-4 text-sm"
-                      data-testid={`rig-accessory-${a.id}`}
-                    >
-                      <span className="text-fan-faint flex-shrink-0">{a.type}</span>
-                      <span className="text-fan-secondary text-right">{a.value}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {tr.tweakNote && (
-                <p className="text-fan-secondary text-sm mt-3 leading-snug italic" data-testid={`text-rig-tweak-${tr.id}`}>
-                  “{tr.tweakNote}”
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -731,6 +1028,9 @@ function CreditsSheetHost({
   subtitle,
   groups,
   rigs,
+  songPerformers,
+  songTextGroups,
+  resolveRigView,
   albumId,
   album,
   trackExtra,
@@ -747,6 +1047,17 @@ function CreditsSheetHost({
   groups: CreditGroup[];
   /** Named gear setups attached to this track (per-track surfaces only). */
   rigs?: SongRig[];
+  /** Raw performer rows for the per-song "On this track" gear doors. When set
+   *  (with resolveRigView), the list view renders the song view instead of the
+   *  flat album-style CreditsList. */
+  songPerformers?: AlbumCreditsRow[];
+  /** Quiet writers / production groups shown under the gear doors. */
+  songTextGroups?: CreditGroup[];
+  /** Resolves a tapped rig into the fully-hydrated RigDetailView at tap time. */
+  resolveRigView?: (
+    rig: SongRig,
+    ctx: { performerName?: string; performerPhotoUrl?: string | null },
+  ) => RigDetailView;
   /** Apple song-page header for per-track surfaces (album credits omit it). */
   songHeader?: CreditsSongHeader;
   /** Current album id — lets the rich-profile gate count a track on THIS
@@ -783,6 +1094,19 @@ function CreditsSheetHost({
     setSelected(view);
   };
 
+  // Per-song surfaces pass raw performer rows + a rig resolver; that flips the
+  // list pane into the "On this track" gear doors. The album-credits surface
+  // leaves these undefined and keeps the flat CreditsList.
+  const songView: CreditsSongView | undefined =
+    songPerformers && resolveRigView
+      ? {
+          performers: songPerformers,
+          rigs: rigs ?? [],
+          textGroups: songTextGroups ?? [],
+          onOpenRig: (rig, ctx) => gear.openRig(resolveRigView(rig, ctx)),
+        }
+      : undefined;
+
   return (
     <>
       <SheetShell
@@ -793,7 +1117,7 @@ function CreditsSheetHost({
       >
         <CreditsSlider
           groups={groups}
-          rigs={rigs}
+          songView={songView}
           eyebrow={eyebrow}
           title={title}
           subtitle={subtitle}
@@ -858,6 +1182,27 @@ export function AlbumCreditsSheet({
   );
 }
 
+/* Shared per-song view-model parts for the mobile SongCreditsSheet and the
+   desktop AlbumCreditsPage song view: the raw performer rows (no dedupe — two
+   performers sharing one instrument each surface as their own gear door) plus
+   the quiet writers (Composition & Lyrics) + album-level production
+   (Production & Engineering) text groups shown beneath the gear doors. */
+function buildSongCreditsParts(
+  credits: AlbumCreditsPayload,
+  songId: string,
+  production?: AlbumCreditsRow[],
+): { songPerformers: AlbumCreditsRow[]; songTextGroups: CreditGroup[] } {
+  const songPerformers = credits.bySongId?.[songId]?.performers ?? [];
+  const songTextGroups: CreditGroup[] = [];
+  const composition = aggregateRows(credits.bySongId?.[songId]?.writers ?? []);
+  if (composition.length)
+    songTextGroups.push({ title: "Composition & Lyrics", entries: composition });
+  const prod = aggregateRows(production ?? []);
+  if (prod.length)
+    songTextGroups.push({ title: "Production & Engineering", entries: prod });
+  return { songPerformers, songTextGroups };
+}
+
 /* ── Mobile per-song "Song Credits" ──────────────────────────────────────
    Same dark pill cards + in-place slide-in person view as the album credits
    sheet, but scoped to a single track. `credits` is a single-song payload
@@ -873,6 +1218,8 @@ export function SongCreditsSheet({
   artist,
   credits,
   rigs,
+  production,
+  resolveRigView,
   album,
   resolveInstrument,
   resolvePersonContext,
@@ -888,6 +1235,15 @@ export function SongCreditsSheet({
   credits: AlbumCreditsPayload;
   /** Named gear setups attached to this track. */
   rigs?: SongRig[];
+  /** Album-level production rows, threaded in as the song view's quiet
+   *  "Production & Engineering" group (Apple-Music honest — production is
+   *  credited at the album level, not per-track). */
+  production?: AlbumCreditsRow[];
+  /** Resolves a tapped rig into the fully-hydrated RigDetailView at tap time. */
+  resolveRigView?: (
+    rig: SongRig,
+    ctx: { performerName?: string; performerPhotoUrl?: string | null },
+  ) => RigDetailView;
   album: Album;
   resolveInstrument: (instrumentId?: string) => Instrument | undefined;
   resolvePersonContext: (personId: string, role: string) => CreditsPersonView | null;
@@ -895,7 +1251,12 @@ export function SongCreditsSheet({
   songHeader?: CreditsSongHeader;
   onClose: () => void;
 }) {
-  const groups = useMemo(() => buildAlbumCreditGroups(credits), [credits]);
+  // Raw performer doors + quiet writers/production groups (shared with the
+  // desktop AlbumCreditsPage song view).
+  const { songPerformers, songTextGroups } = useMemo(
+    () => buildSongCreditsParts(credits, songId, production),
+    [credits, songId, production],
+  );
   return (
     <CreditsSheetHost
       ariaLabel={`Credits for ${songTitle}`}
@@ -903,8 +1264,11 @@ export function SongCreditsSheet({
       eyebrow="Song Credits"
       title={songTitle}
       subtitle={`${artist} · ${albumTitle}`}
-      groups={groups}
+      groups={[]}
       rigs={rigs}
+      songPerformers={songPerformers}
+      songTextGroups={songTextGroups}
+      resolveRigView={resolveRigView}
       albumId={albumId}
       album={album}
       trackExtra={{ songId }}
@@ -933,6 +1297,11 @@ export function AlbumCreditsPage({
   credits,
   eyebrow = "Album Credits",
   songHeader,
+  songId,
+  production,
+  rigs,
+  resolveRigView,
+  resolveInstrument = resolveStaticInstrument,
   onClose,
 }: {
   /** Full album — needed to host the in-place person view's gear/album
@@ -948,6 +1317,24 @@ export function AlbumCreditsPage({
    *  flows the role groups into balanced columns (tablet/desktop). The
    *  album-credits surface omits it → unchanged single-column header. */
   songHeader?: CreditsSongHeader;
+  /** When set (with resolveRigView), the page renders the per-song "On this
+   *  track" gear doors instead of the flat album credit list. */
+  songId?: string;
+  /** Album-level production rows, threaded into the song view as the quiet
+   *  "Production & Engineering" group. */
+  production?: AlbumCreditsRow[];
+  /** Named gear setups attached to this track. */
+  rigs?: SongRig[];
+  /** Resolves a tapped rig into the fully-hydrated RigDetailView at tap time. */
+  resolveRigView?: (
+    rig: SongRig,
+    ctx: { performerName?: string; performerPhotoUrl?: string | null },
+  ) => RigDetailView;
+  /** Resolves an instrument id to its (vendor-enriched) detail. Defaults to the
+   *  static roster; the per-song surface passes a resolver seeded from the live
+   *  album credits so the gear doors + person-view gear carry vendor
+   *  availability. */
+  resolveInstrument?: (instrumentId?: string) => Instrument | undefined;
   onClose: () => void;
 }) {
   const reduce = !!useReducedMotion();
@@ -971,6 +1358,24 @@ export function AlbumCreditsPage({
     track("credits_person_clicked", { personId, albumId: album.id });
     setSelected(synthPersonView(entry, role));
   };
+
+  // Per-song surface: raw performer rows + a rig resolver flip the list pane
+  // into the "On this track" gear doors (mirrors the mobile CreditsSheetHost).
+  // The album-credits surface leaves songId/resolveRigView unset → flat list.
+  let songView: CreditsSongView | undefined;
+  if (songId && resolveRigView) {
+    const { songPerformers, songTextGroups } = buildSongCreditsParts(
+      credits,
+      songId,
+      production,
+    );
+    songView = {
+      performers: songPerformers,
+      rigs: rigs ?? [],
+      textGroups: songTextGroups,
+      onOpenRig: (rig, ctx) => gear.openRig(resolveRigView(rig, ctx)),
+    };
+  }
 
   return (
     <>
@@ -1008,6 +1413,7 @@ export function AlbumCreditsPage({
             >
               <CreditsSlider
                 groups={groups}
+                songView={songView}
                 eyebrow={eyebrow}
                 title={albumTitle}
                 subtitle={artist}
@@ -1017,7 +1423,7 @@ export function AlbumCreditsPage({
                 onOpenPerson={openPerson}
                 onBack={() => setSelected(null)}
                 onClose={requestClose}
-                resolveInstrument={resolveStaticInstrument}
+                resolveInstrument={resolveInstrument}
                 onOpenInstrument={gear.openInstrument}
                 showCloseOnPerson
                 surfaceBg="var(--brand-bg)"

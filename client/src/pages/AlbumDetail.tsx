@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlbumDetailMobileSurface } from "@/components/ui/AlbumDetailMobileSurface";
 import { AlbumDetailMobileSkeleton, AlbumNotFound } from "@/components/ui/AlbumDetailSkeleton";
-import { AlbumCreditsSheet, SongCreditsSheet, buildAlbumCreditGroups, type SongRig } from "@/components/ui/AlbumCreditsSheet";
+import { AlbumCreditsSheet, SongCreditsSheet, buildAlbumCreditGroups } from "@/components/ui/AlbumCreditsSheet";
 import type { AlbumCreditsPayload, AlbumCreditsRow } from "@/components/ui/AlbumCreditsSheet";
 import { BonusPlayBadge } from "@/components/ui/BonusPlayBadge";
 import { BonusVideoPlayer, type BonusVideo } from "@/components/ui/BonusVideoPlayer";
@@ -12,7 +12,8 @@ import { PhotoLightbox } from "@/components/ui/PhotoLightbox";
 // lightbox.
 export { BonusVideoPlayer } from "@/components/ui/BonusVideoPlayer";
 import { useLocation, useParams } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { usePlayer } from "@/context/PlayerContext";
 import { useAlbumOwnership } from "@/hooks/useAlbumOwnership";
 import { useFullPlaybackAccess } from "@/hooks/useFullPlaybackAccess";
@@ -62,56 +63,15 @@ import { useScrollHideNav } from "@/hooks/useNavVisibility";
 import { useRecordRecent } from "@/hooks/useRecents";
 import { ALBUMS, getSongsByAlbum, getCreditsForSong, PEOPLE, INSTRUMENTS, type Song, type Album, type Person, type Instrument, type InstrumentVendor, type TrackPerformer, type TrackCredits } from "@/data/musicData";
 
-// Enriched credits as returned by GET /api/songs/:id/credits and
-// GET /api/albums/:id/credits. Person/instrument joins are already done
-// server-side so the fan-side credits surface renders from a single fetch.
-type ApiPerson = { id: string; name: string; photoUrl?: string | null; bio?: string | null };
-type ApiVendor = { id: string; instrumentId: string; vendorId: string; name: string; domain?: string; affiliateUrl: string; aboutUrl?: string | null; homeUrl?: string | null; logoUrl?: string | null; tagline?: string | null; bio?: string | null; location?: string | null; coverUrl?: string | null; position: number };
-type ApiInstrument = { id: string; name: string; category: string; shortCategory?: string | null; photoUrl?: string | null; photoUrls?: string[] | null; about?: string | null; artistNote?: string | null; vendors: ApiVendor[] };
-type ApiSongCredits = {
-  writers: Array<{ id: string; songId: string; personId: string | null; name: string; role: string; position: number; person: ApiPerson | null }>;
-  performers: Array<{ id: string; songId: string; personId: string | null; instrumentId: string | null; name: string; role: string; tuningNotes: string | null; position: number; person: ApiPerson | null; instrument: ApiInstrument | null }>;
-  rigs?: SongRig[];
-};
-
-// API rows use `string | null` for optional columns; the static types use
-// `string | undefined`. These tiny coercions keep TS happy and match the
-// static-seed shapes already used by the credits sheets.
-const nu = <T,>(v: T | null | undefined): T | undefined => v ?? undefined;
-function normalizePerson(p: ApiPerson): Person {
-  return { id: p.id, name: p.name, photoUrl: nu(p.photoUrl), bio: nu(p.bio) };
-}
-function normalizeInstrument(i: ApiInstrument): Instrument {
-  return {
-    id: i.id,
-    name: i.name,
-    category: i.category,
-    shortCategory: nu(i.shortCategory),
-    photoUrl: nu(i.photoUrl),
-    photoUrls: nu(i.photoUrls),
-    about: nu(i.about),
-    artistNote: nu(i.artistNote),
-    vendors: i.vendors.map((v) => ({
-      // Static-shape fields the static seed data also fills in.
-      name: v.name,
-      affiliateUrl: v.affiliateUrl,
-      aboutUrl: nu(v.aboutUrl),
-      logoUrl: nu(v.logoUrl),
-      tagline: nu(v.tagline),
-      bio: nu(v.bio),
-      location: nu(v.location),
-      coverUrl: nu(v.coverUrl),
-      // API-only fields needed by VendorSheet (profile fetch + bookmark
-      // keying). Static seed rows leave these undefined and fall back
-      // gracefully.
-      id: v.id,
-      vendorId: v.vendorId,
-      instrumentId: v.instrumentId,
-      homeUrl: v.homeUrl ?? undefined,
-      domain: v.domain,
-    })),
-  };
-}
+// Enriched credits payload + gear/rig view-model helpers, shared by the mobile
+// SongCreditsSheet and the desktop AlbumCreditsPage (see lib/rigViewModel.ts).
+import {
+  type AlbumCreditsApiPayload,
+  type RigDetailView,
+  normalizePerson,
+  buildInstrumentsById,
+  makeResolveRigView,
+} from "@/lib/rigViewModel";
 
 // Adapt a single song's `TrackCredits` (the static-seed-inclusive shape used
 // throughout the mobile credits flow) into the one-song `AlbumCreditsPayload`
@@ -130,6 +90,7 @@ function songCreditsPayload(
     personId: string | undefined,
     idx: number,
     prefix: string,
+    instrumentId?: string,
   ): AlbumCreditsRow => {
     const p = personId ? peopleById.get(personId) : undefined;
     return {
@@ -138,13 +99,16 @@ function songCreditsPayload(
       name: name ?? p?.name ?? "",
       role,
       person: p ? { id: p.id, name: p.name, photoUrl: p.photoUrl ?? null } : null,
+      instrumentId: instrumentId ?? null,
     };
   };
   return {
     bySongId: {
       [songId]: {
         writers: (tc?.writers ?? []).map((w, i) => toRow(w.name, w.role, w.personId, i, "w")),
-        performers: (tc?.performers ?? []).map((p, i) => toRow(p.name, p.role, p.personId, i, "p")),
+        performers: (tc?.performers ?? []).map((p, i) =>
+          toRow(p.name, p.role, p.personId, i, "p", p.instrumentId),
+        ),
       },
     },
   };
@@ -719,19 +683,7 @@ function AlbumDetailMobile({
   // SongCreditsSheet + the album credits sheet render from the resolved maps below;
   // the static `TRACK_CREDITS` / `PEOPLE` / `INSTRUMENTS` seed is kept as a
   // graceful fallback for songs that haven't been migrated into the DB yet.
-  type ApiAlbumProductionCredit = {
-    id: string;
-    albumId: string;
-    personId: string | null;
-    name: string;
-    role: string;
-    position: number;
-    person: ApiPerson | null;
-  };
-  const { data: apiAlbumCredits } = useQuery<{
-    bySongId: Record<string, ApiSongCredits>;
-    production?: ApiAlbumProductionCredit[];
-  }>({
+  const { data: apiAlbumCredits } = useQuery<AlbumCreditsApiPayload>({
     queryKey: ["/api/albums", id, "credits"],
     enabled: !!id,
   });
@@ -745,10 +697,8 @@ function AlbumDetailMobile({
   );
   const { creditsBySongId, peopleById, instrumentsById } = useMemo(() => {
     const peopleById = new Map<string, Person>();
-    const instrumentsById = new Map<string, Instrument>();
-    // Seed with the static rosters first so API-supplied rows override.
+    // Seed with the static roster first so API-supplied rows override.
     for (const [pid, p] of Object.entries(PEOPLE)) peopleById.set(pid, p);
-    for (const [iid, i] of Object.entries(INSTRUMENTS)) instrumentsById.set(iid, i);
 
     const creditsBySongId = new Map<string, TrackCredits>();
     if (apiAlbumCredits) {
@@ -761,7 +711,6 @@ function AlbumDetailMobile({
         }
         for (const p of api.performers) {
           if (p.person) peopleById.set(p.person.id, normalizePerson(p.person));
-          if (p.instrument) instrumentsById.set(p.instrument.id, normalizeInstrument(p.instrument));
         }
         creditsBySongId.set(songId, {
           writers: api.writers.map((w) => ({ name: w.name, role: w.role, personId: w.personId ?? undefined })),
@@ -776,6 +725,8 @@ function AlbumDetailMobile({
         });
       }
     }
+    // Instrument index (static roster + vendor-enriched API instruments).
+    const instrumentsById = buildInstrumentsById(apiAlbumCredits);
     return { creditsBySongId, peopleById, instrumentsById };
   }, [apiAlbumCredits]);
   // Helper: live API credits for a song, falling back to the static seed.
@@ -1480,8 +1431,17 @@ function AlbumDetailMobile({
             artist={album.artist}
             credits={songCreditsPayload(getCredits(creditsForSong.id), creditsForSong.id, peopleById)}
             rigs={apiAlbumCredits?.bySongId?.[creditsForSong.id]?.rigs}
+            production={apiAlbumCredits?.production}
             album={album}
             resolveInstrument={(iid) => (iid ? instrumentsById.get(iid) : undefined)}
+            resolveRigView={makeResolveRigView({
+              instrumentsById,
+              credits: apiAlbumCredits,
+              songs,
+              album,
+              songId: creditsForSong.id,
+              songTitle: creditsForSong.title,
+            })}
             songHeader={{
               artwork: album.artwork,
               songTitle: creditsForSong.title,
@@ -2782,12 +2742,14 @@ export function usePersonGearDrilldown(
   opts?: { contained?: boolean },
 ): {
   openInstrument: (instrument: Instrument, tuningNotes?: string, attribution?: { personId: string; songId: string }) => void;
+  openRig: (view: RigDetailView) => void;
   overlay: React.ReactNode;
 } {
   const contained = !!opts?.contained;
   const [instrumentSheet, setInstrumentSheet] = useState<{ instrument: Instrument; tuningNotes?: string; attribution?: { personId: string; songId: string } } | null>(null);
   const [vendorSheet, setVendorSheet] = useState<{ vendor: InstrumentVendor; instrument: Instrument } | null>(null);
   const [inAppBrowser, setInAppBrowser] = useState<{ url: string; title: string; logoUrl?: string } | null>(null);
+  const [rigSheet, setRigSheet] = useState<RigDetailView | null>(null);
   const openVendorInAppBrowser = (b: { url: string; title: string; logoUrl?: string }) => {
     try {
       const domain = new URL(b.url).hostname.replace(/^www\./, "");
@@ -2833,11 +2795,14 @@ export function usePersonGearDrilldown(
     setInAppBrowser(null);
     setVendorSheet(null);
     setInstrumentSheet(null);
+    setRigSheet(null);
     onCloseAll();
   };
 
   const openInstrument = (instrument: Instrument, tuningNotes?: string, attribution?: { personId: string; songId: string }) =>
     setInstrumentSheet({ instrument, tuningNotes, attribution });
+
+  const openRig = (view: RigDetailView) => setRigSheet(view);
 
   let overlay: React.ReactNode = null;
   if (inAppBrowser) {
@@ -2883,9 +2848,19 @@ export function usePersonGearDrilldown(
         contained={contained}
       />
     );
+  } else if (rigSheet) {
+    overlay = (
+      <RigDetailSheet
+        view={rigSheet}
+        onOpenInstrument={(inst) => setInstrumentSheet({ instrument: inst })}
+        onClose={() => setRigSheet(null)}
+        onCloseAll={closeAllSheets}
+        contained={contained}
+      />
+    );
   }
 
-  return { openInstrument, overlay };
+  return { openInstrument, openRig, overlay };
 }
 
 // Self-contained person sheet for surfaces that have no SuperCredits sheet
@@ -3139,6 +3114,371 @@ function InstrumentSheet({
         onOpenVendor={(v) => onOpenVendor(v as InstrumentVendor)}
         onOpenBuy={(v) => { const iv = v as InstrumentVendor; if (iv.affiliateUrl) onOpenInAppBrowser({ url: iv.affiliateUrl, title: iv.name, logoUrl: iv.logoUrl ?? undefined }); }}
       />
+    </SheetShell>
+  );
+}
+
+/* ── Artist Rig detail ───────────────────────────────────────────────────
+   A fully-resolved view of one named gear setup (a "rig") attached to a
+   track — the artist photo hero, the base instrument, accessories, other
+   tracks on this album using the same rig, and a single availability CTA
+   that routes a quote request to the resolved vendor (full) or to GoodTunes
+   to hunt the setup down (none). The host (`usePersonGearDrilldown`) resolves
+   this shape at tap-time from the track's TrackRig + the credits indexes, so
+   the sheet itself stays a dumb renderer with no album/credits knowledge. */
+// RigDetailView now lives in lib/rigViewModel.ts (shared with the desktop
+// AlbumCreditsPage); re-exported here so existing imports from
+// "@/pages/AlbumDetail" keep working.
+export type { RigDetailView };
+
+/* ≥ this many accessories → flow into a 2-up grid instead of a horizontal
+   carousel (the mockup's "See all" affordance, inlined since the live sheet
+   has no separate accessory index page). */
+const RIG_ACCESSORY_GRID_MIN = 5;
+
+function RigDetailSheet({
+  view,
+  onOpenInstrument,
+  onClose,
+  onCloseAll,
+  contained = false,
+}: {
+  view: RigDetailView;
+  onOpenInstrument: (instrument: Instrument) => void;
+  onClose: () => void;
+  onCloseAll: () => void;
+  contained?: boolean;
+}) {
+  const dismiss = useSheetDismiss();
+  const { user } = useAuth();
+  const isCustomer = user?.kind === "customer";
+
+  const vendors = view.instrument?.vendors ?? [];
+  const availability: "full" | "none" = vendors.length >= 1 ? "full" : "none";
+  const vendorName = vendors[0]?.name;
+
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [message, setMessage] = useState("");
+  // Logged-out fans must supply contact details; signed-in customers' details
+  // are read server-side from the session, so they get a one-tap request.
+  const [showForm, setShowForm] = useState(!isCustomer);
+  const [sent, setSent] = useState(false);
+
+  const submit = useMutation({
+    mutationFn: async () => {
+      const payload: Record<string, unknown> = {
+        songId: view.songId,
+        stockState: availability,
+        source: "rig-sheet",
+      };
+      if (message.trim()) payload.message = message.trim();
+      if (!isCustomer || showForm) {
+        if (name.trim()) payload.name = name.trim();
+        if (email.trim()) payload.email = email.trim();
+        if (phone.trim()) payload.phone = phone.trim();
+      }
+      const res = await apiRequest("POST", `/api/rigs/${view.rigId}/request-quote`, payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      setSent(true);
+      track("rig_quote_requested", { rigId: view.rigId, stockState: availability, songId: view.songId });
+    },
+    onError: (e: unknown) => {
+      const msg = e instanceof Error ? e.message.replace(/^\d+:\s*/, "") : "Please try again.";
+      toast({ title: "Couldn't send your request", description: msg });
+    },
+  });
+
+  const emailValid = /.+@.+\..+/.test(email.trim());
+  const canSubmit = isCustomer && !showForm ? true : name.trim().length > 0 && emailValid;
+  const onSubmit = () => {
+    if (!canSubmit || submit.isPending) return;
+    submit.mutate();
+  };
+
+  const textSecondary = "rgba(235,235,245,0.62)";
+  const textTertiary = "rgba(235,235,245,0.40)";
+  const hairline = "rgba(255,255,255,0.10)";
+  const cardBg = "rgba(255,255,255,0.06)";
+  const heroPos = "center 18%";
+
+  const inputStyle = {
+    background: "rgba(255,255,255,0.06)",
+    border: `1px solid ${hairline}`,
+    color: "#fff",
+  } as const;
+
+  const AccessoryCard = ({ acc, wide }: { acc: RigDetailView["accessories"][number]; wide?: boolean }) => {
+    const linkable = !!acc.instrument;
+    const photo = acc.instrument?.photoUrl;
+    return (
+      <button
+        type="button"
+        disabled={!linkable}
+        onClick={() => acc.instrument && onOpenInstrument(acc.instrument)}
+        className={`flex flex-col text-left rounded-[14px] overflow-hidden flex-shrink-0 ${wide ? "w-full" : "w-[124px]"} ${linkable ? "active:opacity-80" : "cursor-default"}`}
+        style={{ background: cardBg, border: `1px solid ${hairline}` }}
+        data-testid={`card-rig-accessory-${acc.id}`}
+      >
+        <div className="w-full aspect-square overflow-hidden" style={{ background: "rgba(255,255,255,0.04)" }}>
+          {photo ? (
+            <img src={photo} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center" style={{ color: textTertiary }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="3" />
+                <path d="M3 9h18M9 21V9" />
+              </svg>
+            </div>
+          )}
+        </div>
+        <div className="px-2.5 py-2 min-w-0">
+          <p className="text-[11px] font-medium truncate" style={{ color: textTertiary }}>{acc.type}</p>
+          <p className="text-[13px] font-semibold leading-tight truncate" style={{ color: "rgba(255,255,255,0.92)" }}>{acc.value}</p>
+        </div>
+      </button>
+    );
+  };
+
+  return (
+    <SheetShell ariaLabel={view.rigName} testId="sheet-rig" variant="full" contained={contained} onClose={onClose}>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide pb-12 relative">
+        {/* Floating chrome over the hero — back (pop one level) + X (tear the
+            whole gear stack down to the album). */}
+        <div
+          className="sticky top-0 z-20 flex items-center justify-between px-3 pb-2"
+          style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+        >
+          <SheetBack data-testid="button-rig-back" />
+          <SheetClose
+            onClick={() => (dismiss ? dismiss(onCloseAll) : onCloseAll())}
+            data-testid="button-rig-closeall"
+          />
+        </div>
+
+        {/* Hero — artist photo with the track / artist / rig name stacked over a
+            navy fade. Pulled up under the floating chrome. */}
+        <div
+          className="relative w-full"
+          style={{ height: 420, marginTop: "calc((env(safe-area-inset-top, 0px) + 64px) * -1)" }}
+        >
+          {view.heroPhotoUrl ? (
+            <img src={view.heroPhotoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: heroPos }} />
+          ) : (
+            <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, #1a1f4a 0%, #2a1156 60%, var(--brand-bg) 100%)" }} />
+          )}
+          <div
+            className="absolute inset-0"
+            style={{ background: "linear-gradient(to bottom, rgba(0,6,43,0.10) 0%, rgba(0,6,43,0.0) 30%, rgba(0,6,43,0.65) 72%, var(--brand-bg) 100%)" }}
+          />
+          <div className="absolute left-0 right-0 bottom-0 px-5 pb-5">
+            {view.trackTitle && (
+              <p className="text-[14px] font-medium mb-1" style={{ color: "rgba(255,255,255,0.85)" }} data-testid="text-rig-track">{view.trackTitle}</p>
+            )}
+            <h2 className="text-[32px] font-extrabold leading-[1.05] tracking-tight text-white" data-testid="text-rig-artist">{view.artistName}</h2>
+            <p className="text-[15px] font-semibold mt-1" style={{ color: "var(--brand-mint)" }} data-testid="text-rig-name">{view.rigName}</p>
+          </div>
+        </div>
+
+        <div className="px-5 pt-4">
+          {view.notes && (
+            <p className="text-[15px] leading-relaxed mb-5" style={{ color: textSecondary }} data-testid="text-rig-notes">{view.notes}</p>
+          )}
+
+          {/* Base instrument — taps through to the full instrument sheet. */}
+          {view.instrument && (
+            <button
+              type="button"
+              onClick={() => view.instrument && onOpenInstrument(view.instrument)}
+              className="w-full flex items-center gap-3.5 rounded-[16px] p-3 mb-6 active:opacity-80"
+              style={{ background: cardBg, border: `1px solid ${hairline}` }}
+              data-testid="button-rig-instrument"
+            >
+              <div className="w-[78px] h-[78px] rounded-[12px] overflow-hidden flex-shrink-0" style={{ background: "rgba(255,255,255,0.04)" }}>
+                {view.instrument.photoUrl ? (
+                  <img src={view.instrument.photoUrl} alt="" className="w-full h-full object-cover" />
+                ) : null}
+              </div>
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-[16px] font-bold leading-tight text-white truncate">{view.instrument.name}</p>
+                <p className="text-[13px] mt-0.5 truncate" style={{ color: textSecondary }}>
+                  {[view.instrument.shortCategory, view.instrument.category].find(Boolean) ?? ""}
+                </p>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-blue)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
+          )}
+
+          {/* Accessories — carousel, or a 2-up grid once there are enough. */}
+          {view.accessories.length > 0 && (
+            <section className="mb-6">
+              <h3 className="text-[13px] font-semibold uppercase tracking-wider mb-3" style={{ color: textSecondary }}>Accessories</h3>
+              {view.accessories.length >= RIG_ACCESSORY_GRID_MIN ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {view.accessories.map((acc) => <AccessoryCard key={acc.id} acc={acc} wide />)}
+                </div>
+              ) : (
+                <div className="flex gap-3 overflow-x-auto scrollbar-hide -mx-5 px-5">
+                  {view.accessories.map((acc) => <AccessoryCard key={acc.id} acc={acc} />)}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Other tracks on this album using the same rig (≥2). No heart — a
+              dead favorite control would violate chevron honesty; favorites
+              wiring is a follow-up. */}
+          {view.tracks.length >= 2 && (
+            <section className="mb-6">
+              <h3 className="text-[13px] font-semibold uppercase tracking-wider mb-3" style={{ color: textSecondary }}>On this album</h3>
+              <div className="flex flex-col">
+                {view.tracks.map((t, i) => (
+                  <div
+                    key={t.id}
+                    className="flex items-center gap-3 py-2.5"
+                    style={i === 0 ? undefined : { borderTop: `1px solid ${hairline}` }}
+                    data-testid={`row-rig-track-${t.id}`}
+                  >
+                    <div className="w-12 h-12 rounded-[8px] overflow-hidden flex-shrink-0" style={{ background: "rgba(255,255,255,0.04)" }}>
+                      {t.artUrl ? <img src={t.artUrl} alt="" className="w-full h-full object-cover" /> : null}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[15px] font-medium text-white truncate">{t.title}</p>
+                      <p className="text-[13px] truncate" style={{ color: textSecondary }}>{view.albumTitle}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Availability CTA — two honest states. `full`: the base instrument
+              resolved a vendor, so route a quote request to them. `none`: no
+              vendor on file, so offer to hunt the setup down. Never a
+              fabricated shop list. */}
+          <div
+            className="rounded-[20px] p-5"
+            style={{
+              border: `1px solid ${hairline}`,
+              background:
+                availability === "full"
+                  ? "linear-gradient(135deg, rgba(49,158,216,0.18), rgba(127,16,167,0.16))"
+                  : "linear-gradient(135deg, rgba(127,16,167,0.18), rgba(255,84,112,0.16))",
+            }}
+            data-testid="card-rig-availability"
+          >
+            {sent ? (
+              <div className="flex flex-col items-center text-center py-3">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ background: "rgba(74,255,202,0.16)" }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--brand-mint)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                </div>
+                <p className="text-[17px] font-bold text-white" data-testid="text-rig-quote-sent">Request sent</p>
+                <p className="text-[13.5px] mt-1" style={{ color: textSecondary }}>
+                  {availability === "full" && vendorName
+                    ? `We've passed your details to ${vendorName}. They'll be in touch by email.`
+                    : "We'll hunt down this setup and follow up by email."}
+                </p>
+              </div>
+            ) : (
+              <>
+                <p
+                  className="text-[12px] font-semibold uppercase mb-2"
+                  style={{
+                    letterSpacing: "0.10em",
+                    color: availability === "full" ? "var(--brand-mint)" : "var(--brand-orange)",
+                  }}
+                  data-testid="text-rig-availability-kicker"
+                >
+                  {availability === "full" ? "Available now" : "Currently unavailable"}
+                </p>
+                <p className="text-[19px] font-extrabold leading-tight text-white">
+                  {availability === "full" ? vendorName : "Track down this rig"}
+                </p>
+                <p className="text-[13.5px] mt-1.5" style={{ color: textSecondary }}>
+                  {availability === "full"
+                    ? `${vendorName} carries the ${view.instrument?.name}. Request the full setup and they'll follow up.`
+                    : "Tell us you want it and we'll hunt down this exact setup for you."}
+                </p>
+
+                {(!isCustomer || showForm) && (
+                  <div className="flex flex-col gap-2.5 mt-4">
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Your name"
+                      className="h-11 rounded-[12px] px-3.5 text-[15px] outline-none placeholder:text-white/35"
+                      style={inputStyle}
+                      data-testid="input-rig-name"
+                    />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Email"
+                      className="h-11 rounded-[12px] px-3.5 text-[15px] outline-none placeholder:text-white/35"
+                      style={inputStyle}
+                      data-testid="input-rig-email"
+                    />
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="Phone (optional)"
+                      className="h-11 rounded-[12px] px-3.5 text-[15px] outline-none placeholder:text-white/35"
+                      style={inputStyle}
+                      data-testid="input-rig-phone"
+                    />
+                  </div>
+                )}
+
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Anything to add? (optional)"
+                  rows={2}
+                  className="w-full rounded-[12px] px-3.5 py-2.5 text-[15px] outline-none resize-none placeholder:text-white/35 mt-2.5"
+                  style={inputStyle}
+                  data-testid="input-rig-message"
+                />
+
+                <button
+                  type="button"
+                  onClick={onSubmit}
+                  disabled={!canSubmit || submit.isPending}
+                  className="w-full h-[52px] rounded-[26px] mt-4 text-[16px] font-bold transition-opacity disabled:opacity-50 active:opacity-80"
+                  style={{ background: "var(--brand-blue)", color: "#001020" }}
+                  data-testid="button-rig-request"
+                >
+                  {submit.isPending ? "Sending…" : "Request this rig"}
+                </button>
+
+                <p className="text-[12.5px] text-center mt-3" style={{ color: textTertiary }}>
+                  {isCustomer && !showForm ? (
+                    <>
+                      Sending as {user?.displayName || user?.email}.{" "}
+                      <button type="button" onClick={() => setShowForm(true)} className="underline active:opacity-70" style={{ color: textSecondary }} data-testid="button-rig-edit-details">
+                        Use different details
+                      </button>
+                    </>
+                  ) : availability === "full" && vendorName ? (
+                    `We'll share your details with ${vendorName} so they can follow up.`
+                  ) : (
+                    "We'll only use your details to follow up about this rig."
+                  )}
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
     </SheetShell>
   );
 }

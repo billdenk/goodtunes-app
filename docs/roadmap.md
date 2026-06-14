@@ -47,6 +47,8 @@ A performer's instrument is often a *system*, not a single product. Example: "19
 - Sub-gear inherits the same affiliate-share rules as the parent instrument. Notes ("D'Addario EJ16 — light bronze, restrung the morning of the take") trigger the same bumped share.
 Naming: "Sub-gear" is fine internally but probably needs a friendlier user-facing term — *Setup*, *Rig*, *Loadout*, or *Kit* are candidates. Punt until we mock the instrument sheet redesign.
 
+**Deferred — rig "partial availability" state.** The shipped fan RigDetailSheet (mobile + desktop) shows only **two** availability states: "Available from {vendor}" when the rig's base instrument resolves to ≥1 vendor, and "Request this rig" when it doesn't. A middle **partial** state ("the instrument is stocked but some accessories aren't") was dropped on purpose — accessories aren't vendor-resolvable on the client today, so "partial" can't be computed honestly (it would either over-promise or fabricate a shop list). Reviving it needs both halves of the Sub-gear work above: (a) accessory→catalog linking, so each accessory points at a real purchasable record, and (b) a `loadRigDetail` that enriches every accessory with its own vendor list server-side, so the sheet can truthfully say which pieces are in stock and which to request.
+
 ## SuperCredits™ — Artist profile + streaming-service handoff
 
 The "View artist profile" link on a performer sheet is the seed of a much bigger flow. It belongs to GoodTunes' core sales pitch (see "Sell first. Then stream." strategy deck): **fans buy on GoodTunes pre-launch and listen here; once the album reaches Spotify / Apple Music / Pandora / Deezer / etc., we hand them off**.

@@ -21,6 +21,11 @@ import {
   buildAlbumCreditGroups,
   type AlbumCreditsPayload,
 } from "@/components/ui/AlbumCreditsSheet";
+import {
+  buildInstrumentsById,
+  makeResolveRigView,
+  type AlbumCreditsApiPayload,
+} from "@/lib/rigViewModel";
 import { PlaylistPickerSheet } from "@/components/PlaylistPickerSheet";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -301,7 +306,7 @@ export function AlbumDetailDesktop({
     queryKey: ["/api/albums", id],
     enabled: !!id,
   });
-  const { data: albumCredits } = useQuery<AlbumCreditsPayload>({
+  const { data: albumCredits } = useQuery<AlbumCreditsApiPayload>({
     queryKey: ["/api/albums", id, "credits"],
     enabled: !!id,
   });
@@ -507,6 +512,16 @@ export function AlbumDetailDesktop({
       : {},
     production: albumCredits?.production ?? [],
   });
+  // Vendor-enriched instrument index (static roster + the album's live
+  // performer instruments) — drives both the rig availability CTA and the
+  // person-view gear resolution. A superset of resolveStaticInstrument, so the
+  // album-credits person view loses nothing by switching to it.
+  const instrumentsById = useMemo(
+    () => buildInstrumentsById(albumCredits),
+    [albumCredits],
+  );
+  const resolveInstrument = (iid?: string) =>
+    iid ? instrumentsById.get(iid) : undefined;
   // A track "has credits" when it carries its own performers or writers,
   // mirroring the mobile track popover's gating (album-only production never
   // lights up a track's Credits action).
@@ -1112,6 +1127,7 @@ export function AlbumDetailDesktop({
           title={album.title}
           artist={album.artist}
           credits={albumCredits ?? {}}
+          resolveInstrument={resolveInstrument}
           onClose={() => setShowAlbumCredits(false)}
         />
       ) : creditsForSong && effectiveOwned && album ? (
@@ -1121,6 +1137,18 @@ export function AlbumDetailDesktop({
           artist={`${album.artist} · ${album.title}`}
           eyebrow="Song Credits"
           credits={scopedCreditsFor(creditsForSong.id)}
+          songId={creditsForSong.id}
+          production={albumCredits?.production}
+          rigs={albumCredits?.bySongId?.[creditsForSong.id]?.rigs}
+          resolveInstrument={resolveInstrument}
+          resolveRigView={makeResolveRigView({
+            instrumentsById,
+            credits: albumCredits,
+            songs: album.songs,
+            album,
+            songId: creditsForSong.id,
+            songTitle: creditsForSong.title,
+          })}
           songHeader={{
             artwork: album.artwork,
             songTitle: creditsForSong.title,

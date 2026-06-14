@@ -101,6 +101,10 @@ export interface AnalyticsEventMap {
   gear_viewed: EntityRefs & { instrumentName?: string };
   gear_vendor_clicked: EntityRefs & { vendorName?: string; affiliateUrl?: string; vendorDomain?: string; url?: string };
   gear_vendor_chat_opened: EntityRefs & { vendorName?: string };
+  // Fan asked us to source a full artist rig from the rig detail sheet.
+  // `stockState` mirrors the availability CTA: `full` routes to the resolved
+  // vendor, `none` is a hunt-it-down request.
+  rig_quote_requested: EntityRefs & { rigId?: string; stockState?: "full" | "none"; songId?: string };
 
   // ─── Share ──────────────────────────────────────────────────
   share_initiated: EntityRefs & { destination: "native" | "copy" | "twitter" | "facebook" | "sms" | "email" | "other" };

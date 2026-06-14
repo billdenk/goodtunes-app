@@ -197,10 +197,13 @@ function makeClient() {
   return qc;
 }
 
-const RICH_BTN = `link-album-credit-person-${RICH_ID}`;
-const UNLINKED_BTN = `link-album-credit-person-null`;
-// CreditPlainRow keys an unlinked row by its lowercased name.
-const UNLINKED_ROW = `text-album-credit-name:${UNLINKED_NAME.toLowerCase()}`;
+// The per-song view renders "On this track" gear doors (not the flat credits
+// list): a rich-profile performer with no rig becomes a tappable <button> door
+// (door-performer-<personId>) with a trailing person chevron; an unlinked name
+// with no rig renders as a plain, non-tappable <div> row keyed by its credit id
+// (row-performer-<creditId>).
+const RICH_DOOR = `door-performer-${RICH_ID}`;
+const UNLINKED_ROW = `row-performer-c-unlinked`;
 
 async function mount(element: any) {
   const container = document.createElement("div");
@@ -276,6 +279,11 @@ test("song credits: chevron only on the linked row; tap slides to the person (wi
       credits,
       album,
       resolveInstrument: () => undefined,
+      // Provide a rig resolver so the host flips the list pane into the per-song
+      // "On this track" gear doors (it only does so when BOTH the raw performer
+      // rows and a rig resolver are present). No rig is exercised in this
+      // fixture, so the stub view is never actually opened.
+      resolveRigView: () => ({}) as any,
       resolvePersonContext,
       onClose: () => {},
     }),
@@ -286,22 +294,26 @@ test("song credits: chevron only on the linked row; tap slides to the person (wi
     // The per-song sheet mounted (own testid, distinct from the album sheet).
     assert.ok(q("sheet-credits"), "the Song Credits sheet renders");
 
-    // Linked rich person → tappable button WITH a trailing chevron.
-    const richBtn = q(RICH_BTN);
-    assert.ok(richBtn, "rich-profile credit renders as a tappable button");
+    // Linked rich person, no rig → tappable <button> door WITH a trailing
+    // person chevron. Every door carries a leading gear glyph (svg), so the
+    // chevron shows up as the door's SECOND svg; the dead row has only the glyph.
+    const richBtn = q(RICH_DOOR);
+    assert.ok(richBtn, "rich-profile performer renders as a tappable door");
+    assert.equal(richBtn!.tagName, "BUTTON", "rich door is an interactive button");
     assert.ok(
-      richBtn!.querySelector("svg"),
-      "tappable row carries the trailing chevron affordance",
+      richBtn!.querySelectorAll("svg").length >= 2,
+      "tappable door carries the trailing chevron (gear glyph + chevron)",
     );
 
-    // Unlinked person → plain (non-tappable) row, NO button, NO chevron.
-    assert.equal(q(UNLINKED_BTN), null, "unlinked row is not a tappable button");
+    // Unlinked person, no rig → plain (non-tappable) row: a <div>, not a button,
+    // and no trailing chevron (only the leading gear glyph).
     const unlinkedRow = q(UNLINKED_ROW);
-    assert.ok(unlinkedRow, "unlinked person still renders as a plain credit row");
+    assert.ok(unlinkedRow, "unlinked performer still renders as a plain row");
+    assert.notEqual(unlinkedRow!.tagName, "BUTTON", "unlinked row is not a button");
     assert.equal(
-      unlinkedRow!.querySelector("svg"),
-      null,
-      "unlinked row has no chevron (presence of the chevron is the whole signal)",
+      unlinkedRow!.querySelectorAll("svg").length,
+      1,
+      "unlinked row has only the gear glyph, no trailing chevron",
     );
 
     // List view: the sheet's single close affordance (X) is present, no back.
@@ -311,13 +323,13 @@ test("song credits: chevron only on the linked row; tap slides to the person (wi
     // Tap the linked row → person profile slides in over the list (no nested
     // sheet) and resolvePersonContext gets the current row's personId + role.
     await click(richBtn!);
-    await waitFor(RICH_BTN, false);
+    await waitFor(RICH_DOOR, false);
     assert.deepEqual(
       calls,
       [{ personId: RICH_ID, role: "Drums" }],
       "opening the person runs resolvePersonContext with the row's personId + role",
     );
-    assert.equal(q(RICH_BTN), null, "list is swapped out for the person view");
+    assert.equal(q(RICH_DOOR), null, "list is swapped out for the person view");
     assert.ok(q("button-credits-back"), "person view shows the back caret");
     assert.ok(
       q("text-performer-name")?.textContent?.includes(RICH_NAME),
@@ -341,8 +353,8 @@ test("song credits: chevron only on the linked row; tap slides to the person (wi
 
     // Back caret returns to the credits list and restores the close X.
     await click(q("button-credits-back")!);
-    await waitFor(RICH_BTN, true);
-    assert.ok(q(RICH_BTN), "back returns to the credits list");
+    await waitFor(RICH_DOOR, true);
+    assert.ok(q(RICH_DOOR), "back returns to the credits list");
     assert.equal(
       q("button-credits-back"),
       null,

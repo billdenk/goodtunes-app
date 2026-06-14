@@ -105,6 +105,9 @@ import {
   rigs,
   rigAccessories,
   trackRigs,
+  rigQuoteRequests,
+  type RigQuoteRequest,
+  type InsertRigQuoteRequest,
   type Rig,
   type InsertRig,
   type RigAccessory,
@@ -230,6 +233,8 @@ export interface IStorage {
   // Admin reporting: how many signups have been notified, and how many of
   // those came back to buy the album after their notifiedAt stamp.
   releaseNotifyStats(albumId: string): Promise<{ total: number; notified: number; cameBack: number }>;
+  addRigQuoteRequest(data: InsertRigQuoteRequest): Promise<RigQuoteRequest>;
+  listRigQuoteRequests(): Promise<RigQuoteRequest[]>;
 
   // Admin bootstrap
   countAdmins(): Promise<number>;
@@ -2263,6 +2268,15 @@ export class DbStorage implements IStorage {
       Array.from(new Set(rows.map((r) => r.rigId).filter((v): v is string => !!v))),
     );
     return rows.map((r) => ({ ...r, rig: r.rigId ? detail.get(r.rigId) ?? null : null }));
+  }
+
+  // Task #1994 — fan "Request this rig" capture + operator list.
+  async addRigQuoteRequest(data: InsertRigQuoteRequest): Promise<RigQuoteRequest> {
+    const [row] = await db.insert(rigQuoteRequests).values(data as any).returning();
+    return row;
+  }
+  async listRigQuoteRequests(): Promise<RigQuoteRequest[]> {
+    return db.select().from(rigQuoteRequests).orderBy(desc(rigQuoteRequests.createdAt));
   }
 
   async attachRigToTrack(args: {
