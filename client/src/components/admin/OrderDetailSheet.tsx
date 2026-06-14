@@ -121,9 +121,9 @@ export function originBadge(origin: string | undefined) {
       <span
         className="inline-flex items-center rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5"
         data-testid="badge-origin-gogoods"
-        title="Imported from goGoods (legacy platform)"
+        title="Imported from GoGoods® (legacy platform)"
       >
-        goGoods
+        GoGoods®
       </span>
     );
   }

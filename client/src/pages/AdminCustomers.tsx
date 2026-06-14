@@ -104,7 +104,7 @@ function SignupValue({ c }: { c: CustomerRow }) {
       );
     }
     return (
-      <span className="text-slate-400" title="Imported from goGoods — no orders yet">
+      <span className="text-slate-400" title="Imported from GoGoods® — no orders yet">
         Imported
       </span>
     );

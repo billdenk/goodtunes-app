@@ -315,12 +315,12 @@ export function AdminCustomerDetail() {
               )}
               <span data-testid="text-joined">
                 {joined.kind === "imported-no-date" ? (
-                  <span className="text-slate-400">Imported from goGoods</span>
+                  <span className="text-slate-400">Imported from GoGoods®</span>
                 ) : (
                   <>
                     Joined {formatDate(joined.iso)}
                     {joined.importedNote ? (
-                      <span className="text-slate-400"> · imported from goGoods</span>
+                      <span className="text-slate-400"> · imported from GoGoods®</span>
                     ) : null}
                   </>
                 )}
@@ -792,7 +792,7 @@ function signInSummary(providers: string[]): string {
 function SignInChips({ providers, hasPassword, isLegacy }: { providers: string[]; hasPassword: boolean; isLegacy: boolean }) {
   const chips: string[] = providers.map(providerLabel);
   if (hasPassword) chips.push("Password");
-  if (isLegacy) chips.push("goGoods");
+  if (isLegacy) chips.push("GoGoods®");
   if (chips.length === 0) {
     return <span className="text-xs text-slate-400">No sign-in method</span>;
   }
@@ -946,7 +946,7 @@ function CombineAccountsPanel({ anchorId, anchorName }: { anchorId: string; anch
                     type="text"
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
-                    placeholder="Search by name, email, or goGoods ID…"
+                    placeholder="Search by name, email, or GoGoods ID…"
                     autoFocus
                     className="w-full h-9 pl-8 pr-3 rounded-md border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:border-[var(--brand-blue)]"
                     data-testid="input-merge-search"
