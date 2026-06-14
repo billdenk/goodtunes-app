@@ -43,12 +43,19 @@ the budget.)
 **Two-part fix, both load-bearing:**
 1. Platform budget bumped to **300000ms** so the ~120s migration suite + bounded mirror fit
    with headroom. Don't drop it back to 180000.
-2. The mirror step's internal timeouts are deliberately small (fetch 60s, per-object LFS 180s,
-   push 90s) so a slow GitHub degrades to a WARNING (Codemagic catches up next merge) instead
-   of blowing the budget. **Never raise them to match a manual full-push time** — a real full
-   push is the rare diverged case the fetch-first already collapses. Keep their sum well under
-   (platform_timeout − migration_time). A bounded-out mirror is harmless (self-heals next
-   merge); a budget-blown post-merge is a scary false failure.
+2. The mirror step is **deadline-aware**: a hard wall-clock cap (`MIRROR_BUDGET=150s` from the
+   function's start, via `mirror_deadline=$((SECONDS+150))`) and EVERY step clamped to the time
+   that actually remains (fetch ≤60s, each LFS object ≤120s, push ≤90s) — including the rare
+   new-LFS-object loop, which checks remaining budget per object and breaks (WARN) rather than
+   overrun. If the budget is exhausted the function returns 0 with a WARNING; a slow GitHub OR a
+   big new LFS object degrades to "Codemagic catches up next merge" instead of blowing the
+   budget. **Never raise these to match a manual full-push time** — a real full push is the rare
+   diverged case the fetch-first already collapses. A bounded-out mirror is harmless (self-heals
+   on the next merge's force-push); a budget-blown post-merge is a scary false failure. NB the
+   step is best-effort and uses `set -e`, so keep numeric comparisons inside `if [ … ]` guards
+   (a bare `[ … ]` that's false would exit the whole script). The token-bearing temp `ghlfs`
+   remote is wrapped in a `trap '… remote remove ghlfs' RETURN` so the token can't linger in
+   `.git/config` on any early-return/out-of-budget path.
 
 **Silent-staleness coupling (matters now that Android auto-builds).** `codemagic.yaml`'s
 `android-internal` workflow auto-triggers on every push to `main` of this mirror (iOS stays
