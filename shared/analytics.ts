@@ -140,6 +140,17 @@ export interface AnalyticsEventMap {
   welcome_back_card_tapped: { version: number; cardKey: string };
   welcome_back_dismissed: { version: number; via: "cta" | "close" };
 
+  // ─── New-fan welcome sheet (Task #53) ───────────────────────
+  // One-time sheet shown to free signups (no library, no legacy import).
+  // `shown` fires the first time the sheet renders. `step` fires when the
+  // fan navigates between screens (1 = what-this-is, 2 = notify opt-in).
+  // `completed` fires when the fan finishes or skips the sheet.
+  // `notify_opt_in` fires when the toggle is changed (either direction).
+  new_fan_welcome_shown: Record<string, never>;
+  new_fan_welcome_step: { step: number };
+  new_fan_welcome_completed: { notifyOptIn: boolean; via: "cta" | "close" };
+  new_fan_notify_opt_in: { opted_in: boolean };
+
   // ─── Auth ───────────────────────────────────────────────────
   sign_in: { provider: "password" | "google" | "apple"; kind?: "admin" | "customer" };
   sign_up: { provider: "password" | "google" | "apple"; kind?: "admin" | "customer" };

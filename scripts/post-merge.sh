@@ -6994,4 +6994,30 @@ SQL
 backfill_press_jacket_applicable_formats dev  "${DATABASE_URL:-}"
 backfill_press_jacket_applicable_formats prod "${PROD_DATABASE_URL:-}"
 
+# Task #53 — New-fan welcome sheet: add newFanWelcomeSeenAt and
+# notifyNewMusicOptIn to customer_users on both DBs. Both columns are
+# optional (nullable), so adding them is non-destructive and safe on a
+# live database without a lock.
+add_new_fan_welcome_columns() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping new-fan-welcome columns on $label (no URL)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+ALTER TABLE customer_users
+  ADD COLUMN IF NOT EXISTS new_fan_welcome_seen_at  timestamp,
+  ADD COLUMN IF NOT EXISTS notify_new_music_opt_in  boolean;
+SQL
+  ); then
+    echo "post-merge: new-fan-welcome columns ok on $label"
+  else
+    echo "post-merge: WARNING — new-fan-welcome columns failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+add_new_fan_welcome_columns dev  "${DATABASE_URL:-}"
+add_new_fan_welcome_columns prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror

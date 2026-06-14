@@ -1920,6 +1920,15 @@ export const customerUsers = pgTable("customer_users", {
   // before this shipped — no re-consent.
   termsAcceptedAt: timestamp("terms_accepted_at"),
   termsVersion: text("terms_version"),
+  // Task #53 — New-fan welcome sheet. Stamped the first time the fan
+  // dismisses (or completes) the one-time free-signup welcome screen so
+  // it never shows twice. NULL = not yet seen; any timestamp = already shown.
+  newFanWelcomeSeenAt: timestamp("new_fan_welcome_seen_at"),
+  // Task #53 — Global "notify me when new music drops" opt-in. Captured
+  // on the new-fan welcome sheet; also editable from Account settings.
+  // NULL = fan hasn't explicitly chosen (treated as no-preference / opted
+  // out for delivery purposes); true = opted in; false = explicitly declined.
+  notifyNewMusicOptIn: boolean("notify_new_music_opt_in"),
 }, (t) => ({
   legacyGogoodsIdUniq: uniqueIndex("customer_users_legacy_gogoods_id_uniq")
     .on(t.legacyGogoodsId)

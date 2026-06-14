@@ -1976,6 +1976,81 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ ok: true, seenVersion: version });
   });
 
+  // ─── Task #53 — New-fan welcome sheet ─────────────────────────────
+  //
+  // Recognition gate: shows the one-time welcome to free signups — fans
+  // who have no library entries (user_albums), no legacy gogoods import,
+  // and haven't dismissed the sheet before (newFanWelcomeSeenAt IS NULL).
+  // Returning buyers (any user_albums row) are routed to the existing
+  // WhatsNew sheet instead; they never see this.
+  //
+  //   GET  /api/me/new-fan-welcome/state     — should show + current opt-in
+  //   POST /api/me/new-fan-welcome/dismiss   — stamp seen + save notify pref
+  //   PATCH /api/me/notify-opt-in            — update notify pref standalone
+
+  app.get("/api/me/new-fan-welcome/state", async (req, res) => {
+    const a = await getAuthFromRequest(req);
+    if (!a || a.kind !== "customer") {
+      return res.json({ shouldShow: false });
+    }
+    const c = await storage.getCustomer(a.userId);
+    if (!c || c.mergedIntoId) {
+      return res.json({ shouldShow: false });
+    }
+    // Already dismissed → never re-show.
+    if ((c as any).newFanWelcomeSeenAt) {
+      return res.json({ shouldShow: false, notifyOptIn: (c as any).notifyNewMusicOptIn ?? null });
+    }
+    // Legacy-imported fans go to the existing WhatsNew / WelcomeBack flow.
+    if ((c as any).legacyGogoodsId) {
+      return res.json({ shouldShow: false });
+    }
+    // Fans who own at least one album are returning buyers — WhatsNew is
+    // their greeting; this sheet is for genuine free signups only.
+    const { userAlbums } = await import("@shared/schema");
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(userAlbums)
+      .where(eq(userAlbums.userId, c.id));
+    const libraryCount = row?.n ?? 0;
+    if (libraryCount > 0) {
+      return res.json({ shouldShow: false });
+    }
+    return res.json({
+      shouldShow: true,
+      notifyOptIn: (c as any).notifyNewMusicOptIn ?? null,
+    });
+  });
+
+  // Dismiss: stamp seen timestamp + persist the notify opt-in choice.
+  // Idempotent — re-posting is fine (e.g. retry on network failure).
+  app.post("/api/me/new-fan-welcome/dismiss", requireCustomer, async (req, res) => {
+    const userId = req.session.userId!;
+    const optIn = req.body?.notifyOptIn;
+    const update: Record<string, unknown> = {
+      newFanWelcomeSeenAt: new Date(),
+    };
+    // Only persist an explicit boolean — null/undefined means "fan skipped
+    // the toggle" (e.g. closed via the X before reaching step 2).
+    if (typeof optIn === "boolean") {
+      update.notifyNewMusicOptIn = optIn;
+    }
+    await storage.updateCustomer(userId, update as any);
+    return res.json({ ok: true });
+  });
+
+  // Standalone toggle — lets the Account settings page update the
+  // notify preference without re-showing the welcome sheet.
+  app.patch("/api/me/notify-opt-in", requireCustomer, async (req, res) => {
+    const userId = req.session.userId!;
+    const optIn = req.body?.notifyOptIn;
+    if (typeof optIn !== "boolean") {
+      return res.status(400).json({ message: "notifyOptIn must be a boolean" });
+    }
+    await storage.updateCustomer(userId, { notifyNewMusicOptIn: optIn } as any);
+    return res.json({ ok: true, notifyOptIn: optIn });
+  });
+
   // ─── Tap-to-report error capture (Task #284) ───────────────────────
   // Friendly error cards across the app POST here when the user taps
   // "Send this to GoodTunes". We attach the authed identity if any,

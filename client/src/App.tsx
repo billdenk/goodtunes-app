@@ -111,6 +111,7 @@ import { AdminShopify } from "@/pages/AdminShopify";
 import { AdminAlbumEngagement } from "@/pages/AdminAlbumEngagement";
 import { AnalyticsDebugOverlay } from "@/components/admin/AnalyticsDebugOverlay";
 import { isAnalyticsDebugOverlayEnabled } from "@/lib/analytics";
+import { NewFanWelcomeSheet } from "@/components/NewFanWelcomeSheet";
 import { AdminReports } from "@/pages/AdminReports";
 import { AdminJobs } from "@/pages/AdminJobs";
 import { AdminPlatformPricing } from "@/pages/AdminPlatformPricing";
@@ -991,6 +992,11 @@ function Router() {
           and stays open across navigation (global PlayerContext.showLyrics).
           The album page renders its OWN in-flow lyrics panel. */}
       <DesktopLyricsRail />
+      {/* Task #53 — one-time new-fan welcome sheet for free signups.
+          Self-gates: only renders for customer sessions with no library,
+          no legacy import, and newFanWelcomeSeenAt IS NULL. Never shows on
+          admin/auth/checkout paths. iOS-safe: zero Buy/price copy. */}
+      <NewFanWelcomeSheet />
       {user?.kind === "admin" && isAnalyticsDebugOverlayEnabled() && <AnalyticsDebugOverlay />}
     </>
   );
