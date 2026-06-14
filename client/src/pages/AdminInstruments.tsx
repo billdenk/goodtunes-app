@@ -326,6 +326,15 @@ export function AdminInstruments() {
         }
       }
 
+      // Task #1986 — a genuine vendor-upsert failure (network/500/400, not a
+      // recoverable duplicate 409, which findOrCreateVendor now resolves) must
+      // surface an honest, visible error instead of silently creating a gear
+      // row with the maker/reseller missing. Abort before the instrument POST
+      // so onError can show the failure in the dialog and the operator can
+      // retry — rather than landing on a maker-less detail page with only a
+      // console.error to explain it.
+      if (vendorError) throw vendorError;
+
       // Task #1233 — the extra gallery photos the operator kept checked,
       // in the scraper's original order. Raw source URLs; the server
       // rehosts each to Object Storage and drops any equal to the hero.
