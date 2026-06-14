@@ -276,13 +276,12 @@ export async function proposeCreditsFromText(
     "---",
   ].join("\n");
 
-  // gpt-5 / gpt-4o-mini either work fine; use the cheap one — credits docs
-  // are short and the schema is forgiving. JSON-mode + low temperature so
-  // re-runs are stable for the same input.
+  // gpt-5-mini works fine here — credits docs are short and the schema is
+  // forgiving. JSON-mode keeps the output parseable. (gpt-5 reasoning models
+  // only support the default temperature, so we don't set it.)
   const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: "gpt-5-mini",
     response_format: { type: "json_object" },
-    temperature: 0,
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: userPayload },

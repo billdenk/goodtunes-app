@@ -70,9 +70,8 @@ export async function findChorusCueIndex(
       .join("\n");
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-5-mini",
       response_format: { type: "json_object" },
-      temperature: 0,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userPayload },
