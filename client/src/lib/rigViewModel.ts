@@ -168,7 +168,15 @@ export function buildInstrumentsById(
     | {
         bySongId?: Record<
           string,
-          { performers?: Array<{ instrument?: ApiInstrument | null }> } | undefined
+          | {
+              performers?: Array<{ instrument?: ApiInstrument | null }>;
+              rigs?: Array<{
+                rig?: {
+                  accessories?: Array<{ instrument?: ApiInstrument | null }>;
+                } | null;
+              }>;
+            }
+          | undefined
         >;
       }
     | null
@@ -181,6 +189,17 @@ export function buildInstrumentsById(
       for (const p of api?.performers ?? []) {
         if (p.instrument)
           instrumentsById.set(p.instrument.id, normalizeInstrument(p.instrument));
+      }
+      // Accessory-linked catalog instruments (e.g. a signature pick) ride
+      // embedded on each accessory, vendor-enriched server-side. Index them so
+      // the rig resolver can fill `accessory.instrument` and make the row
+      // clickable. Performer instruments win (set-if-absent) since they're the
+      // same enriched shape.
+      for (const tr of api?.rigs ?? []) {
+        for (const a of tr.rig?.accessories ?? []) {
+          if (a.instrument && !instrumentsById.has(a.instrument.id))
+            instrumentsById.set(a.instrument.id, normalizeInstrument(a.instrument));
+        }
       }
     }
   }

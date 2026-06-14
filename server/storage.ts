@@ -3282,9 +3282,16 @@ export class DbStorage implements IStorage {
       ...writerRows.map((w) => w.personId).filter((v): v is string => !!v),
       ...performerRows.map((p) => p.personId).filter((v): v is string => !!v),
     ]));
-    const instrumentIds = Array.from(new Set(
-      performerRows.map((p) => p.instrumentId).filter((v): v is string => !!v),
-    ));
+    // Accessory-linked catalog instruments (e.g. a signature pick) must be
+    // vendor-enriched alongside the performer instruments so the fan surfaces
+    // can open the accessory's own gear sheet.
+    const accessoryInstrumentIds = Array.from(rigDetail.values()).flatMap((d) =>
+      d.accessories.map((a) => a.instrumentId).filter((v): v is string => !!v),
+    );
+    const instrumentIds = Array.from(new Set([
+      ...performerRows.map((p) => p.instrumentId).filter((v): v is string => !!v),
+      ...accessoryInstrumentIds,
+    ]));
     const [peopleRows, instrumentRows, vendorsByInstrument] = await Promise.all([
       personIds.length ? db.select().from(people).where(and(inArray(people.id, personIds), isNull(people.deletedAt))) : Promise.resolve([] as Person[]),
       instrumentIds.length ? db.select().from(instruments).where(and(inArray(instruments.id, instrumentIds), isNull(instruments.deletedAt))) : Promise.resolve([] as Instrument[]),
@@ -3322,7 +3329,24 @@ export class DbStorage implements IStorage {
     }
     for (const r of rigAttachRows) {
       const bucket = ensureBucket(r.songId);
-      bucket.rigs.push({ ...r, rig: r.rigId ? rigDetail.get(r.rigId) ?? null : null });
+      const detail = r.rigId ? rigDetail.get(r.rigId) ?? null : null;
+      // Embed each accessory's vendor-enriched catalog instrument so the fan
+      // surfaces can make the accessory row clickable (→ its own gear sheet).
+      // The base instrument stays as loadRigDetail set it (re-resolved client-side).
+      bucket.rigs.push({
+        ...r,
+        rig: detail
+          ? {
+              ...detail,
+              accessories: detail.accessories.map((a) => ({
+                ...a,
+                instrument: a.instrumentId
+                  ? instrumentsById.get(a.instrumentId) ?? null
+                  : null,
+              })),
+            }
+          : null,
+      });
     }
     return { bySongId, production };
   }
