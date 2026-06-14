@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { isDisplayRole } from "@/lib/creditSubtitle";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -160,7 +161,7 @@ function aggregateRows(rows: AlbumCreditsRow[]): CreditEntry[] {
     }
     if (!entry.photoUrl && photoUrl) entry.photoUrl = photoUrl;
     const role = (r.role ?? "").trim();
-    if (role && !entry.roles.includes(role)) entry.roles.push(role);
+    if (role && isDisplayRole(role) && !entry.roles.includes(role)) entry.roles.push(role);
   }
   return order.map((key) => {
     const e = byKey.get(key)!;
