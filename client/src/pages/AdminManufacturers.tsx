@@ -21,6 +21,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Manufacturer } from "@shared/schema";
 
 // apiRequest throws errors shaped like `"502: {\"message\":\"…\"}"` — strip
@@ -464,21 +465,31 @@ function CapabilityChips({ press, className = "" }: { press: Manufacturer; class
   const active = CAPABILITY_CHIPS.filter((c) => Boolean(press[c.key]));
   if (active.length === 0) return null;
   return (
-    <span className={`inline-flex flex-wrap items-center gap-1 ${className}`}>
-      {active.map((c) => {
-        const Icon = c.icon;
-        return (
-          <span
-            key={c.key}
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-xs font-medium"
-            data-testid={`chip-capability-${c.key}-${press.id}`}
-          >
-            <Icon className="w-3 h-3" />
-            {c.label}
-          </span>
-        );
-      })}
-    </span>
+    <TooltipProvider delayDuration={300}>
+      <span className={`inline-flex flex-nowrap items-center gap-1 ${className}`}>
+        {active.map((c) => {
+          const Icon = c.icon;
+          return (
+            <Tooltip key={c.key}>
+              <TooltipTrigger asChild>
+                <span
+                  role="img"
+                  aria-label={c.label}
+                  tabIndex={0}
+                  className="inline-flex items-center justify-center w-6 h-6 rounded bg-slate-100 text-slate-600 cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                  data-testid={`chip-capability-${c.key}-${press.id}`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {c.label}
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </span>
+    </TooltipProvider>
   );
 }
 
