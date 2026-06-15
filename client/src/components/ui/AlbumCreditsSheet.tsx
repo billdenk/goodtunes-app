@@ -669,8 +669,14 @@ function SongPerformerDoor({
 }) {
   const inst = perf.instrumentId ? resolveInstrument(perf.instrumentId) : undefined;
   const gearName = rig?.rig?.instrument?.name ?? inst?.name;
+  // Resolve the icon from the first *meaningful* category candidate — skip
+  // generic placeholders ("Other", "Misc", …) so a guitar/bass row whose
+  // stored category is a placeholder still falls through to the role and gets
+  // its proper glyph instead of the generic note.
   const category =
-    inst?.shortCategory ?? inst?.category ?? rig?.rig?.instrument?.category ?? perf.role;
+    [inst?.shortCategory, inst?.category, rig?.rig?.instrument?.category, perf.role].find(
+      (c): c is string => !!c && isDisplayRole(c),
+    ) ?? perf.role;
   // Never surface a generic placeholder role ("Other", "Misc", "Performer", …)
   // as a fan subtitle — drop to gear-only (or empty) when the role isn't real.
   const roleLabel = isDisplayRole(perf.role) ? perf.role : "";
@@ -715,7 +721,7 @@ function SongPerformerDoor({
         name={perf.name}
         subtitle={subtitle}
         trailing={<RowChevron />}
-        onClick={() => onOpenPerson(perf.personId!, perf.role)}
+        onClick={() => onOpenPerson(perf.personId!, roleLabel)}
         testId={`door-performer-${perf.personId}`}
       />
     );

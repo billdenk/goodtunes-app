@@ -365,3 +365,74 @@ test("song credits: chevron only on the linked row; tap slides to the person (wi
     await teardown();
   }
 });
+
+test("song credits: a placeholder role ('Other') never reaches the fan subtitle — gear-only when there's gear, nothing when there isn't", async () => {
+  // The importer buckets unclassifiable performers into "Other". Fans must never
+  // see that label on the "On this track" gear doors: with gear the subtitle is
+  // gear-only, with no gear there's no subtitle at all. A real role passes
+  // through as "Role · Gear". (Names deliberately avoid the substring "Other" so
+  // the assertion only catches the *role* leaking in.)
+  const localCredits = {
+    bySongId: {
+      [SONG_ID]: {
+        performers: [
+          { id: "c-real", personId: null, name: "Real Guy", role: "Lead Guitar", instrumentId: "i-guitar", person: null },
+          { id: "c-other-gear", personId: null, name: "Gear Guy", role: "Other", instrumentId: "i-guitar", person: null },
+          { id: "c-other-nogear", personId: null, name: "Mystery Hand", role: "Other", instrumentId: null, person: null },
+        ],
+        writers: [],
+      },
+    },
+  } as any;
+
+  const resolveInstrument = (id: string) =>
+    id === "i-guitar"
+      ? ({ id: "i-guitar", name: "Ibanez RG550", category: "Guitar" } as any)
+      : undefined;
+
+  const { q, settle, teardown } = await mount(
+    h(SongCreditsSheet, {
+      songId: SONG_ID,
+      songTitle: SONG_TITLE,
+      albumId: ALBUM_ID,
+      albumTitle: album.title,
+      artist: album.artist,
+      credits: localCredits,
+      album,
+      resolveInstrument,
+      resolveRigView: () => ({}) as any,
+      resolvePersonContext: () => null,
+      onClose: () => {},
+    }),
+  );
+  try {
+    await settle();
+
+    const realRow = q("row-performer-c-real");
+    assert.ok(realRow, "real-role performer row renders");
+    assert.ok(
+      realRow!.textContent?.includes("Lead Guitar · Ibanez RG550"),
+      "a real role shows 'Role · Gear'",
+    );
+
+    const otherGear = q("row-performer-c-other-gear");
+    assert.ok(otherGear, "placeholder-role + gear row renders");
+    assert.ok(
+      otherGear!.textContent?.includes("Ibanez RG550"),
+      "placeholder role with gear still shows the gear name",
+    );
+    assert.ok(
+      !/Other/.test(otherGear!.textContent ?? ""),
+      "placeholder role 'Other' is never shown as a subtitle (gear-only)",
+    );
+
+    const otherNoGear = q("row-performer-c-other-nogear");
+    assert.ok(otherNoGear, "placeholder-role + no-gear row renders");
+    assert.ok(
+      !/Other/.test(otherNoGear!.textContent ?? ""),
+      "placeholder role with no gear shows no subtitle at all",
+    );
+  } finally {
+    await teardown();
+  }
+});
