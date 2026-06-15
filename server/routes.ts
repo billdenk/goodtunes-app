@@ -7756,6 +7756,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const updates: any = {};
     if (title !== undefined) updates.title = String(title);
     if (artist !== undefined) updates.artist = String(artist);
+    // storage.updateAlbum normalizes "null"/"undefined"/"" → "" (Task #2021)
     if (artwork !== undefined) updates.artwork = String(artwork);
     if (year !== undefined) updates.year = year === null || year === "" ? null : Number(year);
     if (type !== undefined) updates.type = normalizeAlbumType(type);

@@ -7127,4 +7127,57 @@ SQL
 add_new_fan_welcome_columns dev  "${DATABASE_URL:-}"
 add_new_fan_welcome_columns prod "${PROD_DATABASE_URL:-}"
 
+# Task #2021 — one-time cleanup of albums whose NOT-NULL `artwork` column holds
+# the literal string "null"/"undefined" (a stale `String(nullish)` write). Those
+# render as `<img src="null">` → the browser's broken-image "?" glyph. We reset
+# them to "" so the client's <AlbumCover> shows the branded placeholder instead.
+# The create/update routes now normalize these on write, so this only mops up
+# rows that predate that guard (e.g. "Cool Tapes"). Marker-guarded in
+# post_merge_data_backfills + targeted ONLY at the literal bad values, so it can
+# never touch a real cover and never re-runs to clobber a later operator edit.
+backfill_task_2021_album_artwork_cleanup() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-2021 album artwork cleanup on $label (no URL)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_count integer := 0;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_2021_album_artwork_null_string_cleanup'
+  ) THEN
+    UPDATE albums
+       SET artwork = ''
+     WHERE artwork IN ('null', 'undefined');
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+
+    INSERT INTO post_merge_data_backfills (name)
+    VALUES ('task_2021_album_artwork_null_string_cleanup');
+
+    RAISE NOTICE 'task-2021 album artwork cleanup applied: % rows fixed', v_count;
+  ELSE
+    RAISE NOTICE 'task-2021 album artwork cleanup already applied — skipping';
+  END IF;
+END
+$$;
+SQL
+  ); then
+    echo "post-merge: task-2021 album artwork cleanup ok on $label"
+    echo "$out" | grep -i 'task-2021' || true
+  else
+    echo "post-merge: WARNING — task-2021 album artwork cleanup failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_task_2021_album_artwork_cleanup dev  "${DATABASE_URL:-}"
+backfill_task_2021_album_artwork_cleanup prod "${PROD_DATABASE_URL:-}"
+
 sync_github_build_mirror

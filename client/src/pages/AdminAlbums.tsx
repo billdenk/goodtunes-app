@@ -20,6 +20,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { ExplicitBadge } from "@/components/ui/ExplicitBadge";
+import { AlbumCover } from "@/components/ui/AlbumCover";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import {
   ViewModeToggle,
@@ -126,6 +127,26 @@ function albumHref(albumId: string, listQuery: string): string {
   const base = `/admin/albums/${albumId}`;
   if (!listQuery) return `${base}?from=albums`;
   return `${base}?from=albums&albumsReturn=${encodeURIComponent(listQuery)}`;
+}
+
+// Task #2021 — decide whether an album row carries a *real* cover. `artwork`
+// is a NOT-NULL string, so "no cover" arrives as one of several sentinels: the
+// empty string, the literal "null"/"undefined" (a stale `String(nullish)`
+// write), or the legacy "/album-placeholder.svg" default. All of those mean
+// "no real art" — return undefined so <AlbumCover> renders its branded
+// placeholder instead of a broken-image "?" glyph.
+function realArtwork(artwork: string | null | undefined): string | undefined {
+  if (!artwork) return undefined;
+  const v = artwork.trim();
+  if (
+    v === "" ||
+    v === "null" ||
+    v === "undefined" ||
+    v === "/album-placeholder.svg"
+  ) {
+    return undefined;
+  }
+  return v;
 }
 
 export function AdminAlbums() {
@@ -1231,12 +1252,13 @@ function NeedsAttentionTable({
                     className="flex items-center gap-2.5 min-w-0 group"
                     data-testid={`link-attention-${r.id}`}
                   >
-                    <img
-                      src={r.artwork}
-                      alt=""
-                      loading="lazy"
-                      className="w-10 h-10 rounded object-cover bg-slate-100 ring-1 ring-slate-200/60 flex-shrink-0"
-                    />
+                    <div className="w-10 h-10 rounded overflow-hidden bg-slate-100 ring-1 ring-slate-200/60 flex-shrink-0">
+                      <AlbumCover
+                        artwork={realArtwork(r.artwork)}
+                        title={r.title}
+                        showName={false}
+                      />
+                    </div>
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold text-slate-900 truncate group-hover:text-[var(--brand-blue)] transition-colors">
                         {r.title}
@@ -1295,12 +1317,7 @@ function AlbumTile({ album, href }: { album: AlbumLite; href: string }) {
       data-testid={`tile-album-${album.id}`}
     >
       <div className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 shadow-sm group-hover:shadow-md transition-shadow ring-1 ring-slate-200/60">
-        <img
-          src={album.artwork}
-          alt={album.title}
-          className="w-full h-full object-cover"
-          loading="lazy"
-        />
+        <AlbumCover artwork={realArtwork(album.artwork)} title={album.title} />
         {album.isHidden && (
           <div
             className="absolute top-2 left-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/65 text-white text-[10px] font-bold uppercase tracking-wide backdrop-blur-sm"
@@ -1379,11 +1396,10 @@ function AlbumRow({
       data-testid={`row-album-${album.id}`}
     >
       <div className="w-12 h-12 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex-shrink-0">
-        <img
-          src={album.artwork}
-          alt={album.title}
-          className="w-full h-full object-cover"
-          loading="lazy"
+        <AlbumCover
+          artwork={realArtwork(album.artwork)}
+          title={album.title}
+          showName={false}
         />
       </div>
       <div className="min-w-0 flex-1">

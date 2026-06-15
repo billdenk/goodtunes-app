@@ -1073,6 +1073,27 @@ function normalizePreviewHide(row: any): any {
   };
 }
 
+// Normalizes an incoming album-artwork value into something safe to store.
+// `albums.artwork` is NOT NULL, so we never store null — but we must also guard
+// against the literal strings "null"/"undefined" (which slip in when a caller
+// does String(someNullishValue)) and empty/whitespace input. All of those
+// collapse to "" so the client's <AlbumCover> renders the branded placeholder
+// instead of the browser's broken-image glyph (Task #2021). This lives at the
+// storage layer so EVERY album write — admin create/update, duplicateAlbum, and
+// approval-queue replay — is covered by one chokepoint. We deliberately do NOT
+// strip "/album-placeholder.svg" here: that's a legitimate stored default; the
+// client decides at render time whether to treat it as "no real art".
+function normalizeAlbumArtwork(value: unknown): string {
+  const s =
+    typeof value === "string"
+      ? value.trim()
+      : value == null
+        ? ""
+        : String(value).trim();
+  if (s === "" || s === "null" || s === "undefined") return "";
+  return s;
+}
+
 export class DbStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
     const [u] = await db.select().from(users).where(eq(users.id, id));
@@ -1280,11 +1301,13 @@ export class DbStorage implements IStorage {
     return rows.map((r) => normalizePreviewHide(r.song));
   }
   async createAlbum(data: Omit<Album, "id"> & { id?: string }): Promise<Album> {
-    const [a] = await db.insert(albums).values(data as any).returning();
+    const values = { ...data, artwork: normalizeAlbumArtwork((data as any).artwork) };
+    const [a] = await db.insert(albums).values(values as any).returning();
     return a;
   }
   async updateAlbum(id: string, data: Partial<Album>): Promise<Album | undefined> {
     const { id: _i, ...rest } = data as any;
+    if ("artwork" in rest) rest.artwork = normalizeAlbumArtwork(rest.artwork);
     if (Object.keys(rest).length === 0) return this.getAlbumById(id);
     const [a] = await db.update(albums).set(rest).where(eq(albums.id, id)).returning();
     return a;

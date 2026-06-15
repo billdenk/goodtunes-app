@@ -34,10 +34,32 @@ and keeps the placeholder identical everywhere.
   `getAlbum*` reads in `server/storage.ts`, on `AlbumWithLabel` (shared/schema.ts)
   and client `Album` (musicData.ts). Any NEW album read that feeds a cover must
   thread `artistPhoto` too, or it silently falls to the brand tile.
-- Wired surfaces (Task #1884): AlbumCard, AlbumDetailMobileSurface,
-  DesktopAlbumView, AdminAlbum cover thumbnail, MiniPlayer (dock + collapsed +
-  expanded), AlbumDetailDesktop dock, GoodDeedCertificate. The full-screen
-  `Player.tsx` and AdminAlbums list were intentionally OUT of scope.
+- Wired surfaces: AlbumCard, AlbumDetailMobileSurface, DesktopAlbumView,
+  AdminAlbum cover thumbnail, MiniPlayer (dock + collapsed + expanded),
+  AlbumDetailDesktop dock, GoodDeedCertificate, and the **AdminAlbums grid/row/
+  attention-row** list (all three raw `<img>` replaced with `AlbumCover`). The
+  full-screen `Player.tsx` is still OUT of scope.
+
+## Write-side: artwork is NOT NULL, so "missing" arrives as sentinel strings
+
+`albums.artwork` is `NOT NULL text`, so a coverless album is never SQL `NULL` —
+it carries a sentinel: `""`, the literal `"null"` / `"undefined"` (prod "Cool
+Tapes" had `"null"`), or the legacy `"/album-placeholder.svg"`. Two-sided fix:
+- **Render side** — a small `realArtwork()` in AdminAlbums collapses that whole
+  set to `undefined` before passing to `AlbumCover` (which then runs its
+  fallback). Any cover caller reading raw `albums.artwork` needs the same guard.
+- **Write side** — normalize at the storage chokepoint, `normalizeAlbumArtwork()`
+  in `server/storage.ts`, applied in `createAlbum` + `updateAlbum` (the latter
+  only when `"artwork" in rest`). It collapses null/undefined/"null"/"undefined"/
+  empty → `""` but deliberately KEEPS `/album-placeholder.svg` (legacy rows the
+  render guard handles). **Why storage, not routes:** `duplicateAlbum` →
+  `createAlbum` and approval-replay → `updateAlbum` bypass the route handlers, so
+  route-only normalization (the first attempt) leaves those paths able to write
+  `"null"` again — the architect flagged exactly this. Storage is the SOLE
+  insert/update chokepoint; put invariants there.
+- One-time prod cleanup (`UPDATE albums SET artwork='' WHERE artwork IN
+  ('null','undefined')`) rides in `scripts/post-merge.sh` behind a marker guard
+  (dev DB had no bad row; the bad row is prod-only).
 - The dock/mini cover value depends on the queue source's album; if it lacks
   `artistPhoto` it degrades to the brand tile (acceptable — never a broken glyph).
 - design-lint flags raw brand hex even inside JS string gradients/styles: use
