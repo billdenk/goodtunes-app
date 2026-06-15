@@ -6569,14 +6569,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           known: false,
         };
       }
-      // Task #603 — when the host owns sub-brands (today: gibson.com
-      // ships Epiphone, Kramer, KRK, Mesa products off the same domain)
-      // AND the JSON-LD `brand` is a non-empty string that doesn't
-      // match the host's display name, treat the brand as the Maker
-      // (sub-brand of the host) and keep the host as the Reseller —
-      // even though we classified it as "both" above. Without this
-      // override, an Epiphone product page on gibson.com would import
-      // as Maker: Gibson / Reseller: Gibson.
+      // Sub-brand promotion (currently DORMANT — SUB_BRAND_PARENT_HOSTS is
+      // empty, see its definition above). When a host genuinely resells
+      // distinct sub-brands off one domain AND the JSON-LD `brand` is a
+      // non-empty string that doesn't match the host's display name, this
+      // treats the brand as the Maker (a sub-brand of the host) and keeps
+      // the host as the Reseller, even though we classified it as "both".
+      // gibson.com was REMOVED from the set: per the operator, everything on
+      // gibson.com is Gibson, so Gibson's own product LINES (e.g. "Gibson
+      // Custom", "Gibson Mod™ Collection") and Epiphone must all import as
+      // Maker: Gibson / Reseller: Gibson rather than spawning sub-brand
+      // maker cards. Re-add a host here only if it truly fronts separate
+      // makers you want broken out.
       if (
         hostInfo?.role === "both" &&
         SUB_BRAND_PARENT_HOSTS.has(host) &&
