@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
+import { lightboxTranslatePct } from "@/lib/lightboxCarousel";
 
 /**
  * GearDetailBody — the shared fan-facing gear surface (Task #1643).
@@ -494,7 +495,7 @@ function PhotoLightbox({ photos, startIndex, onClose }: { photos: GearPhoto[]; s
     setDragX(0);
   };
 
-  const translatePct = -(index * 100) + (dragX / widthRef.current) * 100;
+  const translatePct = lightboxTranslatePct(index, dragX, widthRef.current, photos.length);
   const atFirst = index === 0;
   const atLast = index === photos.length - 1;
   const current = photos[index];
