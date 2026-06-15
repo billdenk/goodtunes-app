@@ -138,7 +138,6 @@ export function SongInstruments() {
                 background: i === 0
                   ? "linear-gradient(135deg, rgba(49,158,216,0.16), rgba(127,16,167,0.16))"
                   : FAN.card,
-                border: `1px solid ${FAN.hairline}`,
                 borderRadius: 16,
                 padding: 13,
               }}

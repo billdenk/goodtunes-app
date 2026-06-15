@@ -541,9 +541,8 @@ function gearIconFor(category?: string | null): ReactNode {
   }
   return (
     <svg {...svg}>
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <circle cx="9" cy="12" r="3" />
-      <path d="M16 8 h2 M16 12 h2 M16 16 h2" />
+      <path d="M9 17 V4 l8 2.6" />
+      <circle cx="6.5" cy="17.5" r="2.6" />
     </svg>
   );
 }
@@ -587,7 +586,7 @@ function GearDoorShell({
   return (
     <Tag
       {...(onClick ? { type: "button", onClick } : {})}
-      className={`w-full flex items-center gap-3.5 rounded-2xl p-[13px] text-left border border-white/10 ${
+      className={`w-full flex items-center gap-3.5 rounded-2xl p-[13px] text-left ${
         onClick ? "active:opacity-80 transition-opacity" : ""
       }`}
       style={{
@@ -670,8 +669,16 @@ function SongPerformerDoor({
 }) {
   const inst = perf.instrumentId ? resolveInstrument(perf.instrumentId) : undefined;
   const gearName = rig?.rig?.instrument?.name ?? inst?.name;
-  const category = inst?.shortCategory ?? inst?.category ?? rig?.rig?.instrument?.category;
-  const subtitle = gearName ? `${perf.role} · ${gearName}` : perf.role;
+  const category =
+    inst?.shortCategory ?? inst?.category ?? rig?.rig?.instrument?.category ?? perf.role;
+  // Never surface a generic placeholder role ("Other", "Misc", "Performer", …)
+  // as a fan subtitle — drop to gear-only (or empty) when the role isn't real.
+  const roleLabel = isDisplayRole(perf.role) ? perf.role : "";
+  const subtitle = gearName
+    ? roleLabel
+      ? `${roleLabel} · ${gearName}`
+      : gearName
+    : roleLabel || undefined;
   const icon = gearIconFor(category);
 
   // Only probe the profile on the person-fallback path — a rig-having row

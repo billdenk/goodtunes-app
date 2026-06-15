@@ -96,6 +96,12 @@ Rules:
 - **Don't drift the tone.** New track/list work reuses `white/20` (navy) or `slate-100` (admin) — don't reach for `white/10`, `white/[0.06]`, `white/[0.07]`, `white/[0.08]`, etc. for a track divider.
 - **Scope: track rows only.** This is the divider between rows in a *track* list. Non-track lists (credits sheets, spec sheets, menus, section header rules) keep their own treatment.
 
+## Card surfaces on the dark fan shell — fill defines the card, no white outline
+
+Filled cards that sit on the navy fan shell — gear-door rows in "On this track", credit cards, and similar standalone tappable tiles — are defined by their **fill alone**: a soft `white/[0.06]` wash, or the blue→purple gradient for a highlighted/leading row. **Don't wrap them in a hard `border border-white/10` (or any white hairline).** On the dark shell a white card border reads as a bright outline — "white lines" — that fights the Apple-Music calm, and the fill already separates the card from the background. Reference: `GearDoorShell` in `AlbumCreditsSheet.tsx` and the `gear-rig-cards` mockups.
+
+This is distinct from the track-row hairline above: that hairline is a *divider between rows in a list* and stays. The rule here is about the *outline around a standalone filled card* — drop it.
+
 ## Save semantics — default to auto-save, reserve explicit Save for the few cases that need it
 
 Most admin fields **auto-save** as soon as they go dirty + lose focus (typeahead pick, blur, toggle change). Showing a "Save" button on a field that could just save itself is noise: it makes the page louder, demands a second click for nothing, and trains operators to assume nothing is saved until they click a button — which makes auto-save fields feel unsafe.
