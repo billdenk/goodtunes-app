@@ -5466,12 +5466,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Add-gear scrape tests can lock in the brand→host contract.
   // Task #603 — hosts that ship multiple brands off one domain. For
   // these, when the JSON-LD `brand` differs from the host's display
-  // name, the scrape route promotes the brand into the Maker slot as
-  // a sub-brand of the host's vendor (Epiphone/Kramer/KRK/Mesa under
-  // Gibson) and keeps the host as the Reseller. Start with `gibson.com`
-  // only — widening this list rewrites other single-brand maker sites,
-  // so it's a deliberate one-at-a-time decision (see task notes).
-  const SUB_BRAND_PARENT_HOSTS: Set<string> = new Set(["gibson.com"]);
+  // name, the scrape route promotes the brand into the Maker slot as a
+  // sub-brand of the host's vendor and keeps the host as the Reseller.
+  //
+  // gibson.com was REMOVED at Bill's request: every product on gibson.com
+  // — Gibson Custom, Gibson Mod™ Collection, Epiphone, … — must import as
+  // a single "Gibson" maker, because gibson.com is Gibson the parent
+  // company. The original promotion mis-fired on Gibson's own product-line
+  // names ("Gibson Custom", "Gibson Mod™ Collection"), minting a separate
+  // maker card for each. With this set empty the promotion block below is
+  // dormant; add a host here only when its sub-brands genuinely are
+  // distinct makers fans should see by name (and weigh that they'll
+  // otherwise collapse to the host's own vendor).
+  const SUB_BRAND_PARENT_HOSTS: Set<string> = new Set<string>([]);
 
   // Task #1228 — vintage shops on Shopify whose product pages are either
   // minimal-meta (Gryphon emits no JSON-LD Product and no og:description)

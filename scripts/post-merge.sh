@@ -559,6 +559,113 @@ backfill_gogoods_collectible_ids() {
 backfill_gogoods_collectible_ids dev  "${DATABASE_URL:-}"
 backfill_gogoods_collectible_ids prod "${PROD_DATABASE_URL:-}"
 
+# Gibson sub-brand fold — every product on gibson.com is Gibson (Bill's call:
+# "anything with gibson.com as the URL is Gibson"). The Add-gear scraper used
+# to promote any gibson.com brand string that wasn't exactly "Gibson" into its
+# own sub-brand maker (Task #603), which mis-fired on Gibson's own product
+# LINES — "Gibson Custom" and "Gibson Mod™ Collection" each became a separate
+# maker card alongside Gibson, and Epiphone too. The route fix removes
+# gibson.com from SUB_BRAND_PARENT_HOSTS so no new sub-brands are minted; this
+# one-time backfill folds the EXISTING sub-brands back into the single Gibson
+# maker: repoint their gear (instruments.maker_vendor_id + instrument_vendors),
+# de-duping attachments, then soft-delete the empty sub-brand rows. Targeted by
+# domain (not hardcoded ids) so it also catches any sub-brands scraped before
+# this deploys. The Gibson rows are prod-only, so dev self-gates (no top-level
+# gibson.com vendor → nothing to fold, marker left unset to re-check later).
+# Marker-guarded (post_merge_data_backfills) so a deliberately re-created
+# gibson.com sub-brand later is never clobbered on a subsequent merge.
+backfill_gibson_fold_subbrands() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping gibson-fold backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_parent  varchar;
+  v_instr   integer := 0;
+  v_dedupe  integer := 0;
+  v_repoint integer := 0;
+  v_deleted integer := 0;
+BEGIN
+  IF EXISTS (SELECT 1 FROM post_merge_data_backfills WHERE name = 'gibson_fold_subbrands') THEN
+    RAISE NOTICE 'gibson-fold already applied — skipping';
+    RETURN;
+  END IF;
+
+  SELECT id INTO v_parent FROM vendors
+   WHERE domain = 'gibson.com' AND parent_vendor_id IS NULL AND deleted_at IS NULL
+   ORDER BY created_at NULLS FIRST
+   LIMIT 1;
+
+  IF v_parent IS NULL THEN
+    RAISE NOTICE 'gibson-fold: no top-level gibson.com vendor — nothing to fold (marker left unset)';
+    RETURN;
+  END IF;
+
+  -- Repoint each gibson.com sub-brand's gear to the one Gibson maker.
+  UPDATE instruments SET maker_vendor_id = v_parent
+   WHERE maker_vendor_id IN (
+     SELECT id FROM vendors
+      WHERE domain = 'gibson.com' AND parent_vendor_id IS NOT NULL
+        AND deleted_at IS NULL AND id <> v_parent
+   );
+  GET DIAGNOSTICS v_instr = ROW_COUNT;
+
+  -- Drop sub-brand attachments that would duplicate an existing Gibson one.
+  DELETE FROM instrument_vendors iv
+   WHERE iv.vendor_id IN (
+     SELECT id FROM vendors
+      WHERE domain = 'gibson.com' AND parent_vendor_id IS NOT NULL
+        AND deleted_at IS NULL AND id <> v_parent
+   )
+   AND EXISTS (
+     SELECT 1 FROM instrument_vendors g
+      WHERE g.instrument_id = iv.instrument_id AND g.vendor_id = v_parent
+   );
+  GET DIAGNOSTICS v_dedupe = ROW_COUNT;
+
+  -- Repoint the remaining sub-brand attachments to Gibson.
+  UPDATE instrument_vendors SET vendor_id = v_parent
+   WHERE vendor_id IN (
+     SELECT id FROM vendors
+      WHERE domain = 'gibson.com' AND parent_vendor_id IS NOT NULL
+        AND deleted_at IS NULL AND id <> v_parent
+   );
+  GET DIAGNOSTICS v_repoint = ROW_COUNT;
+
+  -- Soft-delete the now-empty sub-brand maker rows.
+  UPDATE vendors SET deleted_at = now()
+   WHERE domain = 'gibson.com' AND parent_vendor_id IS NOT NULL
+     AND deleted_at IS NULL AND id <> v_parent;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+
+  INSERT INTO post_merge_data_backfills (name) VALUES ('gibson_fold_subbrands');
+
+  RAISE NOTICE 'gibson-fold applied: % instruments repointed, % attachments deduped, % attachments repointed, % sub-brands removed',
+    v_instr, v_dedupe, v_repoint, v_deleted;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: gibson-fold backfill ok on $label"
+    echo "$out" | grep -i 'gibson-fold' || true
+  else
+    echo "post-merge: WARNING — gibson-fold backfill failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+backfill_gibson_fold_subbrands dev  "${DATABASE_URL:-}"
+backfill_gibson_fold_subbrands prod "${PROD_DATABASE_URL:-}"
+
 # Real fan shipping — seed Spinney Media's April-2026 rate card. base_cents
 # is Spinney's own published rate; markup_cents is the flat $1.00 GoodTunes
 # margin kept separate so the fudge stays visible. US + 7 named countries
