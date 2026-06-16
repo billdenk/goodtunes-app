@@ -1502,7 +1502,7 @@ export function AdminAlbum() {
               {safeTab === "sell" && allowed.has("sell") && (
                 <SellPanel
                   albumId={album.id}
-                  title={album.title}
+                  albumTitle={album.title}
                   artistName={album.artist}
                   primaryArtistId={album.primaryArtistId ?? null}
                   artworkUrl={album.artwork}
