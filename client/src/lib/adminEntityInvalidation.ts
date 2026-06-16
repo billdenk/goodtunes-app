@@ -40,7 +40,11 @@ export async function invalidateAdminEntity(
         // /admin/makers/:id off one component, switching the profile
         // endpoint by mode. Bust both keys so the same upload works
         // whether the operator is on the Maker or Reseller surface,
-        // plus the index list and the instruments join feed.
+        // plus the bare parent-candidate picker and the instruments join
+        // feed. The role-filtered Maker/Reseller *index lists* are keyed
+        // under their full URL (`["/api/vendors?role=maker"]`) and can't
+        // be reached by this exact `["/api/vendors"]` key — they're swept
+        // by the prefix predicate below instead.
         return [
           [`/api/vendors/${id}/profile`],
           [`/api/makers/${id}/profile`],
@@ -93,7 +97,23 @@ export async function invalidateAdminEntity(
         ];
     }
   })();
-  await Promise.all(
-    keys.map((queryKey) => qc.invalidateQueries({ queryKey })),
-  );
+  // Some index lists cache under their *full* URL including a query string
+  // (e.g. the Maker/Reseller lists at `["/api/vendors?role=maker"]`), which
+  // an exact key can never match. Sweep those by URL prefix — same approach
+  // as AdminVendors' own `invalidateActive` — so every filter variant
+  // refetches after an image write.
+  const prefixes: readonly string[] =
+    kind === "vendor" ? ["/api/vendors?role="] : [];
+
+  await Promise.all([
+    ...keys.map((queryKey) => qc.invalidateQueries({ queryKey })),
+    ...prefixes.map((prefix) =>
+      qc.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          typeof q.queryKey[0] === "string" &&
+          q.queryKey[0].startsWith(prefix),
+      }),
+    ),
+  ]);
 }
