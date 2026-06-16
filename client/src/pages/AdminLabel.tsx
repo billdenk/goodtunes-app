@@ -18,9 +18,12 @@ import {
   Trash2,
   Search,
   X,
+  Check,
+  Link2,
+  Unplug,
   User as UserIcon,
 } from "lucide-react";
-import { SiSpotify, SiApplemusic } from "react-icons/si";
+import { SiSpotify, SiApplemusic, SiShopify } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -108,7 +111,7 @@ interface AlbumLite {
   primaryArtistId: string | null;
 }
 
-type Tab = "dashboard" | "overview" | "cover" | "artists" | "releases" | "payouts" | "permissions";
+type Tab = "dashboard" | "overview" | "cover" | "artists" | "releases" | "payouts" | "permissions" | "shopify";
 const TABS: { key: Tab; label: string }[] = [
   // Task #590 — Dashboard leads; Overview demoted to second.
   // Task #639 — Logo tab removed; header avatar's pencil-chip dialog is
@@ -122,6 +125,9 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "releases", label: "Releases" },
   { key: "payouts", label: "Payouts" },
   { key: "permissions", label: "Permissions" },
+  // Task #2030 — connect/associate the label's own Shopify store and see
+  // a per-album mapped/not-mapped summary.
+  { key: "shopify", label: "Shopify" },
 ];
 
 export function AdminLabel() {
@@ -522,6 +528,19 @@ export function AdminLabel() {
         )}
         {tab === "permissions" && (
           <PartnerPermissionsPanel scopeKind="label" scopeId={label.id} scopeName={label.name} />
+        )}
+        {tab === "shopify" && (
+          <ShopifyPanel
+            labelId={label.id}
+            labelName={label.name}
+            onOpenAlbum={(id) =>
+              navigate(
+                `/admin/albums/${id}?from=partner&backHref=${encodeURIComponent(
+                  `/admin/labels/${label.id}?tab=shopify`,
+                )}&backName=${encodeURIComponent(label.name)}`,
+              )
+            }
+          />
         )}
       </div>
 
@@ -1512,5 +1531,333 @@ function ReleasesPanel({
         ))}
       </ul>
     </Card>
+  );
+}
+
+// ── Shopify tab (Task #2030) ──────────────────────────────────────────
+// Connect (or attach) the label's own Shopify store and see, at a glance,
+// which of the label's releases are mapped to a Shopify product. Reuses
+// the existing OAuth install route (/api/shopify/install) — no second
+// install path — passing the labelId so the callback stamps the store and
+// drops the operator back on this tab.
+interface LabelShopifyStore {
+  id: string;
+  shopDomain: string;
+  storeName: string | null;
+  scopes: string | null;
+  installedAt: string | null;
+  uninstalledAt: string | null;
+  connected: boolean;
+}
+interface LabelShopifyAlbum {
+  id: string;
+  title: string;
+  artist: string;
+  artwork: string;
+  mapped: boolean;
+}
+interface LabelShopifyStatus {
+  configured: boolean;
+  store: LabelShopifyStore | null;
+  unattachedStores: { id: string; shopDomain: string; storeName: string | null }[];
+  albums: LabelShopifyAlbum[];
+  mappedCount: number;
+  totalCount: number;
+}
+
+// Normalize whatever the operator pastes into a bare `<store>.myshopify.com`
+// domain. Accepts a full URL, a `foo.myshopify.com`, or just `foo`.
+function normalizeShopDomain(raw: string): string | null {
+  let s = raw.trim().toLowerCase();
+  if (!s) return null;
+  s = s.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  if (!s.includes(".")) s = `${s}.myshopify.com`;
+  return /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(s) ? s : null;
+}
+
+function ShopifyPanel({
+  labelId,
+  labelName,
+  onOpenAlbum,
+}: {
+  labelId: string;
+  labelName: string;
+  onOpenAlbum: (id: string) => void;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [shopInput, setShopInput] = useState("");
+  const [attachId, setAttachId] = useState("");
+
+  const { data, isLoading } = useQuery<LabelShopifyStatus>({
+    queryKey: ["/api/admin/labels", labelId, "shopify"],
+  });
+
+  // Surface the post-install success toast keyed off ?installed=<id> and
+  // strip the param so a refresh doesn't re-toast.
+  useEffect(() => {
+    try {
+      const u = new URL(window.location.href);
+      if (u.searchParams.get("installed")) {
+        toast({ title: "Shopify store connected" });
+        u.searchParams.delete("installed");
+        window.history.replaceState({}, "", u.toString());
+        qc.invalidateQueries({ queryKey: ["/api/admin/labels", labelId, "shopify"] });
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const attach = useMutation({
+    mutationFn: async (storeId: string) => {
+      await apiRequest("POST", `/api/admin/labels/${labelId}/shopify/attach`, { storeId });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/labels", labelId, "shopify"] });
+      setAttachId("");
+      toast({ title: "Store attached to this label" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't attach store", description: e?.message, variant: "destructive" }),
+  });
+
+  const detach = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", `/api/admin/labels/${labelId}/shopify/detach`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/labels", labelId, "shopify"] });
+      toast({ title: "Store disconnected from this label" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't disconnect", description: e?.message, variant: "destructive" }),
+  });
+
+  const startConnect = () => {
+    const domain = normalizeShopDomain(shopInput);
+    if (!domain) {
+      toast({
+        title: "Enter a valid store domain",
+        description: "e.g. your-store.myshopify.com",
+        variant: "destructive",
+      });
+      return;
+    }
+    window.location.href = `/api/shopify/install?shop=${encodeURIComponent(domain)}&labelId=${encodeURIComponent(labelId)}`;
+  };
+
+  if (isLoading || !data) {
+    return (
+      <Card className="rounded-2xl shadow-sm p-10 flex items-center justify-center" data-testid="panel-shopify-loading">
+        <Spinner />
+      </Card>
+    );
+  }
+
+  const store = data.store;
+
+  return (
+    <div className="space-y-4" data-testid="panel-shopify">
+      {/* Connection status */}
+      <Card className="rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h2 className="text-slate-900 text-[14px] font-bold inline-flex items-center gap-2">
+            <SiShopify className="w-4 h-4 text-[#5E8E3E]" />
+            Shopify store
+          </h2>
+          <p className="text-slate-400 text-[11.5px]">
+            Connect {labelName}'s Shopify store so paid orders unlock GoodTunes
+            and you can map products to releases.
+          </p>
+        </div>
+
+        {!data.configured && (
+          <div className="px-6 py-4 border-b border-slate-100" data-testid="status-shopify-unconfigured">
+            <p className="text-amber-700 text-[12.5px] bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              GoodTunes' Shopify app credentials aren't set up yet, so the
+              connect button is disabled. An operator needs to add the Shopify
+              API key and secret first — see the{" "}
+              <Link
+                href="/admin/shopify"
+                className="font-semibold hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2"
+              >
+                Shopify admin page
+              </Link>
+              .
+            </p>
+          </div>
+        )}
+
+        {store ? (
+          <div className="px-6 py-4 flex items-center gap-3" data-testid="status-shopify-connected">
+            <div
+              className={[
+                "w-2 h-2 rounded-full flex-shrink-0",
+                store.connected ? "bg-emerald-500" : "bg-slate-300",
+              ].join(" ")}
+            />
+            <div className="flex-1 min-w-0">
+              <div className="text-slate-900 text-[13.5px] font-semibold truncate" data-testid="text-shopify-store-name">
+                {store.storeName || store.shopDomain}
+              </div>
+              <a
+                href={`https://${store.shopDomain}/admin`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-slate-400 text-[11.5px] hover:text-slate-700 inline-flex items-center gap-1"
+                data-testid="link-shopify-store-admin"
+              >
+                {store.shopDomain}
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <span
+              className={[
+                "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0",
+                store.connected ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600",
+              ].join(" ")}
+            >
+              {store.connected ? "Connected" : "Disconnected"}
+            </span>
+            <button
+              type="button"
+              onClick={() => detach.mutate()}
+              disabled={detach.isPending}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-[12.5px] font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 transition-colors"
+              data-testid="button-shopify-detach"
+            >
+              <Unplug className="w-3.5 h-3.5" />
+              Disconnect
+            </button>
+          </div>
+        ) : (
+          <div className="px-6 py-4 space-y-4" data-testid="status-shopify-disconnected">
+            <div>
+              <label className="block text-slate-600 text-[12px] font-semibold mb-1.5">
+                Store domain
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={shopInput}
+                  onChange={(e) => setShopInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && data.configured && startConnect()}
+                  placeholder="your-store.myshopify.com"
+                  disabled={!data.configured}
+                  className="flex-1 h-9 px-3 rounded-md border border-slate-300 text-[13px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/40 disabled:bg-slate-50 disabled:opacity-60"
+                  data-testid="input-shopify-domain"
+                />
+                <Button
+                  type="button"
+                  onClick={startConnect}
+                  disabled={!data.configured}
+                  className="h-9"
+                  data-testid="button-shopify-connect"
+                >
+                  Connect
+                </Button>
+              </div>
+              <p className="text-slate-400 text-[11.5px] mt-1.5">
+                Opens Shopify's secure install screen, then returns here.
+              </p>
+            </div>
+
+            {data.unattachedStores.length > 0 && (
+              <div className="pt-3 border-t border-slate-100">
+                <label className="block text-slate-600 text-[12px] font-semibold mb-1.5">
+                  Or attach an already-connected store
+                </label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={attachId}
+                    onChange={(e) => setAttachId(e.target.value)}
+                    className="flex-1 h-9 px-3 rounded-md border border-slate-300 text-[13px] text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/40"
+                    data-testid="select-shopify-attach"
+                  >
+                    <option value="">Select a store…</option>
+                    {data.unattachedStores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.storeName || s.shopDomain}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => attachId && attach.mutate(attachId)}
+                    disabled={!attachId || attach.isPending}
+                    className="h-9"
+                    data-testid="button-shopify-attach"
+                  >
+                    <Link2 className="w-3.5 h-3.5 mr-1.5" />
+                    Attach
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+
+      {/* Per-album mapping summary */}
+      <Card className="rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-slate-900 text-[14px] font-bold">Release mapping</h2>
+            <p className="text-slate-400 text-[11.5px]">
+              {data.totalCount === 0
+                ? "No releases on this label yet"
+                : `${data.mappedCount} of ${data.totalCount} mapped to a Shopify product`}
+            </p>
+          </div>
+        </div>
+        {data.albums.length === 0 ? (
+          <div className="px-6 py-8 text-center" data-testid="panel-shopify-albums-empty">
+            <p className="text-slate-400 text-[12.5px]">
+              Assign this label to an album from the album's Overview tab and
+              it'll show up here.
+            </p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-slate-100" data-testid="list-shopify-albums">
+            {data.albums.map((a) => (
+              <li key={a.id} className="relative">
+                <button
+                  type="button"
+                  onClick={() => onOpenAlbum(a.id)}
+                  className="w-full flex items-center gap-3.5 px-6 py-3 text-left hover:bg-slate-50 transition-colors"
+                  data-testid={`row-shopify-album-${a.id}`}
+                >
+                  <div className="w-11 h-11 rounded-md overflow-hidden bg-slate-100 ring-1 ring-slate-200 flex-shrink-0">
+                    <img src={a.artwork} alt={a.title} className="w-full h-full object-cover" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-slate-900 text-[13.5px] font-semibold truncate">{a.title}</div>
+                    <div className="text-slate-400 text-[11.5px] truncate">{a.artist}</div>
+                  </div>
+                  {a.mapped ? (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex-shrink-0"
+                      data-testid={`status-shopify-album-${a.id}`}
+                    >
+                      <Check className="w-3 h-3" />
+                      Mapped
+                    </span>
+                  ) : (
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold uppercase tracking-wider flex-shrink-0"
+                      data-testid={`status-shopify-album-${a.id}`}
+                    >
+                      Not mapped
+                    </span>
+                  )}
+                  <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
   );
 }

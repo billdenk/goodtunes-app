@@ -20,6 +20,7 @@ import { db } from "./db";
 import {
   albums,
   albumAddons,
+  labels,
   orders,
   orderItems,
   customerUsers,
@@ -120,6 +121,12 @@ async function upsertStore(input: {
   storeName: string | null;
   accessToken: string;
   scopes: string;
+  // Task #2030 — when the install was kicked off from a label's Shopify
+  // tab, the validated labelId rides through here so the store is stamped
+  // with its owning label. Undefined = installed without label context
+  // (global Shopify page / legacy) — we leave any existing association
+  // untouched rather than clobbering it to null on a re-install.
+  labelId?: string;
 }): Promise<ShopifyStore> {
   const existing = await getStoreByDomain(input.shopDomain);
   const encrypted = encryptToken(input.accessToken);
@@ -130,6 +137,7 @@ async function upsertStore(input: {
         accessToken: encrypted,
         scopes: input.scopes,
         storeName: input.storeName ?? existing.storeName,
+        labelId: input.labelId ?? existing.labelId,
         installedAt: new Date(),
         uninstalledAt: null,
       })
@@ -139,7 +147,13 @@ async function upsertStore(input: {
   }
   const [created] = await db
     .insert(shopifyStores)
-    .values({ ...input, accessToken: encrypted })
+    .values({
+      shopDomain: input.shopDomain,
+      storeName: input.storeName,
+      accessToken: encrypted,
+      scopes: input.scopes,
+      labelId: input.labelId ?? null,
+    })
     .returning();
   return created;
 }
@@ -804,9 +818,25 @@ export function registerShopifyRoutes(app: Express) {
     if (!shopifyConfigured()) return res.status(500).send("Shopify not configured — set SHOPIFY_API_KEY and SHOPIFY_API_SECRET");
     const shop = String(req.query.shop ?? "").trim().toLowerCase();
     if (!isValidShopDomain(shop)) return res.status(400).send("shop must be a *.myshopify.com domain");
+    // Task #2030 — optional label context. When the operator kicks off the
+    // install from a label's Shopify tab we carry the labelId through the
+    // OAuth round-trip inside the SIGNED `state` so the forged-callback
+    // protection also covers the association. Validate it's a real label
+    // before trusting it; an unknown id just falls back to a label-less
+    // install (same as the global Shopify page).
+    let labelId = "";
+    const rawLabelId = String(req.query.labelId ?? "").trim();
+    if (rawLabelId) {
+      const [labelRow] = await db.select({ id: labels.id }).from(labels).where(eq(labels.id, rawLabelId));
+      if (labelRow) labelId = labelRow.id;
+    }
     const nonce = randomBytes(16).toString("hex");
-    const stateSig = createHmac("sha256", SHOPIFY_API_SECRET).update(nonce).digest("hex").slice(0, 16);
-    const state = `${nonce}.${stateSig}`;
+    // The signed payload is `nonce` (label-less) or `nonce:labelId`. labelId
+    // is a uuid (no `:`), nonce is hex, so split-on-`:` round-trips cleanly
+    // and old `nonce.sig` states stay valid (labelId parses as undefined).
+    const statePayload = labelId ? `${nonce}:${labelId}` : nonce;
+    const stateSig = createHmac("sha256", SHOPIFY_API_SECRET).update(statePayload).digest("hex").slice(0, 16);
+    const state = `${statePayload}.${stateSig}`;
     const redirectUri = `${appOrigin(req)}/api/shopify/callback`;
     const authorize = new URL(`https://${shop}/admin/oauth/authorize`);
     authorize.searchParams.set("client_id", SHOPIFY_API_KEY);
@@ -828,10 +858,18 @@ export function registerShopifyRoutes(app: Express) {
     if (!code) return res.status(400).send("Missing code");
     // Validate `state` shape + signature so a forged callback URL can't
     // complete the handshake with an attacker's code/shop combination.
-    const [nonce, sig] = state.split(".");
-    const expectedSig = createHmac("sha256", SHOPIFY_API_SECRET).update(nonce ?? "").digest("hex").slice(0, 16);
-    if (!nonce || !sig || sig !== expectedSig) return res.status(400).send("State mismatch");
+    // The signed payload is everything before the LAST dot (the signature
+    // never contains a dot), so a `nonce:labelId` payload round-trips. Old
+    // `nonce.sig` states still verify (payload = nonce, labelId undefined).
+    const dotIdx = state.lastIndexOf(".");
+    const statePayload = dotIdx >= 0 ? state.slice(0, dotIdx) : "";
+    const sig = dotIdx >= 0 ? state.slice(dotIdx + 1) : "";
+    const expectedSig = createHmac("sha256", SHOPIFY_API_SECRET).update(statePayload).digest("hex").slice(0, 16);
+    if (!statePayload || !sig || sig !== expectedSig) return res.status(400).send("State mismatch");
     if (!verifyOAuthHmac(req.query as Record<string, any>)) return res.status(400).send("HMAC failed");
+    // Task #2030 — recover the (already-validated-at-install-time) labelId
+    // so we can stamp the store + return the operator to the label's tab.
+    const [, stateLabelId] = statePayload.split(":");
 
     // Exchange the authorization code for an access token.
     const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
@@ -865,6 +903,7 @@ export function registerShopifyRoutes(app: Express) {
       storeName,
       accessToken: tokenJson.access_token,
       scopes: tokenJson.scope ?? SHOPIFY_SCOPES,
+      labelId: stateLabelId || undefined,
     });
 
     // Best-effort post-install setup. If either fails, the admin can hit
@@ -873,9 +912,14 @@ export function registerShopifyRoutes(app: Express) {
     await registerWebhooks(store, appUrl);
     await installScriptTag(store, appUrl);
 
-    // Drop the operator back into the admin install guide with a success
-    // toast keyed off ?installed=<storeId>.
-    res.redirect(`/admin/shopify?installed=${store.id}`);
+    // Drop the operator back where they started: the label's Shopify tab
+    // when the install carried a labelId (Task #2030), otherwise the global
+    // admin install guide. Both key their success toast off ?installed=<id>.
+    if (stateLabelId) {
+      res.redirect(`/admin/labels/${stateLabelId}?tab=shopify&installed=${store.id}`);
+    } else {
+      res.redirect(`/admin/shopify?installed=${store.id}`);
+    }
   });
 
   // ─── Webhooks (Step 4 + 7) ────────────────────────────────────────
@@ -1208,13 +1252,110 @@ export function registerShopifyRoutes(app: Express) {
   });
 
   // ─── Admin: list connected stores ─────────────────────────────────
+  // Joins the owning label (Task #2030) so the global Shopify page can
+  // attribute each store to its label without a second round-trip.
   app.get("/api/admin/shopify/stores", requireAdmin, async (_req, res) => {
-    const rows = await db.select().from(shopifyStores).orderBy(desc(shopifyStores.installedAt));
-    res.json(rows.map((s) => ({ ...s, accessToken: undefined })));
+    const rows = await db
+      .select({ s: shopifyStores, labelName: labels.name })
+      .from(shopifyStores)
+      .leftJoin(labels, eq(shopifyStores.labelId, labels.id))
+      .orderBy(desc(shopifyStores.installedAt));
+    res.json(rows.map((r) => ({ ...r.s, accessToken: undefined, labelName: r.labelName ?? null })));
   });
 
   app.delete("/api/admin/shopify/stores/:id", requireAdmin, async (req, res) => {
     await db.delete(shopifyStores).where(eq(shopifyStores.id, String(req.params.id)));
+    res.json({ ok: true });
+  });
+
+  // ─── Admin: label ↔ Shopify store (Task #2030) ────────────────────
+  // The label page's Shopify tab reads this for connection status + a
+  // per-album mapped/not-mapped summary. `store` is the store stamped with
+  // this label (most recent install wins if more than one was attached);
+  // `unattachedStores` lets the operator associate an already-connected
+  // store that came in via the global page without label context.
+  app.get("/api/admin/labels/:id/shopify", requireAdmin, async (req, res) => {
+    const labelId = String(req.params.id);
+    const [label] = await db.select({ id: labels.id, name: labels.name }).from(labels).where(eq(labels.id, labelId));
+    if (!label) return res.status(404).json({ message: "Label not found" });
+
+    const [store] = await db
+      .select()
+      .from(shopifyStores)
+      .where(eq(shopifyStores.labelId, labelId))
+      .orderBy(desc(shopifyStores.installedAt));
+
+    // Stores connected without a label context — offered as "attach an
+    // existing store" options. Excludes stores already tied to a label.
+    const unattached = await db
+      .select({ id: shopifyStores.id, shopDomain: shopifyStores.shopDomain, storeName: shopifyStores.storeName })
+      .from(shopifyStores)
+      .where(isNull(shopifyStores.labelId))
+      .orderBy(desc(shopifyStores.installedAt));
+
+    // This label's albums + whether each is mapped to a Shopify product on
+    // the connected store. No store = nothing can be mapped yet.
+    const labelAlbums = await db
+      .select({ id: albums.id, title: albums.title, artist: albums.artist, artwork: albums.artwork })
+      .from(albums)
+      .where(and(eq(albums.labelId, labelId), isNull(albums.deletedAt)))
+      .orderBy(desc(albums.year));
+
+    let mappedIds = new Set<string>();
+    if (store && labelAlbums.length > 0) {
+      const mapRows = await db
+        .select({ albumId: shopifyProductMappings.albumId })
+        .from(shopifyProductMappings)
+        .where(
+          and(
+            eq(shopifyProductMappings.storeId, store.id),
+            inArray(shopifyProductMappings.albumId, labelAlbums.map((a) => a.id)),
+          ),
+        );
+      mappedIds = new Set(mapRows.map((m) => m.albumId));
+    }
+
+    const albumSummary = labelAlbums.map((a) => ({ ...a, mapped: mappedIds.has(a.id) }));
+    res.json({
+      configured: shopifyConfigured(),
+      store: store
+        ? {
+            id: store.id,
+            shopDomain: store.shopDomain,
+            storeName: store.storeName,
+            scopes: store.scopes,
+            installedAt: store.installedAt,
+            uninstalledAt: store.uninstalledAt,
+            connected: store.uninstalledAt == null,
+          }
+        : null,
+      unattachedStores: unattached,
+      albums: albumSummary,
+      mappedCount: albumSummary.filter((a) => a.mapped).length,
+      totalCount: albumSummary.length,
+    });
+  });
+
+  // Attach an already-connected store to this label. A store belongs to at
+  // most one label, so we first clear any other store currently pointing
+  // here, then stamp the chosen one.
+  app.post("/api/admin/labels/:id/shopify/attach", requireAdmin, async (req, res) => {
+    const labelId = String(req.params.id);
+    const storeId = z.string().min(1).parse(req.body?.storeId);
+    const [label] = await db.select({ id: labels.id }).from(labels).where(eq(labels.id, labelId));
+    if (!label) return res.status(404).json({ message: "Label not found" });
+    const store = await getStoreById(storeId);
+    if (!store) return res.status(404).json({ message: "Store not found" });
+    await db.update(shopifyStores).set({ labelId: null }).where(eq(shopifyStores.labelId, labelId));
+    await db.update(shopifyStores).set({ labelId }).where(eq(shopifyStores.id, storeId));
+    res.json({ ok: true });
+  });
+
+  // Disassociate this label's store(s). The store row + its order history
+  // stay intact; only the label link is cleared.
+  app.post("/api/admin/labels/:id/shopify/detach", requireAdmin, async (req, res) => {
+    const labelId = String(req.params.id);
+    await db.update(shopifyStores).set({ labelId: null }).where(eq(shopifyStores.labelId, labelId));
     res.json({ ok: true });
   });
 

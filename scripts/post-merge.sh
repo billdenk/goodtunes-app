@@ -353,6 +353,31 @@ SQL
 migrate_cert_paper_size dev  "${DATABASE_URL:-}"
 migrate_cert_paper_size prod "${PROD_DATABASE_URL:-}"
 
+# Task #2030 — associate a connected Shopify store with a GoodTunes label
+# (shopify_stores.label_id). Stamped when the operator connects/attaches a
+# store from the label's Shopify tab. Declared in shared/schema.ts; hand-
+# apply the additive DDL on BOTH dev and prod so the schema-drift guard
+# stays green and the publish dev→prod diff stays empty. Idempotent.
+migrate_shopify_store_label() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping shopify_store_label migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE IF EXISTS shopify_stores
+  ADD COLUMN IF NOT EXISTS label_id varchar
+    REFERENCES labels(id) ON DELETE SET NULL;
+SQL
+  then
+    echo "post-merge: shopify_store_label migration ok on $label"
+  else
+    echo "post-merge: WARNING — shopify_store_label migration failed on $label (continuing)"
+  fi
+}
+migrate_shopify_store_label dev  "${DATABASE_URL:-}"
+migrate_shopify_store_label prod "${PROD_DATABASE_URL:-}"
+
 # Task #1976 — Odoo printer integration. orders.odoo_order_id (unique → a
 # replayed push can't double-create) + orders.odoo_last_synced_at record the
 # Odoo sale.order handoff and poll cursor; fulfillment_partners.is_odoo_printer

@@ -2767,6 +2767,13 @@ export const shopifyStores = pgTable("shopify_stores", {
   storeName: text("store_name"),
   accessToken: text("access_token").notNull(),
   scopes: text("scopes"),
+  // Task #2030 — the GoodTunes label this store belongs to. Stamped when
+  // the operator kicks off the install from the label's Shopify tab (the
+  // labelId rides through the signed OAuth `state`), or attached after the
+  // fact from that same tab. Nullable so legacy installs + stores connected
+  // from the global Shopify page (no label context) keep working; SET NULL
+  // so deleting a label doesn't orphan the store row + its order history.
+  labelId: varchar("label_id").references(() => labels.id, { onDelete: "set null" }),
   // Set when the store calls app/uninstalled. We keep the row (for
   // historical order joins) but clear accessToken and stamp this column
   // so admin UI can render "Disconnected" without losing the linkage.
