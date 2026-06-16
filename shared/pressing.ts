@@ -99,10 +99,10 @@ export type VinylColorOption = {
   name: string; // display name, matches the Hellbender page
   tier: VinylColorTier;
   swatch: string; // CSS color for the placeholder circle
-  thumbnailUrl?: string | null; // future: real photo of the color
+  thumbnailUrl?: string | null; // real tinted-disc photo when we have one
 };
 
-export const VINYL_COLORS: VinylColorOption[] = [
+const VINYL_COLOR_BASE: VinylColorOption[] = [
   // Black
   { id: "black", name: "Black", tier: "black", swatch: "#0c0c0c" },
   // House Mix (random/recycled)
@@ -146,6 +146,59 @@ export const VINYL_COLORS: VinylColorOption[] = [
   { id: "white", name: "White", tier: "opaque", swatch: "#f7f7f5" },
 ];
 
+// PSD-extracted tinted vinyl-disc photos — a single neutral grayscale disc
+// pulled from the supplied Ultimate Vinyl MockUp PSD, tinted per catalog
+// color and mirrored into the shared object-storage bucket (one bucket
+// serves both dev and prod). Keyed by VINYL_COLORS id; the source of truth
+// is scripts/data/hellbender-records.json. Wiring these in as `thumbnailUrl`
+// makes every VinylPreview (Buy sheet "You'll get", admin + fan order rows,
+// the Welcome receipt, the SellPanel preview) render the real colored record
+// instead of the synthetic gradient fallback.
+const VINYL_COLOR_DISC_THUMBNAILS: Record<string, string> = {
+  black: "/objects/uploads/2b84efe9-268f-4265-a0e5-6a5003152866.png",
+  house_mix: "/objects/uploads/209ecfc7-89b2-40b1-bfa8-68979b558d40.png",
+  natural: "/objects/uploads/f45d08bc-1d5b-4350-86be-a1d7debfe337.png",
+  hazy_orange: "/objects/uploads/9f876330-db26-433a-ba94-cea1ff146899.png",
+  seaglass_blue: "/objects/uploads/85f6bea3-0579-4159-99ac-f374f2e61214.png",
+  violet: "/objects/uploads/5dd6cf76-f362-48cd-b0fa-f052a9ea8d8e.png",
+  clear_pink: "/objects/uploads/7d338356-7f9c-42ae-b93c-bffcaf84cb1a.png",
+  clear_red: "/objects/uploads/14e45773-ba08-4972-996e-fcca902989e2.png",
+  clear_orange: "/objects/uploads/56a95ebb-ad1e-42e4-8b8d-e0f31ccc18e0.png",
+  clear_yellow: "/objects/uploads/23631fee-7faf-483e-a508-32272217b4a8.png",
+  coke_bottle: "/objects/uploads/6d0b19d8-e31f-4f44-a7de-ca8197802a0a.png",
+  clear_green: "/objects/uploads/f0dcf750-e441-4e49-ade1-bd5b8800da2f.png",
+  clear_blue: "/objects/uploads/24b79fce-317b-40d9-8aef-70935d53f2fb.png",
+  smokey_clear: "/objects/uploads/ce45a8d0-8896-4812-b13f-047bbcbaf01a.png",
+  ultra_clear: "/objects/uploads/b5b735ae-3624-4721-8552-344357fc68cf.png",
+  gold: "/objects/uploads/3aadefdd-edf4-469e-aee3-4aca2a8ceb64.png",
+  silver: "/objects/uploads/7e15c0c0-17db-44e3-aefb-64fde8285a97.png",
+  pink: "/objects/uploads/dd90a93f-a554-45c1-bad1-f7ffe4ca2079.png",
+  maroon: "/objects/uploads/0f8968bf-3046-42ba-8d0c-4517d884681d.png",
+  red: "/objects/uploads/be85d8cd-0136-4c8d-b013-2b953d0198cb.png",
+  orange: "/objects/uploads/17a95b4a-541d-49f3-b227-d6248034ff1e.png",
+  peach: "/objects/uploads/b0a9b357-53fb-4194-92ad-994cf4aab3e1.png",
+  yellow: "/objects/uploads/73208dd0-e252-421a-ba43-3be042ce9299.png",
+  duckie_yellow: "/objects/uploads/b4b904e4-0045-472d-8dd3-976b88fe5348.png",
+  lime_green: "/objects/uploads/4849a617-187c-4751-bd48-a579329b4100.png",
+  green: "/objects/uploads/19be07d7-4a95-4e77-9558-2170730101c0.png",
+  dark_green: "/objects/uploads/99d66f9e-776e-40e8-9b44-e826fa8cc8a9.png",
+  jade: "/objects/uploads/085ea796-821a-450c-8e8f-d047491e07e7.png",
+  sky_blue: "/objects/uploads/0cb1a225-e5ef-43ca-bd21-723a35fbff24.png",
+  turquoise: "/objects/uploads/15137ebe-3acb-4163-bfce-d167a8148256.png",
+  blue: "/objects/uploads/19f7b070-5baf-4154-abb1-2560c2ac94ac.png",
+  deep_purple: "/objects/uploads/ef73a968-f0fb-4cda-83d2-c403d995fa0e.png",
+  tan: "/objects/uploads/18ae1f8a-e73d-4bc6-81ae-1556b33a4c2f.png",
+  brown: "/objects/uploads/a11f9fd6-b6ff-4f71-88e8-f88cbe04f461.png",
+  white: "/objects/uploads/e8c4a31a-cd85-40a1-9ff6-ea93076116b3.png",
+};
+
+// Final list the app consumes: the base swatch metadata with each color's
+// tinted-disc photo attached (null when we don't have one yet).
+export const VINYL_COLORS: VinylColorOption[] = VINYL_COLOR_BASE.map((c) => ({
+  ...c,
+  thumbnailUrl: VINYL_COLOR_DISC_THUMBNAILS[c.id] ?? null,
+}));
+
 // Legacy SKU rows saved before Task #375 stored a handful of color ids
 // that have since been renamed to match Hellbender's published group
 // list. Aliased here so re-opening an old non-catalog vinyl SKU still
@@ -168,6 +221,15 @@ export const VINYL_COLOR_BY_ID: Record<string, VinylColorOption> = (() => {
   return map;
 })();
 
+// Catalog (manufacturer) colors are snapshotted onto SKUs by their display
+// name ("Clear Blue", "Ultra Clear", "Violet") rather than the snake_case
+// id, so a normalized-name lookup lets resolveVinylColor recover the real
+// swatch + tinted-disc thumbnail for those rows instead of falling back to
+// a neutral gray disc.
+const normColorName = (s: string) => s.trim().toLowerCase();
+export const VINYL_COLOR_BY_NAME: Record<string, VinylColorOption> =
+  Object.fromEntries(VINYL_COLORS.map((c) => [normColorName(c.name), c]));
+
 // Default picks for a fresh vinyl draft row — black, 100 units,
 // standard jacket. Hellbender's cheapest mainstream entry point.
 export const DEFAULT_VINYL_COLOR_ID = "black";
@@ -184,7 +246,12 @@ export function resolveVinylColor(storedValue: string | null | undefined): Vinyl
   if (!storedValue) return VINYL_COLOR_BY_ID[DEFAULT_VINYL_COLOR_ID];
   const legacyMatch = VINYL_COLOR_BY_ID[storedValue];
   if (legacyMatch) return legacyMatch;
-  // Catalog display name — return a neutral swatch so VinylPreview renders
+  // Standard catalog colors are stored by display name ("Ultra Clear",
+  // "Violet") — match that so the real swatch + tinted-disc thumbnail come
+  // through instead of a neutral gray disc.
+  const nameMatch = VINYL_COLOR_BY_NAME[normColorName(storedValue)];
+  if (nameMatch) return nameMatch;
+  // Unknown (other-press / special-finish) name — neutral swatch, no photo.
   return { id: storedValue, name: storedValue, tier: "opaque", swatch: "#888888" };
 }
 export const DEFAULT_VINYL_QUANTITY: VinylQuantityTier = 100;
